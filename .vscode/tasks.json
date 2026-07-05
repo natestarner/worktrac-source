@@ -1,0 +1,99 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Docker: Start Local DB",
+      "type": "shell",
+      "command": "docker start worktrac-sqlserver 2>/dev/null || docker run -e ACCEPT_EULA=Y -e 'MSSQL_SA_PASSWORD=LocalDev123!' -p 1434:1433 --name worktrac-sqlserver -d mcr.microsoft.com/mssql/server:2022-latest",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent"
+      }
+    },
+    {
+      "label": "Docker: Stop Local DB",
+      "type": "shell",
+      "command": "docker stop worktrac-sqlserver",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent"
+      }
+    },
+    {
+      "label": "Backend: Run Tests",
+      "type": "shell",
+      "command": "mvn verify -B",
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: Install Dependencies",
+      "type": "shell",
+      "command": "npm ci",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: Start Dev Server",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": {
+          "regexp": "^$"
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE",
+          "endsPattern": "ready in"
+        }
+      }
+    },
+    {
+      "label": "Frontend: Run Tests",
+      "type": "shell",
+      "command": "npm test",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "E2E: Run Playwright Tests",
+      "type": "shell",
+      "command": "npx playwright test",
+      "options": {
+        "cwd": "${workspaceFolder}/e2e"
+      },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "E2E: Open Playwright Report",
+      "type": "shell",
+      "command": "npx playwright show-report",
+      "options": {
+        "cwd": "${workspaceFolder}/e2e"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Full Stack: Start Everything",
+      "dependsOn": [
+        "Docker: Start Local DB",
+        "Frontend: Start Dev Server"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    }
+  ]
+}

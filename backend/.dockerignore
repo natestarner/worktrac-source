@@ -1,0 +1,7 @@
+.git
+.gitignore
+.vscode
+*.md
+src/test
+api-tests
+target/*.jar.original

@@ -1,0 +1,40 @@
+# === Java / Spring Boot ===
+backend/target/
+*.class
+*.war
+*.log
+*.hprof
+hs_err_pid*
+.settings/
+.classpath
+.project
+.factorypath
+
+# === React / Node ===
+frontend/node_modules/
+frontend/dist/
+e2e/node_modules/
+e2e/playwright-report/
+e2e/test-results/
+
+# === IDE ===
+*.iml
+.idea/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Environment / Secrets ===
+.env
+.env.local
+.env.*.local
+
+# === Claude Code ===
+.claude/settings.local.json
+
+# === Docker ===
+docker-compose.override.yml

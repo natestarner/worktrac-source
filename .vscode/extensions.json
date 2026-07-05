@@ -1,0 +1,18 @@
+{
+  "recommendations": [
+    "vscjava.vscode-java-pack",
+    "vmware.vscode-spring-boot",
+    "vscjava.vscode-spring-initializr",
+    "vscjava.vscode-spring-boot-dashboard",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "ms-azuretools.vscode-docker",
+    "ms-mssql.mssql",
+    "ms-playwright.playwright",
+    "eamodio.gitlens",
+    "humao.rest-client",
+    "editorconfig.editorconfig",
+    "redhat.vscode-yaml",
+    "anthropic.claude-code"
+  ]
+}

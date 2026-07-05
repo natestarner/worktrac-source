@@ -1,0 +1,11 @@
+# Database migrations require senior review
+backend/src/main/resources/db/migration/ @natestarner
+
+# CI/CD workflow changes require DevOps review
+.github/workflows/ @natestarner
+
+# Dockerfile changes require review
+backend/Dockerfile @natestarner
+
+# Security-sensitive configuration
+backend/src/main/resources/application.yml @natestarner

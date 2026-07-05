@@ -1,0 +1,33 @@
+# .editorconfig
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+# Java files — 4-space indentation (standard Java convention)
+[*.java]
+indent_size = 4
+
+# JavaScript, TypeScript, JSON, YAML, CSS, HTML — 2-space indentation
+[*.{js,jsx,ts,tsx,json,yml,yaml,css,html}]
+indent_size = 2
+
+# SQL migration files
+[*.sql]
+indent_size = 2
+
+# Markdown — allow trailing whitespace (used for line breaks)
+[*.md]
+trim_trailing_whitespace = false
+
+# Dockerfiles
+[Dockerfile*]
+indent_size = 2
+
+# GitHub Actions workflows
+[.github/workflows/*.yml]
+indent_size = 2

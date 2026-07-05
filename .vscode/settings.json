@@ -1,0 +1,62 @@
+{
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.compile.nullAnalysis.mode": "automatic",
+  "spring-boot.ls.java.home": null,
+  "spring-boot.ls.javahome": null,
+
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+
+  "[java]": {
+    "editor.defaultFormatter": "redhat.java",
+    "editor.tabSize": 4
+  },
+
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml",
+    "editor.tabSize": 2
+  },
+
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/target": true,
+    "**/.git": true,
+    "**/build": true,
+    "**/.settings": true,
+    "**/.classpath": true,
+    "**/.project": true,
+    "**/.factorypath": true
+  },
+
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/target": true,
+    "**/build": true,
+    "**/playwright-report": true
+  },
+
+  "js/ts.preferences.importModuleSpecifier": "relative",
+
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+
+  "terminal.integrated.cwd": "${workspaceFolder}",
+  "terminal.integrated.defaultProfile.windows": "Git Bash",
+
+  "playwright.reuseBrowser": true,
+
+  "mssql.connections": [
+    {
+      "server": "localhost,1434",
+      "database": "worktrac",
+      "authenticationType": "SqlLogin",
+      "user": "sa",
+      "password": "",
+      "savePassword": false,
+      "profileName": "Local Dev DB"
+    }
+  ]
+}

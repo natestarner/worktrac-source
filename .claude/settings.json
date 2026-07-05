@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Edit(backend/**)",
+      "Edit(frontend/**)",
+      "Edit(e2e/**)",
+      "Bash(cd backend && mvn*)",
+      "Bash(cd frontend && npm*)",
+      "Bash(cd e2e && npx playwright*)",
+      "Bash(docker start*)",
+      "Bash(docker stop*)"
+    ],
+    "deny": [
+      "Edit(.github/workflows/**)",
+      "Edit(backend/src/main/resources/db/migration/V[0-9]*)",
+      "Bash(az*)",
+      "Bash(gh secret*)"
+    ]
+  }
+}

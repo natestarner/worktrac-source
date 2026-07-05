@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    # NOTE: host port 1434 (not the default 1433) — this machine already runs another
+    # local SQL Server container (inttime-sqlserver) bound to 1433. See section 9.1.
+    url: jdbc:sqlserver://localhost:1434;database=worktrac;encrypt=false;trustServerCertificate=true
+    username: sa
+    password: LocalDev123!
+  jpa:
+    hibernate:
+      ddl-auto: validate    # Flyway manages schema
+    show-sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    clean-disabled: false    # OK to allow clean locally (never in prod)

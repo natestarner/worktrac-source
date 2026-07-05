@@ -1,0 +1,9 @@
+### Health Check
+GET http://localhost:8080/actuator/health
+
+### ──────────────────────────────────────
+### Lower Environment (switch target once deployed)
+### ──────────────────────────────────────
+
+### Health Check — Lower
+GET https://api-dev.starnerconsulting.co/actuator/health

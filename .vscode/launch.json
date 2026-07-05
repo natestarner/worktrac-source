@@ -1,0 +1,54 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Backend - Spring Boot (local)",
+      "request": "launch",
+      "mainClass": "com.worktrac.backend.BackendApplication",
+      "projectName": "backend",
+      "cwd": "${workspaceFolder}/backend",
+      "args": "",
+      "vmArgs": "-Dspring.profiles.active=local",
+      "env": {
+        "SERVER_PORT": "8080"
+      }
+    },
+    {
+      "type": "node",
+      "name": "Frontend - React (Dev Server)",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}/frontend",
+      "console": "integratedTerminal"
+    },
+    {
+      "type": "node",
+      "name": "Playwright - Run All Tests",
+      "request": "launch",
+      "program": "${workspaceFolder}/e2e/node_modules/.bin/playwright",
+      "args": ["test"],
+      "cwd": "${workspaceFolder}/e2e",
+      "console": "integratedTerminal"
+    },
+    {
+      "type": "node",
+      "name": "Playwright - Run Current File",
+      "request": "launch",
+      "program": "${workspaceFolder}/e2e/node_modules/.bin/playwright",
+      "args": ["test", "${relativeFile}"],
+      "cwd": "${workspaceFolder}/e2e",
+      "console": "integratedTerminal"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack (Backend + Frontend)",
+      "configurations": [
+        "Backend - Spring Boot (local)",
+        "Frontend - React (Dev Server)"
+      ]
+    }
+  ]
+}
