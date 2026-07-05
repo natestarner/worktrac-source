@@ -73,6 +73,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Drop env-specific config from the deploy artifact
+        run: rm -f dist/config.json
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
