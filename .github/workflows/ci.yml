@@ -91,6 +91,7 @@ jobs:
     permissions:
       packages: write
       contents: read
+      security-events: write
     outputs:
       image_tag: ${{ steps.meta.outputs.tags }}
       short_sha: ${{ steps.vars.outputs.short_sha }}
