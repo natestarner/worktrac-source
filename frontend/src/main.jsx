@@ -5,4 +5,9 @@ import App from './App.jsx'
 import { loadConfig } from './config'
 
 loadConfig().then(() => {
-  createRoot(document.getElementBy
+  createRoot(document.getElementById('root')).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+})
