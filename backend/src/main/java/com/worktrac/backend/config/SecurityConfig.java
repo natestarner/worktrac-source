@@ -27,6 +27,11 @@ public class SecurityConfig {
                                                      CorsConfigurationSource corsConfigurationSource) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
+                // CSRF protection defends session-cookie auth from forged cross-site requests
+                // the browser auto-attaches cookies to. This API is stateless and auth-by-Bearer-
+                // JWT only (read from localStorage by the frontend, never a cookie), so there is
+                // no ambient credential for a forged request to ride on -- CSRF does not apply.
+                // lgtm[java/spring-disabled-csrf-protection]
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
