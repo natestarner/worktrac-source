@@ -129,6 +129,17 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Override spring-boot-starter-parent's managed 2.21.4: fixes CVE-2026-54515
+                 (per-property @JsonIgnoreProperties exclusions can be silently restored by
+                 a later @JsonFormat case-insensitivity rebuild). Patch-only bump within the
+                 same 2.21.x line Spring Boot otherwise manages jackson-core/annotations at,
+                 so no cross-module compatibility concern. Remove this override once
+                 spring-boot-starter-parent's own managed version catches up past 2.21.5. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>2.21.5</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
