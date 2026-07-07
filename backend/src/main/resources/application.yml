@@ -10,6 +10,11 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.SQLServerDialect
+        # All timestamps are stored/compared in UTC (session/set times per CLAUDE.md);
+        # pin the JDBC boundary to UTC so java.time.Instant <-> DATETIME2 round-trips
+        # consistently regardless of the JVM's local timezone.
+        jdbc:
+          time_zone: UTC
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -31,3 +36,6 @@ management:
 app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  jwt:
+    secret: ${APP_JWT_SECRET}
+    expiration-minutes: ${APP_JWT_EXPIRATION_MINUTES:43200}    # 30 days
