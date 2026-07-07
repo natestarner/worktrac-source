@@ -13,3 +13,9 @@ spring:
     enabled: true
     baseline-on-migrate: true
     clean-disabled: false    # OK to allow clean locally (never in prod)
+
+app:
+  jwt:
+    # Local-dev-only secret. NEVER reuse this value in lower/production -- those must set
+    # APP_JWT_SECRET via a real secret store (see CLAUDE.md: never commit real secrets).
+    secret: local-dev-only-insecure-jwt-signing-secret-do-not-use-elsewhere-0123456789

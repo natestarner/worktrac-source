@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      # Azure SQL free/serverless tiers auto-pause and cold-start on the first
+      # connection after idling (see CLAUDE.md) -- give the pool enough time to wait
+      # out a resume instead of failing app startup or the first request.
+      connection-timeout: 60000
+      initialization-fail-timeout: 60000
+  jpa:
+    show-sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    clean-disabled: true    # never allow clean in production, no exceptions

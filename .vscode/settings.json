@@ -56,7 +56,9 @@
       "user": "sa",
       "password": "",
       "savePassword": false,
-      "profileName": "Local Dev DB"
+      "profileName": "Local Dev DB",
+      "groupId": "ROOT",
+      "id": "1667bc73-6e41-4f30-9e94-cafd5e477a5b"
     }
   ]
 }

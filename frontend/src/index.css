@@ -1,111 +1,130 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --color-bg: #faf9f7;
+  --color-surface: #ffffff;
+  --color-accent: #e8590c;
+  --color-accent-contrast: #ffffff;
+  --color-text: #1c1b19;
+  --color-muted: #78746c;
+  --color-faint: #b4afa6;
+  --color-border: #e7e3dc;
+  --color-subtle-bg: #f1efea;
+  --color-success: #15803d;
+  --color-success-bg: #e7f5ec;
+  --color-danger: #c0392b;
+  --color-pr-bg: #fdece2;
+  --color-pr-border: #f6cbaf;
+  --color-pr-text: #b24a17;
+  --color-dark: #1c1b19;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* Validated categorical palette (dataviz skill) for the Trends category-balance
+     chart -- fixed slot order is the CVD-safety mechanism, never cycle/reassign it. */
+  --chart-cat-1: #2a78d6;
+  --chart-cat-2: #1baf7a;
+  --chart-cat-3: #eda100;
+  --chart-cat-4: #008300;
+  --chart-cat-5: #4a3aa7;
+  --chart-cat-6: #e34948;
+  --chart-cat-7: #e87ba4;
+  --chart-cat-8: #eb6834;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
   color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
+    --color-bg: #171614;
+    --color-surface: #221f1c;
+    --color-text: #f1efea;
+    --color-muted: #a39d92;
+    --color-faint: #6f6a61;
+    --color-border: #35322c;
+    --color-subtle-bg: #2a2723;
+    --color-success-bg: #163524;
+    --color-pr-bg: #3a2417;
+    --color-pr-border: #5a3520;
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
+    --chart-cat-1: #3987e5;
+    --chart-cat-2: #199e70;
+    --chart-cat-3: #c98500;
+    --chart-cat-4: #008300;
+    --chart-cat-5: #9085e9;
+    --chart-cat-6: #e66767;
+    --chart-cat-7: #d55181;
+    --chart-cat-8: #d95926;
   }
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
   min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+button,
+input {
+  font-family: inherit;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
   }
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
+
+@keyframes celebPop {
+  0% {
+    transform: scale(0.6) translateY(12px);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.06) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
   }
 }
-p {
-  margin: 0;
+
+@keyframes celebScrimIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+@keyframes confettiFall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(340px) rotate(340deg);
+    opacity: 0;
+  }
 }

@@ -6,6 +6,14 @@ Tracks workouts (exercises, sets, reps) for multiple people (Nate and his sons) 
 household, with each person's data kept separate. Optimized for iPad and iPhone use during
 workouts.
 
+## Pipeline & Setup History
+The full SDLC/DevOps setup guide — covering the reasoning behind CI/CD design, custom
+domains, branch protection, security scanning, and fixes like the deploy-time config.json
+correction and the testcontainers-bom / Docker Engine version pin — lives one level up at
+`../worktrac_SDLC_setup_guide.md`. It is NOT inside this repo, so open the parent folder
+in VS Code (rather than this repo alone) if you need that context. Check it for the "why"
+behind existing pipeline/infra configuration before changing it.
+
 ## Tech Stack
 - Frontend: React (JavaScript), served by Azure Static Web Apps
 - Backend: Java 25, Spring Boot 4.x, Maven
@@ -65,6 +73,34 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   every query must filter by the active person.
 - The schema for people/workouts/exercises/sets has not been designed yet (pipeline setup
   came first, by design). Design it carefully before writing the first Flyway migration.
+
+## Frontend State Notes
+- **Every person has their own independent client-side state.** Whatever a person is
+  currently doing or viewing — which tab/screen, selected exercise, routine position,
+  draft weight/reps, exercise search text, an in-progress past-session edit, an active
+  rest timer, etc. — must survive switching to another person and back. Nothing that
+  represents "what this person is doing right now" should live as a single global value.
+- This is the client-side mirror of the Data Model Notes above: the backend keeps each
+  person's *data* separate; the frontend must keep each person's *in-progress UI state*
+  separate too. Same principle, different layer.
+- Implemented via two mechanisms:
+  - `AppStateContext` (`frontend/src/context/AppStateContext.jsx`) — a per-person
+    snapshot cache (`personSnapshots`), captured/restored on every person switch. Covers
+    navigation/draft state: current tab, selected exercise, routine position,
+    weight/reps drafts, exercise search, in-progress past-session edit.
+  - `UIContext` (`frontend/src/context/UIContext.jsx`) — state keyed by personId directly
+    (e.g. `restTimers: { [personId]: {...} }`), used when a person's state needs to keep
+    running independently in the background even while a *different* person is active
+    (e.g. one person's rest timer must keep counting down while someone else takes their
+    turn logging a set).
+- **When adding new client-side state, ask:** "if two people were using this on the same
+  device and traded off, would one person's state leak onto the other's screen, or get
+  silently reset/destroyed by the other person's actions?" If yes, it needs to go through
+  one of the two mechanisms above — not a plain `useState` at the top of a shared
+  provider or component.
+- Exception: toast messages, the destructive-action confirm dialog, and the PR
+  celebration overlay are genuinely global, one-shot notifications tied to whatever the
+  active person just did — they don't need to persist across a person switch.
 
 ## Git Workflow
 - Branch from `main`, PR back to `main`
