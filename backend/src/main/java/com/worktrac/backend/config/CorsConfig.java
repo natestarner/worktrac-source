@@ -28,6 +28,14 @@ public class CorsConfig {
         configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
+        // Content-Disposition isn't in the CORS-safelisted response headers (Fetch spec),
+        // so a cross-origin fetch can't read it off the response unless it's explicitly
+        // exposed here -- without this, downloadPersonCsv (frontend/src/api/export.js)
+        // silently falls back to a generic filename instead of the server-generated
+        // "<Person>-workout-data-<date>.csv". Same-origin requests (local dev, behind the
+        // Vite proxy) never hit this restriction, which is why it only surfaces once
+        // frontend and backend are on genuinely different deployed origins.
+        configuration.setExposedHeaders(List.of("Content-Disposition"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 
