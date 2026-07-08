@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { localDateTimeToIso, toLocalDateStr, toLocalTimeStr } from '../../utils/datetime';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
+import Button from '../shared/Button';
 
 export default function PastSessionModal({ onClose }) {
   const navigate = useNavigate();
@@ -16,19 +17,13 @@ export default function PastSessionModal({ onClose }) {
   const now = new Date().toISOString();
   const [date, setDate] = useState(toLocalDateStr(now));
   const [time, setTime] = useState(toLocalTimeStr(now));
-  const [submitting, setSubmitting] = useState(false);
 
   async function handleStart() {
-    setSubmitting(true);
-    try {
-      const iso = localDateTimeToIso(date, time);
-      const session = await createPastSession(activePersonId, iso);
-      startEditingSession(session);
-      onClose();
-      navigate('/app/log');
-    } finally {
-      setSubmitting(false);
-    }
+    const iso = localDateTimeToIso(date, time);
+    const session = await createPastSession(activePersonId, iso);
+    startEditingSession(session);
+    onClose();
+    navigate('/app/log');
   }
 
   return (
@@ -53,13 +48,12 @@ export default function PastSessionModal({ onClose }) {
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel
         </button>
-        <button
+        <Button
           onClick={handleStart}
-          disabled={submitting}
           style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
           Start adding sets
-        </button>
+        </Button>
       </div>
     </Modal>
   );

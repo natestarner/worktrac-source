@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Spinner from '../components/shared/Spinner';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -99,8 +100,13 @@ export default function LoginPage() {
           style={inputStyle}
         />
 
-        <button type="submit" disabled={submitting} style={primaryButtonStyle}>
-          {submitting ? 'Logging in...' : 'Log in'}
+        <button type="submit" disabled={submitting} style={{ ...primaryButtonStyle, position: 'relative' }}>
+          <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Log in</span>
+          {submitting && (
+            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Spinner color={primaryButtonStyle.color} />
+            </span>
+          )}
         </button>
 
         <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 18 }}>

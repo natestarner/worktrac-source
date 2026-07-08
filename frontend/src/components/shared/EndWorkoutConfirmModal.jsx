@@ -1,6 +1,7 @@
 import { endWorkout } from '../../api/sessions';
 import Modal from './Modal';
 import { cancelButtonStyle, deleteButtonStyle } from './ConfirmDialog';
+import Button from './Button';
 
 export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
   async function handleEnd() {
@@ -18,9 +19,9 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel
         </button>
-        <button onClick={handleEnd} style={deleteButtonStyle}>
+        <Button onClick={handleEnd} style={deleteButtonStyle}>
           End workout
-        </button>
+        </Button>
       </div>
     </Modal>
   );

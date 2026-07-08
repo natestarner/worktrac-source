@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { createRoutine, updateRoutine } from '../../api/routines';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
+import Button from '../shared/Button';
 
 export default function RoutineFormModal({ personId, routine, exercises, onClose, onSaved }) {
   const isEditing = !!routine;
   const [name, setName] = useState(routine?.name || '');
   const [selectedIds, setSelectedIds] = useState(routine ? routine.exercises.map((e) => e.exerciseId) : []);
-  const [saving, setSaving] = useState(false);
 
   const exerciseById = new Map(exercises.map((e) => [e.id, e]));
   const available = exercises.filter((e) => !selectedIds.includes(e.id));
@@ -31,17 +31,12 @@ export default function RoutineFormModal({ personId, routine, exercises, onClose
   async function handleSave() {
     const trimmed = name.trim();
     if (!trimmed || selectedIds.length === 0) return;
-    setSaving(true);
-    try {
-      if (isEditing) {
-        await updateRoutine(personId, routine.id, { name: trimmed, exerciseIds: selectedIds });
-      } else {
-        await createRoutine(personId, { name: trimmed, exerciseIds: selectedIds });
-      }
-      onSaved();
-    } finally {
-      setSaving(false);
+    if (isEditing) {
+      await updateRoutine(personId, routine.id, { name: trimmed, exerciseIds: selectedIds });
+    } else {
+      await createRoutine(personId, { name: trimmed, exerciseIds: selectedIds });
     }
+    onSaved();
   }
 
   return (
@@ -107,13 +102,12 @@ export default function RoutineFormModal({ personId, routine, exercises, onClose
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel
         </button>
-        <button
+        <Button
           onClick={handleSave}
-          disabled={saving}
           style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
           {isEditing ? 'Save' : 'Save routine'}
-        </button>
+        </Button>
       </div>
     </Modal>
   );

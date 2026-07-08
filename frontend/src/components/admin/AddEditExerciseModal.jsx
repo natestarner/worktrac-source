@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { addExercise, updateExercise } from '../../api/exercises';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
+import Button from '../shared/Button';
 
 export default function AddEditExerciseModal({ exercise, categories, onClose, onSaved }) {
   const isEditing = !!exercise;
@@ -9,7 +10,6 @@ export default function AddEditExerciseModal({ exercise, categories, onClose, on
   const [categoryId, setCategoryId] = useState(exercise?.categoryId ?? categories[0]?.id);
   const [setupFieldNames, setSetupFieldNames] = useState(exercise?.setupFields.map((f) => f.name) || []);
   const [newFieldInput, setNewFieldInput] = useState('');
-  const [saving, setSaving] = useState(false);
 
   // categories can still be loading when this modal first mounts (nothing in AdminTab
   // gates "+ Add exercise" behind categories being ready), which would otherwise leave
@@ -37,18 +37,13 @@ export default function AddEditExerciseModal({ exercise, categories, onClose, on
   async function handleSave() {
     const trimmed = name.trim();
     if (!trimmed || !categoryId) return;
-    setSaving(true);
-    try {
-      const payload = { name: trimmed, categoryId, setupFieldNames };
-      if (isEditing) {
-        await updateExercise(exercise.id, payload);
-      } else {
-        await addExercise(payload);
-      }
-      onSaved();
-    } finally {
-      setSaving(false);
+    const payload = { name: trimmed, categoryId, setupFieldNames };
+    if (isEditing) {
+      await updateExercise(exercise.id, payload);
+    } else {
+      await addExercise(payload);
     }
+    onSaved();
   }
 
   return (
@@ -138,13 +133,13 @@ export default function AddEditExerciseModal({ exercise, categories, onClose, on
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel
         </button>
-        <button
+        <Button
           onClick={handleSave}
-          disabled={saving || !categoryId}
+          disabled={!categoryId}
           style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
           {isEditing ? 'Save' : 'Add'}
-        </button>
+        </Button>
       </div>
     </Modal>
   );
