@@ -1,6 +1,7 @@
 import { useAppState } from '../../context/AppStateContext';
+import Skeleton from '../shared/Skeleton';
 
-export default function ExercisePicker({ exercises, categories, routines, onSelectExercise, onStartRoutine }) {
+export default function ExercisePicker({ exercises, categories, routines, loading, onSelectExercise, onStartRoutine }) {
   const { exerciseSearch, setExerciseSearch } = useAppState();
   const term = exerciseSearch.trim().toLowerCase();
 
@@ -34,7 +35,24 @@ export default function ExercisePicker({ exercises, categories, routines, onSele
         }}
       />
 
-      {noSearchResults && (
+      {loading && (
+        <>
+          <Skeleton width={84} height={12} style={{ marginBottom: 10 }} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
+            {[110, 140, 96].map((w, i) => (
+              <Skeleton key={i} width={w} height={46} radius={14} />
+            ))}
+          </div>
+          <Skeleton width={120} height={12} style={{ marginBottom: 10 }} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {[128, 104, 150, 90].map((w, i) => (
+              <Skeleton key={i} width={w} height={46} radius={14} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {!loading && noSearchResults && (
         <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--color-faint)', fontSize: 15 }}>
           No exercises match "{exerciseSearch}".
         </div>

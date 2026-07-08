@@ -4,6 +4,7 @@ import { useExerciseTrend } from '../../hooks/useExerciseTrend';
 import { formatDateLabel } from '../../utils/datetime';
 import { convertWeight } from '../../utils/formulas';
 import ExerciseTrendChart from './ExerciseTrendChart';
+import Skeleton from '../shared/Skeleton';
 
 const selectStyle = {
   width: '100%',
@@ -50,6 +51,7 @@ export default function ExerciseTrendSection({ personId, exerciseId, onSelectExe
         ))}
       </select>
 
+      {loading && <Skeleton width="100%" height={200} radius={8} />}
       {!loading && <ExerciseTrendChart points={points} defaultUnit={defaultUnit} />}
 
       {points.length > 0 && (

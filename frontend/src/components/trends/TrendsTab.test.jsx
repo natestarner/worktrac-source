@@ -50,10 +50,10 @@ describe('TrendsTab', () => {
     vi.clearAllMocks();
   });
 
-  it('shows a loading state while the overview is being fetched', () => {
+  it('shows a skeleton while the overview is being fetched', () => {
     useTrendsOverview.mockReturnValue({ overview: null, loading: true });
     render(<TrendsTab />);
-    expect(screen.getByText(/loading trends/i)).toBeInTheDocument();
+    expect(screen.getByTestId('trends-skeleton')).toBeInTheDocument();
   });
 
   it('shows an empty state when the person has no workouts in range', () => {

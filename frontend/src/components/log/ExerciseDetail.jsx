@@ -12,6 +12,7 @@ import NumericKeypad from '../shared/NumericKeypad';
 import SetupFieldEditorModal from '../shared/SetupFieldEditorModal';
 import EditSetModal from '../shared/EditSetModal';
 import Button from '../shared/Button';
+import Skeleton from '../shared/Skeleton';
 
 export default function ExerciseDetail({
   exercise,
@@ -36,6 +37,7 @@ export default function ExerciseDetail({
   const [keypadField, setKeypadField] = useState(null);
   const [editingSetupField, setEditingSetupField] = useState(null);
   const [editingSet, setEditingSet] = useState(null);
+  const [ready, setReady] = useState(false);
 
   const defaultUnit = account?.defaultUnit || 'lb';
 
@@ -54,9 +56,8 @@ export default function ExerciseDetail({
   }
 
   useEffect(() => {
-    refetchSummary();
-    refetchSessionSets();
-    refetchSetupValues();
+    setReady(false);
+    Promise.all([refetchSummary(), refetchSessionSets(), refetchSetupValues()]).finally(() => setReady(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercise.id, contextSessionId]);
 
@@ -153,16 +154,31 @@ export default function ExerciseDetail({
         })}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
-          <div style={cardLabelStyle}>Last time &middot; {lastLabel}</div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>{lastSetsText}</div>
+      {!ready && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
+            <Skeleton width={90} height={11} style={{ marginBottom: 8 }} />
+            <Skeleton width={110} height={20} />
+          </div>
+          <div style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 16, padding: 16 }}>
+            <Skeleton width={100} height={11} style={{ marginBottom: 8 }} />
+            <Skeleton width={130} height={20} />
+          </div>
         </div>
-        <div style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 16, padding: 16 }}>
-          <div style={{ ...cardLabelStyle, color: 'var(--color-pr-text)' }}>Best &middot; Est. 1RM</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-pr-text)' }}>{bestText}</div>
+      )}
+
+      {ready && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
+            <div style={cardLabelStyle}>Last time &middot; {lastLabel}</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{lastSetsText}</div>
+          </div>
+          <div style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 16, padding: 16 }}>
+            <div style={{ ...cardLabelStyle, color: 'var(--color-pr-text)' }}>Best &middot; Est. 1RM</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-pr-text)' }}>{bestText}</div>
+          </div>
         </div>
-      </div>
+      )}
 
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 20, marginBottom: 16 }}>
         <WeightRepsStepper
@@ -191,7 +207,7 @@ export default function ExerciseDetail({
         </Button>
       </div>
 
-      {sessionSets.length > 0 && (
+      {ready && sessionSets.length > 0 && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '8px 20px' }}>
           {sessionSets.map((set, i) => {
             const isPR = isPrSet(set.weight, set.reps, set.unit, bestComparableLb);

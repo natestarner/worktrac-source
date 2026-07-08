@@ -10,12 +10,13 @@ import { removePerson } from '../../api/people';
 import AddEditExerciseModal from './AddEditExerciseModal';
 import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
+import Skeleton from '../shared/Skeleton';
 
 export default function AdminTab() {
   const { account, people, refreshPeople } = useAuth();
   const { openConfirm } = useUI();
-  const { exercises, refetch: refetchExercises } = useExercises();
-  const { categories, refetch: refetchCategories } = useCategories();
+  const { exercises, loading: exercisesLoading, refetch: refetchExercises } = useExercises();
+  const { categories, loading: categoriesLoading, refetch: refetchCategories } = useCategories();
   const [modalExercise, setModalExercise] = useState(undefined); // undefined = closed, null = create
   const [newCategoryName, setNewCategoryName] = useState('');
   const [pendingUnit, setPendingUnit] = useState(null);
@@ -102,7 +103,20 @@ export default function AdminTab() {
         + Add exercise
       </button>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '4px 20px', marginBottom: 24 }}>
-        {exercises.map((ex, i) => (
+        {exercisesLoading &&
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: i < 3 ? '1px solid var(--color-subtle-bg)' : 'none' }}>
+              <div>
+                <Skeleton width={130} height={15} style={{ marginBottom: 6 }} />
+                <Skeleton width={80} height={12} />
+              </div>
+              <div style={{ display: 'flex', gap: 14 }}>
+                <Skeleton width={28} height={13} />
+                <Skeleton width={44} height={13} />
+              </div>
+            </div>
+          ))}
+        {!exercisesLoading && exercises.map((ex, i) => (
           <div key={ex.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: i < exercises.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none' }}>
             <div>
               <div style={{ fontSize: 15, fontWeight: 600 }}>{ex.name}</div>
@@ -135,7 +149,9 @@ export default function AdminTab() {
 
       <div style={sectionLabelStyle}>Categories</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-        {categories.map((c) => (
+        {categoriesLoading &&
+          [88, 64, 104, 72].map((w, i) => <Skeleton key={i} width={w} height={34} radius={999} />)}
+        {!categoriesLoading && categories.map((c) => (
           <div
             key={c.id}
             style={{

@@ -7,6 +7,7 @@ import { downloadPersonCsv } from '../../api/export';
 import { formatDateLabel, formatTime, toLocalDateStr } from '../../utils/datetime';
 import PastSessionModal from './PastSessionModal';
 import Button from '../shared/Button';
+import Skeleton from '../shared/Skeleton';
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
@@ -18,7 +19,7 @@ export default function HistoryTab() {
   const navigate = useNavigate();
   const { activePersonId, startEditingSession } = useAppState();
   const { people } = useAuth();
-  const { history } = useHistory(activePersonId);
+  const { history, loading } = useHistory(activePersonId);
   const [showPastSessionModal, setShowPastSessionModal] = useState(false);
 
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
@@ -39,13 +40,33 @@ export default function HistoryTab() {
         </Button>
       </div>
 
-      {history.length === 0 && (
+      {loading &&
+        Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} style={{ marginBottom: 22 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <Skeleton width={150} height={14} />
+              <Skeleton width={32} height={13} />
+            </div>
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '4px 20px' }}>
+              <div style={{ padding: '14px 0', borderBottom: '1px solid var(--color-subtle-bg)' }}>
+                <Skeleton width={120} height={15} style={{ marginBottom: 4 }} />
+                <Skeleton width={190} height={14} />
+              </div>
+              <div style={{ padding: '14px 0' }}>
+                <Skeleton width={100} height={15} style={{ marginBottom: 4 }} />
+                <Skeleton width={160} height={14} />
+              </div>
+            </div>
+          </div>
+        ))}
+
+      {!loading && history.length === 0 && (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--color-faint)', fontSize: 15 }}>
           No workouts logged yet for {activePersonName}.
         </div>
       )}
 
-      {history.map((session) => (
+      {!loading && history.map((session) => (
         <div key={session.id} style={{ marginBottom: 22 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-muted)' }}>

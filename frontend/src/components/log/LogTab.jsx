@@ -30,8 +30,8 @@ export default function LogTab() {
     updateEditingSession,
   } = useAppState();
 
-  const { exercises } = useExercises();
-  const { categories } = useCategories();
+  const { exercises, loading: exercisesLoading } = useExercises();
+  const { categories, loading: categoriesLoading } = useCategories();
   const { routines } = useRoutines(activePersonId);
   const { session: liveSession, refetch: refetchLiveSession } = useLiveSession(activePersonId);
   const [showEndWorkoutConfirm, setShowEndWorkoutConfirm] = useState(false);
@@ -162,7 +162,14 @@ export default function LogTab() {
       )}
 
       {!selectedExercise && (
-        <ExercisePicker exercises={exercises} categories={categories} routines={routines} onSelectExercise={selectExercise} onStartRoutine={handleStartRoutine} />
+        <ExercisePicker
+          exercises={exercises}
+          categories={categories}
+          routines={routines}
+          loading={exercisesLoading || categoriesLoading}
+          onSelectExercise={selectExercise}
+          onStartRoutine={handleStartRoutine}
+        />
       )}
 
       {selectedExercise && (
