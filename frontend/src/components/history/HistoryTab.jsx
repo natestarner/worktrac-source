@@ -46,7 +46,7 @@ export default function HistoryTab() {
       )}
 
       {history.map((session) => (
-        <div key={session.sessionId} style={{ marginBottom: 22 }}>
+        <div key={session.id} style={{ marginBottom: 22 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-muted)' }}>
               {formatDateLabel(toLocalDateStr(session.startedAt))} &middot; {timeLabelFor(session)}
