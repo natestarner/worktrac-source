@@ -16,6 +16,9 @@
   --color-pr-text: #b24a17;
   --color-dark: #1c1b19;
 
+  --skeleton-base: #ece7de;
+  --skeleton-highlight: #f8f6f2;
+
   /* Validated categorical palette (dataviz skill) for the Trends category-balance
      chart -- fixed slot order is the CVD-safety mechanism, never cycle/reassign it. */
   --chart-cat-1: #2a78d6;
@@ -47,6 +50,9 @@
     --color-success-bg: #163524;
     --color-pr-bg: #3a2417;
     --color-pr-border: #5a3520;
+
+    --skeleton-base: #2c2822;
+    --skeleton-highlight: #3c372f;
 
     --chart-cat-1: #3987e5;
     --chart-cat-2: #199e70;
@@ -87,6 +93,15 @@ button {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }
 

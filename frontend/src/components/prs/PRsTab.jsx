@@ -3,17 +3,52 @@ import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { getPrs } from '../../api/stats';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
+import Skeleton from '../shared/Skeleton';
 
 export default function PRsTab() {
   const { activePersonId } = useAppState();
   const { people } = useAuth();
   const [prs, setPrs] = useState([]);
+  const [loading, setLoading] = useState(true);
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
 
   useEffect(() => {
     if (!activePersonId) return;
-    getPrs(activePersonId).then(setPrs);
+    setLoading(true);
+    getPrs(activePersonId)
+      .then(setPrs)
+      .finally(() => setLoading(false));
   }, [activePersonId]);
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 16,
+              padding: '18px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div>
+              <Skeleton width={130} height={16} style={{ marginBottom: 2 }} />
+              <Skeleton width={160} height={13} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <Skeleton width={80} height={18} />
+              <Skeleton width={70} height={13} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   if (prs.length === 0) {
     return (
