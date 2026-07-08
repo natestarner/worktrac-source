@@ -119,9 +119,9 @@ class WorkoutSessionAutocloseTest {
         // Most recent first: the new (still live) session, then the stale one.
         JsonNode newest = history.get(0);
         JsonNode stale = history.get(1);
-        assertEquals(secondSessionId, newest.get("sessionId").asLong());
+        assertEquals(secondSessionId, newest.get("id").asLong());
         assertTrue(newest.get("endedAt").isNull(), "the new session is still live");
-        assertEquals(firstSessionId, stale.get("sessionId").asLong());
+        assertEquals(firstSessionId, stale.get("id").asLong());
         // A stale session is closed with endedAt == its last activity (its only set's time),
         // not "now" -- confirms it wasn't silently extended by the second set's arrival.
         assertEquals(stale.get("startedAt").asText(), stale.get("endedAt").asText());
