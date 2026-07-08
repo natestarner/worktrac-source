@@ -2,19 +2,14 @@ import { useState } from 'react';
 import { setSetupValue } from '../../api/setupValues';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
+import Button from './Button';
 
 export default function SetupFieldEditorModal({ personId, exerciseId, field, onClose, onSaved }) {
   const [draft, setDraft] = useState(field.value || '');
-  const [saving, setSaving] = useState(false);
 
   async function handleSave() {
-    setSaving(true);
-    try {
-      await setSetupValue(personId, exerciseId, field.fieldId, draft.trim());
-      onSaved();
-    } finally {
-      setSaving(false);
-    }
+    await setSetupValue(personId, exerciseId, field.fieldId, draft.trim());
+    onSaved();
   }
 
   return (
@@ -43,13 +38,12 @@ export default function SetupFieldEditorModal({ personId, exerciseId, field, onC
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel
         </button>
-        <button
+        <Button
           onClick={handleSave}
-          disabled={saving}
           style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
           Save
-        </button>
+        </Button>
       </div>
     </Modal>
   );

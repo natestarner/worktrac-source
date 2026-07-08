@@ -11,6 +11,7 @@ import WeightRepsStepper from './WeightRepsStepper';
 import NumericKeypad from '../shared/NumericKeypad';
 import SetupFieldEditorModal from '../shared/SetupFieldEditorModal';
 import EditSetModal from '../shared/EditSetModal';
+import Button from '../shared/Button';
 
 export default function ExerciseDetail({
   exercise,
@@ -35,7 +36,6 @@ export default function ExerciseDetail({
   const [keypadField, setKeypadField] = useState(null);
   const [editingSetupField, setEditingSetupField] = useState(null);
   const [editingSet, setEditingSet] = useState(null);
-  const [logging, setLogging] = useState(false);
 
   const defaultUnit = account?.defaultUnit || 'lb';
 
@@ -87,27 +87,22 @@ export default function ExerciseDetail({
   }
 
   async function handleLogSet() {
-    setLogging(true);
-    try {
-      const result = editingSessionId
-        ? await logSetIntoSession(editingSessionId, { exerciseId: exercise.id, weight: weightDraft, reps: repsDraft })
-        : await logLiveSet(personId, { exerciseId: exercise.id, weight: weightDraft, reps: repsDraft });
+    const result = editingSessionId
+      ? await logSetIntoSession(editingSessionId, { exerciseId: exercise.id, weight: weightDraft, reps: repsDraft })
+      : await logLiveSet(personId, { exerciseId: exercise.id, weight: weightDraft, reps: repsDraft });
 
-      if (!editingSessionId) {
-        startRestTimer(personId, 90);
-        await refetchLiveSession();
-      }
-      if (result.isPR) {
-        showCelebration({
-          exerciseName: exercise.name,
-          setText: `${weightDraft} ${defaultUnit} × ${repsDraft}`,
-          est1rmText: `${result.best.est1rm} ${defaultUnit}`,
-        });
-      }
-      await Promise.all([refetchSummary(), refetchSessionSets()]);
-    } finally {
-      setLogging(false);
+    if (!editingSessionId) {
+      startRestTimer(personId, 90);
+      await refetchLiveSession();
     }
+    if (result.isPR) {
+      showCelebration({
+        exerciseName: exercise.name,
+        setText: `${weightDraft} ${defaultUnit} × ${repsDraft}`,
+        est1rmText: `${result.best.est1rm} ${defaultUnit}`,
+      });
+    }
+    await Promise.all([refetchSummary(), refetchSessionSets()]);
   }
 
   async function handleDeleteSet(setId) {
@@ -178,9 +173,8 @@ export default function ExerciseDetail({
           onValueTap={() => setKeypadField('weight')}
         />
         <WeightRepsStepper label="Reps" value={repsDraft} onDec={decReps} onInc={incReps} onValueTap={() => setKeypadField('reps')} />
-        <button
+        <Button
           onClick={handleLogSet}
-          disabled={logging}
           style={{
             width: '100%',
             padding: 16,
@@ -194,7 +188,7 @@ export default function ExerciseDetail({
           }}
         >
           Log set
-        </button>
+        </Button>
       </div>
 
       {sessionSets.length > 0 && (

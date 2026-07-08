@@ -8,6 +8,8 @@ import { removeExercise } from '../../api/exercises';
 import { addCategory, removeCategory } from '../../api/categories';
 import { removePerson } from '../../api/people';
 import AddEditExerciseModal from './AddEditExerciseModal';
+import Button from '../shared/Button';
+import Spinner from '../shared/Spinner';
 
 export default function AdminTab() {
   const { account, people, refreshPeople } = useAuth();
@@ -16,11 +18,17 @@ export default function AdminTab() {
   const { categories, refetch: refetchCategories } = useCategories();
   const [modalExercise, setModalExercise] = useState(undefined); // undefined = closed, null = create
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [pendingUnit, setPendingUnit] = useState(null);
 
   async function handleUnitSelect(unit) {
-    if (unit === account.defaultUnit) return;
-    await updateDefaultUnit(unit);
-    await refreshPeople();
+    if (unit === account.defaultUnit || pendingUnit) return;
+    setPendingUnit(unit);
+    try {
+      await updateDefaultUnit(unit);
+      await refreshPeople();
+    } finally {
+      setPendingUnit(null);
+    }
   }
 
   async function handleDeleteExercise(ex) {
@@ -56,10 +64,13 @@ export default function AdminTab() {
         <div style={{ display: 'flex', gap: 4, background: 'var(--color-subtle-bg)', borderRadius: 12, padding: 4, maxWidth: 220 }}>
           {['lb', 'kg'].map((unit) => {
             const active = account?.defaultUnit === unit;
+            const loading = pendingUnit === unit;
+            const textColor = active ? 'var(--color-accent)' : 'var(--color-muted)';
             return (
               <button
                 key={unit}
                 onClick={() => handleUnitSelect(unit)}
+                disabled={!!pendingUnit}
                 style={{
                   flex: 1,
                   padding: '10px 0',
@@ -69,11 +80,17 @@ export default function AdminTab() {
                   fontWeight: 700,
                   cursor: 'pointer',
                   background: active ? 'var(--color-surface)' : 'transparent',
-                  color: active ? 'var(--color-accent)' : 'var(--color-muted)',
+                  color: textColor,
                   boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  position: 'relative',
                 }}
               >
-                {unit}
+                <span style={{ visibility: loading ? 'hidden' : 'visible' }}>{unit}</span>
+                {loading && (
+                  <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Spinner size={14} color={textColor} />
+                  </span>
+                )}
               </button>
             );
           })}
@@ -152,9 +169,9 @@ export default function AdminTab() {
           placeholder="New category name"
           style={{ flex: 1, padding: '12px 14px', border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 14 }}
         />
-        <button onClick={handleAddCategory} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+        <Button onClick={handleAddCategory} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
           Add
-        </button>
+        </Button>
       </div>
 
       <div style={sectionLabelStyle}>People</div>

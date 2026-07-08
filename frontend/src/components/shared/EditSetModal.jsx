@@ -3,22 +3,17 @@ import { editSet } from '../../api/sets';
 import WeightRepsStepper from '../log/WeightRepsStepper';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
+import Button from './Button';
 
 export default function EditSetModal({ set, onClose, onSaved }) {
   const [weight, setWeight] = useState(set.weight);
   const [reps, setReps] = useState(set.reps);
-  const [saving, setSaving] = useState(false);
 
   const step = set.unit === 'kg' ? 2.5 : 5;
 
   async function handleSave() {
-    setSaving(true);
-    try {
-      await editSet(set.id, { weight, reps });
-      onSaved();
-    } finally {
-      setSaving(false);
-    }
+    await editSet(set.id, { weight, reps });
+    onSaved();
   }
 
   return (
@@ -36,13 +31,12 @@ export default function EditSetModal({ set, onClose, onSaved }) {
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel
         </button>
-        <button
+        <Button
           onClick={handleSave}
-          disabled={saving}
           style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
           Save
-        </button>
+        </Button>
       </div>
     </Modal>
   );

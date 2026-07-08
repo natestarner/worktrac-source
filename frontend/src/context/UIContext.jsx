@@ -61,11 +61,20 @@ export function UIProvider({ children }) {
   // StrictMode, and in concurrent features generally) may invoke an updater more than
   // once per commit to check for purity, which previously fired the destructive
   // onConfirm callback twice (e.g. deleting the same person twice, the second call
-  // hitting an already-gone row).
-  const runConfirm = useCallback(() => {
+  // hitting an already-gone row). Reading confirmDialog via closure instead and keeping
+  // the dialog mounted until onConfirm's promise settles also gives ConfirmDialog
+  // somewhere to show a spinner and disable its buttons while the delete is in flight.
+  const runConfirm = useCallback(async () => {
     const dlg = confirmDialog;
-    setConfirmDialog(null);
-    if (dlg && dlg.onConfirm) dlg.onConfirm();
+    if (!dlg || !dlg.onConfirm) {
+      setConfirmDialog(null);
+      return;
+    }
+    try {
+      await dlg.onConfirm();
+    } finally {
+      setConfirmDialog(null);
+    }
   }, [confirmDialog]);
 
   const showCelebration = useCallback((data) => {

@@ -6,6 +6,7 @@ import { useHistory } from '../../hooks/useHistory';
 import { downloadPersonCsv } from '../../api/export';
 import { formatDateLabel, formatTime, toLocalDateStr } from '../../utils/datetime';
 import PastSessionModal from './PastSessionModal';
+import Button from '../shared/Button';
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
@@ -33,9 +34,9 @@ export default function HistoryTab() {
         <button onClick={() => setShowPastSessionModal(true)} style={secondaryButtonStyle}>
           + Log a past workout
         </button>
-        <button onClick={() => downloadPersonCsv(activePersonId)} style={outlineButtonStyle}>
+        <Button onClick={() => downloadPersonCsv(activePersonId)} style={outlineButtonStyle}>
           Export data
-        </button>
+        </Button>
       </div>
 
       {history.length === 0 && (

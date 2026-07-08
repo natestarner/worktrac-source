@@ -4,25 +4,20 @@ import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
+import Button from './Button';
 
 export default function AddPersonModal({ onClose }) {
   const { refreshPeople } = useAuth();
   const { selectPerson } = useAppState();
   const [name, setName] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
   async function handleAdd() {
     const trimmed = name.trim();
     if (!trimmed) return;
-    setSubmitting(true);
-    try {
-      const person = await addPerson(trimmed);
-      await refreshPeople();
-      selectPerson(person.id);
-      onClose();
-    } finally {
-      setSubmitting(false);
-    }
+    const person = await addPerson(trimmed);
+    await refreshPeople();
+    selectPerson(person.id);
+    onClose();
   }
 
   return (
@@ -47,9 +42,8 @@ export default function AddPersonModal({ onClose }) {
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel
         </button>
-        <button
+        <Button
           onClick={handleAdd}
-          disabled={submitting}
           style={{
             flex: 1,
             padding: 14,
@@ -63,7 +57,7 @@ export default function AddPersonModal({ onClose }) {
           }}
         >
           Add
-        </button>
+        </Button>
       </div>
     </Modal>
   );
