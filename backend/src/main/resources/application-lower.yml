@@ -1,7 +1,12 @@
 spring:
   datasource:
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    # No separate username/password here -- SPRING_DATASOURCE_URL (from the
+    # SQL_CONNECTION_STRING_LOWER deploy secret) already embeds user=...;password=...
+    # in the JDBC URL itself (see worktrac_SDLC_setup_guide.md section 7.8). These used
+    # to be set to ${SPRING_DATASOURCE_USERNAME}/${SPRING_DATASOURCE_PASSWORD}, which were
+    # never provided by the deploy workflow -- Spring passed the literal unresolved
+    # "${SPRING_DATASOURCE_USERNAME}" string to SQL Server as the username, failing login
+    # and crash-looping the container on every deploy.
     hikari:
       # Azure SQL free/serverless tiers auto-pause and cold-start on the first
       # connection after idling (see CLAUDE.md) -- give the pool enough time to wait

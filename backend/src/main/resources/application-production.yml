@@ -1,7 +1,9 @@
 spring:
   datasource:
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    # No separate username/password here -- SPRING_DATASOURCE_URL (from the
+    # SQL_CONNECTION_STRING_PROD deploy secret) already embeds user=...;password=... in
+    # the JDBC URL itself (see worktrac_SDLC_setup_guide.md section 7.8). See
+    # application-lower.yml for why the separate properties used to break startup.
     hikari:
       # Azure SQL free/serverless tiers auto-pause and cold-start on the first
       # connection after idling (see CLAUDE.md) -- give the pool enough time to wait
