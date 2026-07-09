@@ -140,15 +140,6 @@ jobs:
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
-          # trivy-action v0.36.0 (pinned above) defaults to installing Trivy binary
-          # v0.70.0, which crashes instantly and silently (no error, no results, exit
-          # code 1) scanning this backend jar's Java dependencies -- reproduced on two
-          # separate CI runs, near-zero scan time elapsed both times, unrelated to any
-          # actual vulnerability. Pinned forward to the latest Trivy release, which
-          # doesn't hit it. If bumping this again later, verify the jar scan actually
-          # completes (a "Total:" vulnerability summary should appear in the step log
-          # right after "[jar] Detecting vulnerabilities...") before trusting a green run.
-          version: 'v0.72.0'
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
