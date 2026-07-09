@@ -13,11 +13,6 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
 
     List<WorkoutSet> findBySession_IdAndExercise_IdOrderByCreatedAtAsc(Long sessionId, Long exerciseId);
 
-    // Used to compute rest_seconds for a newly-logged live set: the gap between "now"
-    // and this row's created_at. Only ever called from the live-session path -- see
-    // WorkoutSetService.logLiveSet.
-    Optional<WorkoutSet> findFirstBySession_IdAndExercise_IdOrderByCreatedAtDesc(Long sessionId, Long exerciseId);
-
     List<WorkoutSet> findByPerson_IdOrderByCreatedAtAsc(Long personId);
 
     // Used when forking a system exercise: re-points this account's own logged sets
