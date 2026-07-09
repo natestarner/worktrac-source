@@ -71,35 +71,8 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - The app must keep each person's workout data (exercises, sets, reps, history) fully
   separate — every workout-related table should scope rows to a specific person, and
   every query must filter by the active person.
-- **`workout_sets.rest_seconds`** (added in `V17__add_rest_seconds_to_workout_sets.sql`)
-  records how long a person rested before a given set, for the Trends "rest between
-  sets" feature. The full rule lives in `WorkoutSetService.java`
-  (`logLiveSet`/`logSetIntoSession`/`computeRestSeconds`) and `WorkoutSet.java`, but the
-  invariants any future change must preserve are:
-  - **Null unless the set was logged through the live-session endpoint**
-    (`POST /api/people/{personId}/live-sets` → `WorkoutSetService.logLiveSet`). Anything
-    logged through `POST /api/sessions/{sessionId}/sets` (`logSetIntoSession`) always gets
-    `null` — **do not** gate this on the session's `manual` flag instead. `manual` only
-    catches sessions created via the retroactive "Log a past workout" flow; it misses an
-    old, originally-*live* (`manual = false`) session being resumed via History's "Edit"
-    button to append a forgotten set days later, which is exactly as untrustworthy for
-    rest-time purposes. Gating on which endpoint handled the write catches both cases,
-    because `logSetIntoSession` is *only* ever called when the frontend is in that
-    explicit "editing a specific existing session" mode (see
-    `frontend/src/components/log/ExerciseDetail.jsx`'s `handleLogSet`), never for
-    real-time logging.
-  - Null for the first set of an exercise in a session (nothing to diff against).
-  - Otherwise, computed once at insert time as the gap between now and the most recent
-    prior set's `created_at` for the *same session + same exercise* — scoped by exercise,
-    not just session, so supersetting into a different exercise between sets doesn't
-    corrupt the number.
-  - **Immutable after insert**, by construction: `WorkoutSet.restSeconds` has no setter.
-    Editing a set's weight/reps (`editSet`) must never touch it, and deleting or editing
-    a neighboring set does not retroactively recompute it — it's a snapshot of what
-    actually happened at the time, not a live-derived value.
-  - Computed from the app's injected `Clock` bean (`ClockConfig`), not `Instant.now()`,
-    so it's deterministically testable with `MutableClock` (see `RestSecondsTest.java`),
-    matching the same pattern `WorkoutSessionService` uses for its 8-hour staleness rule.
+- The schema for people/workouts/exercises/sets has not been designed yet (pipeline setup
+  came first, by design). Design it carefully before writing the first Flyway migration.
 
 ## Frontend State Notes
 - **Every person has their own independent client-side state.** Whatever a person is

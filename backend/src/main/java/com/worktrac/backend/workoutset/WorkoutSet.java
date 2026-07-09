@@ -58,28 +58,16 @@ public class WorkoutSet {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    // Seconds of rest before this set, snapshotted once at insert time -- see the
-    // V17 migration and WorkoutSetService.insertSetAndDetectPr for the full rule (live
-    // sets only, null for the first set of an exercise in a session). Deliberately has
-    // no setter: it must never be recomputed after the fact (e.g. from editSet, or if an
-    // earlier/later set is edited or deleted), since it records what actually happened
-    // at the time, not a live-derived value. Never set this from anywhere but the
-    // constructor.
-    @Column(name = "rest_seconds", updatable = false)
-    private Integer restSeconds;
-
     protected WorkoutSet() {
     }
 
-    public WorkoutSet(WorkoutSession session, Person person, Exercise exercise, BigDecimal weight, int reps, String unit,
-                       Integer restSeconds) {
+    public WorkoutSet(WorkoutSession session, Person person, Exercise exercise, BigDecimal weight, int reps, String unit) {
         this.session = session;
         this.person = person;
         this.exercise = exercise;
         this.weight = weight;
         this.reps = reps;
         this.unit = unit;
-        this.restSeconds = restSeconds;
     }
 
     @PrePersist
@@ -133,9 +121,5 @@ public class WorkoutSet {
 
     public Instant getCreatedAt() {
         return createdAt;
-    }
-
-    public Integer getRestSeconds() {
-        return restSeconds;
     }
 }
