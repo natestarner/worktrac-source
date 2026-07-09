@@ -153,3 +153,18 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - The `local` profile uses Docker SQL Server on localhost:1434 (see note above)
 - NEVER commit passwords, tokens, or connection strings to code
 - Database free tier auto-pauses — expect cold start delays
+
+## Known Issue: Trivy Java/jar scan disabled (as of 2026-07-09)
+- `docker-build`'s vulnerability scan (`.github/workflows/ci.yml`) is temporarily scoped
+  to `vuln-type: 'os'` — it no longer scans the backend jar's Java dependencies for CVEs,
+  only the Alpine base image's OS packages.
+- Why: the Java/jar scan started crashing instantly and silently (no error, no results,
+  exit code 1) on 2026-07-09. Confirmed NOT caused by app code (reproduced against a
+  revert to the prior day's exact passing tree/dependency set) and NOT a Trivy binary
+  bug (identical crash on two different Trivy versions). Root cause is external —
+  something in the live vulnerability/Java databases Trivy re-fetches on every run,
+  which we don't control and haven't further isolated.
+- To restore full coverage: remove the `vuln-type: 'os'` line (or set it back to
+  `os,library`, Trivy's default) and confirm the step log shows the jar scan actually
+  completing (a `Total:` vulnerability summary right after `[jar] Detecting
+  vulnerabilities...`) rather than crashing again, before trusting a green run.
