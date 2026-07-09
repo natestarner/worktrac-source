@@ -141,6 +141,14 @@ jobs:
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
           version: 'v0.72.0'
+          # Without this, trivy-action builds the SARIF report with ALL severities
+          # regardless of the severity filter above, and exit-code evaluates against
+          # that unfiltered set -- so a LOW/MEDIUM finding on any dependency can fail
+          # the build even though severity is scoped to CRITICAL,HIGH. Bit us on
+          # 2026-07-09 (CVE-2026-10532, a LOW logback finding, failed the build; see
+          # CLAUDE.md's Resolved Incident writeup). Documented upstream bug:
+          # https://github.com/aquasecurity/trivy-action/issues/309
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4

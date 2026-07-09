@@ -160,15 +160,20 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - Root cause, confirmed via a controlled revert-and-retest and by inspecting the actual
   SARIF result counts via the GitHub code-scanning API (not just the console log, which
   prints nothing useful for `format: sarif`): Trivy's Java vulnerability database picked
-  up a new entry, `CVE-2026-10532` (`ch.qos.logback:logback-core` 1.5.34, severity LOW),
-  and something in Trivy/trivy-action's exit-code logic returned exit 1 for it despite
-  the workflow's `severity: 'CRITICAL,HIGH'` filter, which should only fail the build on
-  HIGH/CRITICAL findings. Not caused by app code or by a stale Trivy version — reproduced
+  up a new entry, `CVE-2026-10532` (`ch.qos.logback:logback-core` 1.5.34, severity LOW).
+  trivy-action failed the build on it despite the workflow's `severity: 'CRITICAL,HIGH'`
+  filter — a documented upstream bug
+  ([trivy-action#309](https://github.com/aquasecurity/trivy-action/issues/309)):
+  without `limit-severities-for-sarif: true`, the SARIF report is built with ALL
+  severities regardless of the `severity` input, and `exit-code` evaluates against that
+  unfiltered set. Not caused by app code or by a stale Trivy version — reproduced
   identically against the prior day's exact passing dependency tree and on two different
   Trivy binary versions.
 - Fix: bumped `logback.version` to `1.5.35` in `backend/pom.xml` (overriding Spring
   Boot's managed version) to patch the actual CVE, which resolved the underlying finding
-  and let the scan pass cleanly again with full `os,library` coverage restored. If
-  Trivy's exit-code-ignores-severity-filter behavior resurfaces on some future unrelated
-  finding, patching/upgrading the flagged dependency (rather than narrowing `vuln-type`)
-  is the preferred fix — it keeps full scan coverage instead of trading it away.
+  and let the scan pass cleanly again with full `os,library` coverage restored. Also
+  added `limit-severities-for-sarif: true` to the Trivy step so a future LOW/MEDIUM
+  finding on some other dependency can't silently fail the build the same way again —
+  if a real HIGH/CRITICAL finding ever fails the build, patching/upgrading the flagged
+  dependency (rather than narrowing `vuln-type`) is the preferred fix, since it keeps
+  full scan coverage instead of trading it away.
