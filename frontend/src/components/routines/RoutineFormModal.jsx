@@ -1,16 +1,31 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createRoutine, updateRoutine } from '../../api/routines';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
 
-export default function RoutineFormModal({ personId, routine, exercises, onClose, onSaved }) {
+export default function RoutineFormModal({ personId, routine, exercises, categories, onClose, onSaved }) {
   const isEditing = !!routine;
   const [name, setName] = useState(routine?.name || '');
   const [selectedIds, setSelectedIds] = useState(routine ? routine.exercises.map((e) => e.exerciseId) : []);
+  const [exerciseFilter, setExerciseFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState(null);
 
   const exerciseById = new Map(exercises.map((e) => [e.id, e]));
-  const available = exercises.filter((e) => !selectedIds.includes(e.id));
+  const term = exerciseFilter.trim().toLowerCase();
+  const unselected = exercises.filter((e) => !selectedIds.includes(e.id));
+  const available = unselected
+    .filter((e) => categoryFilter === null || e.categoryId === categoryFilter)
+    .filter((e) => !term || e.name.toLowerCase().includes(term));
+  const availableCategories = (categories || []).filter((cat) => unselected.some((e) => e.categoryId === cat.id));
+
+  // A category can empty out as its last remaining exercise gets added to the routine;
+  // fall back to "All" rather than leaving the filter pointed at a pill that's no longer shown.
+  useEffect(() => {
+    if (categoryFilter !== null && !availableCategories.some((cat) => cat.id === categoryFilter)) {
+      setCategoryFilter(null);
+    }
+  });
 
   function addExercise(id) {
     setSelectedIds((ids) => [...ids, id]);
@@ -85,16 +100,43 @@ export default function RoutineFormModal({ personId, routine, exercises, onClose
         </>
       )}
 
-      {available.length > 0 && (
+      {(exercises.length - selectedIds.length > 0) && (
         <>
           <div style={sectionLabelStyle}>Add exercise</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-            {available.map((ex) => (
-              <button key={ex.id} onClick={() => addExercise(ex.id)} style={addChipStyle}>
-                + {ex.name}
-              </button>
-            ))}
-          </div>
+          <input
+            value={exerciseFilter}
+            onChange={(e) => setExerciseFilter(e.target.value)}
+            placeholder="Search exercises"
+            style={{ width: '100%', boxSizing: 'border-box', padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 14, marginBottom: 10 }}
+          />
+          {availableCategories.length > 1 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={filterLabelStyle}>Filter by category</div>
+              <div style={categoryTrackStyle}>
+                <button onClick={() => setCategoryFilter(null)} style={categoryTabStyle(categoryFilter === null)}>
+                  All
+                </button>
+                {availableCategories.map((cat) => (
+                  <button key={cat.id} onClick={() => setCategoryFilter(cat.id)} style={categoryTabStyle(categoryFilter === cat.id)}>
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {available.length === 0 ? (
+            <div style={{ padding: '10px 2px 18px', color: 'var(--color-faint)', fontSize: 14 }}>
+              {term ? `No exercises match "${exerciseFilter}".` : 'No exercises in this category.'}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+              {available.map((ex) => (
+                <button key={ex.id} onClick={() => addExercise(ex.id)} style={addChipStyle}>
+                  + {ex.name}
+                </button>
+              ))}
+            </div>
+          )}
         </>
       )}
 
@@ -143,3 +185,34 @@ const addChipStyle = {
   fontWeight: 600,
   cursor: 'pointer',
 };
+
+const filterLabelStyle = {
+  fontSize: 11,
+  fontWeight: 700,
+  color: 'var(--color-faint)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  marginBottom: 6,
+};
+
+const categoryTrackStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 2,
+  padding: 3,
+  background: 'var(--color-subtle-bg)',
+  borderRadius: 10,
+};
+
+function categoryTabStyle(active) {
+  return {
+    padding: '6px 12px',
+    borderRadius: 7,
+    border: 'none',
+    background: active ? 'var(--color-accent)' : 'transparent',
+    color: active ? '#fff' : 'var(--color-muted)',
+    fontSize: 13,
+    fontWeight: active ? 700 : 600,
+    cursor: 'pointer',
+  };
+}

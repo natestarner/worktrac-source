@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
+import { useCategories } from '../../hooks/useCategories';
 import { useRoutines } from '../../hooks/useRoutines';
 import { removeRoutine } from '../../api/routines';
 import RoutineFormModal from './RoutineFormModal';
@@ -13,6 +14,7 @@ export default function RoutinesTab() {
   const { activePersonId, startRoutine } = useAppState();
   const { openConfirm } = useUI();
   const { exercises } = useExercises();
+  const { categories } = useCategories();
   const { routines, loading, refetch } = useRoutines(activePersonId);
   const [modalRoutine, setModalRoutine] = useState(undefined); // undefined = closed, null = create, object = edit
 
@@ -88,6 +90,7 @@ export default function RoutinesTab() {
           personId={activePersonId}
           routine={modalRoutine}
           exercises={exercises}
+          categories={categories}
           onClose={() => setModalRoutine(undefined)}
           onSaved={() => {
             setModalRoutine(undefined);
