@@ -23,6 +23,9 @@
         <java.version>25</java.version>
         <testcontainers.version>1.21.4</testcontainers.version>
         <jjwt.version>0.12.6</jjwt.version>
+        <!-- CVE-2026-10532 (logback-core, fixed in 1.5.35): override Spring Boot's
+             managed version until the parent BOM picks up the patched release itself. -->
+        <logback.version>1.5.35</logback.version>
     </properties>
 
     <dependencies>

@@ -141,19 +141,6 @@ jobs:
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
           version: 'v0.72.0'
-          # TEMPORARY, 2026-07-09: the Java/jar dependency scan crashes instantly and
-          # silently (no error, no results, exit code 1) the moment it starts on this
-          # backend jar -- confirmed NOT caused by our code (reproduced against a
-          # revert to PR #17's exact tree, which scanned cleanly the day before) and
-          # NOT a Trivy binary bug (reproduced identically on both v0.70.0, the
-          # trivy-action default, and v0.72.0, pinned above). Root cause is external --
-          # most likely something in the live vulnerability/Java databases Trivy
-          # re-fetches on every run, which we don't control. Scoped to os-only here to
-          # unblock deploys; this drops Java-dependency CVE coverage until it's
-          # investigated further or the upstream issue passes. Remove vuln-type once
-          # `os,library` (the default) scans clean again -- see CLAUDE.md's Important
-          # Notes for the full incident writeup.
-          vuln-type: 'os'
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4

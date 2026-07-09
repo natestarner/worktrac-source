@@ -154,17 +154,21 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - NEVER commit passwords, tokens, or connection strings to code
 - Database free tier auto-pauses — expect cold start delays
 
-## Known Issue: Trivy Java/jar scan disabled (as of 2026-07-09)
-- `docker-build`'s vulnerability scan (`.github/workflows/ci.yml`) is temporarily scoped
-  to `vuln-type: 'os'` — it no longer scans the backend jar's Java dependencies for CVEs,
-  only the Alpine base image's OS packages.
-- Why: the Java/jar scan started crashing instantly and silently (no error, no results,
-  exit code 1) on 2026-07-09. Confirmed NOT caused by app code (reproduced against a
-  revert to the prior day's exact passing tree/dependency set) and NOT a Trivy binary
-  bug (identical crash on two different Trivy versions). Root cause is external —
-  something in the live vulnerability/Java databases Trivy re-fetches on every run,
-  which we don't control and haven't further isolated.
-- To restore full coverage: remove the `vuln-type: 'os'` line (or set it back to
-  `os,library`, Trivy's default) and confirm the step log shows the jar scan actually
-  completing (a `Total:` vulnerability summary right after `[jar] Detecting
-  vulnerabilities...`) rather than crashing again, before trusting a green run.
+## Resolved Incident: Trivy scan failure (2026-07-09)
+- `docker-build`'s vulnerability scan started failing (silent exit code 1, no console
+  output) on every push to `main` starting 2026-07-09, blocking `promote-to-lower`.
+- Root cause, confirmed via a controlled revert-and-retest and by inspecting the actual
+  SARIF result counts via the GitHub code-scanning API (not just the console log, which
+  prints nothing useful for `format: sarif`): Trivy's Java vulnerability database picked
+  up a new entry, `CVE-2026-10532` (`ch.qos.logback:logback-core` 1.5.34, severity LOW),
+  and something in Trivy/trivy-action's exit-code logic returned exit 1 for it despite
+  the workflow's `severity: 'CRITICAL,HIGH'` filter, which should only fail the build on
+  HIGH/CRITICAL findings. Not caused by app code or by a stale Trivy version — reproduced
+  identically against the prior day's exact passing dependency tree and on two different
+  Trivy binary versions.
+- Fix: bumped `logback.version` to `1.5.35` in `backend/pom.xml` (overriding Spring
+  Boot's managed version) to patch the actual CVE, which resolved the underlying finding
+  and let the scan pass cleanly again with full `os,library` coverage restored. If
+  Trivy's exit-code-ignores-severity-filter behavior resurfaces on some future unrelated
+  finding, patching/upgrading the flagged dependency (rather than narrowing `vuln-type`)
+  is the preferred fix — it keeps full scan coverage instead of trading it away.
