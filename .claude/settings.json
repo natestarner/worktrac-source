@@ -9,8 +9,14 @@
       "Bash(cd frontend && npm*)",
       "Bash(cd e2e && npx playwright*)",
       "Bash(docker start*)",
-      "Bash(docker stop*)"
+      "Bash(docker stop*)",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
     ],
-    "deny": ["Edit(.github/workflows/**)", "Bash(az*)", "Bash(gh secret*)"]
+    "deny": [
+      "Edit(.github/workflows/codeql.yml)",
+      "Bash(az*)",
+      "Bash(gh secret*)"
+    ]
   }
 }
