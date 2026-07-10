@@ -43,3 +43,25 @@ describe('AddEditExerciseModal category default', () => {
     expect(onSaved).toHaveBeenCalled();
   });
 });
+
+describe('AddEditExerciseModal name validation', () => {
+  const categories = [{ id: 42, name: 'Upper Push' }];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    addExercise.mockResolvedValue({ id: 1 });
+  });
+
+  it('shows an error and does not save when the name is blank', async () => {
+    const onSaved = vi.fn();
+    render(<AddEditExerciseModal exercise={null} categories={categories} onClose={vi.fn()} onSaved={onSaved} />);
+
+    fireEvent.click(lastAddButton());
+
+    expect(await screen.findByText('Enter an exercise name.')).toBeInTheDocument();
+    expect(addExercise).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Cable Row' } });
+    expect(screen.queryByText('Enter an exercise name.')).not.toBeInTheDocument();
+  });
+});

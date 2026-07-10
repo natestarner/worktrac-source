@@ -19,6 +19,7 @@ export default function AdminTab() {
   const { categories, loading: categoriesLoading, refetch: refetchCategories } = useCategories();
   const [modalExercise, setModalExercise] = useState(undefined); // undefined = closed, null = create
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryNameError, setCategoryNameError] = useState(false);
   const [pendingUnit, setPendingUnit] = useState(null);
 
   async function handleUnitSelect(unit) {
@@ -39,7 +40,10 @@ export default function AdminTab() {
 
   async function handleAddCategory() {
     const trimmed = newCategoryName.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setCategoryNameError(true);
+      return;
+    }
     await addCategory(trimmed);
     setNewCategoryName('');
     refetchCategories();
@@ -178,17 +182,29 @@ export default function AdminTab() {
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: categoryNameError ? 6 : 24 }}>
         <input
           value={newCategoryName}
-          onChange={(e) => setNewCategoryName(e.target.value)}
+          onChange={(e) => {
+            setNewCategoryName(e.target.value);
+            if (categoryNameError) setCategoryNameError(false);
+          }}
           placeholder="New category name"
-          style={{ flex: 1, padding: '12px 14px', border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 14 }}
+          style={{
+            flex: 1,
+            padding: '12px 14px',
+            border: `1px solid ${categoryNameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
+            borderRadius: 10,
+            fontSize: 14,
+          }}
         />
         <Button onClick={handleAddCategory} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
           Add
         </Button>
       </div>
+      {categoryNameError && (
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 18 }}>Enter a category name.</div>
+      )}
 
       <div style={sectionLabelStyle}>People</div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '4px 20px' }}>

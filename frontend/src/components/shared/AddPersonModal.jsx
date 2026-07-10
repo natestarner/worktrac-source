@@ -10,10 +10,14 @@ export default function AddPersonModal({ onClose }) {
   const { refreshPeople } = useAuth();
   const { selectPerson } = useAppState();
   const [name, setName] = useState('');
+  const [nameError, setNameError] = useState(false);
 
   async function handleAdd() {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setNameError(true);
+      return;
+    }
     const person = await addPerson(trimmed);
     await refreshPeople();
     selectPerson(person.id);
@@ -26,18 +30,24 @@ export default function AddPersonModal({ onClose }) {
       <input
         autoFocus
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e) => {
+          setName(e.target.value);
+          if (nameError) setNameError(false);
+        }}
         placeholder="Name"
         style={{
           width: '100%',
           boxSizing: 'border-box',
           padding: 14,
-          border: '1px solid var(--color-border)',
+          border: `1px solid ${nameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
           borderRadius: 10,
           fontSize: 16,
-          marginBottom: 16,
+          marginBottom: nameError ? 6 : 16,
         }}
       />
+      {nameError && (
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 16 }}>Enter a name.</div>
+      )}
       <div style={{ display: 'flex', gap: 10 }}>
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel

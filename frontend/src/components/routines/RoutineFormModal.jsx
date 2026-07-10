@@ -10,6 +10,8 @@ export default function RoutineFormModal({ personId, routine, exercises, categor
   const [selectedIds, setSelectedIds] = useState(routine ? routine.exercises.map((e) => e.exerciseId) : []);
   const [exerciseFilter, setExerciseFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState(null);
+  const [nameError, setNameError] = useState(false);
+  const [exercisesError, setExercisesError] = useState(false);
 
   const exerciseById = new Map(exercises.map((e) => [e.id, e]));
   const term = exerciseFilter.trim().toLowerCase();
@@ -29,6 +31,7 @@ export default function RoutineFormModal({ personId, routine, exercises, categor
 
   function addExercise(id) {
     setSelectedIds((ids) => [...ids, id]);
+    setExercisesError(false);
   }
   function removeExercise(id) {
     setSelectedIds((ids) => ids.filter((x) => x !== id));
@@ -45,7 +48,12 @@ export default function RoutineFormModal({ personId, routine, exercises, categor
 
   async function handleSave() {
     const trimmed = name.trim();
-    if (!trimmed || selectedIds.length === 0) return;
+    const hasExercises = selectedIds.length > 0;
+    if (!trimmed || !hasExercises) {
+      setNameError(!trimmed);
+      setExercisesError(!hasExercises);
+      return;
+    }
     if (isEditing) {
       await updateRoutine(personId, routine.id, { name: trimmed, exerciseIds: selectedIds });
     } else {
@@ -59,10 +67,24 @@ export default function RoutineFormModal({ personId, routine, exercises, categor
       <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{isEditing ? 'Edit routine' : 'New routine'}</div>
       <input
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e) => {
+          setName(e.target.value);
+          if (nameError) setNameError(false);
+        }}
         placeholder="Routine name (e.g. Push Day)"
-        style={{ width: '100%', boxSizing: 'border-box', padding: 14, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 16, marginBottom: 16 }}
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          padding: 14,
+          border: `1px solid ${nameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
+          borderRadius: 10,
+          fontSize: 16,
+          marginBottom: nameError ? 6 : 16,
+        }}
       />
+      {nameError && <div style={errorTextStyle}>Give this routine a name.</div>}
+
+      {selectedIds.length === 0 && exercisesError && <div style={{ ...errorTextStyle, marginBottom: 18 }}>Add at least one exercise.</div>}
 
       {selectedIds.length > 0 && (
         <>
@@ -162,6 +184,13 @@ const sectionLabelStyle = {
   textTransform: 'uppercase',
   letterSpacing: '0.04em',
   marginBottom: 10,
+};
+
+const errorTextStyle = {
+  fontSize: 12,
+  fontWeight: 600,
+  color: 'var(--color-danger)',
+  marginBottom: 16,
 };
 
 const miniButtonStyle = {
