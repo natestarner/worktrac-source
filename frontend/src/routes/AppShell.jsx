@@ -44,11 +44,11 @@ export default function AppShell() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)', paddingBottom: 40 }}>
+    <div className="app-shell" style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
       <Header />
       <PersonPillBar />
       <TabsNav />
-      <div style={{ maxWidth: 840, margin: '0 auto', padding: '0 24px' }}>
+      <div className="tab-panel" style={{ margin: '0 auto', padding: '0 24px' }}>
         <Outlet />
       </div>
 

@@ -70,11 +70,11 @@ export default function PersonPillBar() {
 
   return (
     <div
+      className="person-pill-bar"
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        padding: '14px 24px',
         overflowX: 'auto',
         background: 'var(--color-surface)',
         borderBottom: '1px solid var(--color-border)',

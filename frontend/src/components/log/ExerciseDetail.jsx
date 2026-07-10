@@ -38,6 +38,7 @@ export default function ExerciseDetail({
   const [editingSetupField, setEditingSetupField] = useState(null);
   const [editingSet, setEditingSet] = useState(null);
   const [ready, setReady] = useState(false);
+  const [justAddedSetId, setJustAddedSetId] = useState(null);
 
   const defaultUnit = account?.defaultUnit || 'lb';
 
@@ -72,6 +73,14 @@ export default function ExerciseDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summary, sessionSets.length]);
 
+  // Clears the just-added highlight once its animation has had time to finish, so it
+  // plays once per set logged rather than lingering or replaying on unrelated re-renders.
+  useEffect(() => {
+    if (!justAddedSetId) return;
+    const timer = setTimeout(() => setJustAddedSetId(null), 1200);
+    return () => clearTimeout(timer);
+  }, [justAddedSetId]);
+
   const weightStep = defaultUnit === 'kg' ? 2.5 : 5;
 
   function decWeight() {
@@ -96,6 +105,7 @@ export default function ExerciseDetail({
       startRestTimer(personId, 90);
       await refetchLiveSession();
     }
+    setJustAddedSetId(result.set.id);
     if (result.isPR) {
       showCelebration({
         exerciseName: exercise.name,
@@ -123,142 +133,160 @@ export default function ExerciseDetail({
 
   return (
     <div>
-      <button onClick={onBack} style={backButtonStyle}>
-        &larr; All exercises
-      </button>
+      <div className="exercise-detail-grid">
+        <div>
+          <button onClick={onBack} style={backButtonStyle}>
+            &larr; All exercises
+          </button>
 
-      <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em', marginBottom: 4 }}>{exercise.name}</div>
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-        <div style={{ fontSize: 14, color: 'var(--color-muted)' }}>{exercise.categoryName}</div>
-        {exercise.setupFields.map((field) => {
-          const found = setupValues.find((v) => v.fieldId === field.id);
-          const value = found?.value || '';
-          return (
-            <button
-              key={field.id}
-              onClick={() => setEditingSetupField({ fieldId: field.id, fieldName: field.name, value })}
+          <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em', marginBottom: 4 }}>{exercise.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+            <div style={{ fontSize: 14, color: 'var(--color-muted)' }}>{exercise.categoryName}</div>
+            {exercise.setupFields.map((field) => {
+              const found = setupValues.find((v) => v.fieldId === field.id);
+              const value = found?.value || '';
+              return (
+                <button
+                  key={field.id}
+                  onClick={() => setEditingSetupField({ fieldId: field.id, fieldName: field.name, value })}
+                  style={{
+                    flexShrink: 0,
+                    padding: '5px 12px',
+                    borderRadius: 999,
+                    border: `1px solid ${value ? 'var(--color-border)' : 'var(--color-pr-border)'}`,
+                    background: value ? 'var(--color-bg)' : 'var(--color-pr-bg)',
+                    color: value ? 'var(--color-text)' : 'var(--color-pr-text)',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {value ? `${field.name}: ${value}` : `${field.name}: set`}
+                </button>
+              );
+            })}
+          </div>
+
+          {!ready && (
+            <div className="summary-cards-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+              <div className="summary-card" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16 }}>
+                <Skeleton width={90} height={11} style={{ marginBottom: 8 }} />
+                <Skeleton width={110} height={20} />
+              </div>
+              <div className="summary-card" style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 16 }}>
+                <Skeleton width={100} height={11} style={{ marginBottom: 8 }} />
+                <Skeleton width={130} height={20} />
+              </div>
+            </div>
+          )}
+
+          {ready && (
+            <div className="summary-cards-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+              <div className="summary-card" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16 }}>
+                <div style={cardLabelStyle}>Last time &middot; {lastLabel}</div>
+                <div className="summary-card-value" style={{ fontWeight: 700 }}>{lastSetsText}</div>
+              </div>
+              <div className="summary-card" style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 16 }}>
+                <div style={{ ...cardLabelStyle, color: 'var(--color-pr-text)' }}>Best &middot; Est. 1RM</div>
+                <div className="summary-card-value" style={{ fontWeight: 700, color: 'var(--color-pr-text)' }}>{bestText}</div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 20, marginBottom: 16 }}>
+            <div className="stepper-pair">
+              <WeightRepsStepper
+                label={`Weight (${defaultUnit})`}
+                value={weightDraft}
+                onDec={decWeight}
+                onInc={incWeight}
+                onValueTap={() => setKeypadField('weight')}
+              />
+              <WeightRepsStepper label="Reps" value={repsDraft} onDec={decReps} onInc={incReps} onValueTap={() => setKeypadField('reps')} />
+            </div>
+            <Button
+              onClick={handleLogSet}
               style={{
-                flexShrink: 0,
-                padding: '5px 12px',
-                borderRadius: 999,
-                border: `1px solid ${value ? 'var(--color-border)' : 'var(--color-pr-border)'}`,
-                background: value ? 'var(--color-bg)' : 'var(--color-pr-bg)',
-                color: value ? 'var(--color-text)' : 'var(--color-pr-text)',
-                fontSize: 12,
+                width: '100%',
+                padding: 16,
+                background: 'var(--color-accent)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 12,
+                fontSize: 16,
                 fontWeight: 700,
                 cursor: 'pointer',
-                whiteSpace: 'nowrap',
               }}
             >
-              {value ? `${field.name}: ${value}` : `${field.name}: set`}
-            </button>
-          );
-        })}
-      </div>
-
-      {!ready && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
-            <Skeleton width={90} height={11} style={{ marginBottom: 8 }} />
-            <Skeleton width={110} height={20} />
-          </div>
-          <div style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 16, padding: 16 }}>
-            <Skeleton width={100} height={11} style={{ marginBottom: 8 }} />
-            <Skeleton width={130} height={20} />
+              Log set
+            </Button>
           </div>
         </div>
-      )}
 
-      {ready && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
-            <div style={cardLabelStyle}>Last time &middot; {lastLabel}</div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{lastSetsText}</div>
-          </div>
-          <div style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 16, padding: 16 }}>
-            <div style={{ ...cardLabelStyle, color: 'var(--color-pr-text)' }}>Best &middot; Est. 1RM</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-pr-text)' }}>{bestText}</div>
-          </div>
-        </div>
-      )}
-
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 20, marginBottom: 16 }}>
-        <WeightRepsStepper
-          label={`Weight (${defaultUnit})`}
-          value={weightDraft}
-          onDec={decWeight}
-          onInc={incWeight}
-          onValueTap={() => setKeypadField('weight')}
-        />
-        <WeightRepsStepper label="Reps" value={repsDraft} onDec={decReps} onInc={incReps} onValueTap={() => setKeypadField('reps')} />
-        <Button
-          onClick={handleLogSet}
-          style={{
-            width: '100%',
-            padding: 16,
-            background: 'var(--color-accent)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 12,
-            fontSize: 16,
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-        >
-          Log set
-        </Button>
-      </div>
-
-      {ready && sessionSets.length > 0 && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '8px 20px' }}>
-          {sessionSets.map((set, i) => {
-            const isPR = isPrSet(set.weight, set.reps, set.unit, bestComparableLb);
-            return (
-              <div
-                key={set.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '14px 0',
-                  borderBottom: i < sessionSets.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
-                }}
-              >
-                <button
-                  onClick={() => setEditingSet(set)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
-                >
-                  <div style={{ fontSize: 13, color: 'var(--color-muted)', fontWeight: 600, width: 44 }}>Set {i + 1}</div>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}>
-                    {set.weight} {set.unit || 'lb'} &times; {set.reps}
-                  </div>
-                  {isPR && (
-                    <span
+        <div className="log-sets-col">
+          {ready && sessionSets.length > 0 && (
+            <>
+              <div className="log-sets-heading">This session</div>
+              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '8px 20px' }}>
+                {[...sessionSets].reverse().map((set, i) => {
+                  // sessionSets comes back from the API in the order logged (oldest
+                  // first) so "Set N" always labels a set's true chronological
+                  // position -- reverse only the rendering, not the numbering, so the
+                  // most recently logged set shows on top.
+                  const setNumber = sessionSets.length - i;
+                  const isPR = isPrSet(set.weight, set.reps, set.unit, bestComparableLb);
+                  return (
+                    <div
+                      key={set.id}
+                      className={set.id === justAddedSetId ? 'set-row-new' : undefined}
                       style={{
-                        background: 'var(--color-success-bg)',
-                        color: 'var(--color-success)',
-                        fontSize: 11,
-                        fontWeight: 800,
-                        padding: '3px 8px',
-                        borderRadius: 999,
-                        letterSpacing: '0.03em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '14px 0',
+                        borderRadius: 10,
+                        borderBottom: i < sessionSets.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
                       }}
                     >
-                      PR
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={() => openConfirm('Delete this set?', () => handleDeleteSet(set.id))}
-                  style={{ background: 'none', border: 'none', color: 'var(--color-faint)', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}
-                >
-                  &times;
-                </button>
+                      <button
+                        onClick={() => setEditingSet(set)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
+                      >
+                        <div style={{ fontSize: 13, color: 'var(--color-muted)', fontWeight: 600, width: 44 }}>Set {setNumber}</div>
+                        <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}>
+                          {set.weight} {set.unit || 'lb'} &times; {set.reps}
+                        </div>
+                        {isPR && (
+                          <span
+                            style={{
+                              background: 'var(--color-success-bg)',
+                              color: 'var(--color-success)',
+                              fontSize: 11,
+                              fontWeight: 800,
+                              padding: '3px 8px',
+                              borderRadius: 999,
+                              letterSpacing: '0.03em',
+                            }}
+                          >
+                            PR
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => openConfirm('Delete this set?', () => handleDeleteSet(set.id))}
+                        style={{ background: 'none', border: 'none', color: 'var(--color-faint)', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {hasActiveRoutine && (
         <button

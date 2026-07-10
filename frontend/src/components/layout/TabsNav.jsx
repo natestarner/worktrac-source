@@ -11,7 +11,7 @@ const TABS = [
 
 export default function TabsNav() {
   return (
-    <div style={{ display: 'flex', gap: 4, padding: '12px 24px', overflowX: 'auto' }}>
+    <div className="tabs-nav-bar" style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
       <div style={{ display: 'flex', gap: 4, background: 'var(--color-subtle-bg)', borderRadius: 12, padding: 4 }}>
         {TABS.map((tab) => (
           <NavLink
