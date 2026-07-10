@@ -18,6 +18,39 @@ export default function ExercisePicker({ exercises, categories, routines, loadin
 
   return (
     <div>
+      {showRoutineQuickStart && (
+        <div style={{ marginBottom: 22 }}>
+          <div style={sectionLabelStyle}>Start a routine</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {routines.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => onStartRoutine(r)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '16px 18px',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 14,
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: 'var(--color-text)',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <span>{r.name}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-accent)' }}>Start &rarr;</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showRoutineQuickStart && <div style={sectionLabelStyle}>Or pick any exercise</div>}
+
       <input
         value={exerciseSearch}
         onChange={(e) => setExerciseSearch(e.target.value)}
@@ -57,39 +90,6 @@ export default function ExercisePicker({ exercises, categories, routines, loadin
           No exercises match "{exerciseSearch}".
         </div>
       )}
-
-      {showRoutineQuickStart && (
-        <div style={{ marginBottom: 22 }}>
-          <div style={sectionLabelStyle}>Start a routine</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {routines.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => onStartRoutine(r)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '16px 18px',
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 14,
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: 'var(--color-text)',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                }}
-              >
-                <span>{r.name}</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-accent)' }}>Start &rarr;</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {showRoutineQuickStart && <div style={sectionLabelStyle}>Or pick any exercise</div>}
 
       {categoryGroups.map((group) => (
         <div key={group.id} style={{ marginBottom: 20 }}>
