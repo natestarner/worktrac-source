@@ -5,7 +5,7 @@ import { useUI } from '../../context/UIContext';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets, logLiveSet, logSetIntoSession, deleteSet } from '../../api/sets';
 import { listSetupValues } from '../../api/setupValues';
-import { computePrefillDraft, isPrSet, toLb } from '../../utils/formulas';
+import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import WeightRepsStepper from './WeightRepsStepper';
 import NumericKeypad from '../shared/NumericKeypad';
@@ -117,7 +117,9 @@ export default function ExerciseDetail({
     : 'No sets yet';
   const bestText = summary?.best ? `${summary.best.est1rm} ${summary.best.unit}  (${summary.best.weight}${summary.best.unit}×${summary.best.reps})` : 'No PR yet';
 
-  const bestComparableLb = summary?.best ? toLb(summary.best.est1rm, summary.best.unit) : null;
+  const bestComparableLb = summary?.best
+    ? comparableLb(summary.best.weight, summary.best.reps, summary.best.unit)
+    : null;
 
   return (
     <div>

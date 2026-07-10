@@ -113,8 +113,7 @@ public class StatsService {
         WorkoutSet best = null;
         BigDecimal bestComparableLb = null;
         for (WorkoutSet s : sets) {
-            BigDecimal est1rm = epleyCalculator.estimate1RM(s.getWeight(), s.getReps());
-            BigDecimal comparableLb = unitConverter.toLb(est1rm, s.getUnit());
+            BigDecimal comparableLb = comparableLb(s.getWeight(), s.getReps(), s.getUnit());
             if (bestComparableLb == null || comparableLb.compareTo(bestComparableLb) > 0) {
                 bestComparableLb = comparableLb;
                 best = s;
@@ -135,7 +134,18 @@ public class StatsService {
                 .map(s -> comparableLb(s.getWeight(), s.getReps(), s.getUnit()));
     }
 
+    // Epley's formula multiplies weight by a reps-based factor, so at weight == 0 (a
+    // bodyweight set logged with no added load) it collapses to 0 no matter how many
+    // reps were done -- every bodyweight set would then compare as an exact tie forever,
+    // which both hides genuine rep-count improvement as a new PR and, worse, flags every
+    // single bodyweight set as "matching" the all-time best (see isPrSet in
+    // frontend/src/utils/formulas.js, which mirrors this). Reps are the only real signal
+    // of performance at zero added weight, so use rep count directly as the comparable
+    // value in that case instead of running it through Epley.
     public BigDecimal comparableLb(BigDecimal weight, int reps, String unit) {
+        if (weight.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.valueOf(reps);
+        }
         return unitConverter.toLb(epleyCalculator.estimate1RM(weight, reps), unit);
     }
 
