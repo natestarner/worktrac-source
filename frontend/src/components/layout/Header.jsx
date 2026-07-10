@@ -5,11 +5,11 @@ export default function Header() {
 
   return (
     <div
+      className="header-bar"
       style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '20px 24px',
         background: 'var(--color-surface)',
         borderBottom: '1px solid var(--color-border)',
         position: 'sticky',
