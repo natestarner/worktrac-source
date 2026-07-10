@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computePrefillDraft, convertWeight, epley, isPrSet, toLb } from './formulas';
+import { comparableLb, computePrefillDraft, convertWeight, epley, isPrSet, toLb } from './formulas';
 
 describe('epley', () => {
   it('returns the rounded weight itself for 1 rep or fewer', () => {
@@ -93,5 +93,24 @@ describe('isPrSet', () => {
     const bestComparableLb = toLb(epley(100, 5), 'kg');
     expect(isPrSet(100, 5, 'kg', bestComparableLb)).toBe(true);
     expect(isPrSet(135, 5, 'lb', bestComparableLb)).toBe(false);
+  });
+
+  it('compares on reps, not est1rm, for a bodyweight (zero-weight) set', () => {
+    // Epley collapses to 0 at weight 0 for any rep count, so without the reps-based
+    // fallback every zero-weight set would trivially "match" the best regardless of reps.
+    const bestComparableLb = comparableLb(0, 10, 'lb');
+    expect(isPrSet(0, 10, 'lb', bestComparableLb)).toBe(true);
+    expect(isPrSet(0, 5, 'lb', bestComparableLb)).toBe(false);
+  });
+});
+
+describe('comparableLb', () => {
+  it('uses the Epley-based estimate when weight is nonzero', () => {
+    expect(comparableLb(135, 8, 'lb')).toBe(toLb(epley(135, 8), 'lb'));
+  });
+
+  it('falls back to rep count when weight is zero', () => {
+    expect(comparableLb(0, 8, 'lb')).toBe(8);
+    expect(comparableLb(0, 12, 'kg')).toBe(12);
   });
 });

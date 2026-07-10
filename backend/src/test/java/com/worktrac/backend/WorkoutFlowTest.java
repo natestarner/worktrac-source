@@ -255,6 +255,23 @@ class WorkoutFlowTest {
     }
 
     @Test
+    void bodyweightPrRankingComparesOnRepsNotEst1rm() throws Exception {
+        // Epley's est1rm collapses to 0 at weight 0 no matter the reps, so PR ranking for
+        // a bodyweight exercise (no added load) must fall back to comparing rep counts
+        // directly -- otherwise every zero-weight set ties every other one forever.
+        JsonNode first = logLiveSet(0, 8);
+        assertTrue(first.get("isPR").asBoolean(), "the first bodyweight set ever logged is always a PR");
+        assertEquals(8, first.get("best").get("reps").asInt());
+
+        JsonNode fewerReps = logLiveSet(0, 5);
+        assertFalse(fewerReps.get("isPR").asBoolean(), "fewer reps at the same zero weight must not be a PR");
+
+        JsonNode moreReps = logLiveSet(0, 10);
+        assertTrue(moreReps.get("isPR").asBoolean(), "more reps at the same zero weight is a genuine PR");
+        assertEquals(10, moreReps.get("best").get("reps").asInt());
+    }
+
+    @Test
     void retroactiveSessionCreateEditPreservesDurationAndCsvExports() throws Exception {
         String createBody = objectMapper.writeValueAsString(Map.of("startedAt", "2026-01-01T09:00:00Z"));
         String createResponse = mockMvc.perform(post("/api/people/" + personId + "/sessions")

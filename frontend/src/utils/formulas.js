@@ -37,11 +37,20 @@ export function computePrefillDraft(lastSession, sessionSetsCount, defaultUnit) 
   };
 }
 
-// Whether a logged set matches the person's current best estimated 1RM for that
+// Epley collapses to 0 at weight 0 regardless of reps, so a bodyweight set (no added
+// load) would always tie every other bodyweight set instead of reps actually mattering.
+// Reps are the only real signal of performance with zero added weight, so compare on
+// reps directly in that case. Mirrors backend/.../stats/StatsService.java#comparableLb.
+export function comparableLb(weight, reps, unit) {
+  if (weight === 0) return reps;
+  return toLb(epley(weight, reps), unit || 'lb');
+}
+
+// Whether a logged set matches the person's current best comparable value for that
 // exercise (within a small tolerance for rounding), used to show the inline "PR" badge
-// on session-set rows. bestComparableLb is the best est-1RM already converted to lb.
+// on session-set rows. bestComparableLb must come from comparableLb() above, not the
+// raw displayed est1rm, or it inherits the same weight-0 collapse this is guarding against.
 export function isPrSet(setWeight, setReps, setUnit, bestComparableLb) {
   if (bestComparableLb === null || bestComparableLb === undefined) return false;
-  const comparableLb = toLb(epley(setWeight, setReps), setUnit || 'lb');
-  return Math.abs(comparableLb - bestComparableLb) < 0.5;
+  return Math.abs(comparableLb(setWeight, setReps, setUnit) - bestComparableLb) < 0.5;
 }
