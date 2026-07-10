@@ -10,6 +10,7 @@ export default function AddEditExerciseModal({ exercise, categories, onClose, on
   const [categoryId, setCategoryId] = useState(exercise?.categoryId ?? categories[0]?.id);
   const [setupFieldNames, setSetupFieldNames] = useState(exercise?.setupFields.map((f) => f.name) || []);
   const [newFieldInput, setNewFieldInput] = useState('');
+  const [nameError, setNameError] = useState(false);
 
   // categories can still be loading when this modal first mounts (nothing in AdminTab
   // gates "+ Add exercise" behind categories being ready), which would otherwise leave
@@ -36,7 +37,11 @@ export default function AddEditExerciseModal({ exercise, categories, onClose, on
 
   async function handleSave() {
     const trimmed = name.trim();
-    if (!trimmed || !categoryId) return;
+    if (!trimmed) {
+      setNameError(true);
+      return;
+    }
+    if (!categoryId) return;
     const payload = { name: trimmed, categoryId, setupFieldNames };
     if (isEditing) {
       await updateExercise(exercise.id, payload);
@@ -51,10 +56,24 @@ export default function AddEditExerciseModal({ exercise, categories, onClose, on
       <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{isEditing ? 'Edit exercise' : 'Add exercise'}</div>
       <input
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e) => {
+          setName(e.target.value);
+          if (nameError) setNameError(false);
+        }}
         placeholder="Exercise name"
-        style={{ width: '100%', boxSizing: 'border-box', padding: 14, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 16, marginBottom: 12 }}
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          padding: 14,
+          border: `1px solid ${nameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
+          borderRadius: 10,
+          fontSize: 16,
+          marginBottom: nameError ? 6 : 12,
+        }}
       />
+      {nameError && (
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 12 }}>Enter an exercise name.</div>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
         {categories.map((c) => {
           const active = c.id === categoryId;

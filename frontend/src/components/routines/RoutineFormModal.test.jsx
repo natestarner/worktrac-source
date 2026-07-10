@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RoutineFormModal from './RoutineFormModal';
+import { createRoutine } from '../../api/routines';
 
 vi.mock('../../api/routines', () => ({ createRoutine: vi.fn(), updateRoutine: vi.fn() }));
 
@@ -88,5 +89,53 @@ describe('RoutineFormModal category filter', () => {
 
     expect(screen.getByRole('button', { name: '+ Bench Press' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Squat' })).toBeInTheDocument();
+  });
+});
+
+describe('RoutineFormModal validation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createRoutine.mockResolvedValue({ id: 1 });
+  });
+
+  it('shows an error and does not save when the name is blank', async () => {
+    const onSaved = vi.fn();
+    render(<RoutineFormModal personId={1} routine={null} exercises={exercises} categories={categories} onClose={vi.fn()} onSaved={onSaved} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save routine' }));
+
+    expect(await screen.findByText('Give this routine a name.')).toBeInTheDocument();
+    expect(createRoutine).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByPlaceholderText('Routine name (e.g. Push Day)'), { target: { value: 'Push Day' } });
+    expect(screen.queryByText('Give this routine a name.')).not.toBeInTheDocument();
+  });
+
+  it('shows an error and does not save when no exercises are selected', async () => {
+    const onSaved = vi.fn();
+    render(<RoutineFormModal personId={1} routine={null} exercises={exercises} categories={categories} onClose={vi.fn()} onSaved={onSaved} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Routine name (e.g. Push Day)'), { target: { value: 'Push Day' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save routine' }));
+
+    expect(await screen.findByText('Add at least one exercise.')).toBeInTheDocument();
+    expect(createRoutine).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    expect(screen.queryByText('Add at least one exercise.')).not.toBeInTheDocument();
+  });
+
+  it('saves once both a name and an exercise are provided', async () => {
+    const onSaved = vi.fn();
+    render(<RoutineFormModal personId={1} routine={null} exercises={exercises} categories={categories} onClose={vi.fn()} onSaved={onSaved} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Routine name (e.g. Push Day)'), { target: { value: 'Push Day' } });
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save routine' }));
+
+    await waitFor(() => expect(createRoutine).toHaveBeenCalledWith(1, { name: 'Push Day', exerciseIds: [1] }));
+    expect(onSaved).toHaveBeenCalled();
   });
 });
