@@ -360,10 +360,10 @@ const backButtonStyle = {
 };
 
 const cardLabelStyle = {
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 700,
   color: 'var(--color-muted)',
   textTransform: 'uppercase',
   letterSpacing: '0.04em',
-  marginBottom: 8,
+  marginBottom: 4,
 };

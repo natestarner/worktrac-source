@@ -123,20 +123,20 @@ body {
   display: block;
 }
 
-/* "Last time" / "Best est. 1RM" summary cards -- sized down in landscape (see @media
-   block) since they were disproportionately large next to the compacted two-column
-   layout. Base values restate today's inline values exactly. */
+/* "Last time" / "Best est. 1RM" summary cards -- compact in every layout, not just
+   landscape; these were disproportionately bulky for how little information they
+   carry. */
 .summary-cards-grid {
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .summary-card {
-  padding: 16px;
+  padding: 10px 12px;
 }
 
 .summary-card-value {
-  font-size: 20px;
+  font-size: 15px;
 }
 
 /* Heading above this session's sets list -- only shown in landscape, where the sets
@@ -189,19 +189,6 @@ body {
   .stepper-pair > *:nth-child(2) {
     border-left: 1px solid var(--color-border);
     padding-left: 16px;
-  }
-
-  .summary-cards-grid {
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  .summary-card {
-    padding: 10px 12px;
-  }
-
-  .summary-card-value {
-    font-size: 16px;
   }
 
   .log-sets-heading {
