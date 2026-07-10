@@ -38,7 +38,7 @@ jobs:
         run: mvn package -DskipTests -B
 
       - name: Upload JAR artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: backend-jar
           path: backend/target/*.jar
@@ -77,7 +77,7 @@ jobs:
         run: rm -f dist/config.json
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: frontend-build
           path: frontend/dist/
@@ -176,7 +176,7 @@ jobs:
           path: deploy
 
       - name: Download frontend build
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: frontend-build
           path: deploy/frontend-build
