@@ -1,6 +1,6 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/config.json", "/favicon.svg", "/icons.svg", "/assets/*"]
+    "exclude": ["/config.json", "/favicon.ico", "/icons.svg", "/assets/*"]
   }
 }

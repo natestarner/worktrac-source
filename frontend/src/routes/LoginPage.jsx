@@ -44,15 +44,19 @@ export default function LoginPage() {
           border: '1px solid var(--color-border)',
           borderRadius: 20,
           padding: '48px 40px',
-          width: 360,
-          maxWidth: '90vw',
+          width: 560,
+          maxWidth: '92vw',
           textAlign: 'center',
           boxShadow: '0 8px 24px rgba(28,27,25,0.06)',
         }}
       >
         <picture>
           <source srcSet={logoDark} media="(prefers-color-scheme: dark)" />
-          <img src={logoLight} alt="Workout Tracker" style={{ height: 56, marginBottom: 28 }} />
+          <img
+            src={logoLight}
+            alt="Workout Tracker"
+            style={{ width: 445, maxWidth: '100%', height: 'auto', marginBottom: 40 }}
+          />
         </picture>
 
         {error && (
