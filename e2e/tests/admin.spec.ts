@@ -10,12 +10,18 @@ async function registerHousehold(page, personName: string) {
   await expect(page).toHaveURL(/\/app\/log/);
 }
 
-// App Settings is reached via the account-holder dropdown in the header, not a tab --
-// scope to .header-bar (the only button living there) rather than matching on the
-// primary account holder's name, which varies per test.
+// App Settings and Profile are both reached via the account-holder dropdown in the
+// header, not a tab -- scope to .header-bar (the only button living there) rather than
+// matching on the primary account holder's name, which varies per test.
 async function openAppSettings(page) {
   await page.locator('.header-bar').getByRole('button').click();
   await page.getByRole('menuitem', { name: 'App Settings' }).click();
+}
+
+// People management (edit/remove) lives on Profile, not App Settings.
+async function openProfile(page) {
+  await page.locator('.header-bar').getByRole('button').click();
+  await page.getByRole('menuitem', { name: 'Profile' }).click();
 }
 
 // Styles are all inline in this app (no stable CSS classes), so the most reliable way
@@ -50,13 +56,13 @@ test.describe('App Settings', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).last().click();
     await expect(page.getByText('Sled Push')).toBeVisible();
 
-    // Add a second person from the pill bar, then remove them from App Settings.
+    // Add a second person from the pill bar, then remove them from Profile.
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByRole('button', { name: /Sam/ })).toBeVisible();
 
-    await openAppSettings(page);
+    await openProfile(page);
     await page.getByRole('button', { name: 'Remove' }).click();
     // The exercise library also has a "Delete" link underneath the confirm overlay --
     // scope to the confirm dialog specifically.
@@ -64,6 +70,7 @@ test.describe('App Settings', () => {
     await expect(page.getByRole('button', { name: /Sam/ })).toHaveCount(0);
 
     // Switch default unit to kg.
+    await openAppSettings(page);
     await page.getByRole('button', { name: 'kg', exact: true }).click();
     await expect(page.getByText(/Default unit for new sets/)).toBeVisible();
   });
@@ -100,7 +107,7 @@ test.describe('App Settings', () => {
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
-    await openAppSettings(page);
+    await openProfile(page);
     await page.getByRole('button', { name: 'Remove' }).click();
     await expect(page.getByRole('dialog')).toContainText('Remove Sam? This deletes all of their sessions, sets, routines, and setup values.');
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();

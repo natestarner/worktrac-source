@@ -44,6 +44,13 @@ public class PersonService {
     }
 
     @Transactional
+    public PersonDto rename(Long accountId, Long personId, String name) {
+        Person person = requireOwnedPerson(personId, accountId);
+        person.setName(name.trim());
+        return PersonDto.from(person);
+    }
+
+    @Transactional
     public void remove(Long accountId, Long personId) {
         Person person = requireOwnedPerson(personId, accountId);
         if (person.isPrimary()) {

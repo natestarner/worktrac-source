@@ -1,10 +1,21 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useUI } from '../../context/UIContext';
+import { removePerson } from '../../api/people';
+import EditPersonModal from './EditPersonModal';
 
 export default function ProfileTab() {
-  const { user, account, people } = useAuth();
+  const { user, account, people, refreshPeople } = useAuth();
+  const { openConfirm } = useUI();
   const navigate = useNavigate();
   const primary = people.find((p) => p.isPrimary);
+  const [editingPerson, setEditingPerson] = useState(null);
+
+  async function handleRemovePerson(person) {
+    await removePerson(person.id);
+    refreshPeople();
+  }
 
   return (
     <div>
@@ -32,11 +43,30 @@ export default function ProfileTab() {
               borderBottom: i < people.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
             }}
           >
-            <div style={{ fontSize: 15, fontWeight: 600 }}>{p.name}</div>
-            {p.isPrimary && <span style={badgeStyle}>PRIMARY</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{p.name}</div>
+              {p.isPrimary && <span style={badgeStyle}>PRIMARY</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 14 }}>
+              <button onClick={() => setEditingPerson(p)} style={editLinkStyle}>
+                Edit
+              </button>
+              {!p.isPrimary && (
+                <button
+                  onClick={() =>
+                    openConfirm(`Remove ${p.name}? This deletes all of their sessions, sets, routines, and setup values.`, () => handleRemovePerson(p))
+                  }
+                  style={deleteLinkStyle}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
+
+      {editingPerson && <EditPersonModal person={editingPerson} onClose={() => setEditingPerson(null)} />}
     </div>
   );
 }
@@ -85,3 +115,6 @@ const badgeStyle = {
   padding: '3px 8px',
   borderRadius: 999,
 };
+
+const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+const deleteLinkStyle = { background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };

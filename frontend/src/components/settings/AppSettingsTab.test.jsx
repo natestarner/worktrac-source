@@ -21,7 +21,7 @@ describe('AppSettingsTab category validation', () => {
     vi.clearAllMocks();
     addCategory.mockResolvedValue({ id: 1 });
     refetchCategories = vi.fn();
-    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [], refreshPeople: vi.fn() });
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, refreshPeople: vi.fn() });
     useUI.mockReturnValue({ openConfirm: vi.fn() });
     useExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn() });
     useCategories.mockReturnValue({ categories: [], loading: false, refetch: refetchCategories });
