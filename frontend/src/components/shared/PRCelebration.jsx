@@ -1,20 +1,20 @@
 import { useUI } from '../../context/UIContext';
 
 const CONFETTI_SPECS = [
-  { left: 6, color: '#E8590C', delay: 0.0 },
+  { left: 6, color: '#D4673E', delay: 0.0 },
   { left: 16, color: '#15803D', delay: 0.08 },
-  { left: 24, color: '#F2A93B', delay: 0.02 },
-  { left: 33, color: '#E8590C', delay: 0.14 },
+  { left: 24, color: '#F2A65A', delay: 0.02 },
+  { left: 33, color: '#D4673E', delay: 0.14 },
   { left: 41, color: '#15803D', delay: 0.06 },
-  { left: 49, color: '#F2A93B', delay: 0.18 },
-  { left: 57, color: '#E8590C', delay: 0.04 },
+  { left: 49, color: '#F2A65A', delay: 0.18 },
+  { left: 57, color: '#D4673E', delay: 0.04 },
   { left: 65, color: '#15803D', delay: 0.16 },
-  { left: 73, color: '#F2A93B', delay: 0.1 },
-  { left: 81, color: '#E8590C', delay: 0.02 },
-  { left: 12, color: '#F2A93B', delay: 0.2 },
+  { left: 73, color: '#F2A65A', delay: 0.1 },
+  { left: 81, color: '#D4673E', delay: 0.02 },
+  { left: 12, color: '#F2A65A', delay: 0.2 },
   { left: 89, color: '#15803D', delay: 0.12 },
-  { left: 45, color: '#E8590C', delay: 0.22 },
-  { left: 60, color: '#F2A93B', delay: 0.24 },
+  { left: 45, color: '#D4673E', delay: 0.22 },
+  { left: 60, color: '#F2A65A', delay: 0.24 },
 ];
 
 export default function PRCelebration() {
