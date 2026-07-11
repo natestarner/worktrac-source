@@ -1,5 +1,12 @@
 import { test, expect } from '@playwright/test';
 
+// The header's account-holder dropdown trigger shows the primary person's name too, so
+// an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
+// pill here -- scope to .person-pill-bar (the pill row's own container) to disambiguate.
+function personPill(page, name: string) {
+  return page.locator('.person-pill-bar').getByRole('button', { name: new RegExp(name) });
+}
+
 test.describe('Multi-person switching', () => {
   test('switching people and back resumes exactly where each left off', async ({ page }) => {
     const email = `e2e-${Date.now()}@example.com`;
@@ -24,11 +31,11 @@ test.describe('Multi-person switching', () => {
     await expect(page.getByPlaceholder('Search exercises')).toBeVisible();
 
     // Switch back to Alex -- should return to Barbell Bench Press, not the picker.
-    await page.getByRole('button', { name: /Alex/ }).click();
+    await personPill(page, 'Alex').click();
     await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
 
     // Switch to Sam again -- still no exercise selected for them.
-    await page.getByRole('button', { name: /Sam/ }).click();
+    await personPill(page, 'Sam').click();
     await expect(page.getByPlaceholder('Search exercises')).toBeVisible();
   });
 
@@ -50,7 +57,7 @@ test.describe('Multi-person switching', () => {
     await expect(page).toHaveURL(/\/app\/routines/);
 
     // Switch to Alex -- Alex was last on Log (never navigated away), not Routines.
-    await page.getByRole('button', { name: /Alex/ }).click();
+    await personPill(page, 'Alex').click();
     await expect(page).toHaveURL(/\/app\/log/);
 
     // Alex browses to History.
@@ -59,11 +66,11 @@ test.describe('Multi-person switching', () => {
 
     // Switching back to Sam must resume Sam's own last tab (Routines), not whichever
     // tab was showing most recently overall (Alex's History).
-    await page.getByRole('button', { name: /Sam/ }).click();
+    await personPill(page, 'Sam').click();
     await expect(page).toHaveURL(/\/app\/routines/);
 
     // And switching back to Alex resumes Alex's own last tab (History).
-    await page.getByRole('button', { name: /Alex/ }).click();
+    await personPill(page, 'Alex').click();
     await expect(page).toHaveURL(/\/app\/history/);
   });
 
@@ -81,7 +88,7 @@ test.describe('Multi-person switching', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
 
     // Alex starts logging a past workout.
-    await page.getByRole('button', { name: /Alex/ }).click();
+    await personPill(page, 'Alex').click();
     await page.getByRole('link', { name: 'History' }).click();
     await page.getByRole('button', { name: '+ Log a past workout' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Start adding sets' }).click();
@@ -90,8 +97,8 @@ test.describe('Multi-person switching', () => {
 
     // Switch away to Sam, then back to Alex -- Alex must still be editing that same
     // past session, not dropped back to normal live logging.
-    await page.getByRole('button', { name: /Sam/ }).click();
-    await page.getByRole('button', { name: /Alex/ }).click();
+    await personPill(page, 'Sam').click();
+    await personPill(page, 'Alex').click();
     await expect(page.getByText('Editing past session')).toBeVisible();
   });
 
@@ -109,7 +116,7 @@ test.describe('Multi-person switching', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
 
     // Alex logs a set -- starts Alex's own rest timer.
-    await page.getByRole('button', { name: /Alex/ }).click();
+    await personPill(page, 'Alex').click();
     await page.getByRole('button', { name: 'Barbell Bench Press' }).click();
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('New PR!')).toBeVisible({ timeout: 5000 });
@@ -117,12 +124,12 @@ test.describe('Multi-person switching', () => {
     await expect(page.getByText('Rest')).toBeVisible();
 
     // Sam has never logged anything -- switching to Sam must NOT show Alex's timer.
-    await page.getByRole('button', { name: /Sam/ }).click();
+    await personPill(page, 'Sam').click();
     await expect(page.getByText('Rest')).toHaveCount(0);
 
     // Switching back to Alex, their timer is still running (not reset or destroyed by
     // having switched away).
-    await page.getByRole('button', { name: /Alex/ }).click();
+    await personPill(page, 'Alex').click();
     await expect(page.getByText('Rest')).toBeVisible();
   });
 
@@ -139,15 +146,15 @@ test.describe('Multi-person switching', () => {
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
 
-    await page.getByRole('button', { name: /Alex/ }).click();
+    await personPill(page, 'Alex').click();
     await page.getByPlaceholder('Search exercises').fill('bench');
 
     // Sam's search box starts empty, unaffected by Alex's search.
-    await page.getByRole('button', { name: /Sam/ }).click();
+    await personPill(page, 'Sam').click();
     await expect(page.getByPlaceholder('Search exercises')).toHaveValue('');
 
     // Switching back to Alex restores what they'd typed.
-    await page.getByRole('button', { name: /Alex/ }).click();
+    await personPill(page, 'Alex').click();
     await expect(page.getByPlaceholder('Search exercises')).toHaveValue('bench');
   });
 });
