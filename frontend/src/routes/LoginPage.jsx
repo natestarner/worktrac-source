@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/shared/Spinner';
+import logoLight from '../assets/huddle-lockup-barlow-light.svg';
+import logoDark from '../assets/huddle-lockup-barlow-dark.svg';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -48,24 +50,10 @@ export default function LoginPage() {
           boxShadow: '0 8px 24px rgba(28,27,25,0.06)',
         }}
       >
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 16,
-            background: 'var(--color-accent)',
-            margin: '0 auto 20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <div style={{ width: 22, height: 22, border: '3px solid #fff', borderRadius: 6 }} />
-        </div>
-        <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.01em' }}>Workout Tracker</div>
-        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginTop: 6, marginBottom: 28 }}>
-          Log sets fast. Never lose a PR.
-        </div>
+        <picture>
+          <source srcSet={logoDark} media="(prefers-color-scheme: dark)" />
+          <img src={logoLight} alt="Workout Tracker" style={{ height: 56, marginBottom: 28 }} />
+        </picture>
 
         {error && (
           <div
