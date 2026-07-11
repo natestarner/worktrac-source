@@ -116,7 +116,7 @@ export default function LogTab() {
           </div>
           <button
             onClick={() => setShowEndWorkoutConfirm(true)}
-            style={{ background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            style={{ background: 'none', border: 'none', color: 'var(--color-muted)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
           >
             End workout
           </button>

@@ -10,7 +10,7 @@
   --color-subtle-bg: #f1efea;
   --color-success: #15803d;
   --color-success-bg: #e7f5ec;
-  --color-danger: #c0392b;
+  --color-danger: #bf472b;
   --color-pr-bg: #fbe9e0;
   --color-pr-border: #f0c4ab;
   --color-pr-text: #a8532c;
@@ -104,8 +104,8 @@ body {
 }
 
 /* Shared width cap for every tab's content (Log, History, PRs, Routines, Trends,
-   Admin) -- widened in landscape below so the two-column Log layout has room, and so
-   Trends' existing auto-fit grids pick up extra columns for free. */
+   App Settings, Profile) -- widened in landscape below so the two-column Log layout has
+   room, and so Trends' existing auto-fit grids pick up extra columns for free. */
 .tab-panel {
   max-width: 840px;
 }
