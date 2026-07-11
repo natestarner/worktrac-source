@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
@@ -12,7 +13,8 @@ import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
 import Skeleton from '../shared/Skeleton';
 
-export default function AdminTab() {
+export default function AppSettingsTab() {
+  const navigate = useNavigate();
   const { account, people, refreshPeople } = useAuth();
   const { openConfirm } = useUI();
   const { exercises, loading: exercisesLoading, refetch: refetchExercises } = useExercises();
@@ -61,6 +63,10 @@ export default function AdminTab() {
 
   return (
     <div>
+      <button onClick={() => navigate(-1)} style={backButtonStyle}>
+        &larr; Back
+      </button>
+
       <div style={sectionLabelStyle}>Units</div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
@@ -244,6 +250,16 @@ export default function AdminTab() {
     </div>
   );
 }
+
+const backButtonStyle = {
+  background: 'none',
+  border: 'none',
+  color: 'var(--color-accent)',
+  fontSize: 15,
+  fontWeight: 600,
+  cursor: 'pointer',
+  padding: '0 0 16px 0',
+};
 
 const sectionLabelStyle = {
   fontSize: 13,

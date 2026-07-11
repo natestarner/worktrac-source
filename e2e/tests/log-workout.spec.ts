@@ -40,10 +40,12 @@ test.describe('Log workout', () => {
     await page.getByRole('link', { name: 'Routines' }).click();
     await expect(page.getByText('No routines yet.')).toBeVisible();
 
-    await page.getByRole('link', { name: 'Admin' }).click();
+    // App Settings is reached via the account-holder dropdown in the header, not a tab.
+    await page.locator('.header-bar').getByRole('button').click();
+    await page.getByRole('menuitem', { name: 'App Settings' }).click();
     await expect(page.getByText('Units')).toBeVisible();
     await expect(page.getByText('PRIMARY')).toBeVisible();
 
-    await page.screenshot({ path: 'test-results/admin-tab.png' });
+    await page.screenshot({ path: 'test-results/app-settings-tab.png' });
   });
 });

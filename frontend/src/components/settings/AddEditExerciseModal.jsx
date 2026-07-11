@@ -12,7 +12,7 @@ export default function AddEditExerciseModal({ exercise, categories, onClose, on
   const [newFieldInput, setNewFieldInput] = useState('');
   const [nameError, setNameError] = useState(false);
 
-  // categories can still be loading when this modal first mounts (nothing in AdminTab
+  // categories can still be loading when this modal first mounts (nothing in AppSettingsTab
   // gates "+ Add exercise" behind categories being ready), which would otherwise leave
   // categoryId stuck at undefined forever and make Save a silent no-op. Backfill the
   // default once categories arrive, but only if nothing's been selected yet.

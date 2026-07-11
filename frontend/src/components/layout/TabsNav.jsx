@@ -6,7 +6,6 @@ const TABS = [
   { path: '/app/prs', label: 'PRs' },
   { path: '/app/routines', label: 'Routines' },
   { path: '/app/trends', label: 'Trends' },
-  { path: '/app/admin', label: 'Admin' },
 ];
 
 export default function TabsNav() {
