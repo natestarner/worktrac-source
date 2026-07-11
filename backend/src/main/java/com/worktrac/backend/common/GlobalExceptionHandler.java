@@ -29,6 +29,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiError.of(401, ex.getMessage()));
     }
 
+    @ExceptionHandler(ExpiredException.class)
+    public ResponseEntity<ApiError> handleExpired(ExpiredException ex) {
+        return ResponseEntity.status(HttpStatus.GONE).body(ApiError.of(410, ex.getMessage()));
+    }
+
+    @ExceptionHandler(LockedException.class)
+    public ResponseEntity<ApiError> handleLocked(LockedException ex) {
+        return ResponseEntity.status(HttpStatus.LOCKED).body(ApiError.of(423, ex.getMessage()));
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ApiError> handleTooManyRequests(TooManyRequestsException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(ApiError.of(429, ex.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex) {
         String message = ex.getBindingResult().getFieldErrors().stream()

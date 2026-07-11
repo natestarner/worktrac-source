@@ -1,14 +1,9 @@
 import { test, expect } from '@playwright/test';
+import { registerHousehold } from './support/auth';
 
 test.describe('Multi-person switching', () => {
-  test('switching people and back resumes exactly where each left off', async ({ page }) => {
-    const email = `e2e-${Date.now()}@example.com`;
-    await page.goto('/register');
-    await page.getByPlaceholder('e.g. Alex').fill('Alex');
-    await page.getByPlaceholder('you@example.com').fill(email);
-    await page.getByPlaceholder('At least 8 characters').fill('password123');
-    await page.getByRole('button', { name: 'Create household' }).click();
-    await expect(page).toHaveURL(/\/app\/log/);
+  test('switching people and back resumes exactly where each left off', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Alex');
 
     // Alex picks an exercise -- this is the "in-progress" state that should be
     // preserved when switching away and back.
@@ -32,14 +27,8 @@ test.describe('Multi-person switching', () => {
     await expect(page.getByPlaceholder('Search exercises')).toBeVisible();
   });
 
-  test('switching people preserves which tab each person was viewing', async ({ page }) => {
-    const email = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
-    await page.goto('/register');
-    await page.getByPlaceholder('e.g. Alex').fill('Alex');
-    await page.getByPlaceholder('you@example.com').fill(email);
-    await page.getByPlaceholder('At least 8 characters').fill('password123');
-    await page.getByRole('button', { name: 'Create household' }).click();
-    await expect(page).toHaveURL(/\/app\/log/);
+  test('switching people preserves which tab each person was viewing', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Alex');
 
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
@@ -67,14 +56,8 @@ test.describe('Multi-person switching', () => {
     await expect(page).toHaveURL(/\/app\/history/);
   });
 
-  test('switching people away from an in-progress past-session edit and back resumes it', async ({ page }) => {
-    const email = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
-    await page.goto('/register');
-    await page.getByPlaceholder('e.g. Alex').fill('Alex');
-    await page.getByPlaceholder('you@example.com').fill(email);
-    await page.getByPlaceholder('At least 8 characters').fill('password123');
-    await page.getByRole('button', { name: 'Create household' }).click();
-    await expect(page).toHaveURL(/\/app\/log/);
+  test('switching people away from an in-progress past-session edit and back resumes it', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Alex');
 
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
@@ -95,14 +78,8 @@ test.describe('Multi-person switching', () => {
     await expect(page.getByText('Editing past session')).toBeVisible();
   });
 
-  test('each person has their own independent rest timer', async ({ page }) => {
-    const email = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
-    await page.goto('/register');
-    await page.getByPlaceholder('e.g. Alex').fill('Alex');
-    await page.getByPlaceholder('you@example.com').fill(email);
-    await page.getByPlaceholder('At least 8 characters').fill('password123');
-    await page.getByRole('button', { name: 'Create household' }).click();
-    await expect(page).toHaveURL(/\/app\/log/);
+  test('each person has their own independent rest timer', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Alex');
 
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
@@ -126,14 +103,8 @@ test.describe('Multi-person switching', () => {
     await expect(page.getByText('Rest')).toBeVisible();
   });
 
-  test('switching people preserves a half-typed exercise search', async ({ page }) => {
-    const email = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
-    await page.goto('/register');
-    await page.getByPlaceholder('e.g. Alex').fill('Alex');
-    await page.getByPlaceholder('you@example.com').fill(email);
-    await page.getByPlaceholder('At least 8 characters').fill('password123');
-    await page.getByRole('button', { name: 'Create household' }).click();
-    await expect(page).toHaveURL(/\/app\/log/);
+  test('switching people preserves a half-typed exercise search', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Alex');
 
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');

@@ -1,6 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login as apiLogin, me as apiMe, register as apiRegister } from '../api/auth';
+import {
+  confirmEmail as apiConfirmEmail,
+  login as apiLogin,
+  me as apiMe,
+  register as apiRegister,
+  resendCode as apiResendCode,
+} from '../api/auth';
 import { getAuthToken, setAuthToken, setUnauthorizedHandler } from '../api/client';
 
 const AuthContext = createContext(null);
@@ -35,11 +41,22 @@ export function AuthProvider({ children }) {
     setState({ status: 'authenticated', ...data });
   }, []);
 
+  // Starts the pending registration (sends a verification code) -- no account exists yet, so
+  // this does not log the user in. That happens in confirmEmail below, once the code checks
+  // out and the account is actually created.
   const register = useCallback(async (payload) => {
-    const { token } = await apiRegister(payload);
+    return apiRegister(payload);
+  }, []);
+
+  const confirmEmail = useCallback(async ({ email, code }) => {
+    const { token } = await apiConfirmEmail({ email, code });
     setAuthToken(token);
     const data = await apiMe();
     setState({ status: 'authenticated', ...data });
+  }, []);
+
+  const resendCode = useCallback(async ({ email }) => {
+    return apiResendCode({ email });
   }, []);
 
   const logout = useCallback(() => {
@@ -55,7 +72,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout, refreshPeople }}>
+    <AuthContext.Provider value={{ ...state, login, register, confirmEmail, resendCode, logout, refreshPeople }}>
       {children}
     </AuthContext.Provider>
   );

@@ -11,16 +11,37 @@ export default function RegisterPage() {
   const [accountName, setAccountName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [personNameError, setPersonNameError] = useState(false);
+  const [emailError, setEmailError] = useState(false);
+  const [passwordError, setPasswordError] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+
+    const trimmedPersonName = personName.trim();
+    const trimmedEmail = email.trim();
+    let hasError = false;
+    if (!trimmedPersonName) {
+      setPersonNameError(true);
+      hasError = true;
+    }
+    if (!trimmedEmail) {
+      setEmailError(true);
+      hasError = true;
+    }
+    if (password.length < 8) {
+      setPasswordError(true);
+      hasError = true;
+    }
+    if (hasError) return;
+
     setSubmitting(true);
     try {
-      await register({ accountName, email, password, personName });
-      navigate('/app/log');
+      await register({ accountName, email: trimmedEmail, password, personName: trimmedPersonName });
+      navigate('/confirm-email', { state: { email: trimmedEmail } });
     } catch (err) {
       setError(err.message || 'Could not register');
     } finally {
@@ -72,7 +93,16 @@ export default function RegisterPage() {
         )}
 
         <label style={labelStyle}>Your name</label>
-        <input required placeholder="e.g. Alex" value={personName} onChange={(e) => setPersonName(e.target.value)} style={inputStyle} />
+        <input
+          placeholder="e.g. Alex"
+          value={personName}
+          onChange={(e) => {
+            setPersonName(e.target.value);
+            if (personNameError) setPersonNameError(false);
+          }}
+          style={{ ...inputStyle, ...(personNameError ? errorInputStyle : {}) }}
+        />
+        {personNameError && <div style={fieldErrorStyle}>Enter your name.</div>}
 
         <label style={labelStyle}>Household name (optional)</label>
         <input
@@ -83,18 +113,30 @@ export default function RegisterPage() {
         />
 
         <label style={labelStyle}>Email</label>
-        <input type="email" required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+        <input
+          type="email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            if (emailError) setEmailError(false);
+          }}
+          style={{ ...inputStyle, ...(emailError ? errorInputStyle : {}) }}
+        />
+        {emailError && <div style={fieldErrorStyle}>Enter your email address.</div>}
 
         <label style={labelStyle}>Password</label>
         <input
           type="password"
-          required
-          minLength={8}
           placeholder="At least 8 characters"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={inputStyle}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            if (passwordError) setPasswordError(false);
+          }}
+          style={{ ...inputStyle, ...(passwordError ? errorInputStyle : {}) }}
         />
+        {passwordError && <div style={fieldErrorStyle}>Password must be at least 8 characters.</div>}
 
         <button type="submit" disabled={submitting} style={{ ...primaryButtonStyle, position: 'relative' }}>
           <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Create household</span>
@@ -121,4 +163,16 @@ const labelStyle = {
   textTransform: 'uppercase',
   letterSpacing: '0.04em',
   marginBottom: 6,
+};
+
+const errorInputStyle = {
+  border: '1px solid var(--color-danger)',
+  marginBottom: 6,
+};
+
+const fieldErrorStyle = {
+  fontSize: 12,
+  fontWeight: 600,
+  color: 'var(--color-danger)',
+  marginBottom: 16,
 };

@@ -3,7 +3,6 @@ package com.worktrac.backend.user;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountDto;
 import com.worktrac.backend.account.AccountRepository;
-import com.worktrac.backend.common.ConflictException;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonDto;
@@ -12,7 +11,6 @@ import com.worktrac.backend.security.JwtService;
 import com.worktrac.backend.user.dto.AuthResponse;
 import com.worktrac.backend.user.dto.LoginRequest;
 import com.worktrac.backend.user.dto.MeResponse;
-import com.worktrac.backend.user.dto.RegisterRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,25 +34,6 @@ public class AuthService {
         this.personRepository = personRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
-    }
-
-    @Transactional
-    public AuthResponse register(RegisterRequest request) {
-        String email = request.email().trim().toLowerCase();
-        if (userRepository.existsByEmail(email)) {
-            throw new ConflictException("An account with that email already exists");
-        }
-
-        String accountName = request.accountName() == null || request.accountName().isBlank()
-                ? request.personName().trim() + "'s Household"
-                : request.accountName().trim();
-
-        Account account = accountRepository.save(new Account(accountName));
-        User user = userRepository.save(new User(account, email, passwordEncoder.encode(request.password())));
-        Person person = personRepository.save(new Person(account, request.personName().trim(), true));
-
-        String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail());
-        return new AuthResponse(token, UserDto.from(user), AccountDto.from(account), PersonDto.from(person));
     }
 
     @Transactional(readOnly = true)

@@ -1,14 +1,5 @@
 import { test, expect } from '@playwright/test';
-
-async function registerHousehold(page, personName: string) {
-  const email = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
-  await page.goto('/register');
-  await page.getByPlaceholder('e.g. Alex').fill(personName);
-  await page.getByPlaceholder('you@example.com').fill(email);
-  await page.getByPlaceholder('At least 8 characters').fill('password123');
-  await page.getByRole('button', { name: 'Create household' }).click();
-  await expect(page).toHaveURL(/\/app\/log/);
-}
+import { registerHousehold } from './support/auth';
 
 // Styles are all inline in this app (no stable CSS classes), so the most reliable way
 // to scope an action to one row among several near-identical rows is: the deepest
@@ -24,8 +15,8 @@ function rowWithButton(page, text: string, buttonName: string) {
 }
 
 test.describe('Admin', () => {
-  test('add a category, add a custom exercise, add and remove a person, switch units', async ({ page }) => {
-    await registerHousehold(page, 'Alex');
+  test('add a category, add a custom exercise, add and remove a person, switch units', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Alex');
     await page.getByRole('link', { name: 'Admin' }).click();
 
     // Add a category first so the new exercise can use it.
@@ -60,8 +51,8 @@ test.describe('Admin', () => {
     await expect(page.getByText(/Default unit for new sets/)).toBeVisible();
   });
 
-  test('exercise, category, and person deletions show the right confirmation wording', async ({ page }) => {
-    await registerHousehold(page, 'Riley');
+  test('exercise, category, and person deletions show the right confirmation wording', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Riley');
     await page.getByRole('link', { name: 'Admin' }).click();
 
     // A private (account-owned) exercise's delete confirm text differs from a global one's.
@@ -99,8 +90,8 @@ test.describe('Admin', () => {
     await expect(page.getByRole('button', { name: /Sam/ })).toHaveCount(0);
   });
 
-  test('adding a setup field in Admin lets each person set their own value for it', async ({ page }) => {
-    await registerHousehold(page, 'Morgan');
+  test('adding a setup field in Admin lets each person set their own value for it', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Morgan');
     await page.getByRole('link', { name: 'Admin' }).click();
 
     // Add a custom exercise with a setup field defined for it. Pick a category

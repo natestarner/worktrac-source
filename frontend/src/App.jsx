@@ -4,6 +4,7 @@ import { AppStateProvider } from './context/AppStateContext';
 import { UIProvider } from './context/UIContext';
 import LoginPage from './routes/LoginPage';
 import RegisterPage from './routes/RegisterPage';
+import ConfirmEmailPage from './routes/ConfirmEmailPage';
 import ProtectedRoute from './routes/ProtectedRoute';
 import AppShell from './routes/AppShell';
 import LogTab from './components/log/LogTab';
@@ -22,6 +23,7 @@ export default function App() {
             <Route path="/" element={<Navigate to="/app/log" replace />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/confirm-email" element={<ConfirmEmailPage />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/app" element={<AppShell />}>
                 <Route index element={<Navigate to="log" replace />} />

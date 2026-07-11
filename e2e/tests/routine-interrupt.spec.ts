@@ -1,21 +1,12 @@
 import { test, expect } from '@playwright/test';
-
-async function registerHousehold(page, personName: string) {
-  const email = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
-  await page.goto('/register');
-  await page.getByPlaceholder('e.g. Alex').fill(personName);
-  await page.getByPlaceholder('you@example.com').fill(email);
-  await page.getByPlaceholder('At least 8 characters').fill('password123');
-  await page.getByRole('button', { name: 'Create household' }).click();
-  await expect(page).toHaveURL(/\/app\/log/);
-}
+import { registerHousehold } from './support/auth';
 
 // Following a routine doesn't lock you into it: you can back out to the exercise picker,
 // log something not on the routine, and then resume the routine at the same position --
 // it never restarts from exercise #1 just because you stepped away from it.
 test.describe('Routine interrupted by off-routine logging', () => {
-  test('backing out to log an unrelated exercise preserves routine position for resuming', async ({ page }) => {
-    await registerHousehold(page, 'Drew');
+  test('backing out to log an unrelated exercise preserves routine position for resuming', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Drew');
 
     await page.getByRole('link', { name: 'Routines' }).click();
     await page.getByRole('button', { name: '+ New routine' }).click();
