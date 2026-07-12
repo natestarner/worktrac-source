@@ -79,7 +79,7 @@ export default function RoutinesTab() {
               {r.exercises.map((e) => e.exerciseName).join(', ')}
             </div>
             <button onClick={() => handleStart(r)} style={startButtonStyle}>
-              Start workout
+              Start routine
             </button>
           </div>
         ))}
