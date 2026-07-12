@@ -25,7 +25,7 @@ test.describe('Routines', () => {
     await expect(page.getByText('Push Day')).toBeVisible();
     await expect(page.getByText('Barbell Bench Press, Dumbbell Overhead Press')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Start workout' }).click();
+    await page.getByRole('button', { name: 'Start routine' }).click();
     await expect(page).toHaveURL(/\/app\/log/);
     await expect(page.getByText('1 of 2')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
@@ -33,7 +33,7 @@ test.describe('Routines', () => {
     await page.getByRole('button', { name: 'Next exercise' }).click();
     await expect(page.getByText('2 of 2')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Finish workout' }).click();
-    await expect(page.getByText('Workout complete!')).toBeVisible();
+    await page.getByRole('button', { name: 'Finish routine' }).click();
+    await expect(page.getByText('Routine complete!')).toBeVisible();
   });
 });

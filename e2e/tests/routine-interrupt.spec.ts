@@ -24,7 +24,7 @@ test.describe('Routine interrupted by off-routine logging', () => {
     await page.getByRole('button', { name: '+ Dumbbell Overhead Press' }).click();
     await page.getByRole('button', { name: 'Save routine' }).click();
 
-    await page.getByRole('button', { name: 'Start workout' }).click();
+    await page.getByRole('button', { name: 'Start routine' }).click();
     await expect(page).toHaveURL(/\/app\/log/);
     await expect(page.getByText('1 of 2')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
@@ -44,7 +44,7 @@ test.describe('Routine interrupted by off-routine logging', () => {
     await page.getByRole('button', { name: 'Dumbbell Overhead Press' }).click();
     await expect(page.getByText('2 of 2')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Finish workout' }).click();
-    await expect(page.getByText('Workout complete!')).toBeVisible();
+    await page.getByRole('button', { name: 'Finish routine' }).click();
+    await expect(page.getByText('Routine complete!')).toBeVisible();
   });
 });
