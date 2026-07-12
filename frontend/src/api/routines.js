@@ -15,3 +15,7 @@ export function updateRoutine(personId, routineId, { name, exerciseIds }) {
 export function removeRoutine(personId, routineId) {
   return apiClient.delete(`/api/people/${personId}/routines/${routineId}`);
 }
+
+export function copyRoutine(personId, routineId, targetPersonIds) {
+  return apiClient.post(`/api/people/${personId}/routines/${routineId}/copy`, { targetPersonIds });
+}

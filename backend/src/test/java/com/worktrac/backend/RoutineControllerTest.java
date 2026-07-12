@@ -101,4 +101,102 @@ class RoutineControllerTest {
                 .andReturn().getResponse().getContentAsString();
         assertEquals(0, objectMapper.readTree(listResponse).size());
     }
+
+    private long addPerson(String name) throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of("name", name));
+        String response = mockMvc.perform(post("/api/people")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response).get("id").asLong();
+    }
+
+    @Test
+    void copyRoutineToMultipleTargets() throws Exception {
+        long person2 = addPerson("Sam");
+        long person3 = addPerson("Jordan");
+
+        String createBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exerciseIds", exerciseIds));
+        String createResponse = mockMvc.perform(post("/api/people/" + personId + "/routines")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long routineId = objectMapper.readTree(createResponse).get("id").asLong();
+
+        String copyBody = objectMapper.writeValueAsString(Map.of("targetPersonIds", List.of(person2, person3)));
+        String copyResponse = mockMvc.perform(post("/api/people/" + personId + "/routines/" + routineId + "/copy")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(copyBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode copies = objectMapper.readTree(copyResponse);
+        assertEquals(2, copies.size());
+        assertEquals("Push Day", copies.get(0).get("name").asText());
+        assertEquals(2, copies.get(0).get("exercises").size());
+
+        String person2List = mockMvc.perform(get("/api/people/" + person2 + "/routines")
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        assertEquals(1, objectMapper.readTree(person2List).size());
+
+        String person3List = mockMvc.perform(get("/api/people/" + person3 + "/routines")
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        assertEquals(1, objectMapper.readTree(person3List).size());
+
+        // Independence: deleting the original doesn't touch the copies.
+        mockMvc.perform(delete("/api/people/" + personId + "/routines/" + routineId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+        String person2ListAfterDelete = mockMvc.perform(get("/api/people/" + person2 + "/routines")
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        assertEquals(1, objectMapper.readTree(person2ListAfterDelete).size());
+    }
+
+    @Test
+    void copyRoutineFailsWithEmptyTargetList() throws Exception {
+        String createBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exerciseIds", exerciseIds));
+        String createResponse = mockMvc.perform(post("/api/people/" + personId + "/routines")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long routineId = objectMapper.readTree(createResponse).get("id").asLong();
+
+        String copyBody = objectMapper.writeValueAsString(Map.of("targetPersonIds", List.of()));
+        mockMvc.perform(post("/api/people/" + personId + "/routines/" + routineId + "/copy")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(copyBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void copyRoutineFailsWhenCallerDoesNotOwnSourceRoutine() throws Exception {
+        long person2 = addPerson("Sam");
+
+        String createBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exerciseIds", exerciseIds));
+        String createResponse = mockMvc.perform(post("/api/people/" + personId + "/routines")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long routineId = objectMapper.readTree(createResponse).get("id").asLong();
+
+        // Routine belongs to personId, not person2 -- copy via person2's path must 404.
+        String copyBody = objectMapper.writeValueAsString(Map.of("targetPersonIds", List.of(person2)));
+        mockMvc.perform(post("/api/people/" + person2 + "/routines/" + routineId + "/copy")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(copyBody))
+                .andExpect(status().isNotFound());
+    }
 }
