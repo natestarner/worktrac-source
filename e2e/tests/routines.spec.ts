@@ -57,7 +57,7 @@ test.describe('Routines', () => {
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Push Day');
     await page.getByRole('button', { name: '+ Barbell Bench Press' }).click();
     await page.getByRole('button', { name: 'Save routine' }).click();
-    await expect(page.getByText('Push Day')).toBeVisible();
+    await expect(page.getByText('Push Day', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Copy to…' }).click();
     await page.getByRole('checkbox', { name: 'Sam' }).check();
@@ -66,7 +66,7 @@ test.describe('Routines', () => {
 
     await personPill(page, 'Sam').click();
     await page.getByRole('link', { name: 'Routines' }).click();
-    await expect(page.getByText('Push Day')).toBeVisible();
+    await expect(page.getByText('Push Day', { exact: true })).toBeVisible();
     await expect(page.getByText('Barbell Bench Press')).toBeVisible();
 
     // Independence: deleting Jordan's original doesn't touch Sam's copy.
@@ -74,10 +74,13 @@ test.describe('Routines', () => {
     await page.getByRole('link', { name: 'Routines' }).click();
     await page.getByRole('button', { name: 'Delete' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
-    await expect(page.getByText('Push Day')).not.toBeVisible();
+    // exact: true -- a plain substring match also catches the still-fading toast
+    // ("Copied "Push Day" to Sam") and the confirm dialog's own message
+    // ("Delete "Push Day"? ..."), both of which legitimately contain this text.
+    await expect(page.getByText('Push Day', { exact: true })).not.toBeVisible();
 
     await personPill(page, 'Sam').click();
     await page.getByRole('link', { name: 'Routines' }).click();
-    await expect(page.getByText('Push Day')).toBeVisible();
+    await expect(page.getByText('Push Day', { exact: true })).toBeVisible();
   });
 });
