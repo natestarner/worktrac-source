@@ -31,6 +31,7 @@ app:
     # actually running the app.
     connection-string: ${ACS_EMAIL_CONNECTION_STRING:}
     sender-address: ${ACS_EMAIL_SENDER_ADDRESS:}
+    app-url: ${APP_EMAIL_APP_URL:http://localhost:3000/app/log}
     # test-support-key is different: it only gates the local-only test-support endpoint on
     # your own machine, so (like the JWT secret above) a fixed, committed placeholder is safe.
     test-support-key: local-dev-only-e2e-test-key-do-not-use-elsewhere

@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -118,6 +119,8 @@ class AuthControllerTest {
         assertJsonEquals(auth, email, "user", "email");
         assertJsonEquals(auth, "Alex", "person", "name");
         assertJsonEquals(auth, true, "person", "isPrimary");
+
+        verify(emailService).sendRegistrationSuccess(email);
     }
 
     @Test

@@ -140,6 +140,7 @@ public class RegistrationService {
         AuthResponse response = createAccountUserPerson(
                 email, pending.getPasswordHash(), pending.getPersonName(), pending.getAccountName());
         pendingRegistrationRepository.deleteByEmail(email);
+        emailService.sendRegistrationSuccess(email);
         return response;
     }
 
