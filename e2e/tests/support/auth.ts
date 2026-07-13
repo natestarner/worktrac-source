@@ -27,11 +27,7 @@ export async function registerHousehold(page: Page, request: APIRequestContext, 
 
   const configResponse = await request.get('/config.json');
   const { apiUrl } = await configResponse.json();
-  const codeResponse = await request.get(`${apiUrl}/api/auth/test/pending-code`, {
-    params: { email },
-    headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' },
-  });
-  const { code } = await codeResponse.json();
+  const code = await fetchPendingCode(request, apiUrl, email);
 
   await page.getByPlaceholder('123456').fill(code);
   await page.getByRole('button', { name: 'Confirm' }).click();
@@ -41,4 +37,30 @@ export async function registerHousehold(page: Page, request: APIRequestContext, 
   await expect(page).toHaveURL(/\/app\/log/, { timeout: 20000 });
 
   return email;
+}
+
+// TestCodeCache (see TestCodeCache.java) is a plain in-memory map inside the running
+// container -- register() only returns after writing to it, so a lookup immediately after
+// should always find it. It's occasionally missing anyway: the lower backend scales to zero
+// when idle (min-replicas 0), and Azure Container Apps can briefly route two requests to two
+// different instances during a scale event, leaving the code written on an instance this GET
+// doesn't land on. Retrying tolerates that transient case (confirmed live 2026-07-13 as the
+// cause of an intermittent "Unexpected end of JSON input" failure) without masking a real
+// bug -- if the code is genuinely never sent, this still fails after the deadline.
+async function fetchPendingCode(request: APIRequestContext, apiUrl: string, email: string): Promise<string> {
+  const deadline = Date.now() + 10_000;
+  while (true) {
+    const response = await request.get(`${apiUrl}/api/auth/test/pending-code`, {
+      params: { email },
+      headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' },
+    });
+    if (response.ok()) {
+      const { code } = await response.json();
+      return code;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`No pending code appeared for ${email} within 10s (last status: ${response.status()})`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
 }
