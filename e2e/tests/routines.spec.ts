@@ -35,8 +35,8 @@ test.describe('Routines', () => {
     await expect(page.getByText('Routine complete!')).toBeVisible();
   });
 
-  test('copy a routine to another person and it appears independently in their routine list', async ({ page }) => {
-    await registerHousehold(page, 'Jordan');
+  test('copy a routine to another person and it appears independently in their routine list', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Jordan');
 
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');

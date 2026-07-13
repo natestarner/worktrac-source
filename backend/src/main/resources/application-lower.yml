@@ -19,3 +19,16 @@ spring:
     enabled: true
     baseline-on-migrate: true
     clean-disabled: true    # never allow clean outside local dev, even in lower env
+
+app:
+  rate-limit:
+    # application.yml's production-sane defaults (10/hour per-IP, 30/hour global) are sized
+    # for real internet-facing abuse resistance, not for the e2e-tests CI job -- one run
+    # registers ~15 households, and Playwright's CI retry policy (2 retries per failing test)
+    # means a single early 429 cascades into every subsequent test also registering 2-3x,
+    # confirmed live 2026-07-13: the global cap was exhausted mid-run, failing 14 of 15 tests.
+    # lower is internet-facing but has no real users (only e2e CI + manual testing), so it
+    # gets headroom sized for CI bursts rather than local's effectively-unlimited 1000/1000 --
+    # still meaningfully bounded, unlike local, since lower is a real deployed target.
+    per-ip-per-hour: 100
+    global-email-sends-per-hour: 200
