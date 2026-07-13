@@ -11,6 +11,12 @@ public class EmailProperties {
     private String senderAddress;
     private int codeExpirationMinutes = 15;
 
+    // Base URL for the "Open Huddle" link in the registration-success email, e.g.
+    // https://huddle.fitness/app/log. Differs per environment the same way
+    // connectionString/senderAddress do, so it's sourced from an env var with no
+    // production default -- only application-local.yml gives it a fallback.
+    private String appUrl;
+
     // Only ever set in local/lower -- gates the test-support endpoint in addition to its
     // @Profile restriction (see TestSupportController). Left null in production, where the
     // endpoint's controller bean doesn't exist at all regardless of this value.
@@ -46,5 +52,13 @@ public class EmailProperties {
 
     public void setTestSupportKey(String testSupportKey) {
         this.testSupportKey = testSupportKey;
+    }
+
+    public String getAppUrl() {
+        return appUrl;
+    }
+
+    public void setAppUrl(String appUrl) {
+        this.appUrl = appUrl;
     }
 }
