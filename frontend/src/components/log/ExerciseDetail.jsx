@@ -25,7 +25,9 @@ export default function ExerciseDetail({
   onNextExercise,
   onBack,
 }) {
-  const { account } = useAuth();
+  const { account, people } = useAuth();
+  const activePersonName = people.length >= 2 ? people.find((p) => p.id === personId)?.name : null;
+  const activePersonFirstName = activePersonName?.split(' ')[0];
   const { weightDraft, repsDraft, setWeightDraft, setRepsDraft } = useAppState();
   const { showCelebration, startRestTimer, openConfirm } = useUI();
 
@@ -219,7 +221,16 @@ export default function ExerciseDetail({
                 cursor: 'pointer',
               }}
             >
-              Log set
+              <span
+                style={{
+                  display: 'block',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {activePersonFirstName ? `Log set for ${activePersonFirstName}` : 'Log set'}
+              </span>
             </Button>
           </div>
         </div>

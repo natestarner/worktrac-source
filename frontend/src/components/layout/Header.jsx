@@ -12,9 +12,6 @@ export default function Header() {
         justifyContent: 'space-between',
         background: 'var(--color-surface)',
         borderBottom: '1px solid var(--color-border)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 5,
       }}
     >
       <picture>

@@ -78,6 +78,7 @@ export default function PersonPillBar() {
         overflowX: 'auto',
         background: 'var(--color-surface)',
         borderBottom: '1px solid var(--color-border)',
+        ...(people.length >= 2 ? { position: 'sticky', top: 0, zIndex: 5 } : null),
       }}
     >
       {people.map((p) => (

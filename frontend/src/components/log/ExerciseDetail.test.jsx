@@ -51,7 +51,7 @@ describe('ExerciseDetail rest-timer live-vs-retroactive gating', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     startRestTimer = vi.fn();
-    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' } });
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
     useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
     useUI.mockReturnValue({ showCelebration: vi.fn(), startRestTimer, openConfirm: vi.fn() });
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
