@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 // Determine which environment to test against
 const baseURL = process.env.E2E_BASE_URL || 'http://localhost:3000';
+const isDeployedEnv = !!process.env.E2E_BASE_URL;
 
 export default defineConfig({
   testDir: './tests',
@@ -17,6 +18,14 @@ export default defineConfig({
     ['html', { open: 'never' }],
     ['list'],
   ],
+  // A real deployed target (lower/production) has real network latency and shared,
+  // resource-constrained infra that localhost doesn't -- give assertions more headroom there
+  // by default instead of bumping Playwright's 5s default one call site at a time as each new
+  // flow happens to hit it (see git history: this happened repeatedly for the registration
+  // email flow before it became a blanket default here).
+  expect: {
+    timeout: isDeployedEnv ? 15000 : 5000,
+  },
   use: {
     baseURL,
     trace: 'on-first-retry',

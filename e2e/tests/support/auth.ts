@@ -17,13 +17,7 @@ export async function registerHousehold(page: Page, request: APIRequestContext, 
   await page.getByPlaceholder('you@example.com').fill(email);
   await page.getByPlaceholder('At least 8 characters').fill('password123');
   await page.getByRole('button', { name: 'Create household' }).click();
-  // Unlike the rest of this flow, register() now makes a real blocking network call to Azure
-  // Communication Services (EmailService waits for the full send to complete before
-  // responding) -- confirmed live 2026-07-13: Playwright's default 5s assertion timeout was
-  // too tight for that round-trip's real-world latency and caused intermittent failures
-  // (which sometimes passed on CI retry, ruling out a deterministic bug) against the actual
-  // deployed lower environment.
-  await expect(page).toHaveURL(/\/confirm-email/, { timeout: 20000 });
+  await expect(page).toHaveURL(/\/confirm-email/);
 
   const configResponse = await request.get('/config.json');
   const { apiUrl } = await configResponse.json();
@@ -31,10 +25,7 @@ export async function registerHousehold(page: Page, request: APIRequestContext, 
 
   await page.getByPlaceholder('123456').fill(code);
   await page.getByRole('button', { name: 'Confirm' }).click();
-  // confirmEmail() now also sends a real blocking registration-success email (same
-  // EmailService.waitForCompletion() pattern as register()'s code email above) before
-  // responding -- needs the same extended timeout for the same reason.
-  await expect(page).toHaveURL(/\/app\/log/, { timeout: 20000 });
+  await expect(page).toHaveURL(/\/app\/log/);
 
   return email;
 }
