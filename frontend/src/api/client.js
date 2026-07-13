@@ -34,6 +34,7 @@ class ApiError extends Error {
 async function request(path, { method = 'GET', body, isFormData = false } = {}) {
   const headers = {};
   if (!isFormData) headers['Content-Type'] = 'application/json';
+  const hadToken = Boolean(token);
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const response = await fetch(getApiUrl(path), {
@@ -42,7 +43,13 @@ async function request(path, { method = 'GET', body, isFormData = false } = {}) 
     body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
   });
 
-  if (response.status === 401) {
+  // A 401 only means "your session expired" if this request actually carried a token --
+  // public/unauthenticated endpoints (login, register, confirm-email, resend-code) also
+  // return 401 for ordinary "that wasn't right" failures (wrong password, wrong
+  // verification code), and there's no session to expire in that case. Redirecting to
+  // /login there just discards whatever error the caller was about to show and dumps the
+  // user out of a flow they were never logged into to begin with.
+  if (response.status === 401 && hadToken) {
     setAuthToken(null);
     if (onUnauthorized) onUnauthorized();
     throw new ApiError(401, 'Session expired -- please log in again.');
