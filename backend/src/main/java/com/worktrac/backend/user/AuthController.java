@@ -2,9 +2,13 @@ package com.worktrac.backend.user;
 
 import com.worktrac.backend.security.CurrentUser;
 import com.worktrac.backend.user.dto.AuthResponse;
+import com.worktrac.backend.user.dto.ConfirmEmailRequest;
 import com.worktrac.backend.user.dto.LoginRequest;
 import com.worktrac.backend.user.dto.MeResponse;
 import com.worktrac.backend.user.dto.RegisterRequest;
+import com.worktrac.backend.user.dto.RegisterStartedResponse;
+import com.worktrac.backend.user.dto.ResendCodeRequest;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,16 +21,30 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final RegistrationService registrationService;
     private final CurrentUser currentUser;
 
-    public AuthController(AuthService authService, CurrentUser currentUser) {
+    public AuthController(AuthService authService, RegistrationService registrationService,
+                           CurrentUser currentUser) {
         this.authService = authService;
+        this.registrationService = registrationService;
         this.currentUser = currentUser;
     }
 
     @PostMapping("/register")
-    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
-        return authService.register(request);
+    public RegisterStartedResponse register(@Valid @RequestBody RegisterRequest request,
+                                             HttpServletRequest servletRequest) {
+        return registrationService.register(request, servletRequest.getRemoteAddr());
+    }
+
+    @PostMapping("/confirm-email")
+    public AuthResponse confirmEmail(@Valid @RequestBody ConfirmEmailRequest request) {
+        return registrationService.confirmEmail(request);
+    }
+
+    @PostMapping("/resend-code")
+    public void resendCode(@Valid @RequestBody ResendCodeRequest request, HttpServletRequest servletRequest) {
+        registrationService.resendCode(request, servletRequest.getRemoteAddr());
     }
 
     @PostMapping("/login")

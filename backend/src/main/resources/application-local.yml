@@ -19,3 +19,29 @@ app:
     # Local-dev-only secret. NEVER reuse this value in lower/production -- those must set
     # APP_JWT_SECRET via a real secret store (see CLAUDE.md: never commit real secrets).
     secret: local-dev-only-insecure-jwt-signing-secret-do-not-use-elsewhere-0123456789
+  email:
+    # There's no safe fake value for actually sending mail -- registration sends a real email
+    # through Azure Communication Services even locally, so set real ACS_EMAIL_CONNECTION_STRING/
+    # ACS_EMAIL_SENDER_ADDRESS env vars on your machine to run the app and get a real code
+    # (a free-tier ACS resource is fine). The `:` empty fallback below exists ONLY so
+    # @SpringBootTest classes -- which also activate this "local" profile, and mock EmailService
+    # out entirely (see e.g. RegistrationServiceTest) rather than calling real Azure -- don't
+    # fail at context startup in CI, where no such env var exists. A real env var you set
+    # locally always wins over this fallback; it does not weaken the "real send" decision for
+    # actually running the app.
+    connection-string: ${ACS_EMAIL_CONNECTION_STRING:}
+    sender-address: ${ACS_EMAIL_SENDER_ADDRESS:}
+    # test-support-key is different: it only gates the local-only test-support endpoint on
+    # your own machine, so (like the JWT secret above) a fixed, committed placeholder is safe.
+    test-support-key: local-dev-only-e2e-test-key-do-not-use-elsewhere
+  rate-limit:
+    # Rate limiting defends a deployed, internet-facing environment against abuse -- that's
+    # not the threat model for a single developer or an automated test suite hitting
+    # localhost. @SpringBootTest classes reuse one Spring context (and its rate limiter's
+    # stateful buckets) across every test method in the file, so the production-sane defaults
+    # in application.yml would otherwise start rejecting unrelated tests with 429s partway
+    # through a file purely because earlier tests in the same class already consumed the
+    # quota. The one test class that actually verifies rate-limiting behavior overrides these
+    # back down via its own property source, which gives it an isolated Spring context.
+    per-ip-per-hour: 1000
+    global-email-sends-per-hour: 1000

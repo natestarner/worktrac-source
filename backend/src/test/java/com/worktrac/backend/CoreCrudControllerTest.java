@@ -2,6 +2,9 @@ package com.worktrac.backend;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.worktrac.backend.email.EmailService;
+import com.worktrac.backend.support.RegistrationTestSupport;
+import com.worktrac.backend.user.TestCodeCache;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +13,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.MSSQLServerContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -43,6 +47,15 @@ class CoreCrudControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private TestCodeCache testCodeCache;
+
+    // EmailService's real constructor builds a live Azure EmailClient from
+    // app.email.connection-string, which is empty in the "local" test profile (no real ACS
+    // resource in CI) -- @MockitoBean replaces the bean entirely so that constructor never runs.
+    @MockitoBean
+    private EmailService emailService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private String token;
@@ -50,14 +63,8 @@ class CoreCrudControllerTest {
     @BeforeEach
     void registerAccount() throws Exception {
         String email = "crud-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
-        String body = objectMapper.writeValueAsString(Map.of(
-                "email", email, "password", "password123", "personName", "Nate"));
-        String response = mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        token = objectMapper.readTree(response).get("token").asText();
+        JsonNode registerJson = RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Nate");
+        token = registerJson.get("token").asText();
     }
 
     @Test

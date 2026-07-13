@@ -26,6 +26,12 @@
         <!-- CVE-2026-10532 (logback-core, fixed in 1.5.35): override Spring Boot's
              managed version until the parent BOM picks up the patched release itself. -->
         <logback.version>1.5.35</logback.version>
+        <!-- NOTE: verify these are still the latest stable versions on Maven Central
+             before your first build. bucket4j_jdk17-core targets JDK 17+ (this project
+             is on Java 25); do not use the bucket4j_jdk8-core artifact. -->
+        <bucket4j.version>8.19.0</bucket4j.version>
+        <caffeine.version>3.2.4</caffeine.version>
+        <azure-communication-email.version>1.0.22</azure-communication-email.version>
     </properties>
 
     <dependencies>
@@ -86,6 +92,28 @@
             <groupId>com.microsoft.sqlserver</groupId>
             <artifactId>mssql-jdbc</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- Rate limiting (registration/resend-code abuse + Azure email cost control).
+             jdk17 variant, not jdk8, since this project targets Java 25. -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j_jdk17-core</artifactId>
+            <version>${bucket4j.version}</version>
+        </dependency>
+        <!-- Backs the per-IP bucket registry so idle IPs are evicted automatically
+             instead of a hand-rolled map that grows without bound. -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>${caffeine.version}</version>
+        </dependency>
+
+        <!-- Azure Communication Services Email (registration verification codes) -->
+        <dependency>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-communication-email</artifactId>
+            <version>${azure-communication-email.version}</version>
         </dependency>
 
         <!-- Test -->

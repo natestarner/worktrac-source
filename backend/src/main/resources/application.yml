@@ -39,3 +39,13 @@ app:
   jwt:
     secret: ${APP_JWT_SECRET}
     expiration-minutes: ${APP_JWT_EXPIRATION_MINUTES:43200}    # 30 days
+  email:
+    connection-string: ${ACS_EMAIL_CONNECTION_STRING}
+    sender-address: ${ACS_EMAIL_SENDER_ADDRESS}
+    code-expiration-minutes: ${APP_EMAIL_CODE_EXPIRATION_MINUTES:15}
+    # Empty (not required) so production startup never depends on this -- the
+    # test-support endpoint's controller bean doesn't exist outside local/lower anyway.
+    test-support-key: ${E2E_TEST_SUPPORT_KEY:}
+  rate-limit:
+    per-ip-per-hour: ${APP_RATE_LIMIT_PER_IP_PER_HOUR:10}
+    global-email-sends-per-hour: ${APP_RATE_LIMIT_GLOBAL_EMAIL_SENDS_PER_HOUR:30}

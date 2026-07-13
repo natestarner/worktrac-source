@@ -1,19 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { registerHousehold } from './support/auth';
 
 // Full golden-path smoke: register a new household, log the first-ever set (always a
 // PR), confirm the celebration fires, then check every tab renders without error.
 test.describe('Log workout', () => {
-  test('register, log a set, see PR celebration, browse all tabs', async ({ page }) => {
-    const unique = Date.now();
-    const email = `e2e-${unique}@example.com`;
+  test('register, log a set, see PR celebration, browse all tabs', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
 
-    await page.goto('/register');
-    await page.getByPlaceholder('e.g. Alex').fill('Nate');
-    await page.getByPlaceholder('you@example.com').fill(email);
-    await page.getByPlaceholder('At least 8 characters').fill('password123');
-    await page.getByRole('button', { name: 'Create household' }).click();
-
-    await expect(page).toHaveURL(/\/app\/log/);
     await expect(page.getByPlaceholder('Search exercises')).toBeVisible();
 
     // Pick the first exercise in the library.
