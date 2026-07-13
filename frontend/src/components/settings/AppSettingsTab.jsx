@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
@@ -6,14 +7,14 @@ import { useCategories } from '../../hooks/useCategories';
 import { updateDefaultUnit } from '../../api/account';
 import { removeExercise } from '../../api/exercises';
 import { addCategory, removeCategory } from '../../api/categories';
-import { removePerson } from '../../api/people';
 import AddEditExerciseModal from './AddEditExerciseModal';
 import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
 import Skeleton from '../shared/Skeleton';
 
-export default function AdminTab() {
-  const { account, people, refreshPeople } = useAuth();
+export default function AppSettingsTab() {
+  const navigate = useNavigate();
+  const { account, refreshPeople } = useAuth();
   const { openConfirm } = useUI();
   const { exercises, loading: exercisesLoading, refetch: refetchExercises } = useExercises();
   const { categories, loading: categoriesLoading, refetch: refetchCategories } = useCategories();
@@ -54,13 +55,12 @@ export default function AdminTab() {
     refetchCategories();
   }
 
-  async function handleRemovePerson(person) {
-    await removePerson(person.id);
-    refreshPeople();
-  }
-
   return (
     <div>
+      <button onClick={() => navigate(-1)} style={backButtonStyle}>
+        &larr; Back
+      </button>
+
       <div style={sectionLabelStyle}>Units</div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
@@ -206,30 +206,6 @@ export default function AdminTab() {
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 18 }}>Enter a category name.</div>
       )}
 
-      <div style={sectionLabelStyle}>People</div>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '4px 20px' }}>
-        {people.map((p, i) => (
-          <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: i < people.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>{p.name}</div>
-              {p.isPrimary && (
-                <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--color-muted)', background: 'var(--color-subtle-bg)', padding: '3px 8px', borderRadius: 999 }}>
-                  PRIMARY
-                </span>
-              )}
-            </div>
-            {!p.isPrimary && (
-              <button
-                onClick={() => openConfirm(`Remove ${p.name}? This deletes all of their sessions, sets, routines, and setup values.`, () => handleRemovePerson(p))}
-                style={deleteLinkStyle}
-              >
-                Remove
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
       {modalExercise !== undefined && (
         <AddEditExerciseModal
           exercise={modalExercise}
@@ -244,6 +220,16 @@ export default function AdminTab() {
     </div>
   );
 }
+
+const backButtonStyle = {
+  background: 'none',
+  border: 'none',
+  color: 'var(--color-accent)',
+  fontSize: 15,
+  fontWeight: 600,
+  cursor: 'pointer',
+  padding: '0 0 16px 0',
+};
 
 const sectionLabelStyle = {
   fontSize: 13,

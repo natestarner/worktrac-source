@@ -249,10 +249,7 @@ export default function ExerciseDetail({
                         borderBottom: i < sessionSets.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
                       }}
                     >
-                      <button
-                        onClick={() => setEditingSet(set)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
-                      >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ fontSize: 13, color: 'var(--color-muted)', fontWeight: 600, width: 44 }}>Set {setNumber}</div>
                         <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}>
                           {set.weight} {set.unit || 'lb'} &times; {set.reps}
@@ -272,13 +269,15 @@ export default function ExerciseDetail({
                             PR
                           </span>
                         )}
-                      </button>
-                      <button
-                        onClick={() => openConfirm('Delete this set?', () => handleDeleteSet(set.id))}
-                        style={{ background: 'none', border: 'none', color: 'var(--color-faint)', fontSize: 20, cursor: 'pointer', padding: '4px 8px' }}
-                      >
-                        &times;
-                      </button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 14 }}>
+                        <button onClick={() => setEditingSet(set)} style={editLinkStyle}>
+                          Edit
+                        </button>
+                        <button onClick={() => openConfirm('Delete this set?', () => handleDeleteSet(set.id))} style={deleteLinkStyle}>
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -367,3 +366,6 @@ const cardLabelStyle = {
   letterSpacing: '0.04em',
   marginBottom: 4,
 };
+
+const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+const deleteLinkStyle = { background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };

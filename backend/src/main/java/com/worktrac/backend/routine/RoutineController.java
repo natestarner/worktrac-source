@@ -41,6 +41,12 @@ public class RoutineController {
         return routineService.update(currentUser.accountId(), personId, routineId, request);
     }
 
+    @PostMapping("/api/people/{personId}/routines/{routineId}/copy")
+    public List<RoutineDto> copy(@PathVariable Long personId, @PathVariable Long routineId,
+                                  @Valid @RequestBody CopyRoutineRequest request) {
+        return routineService.copy(currentUser.accountId(), personId, routineId, request);
+    }
+
     @DeleteMapping("/api/people/{personId}/routines/{routineId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long personId, @PathVariable Long routineId) {

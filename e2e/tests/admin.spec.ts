@@ -1,6 +1,20 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 
+// App Settings and Profile are both reached via the account-holder dropdown in the
+// header, not a tab -- scope to .header-bar (the only button living there) rather than
+// matching on the primary account holder's name, which varies per test.
+async function openAppSettings(page) {
+  await page.locator('.header-bar').getByRole('button').click();
+  await page.getByRole('menuitem', { name: 'App Settings' }).click();
+}
+
+// People management (edit/remove) lives on Profile, not App Settings.
+async function openProfile(page) {
+  await page.locator('.header-bar').getByRole('button').click();
+  await page.getByRole('menuitem', { name: 'Profile' }).click();
+}
+
 // Styles are all inline in this app (no stable CSS classes), so the most reliable way
 // to scope an action to one row among several near-identical rows is: the deepest
 // element whose text includes the target string AND that also contains the button
@@ -14,10 +28,10 @@ function rowWithButton(page, text: string, buttonName: string) {
     .last();
 }
 
-test.describe('Admin', () => {
+test.describe('App Settings', () => {
   test('add a category, add a custom exercise, add and remove a person, switch units', async ({ page, request }) => {
     await registerHousehold(page, request, 'Alex');
-    await page.getByRole('link', { name: 'Admin' }).click();
+    await openAppSettings(page);
 
     // Add a category first so the new exercise can use it.
     await page.getByPlaceholder('New category name').fill('Conditioning');
@@ -33,13 +47,13 @@ test.describe('Admin', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).last().click();
     await expect(page.getByText('Sled Push')).toBeVisible();
 
-    // Add a second person from the pill bar, then remove them from Admin.
+    // Add a second person from the pill bar, then remove them from Profile.
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByRole('button', { name: /Sam/ })).toBeVisible();
 
-    await page.getByRole('link', { name: 'Admin' }).click();
+    await openProfile(page);
     await page.getByRole('button', { name: 'Remove' }).click();
     // The exercise library also has a "Delete" link underneath the confirm overlay --
     // scope to the confirm dialog specifically.
@@ -47,13 +61,14 @@ test.describe('Admin', () => {
     await expect(page.getByRole('button', { name: /Sam/ })).toHaveCount(0);
 
     // Switch default unit to kg.
+    await openAppSettings(page);
     await page.getByRole('button', { name: 'kg', exact: true }).click();
     await expect(page.getByText(/Default unit for new sets/)).toBeVisible();
   });
 
   test('exercise, category, and person deletions show the right confirmation wording', async ({ page, request }) => {
     await registerHousehold(page, request, 'Riley');
-    await page.getByRole('link', { name: 'Admin' }).click();
+    await openAppSettings(page);
 
     // A private (account-owned) exercise's delete confirm text differs from a global one's.
     await page.getByRole('button', { name: '+ Add exercise' }).click();
@@ -83,16 +98,16 @@ test.describe('Admin', () => {
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
-    await page.getByRole('link', { name: 'Admin' }).click();
+    await openProfile(page);
     await page.getByRole('button', { name: 'Remove' }).click();
     await expect(page.getByRole('dialog')).toContainText('Remove Sam? This deletes all of their sessions, sets, routines, and setup values.');
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
     await expect(page.getByRole('button', { name: /Sam/ })).toHaveCount(0);
   });
 
-  test('adding a setup field in Admin lets each person set their own value for it', async ({ page, request }) => {
+  test('adding a setup field in App Settings lets each person set their own value for it', async ({ page, request }) => {
     await registerHousehold(page, request, 'Morgan');
-    await page.getByRole('link', { name: 'Admin' }).click();
+    await openAppSettings(page);
 
     // Add a custom exercise with a setup field defined for it. Pick a category
     // explicitly rather than relying on the modal's default selection, which is only
@@ -115,8 +130,8 @@ test.describe('Admin', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
     await expect(page.getByRole('button', { name: 'Seat position: 7' })).toBeVisible();
 
-    // Removing the field name in Admin removes it from the exercise's setup fields.
-    await page.getByRole('link', { name: 'Admin' }).click();
+    // Removing the field name in App Settings removes it from the exercise's setup fields.
+    await openAppSettings(page);
     await rowWithButton(page, 'Cable Row', 'Edit').getByRole('button', { name: 'Edit' }).click();
     await page.getByRole('dialog').getByText('Seat position').getByRole('button', { name: '×', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();

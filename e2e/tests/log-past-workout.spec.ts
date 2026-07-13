@@ -30,11 +30,11 @@ test.describe('Log a past workout', () => {
     // Sets added while editing a past session must never start the live rest timer.
     await expect(page.getByText('Rest')).toHaveCount(0);
 
-    // Remove the first set (the first "×" delete button in DOM order corresponds to
-    // Set 1's row). Must be an exact match -- a substring match on "×" would also hit
-    // each row's own "Set N 45 lb × 8" button, since that text contains the same
-    // multiplication sign.
-    await page.getByRole('button', { name: '×', exact: true }).first().click();
+    // Remove the newest set (rows render newest-first, so the first "Delete" link in DOM
+    // order belongs to Set 2's row). Two "Delete" buttons exist before the confirm dialog
+    // opens (one per row), so `.first()` disambiguates; the dialog's own "Delete" button
+    // is scoped separately below once it's the only one on screen.
+    await page.getByRole('button', { name: 'Delete', exact: true }).first().click();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
     await expect(page.getByText('Set 2')).toHaveCount(0);
     await expect(page.getByText('Set 1')).toBeVisible();

@@ -8,7 +8,11 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,      // Fail if test.only is left in CI
   retries: process.env.CI ? 2 : 0,   // Retry flaky tests in CI only
-  workers: process.env.CI ? 1 : undefined,  // Single worker in CI for stability
+  // 2 workers in CI: all specs already isolate via per-test random accounts (see
+  // admin.spec.ts etc.), so data collisions aren't the concern -- the lower-env DB is
+  // Azure SQL free tier with limited concurrency headroom, so we go modest rather than
+  // fully parallel.
+  workers: process.env.CI ? 2 : undefined,
   reporter: [
     ['html', { open: 'never' }],
     ['list'],

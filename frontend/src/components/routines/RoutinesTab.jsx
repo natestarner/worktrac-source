@@ -1,22 +1,27 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../context/AppStateContext';
+import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
 import { useCategories } from '../../hooks/useCategories';
 import { useRoutines } from '../../hooks/useRoutines';
 import { removeRoutine } from '../../api/routines';
 import RoutineFormModal from './RoutineFormModal';
+import CopyRoutineModal from './CopyRoutineModal';
 import Skeleton from '../shared/Skeleton';
 
 export default function RoutinesTab() {
   const navigate = useNavigate();
   const { activePersonId, startRoutine } = useAppState();
+  const { people } = useAuth();
   const { openConfirm } = useUI();
   const { exercises } = useExercises();
   const { categories } = useCategories();
   const { routines, loading, refetch } = useRoutines(activePersonId);
   const [modalRoutine, setModalRoutine] = useState(undefined); // undefined = closed, null = create, object = edit
+  const [copyRoutine, setCopyRoutine] = useState(null); // null = closed, object = routine being copied
+  const hasOtherPeople = people.some((p) => p.id !== activePersonId);
 
   function handleStart(routine) {
     startRoutine(routine.id, routine.exercises.map((e) => e.exerciseId));
@@ -64,6 +69,11 @@ export default function RoutinesTab() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div style={{ fontSize: 16, fontWeight: 700 }}>{r.name}</div>
               <div style={{ display: 'flex', gap: 14 }}>
+                {hasOtherPeople && (
+                  <button onClick={() => setCopyRoutine(r)} style={editLinkStyle}>
+                    Copy to&hellip;
+                  </button>
+                )}
                 <button onClick={() => setModalRoutine(r)} style={editLinkStyle}>
                   Edit
                 </button>
@@ -79,7 +89,7 @@ export default function RoutinesTab() {
               {r.exercises.map((e) => e.exerciseName).join(', ')}
             </div>
             <button onClick={() => handleStart(r)} style={startButtonStyle}>
-              Start workout
+              Start routine
             </button>
           </div>
         ))}
@@ -97,6 +107,10 @@ export default function RoutinesTab() {
             refetch();
           }}
         />
+      )}
+
+      {copyRoutine && (
+        <CopyRoutineModal routine={copyRoutine} personId={activePersonId} onClose={() => setCopyRoutine(null)} />
       )}
     </div>
   );

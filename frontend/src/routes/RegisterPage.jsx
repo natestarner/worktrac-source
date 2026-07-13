@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { inputStyle, primaryButtonStyle } from './LoginPage';
 import Spinner from '../components/shared/Spinner';
+import logoLight from '../assets/huddle-lockup-barlow-light.svg';
+import logoDark from '../assets/huddle-lockup-barlow-dark.svg';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -67,11 +69,20 @@ export default function RegisterPage() {
           border: '1px solid var(--color-border)',
           borderRadius: 20,
           padding: '40px 36px',
-          width: 380,
+          width: 560,
           maxWidth: '100%',
           boxShadow: '0 8px 24px rgba(28,27,25,0.06)',
         }}
       >
+        <picture>
+          <source srcSet={logoDark} media="(prefers-color-scheme: dark)" />
+          <img
+            src={logoLight}
+            alt="Huddle"
+            style={{ display: 'block', margin: '0 auto 24px', width: 445, maxWidth: '100%', height: 'auto' }}
+          />
+        </picture>
+
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, textAlign: 'center' }}>Create your household</div>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 24, textAlign: 'center' }}>
           You'll be the primary login -- kids and training partners get added inside the app, no login needed.

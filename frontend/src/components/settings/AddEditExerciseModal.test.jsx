@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AddEditExerciseModal from './AddEditExerciseModal';
 import { addExercise } from '../../api/exercises';
 
-// AdminTab doesn't gate "+ Add exercise" behind categories having finished loading, so
+// AppSettingsTab doesn't gate "+ Add exercise" behind categories having finished loading, so
 // this modal can mount with an empty categories list. categoryId's default used to be
 // computed once at mount (`categories[0]?.id`), which stuck at undefined forever if
 // categories arrived a moment later -- silently turning Save into a no-op with no

@@ -28,7 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -73,6 +75,48 @@ class CoreCrudControllerTest {
 
         mockMvc.perform(delete("/api/people/" + primaryPersonId).header("Authorization", "Bearer " + token))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void canRenamePrimaryAndNonPrimaryPerson() throws Exception {
+        String meResponse = mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        long primaryPersonId = objectMapper.readTree(meResponse).get("people").get(0).get("id").asLong();
+
+        mockMvc.perform(patch("/api/people/" + primaryPersonId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("name", "Nathaniel"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Nathaniel"));
+
+        String samBody = objectMapper.writeValueAsString(Map.of("name", "Sam"));
+        String samResponse = mockMvc.perform(post("/api/people")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(samBody))
+                .andReturn().getResponse().getContentAsString();
+        long samId = objectMapper.readTree(samResponse).get("id").asLong();
+
+        mockMvc.perform(patch("/api/people/" + samId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("name", "Samuel"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Samuel"));
+    }
+
+    @Test
+    void renamingPersonRejectsBlankName() throws Exception {
+        String meResponse = mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        long primaryPersonId = objectMapper.readTree(meResponse).get("people").get(0).get("id").asLong();
+
+        mockMvc.perform(patch("/api/people/" + primaryPersonId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("name", "  "))))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

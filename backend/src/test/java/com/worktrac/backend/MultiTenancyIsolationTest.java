@@ -299,4 +299,67 @@ class MultiTenancyIsolationTest {
                         .header("Authorization", "Bearer " + tokenB))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void accountBCannotCopyAccountAsRoutine() throws Exception {
+        long personIdA = primaryPersonId(tokenA);
+        long personIdB = primaryPersonId(tokenB);
+        String exercisesResponse = mockMvc.perform(get("/api/exercises").header("Authorization", "Bearer " + tokenA))
+                .andReturn().getResponse().getContentAsString();
+        long exerciseId = objectMapper.readTree(exercisesResponse).get(0).get("id").asLong();
+
+        String routineBody = objectMapper.writeValueAsString(Map.of(
+                "name", "Account A Routine", "exerciseIds", java.util.List.of(exerciseId)));
+        String routineResponse = mockMvc.perform(post("/api/people/" + personIdA + "/routines")
+                        .header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(routineBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long routineId = objectMapper.readTree(routineResponse).get("id").asLong();
+
+        // Account B targeting Account A's own person id as a copy target must 404 --
+        // B has no access to A's routine OR A's person id.
+        String copyBody = objectMapper.writeValueAsString(Map.of(
+                "targetPersonIds", java.util.List.of(personIdA)));
+        mockMvc.perform(post("/api/people/" + personIdB + "/routines/" + routineId + "/copy")
+                        .header("Authorization", "Bearer " + tokenB)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(copyBody))
+                .andExpect(status().isNotFound());
+
+        // Add a second person to Account B and mix a valid B target with A's person id --
+        // the whole call must roll back, so the valid target must not receive a partial copy.
+        String addPersonBody = objectMapper.writeValueAsString(Map.of("name", "Blair's Kid"));
+        String addPersonResponse = mockMvc.perform(post("/api/people")
+                        .header("Authorization", "Bearer " + tokenB)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(addPersonBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long personIdBKid = objectMapper.readTree(addPersonResponse).get("id").asLong();
+
+        String routineBBody = objectMapper.writeValueAsString(Map.of(
+                "name", "Account B Routine", "exerciseIds", java.util.List.of(exerciseId)));
+        String routineBResponse = mockMvc.perform(post("/api/people/" + personIdB + "/routines")
+                        .header("Authorization", "Bearer " + tokenB)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(routineBBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long routineBId = objectMapper.readTree(routineBResponse).get("id").asLong();
+
+        String mixedCopyBody = objectMapper.writeValueAsString(Map.of(
+                "targetPersonIds", java.util.List.of(personIdBKid, personIdA)));
+        mockMvc.perform(post("/api/people/" + personIdB + "/routines/" + routineBId + "/copy")
+                        .header("Authorization", "Bearer " + tokenB)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mixedCopyBody))
+                .andExpect(status().isNotFound());
+
+        String kidListResponse = mockMvc.perform(get("/api/people/" + personIdBKid + "/routines")
+                        .header("Authorization", "Bearer " + tokenB))
+                .andReturn().getResponse().getContentAsString();
+        org.junit.jupiter.api.Assertions.assertEquals(0, objectMapper.readTree(kidListResponse).size());
+    }
 }

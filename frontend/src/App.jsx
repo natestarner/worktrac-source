@@ -12,7 +12,8 @@ import HistoryTab from './components/history/HistoryTab';
 import PRsTab from './components/prs/PRsTab';
 import RoutinesTab from './components/routines/RoutinesTab';
 import TrendsTab from './components/trends/TrendsTab';
-import AdminTab from './components/admin/AdminTab';
+import AppSettingsTab from './components/settings/AppSettingsTab';
+import ProfileTab from './components/profile/ProfileTab';
 
 export default function App() {
   return (
@@ -32,7 +33,8 @@ export default function App() {
                 <Route path="prs" element={<PRsTab />} />
                 <Route path="routines" element={<RoutinesTab />} />
                 <Route path="trends" element={<TrendsTab />} />
-                <Route path="admin" element={<AdminTab />} />
+                <Route path="settings" element={<AppSettingsTab />} />
+                <Route path="profile" element={<ProfileTab />} />
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

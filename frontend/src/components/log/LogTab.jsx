@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
@@ -6,10 +6,12 @@ import { useExercises } from '../../hooks/useExercises';
 import { useCategories } from '../../hooks/useCategories';
 import { useRoutines } from '../../hooks/useRoutines';
 import { useLiveSession } from '../../hooks/useLiveSession';
+import { useHistory } from '../../hooks/useHistory';
 import { editSession } from '../../api/sessions';
 import { formatTime, localDateTimeToIso, toLocalDateStr, toLocalTimeStr } from '../../utils/datetime';
 import ExercisePicker from './ExercisePicker';
 import ExerciseDetail from './ExerciseDetail';
+import SessionSummary from './SessionSummary';
 import EndWorkoutConfirmModal from '../shared/EndWorkoutConfirmModal';
 
 export default function LogTab() {
@@ -34,10 +36,18 @@ export default function LogTab() {
   const { categories, loading: categoriesLoading } = useCategories();
   const { routines } = useRoutines(activePersonId);
   const { session: liveSession, refetch: refetchLiveSession } = useLiveSession(activePersonId);
+  const activeSessionId = editingSession?.id || liveSession?.id || null;
+  const { history, loading: historyLoading, refetch: refetchHistory } = useHistory(activeSessionId ? activePersonId : null);
   const [showEndWorkoutConfirm, setShowEndWorkoutConfirm] = useState(false);
 
   const activeRoutine = activeRoutineId ? routines.find((r) => r.id === activeRoutineId) : null;
   const selectedExercise = selectedExerciseId ? exercises.find((e) => e.id === selectedExerciseId) : null;
+  const sessionEntries = activeSessionId ? history.find((s) => s.id === activeSessionId)?.entries ?? [] : [];
+
+  useEffect(() => {
+    if (activeSessionId && !selectedExerciseId) refetchHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId, selectedExerciseId]);
 
   async function handleEditingDateChange(e) {
     const iso = localDateTimeToIso(e.target.value, toLocalTimeStr(editingSession.startedAt));
@@ -59,7 +69,7 @@ export default function LogTab() {
     const exerciseIds = activeRoutine.exercises.map((e) => e.exerciseId);
     const wasLast = routineIndex + 1 >= exerciseIds.length;
     nextExerciseInRoutine(exerciseIds);
-    if (wasLast) showToast('Workout complete!', 2400);
+    if (wasLast) showToast('Routine complete!', 2400);
   }
 
   return (
@@ -116,7 +126,7 @@ export default function LogTab() {
           </div>
           <button
             onClick={() => setShowEndWorkoutConfirm(true)}
-            style={{ background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            style={{ background: 'none', border: 'none', color: 'var(--color-muted)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
           >
             End workout
           </button>
@@ -161,6 +171,16 @@ export default function LogTab() {
         </div>
       )}
 
+      {activeSessionId && !selectedExercise && (
+        <SessionSummary
+          entries={sessionEntries}
+          loading={historyLoading}
+          sessionId={activeSessionId}
+          onSelectExercise={selectExercise}
+          onChanged={refetchHistory}
+        />
+      )}
+
       {!selectedExercise && (
         <ExercisePicker
           exercises={exercises}
@@ -180,7 +200,7 @@ export default function LogTab() {
           liveSession={liveSession}
           refetchLiveSession={refetchLiveSession}
           hasActiveRoutine={!!activeRoutine}
-          nextButtonLabel={activeRoutine && routineIndex + 1 >= activeRoutine.exercises.length ? 'Finish workout' : 'Next exercise'}
+          nextButtonLabel={activeRoutine && routineIndex + 1 >= activeRoutine.exercises.length ? 'Finish routine' : 'Next exercise'}
           onNextExercise={handleNextExercise}
           onBack={backToPicker}
         />
