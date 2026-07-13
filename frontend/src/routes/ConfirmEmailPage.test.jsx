@@ -76,5 +76,21 @@ describe('ConfirmEmailPage', () => {
 
     await waitFor(() => expect(resendCode).toHaveBeenCalledWith({ email: 'alex@example.com' }));
     expect(await screen.findByRole('button', { name: 'Resend code (60s)' })).toBeDisabled();
+    expect(screen.getByText('New code sent.')).toBeInTheDocument();
+  });
+
+  it('disables the resend button and shows a spinner while the request is in flight', async () => {
+    let resolveResend;
+    resendCode.mockReturnValue(new Promise((resolve) => { resolveResend = resolve; }));
+    renderWithEmail('alex@example.com');
+
+    const resendButton = screen.getByRole('button', { name: 'Resend code' });
+    fireEvent.click(resendButton);
+
+    await waitFor(() => expect(resendButton).toBeDisabled());
+    expect(screen.queryByText('New code sent.')).not.toBeInTheDocument();
+
+    resolveResend();
+    expect(await screen.findByRole('button', { name: 'Resend code (60s)' })).toBeDisabled();
   });
 });
