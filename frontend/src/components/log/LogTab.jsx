@@ -189,6 +189,7 @@ export default function LogTab() {
           loading={exercisesLoading || categoriesLoading}
           onSelectExercise={selectExercise}
           onStartRoutine={handleStartRoutine}
+          hasActiveRoutine={!!activeRoutine}
         />
       )}
 
