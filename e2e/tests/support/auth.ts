@@ -35,7 +35,10 @@ export async function registerHousehold(page: Page, request: APIRequestContext, 
 
   await page.getByPlaceholder('123456').fill(code);
   await page.getByRole('button', { name: 'Confirm' }).click();
-  await expect(page).toHaveURL(/\/app\/log/);
+  // confirmEmail() now also sends a real blocking registration-success email (same
+  // EmailService.waitForCompletion() pattern as register()'s code email above) before
+  // responding -- needs the same extended timeout for the same reason.
+  await expect(page).toHaveURL(/\/app\/log/, { timeout: 20000 });
 
   return email;
 }
