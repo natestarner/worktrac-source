@@ -4,11 +4,15 @@ export default function WeightRepsStepper({ label, value, onDec, onInc, onValueT
   const valueFont = size === 'lg' ? 28 : 22;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: size === 'lg' ? 20 : 18 }}>
+    <div
+      className="stepper-row"
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: size === 'lg' ? 20 : 18, minWidth: 0 }}
+    >
       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-muted)' }}>{label}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div className="stepper-controls" style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
         <button
           onClick={onDec}
+          className="stepper-circle-btn"
           style={{
             width: circle,
             height: circle,
@@ -19,6 +23,7 @@ export default function WeightRepsStepper({ label, value, onDec, onInc, onValueT
             fontWeight: 700,
             color: 'var(--color-text)',
             cursor: 'pointer',
+            flexShrink: 0,
           }}
         >
           &minus;
@@ -26,6 +31,7 @@ export default function WeightRepsStepper({ label, value, onDec, onInc, onValueT
         {onValueTap ? (
           <button
             onClick={onValueTap}
+            className="stepper-value"
             style={{
               minWidth: 88,
               textAlign: 'center',
@@ -40,12 +46,13 @@ export default function WeightRepsStepper({ label, value, onDec, onInc, onValueT
             {value}
           </button>
         ) : (
-          <div style={{ minWidth: circle + 24, textAlign: 'center', fontSize: valueFont, fontWeight: 700, color: 'var(--color-text)' }}>
+          <div className="stepper-value" style={{ minWidth: circle + 24, textAlign: 'center', fontSize: valueFont, fontWeight: 700, color: 'var(--color-text)' }}>
             {value}
           </div>
         )}
         <button
           onClick={onInc}
+          className="stepper-circle-btn"
           style={{
             width: circle,
             height: circle,
@@ -56,6 +63,7 @@ export default function WeightRepsStepper({ label, value, onDec, onInc, onValueT
             fontWeight: 700,
             color: 'var(--color-text)',
             cursor: 'pointer',
+            flexShrink: 0,
           }}
         >
           +
