@@ -96,7 +96,7 @@ test.describe('Multi-person switching', () => {
     await personPill(page, 'Alex').click();
     await page.getByRole('button', { name: 'Barbell Bench Press' }).click();
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('New PR!')).toBeVisible();
     await page.getByText('New PR!').click({ force: true });
     await expect(page.getByText('Rest')).toBeVisible();
 

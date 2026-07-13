@@ -16,7 +16,7 @@ test.describe('Log workout', () => {
     await page.getByRole('button', { name: 'Log set' }).click();
 
     // First-ever set is always a PR -- the celebration overlay should appear.
-    await expect(page.getByText('New PR!')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('New PR!')).toBeVisible();
     await page.screenshot({ path: 'test-results/pr-celebration.png' });
     await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
 

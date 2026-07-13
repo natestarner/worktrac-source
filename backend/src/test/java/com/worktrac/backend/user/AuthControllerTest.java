@@ -26,6 +26,10 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -108,6 +112,11 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(loginBody))
                 .andExpect(status().isUnauthorized());
+
+        // The verification code email is now dispatched asynchronously (after commit), not
+        // inline in the request thread -- verify it still actually gets sent, just not
+        // necessarily by the time the HTTP response above returned.
+        verify(emailService, timeout(2000)).sendVerificationCode(eq(email), anyString());
     }
 
     @Test
@@ -120,7 +129,30 @@ class AuthControllerTest {
         assertJsonEquals(auth, "Alex", "person", "name");
         assertJsonEquals(auth, true, "person", "isPrimary");
 
-        verify(emailService).sendRegistrationSuccess(email);
+        // Dispatched asynchronously after the confirming transaction commits -- allow it a
+        // moment to land on the executor thread rather than asserting immediately.
+        verify(emailService, timeout(2000)).sendRegistrationSuccess(email);
+    }
+
+    @Test
+    void confirmSucceedsEvenWhenTheSuccessEmailSendFails() throws Exception {
+        String email = uniqueEmail("emailfails");
+        doThrow(new RuntimeException("ACS unavailable")).when(emailService).sendRegistrationSuccess(email);
+
+        // The account is created and usable even though the (now async, post-commit) success
+        // email send fails -- this is the actual bug being fixed: sendRegistrationSuccess used
+        // to run synchronously inside confirmEmail's @Transactional method, so a failure there
+        // rolled back the whole registration despite everything else having succeeded.
+        JsonNode auth = RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Drew");
+        assertJsonNotEmpty(auth, "token");
+
+        String loginBody = objectMapper.writeValueAsString(Map.of("email", email, "password", "password123"));
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody))
+                .andExpect(status().isOk());
+
+        verify(emailService, timeout(2000)).sendRegistrationSuccess(email);
     }
 
     @Test

@@ -8,7 +8,7 @@ test.describe('CSV export', () => {
     // Log a set first so the export isn't trivially empty.
     await page.getByRole('button', { name: 'Barbell Bench Press' }).click();
     await page.getByRole('button', { name: 'Log set' }).click();
-    await expect(page.getByText('New PR!')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('New PR!')).toBeVisible();
     await page.getByText('New PR!').click({ force: true });
 
     await page.getByRole('link', { name: 'History' }).click();

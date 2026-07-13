@@ -10,7 +10,6 @@ import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.common.TooManyRequestsException;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.config.EmailProperties;
-import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonDto;
 import com.worktrac.backend.person.PersonRepository;
@@ -21,6 +20,7 @@ import com.worktrac.backend.user.dto.ConfirmEmailRequest;
 import com.worktrac.backend.user.dto.RegisterRequest;
 import com.worktrac.backend.user.dto.RegisterStartedResponse;
 import com.worktrac.backend.user.dto.ResendCodeRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,7 +50,7 @@ public class RegistrationService {
     private final PendingRegistrationRepository pendingRegistrationRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    private final EmailService emailService;
+    private final ApplicationEventPublisher eventPublisher;
     private final EmailProperties emailProperties;
     private final RegistrationRateLimiter rateLimiter;
     private final Optional<TestCodeCache> testCodeCache;
@@ -61,7 +61,7 @@ public class RegistrationService {
                                 PersonRepository personRepository,
                                 PendingRegistrationRepository pendingRegistrationRepository,
                                 PasswordEncoder passwordEncoder, JwtService jwtService,
-                                EmailService emailService, EmailProperties emailProperties,
+                                ApplicationEventPublisher eventPublisher, EmailProperties emailProperties,
                                 RegistrationRateLimiter rateLimiter, Optional<TestCodeCache> testCodeCache,
                                 Clock clock) {
         this.accountRepository = accountRepository;
@@ -70,7 +70,7 @@ public class RegistrationService {
         this.pendingRegistrationRepository = pendingRegistrationRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
-        this.emailService = emailService;
+        this.eventPublisher = eventPublisher;
         this.emailProperties = emailProperties;
         this.rateLimiter = rateLimiter;
         this.testCodeCache = testCodeCache;
@@ -140,7 +140,7 @@ public class RegistrationService {
         AuthResponse response = createAccountUserPerson(
                 email, pending.getPasswordHash(), pending.getPersonName(), pending.getAccountName());
         pendingRegistrationRepository.deleteByEmail(email);
-        emailService.sendRegistrationSuccess(email);
+        eventPublisher.publishEvent(new RegistrationConfirmedEvent(email));
         return response;
     }
 
@@ -190,8 +190,11 @@ public class RegistrationService {
     }
 
     private void sendCode(String email, String rawCode) {
-        emailService.sendVerificationCode(email, rawCode);
+        // Populate the test-only cache synchronously (before the email dispatch, which is now
+        // async) -- e2e tests and RegistrationTestSupport read this immediately after the HTTP
+        // response returns and never wait on the actual email send.
         testCodeCache.ifPresent(cache -> cache.put(email, rawCode));
+        eventPublisher.publishEvent(new VerificationCodeIssuedEvent(email, rawCode));
     }
 
     private AuthResponse createAccountUserPerson(String email, String passwordHash, String personName,
