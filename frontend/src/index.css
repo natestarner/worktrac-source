@@ -191,6 +191,26 @@ body {
     padding-left: 16px;
   }
 
+  /* WeightRepsStepper is built with inline styles sized for a full-width portrait
+     row (44px circular buttons, an 88px-wide value box, 14px gaps). Squeezed into
+     one of two side-by-side grid columns here, that combined width doesn't fit --
+     these need !important to win over the component's own inline styles. Only
+     scoped under .stepper-pair so EditSetModal's (already-narrow, single-column)
+     use of the same component is untouched. */
+  .stepper-pair .stepper-controls {
+    gap: 8px !important;
+  }
+
+  .stepper-pair .stepper-value {
+    min-width: 56px !important;
+    font-size: 20px !important;
+  }
+
+  .stepper-pair .stepper-circle-btn {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
   .log-sets-heading {
     display: block;
     font-size: 12px;
