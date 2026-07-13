@@ -40,7 +40,7 @@ describe('apiClient', () => {
     expect(options.headers['Authorization']).toBeUndefined();
   });
 
-  it('clears the token and invokes the unauthorized handler on a 401', async () => {
+  it('clears the token and invokes the unauthorized handler on a 401 for an authenticated request', async () => {
     setAuthToken('expired-token');
     const onUnauthorized = vi.fn();
     setUnauthorizedHandler(onUnauthorized);
@@ -50,6 +50,18 @@ describe('apiClient', () => {
 
     expect(getAuthToken()).toBeNull();
     expect(onUnauthorized).toHaveBeenCalledOnce();
+  });
+
+  it('surfaces the server message on a 401 from an unauthenticated request without redirecting', async () => {
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    global.fetch.mockReturnValue(jsonResponse({ message: 'Incorrect code' }, 401));
+
+    await expect(apiClient.post('/api/auth/confirm-email', { email: 'a@b.com', code: '000000' })).rejects.toThrow(
+      'Incorrect code',
+    );
+
+    expect(onUnauthorized).not.toHaveBeenCalled();
   });
 
   it('throws with the server message on a non-2xx response', async () => {
