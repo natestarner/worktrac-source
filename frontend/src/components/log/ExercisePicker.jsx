@@ -1,7 +1,7 @@
 import { useAppState } from '../../context/AppStateContext';
 import Skeleton from '../shared/Skeleton';
 
-export default function ExercisePicker({ exercises, categories, routines, loading, onSelectExercise, onStartRoutine }) {
+export default function ExercisePicker({ exercises, categories, routines, loading, onSelectExercise, onStartRoutine, hasActiveRoutine }) {
   const { exerciseSearch, setExerciseSearch } = useAppState();
   const term = exerciseSearch.trim().toLowerCase();
 
@@ -14,7 +14,7 @@ export default function ExercisePicker({ exercises, categories, routines, loadin
     .filter((g) => g.items.length > 0);
 
   const noSearchResults = !!term && categoryGroups.length === 0;
-  const showRoutineQuickStart = !term && routines.length > 0;
+  const showRoutineQuickStart = !term && !hasActiveRoutine && routines.length > 0;
 
   return (
     <div>
