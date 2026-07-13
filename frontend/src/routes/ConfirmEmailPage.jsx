@@ -18,6 +18,7 @@ export default function ConfirmEmailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [justSent, setJustSent] = useState(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -54,10 +55,12 @@ export default function ConfirmEmailPage() {
 
   async function handleResend() {
     setError('');
+    setJustSent(false);
     setResending(true);
     try {
       await resendCode({ email });
       setCooldown(RESEND_COOLDOWN_SECONDS);
+      setJustSent(true);
     } catch (err) {
       setError(err.message || 'Could not resend the code');
     } finally {
@@ -143,19 +146,32 @@ export default function ConfirmEmailPage() {
           onClick={handleResend}
           disabled={resending || cooldown > 0}
           style={{
+            position: 'relative',
             width: '100%',
             padding: 12,
             marginTop: 10,
             background: 'transparent',
-            color: cooldown > 0 ? 'var(--color-muted)' : 'var(--color-accent)',
+            color: resending || cooldown > 0 ? 'var(--color-muted)' : 'var(--color-accent)',
             border: 'none',
             fontSize: 14,
             fontWeight: 600,
             cursor: resending || cooldown > 0 ? 'default' : 'pointer',
           }}
         >
-          {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
+          <span style={{ visibility: resending ? 'hidden' : 'visible' }}>
+            {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
+          </span>
+          {resending && (
+            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Spinner color="var(--color-muted)" />
+            </span>
+          )}
         </button>
+        {justSent && cooldown > 0 && (
+          <div style={{ fontSize: 12, color: 'var(--color-muted)', textAlign: 'center', marginTop: 6 }}>
+            New code sent.
+          </div>
+        )}
       </form>
     </div>
   );
