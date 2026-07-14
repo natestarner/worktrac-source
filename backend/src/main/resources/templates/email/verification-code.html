@@ -3,44 +3,67 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
 <title>Huddle Registration Email</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  body { margin:0; background:#EDE7DA; font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; padding:40px 0; }
+  body { margin:0; font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; padding:40px 0; }
   a { color:#B5542D; }
   a:hover { color:#8f3f1f; }
+
+  @media (prefers-color-scheme: dark) {
+    body { background:#12181A !important; }
+    .email-card { background:#1B2422 !important; box-shadow:0 20px 50px rgba(0,0,0,0.5) !important; }
+    .email-heading { color:#F2EDE1 !important; }
+    .email-body-text { color:#C9C4B8 !important; }
+    .code-box { background:#232B28 !important; border-color:#3A4440 !important; }
+    .code-label { color:#9C978A !important; }
+    .code-value { color:#F0895F !important; }
+    .code-expiry { color:#8C8778 !important; }
+    .footer-note { color:#8C8778 !important; border-color:#3A4440 !important; }
+    .footer-tagline { color:#9C978A !important; }
+    .footer-copy { color:#726E62 !important; }
+  }
 </style>
 </head>
-<body>
+<body bgcolor="#EDE7DA">
 
-<div style="width:600px;margin:0 auto;background:#F2EDE1;border-radius:20px;overflow:hidden;box-shadow:0 20px 50px rgba(22,59,62,0.18);font-family:'Inter',sans-serif;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" align="center" bgcolor="#F2EDE1" class="email-card" style="width:600px;margin:0 auto;border-radius:20px;overflow:hidden;box-shadow:0 20px 50px rgba(22,59,62,0.18);font-family:'Inter',sans-serif;">
+<tr><td>
 
   <!-- header band -->
-  <div style="background:#163B3E;padding:36px 48px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#163B3E">
+  <tr><td style="padding:36px 48px;">
     <img src="{{LOGO_URL}}" width="216" height="77" alt="Huddle" style="display:block;border:0;outline:none;text-decoration:none;">
-  </div>
+  </td></tr>
+  </table>
 
   <!-- body -->
   <div style="padding:48px;">
-    <div style="font-family:'Poppins',sans-serif;font-size:26px;font-weight:700;color:#163B3E;letter-spacing:-0.01em;margin-bottom:12px;">Welcome to Huddle!</div>
-    <div style="font-size:16px;line-height:1.6;color:#3F3A32;margin-bottom:32px;">Hey there &mdash; you're one step from tracking sets, chasing PRs, and huddling up with your whole crew. Enter this code in the app to confirm your email and finish setting up your account.</div>
+    <div class="email-heading" style="font-family:'Poppins',sans-serif;font-size:26px;font-weight:700;color:#163B3E;letter-spacing:-0.01em;margin-bottom:12px;">Welcome to Huddle!</div>
+    <div class="email-body-text" style="font-size:16px;line-height:1.6;color:#3F3A32;margin-bottom:32px;">Hey there &mdash; you're one step from tracking sets, chasing PRs, and huddling up with your whole crew. Enter this code in the app to confirm your email and finish setting up your account.</div>
 
-    <div style="background:#FFFFFF;border:1.5px solid #E4CDB8;border-radius:16px;padding:28px;text-align:center;margin-bottom:28px;">
-      <div style="font-size:12px;font-weight:700;color:#78746C;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:14px;">Your one-time code</div>
-      <div style="font-family:'Poppins',sans-serif;font-size:44px;font-weight:800;letter-spacing:0.18em;color:#B5542D;"><span>{{CODE_PART_1}}</span><span style="margin-left:0.35em;">{{CODE_PART_2}}</span></div>
-      <div style="font-size:13px;color:#94897A;margin-top:14px;">Expires in {{EXPIRATION_MINUTES}} minutes</div>
-    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" class="code-box" style="border:1.5px solid #E4CDB8;border-radius:16px;margin-bottom:28px;">
+    <tr><td style="padding:28px;text-align:center;">
+      <div class="code-label" style="font-size:12px;font-weight:700;color:#78746C;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:14px;">Your one-time code</div>
+      <div class="code-value" style="font-family:'Poppins',sans-serif;font-size:44px;font-weight:800;letter-spacing:0.18em;color:#B5542D;"><span>{{CODE_PART_1}}</span><span style="margin-left:0.35em;">{{CODE_PART_2}}</span></div>
+      <div class="code-expiry" style="font-size:13px;color:#94897A;margin-top:14px;">Expires in {{EXPIRATION_MINUTES}} minutes</div>
+    </td></tr>
+    </table>
 
-    <div style="font-size:13px;line-height:1.6;color:#94897A;border-top:1px solid #E4CDB8;padding-top:20px;">Didn't try to sign up for Huddle? No action needed &mdash; you can safely ignore this email.</div>
+    <div class="footer-note" style="font-size:13px;line-height:1.6;color:#94897A;border-top:1px solid #E4CDB8;padding-top:20px;">Didn't try to sign up for Huddle? No action needed &mdash; you can safely ignore this email.</div>
   </div>
 
   <!-- footer -->
   <div style="padding:24px 48px;text-align:center;">
-    <div style="font-size:13px;font-weight:600;color:#78746C;">Log sets fast. Never lose a PR.</div>
-    <div style="font-size:12px;color:#B0A99A;margin-top:6px;">&copy; 2026 Huddle</div>
+    <div class="footer-tagline" style="font-size:13px;font-weight:600;color:#78746C;">Log sets fast. Never lose a PR.</div>
+    <div class="footer-copy" style="font-size:12px;color:#B0A99A;margin-top:6px;">&copy; 2026 Huddle</div>
   </div>
-</div>
+
+</td></tr>
+</table>
 
 </body>
 </html>
