@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { deleteAccount } from '../../api/account';
-import { downloadPersonCsv } from '../../api/export';
+import { downloadAllPeopleZip } from '../../api/export';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import { cancelButtonStyle, deleteButtonStyle } from '../shared/ConfirmDialog';
@@ -34,27 +34,25 @@ export default function DeleteAccountModal({ onClose }) {
         setup value. This cannot be undone, and this email will look brand new if you ever register again.
       </div>
 
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', marginBottom: 8 }}>
-        Download each person&apos;s data first
-      </div>
       <div style={cardStyle}>
-        {people.map((p, i) => (
-          <div
-            key={p.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '10px 0',
-              borderBottom: i < people.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
-            }}
-          >
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{p.name}</div>
-            <button onClick={() => downloadPersonCsv(p.id)} style={downloadLinkStyle}>
-              Download CSV
-            </button>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 0',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Download your data first</div>
+            <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+              A zip with every person&apos;s workout history ({people.map((p) => p.name).join(', ')})
+            </div>
           </div>
-        ))}
+          <button onClick={() => downloadAllPeopleZip()} style={downloadLinkStyle}>
+            Download all
+          </button>
+        </div>
       </div>
 
       {error && (

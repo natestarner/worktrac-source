@@ -2,11 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DeleteAccountModal from './DeleteAccountModal';
 import { deleteAccount } from '../../api/account';
-import { downloadPersonCsv } from '../../api/export';
+import { downloadAllPeopleZip } from '../../api/export';
 import { useAuth } from '../../context/AuthContext';
 
 vi.mock('../../api/account', () => ({ deleteAccount: vi.fn() }));
-vi.mock('../../api/export', () => ({ downloadPersonCsv: vi.fn() }));
+vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 
 const navigateMock = vi.fn();
@@ -61,10 +61,10 @@ describe('DeleteAccountModal', () => {
     expect(navigateMock).not.toHaveBeenCalled();
   });
 
-  it('lets each person’s data be downloaded before deleting', () => {
+  it('lets everyone’s data be downloaded as a zip before deleting', () => {
     render(<DeleteAccountModal onClose={vi.fn()} />);
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Download CSV' })[0]);
-    expect(downloadPersonCsv).toHaveBeenCalledWith(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Download all' }));
+    expect(downloadAllPeopleZip).toHaveBeenCalled();
   });
 });
