@@ -10,4 +10,6 @@ public interface PersonRepository extends JpaRepository<Person, Long> {
     List<Person> findByAccount_IdOrderByCreatedAtAsc(Long accountId);
 
     Optional<Person> findByIdAndAccount_Id(Long id, Long accountId);
+
+    void deleteByAccount_Id(Long accountId);
 }

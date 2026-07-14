@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { removePerson } from '../../api/people';
 import EditPersonModal from './EditPersonModal';
+import DeleteAccountModal from './DeleteAccountModal';
 
 export default function ProfileTab() {
   const { user, account, people, refreshPeople } = useAuth();
@@ -11,6 +12,7 @@ export default function ProfileTab() {
   const navigate = useNavigate();
   const primary = people.find((p) => p.isPrimary);
   const [editingPerson, setEditingPerson] = useState(null);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
 
   async function handleRemovePerson(person) {
     await removePerson(person.id);
@@ -66,7 +68,30 @@ export default function ProfileTab() {
         ))}
       </div>
 
+      <div style={sectionLabelStyle}>Danger zone</div>
+      <div style={cardStyle}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '14px 0',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>Delete account</div>
+            <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
+              Permanently deletes all data for everyone on this account.
+            </div>
+          </div>
+          <button onClick={() => setShowDeleteAccount(true)} style={deleteLinkStyle}>
+            Delete
+          </button>
+        </div>
+      </div>
+
       {editingPerson && <EditPersonModal person={editingPerson} onClose={() => setEditingPerson(null)} />}
+      {showDeleteAccount && <DeleteAccountModal onClose={() => setShowDeleteAccount(false)} />}
     </div>
   );
 }
