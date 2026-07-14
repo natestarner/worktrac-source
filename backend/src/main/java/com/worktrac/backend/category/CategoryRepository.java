@@ -13,4 +13,6 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
     List<Category> findVisibleToAccount(@Param("accountId") Long accountId);
 
     Optional<Category> findByIdAndAccount_Id(Long id, Long accountId);
+
+    void deleteByAccount_Id(Long accountId);
 }
