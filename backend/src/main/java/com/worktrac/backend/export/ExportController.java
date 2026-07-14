@@ -33,4 +33,15 @@ public class ExportController {
                         ContentDisposition.attachment().filename(export.filename()).build().toString())
                 .body(body);
     }
+
+    @GetMapping("/api/export/all.zip")
+    public ResponseEntity<byte[]> exportAll() {
+        CsvExportService.ZipExport export = csvExportService.exportAll(currentUser.accountId());
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(export.filename()).build().toString())
+                .body(export.content());
+    }
 }

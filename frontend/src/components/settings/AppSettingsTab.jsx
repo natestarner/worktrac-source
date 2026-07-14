@@ -7,6 +7,7 @@ import { useCategories } from '../../hooks/useCategories';
 import { updateDefaultUnit } from '../../api/account';
 import { removeExercise } from '../../api/exercises';
 import { addCategory, removeCategory } from '../../api/categories';
+import { downloadAllPeopleZip } from '../../api/export';
 import AddEditExerciseModal from './AddEditExerciseModal';
 import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
@@ -54,6 +55,7 @@ export default function AppSettingsTab() {
     await removeCategory(cat.id);
     refetchCategories();
   }
+
 
   return (
     <div>
@@ -205,6 +207,16 @@ export default function AppSettingsTab() {
       {categoryNameError && (
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 18 }}>Enter a category name.</div>
       )}
+
+      <div style={sectionLabelStyle}>Data</div>
+      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
+        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
+          Download a CSV of every set ever logged, for every person on this account &mdash; one file per person, zipped together.
+        </div>
+        <Button onClick={downloadAllPeopleZip} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          Export all data
+        </Button>
+      </div>
 
       {modalExercise !== undefined && (
         <AddEditExerciseModal

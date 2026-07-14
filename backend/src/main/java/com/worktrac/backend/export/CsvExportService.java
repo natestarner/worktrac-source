@@ -1,6 +1,7 @@
 package com.worktrac.backend.export;
 
 import com.worktrac.backend.person.Person;
+import com.worktrac.backend.person.PersonDto;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.stats.EpleyCalculator;
 import com.worktrac.backend.workoutsession.WorkoutSession;
@@ -10,14 +11,23 @@ import com.worktrac.backend.workoutset.WorkoutSetRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Service
 public class CsvExportService {
@@ -39,6 +49,9 @@ public class CsvExportService {
     }
 
     public record CsvExport(String filename, String content) {
+    }
+
+    public record ZipExport(String filename, byte[] content) {
     }
 
     // Columns and ordering match the design prototype's export exactly: one row per
@@ -93,6 +106,39 @@ public class CsvExportService {
         String today = DATE_FMT.format(java.time.Instant.now());
         String filename = person.getName().replaceAll("\\s+", "-") + "-workout-data-" + today + ".csv";
         return new CsvExport(filename, csv);
+    }
+
+    // One CSV per person in the account, zipped together -- lets the "export all data"
+    // Settings action download everyone's workout history in one request instead of
+    // requiring a separate export per person. Reuses export() per person rather than
+    // re-querying, so the two paths can never disagree on formatting.
+    @Transactional(readOnly = true)
+    public ZipExport exportAll(Long accountId) {
+        List<PersonDto> people = personService.list(accountId);
+
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        Set<String> usedEntryNames = new HashSet<>();
+        try (ZipOutputStream zip = new ZipOutputStream(buffer)) {
+            for (PersonDto person : people) {
+                CsvExport csvExport = export(accountId, person.id());
+                String entryName = csvExport.filename();
+                if (!usedEntryNames.add(entryName)) {
+                    // Two people share a display name -- disambiguate by id rather than
+                    // silently overwriting or failing on a duplicate zip entry.
+                    entryName = entryName.replace(".csv", "-" + person.id() + ".csv");
+                    usedEntryNames.add(entryName);
+                }
+                zip.putNextEntry(new ZipEntry(entryName));
+                zip.write(csvExport.content().getBytes(StandardCharsets.UTF_8));
+                zip.closeEntry();
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+
+        String today = DATE_FMT.format(Instant.now());
+        String filename = "workout-data-all-people-" + today + ".zip";
+        return new ZipExport(filename, buffer.toByteArray());
     }
 
     private String csvEscape(String value) {
