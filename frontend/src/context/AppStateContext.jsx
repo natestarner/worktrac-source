@@ -101,6 +101,8 @@ export function reducer(state, action) {
       }
       return { ...state, activeRoutineId: null, routineIndex: 0, selectedExerciseId: null };
     }
+    case 'END_ROUTINE':
+      return { ...state, activeRoutineId: null, routineIndex: 0 };
     case 'START_EDITING_SESSION':
       return { ...state, editingSession: action.session, selectedExerciseId: null };
     case 'UPDATE_EDITING_SESSION':
@@ -131,6 +133,7 @@ export function AppStateProvider({ children }) {
       startRoutine: (routineId, exerciseIds) => dispatch({ type: 'START_ROUTINE', routineId, exerciseIds }),
       jumpToRoutineIndex: (index, exerciseIds) => dispatch({ type: 'JUMP_TO_ROUTINE_INDEX', index, exerciseIds }),
       nextExerciseInRoutine: (exerciseIds) => dispatch({ type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds }),
+      endRoutine: () => dispatch({ type: 'END_ROUTINE' }),
       startEditingSession: (session) => dispatch({ type: 'START_EDITING_SESSION', session }),
       updateEditingSession: (session) => dispatch({ type: 'UPDATE_EDITING_SESSION', session }),
       doneEditingSession: () => dispatch({ type: 'DONE_EDITING_SESSION' }),

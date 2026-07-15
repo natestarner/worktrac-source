@@ -36,9 +36,6 @@ function renderExerciseDetail(props = {}) {
       editingSessionId={null}
       liveSession={null}
       refetchLiveSession={vi.fn().mockResolvedValue()}
-      hasActiveRoutine={false}
-      nextButtonLabel="Next exercise"
-      onNextExercise={vi.fn()}
       onBack={vi.fn()}
       {...props}
     />,

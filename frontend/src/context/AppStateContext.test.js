@@ -122,6 +122,17 @@ describe('AppStateContext reducer', () => {
     expect(state.trendsExerciseId).toBe(42);
   });
 
+  it('ending the routine (e.g. when the workout itself is ended) clears routine progress but leaves the selected exercise alone', () => {
+    let state = reducer(initialState, { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20, 30] });
+    state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20, 30] });
+    expect(state.routineIndex).toBe(1);
+
+    state = reducer(state, { type: 'END_ROUTINE' });
+    expect(state.activeRoutineId).toBeNull();
+    expect(state.routineIndex).toBe(0);
+    expect(state.selectedExerciseId).toBe(20);
+  });
+
   it('jumping to a routine index selects that position and its exercise', () => {
     let state = reducer(initialState, { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20, 30] });
 
