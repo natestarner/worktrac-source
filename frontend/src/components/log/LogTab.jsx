@@ -28,6 +28,7 @@ export default function LogTab() {
     startRoutine,
     jumpToRoutineIndex,
     nextExerciseInRoutine,
+    endRoutine,
     doneEditingSession,
     updateEditingSession,
   } = useAppState();
@@ -168,6 +169,26 @@ export default function LogTab() {
               );
             })}
           </div>
+
+          {selectedExercise && (
+            <button
+              onClick={handleNextExercise}
+              style={{
+                width: '100%',
+                marginTop: 12,
+                padding: 14,
+                background: 'var(--color-dark)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 12,
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {routineIndex + 1 >= activeRoutine.exercises.length ? 'Finish routine' : 'Next exercise'}
+            </button>
+          )}
         </div>
       )}
 
@@ -200,9 +221,6 @@ export default function LogTab() {
           editingSessionId={editingSession?.id || null}
           liveSession={liveSession}
           refetchLiveSession={refetchLiveSession}
-          hasActiveRoutine={!!activeRoutine}
-          nextButtonLabel={activeRoutine && routineIndex + 1 >= activeRoutine.exercises.length ? 'Finish routine' : 'Next exercise'}
-          onNextExercise={handleNextExercise}
           onBack={backToPicker}
         />
       )}
@@ -213,6 +231,7 @@ export default function LogTab() {
           onClose={() => setShowEndWorkoutConfirm(false)}
           onEnded={() => {
             setShowEndWorkoutConfirm(false);
+            endRoutine();
             refetchLiveSession();
             showToast('Workout ended. Logging a set anytime starts a new one.');
           }}

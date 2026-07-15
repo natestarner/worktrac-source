@@ -20,9 +20,6 @@ export default function ExerciseDetail({
   editingSessionId,
   liveSession,
   refetchLiveSession,
-  hasActiveRoutine,
-  nextButtonLabel,
-  onNextExercise,
   onBack,
 }) {
   const { account, people } = useAuth();
@@ -297,26 +294,6 @@ export default function ExerciseDetail({
           )}
         </div>
       </div>
-
-      {hasActiveRoutine && (
-        <button
-          onClick={onNextExercise}
-          style={{
-            width: '100%',
-            marginTop: 16,
-            padding: 16,
-            background: 'var(--color-dark)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 12,
-            fontSize: 16,
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-        >
-          {nextButtonLabel}
-        </button>
-      )}
 
       {keypadField && (
         <NumericKeypad
