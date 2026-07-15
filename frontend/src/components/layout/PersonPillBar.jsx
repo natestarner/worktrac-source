@@ -69,39 +69,44 @@ export default function PersonPillBar() {
   const [showAddPerson, setShowAddPerson] = useState(false);
 
   return (
-    <div
-      className="person-pill-bar"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        overflowX: 'auto',
-        background: 'var(--color-surface)',
-        borderBottom: '1px solid var(--color-border)',
-        ...(people.length >= 2 ? { position: 'sticky', top: 0, zIndex: 5 } : null),
-      }}
-    >
-      {people.map((p) => (
-        <PersonPill key={p.id} person={p} active={p.id === activePersonId} onSelect={() => selectPerson(p.id)} />
-      ))}
-      <button
-        onClick={() => setShowAddPerson(true)}
+    <>
+      <div
+        className="person-pill-bar"
         style={{
-          flexShrink: 0,
-          padding: '10px 16px',
-          borderRadius: 999,
-          border: '1px dashed var(--color-faint)',
-          background: 'none',
-          color: 'var(--color-muted)',
-          fontSize: 14,
-          fontWeight: 600,
-          cursor: 'pointer',
-          whiteSpace: 'nowrap',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          overflowX: 'auto',
+          background: 'var(--color-surface)',
+          borderBottom: '1px solid var(--color-border)',
+          ...(people.length >= 2 ? { position: 'sticky', top: 0, zIndex: 5 } : null),
         }}
       >
-        + Add person
-      </button>
+        {people.map((p) => (
+          <PersonPill key={p.id} person={p} active={p.id === activePersonId} onSelect={() => selectPerson(p.id)} />
+        ))}
+        <button
+          onClick={() => setShowAddPerson(true)}
+          style={{
+            flexShrink: 0,
+            padding: '10px 16px',
+            borderRadius: 999,
+            border: '1px dashed var(--color-faint)',
+            background: 'none',
+            color: 'var(--color-muted)',
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          + Add person
+        </button>
+      </div>
+      {/* Rendered outside the sticky pill bar above: position:sticky + z-index there
+          creates a stacking context that would trap this fixed-position modal behind
+          later siblings (TabsNav, tab content) regardless of its own z-index. */}
       {showAddPerson && <AddPersonModal onClose={() => setShowAddPerson(false)} />}
-    </div>
+    </>
   );
 }
