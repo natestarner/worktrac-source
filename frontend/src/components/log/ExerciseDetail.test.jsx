@@ -31,6 +31,8 @@ vi.mock('../../api/exercises', () => ({
   updateCustomField: vi.fn(),
   removeCustomField: vi.fn(),
   setExerciseCategory: vi.fn(),
+  updateExercise: vi.fn(),
+  removeExercise: vi.fn(),
   favoriteExercise: vi.fn(),
   unfavoriteExercise: vi.fn(),
 }));

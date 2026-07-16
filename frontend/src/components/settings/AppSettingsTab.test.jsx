@@ -5,24 +5,21 @@ import { createPersonCategory, listCategoryRecommendations } from '../../api/per
 import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
-import { useExercises } from '../../hooks/useExercises';
-import { usePersonExercises } from '../../hooks/usePersonExercises';
 import { usePersonCategories } from '../../hooks/usePersonCategories';
 
+// Exercises are managed on the exercise screen now; Settings only keeps units, the per-person
+// category manager, and data export.
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('../../api/personCategories', () => ({
   createPersonCategory: vi.fn(),
   deletePersonCategory: vi.fn(),
   listCategoryRecommendations: vi.fn(),
 }));
-vi.mock('../../api/exercises', () => ({ removeExercise: vi.fn(), favoriteExercise: vi.fn(), unfavoriteExercise: vi.fn() }));
 vi.mock('../../api/account', () => ({ updateDefaultUnit: vi.fn() }));
 vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
-vi.mock('../../hooks/useExercises', () => ({ useExercises: vi.fn() }));
-vi.mock('../../hooks/usePersonExercises', () => ({ usePersonExercises: vi.fn() }));
 vi.mock('../../hooks/usePersonCategories', () => ({ usePersonCategories: vi.fn() }));
 
 describe('AppSettingsTab category management', () => {
@@ -36,8 +33,6 @@ describe('AppSettingsTab category management', () => {
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [{ id: 5, name: 'Sam' }], refreshPeople: vi.fn() });
     useAppState.mockReturnValue({ activePersonId: 5 });
     useUI.mockReturnValue({ openConfirm: vi.fn() });
-    useExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn() });
-    usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
     usePersonCategories.mockReturnValue({ categories: [], loading: false, refetch: refetchPersonCategories });
   });
 
@@ -61,5 +56,11 @@ describe('AppSettingsTab category management', () => {
 
     await waitFor(() => expect(createPersonCategory).toHaveBeenCalledWith(5, 'Legs'));
     expect(refetchPersonCategories).toHaveBeenCalled();
+  });
+
+  it('no longer renders an exercises section', () => {
+    render(<AppSettingsTab />);
+    expect(screen.queryByRole('button', { name: '+ Add exercise' })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Search all exercises to add')).not.toBeInTheDocument();
   });
 });

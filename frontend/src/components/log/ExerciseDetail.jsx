@@ -5,7 +5,7 @@ import { useUI } from '../../context/UIContext';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets, logLiveSet, logSetIntoSession, deleteSet } from '../../api/sets';
 import { listSetupValues } from '../../api/setupValues';
-import { listCustomFields, favoriteExercise, unfavoriteExercise } from '../../api/exercises';
+import { listCustomFields, favoriteExercise, unfavoriteExercise, removeExercise } from '../../api/exercises';
 import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import WeightRepsStepper from './WeightRepsStepper';
@@ -78,6 +78,18 @@ export default function ExerciseDetail({
     if (exercise.isFavorite) await unfavoriteExercise(personId, exercise.id);
     else await favoriteExercise(personId, exercise.id);
     if (onPersonalizationChanged) await onPersonalizationChanged();
+  }
+
+  function handleRequestDelete() {
+    setShowConfigureModal(false);
+    openConfirm(
+      `Delete "${exercise.name}"? Already-logged sets for it are kept, but it will disappear from your picker.`,
+      async () => {
+        await removeExercise(exercise.id);
+        if (onPersonalizationChanged) await onPersonalizationChanged();
+        onBack();
+      },
+    );
   }
 
   // Prefill weight/reps from the same set-index in the most recent prior session,
@@ -378,6 +390,7 @@ export default function ExerciseDetail({
 
       {showConfigureModal && (
         <ConfigureExerciseModal
+          exercise={exercise}
           personId={personId}
           exerciseId={exercise.id}
           currentCategoryId={exercise.personCategoryId ?? null}
@@ -386,6 +399,8 @@ export default function ExerciseDetail({
           onClose={() => setShowConfigureModal(false)}
           onFieldsChanged={refetchCustomFields}
           onCategoryChanged={onPersonalizationChanged || (() => {})}
+          onExerciseChanged={onPersonalizationChanged || (() => {})}
+          onRequestDelete={handleRequestDelete}
         />
       )}
 

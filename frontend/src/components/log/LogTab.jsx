@@ -44,7 +44,7 @@ export default function LogTab() {
   const { categories: personCategories, refetch: refetchPersonCategories } = usePersonCategories(activePersonId);
   // The full catalog powers search and lets us resolve a search-selected exercise that isn't
   // in the person's list yet.
-  const { exercises: catalog } = useExercises();
+  const { exercises: catalog, refetch: refetchCatalog } = useExercises();
   const { routines } = useRoutines(activePersonId);
   const { session: liveSession, refetch: refetchLiveSession } = useLiveSession(activePersonId);
   const activeSessionId = editingSession?.id || liveSession?.id || null;
@@ -71,7 +71,7 @@ export default function LogTab() {
   }, [selectedExerciseId]);
 
   async function refreshPersonalization() {
-    await Promise.all([refetchPersonExercises(), refetchPersonCategories()]);
+    await Promise.all([refetchPersonExercises(), refetchPersonCategories(), refetchCatalog()]);
   }
 
   async function handleExerciseCreated(created) {

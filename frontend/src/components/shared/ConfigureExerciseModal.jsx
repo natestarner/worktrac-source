@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { addCustomField, updateCustomField, removeCustomField, setExerciseCategory } from '../../api/exercises';
+import { addCustomField, updateCustomField, removeCustomField, setExerciseCategory, updateExercise } from '../../api/exercises';
 import { createPersonCategory } from '../../api/personCategories';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
 
-// One place to personalize an exercise: which of the person's categories it's filed under, and
-// the custom setup fields they've added to it. Setting a field's *value* still happens by
-// tapping its pill on the exercise screen -- this modal is about structure, not values.
+// One place to personalize an exercise: rename/delete (your own exercises only), which of the
+// person's categories it's filed under, and the custom setup fields they've added. Setting a
+// field's *value* still happens by tapping its pill on the exercise screen -- this modal is
+// about structure, not values. Preloaded exercises are shared and immutable, so they show a
+// "Preloaded exercise" badge and no rename/delete.
 export default function ConfigureExerciseModal({
+  exercise,
   personId,
   exerciseId,
   currentCategoryId,
@@ -16,10 +19,27 @@ export default function ConfigureExerciseModal({
   onClose,
   onFieldsChanged,
   onCategoryChanged,
+  onExerciseChanged,
+  onRequestDelete,
 }) {
+  const isOwn = exercise && !exercise.isGlobal;
+  const [name, setName] = useState(exercise?.name || '');
   const [newFieldName, setNewFieldName] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [busy, setBusy] = useState(false);
+
+  async function saveName() {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === exercise.name || busy) return;
+    setBusy(true);
+    try {
+      // Pass the current base field names so a pure rename doesn't clear them.
+      await updateExercise(exercise.id, { name: trimmed, setupFieldNames: (exercise.setupFields || []).map((f) => f.name) });
+      if (onExerciseChanged) await onExerciseChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function fileCategory(categoryId) {
     setBusy(true);
@@ -53,8 +73,8 @@ export default function ConfigureExerciseModal({
     await onFieldsChanged();
   }
 
-  async function renameField(field, name) {
-    const trimmed = name.trim();
+  async function renameField(field, fieldName) {
+    const trimmed = fieldName.trim();
     if (!trimmed || trimmed === field.name) return;
     await updateCustomField(personId, exerciseId, field.id, { name: trimmed });
     await onFieldsChanged();
@@ -69,7 +89,33 @@ export default function ConfigureExerciseModal({
 
   return (
     <Modal width={360} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Customize this exercise</div>
+      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Customize this exercise</div>
+      <div style={{ marginBottom: 18 }}>
+        <span style={isOwn ? ownBadgeStyle : preloadedBadgeStyle}>{isOwn ? 'Created by you' : 'Preloaded exercise'}</span>
+      </div>
+
+      {isOwn && (
+        <>
+          <div style={labelStyle}>Name</div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  saveName();
+                }
+              }}
+              onBlur={saveName}
+              style={inputStyle}
+            />
+            <button onClick={saveName} disabled={busy || !name.trim() || name.trim() === exercise.name} style={smallButtonStyle}>
+              Save
+            </button>
+          </div>
+        </>
+      )}
 
       <div style={labelStyle}>Category</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
@@ -154,6 +200,12 @@ export default function ConfigureExerciseModal({
         </button>
       </div>
 
+      {isOwn && (
+        <button onClick={onRequestDelete} style={{ ...cancelButtonStyle, width: '100%', color: 'var(--color-danger)', marginBottom: 10 }}>
+          Delete this exercise
+        </button>
+      )}
+
       <button onClick={onClose} style={{ ...cancelButtonStyle, width: '100%' }}>
         Done
       </button>
@@ -188,4 +240,25 @@ const smallButtonStyle = {
   fontSize: 13,
   fontWeight: 700,
   cursor: 'pointer',
+};
+
+const ownBadgeStyle = {
+  display: 'inline-block',
+  padding: '4px 10px',
+  borderRadius: 999,
+  background: 'var(--color-pr-bg)',
+  color: 'var(--color-pr-text)',
+  border: '1px solid var(--color-pr-border)',
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const preloadedBadgeStyle = {
+  display: 'inline-block',
+  padding: '4px 10px',
+  borderRadius: 999,
+  background: 'var(--color-subtle-bg)',
+  color: 'var(--color-muted)',
+  fontSize: 12,
+  fontWeight: 700,
 };
