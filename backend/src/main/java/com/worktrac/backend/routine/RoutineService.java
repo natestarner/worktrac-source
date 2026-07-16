@@ -3,6 +3,7 @@ package com.worktrac.backend.routine;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.exercise.Exercise;
 import com.worktrac.backend.exercise.ExerciseRepository;
+import com.worktrac.backend.exercise.PersonExerciseService;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import org.springframework.stereotype.Service;
@@ -17,12 +18,14 @@ public class RoutineService {
     private final RoutineRepository routineRepository;
     private final ExerciseRepository exerciseRepository;
     private final PersonService personService;
+    private final PersonExerciseService personExerciseService;
 
     public RoutineService(RoutineRepository routineRepository, ExerciseRepository exerciseRepository,
-                           PersonService personService) {
+                           PersonService personService, PersonExerciseService personExerciseService) {
         this.routineRepository = routineRepository;
         this.exerciseRepository = exerciseRepository;
         this.personService = personService;
+        this.personExerciseService = personExerciseService;
     }
 
     @Transactional(readOnly = true)
@@ -37,7 +40,7 @@ public class RoutineService {
     public RoutineDto create(Long accountId, Long personId, RoutineRequest request) {
         Person person = personService.requireOwnedPerson(personId, accountId);
         Routine routine = new Routine(person, request.name().trim());
-        applyExercises(accountId, routine, request.exerciseIds());
+        applyExercises(accountId, person, routine, request.exerciseIds());
         return RoutineDto.from(routineRepository.save(routine));
     }
 
@@ -48,7 +51,7 @@ public class RoutineService {
                 .orElseThrow(() -> new NotFoundException("No such routine"));
         routine.setName(request.name().trim());
         routine.getExercises().clear();
-        applyExercises(accountId, routine, request.exerciseIds());
+        applyExercises(accountId, person, routine, request.exerciseIds());
         return RoutineDto.from(routine);
     }
 
@@ -77,12 +80,21 @@ public class RoutineService {
             Routine copy = new Routine(target, source.getName());
             attachExercises(copy, exercises);
             copies.add(RoutineDto.from(routineRepository.save(copy)));
+            favorite(target, exercises);
         }
         return copies;
     }
 
-    private void applyExercises(Long accountId, Routine routine, List<Long> exerciseIds) {
-        attachExercises(routine, resolveVisibleExercises(accountId, exerciseIds));
+    private void applyExercises(Long accountId, Person person, Routine routine, List<Long> exerciseIds) {
+        List<Exercise> exercises = resolveVisibleExercises(accountId, exerciseIds);
+        attachExercises(routine, exercises);
+        favorite(person, exercises);
+    }
+
+    // An exercise placed in a routine auto-favorites for that routine's person, so it shows in
+    // their Log picker without a separate favoriting step (matches the V24 backfill).
+    private void favorite(Person person, List<Exercise> exercises) {
+        exercises.forEach(exercise -> personExerciseService.ensureFavorite(person, exercise));
     }
 
     private List<Exercise> resolveVisibleExercises(Long accountId, List<Long> exerciseIds) {

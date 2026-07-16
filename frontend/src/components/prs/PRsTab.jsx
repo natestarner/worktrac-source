@@ -76,7 +76,7 @@ export default function PRsTab() {
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{pr.exerciseName}</div>
             <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 2 }}>
-              {pr.category} &middot; {formatDateLabel(toLocalDateStr(pr.best.sessionStartedAt))}
+              {formatDateLabel(toLocalDateStr(pr.best.sessionStartedAt))}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>

@@ -1,30 +1,44 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AppSettingsTab from './AppSettingsTab';
-import { addCategory } from '../../api/categories';
+import { createPersonCategory, listCategoryRecommendations } from '../../api/personCategories';
 import { useAuth } from '../../context/AuthContext';
+import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
-import { useCategories } from '../../hooks/useCategories';
+import { usePersonExercises } from '../../hooks/usePersonExercises';
+import { usePersonCategories } from '../../hooks/usePersonCategories';
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
-vi.mock('../../api/categories', () => ({ addCategory: vi.fn(), removeCategory: vi.fn() }));
+vi.mock('../../api/personCategories', () => ({
+  createPersonCategory: vi.fn(),
+  deletePersonCategory: vi.fn(),
+  listCategoryRecommendations: vi.fn(),
+}));
+vi.mock('../../api/exercises', () => ({ removeExercise: vi.fn(), favoriteExercise: vi.fn(), unfavoriteExercise: vi.fn() }));
+vi.mock('../../api/account', () => ({ updateDefaultUnit: vi.fn() }));
+vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
+vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 vi.mock('../../hooks/useExercises', () => ({ useExercises: vi.fn() }));
-vi.mock('../../hooks/useCategories', () => ({ useCategories: vi.fn() }));
+vi.mock('../../hooks/usePersonExercises', () => ({ usePersonExercises: vi.fn() }));
+vi.mock('../../hooks/usePersonCategories', () => ({ usePersonCategories: vi.fn() }));
 
-describe('AppSettingsTab category validation', () => {
-  let refetchCategories;
+describe('AppSettingsTab category management', () => {
+  let refetchPersonCategories;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    addCategory.mockResolvedValue({ id: 1 });
-    refetchCategories = vi.fn();
-    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, refreshPeople: vi.fn() });
+    createPersonCategory.mockResolvedValue({ id: 1 });
+    listCategoryRecommendations.mockResolvedValue([]);
+    refetchPersonCategories = vi.fn().mockResolvedValue();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [{ id: 5, name: 'Sam' }], refreshPeople: vi.fn() });
+    useAppState.mockReturnValue({ activePersonId: 5 });
     useUI.mockReturnValue({ openConfirm: vi.fn() });
     useExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn() });
-    useCategories.mockReturnValue({ categories: [], loading: false, refetch: refetchCategories });
+    usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
+    usePersonCategories.mockReturnValue({ categories: [], loading: false, refetch: refetchPersonCategories });
   });
 
   it('shows an error and does not add a category when the name is blank', async () => {
@@ -33,19 +47,19 @@ describe('AppSettingsTab category validation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
     expect(await screen.findByText('Enter a category name.')).toBeInTheDocument();
-    expect(addCategory).not.toHaveBeenCalled();
+    expect(createPersonCategory).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByPlaceholderText('New category name'), { target: { value: 'Legs' } });
     expect(screen.queryByText('Enter a category name.')).not.toBeInTheDocument();
   });
 
-  it('adds the category once a name is provided', async () => {
+  it('creates a per-person category once a name is provided', async () => {
     render(<AppSettingsTab />);
 
     fireEvent.change(screen.getByPlaceholderText('New category name'), { target: { value: 'Legs' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
-    await waitFor(() => expect(addCategory).toHaveBeenCalledWith('Legs'));
-    expect(refetchCategories).toHaveBeenCalled();
+    await waitFor(() => expect(createPersonCategory).toHaveBeenCalledWith(5, 'Legs'));
+    expect(refetchPersonCategories).toHaveBeenCalled();
   });
 });

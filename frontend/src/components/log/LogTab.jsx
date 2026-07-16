@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
-import { useCategories } from '../../hooks/useCategories';
+import { usePersonExercises } from '../../hooks/usePersonExercises';
+import { usePersonCategories } from '../../hooks/usePersonCategories';
 import { useRoutines } from '../../hooks/useRoutines';
 import { useLiveSession } from '../../hooks/useLiveSession';
 import { useHistory } from '../../hooks/useHistory';
@@ -13,6 +14,7 @@ import ExercisePicker from './ExercisePicker';
 import ExerciseDetail from './ExerciseDetail';
 import SessionSummary from './SessionSummary';
 import EndWorkoutConfirmModal from '../shared/EndWorkoutConfirmModal';
+import AddEditExerciseModal from '../settings/AddEditExerciseModal';
 
 export default function LogTab() {
   const navigate = useNavigate();
@@ -31,24 +33,53 @@ export default function LogTab() {
     endRoutine,
     doneEditingSession,
     updateEditingSession,
+    setExerciseSearch,
   } = useAppState();
 
-  const { exercises, loading: exercisesLoading } = useExercises();
-  const { categories, loading: categoriesLoading } = useCategories();
+  const {
+    exercises: personExercises,
+    loading: personExercisesLoading,
+    refetch: refetchPersonExercises,
+  } = usePersonExercises(activePersonId);
+  const { categories: personCategories, refetch: refetchPersonCategories } = usePersonCategories(activePersonId);
+  // The full catalog powers search and lets us resolve a search-selected exercise that isn't
+  // in the person's list yet.
+  const { exercises: catalog } = useExercises();
   const { routines } = useRoutines(activePersonId);
   const { session: liveSession, refetch: refetchLiveSession } = useLiveSession(activePersonId);
   const activeSessionId = editingSession?.id || liveSession?.id || null;
   const { history, loading: historyLoading, refetch: refetchHistory } = useHistory(activeSessionId ? activePersonId : null);
   const [showEndWorkoutConfirm, setShowEndWorkoutConfirm] = useState(false);
+  const [addExerciseName, setAddExerciseName] = useState(null); // null = closed; string = create modal prefilled with this name
 
   const activeRoutine = activeRoutineId ? routines.find((r) => r.id === activeRoutineId) : null;
-  const selectedExercise = selectedExerciseId ? exercises.find((e) => e.id === selectedExerciseId) : null;
+  const selectedExercise = selectedExerciseId
+    ? personExercises.find((e) => e.id === selectedExerciseId) || catalog.find((e) => e.id === selectedExerciseId) || null
+    : null;
   const sessionEntries = activeSessionId ? history.find((s) => s.id === activeSessionId)?.entries ?? [] : [];
 
   useEffect(() => {
     if (activeSessionId && !selectedExerciseId) refetchHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, selectedExerciseId]);
+
+  // Returning to the picker refreshes the person's list so a just-logged exercise (or a
+  // favorite/category change made on the detail screen) shows up.
+  useEffect(() => {
+    if (!selectedExerciseId) refetchPersonExercises();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedExerciseId]);
+
+  async function refreshPersonalization() {
+    await Promise.all([refetchPersonExercises(), refetchPersonCategories()]);
+  }
+
+  async function handleExerciseCreated(created) {
+    setAddExerciseName(null);
+    setExerciseSearch('');
+    await refetchPersonExercises();
+    if (created?.id) selectExercise(created.id);
+  }
 
   async function handleEditingDateChange(e) {
     const iso = localDateTimeToIso(e.target.value, toLocalTimeStr(editingSession.startedAt));
@@ -204,11 +235,12 @@ export default function LogTab() {
 
       {!selectedExercise && (
         <ExercisePicker
-          exercises={exercises}
-          categories={categories}
+          personExercises={personExercises}
+          catalog={catalog}
           routines={routines}
-          loading={exercisesLoading || categoriesLoading}
+          loading={personExercisesLoading}
           onSelectExercise={selectExercise}
+          onAddExercise={(term) => setAddExerciseName((term || '').trim())}
           onStartRoutine={handleStartRoutine}
           hasActiveRoutine={!!activeRoutine}
         />
@@ -218,10 +250,22 @@ export default function LogTab() {
         <ExerciseDetail
           exercise={selectedExercise}
           personId={activePersonId}
+          personCategories={personCategories}
+          onPersonalizationChanged={refreshPersonalization}
           editingSessionId={editingSession?.id || null}
           liveSession={liveSession}
           refetchLiveSession={refetchLiveSession}
           onBack={backToPicker}
+        />
+      )}
+
+      {addExerciseName !== null && (
+        <AddEditExerciseModal
+          exercise={null}
+          personId={activePersonId}
+          initialName={addExerciseName}
+          onClose={() => setAddExerciseName(null)}
+          onSaved={handleExerciseCreated}
         />
       )}
 

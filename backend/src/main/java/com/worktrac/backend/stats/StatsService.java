@@ -103,9 +103,9 @@ public class StatsService {
                 .map(sets -> {
                     Exercise exercise = sets.get(0).getExercise();
                     WorkoutSet best = bestSet(sets).orElseThrow();
-                    return new PrRowDto(exercise.getId(), exercise.getName(), exercise.getCategory().getName(), toBestDto(best));
+                    return new PrRowDto(exercise.getId(), exercise.getName(), toBestDto(best));
                 })
-                .sorted(Comparator.comparing((PrRowDto r) -> r.category() + r.exerciseName()))
+                .sorted(Comparator.comparing(PrRowDto::exerciseName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
     }
 
@@ -125,6 +125,13 @@ public class StatsService {
     private BestDto toBestDto(WorkoutSet set) {
         BigDecimal est1rm = epleyCalculator.estimate1RM(set.getWeight(), set.getReps());
         return new BestDto(set.getWeight(), set.getReps(), set.getUnit(), est1rm, set.getSession().getStartedAt());
+    }
+
+    // The exercise's legacy shared category, used only for the Trends muscle-group balance
+    // chart. User-created exercises are uncategorized now (category is per-person), so they
+    // fall under "Uncategorized" rather than NPE-ing.
+    private static String categoryNameOf(Exercise exercise) {
+        return exercise.getCategory() == null ? "Uncategorized" : exercise.getCategory().getName();
     }
 
     // Used by WorkoutSetService to determine isPR when logging a new set: the previous
@@ -227,7 +234,7 @@ public class StatsService {
             if (!date.isBefore(thisWindowStart) && !date.isAfter(today)) {
                 BigDecimal volumeLb = unitConverter.toLb(s.getWeight().multiply(BigDecimal.valueOf(s.getReps())), s.getUnit());
                 volumeThisMonthLb = volumeThisMonthLb.add(volumeLb);
-                categoryCounts.merge(s.getExercise().getCategory().getName(), 1, Integer::sum);
+                categoryCounts.merge(categoryNameOf(s.getExercise()), 1, Integer::sum);
                 categoryWindowSets++;
             } else if (!date.isBefore(lastWindowStart) && !date.isAfter(lastWindowEnd)) {
                 BigDecimal volumeLb = unitConverter.toLb(s.getWeight().multiply(BigDecimal.valueOf(s.getReps())), s.getUnit());

@@ -1,33 +1,39 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { createRoutine, updateRoutine } from '../../api/routines';
+import AddEditExerciseModal from '../settings/AddEditExerciseModal';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
 
-export default function RoutineFormModal({ personId, routine, exercises, categories, onClose, onSaved }) {
+// Same favorites/logged-first-then-search model as the Log picker: the "Add exercise to
+// routine" pool defaults to the person's own list (personExercises); typing a search reveals
+// the whole catalog. Adding to a routine auto-favorites on the backend, so it also shows in
+// the picker.
+export default function RoutineFormModal({ personId, routine, personExercises, catalog, onClose, onSaved, onExerciseCreated }) {
   const isEditing = !!routine;
   const [name, setName] = useState(routine?.name || '');
   const [selectedIds, setSelectedIds] = useState(routine ? routine.exercises.map((e) => e.exerciseId) : []);
   const [exerciseFilter, setExerciseFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState(null);
+  const [addingExercise, setAddingExercise] = useState(false);
+  const [locallyCreated, setLocallyCreated] = useState([]);
   const [nameError, setNameError] = useState(false);
   const [exercisesError, setExercisesError] = useState(false);
 
-  const exerciseById = new Map(exercises.map((e) => [e.id, e]));
+  // Names resolve against the full catalog (plus anything just created in this modal) so a
+  // selected exercise always renders, whatever list it came from.
+  const exerciseById = new Map([...catalog, ...locallyCreated].map((e) => [e.id, e]));
   const term = exerciseFilter.trim().toLowerCase();
-  const unselected = exercises.filter((e) => !selectedIds.includes(e.id));
-  const available = unselected
-    .filter((e) => categoryFilter === null || e.categoryId === categoryFilter)
-    .filter((e) => !term || e.name.toLowerCase().includes(term));
-  const availableCategories = (categories || []).filter((cat) => unselected.some((e) => e.categoryId === cat.id));
+  const searching = term.length > 0;
+  const unselected = (e) => !selectedIds.includes(e.id);
 
-  // A category can empty out as its last remaining exercise gets added to the routine;
-  // fall back to "All" rather than leaving the filter pointed at a pill that's no longer shown.
-  useEffect(() => {
-    if (categoryFilter !== null && !availableCategories.some((cat) => cat.id === categoryFilter)) {
-      setCategoryFilter(null);
-    }
-  });
+  // Mirrors the Log picker: default view is the person's list split into "Favorites" and
+  // "Other Previously Logged"; typing a search reveals the whole catalog (flat).
+  const searchResults = searching ? catalog.filter((e) => unselected(e) && e.name.toLowerCase().includes(term)) : [];
+  const favorites = personExercises.filter((e) => e.isFavorite && unselected(e));
+  const otherLogged = personExercises.filter((e) => !e.isFavorite && unselected(e));
+  const groups = [];
+  if (favorites.length > 0) groups.push({ id: 'favorites', name: 'Favorites', items: favorites });
+  if (otherLogged.length > 0) groups.push({ id: 'other', name: 'Other Previously Logged', items: otherLogged });
 
   function addExercise(id) {
     setSelectedIds((ids) => [...ids, id]);
@@ -44,6 +50,15 @@ export default function RoutineFormModal({ personId, routine, exercises, categor
       [arr[index], arr[j]] = [arr[j], arr[index]];
       return arr;
     });
+  }
+
+  async function handleExerciseCreated(created) {
+    setLocallyCreated((list) => [...list, created]);
+    setSelectedIds((ids) => (ids.includes(created.id) ? ids : [...ids, created.id]));
+    setExercisesError(false);
+    setExerciseFilter('');
+    setAddingExercise(false);
+    if (onExerciseCreated) await onExerciseCreated();
   }
 
   async function handleSave() {
@@ -122,47 +137,48 @@ export default function RoutineFormModal({ personId, routine, exercises, categor
         </>
       )}
 
-      {(exercises.length - selectedIds.length > 0) && (
-        <>
-          <div style={sectionLabelStyle}>Add exercise</div>
-          <input
-            value={exerciseFilter}
-            onChange={(e) => setExerciseFilter(e.target.value)}
-            placeholder="Search exercises"
-            style={{ width: '100%', boxSizing: 'border-box', padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 14, marginBottom: 10 }}
-          />
-          {availableCategories.length > 1 && (
-            <div style={{ marginBottom: 14 }}>
-              <div style={filterLabelStyle}>Filter by category</div>
-              <div style={categoryTrackStyle}>
-                <button onClick={() => setCategoryFilter(null)} style={categoryTabStyle(categoryFilter === null)}>
-                  All
-                </button>
-                {availableCategories.map((cat) => (
-                  <button key={cat.id} onClick={() => setCategoryFilter(cat.id)} style={categoryTabStyle(categoryFilter === cat.id)}>
-                    {cat.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {available.length === 0 ? (
-            <div style={{ padding: '10px 2px 18px', color: 'var(--color-faint)', fontSize: 14 }}>
-              {term ? `No exercises match "${exerciseFilter}".` : 'No exercises in this category.'}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-              {available.map((ex) => (
+      <div style={sectionLabelStyle}>Add exercise to routine</div>
+      <input
+        value={exerciseFilter}
+        onChange={(e) => setExerciseFilter(e.target.value)}
+        placeholder="Search all exercises"
+        style={{ width: '100%', boxSizing: 'border-box', padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 14, marginBottom: 14 }}
+      />
+
+      {searching ? (
+        searchResults.length === 0 ? (
+          <div style={hintStyle}>No exercises match "{exerciseFilter}".</div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+            {searchResults.map((ex) => (
+              <button key={ex.id} onClick={() => addExercise(ex.id)} style={addChipStyle}>
+                + {ex.name}
+              </button>
+            ))}
+          </div>
+        )
+      ) : groups.length === 0 ? (
+        <div style={hintStyle}>Your favorited and logged exercises appear here. Search above to add any other exercise.</div>
+      ) : (
+        groups.map((group) => (
+          <div key={group.id} style={{ marginBottom: 14 }}>
+            <div style={groupLabelStyle}>{group.name}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {group.items.map((ex) => (
                 <button key={ex.id} onClick={() => addExercise(ex.id)} style={addChipStyle}>
                   + {ex.name}
                 </button>
               ))}
             </div>
-          )}
-        </>
+          </div>
+        ))
       )}
 
-      <div style={{ display: 'flex', gap: 10 }}>
+      <button onClick={() => setAddingExercise(true)} style={addOwnButtonStyle}>
+        + Add your own exercise
+      </button>
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel
         </button>
@@ -173,6 +189,16 @@ export default function RoutineFormModal({ personId, routine, exercises, categor
           {isEditing ? 'Save' : 'Save routine'}
         </Button>
       </div>
+
+      {addingExercise && (
+        <AddEditExerciseModal
+          exercise={null}
+          personId={personId}
+          initialName={exerciseFilter.trim()}
+          onClose={() => setAddingExercise(false)}
+          onSaved={handleExerciseCreated}
+        />
+      )}
     </Modal>
   );
 }
@@ -184,6 +210,31 @@ const sectionLabelStyle = {
   textTransform: 'uppercase',
   letterSpacing: '0.04em',
   marginBottom: 10,
+};
+
+const groupLabelStyle = {
+  fontSize: 11,
+  fontWeight: 700,
+  color: 'var(--color-faint)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  marginBottom: 8,
+};
+
+const hintStyle = { padding: '10px 2px 18px', color: 'var(--color-faint)', fontSize: 14 };
+
+const addOwnButtonStyle = {
+  width: '100%',
+  marginTop: 4,
+  marginBottom: 4,
+  padding: 12,
+  background: 'var(--color-subtle-bg)',
+  color: 'var(--color-text)',
+  border: 'none',
+  borderRadius: 10,
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: 'pointer',
 };
 
 const errorTextStyle = {
@@ -214,34 +265,3 @@ const addChipStyle = {
   fontWeight: 600,
   cursor: 'pointer',
 };
-
-const filterLabelStyle = {
-  fontSize: 11,
-  fontWeight: 700,
-  color: 'var(--color-faint)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 6,
-};
-
-const categoryTrackStyle = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 2,
-  padding: 3,
-  background: 'var(--color-subtle-bg)',
-  borderRadius: 10,
-};
-
-function categoryTabStyle(active) {
-  return {
-    padding: '6px 12px',
-    borderRadius: 7,
-    border: 'none',
-    background: active ? 'var(--color-accent)' : 'transparent',
-    color: active ? '#fff' : 'var(--color-muted)',
-    fontSize: 13,
-    fontWeight: active ? 700 : 600,
-    cursor: 'pointer',
-  };
-}

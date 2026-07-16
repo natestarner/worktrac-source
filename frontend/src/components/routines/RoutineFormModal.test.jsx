@@ -5,90 +5,62 @@ import { createRoutine } from '../../api/routines';
 
 vi.mock('../../api/routines', () => ({ createRoutine: vi.fn(), updateRoutine: vi.fn() }));
 
-const categories = [
-  { id: 10, name: 'Push' },
-  { id: 20, name: 'Pull' },
+// The "Add exercise" pool defaults to the person's favorites/logged list; typing a search
+// reveals the whole catalog. There are no category pills anymore -- categories are per-person.
+const personExercises = [
+  { id: 1, name: 'Bench Press', isFavorite: true },
+  { id: 2, name: 'Squat', isFavorite: true },
+  { id: 3, name: 'Bent-Over Row', isFavorite: false },
 ];
 
-const exercises = [
-  { id: 1, name: 'Bench Press', categoryId: 10 },
-  { id: 2, name: 'Squat', categoryId: 10 },
-  { id: 3, name: 'Bent-Over Row', categoryId: 20 },
+const catalog = [
+  { id: 1, name: 'Bench Press' },
+  { id: 2, name: 'Squat' },
+  { id: 3, name: 'Bent-Over Row' },
+  { id: 4, name: 'Cable Fly' },
 ];
 
-describe('RoutineFormModal exercise search', () => {
-  it('filters the "Add exercise" list by name and shows a no-results message', () => {
-    render(<RoutineFormModal personId={1} routine={null} exercises={exercises} categories={categories} onClose={vi.fn()} onSaved={vi.fn()} />);
+function renderModal(props = {}) {
+  return render(
+    <RoutineFormModal
+      personId={1}
+      routine={null}
+      personExercises={personExercises}
+      catalog={catalog}
+      onClose={vi.fn()}
+      onSaved={vi.fn()}
+      {...props}
+    />,
+  );
+}
 
+describe('RoutineFormModal exercise selection', () => {
+  it('shows the person list by default and searches the catalog', () => {
+    renderModal();
+
+    // Default: the person's list, split into the same two headings as the Log picker.
+    expect(screen.getByText('Favorites')).toBeInTheDocument();
+    expect(screen.getByText('Other Previously Logged')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Bench Press' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Squat' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Bent-Over Row' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Cable Fly' })).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText('Search exercises'), { target: { value: 'ben' } });
+    // Searching reveals the whole catalog (incl. non-favorited Cable Fly).
+    fireEvent.change(screen.getByPlaceholderText('Search all exercises'), { target: { value: 'ca' } });
+    expect(screen.getByRole('button', { name: '+ Cable Fly' })).toBeInTheDocument();
 
-    expect(screen.getByRole('button', { name: '+ Bench Press' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '+ Bent-Over Row' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '+ Squat' })).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByPlaceholderText('Search exercises'), { target: { value: 'zzz' } });
+    fireEvent.change(screen.getByPlaceholderText('Search all exercises'), { target: { value: 'zzz' } });
     expect(screen.getByText('No exercises match "zzz".')).toBeInTheDocument();
   });
 
-  it('excludes exercises already added to the routine from the search results', () => {
-    render(<RoutineFormModal personId={1} routine={null} exercises={exercises} categories={categories} onClose={vi.fn()} onSaved={vi.fn()} />);
+  it('excludes exercises already added to the routine', () => {
+    renderModal();
 
     fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
 
     expect(screen.queryByRole('button', { name: '+ Bench Press' })).not.toBeInTheDocument();
     expect(screen.getByText('Bench Press')).toBeInTheDocument();
-  });
-});
-
-describe('RoutineFormModal category filter', () => {
-  it('filters the "Add exercise" list by category pill', () => {
-    render(<RoutineFormModal personId={1} routine={null} exercises={exercises} categories={categories} onClose={vi.fn()} onSaved={vi.fn()} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Pull' }));
-
-    expect(screen.getByRole('button', { name: '+ Bent-Over Row' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '+ Bench Press' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '+ Squat' })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'All' }));
-    expect(screen.getByRole('button', { name: '+ Bench Press' })).toBeInTheDocument();
-  });
-
-  it('combines the category pill with the text search', () => {
-    render(<RoutineFormModal personId={1} routine={null} exercises={exercises} categories={categories} onClose={vi.fn()} onSaved={vi.fn()} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
-    fireEvent.change(screen.getByPlaceholderText('Search exercises'), { target: { value: 'squat' } });
-
-    expect(screen.getByRole('button', { name: '+ Squat' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '+ Bench Press' })).not.toBeInTheDocument();
-  });
-
-  it('does not show category pills when only one category has unselected exercises', () => {
-    const singleCategoryExercises = [
-      { id: 1, name: 'Bench Press', categoryId: 10 },
-      { id: 2, name: 'Squat', categoryId: 10 },
-    ];
-    render(
-      <RoutineFormModal personId={1} routine={null} exercises={singleCategoryExercises} categories={categories} onClose={vi.fn()} onSaved={vi.fn()} />,
-    );
-
-    expect(screen.queryByRole('button', { name: 'Push' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument();
-  });
-
-  it('falls back to "All" once a category empties out from adding its last exercise', () => {
-    render(<RoutineFormModal personId={1} routine={null} exercises={exercises} categories={categories} onClose={vi.fn()} onSaved={vi.fn()} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Pull' }));
-    fireEvent.click(screen.getByRole('button', { name: '+ Bent-Over Row' }));
-
-    expect(screen.getByRole('button', { name: '+ Bench Press' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '+ Squat' })).toBeInTheDocument();
   });
 });
 
@@ -100,7 +72,7 @@ describe('RoutineFormModal validation', () => {
 
   it('shows an error and does not save when the name is blank', async () => {
     const onSaved = vi.fn();
-    render(<RoutineFormModal personId={1} routine={null} exercises={exercises} categories={categories} onClose={vi.fn()} onSaved={onSaved} />);
+    renderModal({ onSaved });
 
     fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save routine' }));
@@ -115,7 +87,7 @@ describe('RoutineFormModal validation', () => {
 
   it('shows an error and does not save when no exercises are selected', async () => {
     const onSaved = vi.fn();
-    render(<RoutineFormModal personId={1} routine={null} exercises={exercises} categories={categories} onClose={vi.fn()} onSaved={onSaved} />);
+    renderModal({ onSaved });
 
     fireEvent.change(screen.getByPlaceholderText('Routine name (e.g. Push Day)'), { target: { value: 'Push Day' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save routine' }));
@@ -129,7 +101,7 @@ describe('RoutineFormModal validation', () => {
 
   it('saves once both a name and an exercise are provided', async () => {
     const onSaved = vi.fn();
-    render(<RoutineFormModal personId={1} routine={null} exercises={exercises} categories={categories} onClose={vi.fn()} onSaved={onSaved} />);
+    renderModal({ onSaved });
 
     fireEvent.change(screen.getByPlaceholderText('Routine name (e.g. Push Day)'), { target: { value: 'Push Day' } });
     fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));

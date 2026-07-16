@@ -4,7 +4,7 @@ import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
-import { useCategories } from '../../hooks/useCategories';
+import { usePersonExercises } from '../../hooks/usePersonExercises';
 import { useRoutines } from '../../hooks/useRoutines';
 import { removeRoutine } from '../../api/routines';
 import RoutineFormModal from './RoutineFormModal';
@@ -16,8 +16,8 @@ export default function RoutinesTab() {
   const { activePersonId, startRoutine } = useAppState();
   const { people } = useAuth();
   const { openConfirm } = useUI();
-  const { exercises } = useExercises();
-  const { categories } = useCategories();
+  const { exercises: catalog, refetch: refetchCatalog } = useExercises();
+  const { exercises: personExercises, refetch: refetchPersonExercises } = usePersonExercises(activePersonId);
   const { routines, loading, refetch } = useRoutines(activePersonId);
   const [modalRoutine, setModalRoutine] = useState(undefined); // undefined = closed, null = create, object = edit
   const [copyRoutine, setCopyRoutine] = useState(null); // null = closed, object = routine being copied
@@ -99,8 +99,9 @@ export default function RoutinesTab() {
         <RoutineFormModal
           personId={activePersonId}
           routine={modalRoutine}
-          exercises={exercises}
-          categories={categories}
+          personExercises={personExercises}
+          catalog={catalog}
+          onExerciseCreated={() => Promise.all([refetchCatalog(), refetchPersonExercises()])}
           onClose={() => setModalRoutine(undefined)}
           onSaved={() => {
             setModalRoutine(undefined);

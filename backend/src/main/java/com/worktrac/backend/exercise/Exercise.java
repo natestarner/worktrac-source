@@ -38,8 +38,11 @@ public class Exercise {
     @JoinColumn(name = "account_id")
     private Account account;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "category_id", nullable = false)
+    // Legacy: categories are now per-person (see PersonExercise). New "add your own" exercises
+    // are created uncategorized, so this is nullable; existing rows keep their old value but the
+    // UI ignores it.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
     private Category category;
 
     @Column(nullable = false, length = 200)

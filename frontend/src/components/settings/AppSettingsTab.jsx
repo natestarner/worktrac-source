@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
-import { useCategories } from '../../hooks/useCategories';
+import { usePersonExercises } from '../../hooks/usePersonExercises';
+import { usePersonCategories } from '../../hooks/usePersonCategories';
 import { updateDefaultUnit } from '../../api/account';
-import { removeExercise } from '../../api/exercises';
-import { addCategory, removeCategory } from '../../api/categories';
+import { removeExercise, favoriteExercise, unfavoriteExercise } from '../../api/exercises';
+import { createPersonCategory, deletePersonCategory, listCategoryRecommendations } from '../../api/personCategories';
 import { downloadAllPeopleZip } from '../../api/export';
 import AddEditExerciseModal from './AddEditExerciseModal';
 import Button from '../shared/Button';
@@ -15,14 +17,39 @@ import Skeleton from '../shared/Skeleton';
 
 export default function AppSettingsTab() {
   const navigate = useNavigate();
-  const { account, refreshPeople } = useAuth();
+  const { account, people, refreshPeople } = useAuth();
+  const { activePersonId } = useAppState();
   const { openConfirm } = useUI();
-  const { exercises, loading: exercisesLoading, refetch: refetchExercises } = useExercises();
-  const { categories, loading: categoriesLoading, refetch: refetchCategories } = useCategories();
+
+  const activePersonName = people?.find((p) => p.id === activePersonId)?.name;
+
+  const {
+    exercises: personExercises,
+    loading: personExercisesLoading,
+    refetch: refetchPersonExercises,
+  } = usePersonExercises(activePersonId);
+  const {
+    categories: personCategories,
+    loading: personCategoriesLoading,
+    refetch: refetchPersonCategories,
+  } = usePersonCategories(activePersonId);
+  const { exercises: catalog } = useExercises();
+
   const [modalExercise, setModalExercise] = useState(undefined); // undefined = closed, null = create
+  const [exerciseSearch, setExerciseSearch] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [categoryNameError, setCategoryNameError] = useState(false);
+  const [recommendations, setRecommendations] = useState([]);
   const [pendingUnit, setPendingUnit] = useState(null);
+
+  useEffect(() => {
+    if (!activePersonId) return;
+    listCategoryRecommendations(activePersonId).then(setRecommendations).catch(() => setRecommendations([]));
+  }, [activePersonId, personCategories]);
+
+  const favoriteIds = new Set(personExercises.filter((e) => e.isFavorite).map((e) => e.id));
+  const term = exerciseSearch.trim().toLowerCase();
+  const searchResults = term ? catalog.filter((e) => e.name.toLowerCase().includes(term)) : [];
 
   async function handleUnitSelect(unit) {
     if (unit === account.defaultUnit || pendingUnit) return;
@@ -35,27 +62,32 @@ export default function AppSettingsTab() {
     }
   }
 
-  async function handleDeleteExercise(ex) {
-    await removeExercise(ex.id);
-    refetchExercises();
+  async function toggleFavorite(exerciseId, isFavorite) {
+    if (isFavorite) await unfavoriteExercise(activePersonId, exerciseId);
+    else await favoriteExercise(activePersonId, exerciseId);
+    await refetchPersonExercises();
   }
 
-  async function handleAddCategory() {
-    const trimmed = newCategoryName.trim();
+  async function handleDeleteExercise(ex) {
+    await removeExercise(ex.id);
+    refetchPersonExercises();
+  }
+
+  async function handleAddCategory(name) {
+    const trimmed = (name ?? newCategoryName).trim();
     if (!trimmed) {
       setCategoryNameError(true);
       return;
     }
-    await addCategory(trimmed);
+    await createPersonCategory(activePersonId, trimmed);
     setNewCategoryName('');
-    refetchCategories();
+    await Promise.all([refetchPersonCategories(), refetchPersonExercises()]);
   }
 
   async function handleDeleteCategory(cat) {
-    await removeCategory(cat.id);
-    refetchCategories();
+    await deletePersonCategory(activePersonId, cat.id);
+    await Promise.all([refetchPersonCategories(), refetchPersonExercises()]);
   }
-
 
   return (
     <div>
@@ -104,86 +136,131 @@ export default function AppSettingsTab() {
         </div>
       </div>
 
-      <div style={sectionLabelStyle}>Exercise library</div>
+      <div style={sectionLabelStyle}>
+        {activePersonName ? `${activePersonName}'s exercises` : 'Your exercises'}
+      </div>
       <button onClick={() => setModalExercise(null)} style={addButtonStyle}>
         + Add exercise
       </button>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '4px 20px', marginBottom: 24 }}>
-        {exercisesLoading &&
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: i < 3 ? '1px solid var(--color-subtle-bg)' : 'none' }}>
-              <div>
-                <Skeleton width={130} height={15} style={{ marginBottom: 6 }} />
-                <Skeleton width={80} height={12} />
-              </div>
-              <div style={{ display: 'flex', gap: 14 }}>
-                <Skeleton width={28} height={13} />
-                <Skeleton width={44} height={13} />
-              </div>
+
+      <input
+        value={exerciseSearch}
+        onChange={(e) => setExerciseSearch(e.target.value)}
+        placeholder="Search all exercises to add"
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          padding: '12px 14px',
+          border: '1px solid var(--color-border)',
+          borderRadius: 12,
+          fontSize: 14,
+          marginBottom: 14,
+        }}
+      />
+
+      {term ? (
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '4px 20px', marginBottom: 24 }}>
+          {searchResults.length === 0 && (
+            <div style={{ padding: '16px 0', color: 'var(--color-faint)', fontSize: 14 }}>No exercises match "{exerciseSearch}".</div>
+          )}
+          {searchResults.map((ex, i) => (
+            <div key={ex.id} style={rowStyle(i < searchResults.length - 1)}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{ex.name}</div>
+              <button onClick={() => toggleFavorite(ex.id, favoriteIds.has(ex.id))} style={starStyle(favoriteIds.has(ex.id))}>
+                {favoriteIds.has(ex.id) ? '★ Added' : '☆ Add'}
+              </button>
             </div>
           ))}
-        {!exercisesLoading && exercises.map((ex, i) => (
-          <div key={ex.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: i < exercises.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none' }}>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>{ex.name}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>
-                {ex.categoryName}
-                {ex.isGlobal && ' · System'}
+        </div>
+      ) : (
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '4px 20px', marginBottom: 24 }}>
+          {personExercisesLoading &&
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} style={rowStyle(i < 3)}>
+                <div>
+                  <Skeleton width={130} height={15} style={{ marginBottom: 6 }} />
+                  <Skeleton width={80} height={12} />
+                </div>
+                <Skeleton width={44} height={13} />
               </div>
+            ))}
+          {!personExercisesLoading && personExercises.length === 0 && (
+            <div style={{ padding: '16px 0', color: 'var(--color-faint)', fontSize: 14 }}>
+              No exercises yet. Search above to add exercises, or tap &ldquo;+ Add exercise&rdquo; to create your own.
             </div>
-            <div style={{ display: 'flex', gap: 14 }}>
-              <button onClick={() => setModalExercise(ex)} style={editLinkStyle}>
-                Edit
-              </button>
-              <button
-                onClick={() =>
-                  openConfirm(
-                    ex.isGlobal
-                      ? `Delete "${ex.name}"? This only removes it from your library -- other households keep it, and your own already-logged sets are kept but it will disappear from your picker.`
-                      : `Delete "${ex.name}"? Already-logged sets for it are kept, but it will disappear from the picker.`,
-                    () => handleDeleteExercise(ex),
-                  )
-                }
-                style={deleteLinkStyle}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          )}
+          {!personExercisesLoading &&
+            personExercises.map((ex, i) => (
+              <div key={ex.id} style={rowStyle(i < personExercises.length - 1)}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 600 }}>{ex.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>{ex.personCategoryName || 'Uncategorized'}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                  <button onClick={() => toggleFavorite(ex.id, ex.isFavorite)} style={starStyle(ex.isFavorite)}>
+                    {ex.isFavorite ? '★' : '☆'}
+                  </button>
+                  {!ex.isGlobal && (
+                    <>
+                      <button onClick={() => setModalExercise(ex)} style={editLinkStyle}>
+                        Edit
+                      </button>
+                      <button
+                        onClick={() =>
+                          openConfirm(
+                            `Delete "${ex.name}"? Already-logged sets for it are kept, but it will disappear from the picker.`,
+                            () => handleDeleteExercise(ex),
+                          )
+                        }
+                        style={deleteLinkStyle}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
 
-      <div style={sectionLabelStyle}>Categories</div>
+      <div style={sectionLabelStyle}>
+        {activePersonName ? `${activePersonName}'s categories` : 'Your categories'}
+      </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-        {categoriesLoading &&
-          [88, 64, 104, 72].map((w, i) => <Skeleton key={i} width={w} height={34} radius={999} />)}
-        {!categoriesLoading && categories.map((c) => (
-          <div
-            key={c.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 8px 8px 14px',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 999,
-              fontSize: 14,
-              fontWeight: 600,
-            }}
-          >
-            {c.name}
-            {!c.isGlobal && (
+        {personCategoriesLoading && [88, 64, 104, 72].map((w, i) => <Skeleton key={i} width={w} height={34} radius={999} />)}
+        {!personCategoriesLoading &&
+          personCategories.map((c) => (
+            <div key={c.id} style={categoryChipStyle}>
+              {c.name}
               <button
-                onClick={() => openConfirm(`Delete category "${c.name}"?`, () => handleDeleteCategory(c))}
+                onClick={() => openConfirm(`Delete category "${c.name}"? Exercises filed under it stay in your list, just uncategorized.`, () => handleDeleteCategory(c))}
                 style={{ background: 'none', border: 'none', color: 'var(--color-faint)', fontSize: 15, cursor: 'pointer' }}
               >
                 &times;
               </button>
-            )}
-          </div>
-        ))}
+            </div>
+          ))}
+        {!personCategoriesLoading && personCategories.length === 0 && (
+          <div style={{ fontSize: 13, color: 'var(--color-faint)' }}>No categories yet.</div>
+        )}
       </div>
+
+      {recommendations.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+            Suggestions
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {recommendations.map((name) => (
+              <button key={name} onClick={() => handleAddCategory(name)} style={{ ...categoryChipStyle, borderStyle: 'dashed', cursor: 'pointer', color: 'var(--color-muted)' }}>
+                + {name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, marginBottom: categoryNameError ? 6 : 24 }}>
         <input
           value={newCategoryName}
@@ -200,7 +277,7 @@ export default function AppSettingsTab() {
             fontSize: 14,
           }}
         />
-        <Button onClick={handleAddCategory} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+        <Button onClick={() => handleAddCategory()} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
           Add
         </Button>
       </div>
@@ -221,16 +298,37 @@ export default function AppSettingsTab() {
       {modalExercise !== undefined && (
         <AddEditExerciseModal
           exercise={modalExercise}
-          categories={categories}
+          personId={activePersonId}
           onClose={() => setModalExercise(undefined)}
           onSaved={() => {
             setModalExercise(undefined);
-            refetchExercises();
+            refetchPersonExercises();
           }}
         />
       )}
     </div>
   );
+}
+
+function rowStyle(hasBorder) {
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '14px 0',
+    borderBottom: hasBorder ? '1px solid var(--color-subtle-bg)' : 'none',
+  };
+}
+
+function starStyle(active) {
+  return {
+    background: 'none',
+    border: 'none',
+    color: active ? 'var(--color-accent)' : 'var(--color-faint)',
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
+  };
 }
 
 const backButtonStyle = {
@@ -263,6 +361,18 @@ const addButtonStyle = {
   fontWeight: 700,
   cursor: 'pointer',
   marginBottom: 14,
+};
+
+const categoryChipStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '8px 8px 8px 14px',
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 999,
+  fontSize: 14,
+  fontWeight: 600,
 };
 
 const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
