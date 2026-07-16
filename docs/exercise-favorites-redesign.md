@@ -102,6 +102,8 @@ New tables (Flyway V19–V24):
 
 The old `forked_from_id` column and any existing forked rows are kept for historical data but
 are never triggered again. Logged sets, history, PRs, and exports are untouched by all of this.
+(**Superseded 2026-07-16 — see the update entry at the bottom: the `forked_from_id` column and
+the whole fork-on-edit code path have now been removed.**)
 
 The PR board and Trends stopped surfacing the legacy per-exercise category and were made
 null-safe (user-created exercises have no base category).
@@ -114,3 +116,26 @@ null-safe (user-created exercises have no base category).
   recommendations, routine auto-favorite, global edit/delete rejected, PRs safe for
   uncategorized exercises) and all pre-existing suites.
 - Frontend build, lint, and tests green.
+
+## Update — 2026-07-16: fork-on-edit machinery removed (V25)
+
+The favorites rebuild retired fork-on-edit but deliberately *kept* the `forked_from_id`
+column and the re-pointing helpers around for historical data (see the note in "Data model &
+migrations"). They were never triggered again — nothing ever set `forked_from_id`, so it was
+`NULL` on every row and the visibility query's exclusion subquery was a permanent no-op.
+
+That dead scaffolding has now been removed (behavior-preserving):
+
+- **Migration `V25__drop_forked_from_from_exercises.sql`** drops the
+  `IX_exercises_forked_from_id` index, the `FK_exercises_forked_from` FK, and the
+  `forked_from_id` column.
+- `Exercise.forkedFrom` (+ getter/setter) removed; `ExerciseRepository.findVisibleToAccount`
+  simplified to "every global exercise ∪ this account's own."
+- The unused fork re-point helpers removed:
+  `SetupValueRepository.findByField_IdAndPerson_IdIn` + `SetupValue.setField`,
+  `WorkoutSetRepository.findByPerson_IdInAndExercise_Id` + `WorkoutSet.setExercise`,
+  `RoutineExerciseRepository.findByExercise_IdAndRoutine_Person_IdIn` +
+  `RoutineExercise.setExercise` (all had zero callers).
+
+Rationale: with more people onboarding, keep `main` lean — dead history-re-pointing code is
+exactly the kind of risky-looking scaffolding worth deleting once it's provably unreachable.

@@ -54,13 +54,6 @@ public class Exercise {
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted = false;
 
-    // Set only on an account-owned exercise that was forked from a shared system
-    // exercise on first edit/delete -- lets the visibility query hide the original
-    // global row from this account without touching it for anyone else.
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "forked_from_id")
-    private Exercise forkedFrom;
-
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -127,14 +120,6 @@ public class Exercise {
 
     public Instant getCreatedAt() {
         return createdAt;
-    }
-
-    public Exercise getForkedFrom() {
-        return forkedFrom;
-    }
-
-    public void setForkedFrom(Exercise forkedFrom) {
-        this.forkedFrom = forkedFrom;
     }
 
     public List<ExerciseSetupField> getSetupFields() {

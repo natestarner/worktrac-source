@@ -51,12 +51,6 @@ public class RoutineExercise {
         return exercise;
     }
 
-    // Used only when forking a system exercise -- re-points this routine entry from
-    // the shared original to the account-owned fork.
-    public void setExercise(Exercise exercise) {
-        this.exercise = exercise;
-    }
-
     public int getSortOrder() {
         return sortOrder;
     }
