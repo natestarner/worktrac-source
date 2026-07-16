@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
+import { pickExercise } from './support/exercises';
 
 // Full "Log a past workout" round trip: create a retroactive session, add and remove
 // sets into it without triggering the live rest timer, edit its date from the "Editing
@@ -20,8 +21,8 @@ test.describe('Log a past workout', () => {
     await expect(page.getByText('Editing past session')).toBeVisible();
     await expect(page.locator('input[type="date"]')).toHaveValue('2026-01-15');
 
-    // Log two sets into the retroactive session.
-    await page.getByRole('button', { name: 'Barbell Bench Press' }).click();
+    // Log two sets into the retroactive session (picker is empty for a new person -- search).
+    await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('Set 1')).toBeVisible();
     await page.getByRole('button', { name: 'Log set' }).click();

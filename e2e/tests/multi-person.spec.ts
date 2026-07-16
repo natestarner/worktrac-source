@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
+import { pickExercise } from './support/exercises';
 
 // The header's account-holder dropdown trigger shows the primary person's name too, so
 // an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
@@ -14,7 +15,7 @@ test.describe('Multi-person switching', () => {
 
     // Alex picks an exercise -- this is the "in-progress" state that should be
     // preserved when switching away and back.
-    await page.getByRole('button', { name: 'Barbell Bench Press' }).click();
+    await pickExercise(page, 'Barbell Bench Press');
     await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
 
     // Add Sam and switch to them.
@@ -23,7 +24,7 @@ test.describe('Multi-person switching', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
 
     // Newly added person becomes active, and starts with no exercise selected.
-    await expect(page.getByPlaceholder('Search exercises')).toBeVisible();
+    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
 
     // Switch back to Alex -- should return to Barbell Bench Press, not the picker.
     await personPill(page, 'Alex').click();
@@ -31,7 +32,7 @@ test.describe('Multi-person switching', () => {
 
     // Switch to Sam again -- still no exercise selected for them.
     await personPill(page, 'Sam').click();
-    await expect(page.getByPlaceholder('Search exercises')).toBeVisible();
+    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
   });
 
   test('switching people preserves which tab each person was viewing', async ({ page, request }) => {
@@ -94,7 +95,7 @@ test.describe('Multi-person switching', () => {
 
     // Alex logs a set -- starts Alex's own rest timer.
     await personPill(page, 'Alex').click();
-    await page.getByRole('button', { name: 'Barbell Bench Press' }).click();
+    await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('New PR!')).toBeVisible();
     await page.getByText('New PR!').click({ force: true });
@@ -118,14 +119,14 @@ test.describe('Multi-person switching', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
 
     await personPill(page, 'Alex').click();
-    await page.getByPlaceholder('Search exercises').fill('bench');
+    await page.getByPlaceholder('Search all exercises').fill('bench');
 
     // Sam's search box starts empty, unaffected by Alex's search.
     await personPill(page, 'Sam').click();
-    await expect(page.getByPlaceholder('Search exercises')).toHaveValue('');
+    await expect(page.getByPlaceholder('Search all exercises')).toHaveValue('');
 
     // Switching back to Alex restores what they'd typed.
     await personPill(page, 'Alex').click();
-    await expect(page.getByPlaceholder('Search exercises')).toHaveValue('bench');
+    await expect(page.getByPlaceholder('Search all exercises')).toHaveValue('bench');
   });
 });
