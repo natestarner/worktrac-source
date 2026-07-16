@@ -1,6 +1,8 @@
 package com.worktrac.backend.workoutset;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -8,6 +10,11 @@ import java.util.Optional;
 public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
 
     List<WorkoutSet> findByPerson_IdAndExercise_Id(Long personId, Long exerciseId);
+
+    // The "has a logged set" half of a person's Log picker: every exercise they've ever
+    // logged shows up automatically, alongside their favorites.
+    @Query("SELECT DISTINCT ws.exercise.id FROM WorkoutSet ws WHERE ws.person.id = :personId")
+    List<Long> findDistinctExerciseIdsByPerson(@Param("personId") Long personId);
 
     List<WorkoutSet> findBySession_Id(Long sessionId);
 

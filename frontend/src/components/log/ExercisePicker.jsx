@@ -1,20 +1,36 @@
 import { useAppState } from '../../context/AppStateContext';
 import Skeleton from '../shared/Skeleton';
 
-export default function ExercisePicker({ exercises, categories, routines, loading, onSelectExercise, onStartRoutine, hasActiveRoutine }) {
+// The Log picker. By default it shows only this person's list -- the exercises they've
+// favorited or logged a set for -- split into two headings: "Favorites" and "Other Previously
+// Logged". Typing a search reveals the full catalog. Favoriting itself happens on the exercise
+// detail screen, so the pills here are plain (tap to open).
+export default function ExercisePicker({
+  personExercises,
+  catalog,
+  routines,
+  loading,
+  onSelectExercise,
+  onAddExercise,
+  onStartRoutine,
+  hasActiveRoutine,
+}) {
   const { exerciseSearch, setExerciseSearch } = useAppState();
   const term = exerciseSearch.trim().toLowerCase();
+  const searching = term.length > 0;
 
-  const categoryGroups = categories
-    .map((cat) => ({
-      id: cat.id,
-      name: cat.name,
-      items: exercises.filter((e) => e.categoryId === cat.id && (!term || e.name.toLowerCase().includes(term))),
-    }))
-    .filter((g) => g.items.length > 0);
+  // Default view: favorites first, then everything else the person has logged.
+  const favorites = personExercises.filter((e) => e.isFavorite);
+  const otherLogged = personExercises.filter((e) => !e.isFavorite);
+  const groups = [];
+  if (favorites.length > 0) groups.push({ id: 'favorites', name: 'Favorites', items: favorites });
+  if (otherLogged.length > 0) groups.push({ id: 'other', name: 'Other Previously Logged', items: otherLogged });
 
-  const noSearchResults = !!term && categoryGroups.length === 0;
-  const showRoutineQuickStart = !term && !hasActiveRoutine && routines.length > 0;
+  // Search view: filter the whole catalog by name (flat).
+  const searchResults = searching ? catalog.filter((e) => e.name.toLowerCase().includes(term)) : [];
+
+  const showRoutineQuickStart = !searching && !hasActiveRoutine && routines.length > 0;
+  const hasList = personExercises.length > 0;
 
   return (
     <div>
@@ -49,12 +65,12 @@ export default function ExercisePicker({ exercises, categories, routines, loadin
         </div>
       )}
 
-      {showRoutineQuickStart && <div style={sectionLabelStyle}>Or pick any exercise</div>}
+      {showRoutineQuickStart && <div style={sectionLabelStyle}>Or pick an exercise</div>}
 
       <input
         value={exerciseSearch}
         onChange={(e) => setExerciseSearch(e.target.value)}
-        placeholder="Search exercises"
+        placeholder="Search all exercises"
         style={{
           width: '100%',
           boxSizing: 'border-box',
@@ -76,47 +92,71 @@ export default function ExercisePicker({ exercises, categories, routines, loadin
               <Skeleton key={i} width={w} height={46} radius={14} />
             ))}
           </div>
-          <Skeleton width={120} height={12} style={{ marginBottom: 10 }} />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            {[128, 104, 150, 90].map((w, i) => (
-              <Skeleton key={i} width={w} height={46} radius={14} />
-            ))}
-          </div>
         </>
       )}
 
-      {!loading && noSearchResults && (
-        <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--color-faint)', fontSize: 15 }}>
-          No exercises match "{exerciseSearch}".
-        </div>
+      {/* Search results across the whole catalog */}
+      {!loading && searching && (
+        searchResults.length === 0 ? (
+          <div style={emptyStyle}>No exercises match "{exerciseSearch}".</div>
+        ) : (
+          <div style={{ marginBottom: 20 }}>
+            <div style={sectionLabelStyle}>Search results</div>
+            <div style={chipWrapStyle}>
+              {searchResults.map((ex) => (
+                <ExerciseChip key={ex.id} name={ex.name} onSelect={() => onSelectExercise(ex.id)} />
+              ))}
+            </div>
+          </div>
+        )
       )}
 
-      {categoryGroups.map((group) => (
-        <div key={group.id} style={{ marginBottom: 20 }}>
-          <div style={sectionLabelStyle}>{group.name}</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            {group.items.map((ex) => (
-              <button
-                key={ex.id}
-                onClick={() => onSelectExercise(ex.id)}
-                style={{
-                  padding: '14px 18px',
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 14,
-                  fontSize: 15,
-                  fontWeight: 600,
-                  color: 'var(--color-text)',
-                  cursor: 'pointer',
-                }}
-              >
-                {ex.name}
-              </button>
-            ))}
+      {/* Default view: Favorites + Other Previously Logged */}
+      {!loading && !searching && (
+        !hasList ? (
+          <div style={emptyStyle}>
+            No exercises yet. Search above to find an exercise and log a set, or favorite it from its page.
           </div>
-        </div>
-      ))}
+        ) : (
+          groups.map((group) => (
+            <div key={group.id} style={{ marginBottom: 20 }}>
+              <div style={sectionLabelStyle}>{group.name}</div>
+              <div style={chipWrapStyle}>
+                {group.items.map((ex) => (
+                  <ExerciseChip key={ex.id} name={ex.name} onSelect={() => onSelectExercise(ex.id)} />
+                ))}
+              </div>
+            </div>
+          ))
+        )
+      )}
+
+      {!loading && (
+        <button onClick={() => onAddExercise(exerciseSearch)} style={addOwnButtonStyle}>
+          + Add your own exercise
+        </button>
+      )}
     </div>
+  );
+}
+
+function ExerciseChip({ name, onSelect }) {
+  return (
+    <button
+      onClick={onSelect}
+      style={{
+        padding: '14px 18px',
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 14,
+        fontSize: 15,
+        fontWeight: 600,
+        color: 'var(--color-text)',
+        cursor: 'pointer',
+      }}
+    >
+      {name}
+    </button>
   );
 }
 
@@ -127,4 +167,21 @@ const sectionLabelStyle = {
   textTransform: 'uppercase',
   letterSpacing: '0.04em',
   marginBottom: 10,
+};
+
+const chipWrapStyle = { display: 'flex', flexWrap: 'wrap', gap: 10 };
+
+const emptyStyle = { textAlign: 'center', padding: '30px 20px', color: 'var(--color-faint)', fontSize: 15 };
+
+const addOwnButtonStyle = {
+  width: '100%',
+  marginTop: 8,
+  padding: 14,
+  background: 'var(--color-subtle-bg)',
+  color: 'var(--color-text)',
+  border: 'none',
+  borderRadius: 12,
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: 'pointer',
 };

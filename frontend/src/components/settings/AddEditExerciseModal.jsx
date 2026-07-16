@@ -1,26 +1,20 @@
-import { useEffect, useState } from 'react';
-import { addExercise, updateExercise } from '../../api/exercises';
+import { useState } from 'react';
+import { addExercise, updateExercise, favoriteExercise } from '../../api/exercises';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
 
-export default function AddEditExerciseModal({ exercise, categories, onClose, onSaved }) {
+// Add-your-own / edit-your-own exercise. Categories are per-person now, so there's no category
+// selector here -- a new exercise is created uncategorized and auto-favorited for the active
+// person (file it into a category later from the picker). Editing is only reachable for the
+// account's own exercises; preloaded ones are favorite-as-is.
+export default function AddEditExerciseModal({ exercise, personId, initialName = '', onClose, onSaved }) {
   const isEditing = !!exercise;
-  const [name, setName] = useState(exercise?.name || '');
-  const [categoryId, setCategoryId] = useState(exercise?.categoryId ?? categories[0]?.id);
-  const [setupFieldNames, setSetupFieldNames] = useState(exercise?.setupFields.map((f) => f.name) || []);
+  const [name, setName] = useState(exercise?.name || initialName || '');
+  const [setupFieldNames, setSetupFieldNames] = useState(exercise?.setupFields?.map((f) => f.name) || []);
   const [newFieldInput, setNewFieldInput] = useState('');
   const [nameError, setNameError] = useState(false);
-
-  // categories can still be loading when this modal first mounts (nothing in AppSettingsTab
-  // gates "+ Add exercise" behind categories being ready), which would otherwise leave
-  // categoryId stuck at undefined forever and make Save a silent no-op. Backfill the
-  // default once categories arrive, but only if nothing's been selected yet.
-  useEffect(() => {
-    if (categoryId === undefined && categories.length > 0) {
-      setCategoryId(categories[0].id);
-    }
-  }, [categories, categoryId]);
+  const [saving, setSaving] = useState(false);
 
   function addField() {
     const trimmed = newFieldInput.trim();
@@ -31,8 +25,8 @@ export default function AddEditExerciseModal({ exercise, categories, onClose, on
     setSetupFieldNames((fields) => [...fields, trimmed]);
     setNewFieldInput('');
   }
-  function removeField(name) {
-    setSetupFieldNames((fields) => fields.filter((f) => f !== name));
+  function removeField(fieldName) {
+    setSetupFieldNames((fields) => fields.filter((f) => f !== fieldName));
   }
 
   async function handleSave() {
@@ -41,14 +35,20 @@ export default function AddEditExerciseModal({ exercise, categories, onClose, on
       setNameError(true);
       return;
     }
-    if (!categoryId) return;
-    const payload = { name: trimmed, categoryId, setupFieldNames };
-    if (isEditing) {
-      await updateExercise(exercise.id, payload);
-    } else {
-      await addExercise(payload);
+    setSaving(true);
+    try {
+      if (isEditing) {
+        const updated = await updateExercise(exercise.id, { name: trimmed, setupFieldNames });
+        onSaved(updated);
+      } else {
+        const created = await addExercise({ name: trimmed, setupFieldNames });
+        // Auto-favorite so it lands in this person's picker immediately.
+        if (personId) await favoriteExercise(personId, created.id);
+        onSaved(created);
+      }
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   }
 
   return (
@@ -68,41 +68,16 @@ export default function AddEditExerciseModal({ exercise, categories, onClose, on
           border: `1px solid ${nameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
           borderRadius: 10,
           fontSize: 16,
-          marginBottom: nameError ? 6 : 12,
+          marginBottom: nameError ? 6 : 16,
         }}
       />
       {nameError && (
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 12 }}>Enter an exercise name.</div>
       )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-        {categories.map((c) => {
-          const active = c.id === categoryId;
-          return (
-            <button
-              key={c.id}
-              onClick={() => setCategoryId(c.id)}
-              style={{
-                padding: '9px 14px',
-                borderRadius: 999,
-                border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                background: active ? 'var(--color-accent)' : 'var(--color-surface)',
-                color: active ? '#fff' : 'var(--color-text)',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {c.name}
-            </button>
-          );
-        })}
-      </div>
 
       {isEditing && (
         <div style={{ fontSize: 12, color: 'var(--color-muted)', marginBottom: 18 }}>
-          {exercise.isGlobal
-            ? 'This is a shared system exercise -- saving creates your own private copy with these changes. Other households keep seeing the original untouched, and your own logged sets/history/PRs for it move over to your copy automatically.'
-            : 'Renaming or re-categorizing keeps all logged sets, history, and PRs for this exercise intact.'}
+          Renaming keeps all logged sets, history, and PRs for this exercise intact.
         </div>
       )}
 
@@ -154,7 +129,7 @@ export default function AddEditExerciseModal({ exercise, categories, onClose, on
         </button>
         <Button
           onClick={handleSave}
-          disabled={!categoryId}
+          disabled={saving}
           style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
           {isEditing ? 'Save' : 'Add'}

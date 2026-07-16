@@ -25,8 +25,20 @@ vi.mock('../../api/sets', () => ({
   deleteSet: vi.fn(),
 }));
 vi.mock('../../api/setupValues', () => ({ listSetupValues: vi.fn(), setSetupValue: vi.fn() }));
+vi.mock('../../api/exercises', () => ({
+  listCustomFields: vi.fn().mockResolvedValue([]),
+  addCustomField: vi.fn(),
+  updateCustomField: vi.fn(),
+  removeCustomField: vi.fn(),
+  setExerciseCategory: vi.fn(),
+  updateExercise: vi.fn(),
+  removeExercise: vi.fn(),
+  favoriteExercise: vi.fn(),
+  unfavoriteExercise: vi.fn(),
+}));
+vi.mock('../../api/personCategories', () => ({ createPersonCategory: vi.fn() }));
 
-const exercise = { id: 1, name: 'Bench Press', categoryName: 'Upper Push', setupFields: [] };
+const exercise = { id: 1, name: 'Bench Press', personCategoryName: 'Upper Push', isFavorite: true, setupFields: [] };
 
 function renderExerciseDetail(props = {}) {
   return render(

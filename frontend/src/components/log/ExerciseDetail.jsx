@@ -5,11 +5,14 @@ import { useUI } from '../../context/UIContext';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets, logLiveSet, logSetIntoSession, deleteSet } from '../../api/sets';
 import { listSetupValues } from '../../api/setupValues';
+import { listCustomFields, favoriteExercise, unfavoriteExercise, removeExercise } from '../../api/exercises';
 import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import WeightRepsStepper from './WeightRepsStepper';
 import NumericKeypad from '../shared/NumericKeypad';
 import SetupFieldEditorModal from '../shared/SetupFieldEditorModal';
+import CustomFieldEditorModal from '../shared/CustomFieldEditorModal';
+import ConfigureExerciseModal from '../shared/ConfigureExerciseModal';
 import EditSetModal from '../shared/EditSetModal';
 import Button from '../shared/Button';
 import Skeleton from '../shared/Skeleton';
@@ -17,6 +20,8 @@ import Skeleton from '../shared/Skeleton';
 export default function ExerciseDetail({
   exercise,
   personId,
+  personCategories = [],
+  onPersonalizationChanged,
   editingSessionId,
   liveSession,
   refetchLiveSession,
@@ -33,8 +38,11 @@ export default function ExerciseDetail({
   const [summary, setSummary] = useState(null);
   const [sessionSets, setSessionSets] = useState([]);
   const [setupValues, setSetupValues] = useState([]);
+  const [customFields, setCustomFields] = useState([]);
   const [keypadField, setKeypadField] = useState(null);
   const [editingSetupField, setEditingSetupField] = useState(null);
+  const [editingCustomField, setEditingCustomField] = useState(null);
+  const [showConfigureModal, setShowConfigureModal] = useState(false);
   const [editingSet, setEditingSet] = useState(null);
   const [ready, setReady] = useState(false);
   const [justAddedSetId, setJustAddedSetId] = useState(null);
@@ -54,12 +62,35 @@ export default function ExerciseDetail({
   function refetchSetupValues() {
     return listSetupValues(personId, exercise.id).then(setSetupValues);
   }
+  function refetchCustomFields() {
+    return listCustomFields(personId, exercise.id).then(setCustomFields);
+  }
 
   useEffect(() => {
     setReady(false);
-    Promise.all([refetchSummary(), refetchSessionSets(), refetchSetupValues()]).finally(() => setReady(true));
+    Promise.all([refetchSummary(), refetchSessionSets(), refetchSetupValues(), refetchCustomFields()]).finally(() =>
+      setReady(true),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercise.id, contextSessionId]);
+
+  async function handleToggleFavorite() {
+    if (exercise.isFavorite) await unfavoriteExercise(personId, exercise.id);
+    else await favoriteExercise(personId, exercise.id);
+    if (onPersonalizationChanged) await onPersonalizationChanged();
+  }
+
+  function handleRequestDelete() {
+    setShowConfigureModal(false);
+    openConfirm(
+      `Delete "${exercise.name}"? Already-logged sets for it are kept, but it will disappear from your picker.`,
+      async () => {
+        await removeExercise(exercise.id);
+        if (onPersonalizationChanged) await onPersonalizationChanged();
+        onBack();
+      },
+    );
+  }
 
   // Prefill weight/reps from the same set-index in the most recent prior session,
   // recomputed whenever the exercise, its summary, or how many sets are already logged
@@ -138,34 +169,53 @@ export default function ExerciseDetail({
             &larr; All exercises
           </button>
 
-          <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em', marginBottom: 4 }}>{exercise.name}</div>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-            <div style={{ fontSize: 14, color: 'var(--color-muted)' }}>{exercise.categoryName}</div>
-            {exercise.setupFields.map((field) => {
-              const found = setupValues.find((v) => v.fieldId === field.id);
-              const value = found?.value || '';
-              return (
-                <button
-                  key={field.id}
-                  onClick={() => setEditingSetupField({ fieldId: field.id, fieldName: field.name, value })}
-                  style={{
-                    flexShrink: 0,
-                    padding: '5px 12px',
-                    borderRadius: 999,
-                    border: `1px solid ${value ? 'var(--color-border)' : 'var(--color-pr-border)'}`,
-                    background: value ? 'var(--color-bg)' : 'var(--color-pr-bg)',
-                    color: value ? 'var(--color-text)' : 'var(--color-pr-text)',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {value ? `${field.name}: ${value}` : `${field.name}: set`}
-                </button>
-              );
-            })}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: exercise.personCategoryName ? 6 : 18 }}>
+            <div style={{ minWidth: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em' }}>{exercise.name}</div>
+            <button
+              onClick={handleToggleFavorite}
+              aria-label={exercise.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              style={{ ...iconButtonStyle, fontSize: 20, color: exercise.isFavorite ? 'var(--color-accent)' : 'var(--color-faint)' }}
+            >
+              {exercise.isFavorite ? '★' : '☆'}
+            </button>
+            <button
+              onClick={() => setShowConfigureModal(true)}
+              aria-label="Customize this exercise"
+              title="Customize this exercise"
+              style={{ ...iconButtonStyle, fontSize: 22, fontWeight: 700, color: 'var(--color-muted)' }}
+            >
+              &#8942;
+            </button>
           </div>
+          {exercise.personCategoryName && (
+            <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 18 }}>{exercise.personCategoryName}</div>
+          )}
+
+          {(exercise.setupFields.length > 0 || customFields.length > 0) && (
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+              {exercise.setupFields.map((field) => {
+                const found = setupValues.find((v) => v.fieldId === field.id);
+                const value = found?.value || '';
+                return (
+                  <button
+                    key={`base-${field.id}`}
+                    onClick={() => setEditingSetupField({ fieldId: field.id, fieldName: field.name, value })}
+                    style={setupPillStyle(value)}
+                  >
+                    {value ? `${field.name}: ${value}` : `${field.name}: set`}
+                  </button>
+                );
+              })}
+              {customFields.map((field) => {
+                const value = field.value || '';
+                return (
+                  <button key={`custom-${field.id}`} onClick={() => setEditingCustomField(field)} style={setupPillStyle(value)}>
+                    {value ? `${field.name}: ${value}` : `${field.name}: set`}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {!ready && (
             <div className="summary-cards-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
@@ -321,6 +371,39 @@ export default function ExerciseDetail({
         />
       )}
 
+      {editingCustomField && (
+        <CustomFieldEditorModal
+          personId={personId}
+          exerciseId={exercise.id}
+          field={editingCustomField}
+          onClose={() => setEditingCustomField(null)}
+          onSaved={() => {
+            setEditingCustomField(null);
+            refetchCustomFields();
+          }}
+          onDeleted={() => {
+            setEditingCustomField(null);
+            refetchCustomFields();
+          }}
+        />
+      )}
+
+      {showConfigureModal && (
+        <ConfigureExerciseModal
+          exercise={exercise}
+          personId={personId}
+          exerciseId={exercise.id}
+          currentCategoryId={exercise.personCategoryId ?? null}
+          categories={personCategories}
+          customFields={customFields}
+          onClose={() => setShowConfigureModal(false)}
+          onFieldsChanged={refetchCustomFields}
+          onCategoryChanged={onPersonalizationChanged || (() => {})}
+          onExerciseChanged={onPersonalizationChanged || (() => {})}
+          onRequestDelete={handleRequestDelete}
+        />
+      )}
+
       {editingSet && (
         <EditSetModal
           set={editingSet}
@@ -357,3 +440,27 @@ const cardLabelStyle = {
 
 const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const deleteLinkStyle = { background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+
+const iconButtonStyle = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  lineHeight: 1,
+  cursor: 'pointer',
+  flexShrink: 0,
+};
+
+function setupPillStyle(value) {
+  return {
+    flexShrink: 0,
+    padding: '5px 12px',
+    borderRadius: 999,
+    border: `1px solid ${value ? 'var(--color-border)' : 'var(--color-pr-border)'}`,
+    background: value ? 'var(--color-bg)' : 'var(--color-pr-bg)',
+    color: value ? 'var(--color-text)' : 'var(--color-pr-text)',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  };
+}
