@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
+import { pickExercise } from './support/exercises';
 
 // Full golden-path smoke: register a new household, log the first-ever set (always a
 // PR), confirm the celebration fires, then check every tab renders without error.
@@ -7,10 +8,9 @@ test.describe('Log workout', () => {
   test('register, log a set, see PR celebration, browse all tabs', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
 
-    await expect(page.getByPlaceholder('Search exercises')).toBeVisible();
-
-    // Pick the first exercise in the library.
-    await page.getByRole('button', { name: 'Barbell Bench Press' }).click();
+    // A fresh person's picker is empty -- search the catalog to pick an exercise.
+    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+    await pickExercise(page, 'Barbell Bench Press');
     await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Log set' }).click();

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
+import { addExerciseToRoutine } from './support/exercises';
 
 // The header's account-holder dropdown trigger shows the primary person's name too, so
 // an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
@@ -16,8 +17,8 @@ test.describe('Routines', () => {
     await page.getByRole('button', { name: '+ New routine' }).click();
 
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Push Day');
-    await page.getByRole('button', { name: '+ Barbell Bench Press' }).click();
-    await page.getByRole('button', { name: '+ Dumbbell Overhead Press' }).click();
+    await addExerciseToRoutine(page, 'Barbell Bench Press');
+    await addExerciseToRoutine(page, 'Dumbbell Overhead Press');
     await page.getByRole('button', { name: 'Save routine' }).click();
 
     await expect(page.getByText('Push Day')).toBeVisible();
@@ -46,7 +47,7 @@ test.describe('Routines', () => {
     await page.getByRole('link', { name: 'Routines' }).click();
     await page.getByRole('button', { name: '+ New routine' }).click();
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Push Day');
-    await page.getByRole('button', { name: '+ Barbell Bench Press' }).click();
+    await addExerciseToRoutine(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Save routine' }).click();
     await expect(page.getByText('Push Day', { exact: true })).toBeVisible();
 

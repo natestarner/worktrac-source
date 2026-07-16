@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
+import { addOwnExercise, pickExercise } from './support/exercises';
 
 // App Settings and Profile are both reached via the account-holder dropdown in the
 // header, not a tab -- scope to .header-bar (the only button living there) rather than
@@ -28,24 +29,23 @@ function rowWithButton(page, text: string, buttonName: string) {
     .last();
 }
 
+// Exercises are managed on the exercise screen now (create via the Log picker's "+ Add your
+// own exercise"; rename/delete/setup-fields via the gear "Customize this exercise" modal).
+// App Settings only keeps units, the per-person category manager, and data export.
 test.describe('App Settings', () => {
-  test('add a category, add a custom exercise, add and remove a person, switch units', async ({ page, request }) => {
+  test('add a category, create a custom exercise, add and remove a person, switch units', async ({ page, request }) => {
     await registerHousehold(page, request, 'Alex');
+
+    // Custom exercises are created from the Log picker now, not App Settings.
+    await addOwnExercise(page, 'Sled Push');
+    await expect(page.getByText('Sled Push')).toBeVisible();
+
     await openAppSettings(page);
 
-    // Add a category first so the new exercise can use it.
+    // Categories are still managed here.
     await page.getByPlaceholder('New category name').fill('Conditioning');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByText('Conditioning')).toBeVisible();
-
-    // Add a custom exercise using that category.
-    await page.getByRole('button', { name: '+ Add exercise' }).click();
-    await page.getByPlaceholder('Exercise name').fill('Sled Push');
-    await page.getByRole('button', { name: 'Conditioning' }).click();
-    // The modal has two "Add" buttons (add-setup-field-chip, then submit) -- the
-    // submit button is the last one in DOM order.
-    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).last().click();
-    await expect(page.getByText('Sled Push')).toBeVisible();
 
     // Add a second person from the pill bar, then remove them from Profile.
     await page.getByRole('button', { name: '+ Add person' }).click();
@@ -55,8 +55,6 @@ test.describe('App Settings', () => {
 
     await openProfile(page);
     await page.getByRole('button', { name: 'Remove' }).click();
-    // The exercise library also has a "Delete" link underneath the confirm overlay --
-    // scope to the confirm dialog specifically.
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
     await expect(page.getByRole('button', { name: /Sam/ })).toHaveCount(0);
 
@@ -66,26 +64,28 @@ test.describe('App Settings', () => {
     await expect(page.getByText(/Default unit for new sets/)).toBeVisible();
   });
 
-  test('exercise, category, and person deletions show the right confirmation wording', async ({ page, request }) => {
+  test('deletions show the right confirmation wording', async ({ page, request }) => {
     await registerHousehold(page, request, 'Riley');
+
+    // Your own exercise: delete lives in its Customize modal, and the confirm keeps logged sets.
+    await addOwnExercise(page, 'Sled Push');
+    await page.getByRole('button', { name: 'Customize this exercise' }).click();
+    await expect(page.getByRole('dialog').getByText('Created by you')).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete this exercise' }).click();
+    await expect(page.getByRole('dialog')).toContainText('Already-logged sets for it are kept, but it will disappear from your picker.');
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+
+    // A preloaded (system) exercise is immutable: its Customize modal is badged as preloaded
+    // and offers no delete.
+    await page.getByRole('button', { name: /All exercises/ }).click();
+    await pickExercise(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: 'Customize this exercise' }).click();
+    await expect(page.getByRole('dialog').getByText('Preloaded exercise')).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('button', { name: 'Delete this exercise' })).toHaveCount(0);
+    await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click();
+
+    // Category delete confirm text (App Settings).
     await openAppSettings(page);
-
-    // A private (account-owned) exercise's delete confirm text differs from a global one's.
-    await page.getByRole('button', { name: '+ Add exercise' }).click();
-    await page.getByPlaceholder('Exercise name').fill('Sled Push');
-    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).last().click();
-    await expect(page.getByText('Sled Push')).toBeVisible();
-
-    await rowWithButton(page, 'Sled Push', 'Delete').getByRole('button', { name: 'Delete' }).click();
-    await expect(page.getByRole('dialog')).toContainText('Already-logged sets for it are kept, but it will disappear from the picker.');
-    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
-
-    // A global (system) exercise's delete confirm text warns it only affects this household.
-    await rowWithButton(page, 'Barbell Bench Press', 'Delete').getByRole('button', { name: 'Delete' }).click();
-    await expect(page.getByRole('dialog')).toContainText('other households keep it');
-    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
-
-    // Category delete confirm text.
     await page.getByPlaceholder('New category name').fill('Mobility');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByText('Mobility')).toBeVisible();
@@ -105,41 +105,28 @@ test.describe('App Settings', () => {
     await expect(page.getByRole('button', { name: /Sam/ })).toHaveCount(0);
   });
 
-  test('adding a setup field in App Settings lets each person set their own value for it', async ({ page, request }) => {
+  test('a custom setup field lets each person set their own value for it', async ({ page, request }) => {
     await registerHousehold(page, request, 'Morgan');
-    await openAppSettings(page);
 
-    // Add a custom exercise with a setup field defined for it. Pick a category
-    // explicitly rather than relying on the modal's default selection, which is only
-    // reliable once the categories list has finished loading.
-    await page.getByRole('button', { name: '+ Add exercise' }).click();
-    await page.getByPlaceholder('Exercise name').fill('Cable Row');
-    await page.getByRole('dialog').getByRole('button', { name: 'Upper Pull' }).click();
-    await page.getByPlaceholder('Field name').fill('Seat position');
-    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).first().click();
-    await expect(page.getByRole('dialog').getByText('Seat position')).toBeVisible();
-    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).last().click();
-    await expect(page.getByText('Cable Row')).toBeVisible();
+    // Add a custom setup field to an exercise via its Customize modal.
+    await addOwnExercise(page, 'Cable Row');
+    await page.getByRole('button', { name: 'Customize this exercise' }).click();
+    await page.getByPlaceholder('Add a field (e.g. seat height)').fill('Seat position');
+    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
+    // The added field appears as a row with a "Remove Seat position" control.
+    await expect(page.getByRole('dialog').getByRole('button', { name: 'Remove Seat position' })).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click();
 
-    // On the Log tab, the field shows as an inline "Tap to set" pill next to the
-    // exercise name -- setting a value there is per-person, not shared.
-    await page.getByRole('link', { name: 'Log' }).click();
-    await page.getByRole('button', { name: 'Cable Row' }).click();
+    // The field shows as a per-person "Seat position: set" pill on the detail screen.
     await page.getByRole('button', { name: /Seat position: set/ }).click();
     await page.getByPlaceholder('e.g. 5').fill('7');
     await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
     await expect(page.getByRole('button', { name: 'Seat position: 7' })).toBeVisible();
 
-    // Removing the field name in App Settings removes it from the exercise's setup fields.
-    await openAppSettings(page);
-    await rowWithButton(page, 'Cable Row', 'Edit').getByRole('button', { name: 'Edit' }).click();
-    await page.getByRole('dialog').getByText('Seat position').getByRole('button', { name: '×', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
-
-    // Navigating back to Log resumes showing Cable Row's detail directly (the selected
-    // exercise persists across tab switches), so there's no picker button to click here.
-    await page.getByRole('link', { name: 'Log' }).click();
-    await expect(page.getByText('Cable Row')).toBeVisible();
+    // Removing the field via Customize removes its pill from the exercise.
+    await page.getByRole('button', { name: 'Customize this exercise' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove Seat position' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click();
     await expect(page.getByRole('button', { name: /Seat position/ })).toHaveCount(0);
   });
 });

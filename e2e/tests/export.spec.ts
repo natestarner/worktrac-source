@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
+import { pickExercise } from './support/exercises';
 
 test.describe('CSV export', () => {
   test('exporting data from History triggers a file download', async ({ page, request }) => {
     await registerHousehold(page, request, 'Casey');
 
     // Log a set first so the export isn't trivially empty.
-    await page.getByRole('button', { name: 'Barbell Bench Press' }).click();
+    await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('New PR!')).toBeVisible();
     await page.getByText('New PR!').click({ force: true });
