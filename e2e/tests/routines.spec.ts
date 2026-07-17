@@ -17,6 +17,11 @@ test.describe('Routines', () => {
     await page.getByRole('button', { name: '+ New routine' }).click();
 
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Push Day');
+
+    // iOS Safari auto-zooms the page on focus for any input under 16px font-size -- lock
+    // this in so a future style tweak can't reintroduce that.
+    await expect(page.getByPlaceholder('Search all exercises')).toHaveCSS('font-size', '16px');
+
     await addExerciseToRoutine(page, 'Barbell Bench Press');
 
     // Adding an exercise clears the search box, so it's ready for the next search

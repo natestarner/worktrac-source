@@ -58,6 +58,10 @@ test.describe('Log workout', () => {
   test('search is forgiving of word order', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
 
+    // iOS Safari auto-zooms the page on focus for any input under 16px font-size -- lock
+    // this in so a future style tweak can't reintroduce that.
+    await expect(page.getByPlaceholder('Search all exercises')).toHaveCSS('font-size', '16px');
+
     // "barbell squat" isn't a contiguous substring of "Barbell Back Squat" -- the older
     // exact-substring matcher would miss it. Token-based matching should still find it,
     // and clicking the result should select that exercise.
