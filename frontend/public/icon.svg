@@ -1,0 +1,13 @@
+<svg viewBox="126 92 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <mask id="creamStrokeMask" maskUnits="userSpaceOnUse" x="126" y="92" width="200" height="200">
+      <rect x="126" y="92" width="200" height="200" fill="#FFFFFF"/>
+      <circle cx="200" cy="175" r="34" fill="#000000"/>
+    </mask>
+  </defs>
+  <circle cx="200" cy="175" r="34" fill="#E8734A"/>
+  <circle cx="258" cy="168" r="29" fill="#F2A65A"/>
+  <circle cx="198" cy="221" r="25" fill="#F2EDE1"/>
+  <circle cx="198" cy="221" r="25" fill="none" stroke="#163B3E" stroke-opacity="0.35" stroke-width="1.25" mask="url(#creamStrokeMask)"/>
+  <circle cx="250" cy="219" r="19" fill="#B5542D"/>
+</svg>

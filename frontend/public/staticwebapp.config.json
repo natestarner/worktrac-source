@@ -1,6 +1,6 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/config.json", "/favicon.ico", "/icons.svg", "/og-image.png", "/assets/*", "/email/*"]
+    "exclude": ["/config.json", "/favicon.ico", "/icons.svg", "/og-image.png", "/assets/*", "/email/*", "/apple-touch-icon.png", "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"]
   }
 }
