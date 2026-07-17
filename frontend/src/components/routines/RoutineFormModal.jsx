@@ -141,11 +141,13 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
       )}
 
       <div style={sectionLabelStyle}>Add exercise to routine</div>
+      {/* fontSize must stay >=16px -- below that, iOS Safari auto-zooms on focus and doesn't
+          reliably zoom back out (see ExercisePicker.jsx's search input for the full story). */}
       <input
         value={exerciseFilter}
         onChange={(e) => setExerciseFilter(e.target.value)}
         placeholder="Search all exercises"
-        style={{ width: '100%', boxSizing: 'border-box', padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 14, marginBottom: 14 }}
+        style={{ width: '100%', boxSizing: 'border-box', padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 16, marginBottom: 14 }}
       />
 
       {searching ? (

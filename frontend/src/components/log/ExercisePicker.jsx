@@ -79,7 +79,10 @@ export default function ExercisePicker({
           padding: '14px 16px',
           border: '1px solid var(--color-border)',
           borderRadius: 14,
-          fontSize: 15,
+          // iOS Safari auto-zooms the page on focus for any input under 16px, and doesn't
+          // reliably zoom back out when selecting a result clears/unmounts this input instead
+          // of a normal blur -- 16px avoids triggering the zoom at all.
+          fontSize: 16,
           marginBottom: 18,
           background: 'var(--color-surface)',
           color: 'var(--color-text)',
