@@ -124,8 +124,7 @@ class MultiTenancyIsolationTest {
 
         String exerciseBody = objectMapper.writeValueAsString(Map.of(
                 "name", "Account A Custom Exercise",
-                "categoryId", globalCategoryId,
-                "setupFieldNames", java.util.List.of()));
+                "categoryId", globalCategoryId));
         String response = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -136,8 +135,7 @@ class MultiTenancyIsolationTest {
 
         String editBody = objectMapper.writeValueAsString(Map.of(
                 "name", "Hijacked name",
-                "categoryId", globalCategoryId,
-                "setupFieldNames", java.util.List.of()));
+                "categoryId", globalCategoryId));
         mockMvc.perform(put("/api/exercises/" + exerciseId)
                         .header("Authorization", "Bearer " + tokenB)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -156,7 +154,7 @@ class MultiTenancyIsolationTest {
     }
 
     @Test
-    void accountBCannotReadAccountAsSetupValues() throws Exception {
+    void accountBCannotReadOrWriteAccountAsCustomFields() throws Exception {
         long personIdA = primaryPersonId(tokenA);
         String categoriesResponse = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + tokenA))
                 .andReturn().getResponse().getContentAsString();
@@ -164,8 +162,7 @@ class MultiTenancyIsolationTest {
 
         String exerciseBody = objectMapper.writeValueAsString(Map.of(
                 "name", "Exercise With Setup Field",
-                "categoryId", globalCategoryId,
-                "setupFieldNames", java.util.List.of("Pin height")));
+                "categoryId", globalCategoryId));
         String response = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -173,25 +170,24 @@ class MultiTenancyIsolationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         long exerciseId = objectMapper.readTree(response).get("id").asLong();
-        long fieldId = objectMapper.readTree(response).get("setupFields").get(0).get("id").asLong();
 
-        // Account B trying to read/write setup values under Account A's own person id
-        // must 404, since personId ownership is re-checked server-side regardless of
-        // which account created the exercise.
-        mockMvc.perform(get("/api/people/" + personIdA + "/exercises/" + exerciseId + "/setup-values")
+        // Account B trying to read/write per-person setup fields under Account A's own person
+        // id must 404, since personId ownership is re-checked server-side regardless of which
+        // account created the exercise.
+        mockMvc.perform(get("/api/people/" + personIdA + "/exercises/" + exerciseId + "/custom-fields")
                         .header("Authorization", "Bearer " + tokenB))
                 .andExpect(status().isNotFound());
 
-        String valueBody = objectMapper.writeValueAsString(Map.of("value", "5"));
-        mockMvc.perform(put("/api/people/" + personIdA + "/exercises/" + exerciseId + "/setup-fields/" + fieldId + "/value")
+        String fieldBody = objectMapper.writeValueAsString(Map.of("name", "Pin height"));
+        mockMvc.perform(post("/api/people/" + personIdA + "/exercises/" + exerciseId + "/custom-fields")
                         .header("Authorization", "Bearer " + tokenB)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(valueBody))
+                        .content(fieldBody))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    void accountBCannotWriteASetupValueAgainstAccountAsPrivateExercise() throws Exception {
+    void accountBCannotWriteACustomFieldAgainstAccountAsPrivateExercise() throws Exception {
         // Account B owns their own person, but the exerciseId belongs to Account A --
         // B's own personId ownership check alone must not be enough to let this through.
         long personIdB = primaryPersonId(tokenB);
@@ -201,8 +197,7 @@ class MultiTenancyIsolationTest {
 
         String exerciseBody = objectMapper.writeValueAsString(Map.of(
                 "name", "Account A Private Exercise With Field",
-                "categoryId", globalCategoryId,
-                "setupFieldNames", java.util.List.of("Pin height")));
+                "categoryId", globalCategoryId));
         String response = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -210,17 +205,16 @@ class MultiTenancyIsolationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         long exerciseId = objectMapper.readTree(response).get("id").asLong();
-        long fieldId = objectMapper.readTree(response).get("setupFields").get(0).get("id").asLong();
 
-        mockMvc.perform(get("/api/people/" + personIdB + "/exercises/" + exerciseId + "/setup-values")
+        mockMvc.perform(get("/api/people/" + personIdB + "/exercises/" + exerciseId + "/custom-fields")
                         .header("Authorization", "Bearer " + tokenB))
                 .andExpect(status().isNotFound());
 
-        String valueBody = objectMapper.writeValueAsString(Map.of("value", "5"));
-        mockMvc.perform(put("/api/people/" + personIdB + "/exercises/" + exerciseId + "/setup-fields/" + fieldId + "/value")
+        String fieldBody = objectMapper.writeValueAsString(Map.of("name", "Pin height"));
+        mockMvc.perform(post("/api/people/" + personIdB + "/exercises/" + exerciseId + "/custom-fields")
                         .header("Authorization", "Bearer " + tokenB)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(valueBody))
+                        .content(fieldBody))
                 .andExpect(status().isNotFound());
     }
 

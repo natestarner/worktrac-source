@@ -4,13 +4,11 @@ import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets, logLiveSet, logSetIntoSession, deleteSet } from '../../api/sets';
-import { listSetupValues } from '../../api/setupValues';
 import { listCustomFields, favoriteExercise, unfavoriteExercise, removeExercise } from '../../api/exercises';
 import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import WeightRepsStepper from './WeightRepsStepper';
 import NumericKeypad from '../shared/NumericKeypad';
-import SetupFieldEditorModal from '../shared/SetupFieldEditorModal';
 import CustomFieldEditorModal from '../shared/CustomFieldEditorModal';
 import ConfigureExerciseModal from '../shared/ConfigureExerciseModal';
 import EditSetModal from '../shared/EditSetModal';
@@ -37,10 +35,8 @@ export default function ExerciseDetail({
 
   const [summary, setSummary] = useState(null);
   const [sessionSets, setSessionSets] = useState([]);
-  const [setupValues, setSetupValues] = useState([]);
   const [customFields, setCustomFields] = useState([]);
   const [keypadField, setKeypadField] = useState(null);
-  const [editingSetupField, setEditingSetupField] = useState(null);
   const [editingCustomField, setEditingCustomField] = useState(null);
   const [showConfigureModal, setShowConfigureModal] = useState(false);
   const [editingSet, setEditingSet] = useState(null);
@@ -59,16 +55,13 @@ export default function ExerciseDetail({
     }
     return listSessionSets(contextSessionId, exercise.id).then(setSessionSets);
   }
-  function refetchSetupValues() {
-    return listSetupValues(personId, exercise.id).then(setSetupValues);
-  }
   function refetchCustomFields() {
     return listCustomFields(personId, exercise.id).then(setCustomFields);
   }
 
   useEffect(() => {
     setReady(false);
-    Promise.all([refetchSummary(), refetchSessionSets(), refetchSetupValues(), refetchCustomFields()]).finally(() =>
+    Promise.all([refetchSummary(), refetchSessionSets(), refetchCustomFields()]).finally(() =>
       setReady(true),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,21 +184,8 @@ export default function ExerciseDetail({
             <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 18 }}>{exercise.personCategoryName}</div>
           )}
 
-          {(exercise.setupFields.length > 0 || customFields.length > 0) && (
+          {customFields.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
-              {exercise.setupFields.map((field) => {
-                const found = setupValues.find((v) => v.fieldId === field.id);
-                const value = found?.value || '';
-                return (
-                  <button
-                    key={`base-${field.id}`}
-                    onClick={() => setEditingSetupField({ fieldId: field.id, fieldName: field.name, value })}
-                    style={setupPillStyle(value)}
-                  >
-                    {value ? `${field.name}: ${value}` : `${field.name}: set`}
-                  </button>
-                );
-              })}
               {customFields.map((field) => {
                 const value = field.value || '';
                 return (
@@ -354,19 +334,6 @@ export default function ExerciseDetail({
             if (keypadField === 'weight') setWeightDraft(value);
             else setRepsDraft(value);
             setKeypadField(null);
-          }}
-        />
-      )}
-
-      {editingSetupField && (
-        <SetupFieldEditorModal
-          personId={personId}
-          exerciseId={exercise.id}
-          field={editingSetupField}
-          onClose={() => setEditingSetupField(null)}
-          onSaved={() => {
-            setEditingSetupField(null);
-            refetchSetupValues();
           }}
         />
       )}

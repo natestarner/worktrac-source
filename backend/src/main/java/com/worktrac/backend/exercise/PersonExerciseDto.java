@@ -1,11 +1,9 @@
 package com.worktrac.backend.exercise;
 
-import java.util.List;
-
 // One row of a person's Log picker list -- an exercise they've favorited or logged, carrying
 // their personalization (favorite flag + which of their own categories it's filed under).
-// setupFields are the exercise's shared base fields; a person's own custom fields are fetched
-// separately (GET .../custom-fields) since they carry per-person values.
+// A person's own setup fields are fetched separately (GET .../custom-fields) since they carry
+// per-person values.
 public record PersonExerciseDto(
         Long id,
         String name,
@@ -13,8 +11,7 @@ public record PersonExerciseDto(
         boolean isGlobal,
         boolean isFavorite,
         Long personCategoryId,
-        String personCategoryName,
-        List<ExerciseSetupFieldDto> setupFields
+        String personCategoryName
 ) {
     public static PersonExerciseDto of(Exercise exercise, PersonExercise personExercise) {
         boolean favorite = personExercise != null && personExercise.isFavorite();
@@ -31,7 +28,6 @@ public record PersonExerciseDto(
                 exercise.isGlobal(),
                 favorite,
                 categoryId,
-                categoryName,
-                exercise.getSetupFields().stream().map(ExerciseSetupFieldDto::from).toList());
+                categoryName);
     }
 }

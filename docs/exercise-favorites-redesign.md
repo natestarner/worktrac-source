@@ -87,6 +87,8 @@ Goal: make the catalog **searched, not dumped**; let each **person** curate what
 - **Base vs. overlay setup fields on your own exercises.** A user-created exercise can carry
   base fields (from creation) *and* per-person overlay fields; both render identically as
   value pills. Accepted as a minor, invisible-to-user wart rather than special-casing it.
+  (**Superseded 2026-07-16 — see the update entry at the bottom: shared "base" setup fields
+  (System A) were removed; all setup fields are per-person now, so the wart is gone.**)
 
 ## Data model & migrations
 
@@ -114,3 +116,32 @@ null-safe (user-created exercises have no base category).
   recommendations, routine auto-favorite, global edit/delete rejected, PRs safe for
   uncategorized exercises) and all pre-existing suites.
 - Frontend build, lint, and tests green.
+
+## Update — 2026-07-16: setup fields are now per-person only (V26–V28)
+
+The original model kept **two** setup-field systems side by side: shared field *names* on the
+exercise (`exercise_setup_fields`, seeded for the 14 system exercises) with per-person *values*
+in `setup_values` ("System A"), plus fully per-person fields with name+value inline on the
+`person_exercise` overlay (`person_exercise_fields`, "System B"). The two rendered identically
+as pills (the "wart" above), and two different modals each wrote to a different store.
+
+That is now collapsed to **one system: all setup fields are per-person** (System B). Rationale:
+with more people onboarding, one clear model ("your fields on your exercises") beats a hidden
+shared/overlay split; it removes a whole table, DTO field, and editor modal.
+
+- **Migrations:** `V26` back-fills every entered `setup_values` row into
+  `person_exercise_fields` (creating the `person_exercise` overlay row as needed, preserving
+  name/value/sort order) so no real data is lost; `V27` drops `setup_values`; `V28` drops
+  `exercise_setup_fields`. Seeded base-field *names* a person never entered a value for are
+  intentionally not carried over.
+- **Backend:** deleted the `setupvalue` package and `ExerciseSetupField*`; removed
+  `Exercise.setupFields`, `ExerciseRequest.setupFieldNames`, and `setupFields` from
+  `ExerciseDto`/`PersonExerciseDto`; account-deletion now cascades via
+  `person_exercise/person_exercise_fields`.
+- **Frontend:** deleted `api/setupValues.js` and the System-A `SetupFieldEditorModal`; removed
+  the base-field section from Add/Edit exercise and the System-A pills + fetch from
+  `ExerciseDetail`; the per-person fields (still on the `.../custom-fields` endpoints) are the
+  only setup-field UI.
+- Backend `mvn verify` (87 tests) and frontend Vitest (98 tests) green.
+- **Deferred:** renaming the per-person `/custom-fields` endpoints to `/setup-fields` (pure
+  cosmetics, larger cross-stack ripple) — left for a follow-up.

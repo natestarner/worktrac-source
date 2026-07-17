@@ -6,7 +6,6 @@ import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets, logLiveSet, logSetIntoSession } from '../../api/sets';
-import { listSetupValues } from '../../api/setupValues';
 
 // ExerciseDetail's handleLogSet only starts the 90s rest timer for a LIVE set --
 // never for a set logged while editing a past/retroactive session. This is the one
@@ -24,7 +23,6 @@ vi.mock('../../api/sets', () => ({
   logSetIntoSession: vi.fn(),
   deleteSet: vi.fn(),
 }));
-vi.mock('../../api/setupValues', () => ({ listSetupValues: vi.fn(), setSetupValue: vi.fn() }));
 vi.mock('../../api/exercises', () => ({
   listCustomFields: vi.fn().mockResolvedValue([]),
   addCustomField: vi.fn(),
@@ -38,7 +36,7 @@ vi.mock('../../api/exercises', () => ({
 }));
 vi.mock('../../api/personCategories', () => ({ createPersonCategory: vi.fn() }));
 
-const exercise = { id: 1, name: 'Bench Press', personCategoryName: 'Upper Push', isFavorite: true, setupFields: [] };
+const exercise = { id: 1, name: 'Bench Press', personCategoryName: 'Upper Push', isFavorite: true };
 
 function renderExerciseDetail(props = {}) {
   return render(
@@ -65,7 +63,6 @@ describe('ExerciseDetail rest-timer live-vs-retroactive gating', () => {
     useUI.mockReturnValue({ showCelebration: vi.fn(), startRestTimer, openConfirm: vi.fn() });
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
     listSessionSets.mockResolvedValue([]);
-    listSetupValues.mockResolvedValue([]);
     logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
     logSetIntoSession.mockResolvedValue({ isPR: false, best: null, session: { id: 102 }, set: { id: 202 } });
   });

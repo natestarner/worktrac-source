@@ -2,7 +2,6 @@ package com.worktrac.backend.exercise;
 
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.category.Category;
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -11,16 +10,12 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
 @Table(name = "exercises")
@@ -64,10 +59,6 @@ public class Exercise {
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
-
-    @OneToMany(mappedBy = "exercise", cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("sortOrder ASC")
-    private List<ExerciseSetupField> setupFields = new ArrayList<>();
 
     protected Exercise() {
     }
@@ -135,9 +126,5 @@ public class Exercise {
 
     public void setForkedFrom(Exercise forkedFrom) {
         this.forkedFrom = forkedFrom;
-    }
-
-    public List<ExerciseSetupField> getSetupFields() {
-        return setupFields;
     }
 }

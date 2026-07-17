@@ -135,7 +135,7 @@ class CoreCrudControllerTest {
     }
 
     @Test
-    void removingNonPrimaryPersonCascadesTheirSessionsSetsRoutinesAndSetupValues() throws Exception {
+    void removingNonPrimaryPersonCascadesTheirSessionsSetsRoutinesAndSetupFields() throws Exception {
         String personBody = objectMapper.writeValueAsString(Map.of("name", "Sam"));
         String personResponse = mockMvc.perform(post("/api/people")
                         .header("Authorization", "Bearer " + token)
@@ -150,22 +150,20 @@ class CoreCrudControllerTest {
         long globalCategoryId = objectMapper.readTree(categoriesResponse).get(0).get("id").asLong();
 
         String exBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Sam's Exercise With Setup", "categoryId", globalCategoryId,
-                "setupFieldNames", List.of("Pin height")));
+                "name", "Sam's Exercise With Setup", "categoryId", globalCategoryId));
         String exResponse = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(exBody))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        JsonNode exerciseNode = objectMapper.readTree(exResponse);
-        long exerciseId = exerciseNode.get("id").asLong();
-        long fieldId = exerciseNode.get("setupFields").get(0).get("id").asLong();
+        long exerciseId = objectMapper.readTree(exResponse).get("id").asLong();
 
-        // Give Sam a routine, a logged set (which auto-creates a session), and a setup
-        // value before deleting them, so the delete actually exercises the FK cascade
-        // chain (routines/routine_exercises, workout_sessions/workout_sets, setup_values)
-        // rather than trivially succeeding on a person with no data.
+        // Give Sam a routine, a logged set (which auto-creates a session), and a per-person
+        // setup field before deleting them, so the delete actually exercises the FK cascade
+        // chain (routines/routine_exercises, workout_sessions/workout_sets,
+        // person_exercise/person_exercise_fields) rather than trivially succeeding on a
+        // person with no data.
         String routineBody = objectMapper.writeValueAsString(Map.of("name", "Sam's Routine", "exerciseIds", List.of(exerciseId)));
         mockMvc.perform(post("/api/people/" + samId + "/routines")
                         .header("Authorization", "Bearer " + token)
@@ -180,9 +178,18 @@ class CoreCrudControllerTest {
                         .content(setBody))
                 .andExpect(status().isOk());
 
+        String fieldBody = objectMapper.writeValueAsString(Map.of("name", "Pin height"));
+        long fieldId = objectMapper.readTree(mockMvc.perform(
+                        post("/api/people/" + samId + "/exercises/" + exerciseId + "/custom-fields")
+                                .header("Authorization", "Bearer " + token)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(fieldBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
         String valueBody = objectMapper.writeValueAsString(Map.of("value", "5"));
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .put("/api/people/" + samId + "/exercises/" + exerciseId + "/setup-fields/" + fieldId + "/value")
+                        .put("/api/people/" + samId + "/exercises/" + exerciseId + "/custom-fields/" + fieldId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(valueBody))
@@ -204,7 +211,7 @@ class CoreCrudControllerTest {
                 .andExpect(status().isNotFound());
         mockMvc.perform(get("/api/people/" + samId + "/history").header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound());
-        mockMvc.perform(get("/api/people/" + samId + "/exercises/" + exerciseId + "/setup-values")
+        mockMvc.perform(get("/api/people/" + samId + "/exercises/" + exerciseId + "/custom-fields")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
@@ -221,7 +228,7 @@ class CoreCrudControllerTest {
         long categoryId = objectMapper.readTree(catResponse).get("id").asLong();
 
         String exBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Custom Exercise", "categoryId", categoryId, "setupFieldNames", List.of()));
+                "name", "Custom Exercise", "categoryId", categoryId));
         mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -243,14 +250,13 @@ class CoreCrudControllerTest {
     }
 
     @Test
-    void softDeletedExerciseDisappearsFromListButKeepsSetupFields() throws Exception {
+    void softDeletedExerciseDisappearsFromList() throws Exception {
         String listResponse = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + token))
                 .andReturn().getResponse().getContentAsString();
         long globalCategoryId = objectMapper.readTree(listResponse).get(0).get("id").asLong();
 
         String exBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Soft Delete Me", "categoryId", globalCategoryId,
-                "setupFieldNames", List.of("Seat height")));
+                "name", "Soft Delete Me", "categoryId", globalCategoryId));
         String exResponse = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -258,7 +264,6 @@ class CoreCrudControllerTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         long exerciseId = objectMapper.readTree(exResponse).get("id").asLong();
-        assertEquals(1, objectMapper.readTree(exResponse).get("setupFields").size());
 
         mockMvc.perform(delete("/api/exercises/" + exerciseId).header("Authorization", "Bearer " + token))
                 .andExpect(status().isNoContent());
@@ -299,33 +304,39 @@ class CoreCrudControllerTest {
         long globalCategoryId = objectMapper.readTree(listResponse).get(0).get("id").asLong();
 
         String exBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Bench Setup Test", "categoryId", globalCategoryId,
-                "setupFieldNames", List.of("Bar catch pin")));
+                "name", "Bench Setup Test", "categoryId", globalCategoryId));
         String exResponse = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(exBody))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        JsonNode exerciseNode = objectMapper.readTree(exResponse);
-        long exerciseId = exerciseNode.get("id").asLong();
-        long fieldId = exerciseNode.get("setupFields").get(0).get("id").asLong();
+        long exerciseId = objectMapper.readTree(exResponse).get("id").asLong();
+
+        String fieldBody = objectMapper.writeValueAsString(Map.of("name", "Bar catch pin"));
+        long fieldId = objectMapper.readTree(mockMvc.perform(
+                        post("/api/people/" + personId + "/exercises/" + exerciseId + "/custom-fields")
+                                .header("Authorization", "Bearer " + token)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(fieldBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
 
         String valueBody = objectMapper.writeValueAsString(Map.of("value", "5"));
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .put("/api/people/" + personId + "/exercises/" + exerciseId + "/setup-fields/" + fieldId + "/value")
+                        .put("/api/people/" + personId + "/exercises/" + exerciseId + "/custom-fields/" + fieldId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(valueBody))
                 .andExpect(status().isOk());
 
-        String setupValuesResponse = mockMvc.perform(
-                        get("/api/people/" + personId + "/exercises/" + exerciseId + "/setup-values")
+        String fieldsResponse = mockMvc.perform(
+                        get("/api/people/" + personId + "/exercises/" + exerciseId + "/custom-fields")
                                 .header("Authorization", "Bearer " + token))
                 .andReturn().getResponse().getContentAsString();
-        JsonNode values = objectMapper.readTree(setupValuesResponse);
+        JsonNode values = objectMapper.readTree(fieldsResponse);
         assertEquals(1, values.size());
         assertEquals("5", values.get(0).get("value").asText());
-        assertTrue(values.get(0).get("fieldName").asText().contains("Bar catch pin"));
+        assertTrue(values.get(0).get("name").asText().contains("Bar catch pin"));
     }
 }

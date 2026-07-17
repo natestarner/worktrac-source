@@ -85,9 +85,9 @@ class AccountDeletionTest {
         return RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, personName);
     }
 
-    // Populates one account with a person, a logged set (creating a session + a set, and
-    // exercising the setup-values path), a custom exercise, and a custom category -- the
-    // full blast radius a real household's account would have accumulated.
+    // Populates one account with a person, a logged set (creating a session + a set), a
+    // custom exercise with a per-person setup field, and a custom category -- the full blast
+    // radius a real household's account would have accumulated.
     private void seedAccountData(String token, long personId) throws Exception {
         String categoryBody = objectMapper.writeValueAsString(Map.of("name", "Custom Category " + personId));
         long categoryId = objectMapper.readTree(mockMvc.perform(post("/api/categories")
@@ -99,14 +99,20 @@ class AccountDeletionTest {
 
         String exerciseBody = objectMapper.writeValueAsString(Map.of(
                 "name", "Custom Exercise " + personId,
-                "categoryId", categoryId,
-                "setupFieldNames", List.of("Pin height")));
+                "categoryId", categoryId));
         long exerciseId = objectMapper.readTree(mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(exerciseBody))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        String fieldBody = objectMapper.writeValueAsString(Map.of("name", "Pin height"));
+        mockMvc.perform(post("/api/people/" + personId + "/exercises/" + exerciseId + "/custom-fields")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(fieldBody))
+                .andExpect(status().isOk());
 
         String setBody = objectMapper.writeValueAsString(Map.of("exerciseId", exerciseId, "weight", 135, "reps", 8));
         mockMvc.perform(post("/api/people/" + personId + "/live-sets")

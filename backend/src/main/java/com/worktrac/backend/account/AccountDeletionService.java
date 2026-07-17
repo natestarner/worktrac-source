@@ -11,9 +11,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 // Permanently erases an account and everything under it. Order matters: people must go
 // first so the existing DB cascades (routines/routine_exercises, workout_sessions/
-// workout_sets, setup_values) fire and clear the FK rows that still reference this
-// account's exercises (routine_exercises.exercise_id, workout_sets.exercise_id have no
-// cascade of their own). Only rows with this exact account_id are ever touched --
+// workout_sets, person_exercise/person_exercise_fields) fire and clear the FK rows that still
+// reference this account's exercises (routine_exercises.exercise_id, workout_sets.exercise_id
+// have no cascade of their own). Only rows with this exact account_id are ever touched --
 // categories/exercises with a NULL account_id are global/shared library data and are
 // never selected by these account-scoped deletes.
 @Service

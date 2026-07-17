@@ -5,12 +5,12 @@ export function listExercises() {
   return apiClient.get('/api/exercises');
 }
 
-export function addExercise({ name, categoryId, setupFieldNames }) {
-  return apiClient.post('/api/exercises', { name, categoryId, setupFieldNames });
+export function addExercise({ name, categoryId }) {
+  return apiClient.post('/api/exercises', { name, categoryId });
 }
 
-export function updateExercise(exerciseId, { name, categoryId, setupFieldNames }) {
-  return apiClient.put(`/api/exercises/${exerciseId}`, { name, categoryId, setupFieldNames });
+export function updateExercise(exerciseId, { name, categoryId }) {
+  return apiClient.put(`/api/exercises/${exerciseId}`, { name, categoryId });
 }
 
 export function removeExercise(exerciseId) {

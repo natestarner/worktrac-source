@@ -84,7 +84,7 @@ class ExportAllControllerTest {
 
     private long createExercise(String name, long categoryId) throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
-                "name", name, "categoryId", categoryId, "setupFieldNames", java.util.List.of()));
+                "name", name, "categoryId", categoryId));
         String response = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)

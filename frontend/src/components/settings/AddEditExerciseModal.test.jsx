@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AddEditExerciseModal from './AddEditExerciseModal';
 import { addExercise, favoriteExercise } from '../../api/exercises';
 
-// Categories are per-person now, so the modal only collects a name (+ optional setup fields);
-// a new exercise is created uncategorized and auto-favorited for the active person so it lands
-// in their picker.
+// Categories and setup fields are per-person now, so the modal only collects a name; a new
+// exercise is created uncategorized and auto-favorited for the active person so it lands in
+// their picker.
 vi.mock('../../api/exercises', () => ({ addExercise: vi.fn(), updateExercise: vi.fn(), favoriteExercise: vi.fn() }));
 
 function lastAddButton() {
@@ -27,7 +27,7 @@ describe('AddEditExerciseModal', () => {
     fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Cable Row' } });
     fireEvent.click(lastAddButton());
 
-    await waitFor(() => expect(addExercise).toHaveBeenCalledWith({ name: 'Cable Row', setupFieldNames: [] }));
+    await waitFor(() => expect(addExercise).toHaveBeenCalledWith({ name: 'Cable Row' }));
     await waitFor(() => expect(favoriteExercise).toHaveBeenCalledWith(5, 7));
     expect(onSaved).toHaveBeenCalled();
   });
