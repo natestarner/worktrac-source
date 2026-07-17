@@ -226,3 +226,30 @@ category/muscle-group metadata (dropped in V33) for such a source to populate.
 
 Pure data migration — no schema, API, or frontend changes. Backend `mvn verify` (84 tests)
 green.
+
+## Update — 2026-07-17: forgiving, ranked search + a distinct results list
+
+With the catalog now at 111 entries (see previous update), the original exact-substring
+matcher (`name.toLowerCase().includes(term)`) was too strict: it's word-order sensitive, so
+`"barbell squat"` didn't match `"Barbell Back Squat"` even though both words are present.
+Results also rendered as the same wrapped-chip layout used for the Favorites/Other
+Previously Logged sections, making curated picks and search matches hard to tell apart.
+
+This directly touches the **"Client-side search for now"** decision above, which named
+"ranked/fuzzy search" as one trigger for going server-side. Decision: **stay client-side.**
+Ranking is a pure sort over an already-in-memory array of 111 rows — negligible cost — so the
+threshold that decision meant to guard against (query latency/complexity at a much larger
+scale) isn't in play yet. Revisit if the catalog grows another order of magnitude or the
+matching logic needs data (e.g. muscle group/equipment) that isn't already client-side.
+
+Changes:
+- `frontend/src/utils/exerciseSearch.js` — new shared matcher: splits the query into
+  whitespace tokens and matches if every token appears anywhere in the name (order-
+  independent), ranked exact-prefix > contiguous-substring > scattered-tokens. Replaces the
+  logic duplicated between `ExercisePicker.jsx` and `RoutineFormModal.jsx`.
+- `frontend/src/components/shared/ExerciseSearchResults.jsx` — new shared component:
+  search results now render as a single-column list (one exercise per row, matched text
+  highlighted), visually distinct from the chip-based Favorites/Other Previously Logged
+  sections. Used by both the Log picker and the routine builder's exercise search.
+- Frontend Vitest (incl. new `exerciseSearch.test.js`) and Playwright e2e (incl. a new
+  reordered-query case) green.
