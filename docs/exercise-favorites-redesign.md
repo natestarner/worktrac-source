@@ -33,7 +33,8 @@ Goal: make the catalog **searched, not dumped**; let each **person** curate what
 - **Categories are per-person, user-created.** Exercises ship **uncategorized**
   (`exercises.category_id` made nullable); a person builds their own categories and files
   exercises into them. "Recommendations" = the seeded global category names, offered as
-  one-tap starters.
+  one-tap starters. (**Superseded 2026-07-17 — see the update entry at the bottom: categories
+  are replaced by shared, free-text, many-to-many tags.**)
 - **Only user-created exercises can be renamed/deleted**, and that happens on the exercise's
   own screen — the ⚙ **"Customize this exercise"** modal — which shows a **"Created by you"**
   vs **"Preloaded exercise"** badge so it's obvious why the option is/ isn't there.
@@ -170,3 +171,32 @@ shared/overlay split; it removes a whole table, DTO field, and editor modal.
 - Backend `mvn verify` (87 tests) and frontend Vitest (98 tests) green.
 - **Deferred:** renaming the per-person `/custom-fields` endpoints to `/setup-fields` (pure
   cosmetics, larger cross-stack ripple) — left for a follow-up.
+
+## Update — 2026-07-17: categories replaced by tags (V29–V33)
+
+Per-person categories (a single category per exercise) were too rigid — a Romanian deadlift
+is legs *and* hamstrings *and* a hinge. Categories are replaced by **tags**: a shared,
+per-account, free-text vocabulary applied to exercises **many-to-many**, per person.
+
+Decisions:
+- **Shared vocabulary, per-person assignment.** Tags belong to the account (everyone picks
+  from the same free-text set — `GET /api/tags`), but which exercises each *person* tags stays
+  per-person (`person_exercise_tags`). Consistent with the app's per-person overlay model.
+- **Free-text, created on the fly.** Applying a tag by a name that doesn't exist yet upserts
+  it into the account vocabulary (`TagService.getOrCreate`, case-insensitive de-dup via DB
+  collation). No curated list, no "recommendations".
+- **Both category systems removed.** The legacy account/global `categories` taxonomy AND the
+  per-person `person_categories` are dropped — tags fully supersede them.
+- **Trends "category balance" chart removed** (it keyed off the legacy category; a set can now
+  belong to multiple tags, which breaks the 100%-stacked framing). CSV export's old "Category"
+  column (which also had a latent NPE) becomes a per-person **"Tags"** column.
+
+Migrations: `V29` creates `tags` (account-scoped, `UNIQUE(account_id, name)`); `V30` creates
+the `person_exercise_tags` join (both FKs cascade); `V31` back-fills tags + assignments from
+`person_categories`; `V32` drops `person_categories`; `V33` drops `exercises.category_id` +
+the legacy `categories` table. Backend `mvn verify` (84 tests) and frontend Vitest (98 tests)
++ build green.
+
+Rationale for the whole three-part cleanup (fork removal, setup-fields → per-person, tags):
+onboarding more household members meant lock-in on a lean, single-model data layer with no
+dead scaffolding.

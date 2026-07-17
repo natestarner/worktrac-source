@@ -2,8 +2,6 @@ package com.worktrac.backend.exercise;
 
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
-import com.worktrac.backend.category.Category;
-import com.worktrac.backend.category.CategoryRepository;
 import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.common.NotFoundException;
 import org.springframework.stereotype.Service;
@@ -15,13 +13,10 @@ import java.util.List;
 public class ExerciseService {
 
     private final ExerciseRepository exerciseRepository;
-    private final CategoryRepository categoryRepository;
     private final AccountRepository accountRepository;
 
-    public ExerciseService(ExerciseRepository exerciseRepository, CategoryRepository categoryRepository,
-                            AccountRepository accountRepository) {
+    public ExerciseService(ExerciseRepository exerciseRepository, AccountRepository accountRepository) {
         this.exerciseRepository = exerciseRepository;
-        this.categoryRepository = categoryRepository;
         this.accountRepository = accountRepository;
     }
 
@@ -37,9 +32,7 @@ public class ExerciseService {
     @Transactional
     public ExerciseDto add(Long accountId, ExerciseRequest request) {
         Account account = accountRepository.getReferenceById(accountId);
-        Category category = request.categoryId() == null ? null : requireVisibleCategory(accountId, request.categoryId());
-
-        Exercise exercise = new Exercise(account, category, request.name().trim());
+        Exercise exercise = new Exercise(account, request.name().trim());
         return ExerciseDto.from(exerciseRepository.save(exercise));
     }
 
@@ -53,10 +46,8 @@ public class ExerciseService {
         if (exercise.isGlobal()) {
             throw new ForbiddenException("Preloaded exercises can't be edited -- favorite it, or add your own");
         }
-        Category category = request.categoryId() == null ? null : requireVisibleCategory(accountId, request.categoryId());
 
         exercise.setName(request.name().trim());
-        exercise.setCategory(category);
         return ExerciseDto.from(exercise);
     }
 
@@ -79,15 +70,5 @@ public class ExerciseService {
             throw new NotFoundException("No such exercise");
         }
         return exercise;
-    }
-
-    private Category requireVisibleCategory(Long accountId, Long categoryId) {
-        Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new NotFoundException("No such category"));
-        boolean visible = category.isGlobal() || category.getAccount().getId().equals(accountId);
-        if (!visible) {
-            throw new NotFoundException("No such category");
-        }
-        return category;
     }
 }

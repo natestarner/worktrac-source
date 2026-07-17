@@ -4,7 +4,7 @@ import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
 import { usePersonExercises } from '../../hooks/usePersonExercises';
-import { usePersonCategories } from '../../hooks/usePersonCategories';
+import { useTags } from '../../hooks/useTags';
 import { useRoutines } from '../../hooks/useRoutines';
 import { useLiveSession } from '../../hooks/useLiveSession';
 import { useHistory } from '../../hooks/useHistory';
@@ -41,7 +41,7 @@ export default function LogTab() {
     loading: personExercisesLoading,
     refetch: refetchPersonExercises,
   } = usePersonExercises(activePersonId);
-  const { categories: personCategories, refetch: refetchPersonCategories } = usePersonCategories(activePersonId);
+  const { tags, refetch: refetchTags } = useTags();
   // The full catalog powers search and lets us resolve a search-selected exercise that isn't
   // in the person's list yet.
   const { exercises: catalog, refetch: refetchCatalog } = useExercises();
@@ -64,14 +64,14 @@ export default function LogTab() {
   }, [activeSessionId, selectedExerciseId]);
 
   // Returning to the picker refreshes the person's list so a just-logged exercise (or a
-  // favorite/category change made on the detail screen) shows up.
+  // favorite/tag change made on the detail screen) shows up.
   useEffect(() => {
     if (!selectedExerciseId) refetchPersonExercises();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedExerciseId]);
 
   async function refreshPersonalization() {
-    await Promise.all([refetchPersonExercises(), refetchPersonCategories(), refetchCatalog()]);
+    await Promise.all([refetchPersonExercises(), refetchTags(), refetchCatalog()]);
   }
 
   async function handleExerciseCreated(created) {
@@ -250,7 +250,7 @@ export default function LogTab() {
         <ExerciseDetail
           exercise={selectedExercise}
           personId={activePersonId}
-          personCategories={personCategories}
+          tags={tags}
           onPersonalizationChanged={refreshPersonalization}
           editingSessionId={editingSession?.id || null}
           liveSession={liveSession}

@@ -145,12 +145,8 @@ class CoreCrudControllerTest {
                 .andReturn().getResponse().getContentAsString();
         long samId = objectMapper.readTree(personResponse).get("id").asLong();
 
-        String categoriesResponse = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + token))
-                .andReturn().getResponse().getContentAsString();
-        long globalCategoryId = objectMapper.readTree(categoriesResponse).get(0).get("id").asLong();
-
         String exBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Sam's Exercise With Setup", "categoryId", globalCategoryId));
+                "name", "Sam's Exercise With Setup"));
         String exResponse = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -217,46 +213,9 @@ class CoreCrudControllerTest {
     }
 
     @Test
-    void deletingCategoryStillReferencedByExerciseReturns409() throws Exception {
-        String catBody = objectMapper.writeValueAsString(Map.of("name", "Custom Cat"));
-        String catResponse = mockMvc.perform(post("/api/categories")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(catBody))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        long categoryId = objectMapper.readTree(catResponse).get("id").asLong();
-
-        String exBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Custom Exercise", "categoryId", categoryId));
-        mockMvc.perform(post("/api/exercises")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(exBody))
-                .andExpect(status().isOk());
-
-        mockMvc.perform(delete("/api/categories/" + categoryId).header("Authorization", "Bearer " + token))
-                .andExpect(status().isConflict());
-    }
-
-    @Test
-    void deletingGlobalCategoryIsForbidden() throws Exception {
-        String listResponse = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + token))
-                .andReturn().getResponse().getContentAsString();
-        long globalCategoryId = objectMapper.readTree(listResponse).get(0).get("id").asLong();
-
-        mockMvc.perform(delete("/api/categories/" + globalCategoryId).header("Authorization", "Bearer " + token))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
     void softDeletedExerciseDisappearsFromList() throws Exception {
-        String listResponse = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + token))
-                .andReturn().getResponse().getContentAsString();
-        long globalCategoryId = objectMapper.readTree(listResponse).get(0).get("id").asLong();
-
         String exBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Soft Delete Me", "categoryId", globalCategoryId));
+                "name", "Soft Delete Me"));
         String exResponse = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -299,12 +258,8 @@ class CoreCrudControllerTest {
                 .andReturn().getResponse().getContentAsString();
         long personId = objectMapper.readTree(meResponse).get("people").get(0).get("id").asLong();
 
-        String listResponse = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + token))
-                .andReturn().getResponse().getContentAsString();
-        long globalCategoryId = objectMapper.readTree(listResponse).get(0).get("id").asLong();
-
         String exBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Bench Setup Test", "categoryId", globalCategoryId));
+                "name", "Bench Setup Test"));
         String exResponse = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)

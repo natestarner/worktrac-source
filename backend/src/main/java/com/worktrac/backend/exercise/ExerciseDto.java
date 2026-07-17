@@ -1,13 +1,10 @@
 package com.worktrac.backend.exercise;
 
-// The catalog/search shape. Categories are now per-person (see PersonExerciseDto), so
-// categoryId/categoryName are legacy and may be null on exercises created after the rethink;
-// the UI no longer groups the catalog by them.
+// The catalog/search shape used for exercise search. Tagging/favoriting is per-person (see
+// PersonExerciseDto); this is just the searchable pool.
 public record ExerciseDto(
         Long id,
         String name,
-        Long categoryId,
-        String categoryName,
         String trackingType,
         boolean isGlobal
 ) {
@@ -15,8 +12,6 @@ public record ExerciseDto(
         return new ExerciseDto(
                 exercise.getId(),
                 exercise.getName(),
-                exercise.getCategory() == null ? null : exercise.getCategory().getId(),
-                exercise.getCategory() == null ? null : exercise.getCategory().getName(),
                 exercise.getTrackingType(),
                 exercise.isGlobal());
     }

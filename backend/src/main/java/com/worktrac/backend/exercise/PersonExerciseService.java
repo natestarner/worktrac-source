@@ -3,8 +3,8 @@ package com.worktrac.backend.exercise;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
-import com.worktrac.backend.personcategory.PersonCategory;
-import com.worktrac.backend.personcategory.PersonCategoryRepository;
+import com.worktrac.backend.tag.Tag;
+import com.worktrac.backend.tag.TagService;
 import com.worktrac.backend.workoutset.WorkoutSetRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,20 +24,20 @@ public class PersonExerciseService {
 
     private final PersonExerciseRepository personExerciseRepository;
     private final PersonExerciseFieldRepository personExerciseFieldRepository;
-    private final PersonCategoryRepository personCategoryRepository;
+    private final TagService tagService;
     private final ExerciseRepository exerciseRepository;
     private final WorkoutSetRepository workoutSetRepository;
     private final PersonService personService;
 
     public PersonExerciseService(PersonExerciseRepository personExerciseRepository,
                                   PersonExerciseFieldRepository personExerciseFieldRepository,
-                                  PersonCategoryRepository personCategoryRepository,
+                                  TagService tagService,
                                   ExerciseRepository exerciseRepository,
                                   WorkoutSetRepository workoutSetRepository,
                                   PersonService personService) {
         this.personExerciseRepository = personExerciseRepository;
         this.personExerciseFieldRepository = personExerciseFieldRepository;
-        this.personCategoryRepository = personCategoryRepository;
+        this.tagService = tagService;
         this.exerciseRepository = exerciseRepository;
         this.workoutSetRepository = workoutSetRepository;
         this.personService = personService;
@@ -80,17 +80,24 @@ public class PersonExerciseService {
         return PersonExerciseDto.of(exercise, pe);
     }
 
+    // Free-text tagging: each name is upserted into the account's shared vocabulary, then the
+    // person's tag set for this exercise is replaced with exactly those tags. An empty list
+    // clears them.
     @Transactional
-    public PersonExerciseDto setCategory(Long accountId, Long personId, Long exerciseId, Long personCategoryId) {
+    public PersonExerciseDto setTags(Long accountId, Long personId, Long exerciseId, List<String> tagNames) {
         Person person = personService.requireOwnedPerson(personId, accountId);
         Exercise exercise = requireVisibleExercise(accountId, exerciseId);
-        PersonCategory category = null;
-        if (personCategoryId != null) {
-            category = personCategoryRepository.findByIdAndPerson_Id(personCategoryId, person.getId())
-                    .orElseThrow(() -> new NotFoundException("No such category"));
+        Set<Tag> resolved = new HashSet<>();
+        if (tagNames != null) {
+            for (String name : tagNames) {
+                if (name != null && !name.trim().isEmpty()) {
+                    resolved.add(tagService.getOrCreate(accountId, name));
+                }
+            }
         }
         PersonExercise pe = getOrCreate(person, exercise);
-        pe.setCategory(category);
+        pe.getTags().clear();
+        pe.getTags().addAll(resolved);
         return PersonExerciseDto.of(exercise, pe);
     }
 

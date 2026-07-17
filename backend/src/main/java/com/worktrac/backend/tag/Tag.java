@@ -1,4 +1,4 @@
-package com.worktrac.backend.category;
+package com.worktrac.backend.tag;
 
 import com.worktrac.backend.account.Account;
 import jakarta.persistence.Column;
@@ -16,17 +16,19 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
+// A tag in the household's shared tagging vocabulary. Tags belong to the account, so everyone
+// in the household picks from the same free-text set; which exercises each person tags stays
+// per-person (person_exercise_tags). Replaces the per-person "categories" concept.
 @Entity
-@Table(name = "categories")
-public class Category {
+@Table(name = "tags")
+public class Tag {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // null = global/system category, shared by every account
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "account_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "account_id", nullable = false)
     private Account account;
 
     @Column(nullable = false, length = 100)
@@ -36,10 +38,10 @@ public class Category {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    protected Category() {
+    protected Tag() {
     }
 
-    public Category(Account account, String name) {
+    public Tag(Account account, String name) {
         this.account = account;
         this.name = name;
     }
@@ -57,10 +59,6 @@ public class Category {
 
     public Account getAccount() {
         return account;
-    }
-
-    public boolean isGlobal() {
-        return account == null;
     }
 
     public String getName() {

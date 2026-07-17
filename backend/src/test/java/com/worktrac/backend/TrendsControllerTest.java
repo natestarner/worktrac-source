@@ -79,7 +79,6 @@ class TrendsControllerTest {
     private String token;
     private long personId;
     private long exerciseId;
-    private String categoryName;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -94,7 +93,6 @@ class TrendsControllerTest {
                 .andReturn().getResponse().getContentAsString();
         JsonNode firstExercise = objectMapper.readTree(exercisesResponse).get(0);
         exerciseId = firstExercise.get("id").asLong();
-        categoryName = firstExercise.get("categoryName").asText();
     }
 
     private long createPastSession(String startedAt) throws Exception {
@@ -163,17 +161,6 @@ class TrendsControllerTest {
         JsonNode overview = getOverview(6);
         assertEquals(1, overview.get("currentStreakWeeks").asInt(),
                 "a gap week should stop the streak count even if there's older activity further back");
-    }
-
-    @Test
-    void categoryBreakdownReflectsRecentSets() throws Exception {
-        logSet(createPastSession("2026-01-04T09:00:00Z"), 100, 5);
-
-        JsonNode overview = getOverview(4);
-        JsonNode breakdown = overview.get("categoryBreakdown");
-        assertEquals(1, breakdown.size());
-        assertEquals(categoryName, breakdown.get(0).get("category").asText());
-        assertEquals(100.0, breakdown.get(0).get("pct").asDouble());
     }
 
     @Test

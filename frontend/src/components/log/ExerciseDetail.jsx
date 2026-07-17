@@ -18,7 +18,7 @@ import Skeleton from '../shared/Skeleton';
 export default function ExerciseDetail({
   exercise,
   personId,
-  personCategories = [],
+  tags = [],
   onPersonalizationChanged,
   editingSessionId,
   liveSession,
@@ -162,7 +162,7 @@ export default function ExerciseDetail({
             &larr; All exercises
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: exercise.personCategoryName ? 6 : 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: exercise.tags?.length ? 6 : 18 }}>
             <div style={{ minWidth: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em' }}>{exercise.name}</div>
             <button
               onClick={handleToggleFavorite}
@@ -180,8 +180,14 @@ export default function ExerciseDetail({
               &#8942;
             </button>
           </div>
-          {exercise.personCategoryName && (
-            <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 18 }}>{exercise.personCategoryName}</div>
+          {exercise.tags?.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
+              {exercise.tags.map((tag) => (
+                <span key={tag.id} style={tagChipStyle}>
+                  {tag.name}
+                </span>
+              ))}
+            </div>
           )}
 
           {customFields.length > 0 && (
@@ -360,12 +366,12 @@ export default function ExerciseDetail({
           exercise={exercise}
           personId={personId}
           exerciseId={exercise.id}
-          currentCategoryId={exercise.personCategoryId ?? null}
-          categories={personCategories}
+          allTags={tags}
+          appliedTagNames={(exercise.tags || []).map((t) => t.name)}
           customFields={customFields}
           onClose={() => setShowConfigureModal(false)}
           onFieldsChanged={refetchCustomFields}
-          onCategoryChanged={onPersonalizationChanged || (() => {})}
+          onTagsChanged={onPersonalizationChanged || (() => {})}
           onExerciseChanged={onPersonalizationChanged || (() => {})}
           onRequestDelete={handleRequestDelete}
         />
@@ -415,6 +421,16 @@ const iconButtonStyle = {
   lineHeight: 1,
   cursor: 'pointer',
   flexShrink: 0,
+};
+
+const tagChipStyle = {
+  display: 'inline-block',
+  padding: '4px 10px',
+  borderRadius: 999,
+  background: 'var(--color-subtle-bg)',
+  color: 'var(--color-muted)',
+  fontSize: 12,
+  fontWeight: 700,
 };
 
 function setupPillStyle(value) {

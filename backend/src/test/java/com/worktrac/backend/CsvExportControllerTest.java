@@ -79,22 +79,17 @@ class CsvExportControllerTest {
 
     @Test
     void exportsMultipleSessionsAndExercisesWithCorrectSetNumberingAndEscaping() throws Exception {
-        // A category name containing a comma, to exercise CSV quote-escaping.
-        String categoryBody = objectMapper.writeValueAsString(Map.of("name", "Full Body, Conditioning"));
-        String categoryResponse = mockMvc.perform(post("/api/categories")
+        long exerciseA = createExercise("Exercise A");
+        long exerciseB = createExercise("Exercise B");
+
+        // Tag Exercise A with a comma-containing tag, to exercise CSV quote-escaping in the
+        // per-person Tags column.
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/people/" + personId + "/exercises/" + exerciseA + "/tags")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(categoryBody))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        long commaCategory = objectMapper.readTree(categoryResponse).get("id").asLong();
-
-        String globalCategoriesResponse = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + token))
-                .andReturn().getResponse().getContentAsString();
-        long globalCategory = objectMapper.readTree(globalCategoriesResponse).get(0).get("id").asLong();
-
-        long exerciseA = createExercise("Exercise A", commaCategory);
-        long exerciseB = createExercise("Exercise B", globalCategory);
+                        .content(objectMapper.writeValueAsString(Map.of("tags", List.of("Full Body, Conditioning")))))
+                .andExpect(status().isOk());
 
         // Session 1: two sets of Exercise A, one set of Exercise B, then explicitly ended.
         logLiveSet(exerciseA, 135, 8);
@@ -113,13 +108,13 @@ class CsvExportControllerTest {
                 .andReturn().getResponse().getContentAsString();
         String[] lines = csvResponse.split("\n");
 
-        assertEquals("Date,Time,Exercise,Category,Set #,Weight,Unit,Reps,Est. 1RM", lines[0]);
+        assertEquals("Date,Time,Exercise,Tags,Set #,Weight,Unit,Reps,Est. 1RM", lines[0]);
         assertEquals(5, lines.length, "header + 4 set rows (2 for A in session 1, 1 for B in session 1, 1 for A in session 2)");
 
         // Sessions ordered oldest-first: session 1's three rows, then session 2's row.
         String[] row1 = splitCsvLine(lines[1]);
         assertEquals("Exercise A", row1[2]);
-        assertEquals("Full Body, Conditioning", row1[3], "comma-containing category name should round-trip through quote-escaping");
+        assertEquals("Full Body, Conditioning", row1[3], "comma-containing tag name should round-trip through quote-escaping");
         assertEquals("1", row1[4], "first set of Exercise A in session 1 is Set # 1");
         assertEquals("135.00", row1[5]);
         assertEquals("lb", row1[6]);
@@ -169,9 +164,9 @@ class CsvExportControllerTest {
         return fields.toArray(new String[0]);
     }
 
-    private long createExercise(String name, long categoryId) throws Exception {
+    private long createExercise(String name) throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
-                "name", name, "categoryId", categoryId));
+                "name", name));
         String response = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)

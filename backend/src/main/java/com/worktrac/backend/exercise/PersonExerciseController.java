@@ -15,8 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 // Per-person view of exercises: the Log picker list (favorites UNION logged), favoriting,
-// category filing, and the per-person setup-field overlay. All setup fields are per-person
-// now; they live on the /{exerciseId}/custom-fields subpaths.
+// applying the household's shared tags, and the per-person setup-field overlay. All setup
+// fields are per-person now; they live on the /{exerciseId}/custom-fields subpaths.
 @RestController
 @RequestMapping("/api/people/{personId}/exercises")
 public class PersonExerciseController {
@@ -44,10 +44,10 @@ public class PersonExerciseController {
         return personExerciseService.setFavorite(currentUser.accountId(), personId, exerciseId, false);
     }
 
-    @PutMapping("/{exerciseId}/category")
-    public PersonExerciseDto setCategory(@PathVariable Long personId, @PathVariable Long exerciseId,
-                                          @RequestBody ExerciseCategoryRequest request) {
-        return personExerciseService.setCategory(currentUser.accountId(), personId, exerciseId, request.personCategoryId());
+    @PutMapping("/{exerciseId}/tags")
+    public PersonExerciseDto setTags(@PathVariable Long personId, @PathVariable Long exerciseId,
+                                     @RequestBody ExerciseTagsRequest request) {
+        return personExerciseService.setTags(currentUser.accountId(), personId, exerciseId, request.tagsOrEmpty());
     }
 
     @GetMapping("/{exerciseId}/custom-fields")

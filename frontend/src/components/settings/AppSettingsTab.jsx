@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
-import { usePersonCategories } from '../../hooks/usePersonCategories';
+import { useTags } from '../../hooks/useTags';
 import { updateDefaultUnit } from '../../api/account';
-import { createPersonCategory, deletePersonCategory, listCategoryRecommendations } from '../../api/personCategories';
+import { createTag, deleteTag } from '../../api/tags';
 import { downloadAllPeopleZip } from '../../api/export';
 import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
@@ -13,30 +12,17 @@ import Skeleton from '../shared/Skeleton';
 
 // Exercises are managed on the exercise screen itself now (favorite star + the gear "Customize
 // this exercise" modal, which is also where you rename/delete your own exercises). Settings
-// only keeps account/person-level bits: units, the per-person category list, and data export.
+// only keeps account-level bits: units, the household's shared tag vocabulary, and data export.
 export default function AppSettingsTab() {
   const navigate = useNavigate();
-  const { account, people, refreshPeople } = useAuth();
-  const { activePersonId } = useAppState();
+  const { account, refreshPeople } = useAuth();
   const { openConfirm } = useUI();
 
-  const activePersonName = people?.find((p) => p.id === activePersonId)?.name;
+  const { tags, loading: tagsLoading, refetch: refetchTags } = useTags();
 
-  const {
-    categories: personCategories,
-    loading: personCategoriesLoading,
-    refetch: refetchPersonCategories,
-  } = usePersonCategories(activePersonId);
-
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [categoryNameError, setCategoryNameError] = useState(false);
-  const [recommendations, setRecommendations] = useState([]);
+  const [newTagName, setNewTagName] = useState('');
+  const [tagNameError, setTagNameError] = useState(false);
   const [pendingUnit, setPendingUnit] = useState(null);
-
-  useEffect(() => {
-    if (!activePersonId) return;
-    listCategoryRecommendations(activePersonId).then(setRecommendations).catch(() => setRecommendations([]));
-  }, [activePersonId, personCategories]);
 
   async function handleUnitSelect(unit) {
     if (unit === account.defaultUnit || pendingUnit) return;
@@ -49,20 +35,20 @@ export default function AppSettingsTab() {
     }
   }
 
-  async function handleAddCategory(name) {
-    const trimmed = (name ?? newCategoryName).trim();
+  async function handleAddTag(name) {
+    const trimmed = (name ?? newTagName).trim();
     if (!trimmed) {
-      setCategoryNameError(true);
+      setTagNameError(true);
       return;
     }
-    await createPersonCategory(activePersonId, trimmed);
-    setNewCategoryName('');
-    await refetchPersonCategories();
+    await createTag(trimmed);
+    setNewTagName('');
+    await refetchTags();
   }
 
-  async function handleDeleteCategory(cat) {
-    await deletePersonCategory(activePersonId, cat.id);
-    await refetchPersonCategories();
+  async function handleDeleteTag(tag) {
+    await deleteTag(tag.id);
+    await refetchTags();
   }
 
   return (
@@ -112,68 +98,51 @@ export default function AppSettingsTab() {
         </div>
       </div>
 
-      <div style={sectionLabelStyle}>
-        {activePersonName ? `${activePersonName}'s categories` : 'Your categories'}
-      </div>
+      <div style={sectionLabelStyle}>Tags</div>
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
-        Categories you can file exercises under from an exercise&rsquo;s Customize screen.
+        Shared tags anyone on this account can apply to exercises from an exercise&rsquo;s Customize screen.
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-        {personCategoriesLoading && [88, 64, 104, 72].map((w, i) => <Skeleton key={i} width={w} height={34} radius={999} />)}
-        {!personCategoriesLoading &&
-          personCategories.map((c) => (
-            <div key={c.id} style={categoryChipStyle}>
-              {c.name}
+        {tagsLoading && [88, 64, 104, 72].map((w, i) => <Skeleton key={i} width={w} height={34} radius={999} />)}
+        {!tagsLoading &&
+          tags.map((t) => (
+            <div key={t.id} style={categoryChipStyle}>
+              {t.name}
               <button
-                onClick={() => openConfirm(`Delete category "${c.name}"? Exercises filed under it stay in your list, just uncategorized.`, () => handleDeleteCategory(c))}
+                onClick={() => openConfirm(`Delete tag "${t.name}"? It will be removed from every exercise it's applied to.`, () => handleDeleteTag(t))}
                 style={{ background: 'none', border: 'none', color: 'var(--color-faint)', fontSize: 15, cursor: 'pointer' }}
               >
                 &times;
               </button>
             </div>
           ))}
-        {!personCategoriesLoading && personCategories.length === 0 && (
-          <div style={{ fontSize: 13, color: 'var(--color-faint)' }}>No categories yet.</div>
+        {!tagsLoading && tags.length === 0 && (
+          <div style={{ fontSize: 13, color: 'var(--color-faint)' }}>No tags yet.</div>
         )}
       </div>
 
-      {recommendations.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-            Suggestions
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {recommendations.map((name) => (
-              <button key={name} onClick={() => handleAddCategory(name)} style={{ ...categoryChipStyle, borderStyle: 'dashed', cursor: 'pointer', color: 'var(--color-muted)' }}>
-                + {name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 8, marginBottom: categoryNameError ? 6 : 24 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: tagNameError ? 6 : 24 }}>
         <input
-          value={newCategoryName}
+          value={newTagName}
           onChange={(e) => {
-            setNewCategoryName(e.target.value);
-            if (categoryNameError) setCategoryNameError(false);
+            setNewTagName(e.target.value);
+            if (tagNameError) setTagNameError(false);
           }}
-          placeholder="New category name"
+          placeholder="New tag name"
           style={{
             flex: 1,
             padding: '12px 14px',
-            border: `1px solid ${categoryNameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
+            border: `1px solid ${tagNameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
             borderRadius: 10,
             fontSize: 14,
           }}
         />
-        <Button onClick={() => handleAddCategory()} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+        <Button onClick={() => handleAddTag()} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
           Add
         </Button>
       </div>
-      {categoryNameError && (
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 18 }}>Enter a category name.</div>
+      {tagNameError && (
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 18 }}>Enter a tag name.</div>
       )}
 
       <div style={sectionLabelStyle}>Data</div>

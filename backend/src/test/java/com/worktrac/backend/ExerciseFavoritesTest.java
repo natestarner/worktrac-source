@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 // The favorites model that replaced fork-on-edit: preloaded (global) exercises are immutable
 // and reached by search; a person curates their own Log picker by favoriting; personalization
-// (custom fields, category filing) is per-person and never mutates the shared exercise row.
+// (custom fields, tagging) is per-person and never mutates the shared exercise row.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("local")
@@ -223,48 +223,41 @@ class ExerciseFavoritesTest {
         assertEquals(0, fieldsB.size());
     }
 
-    // --- Per-person categories ---
+    // --- Per-person tags (shared account vocabulary) ---
 
     @Test
-    void filingAnExerciseIntoAPersonalCategoryShowsInThePicker() throws Exception {
+    void applyingTagsShowsThemOnThePickerEntry() throws Exception {
         favorite(tokenA, personA1, benchPressId);
-        long categoryId = objectMapper.readTree(mockMvc.perform(post("/api/people/" + personA1 + "/categories")
-                        .header("Authorization", "Bearer " + tokenA)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("name", "Chest"))))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString()).get("id").asLong();
 
-        mockMvc.perform(put("/api/people/" + personA1 + "/exercises/" + benchPressId + "/category")
-                        .header("Authorization", "Bearer " + tokenA)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("personCategoryId", categoryId))))
-                .andExpect(status().isOk());
+        setTags(tokenA, personA1, benchPressId, List.of("Chest", "Push"));
 
         JsonNode entry = findByName(pickerList(tokenA, personA1), "Barbell Bench Press");
-        assertEquals("Chest", entry.get("personCategoryName").asText());
+        JsonNode tags = entry.get("tags");
+        assertEquals(2, tags.size());
+        // The DTO sorts tags case-insensitively by name.
+        assertEquals("Chest", tags.get(0).get("name").asText());
+        assertEquals("Push", tags.get(1).get("name").asText());
     }
 
     @Test
-    void categoryRecommendationsExcludeAlreadyAdoptedNames() throws Exception {
-        JsonNode before = objectMapper.readTree(mockMvc.perform(get("/api/people/" + personA1 + "/categories/recommendations")
-                        .header("Authorization", "Bearer " + tokenA))
-                .andReturn().getResponse().getContentAsString());
-        assertTrue(before.size() > 0, "seeded global categories should be recommended");
-        String first = before.get(0).asText();
+    void freeTextTaggingReusesExistingAccountTagCaseInsensitively() throws Exception {
+        favorite(tokenA, personA1, benchPressId);
+        setTags(tokenA, personA1, benchPressId, List.of("Chest"));
+        // Re-tagging with a different case must reuse the existing account tag, not duplicate it.
+        setTags(tokenA, personA1, benchPressId, List.of("chest", "Push"));
 
-        mockMvc.perform(post("/api/people/" + personA1 + "/categories")
-                        .header("Authorization", "Bearer " + tokenA)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("name", first))))
-                .andExpect(status().isOk());
-
-        JsonNode after = objectMapper.readTree(mockMvc.perform(get("/api/people/" + personA1 + "/categories/recommendations")
+        JsonNode tags = objectMapper.readTree(mockMvc.perform(get("/api/tags")
                         .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString());
-        for (JsonNode n : after) {
-            assertFalse(n.asText().equalsIgnoreCase(first), "an adopted category name is no longer recommended");
+        long chestCount = 0;
+        boolean hasPush = false;
+        for (JsonNode t : tags) {
+            if (t.get("name").asText().equalsIgnoreCase("Chest")) chestCount++;
+            if (t.get("name").asText().equals("Push")) hasPush = true;
         }
+        assertEquals(1, chestCount, "free-text tagging reuses the existing account tag rather than duplicating it");
+        assertTrue(hasPush, "a new tag name is added to the shared vocabulary");
     }
 
     // --- Routine membership auto-favorites ---
@@ -285,9 +278,8 @@ class ExerciseFavoritesTest {
     }
 
     @Test
-    void prListWorksForAnUncategorizedCustomExercise() throws Exception {
-        // A user-created exercise is uncategorized now (category_id NULL). The PR board must
-        // not NPE on it (regression guard for the nullable-category change).
+    void prListWorksForACustomExercise() throws Exception {
+        // A user-created exercise carries no tags. The PR board must not NPE on it.
         long id = addOwnExercise(tokenA, "My Movement");
         String setBody = objectMapper.writeValueAsString(Map.of("exerciseId", id, "weight", 100, "reps", 5));
         mockMvc.perform(post("/api/people/" + personA1 + "/live-sets")
@@ -310,6 +302,14 @@ class ExerciseFavoritesTest {
     private void favorite(String token, long personId, long exerciseId) throws Exception {
         mockMvc.perform(put("/api/people/" + personId + "/exercises/" + exerciseId + "/favorite")
                         .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+    }
+
+    private void setTags(String token, long personId, long exerciseId, List<String> tagNames) throws Exception {
+        mockMvc.perform(put("/api/people/" + personId + "/exercises/" + exerciseId + "/tags")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("tags", tagNames))))
                 .andExpect(status().isOk());
     }
 

@@ -82,9 +82,9 @@ class ExportAllControllerTest {
         return objectMapper.readTree(response).get("id").asLong();
     }
 
-    private long createExercise(String name, long categoryId) throws Exception {
+    private long createExercise(String name) throws Exception {
         String body = objectMapper.writeValueAsString(Map.of(
-                "name", name, "categoryId", categoryId));
+                "name", name));
         String response = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -103,16 +103,9 @@ class ExportAllControllerTest {
                 .andExpect(status().isOk());
     }
 
-    private long globalCategoryId() throws Exception {
-        String response = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + token))
-                .andReturn().getResponse().getContentAsString();
-        return objectMapper.readTree(response).get(0).get("id").asLong();
-    }
-
     @Test
     void zipsOnePerPersonCsvForEveryPersonOnTheAccount() throws Exception {
-        long category = globalCategoryId();
-        long exercise = createExercise("Bench Press", category);
+        long exercise = createExercise("Bench Press");
 
         long secondPersonId = addPerson("Jax");
 

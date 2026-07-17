@@ -6,10 +6,9 @@ vi.mock('../../api/exercises', () => ({
   addCustomField: vi.fn(),
   updateCustomField: vi.fn(),
   removeCustomField: vi.fn(),
-  setExerciseCategory: vi.fn(),
+  setExerciseTags: vi.fn(),
   updateExercise: vi.fn(),
 }));
-vi.mock('../../api/personCategories', () => ({ createPersonCategory: vi.fn() }));
 
 function renderModal(exercise) {
   return render(
@@ -17,12 +16,12 @@ function renderModal(exercise) {
       exercise={exercise}
       personId={1}
       exerciseId={exercise.id}
-      currentCategoryId={null}
-      categories={[]}
+      allTags={[]}
+      appliedTagNames={[]}
       customFields={[]}
       onClose={vi.fn()}
       onFieldsChanged={vi.fn()}
-      onCategoryChanged={vi.fn()}
+      onTagsChanged={vi.fn()}
       onExerciseChanged={vi.fn()}
       onRequestDelete={vi.fn()}
     />,

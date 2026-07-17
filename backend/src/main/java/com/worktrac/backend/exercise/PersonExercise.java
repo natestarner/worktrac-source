@@ -1,7 +1,7 @@
 package com.worktrac.backend.exercise;
 
 import com.worktrac.backend.person.Person;
-import com.worktrac.backend.personcategory.PersonCategory;
+import com.worktrac.backend.tag.Tag;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -10,6 +10,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
@@ -20,11 +22,13 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 // One person's personalization of a shared exercise, layered on top without ever mutating the
-// exercise row. Holds whether it's favorited (shows in their picker) and which of their own
-// categories they filed it under, plus any custom setup fields they added. A person's picker
+// exercise row. Holds whether it's favorited (shows in their picker), which of the household's
+// shared tags they've applied to it, plus any custom setup fields they added. A person's picker
 // list = these favorites UNION every exercise they have a logged set for.
 @Entity
 @Table(name = "person_exercise")
@@ -45,9 +49,11 @@ public class PersonExercise {
     @Column(name = "is_favorite", nullable = false)
     private boolean favorite = false;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "person_category_id")
-    private PersonCategory category;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "person_exercise_tags",
+            joinColumns = @JoinColumn(name = "person_exercise_id"),
+            inverseJoinColumns = @JoinColumn(name = "tag_id"))
+    private Set<Tag> tags = new HashSet<>();
 
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -92,12 +98,8 @@ public class PersonExercise {
         this.favorite = favorite;
     }
 
-    public PersonCategory getCategory() {
-        return category;
-    }
-
-    public void setCategory(PersonCategory category) {
-        this.category = category;
+    public Set<Tag> getTags() {
+        return tags;
     }
 
     public Instant getCreatedAt() {
