@@ -1,7 +1,6 @@
 package com.worktrac.backend.exercise;
 
 import com.worktrac.backend.account.Account;
-import com.worktrac.backend.category.Category;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -38,13 +37,6 @@ public class Exercise {
     @JoinColumn(name = "account_id")
     private Account account;
 
-    // Legacy: categories are now per-person (see PersonExercise). New "add your own" exercises
-    // are created uncategorized, so this is nullable; existing rows keep their old value but the
-    // UI ignores it.
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id")
-    private Category category;
-
     @Column(nullable = false, length = 200)
     private String name;
 
@@ -72,9 +64,8 @@ public class Exercise {
     protected Exercise() {
     }
 
-    public Exercise(Account account, Category category, String name) {
+    public Exercise(Account account, String name) {
         this.account = account;
-        this.category = category;
         this.name = name;
     }
 
@@ -95,14 +86,6 @@ public class Exercise {
 
     public boolean isGlobal() {
         return account == null;
-    }
-
-    public Category getCategory() {
-        return category;
-    }
-
-    public void setCategory(Category category) {
-        this.category = category;
     }
 
     public String getName() {

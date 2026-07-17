@@ -3,7 +3,6 @@ package com.worktrac.backend;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.account.AccountRepository;
-import com.worktrac.backend.category.CategoryRepository;
 import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.PersonRepository;
@@ -37,10 +36,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 // Deleting an account must erase every row it owns (people, sessions, sets, routines,
-// setup values, its own exercises/categories, its user, and the account row itself) while
-// leaving every other account -- and every global/system exercise and category -- exactly
-// as it was. That isolation guarantee is the single most important thing to get right
-// here, same as MultiTenancyIsolationTest.
+// setup values, its own exercises, its tags, its user, and the account row itself) while
+// leaving every other account -- and every global/system exercise -- exactly as it was.
+// That isolation guarantee is the single most important thing to get right here, same as
+// MultiTenancyIsolationTest.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("local")
@@ -70,9 +69,6 @@ class AccountDeletionTest {
     @Autowired
     private ExerciseRepository exerciseRepository;
 
-    @Autowired
-    private CategoryRepository categoryRepository;
-
     // EmailService's real constructor builds a live Azure EmailClient from
     // app.email.connection-string, which is empty in the "local" test profile (no real ACS
     // resource in CI) -- @MockitoBean replaces the bean entirely so that constructor never runs.
@@ -86,20 +82,11 @@ class AccountDeletionTest {
     }
 
     // Populates one account with a person, a logged set (creating a session + a set, and
-    // exercising the setup-values path), a custom exercise, and a custom category -- the
+    // exercising the setup-values path), a custom exercise, and a tag applied to it -- the
     // full blast radius a real household's account would have accumulated.
     private void seedAccountData(String token, long personId) throws Exception {
-        String categoryBody = objectMapper.writeValueAsString(Map.of("name", "Custom Category " + personId));
-        long categoryId = objectMapper.readTree(mockMvc.perform(post("/api/categories")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(categoryBody))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString()).get("id").asLong();
-
         String exerciseBody = objectMapper.writeValueAsString(Map.of(
                 "name", "Custom Exercise " + personId,
-                "categoryId", categoryId,
                 "setupFieldNames", List.of("Pin height")));
         long exerciseId = objectMapper.readTree(mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
@@ -107,6 +94,13 @@ class AccountDeletionTest {
                         .content(exerciseBody))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString()).get("id").asLong();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/people/" + personId + "/exercises/" + exerciseId + "/tags")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("tags", List.of("My Tag " + personId)))))
+                .andExpect(status().isOk());
 
         String setBody = objectMapper.writeValueAsString(Map.of("exerciseId", exerciseId, "weight", 135, "reps", 8));
         mockMvc.perform(post("/api/people/" + personId + "/live-sets")
@@ -173,8 +167,8 @@ class AccountDeletionTest {
 
         assertTrue(accountRepository.findById(accountIdA).isEmpty());
 
-        // Account B is completely untouched -- its person, custom exercise/category, and
-        // account row must all still be reachable via its own token.
+        // Account B is completely untouched -- its person, custom exercise/tag, and account
+        // row must all still be reachable via its own token.
         assertTrue(accountRepository.findById(accountIdB).isPresent());
         assertEquals(1, personRepository.findByAccount_IdOrderByCreatedAtAsc(accountIdB).size());
         assertEquals(personIdB, personRepository.findByAccount_IdOrderByCreatedAtAsc(accountIdB).get(0).getId());
@@ -182,10 +176,10 @@ class AccountDeletionTest {
         mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + tokenB))
                 .andExpect(status().isOk());
 
-        JsonNode categoriesB = objectMapper.readTree(mockMvc.perform(get("/api/categories")
+        JsonNode tagsB = objectMapper.readTree(mockMvc.perform(get("/api/tags")
                         .header("Authorization", "Bearer " + tokenB))
                 .andReturn().getResponse().getContentAsString());
-        assertTrue(containsName(categoriesB, "Custom Category " + personIdB));
+        assertTrue(containsName(tagsB, "My Tag " + personIdB));
 
         JsonNode exercisesB = objectMapper.readTree(mockMvc.perform(get("/api/exercises")
                         .header("Authorization", "Bearer " + tokenB))
@@ -194,12 +188,11 @@ class AccountDeletionTest {
     }
 
     @Test
-    void deletingAccountDoesNotTouchGlobalExercisesOrCategories() throws Exception {
+    void deletingAccountDoesNotTouchGlobalExercises() throws Exception {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         JsonNode registration = register("deleteglobal-" + suffix + "@example.com", "Alex");
         String token = registration.get("token").asText();
 
-        long globalCategoryCountBefore = categoryRepository.findVisibleToAccount(-1L).size();
         long globalExerciseCountBefore = exerciseRepository.findVisibleToAccount(-1L).size();
 
         mockMvc.perform(delete("/api/account")
@@ -210,7 +203,6 @@ class AccountDeletionTest {
 
         // -1L never matches any real account, so findVisibleToAccount(-1L) returns exactly
         // the global (account_id IS NULL) rows -- unaffected by any account's deletion.
-        assertEquals(globalCategoryCountBefore, categoryRepository.findVisibleToAccount(-1L).size());
         assertEquals(globalExerciseCountBefore, exerciseRepository.findVisibleToAccount(-1L).size());
     }
 

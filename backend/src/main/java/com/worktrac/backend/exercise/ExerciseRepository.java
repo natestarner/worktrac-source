@@ -19,7 +19,5 @@ public interface ExerciseRepository extends JpaRepository<Exercise, Long> {
 
     Optional<Exercise> findByIdAndAccount_Id(Long id, Long accountId);
 
-    boolean existsByCategory_Id(Long categoryId);
-
     void deleteByAccount_Id(Long accountId);
 }

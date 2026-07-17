@@ -1,5 +1,7 @@
 package com.worktrac.backend.export;
 
+import com.worktrac.backend.exercise.PersonExercise;
+import com.worktrac.backend.exercise.PersonExerciseRepository;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonDto;
 import com.worktrac.backend.person.PersonService;
@@ -26,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -38,13 +41,16 @@ public class CsvExportService {
     private final PersonService personService;
     private final WorkoutSessionRepository workoutSessionRepository;
     private final WorkoutSetRepository workoutSetRepository;
+    private final PersonExerciseRepository personExerciseRepository;
     private final EpleyCalculator epleyCalculator;
 
     public CsvExportService(PersonService personService, WorkoutSessionRepository workoutSessionRepository,
-                             WorkoutSetRepository workoutSetRepository, EpleyCalculator epleyCalculator) {
+                             WorkoutSetRepository workoutSetRepository,
+                             PersonExerciseRepository personExerciseRepository, EpleyCalculator epleyCalculator) {
         this.personService = personService;
         this.workoutSessionRepository = workoutSessionRepository;
         this.workoutSetRepository = workoutSetRepository;
+        this.personExerciseRepository = personExerciseRepository;
         this.epleyCalculator = epleyCalculator;
     }
 
@@ -74,8 +80,19 @@ public class CsvExportService {
                 .sorted(Comparator.comparing(WorkoutSession::getStartedAt))
                 .toList();
 
+        // This person's tags per exercise (empty when untagged), for the Tags column.
+        Map<Long, String> tagsByExercise = new HashMap<>();
+        for (PersonExercise pe : personExerciseRepository.findByPerson_Id(person.getId())) {
+            if (!pe.getTags().isEmpty()) {
+                tagsByExercise.put(pe.getExercise().getId(), pe.getTags().stream()
+                        .map(t -> t.getName())
+                        .sorted(String.CASE_INSENSITIVE_ORDER)
+                        .collect(Collectors.joining("; ")));
+            }
+        }
+
         List<List<String>> rows = new ArrayList<>();
-        rows.add(List.of("Date", "Time", "Exercise", "Category", "Set #", "Weight", "Unit", "Reps", "Est. 1RM"));
+        rows.add(List.of("Date", "Time", "Exercise", "Tags", "Set #", "Weight", "Unit", "Reps", "Est. 1RM"));
 
         for (WorkoutSession session : sessionsAscending) {
             List<WorkoutSet> sets = setsBySession.get(session.getId());
@@ -89,7 +106,7 @@ public class CsvExportService {
                         DATE_FMT.format(session.getStartedAt()),
                         TIME_FMT.format(session.getStartedAt()),
                         set.getExercise().getName(),
-                        set.getExercise().getCategory().getName(),
+                        tagsByExercise.getOrDefault(set.getExercise().getId(), ""),
                         String.valueOf(setNumber),
                         set.getWeight().toPlainString(),
                         set.getUnit(),

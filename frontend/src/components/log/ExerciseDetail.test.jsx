@@ -30,15 +30,13 @@ vi.mock('../../api/exercises', () => ({
   addCustomField: vi.fn(),
   updateCustomField: vi.fn(),
   removeCustomField: vi.fn(),
-  setExerciseCategory: vi.fn(),
+  setExerciseTags: vi.fn(),
   updateExercise: vi.fn(),
   removeExercise: vi.fn(),
   favoriteExercise: vi.fn(),
   unfavoriteExercise: vi.fn(),
 }));
-vi.mock('../../api/personCategories', () => ({ createPersonCategory: vi.fn() }));
-
-const exercise = { id: 1, name: 'Bench Press', personCategoryName: 'Upper Push', isFavorite: true, setupFields: [] };
+const exercise = { id: 1, name: 'Bench Press', tags: [], isFavorite: true, setupFields: [] };
 
 function renderExerciseDetail(props = {}) {
   return render(

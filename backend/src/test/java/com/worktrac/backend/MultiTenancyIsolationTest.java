@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 // The single most important test in this codebase: confirms Account B's token can never
 // read, edit, or delete Account A's rows, and that a mismatched personId/exerciseId/
-// categoryId always comes back as 404 (never 403, which would confirm the row exists).
+// tagId always comes back as 404 (never 403, which would confirm the row exists).
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("local")
@@ -93,38 +93,32 @@ class MultiTenancyIsolationTest {
     }
 
     @Test
-    void accountBCannotDeleteAccountAsCustomCategory() throws Exception {
-        String body = objectMapper.writeValueAsString(Map.of("name", "Account A Custom Category"));
-        String response = mockMvc.perform(post("/api/categories")
+    void accountBCannotDeleteAccountAsTag() throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of("name", "Account A Tag"));
+        String response = mockMvc.perform(post("/api/tags")
                         .header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        long categoryId = objectMapper.readTree(response).get("id").asLong();
+        long tagId = objectMapper.readTree(response).get("id").asLong();
 
-        mockMvc.perform(delete("/api/categories/" + categoryId).header("Authorization", "Bearer " + tokenB))
+        mockMvc.perform(delete("/api/tags/" + tagId).header("Authorization", "Bearer " + tokenB))
                 .andExpect(status().isNotFound());
 
         // Also must not appear in B's own list.
-        String listResponse = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + tokenB))
+        String listResponse = mockMvc.perform(get("/api/tags").header("Authorization", "Bearer " + tokenB))
                 .andReturn().getResponse().getContentAsString();
-        JsonNode categories = objectMapper.readTree(listResponse);
-        for (JsonNode c : categories) {
-            org.junit.jupiter.api.Assertions.assertNotEquals(categoryId, c.get("id").asLong());
+        JsonNode tags = objectMapper.readTree(listResponse);
+        for (JsonNode t : tags) {
+            org.junit.jupiter.api.Assertions.assertNotEquals(tagId, t.get("id").asLong());
         }
     }
 
     @Test
     void accountBCannotEditOrDeleteAccountAsCustomExercise() throws Exception {
-        // Reuse a global category (seeded for every account) rather than creating one.
-        String categoriesResponse = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + tokenA))
-                .andReturn().getResponse().getContentAsString();
-        long globalCategoryId = objectMapper.readTree(categoriesResponse).get(0).get("id").asLong();
-
         String exerciseBody = objectMapper.writeValueAsString(Map.of(
                 "name", "Account A Custom Exercise",
-                "categoryId", globalCategoryId,
                 "setupFieldNames", java.util.List.of()));
         String response = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + tokenA)
@@ -136,7 +130,6 @@ class MultiTenancyIsolationTest {
 
         String editBody = objectMapper.writeValueAsString(Map.of(
                 "name", "Hijacked name",
-                "categoryId", globalCategoryId,
                 "setupFieldNames", java.util.List.of()));
         mockMvc.perform(put("/api/exercises/" + exerciseId)
                         .header("Authorization", "Bearer " + tokenB)
@@ -158,13 +151,8 @@ class MultiTenancyIsolationTest {
     @Test
     void accountBCannotReadAccountAsSetupValues() throws Exception {
         long personIdA = primaryPersonId(tokenA);
-        String categoriesResponse = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + tokenA))
-                .andReturn().getResponse().getContentAsString();
-        long globalCategoryId = objectMapper.readTree(categoriesResponse).get(0).get("id").asLong();
-
         String exerciseBody = objectMapper.writeValueAsString(Map.of(
                 "name", "Exercise With Setup Field",
-                "categoryId", globalCategoryId,
                 "setupFieldNames", java.util.List.of("Pin height")));
         String response = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + tokenA)
@@ -195,13 +183,8 @@ class MultiTenancyIsolationTest {
         // Account B owns their own person, but the exerciseId belongs to Account A --
         // B's own personId ownership check alone must not be enough to let this through.
         long personIdB = primaryPersonId(tokenB);
-        String categoriesResponse = mockMvc.perform(get("/api/categories").header("Authorization", "Bearer " + tokenA))
-                .andReturn().getResponse().getContentAsString();
-        long globalCategoryId = objectMapper.readTree(categoriesResponse).get(0).get("id").asLong();
-
         String exerciseBody = objectMapper.writeValueAsString(Map.of(
                 "name", "Account A Private Exercise With Field",
-                "categoryId", globalCategoryId,
                 "setupFieldNames", java.util.List.of("Pin height")));
         String response = mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + tokenA)

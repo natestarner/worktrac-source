@@ -14,7 +14,6 @@ vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTrendsOverview', () => ({ useTrendsOverview: vi.fn() }));
 vi.mock('./WeeklyFrequencyChart', () => ({ default: () => <div>weekly-frequency-chart</div> }));
 vi.mock('./VolumeChart', () => ({ default: () => <div>volume-chart</div> }));
-vi.mock('./CategoryBalanceChart', () => ({ default: () => <div>category-balance-chart</div> }));
 vi.mock('./ExerciseTrendSection', () => ({ default: () => <div>exercise-trend-section</div> }));
 
 const overviewWithActivity = {
@@ -27,7 +26,6 @@ const overviewWithActivity = {
   workoutsLastWeek: 0,
   volumeThisMonthLb: 3000,
   volumeLastMonthLb: 1500,
-  categoryBreakdown: [{ category: 'Upper Push', setCount: 10, pct: 100 }],
 };
 
 describe('TrendsTab', () => {
@@ -72,7 +70,6 @@ describe('TrendsTab', () => {
     expect(screen.getByText('1 week')).toBeInTheDocument();
     expect(screen.getByText('weekly-frequency-chart')).toBeInTheDocument();
     expect(screen.getByText('volume-chart')).toBeInTheDocument();
-    expect(screen.getByText('category-balance-chart')).toBeInTheDocument();
     expect(screen.getByText('exercise-trend-section')).toBeInTheDocument();
   });
 
