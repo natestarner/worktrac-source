@@ -31,9 +31,9 @@ function rowWithButton(page, text: string, buttonName: string) {
 
 // Exercises are managed on the exercise screen now (create via the Log picker's "+ Add your
 // own exercise"; rename/delete/setup-fields via the gear "Customize this exercise" modal).
-// App Settings only keeps units, the per-person category manager, and data export.
+// App Settings only keeps units, the household's shared tag manager, and data export.
 test.describe('App Settings', () => {
-  test('add a category, create a custom exercise, add and remove a person, switch units', async ({ page, request }) => {
+  test('add a tag, create a custom exercise, add and remove a person, switch units', async ({ page, request }) => {
     await registerHousehold(page, request, 'Alex');
 
     // Custom exercises are created from the Log picker now, not App Settings.
@@ -42,8 +42,8 @@ test.describe('App Settings', () => {
 
     await openAppSettings(page);
 
-    // Categories are still managed here.
-    await page.getByPlaceholder('New category name').fill('Conditioning');
+    // Tags are managed here.
+    await page.getByPlaceholder('New tag name').fill('Conditioning');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByText('Conditioning')).toBeVisible();
 
@@ -84,13 +84,13 @@ test.describe('App Settings', () => {
     await expect(page.getByRole('dialog').getByRole('button', { name: 'Delete this exercise' })).toHaveCount(0);
     await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click();
 
-    // Category delete confirm text (App Settings).
+    // Tag delete confirm text (App Settings).
     await openAppSettings(page);
-    await page.getByPlaceholder('New category name').fill('Mobility');
+    await page.getByPlaceholder('New tag name').fill('Mobility');
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByText('Mobility')).toBeVisible();
     await rowWithButton(page, 'Mobility', '×').getByRole('button', { name: '×', exact: true }).click();
-    await expect(page.getByRole('dialog')).toContainText('Delete category "Mobility"?');
+    await expect(page.getByRole('dialog')).toContainText('Delete tag "Mobility"?');
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
     await expect(page.getByText('Mobility')).toHaveCount(0);
 
@@ -112,7 +112,9 @@ test.describe('App Settings', () => {
     await addOwnExercise(page, 'Cable Row');
     await page.getByRole('button', { name: 'Customize this exercise' }).click();
     await page.getByPlaceholder('Add a field (e.g. seat height)').fill('Seat position');
-    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
+    // The dialog now has two "Add" buttons (tags + setup fields), so submit via the field
+    // input's Enter handler rather than an ambiguous button click.
+    await page.getByPlaceholder('Add a field (e.g. seat height)').press('Enter');
     // The added field appears as a row with a "Remove Seat position" control.
     await expect(page.getByRole('dialog').getByRole('button', { name: 'Remove Seat position' })).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click();
