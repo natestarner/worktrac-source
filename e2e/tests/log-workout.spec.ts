@@ -13,6 +13,13 @@ test.describe('Log workout', () => {
     await pickExercise(page, 'Barbell Bench Press');
     await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
 
+    // Selecting an exercise clears the search box, so returning to the picker starts
+    // fresh instead of still showing the old search term.
+    await page.getByRole('button', { name: '← All exercises' }).click();
+    await expect(page.getByPlaceholder('Search all exercises')).toHaveValue('');
+    await pickExercise(page, 'Barbell Bench Press');
+    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+
     await page.getByRole('button', { name: 'Log set' }).click();
 
     // First-ever set is always a PR -- the celebration overlay should appear.
@@ -46,5 +53,49 @@ test.describe('Log workout', () => {
     await expect(page.getByText('PRIMARY')).toBeVisible();
 
     await page.screenshot({ path: 'test-results/profile-tab.png' });
+  });
+
+  test('nudges a routine-less person to create one, links to Routines, and stays dismissed', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+
+    await expect(page.getByText('create a routine')).toBeVisible();
+    await page.getByText('create a routine').click();
+    await expect(page).toHaveURL(/\/app\/routines/);
+
+    await page.getByRole('link', { name: 'Log' }).click();
+    await expect(page.getByText('create a routine')).toBeVisible();
+    await page.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(page.getByText('create a routine')).not.toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText('create a routine')).not.toBeVisible();
+  });
+
+  test('shows reps instead of a weight/1RM calc for a bodyweight PR', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+    await pickExercise(page, 'Pull-up');
+    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+
+    // Dial the weight down to 0 via the keypad to simulate a bodyweight set (no added
+    // load) -- clear the prefilled "45" first since digits otherwise append to it.
+    await page.getByRole('button', { name: '45' }).click();
+    await page.getByRole('button', { name: '⌫' }).click();
+    await page.getByRole('button', { name: '⌫' }).click();
+    await page.getByRole('button', { name: '0', exact: true }).click();
+    await page.getByRole('button', { name: 'Done' }).click();
+
+    await page.getByRole('button', { name: 'Log set' }).click();
+
+    // First-ever set is always a PR -- Epley's 1RM collapses to a meaningless 0 at
+    // weight 0, so the celebration should show the rep count instead.
+    await expect(page.getByText('New PR!')).toBeVisible();
+    await expect(page.getByText('8 reps')).toBeVisible();
+    await expect(page.getByText('Bodyweight')).toBeVisible();
+    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+
+    await page.getByRole('link', { name: 'PRs' }).click();
+    await expect(page.getByText('Pull-up')).toBeVisible();
+    await expect(page.getByText('8 reps')).toBeVisible();
+    await expect(page.getByText('Bodyweight')).toBeVisible();
   });
 });

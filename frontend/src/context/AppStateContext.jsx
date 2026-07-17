@@ -70,7 +70,7 @@ export function reducer(state, action) {
       };
     }
     case 'SELECT_EXERCISE':
-      return { ...state, selectedExerciseId: action.exerciseId };
+      return { ...state, selectedExerciseId: action.exerciseId, exerciseSearch: '' };
     case 'BACK_TO_PICKER':
       return { ...state, selectedExerciseId: null };
     case 'SET_EXERCISE_SEARCH':

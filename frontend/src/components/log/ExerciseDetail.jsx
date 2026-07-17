@@ -130,10 +130,12 @@ export default function ExerciseDetail({
     }
     setJustAddedSetId(result.set.id);
     if (result.isPR) {
+      const isBodyweight = result.best.weight === 0;
       showCelebration({
         exerciseName: exercise.name,
+        isBodyweight,
         setText: `${weightDraft} ${defaultUnit} × ${repsDraft}`,
-        est1rmText: `${result.best.est1rm} ${defaultUnit}`,
+        est1rmText: isBodyweight ? `${repsDraft} reps` : `${result.best.est1rm} ${defaultUnit}`,
       });
     }
     await Promise.all([refetchSummary(), refetchSessionSets()]);

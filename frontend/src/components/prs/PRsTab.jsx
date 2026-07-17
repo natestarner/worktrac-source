@@ -80,13 +80,22 @@ export default function PRsTab() {
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-pr-text)' }}>
-              {pr.best.est1rm} {pr.best.unit}
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
-              {pr.best.weight}
-              {pr.best.unit}×{pr.best.reps}
-            </div>
+            {pr.best.weight === 0 ? (
+              <>
+                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-pr-text)' }}>{pr.best.reps} reps</div>
+                <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>Bodyweight</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-pr-text)' }}>
+                  {pr.best.est1rm} {pr.best.unit}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
+                  {pr.best.weight}
+                  {pr.best.unit}×{pr.best.reps}
+                </div>
+              </>
+            )}
           </div>
         </div>
       ))}

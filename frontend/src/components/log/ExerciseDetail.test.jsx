@@ -87,3 +87,57 @@ describe('ExerciseDetail rest-timer live-vs-retroactive gating', () => {
     expect(startRestTimer).not.toHaveBeenCalled();
   });
 });
+
+// A bodyweight set (weight === 0) makes Epley's 1RM estimate meaningless -- it collapses
+// to 0 regardless of reps -- so the celebration payload should surface the rep count
+// instead. Mirrors the same weight-0 convention as comparableLb in utils/formulas.js.
+describe('ExerciseDetail PR celebration payload', () => {
+  let showCelebration;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    showCelebration = vi.fn();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useAppState.mockReturnValue({ weightDraft: 0, repsDraft: 12, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useUI.mockReturnValue({ showCelebration, startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    listSessionSets.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows the rep count instead of a weight/1RM calc for a bodyweight PR', async () => {
+    logLiveSet.mockResolvedValue({
+      isPR: true,
+      best: { weight: 0, reps: 12, unit: 'lb', est1rm: 0 },
+      session: { id: 101 },
+      set: { id: 201 },
+    });
+    renderExerciseDetail();
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() =>
+      expect(showCelebration).toHaveBeenCalledWith(expect.objectContaining({ isBodyweight: true, est1rmText: '12 reps' })),
+    );
+  });
+
+  it('shows the normal weight/1RM calc for a weighted PR', async () => {
+    useAppState.mockReturnValue({ weightDraft: 185, repsDraft: 5, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    logLiveSet.mockResolvedValue({
+      isPR: true,
+      best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208 },
+      session: { id: 101 },
+      set: { id: 201 },
+    });
+    renderExerciseDetail();
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() =>
+      expect(showCelebration).toHaveBeenCalledWith(expect.objectContaining({ isBodyweight: false, est1rmText: '208 lb' })),
+    );
+  });
+});

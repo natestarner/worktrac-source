@@ -118,7 +118,7 @@ export default function PRCelebration() {
             zIndex: 1,
           }}
         >
-          Est. 1RM &middot; {celebration.setText}
+          {celebration.isBodyweight ? 'Bodyweight' : <>Est. 1RM &middot; {celebration.setText}</>}
         </div>
       </div>
     </div>
