@@ -16,6 +16,10 @@ import SessionSummary from './SessionSummary';
 import EndWorkoutConfirmModal from '../shared/EndWorkoutConfirmModal';
 import AddEditExerciseModal from '../settings/AddEditExerciseModal';
 
+function routineBannerDismissKey(personId) {
+  return `workout-tracker-routine-banner-dismissed-${personId}`;
+}
+
 export default function LogTab() {
   const navigate = useNavigate();
   const { showToast } = useUI();
@@ -45,12 +49,13 @@ export default function LogTab() {
   // The full catalog powers search and lets us resolve a search-selected exercise that isn't
   // in the person's list yet.
   const { exercises: catalog, refetch: refetchCatalog } = useExercises();
-  const { routines } = useRoutines(activePersonId);
+  const { routines, loading: routinesLoading } = useRoutines(activePersonId);
   const { session: liveSession, refetch: refetchLiveSession } = useLiveSession(activePersonId);
   const activeSessionId = editingSession?.id || liveSession?.id || null;
   const { history, loading: historyLoading, refetch: refetchHistory } = useHistory(activeSessionId ? activePersonId : null);
   const [showEndWorkoutConfirm, setShowEndWorkoutConfirm] = useState(false);
   const [addExerciseName, setAddExerciseName] = useState(null); // null = closed; string = create modal prefilled with this name
+  const [routineBannerDismissed, setRoutineBannerDismissed] = useState(false);
 
   const activeRoutine = activeRoutineId ? routines.find((r) => r.id === activeRoutineId) : null;
   const selectedExercise = selectedExerciseId
@@ -69,6 +74,18 @@ export default function LogTab() {
     if (!selectedExerciseId) refetchPersonExercises();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedExerciseId]);
+
+  // The "create a routine" nudge banner's dismissal is a permanent-per-person preference,
+  // not in-progress UI state, so it's kept in localStorage (not AppStateContext/UIContext)
+  // and re-read whenever the active person changes.
+  useEffect(() => {
+    setRoutineBannerDismissed(localStorage.getItem(routineBannerDismissKey(activePersonId)) === 'true');
+  }, [activePersonId]);
+
+  function dismissRoutineBanner() {
+    localStorage.setItem(routineBannerDismissKey(activePersonId), 'true');
+    setRoutineBannerDismissed(true);
+  }
 
   async function refreshPersonalization() {
     await Promise.all([refetchPersonExercises(), refetchTags(), refetchCatalog()]);
@@ -106,6 +123,40 @@ export default function LogTab() {
 
   return (
     <div>
+      {!routinesLoading && routines.length === 0 && !routineBannerDismissed && (
+        <div
+          style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 16,
+            padding: '14px 20px',
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <div style={{ fontSize: 14 }}>
+            For faster exercise logging,{' '}
+            <span
+              onClick={() => navigate('/app/routines')}
+              style={{ color: 'var(--color-accent)', fontWeight: 700, cursor: 'pointer' }}
+            >
+              create a routine
+            </span>
+            .
+          </div>
+          <button
+            onClick={dismissRoutineBanner}
+            aria-label="Dismiss"
+            style={{ background: 'none', border: 'none', color: 'var(--color-muted)', fontSize: 18, lineHeight: 1, cursor: 'pointer' }}
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       {editingSession && (
         <div style={{ background: 'var(--color-dark)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>

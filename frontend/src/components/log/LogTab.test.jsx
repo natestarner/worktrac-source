@@ -120,3 +120,53 @@ describe('LogTab routine nav button placement', () => {
     expect(appState.endRoutine).toHaveBeenCalled();
   });
 });
+
+describe('LogTab "create a routine" banner', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    useAppState.mockReturnValue(baseAppState({ selectedExerciseId: null, activeRoutineId: null }));
+    useUI.mockReturnValue({ showToast: vi.fn() });
+    useExercises.mockReturnValue({ exercises: [], loading: false });
+    usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
+    useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
+    useLiveSession.mockReturnValue({ session: null, refetch: vi.fn() });
+    useHistory.mockReturnValue({ history: [], loading: false, refetch: vi.fn() });
+  });
+
+  const bannerText = 'For faster exercise logging,';
+
+  it('shows the banner when the person has no routines', () => {
+    useRoutines.mockReturnValue({ routines: [], loading: false });
+    render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    expect(screen.getByText(bannerText, { exact: false })).toBeInTheDocument();
+  });
+
+  it('hides the banner while routines are still loading', () => {
+    useRoutines.mockReturnValue({ routines: [], loading: true });
+    render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    expect(screen.queryByText(bannerText, { exact: false })).not.toBeInTheDocument();
+  });
+
+  it('hides the banner once the person has at least one routine', () => {
+    useRoutines.mockReturnValue({ routines: [routine], loading: false });
+    render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    expect(screen.queryByText(bannerText, { exact: false })).not.toBeInTheDocument();
+  });
+
+  it('dismissing the banner hides it and keeps it hidden across remounts for that person', () => {
+    useRoutines.mockReturnValue({ routines: [], loading: false });
+    const { unmount } = render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    expect(screen.getByText(bannerText, { exact: false })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByText(bannerText, { exact: false })).not.toBeInTheDocument();
+
+    unmount();
+    render(<MemoryRouter><LogTab /></MemoryRouter>);
+    expect(screen.queryByText(bannerText, { exact: false })).not.toBeInTheDocument();
+  });
+});

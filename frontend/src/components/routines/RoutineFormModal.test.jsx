@@ -62,6 +62,16 @@ describe('RoutineFormModal exercise selection', () => {
     expect(screen.queryByRole('button', { name: '+ Bench Press' })).not.toBeInTheDocument();
     expect(screen.getByText('Bench Press')).toBeInTheDocument();
   });
+
+  it('clears the search box after adding an exercise from search results', () => {
+    renderModal();
+
+    const filterInput = screen.getByPlaceholderText('Search all exercises');
+    fireEvent.change(filterInput, { target: { value: 'ca' } });
+    fireEvent.click(screen.getByRole('button', { name: '+ Cable Fly' }));
+
+    expect(filterInput).toHaveValue('');
+  });
 });
 
 describe('RoutineFormModal validation', () => {

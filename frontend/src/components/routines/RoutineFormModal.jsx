@@ -38,6 +38,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   function addExercise(id) {
     setSelectedIds((ids) => [...ids, id]);
     setExercisesError(false);
+    setExerciseFilter('');
   }
   function removeExercise(id) {
     setSelectedIds((ids) => ids.filter((x) => x !== id));

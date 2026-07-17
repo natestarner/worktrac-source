@@ -61,6 +61,13 @@ describe('AppStateContext reducer', () => {
     expect(state.exerciseSearch).toBe('bench');
   });
 
+  it('selecting an exercise clears any in-progress search text', () => {
+    let state = reducer(initialState, { type: 'SET_EXERCISE_SEARCH', value: 'bench' });
+    state = reducer(state, { type: 'SELECT_EXERCISE', exerciseId: 5 });
+    expect(state.selectedExerciseId).toBe(5);
+    expect(state.exerciseSearch).toBe('');
+  });
+
   it('starting a routine selects its first exercise', () => {
     const state = reducer(initialState, { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20, 30] });
     expect(state.activeRoutineId).toBe(7);

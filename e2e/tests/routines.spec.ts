@@ -18,6 +18,11 @@ test.describe('Routines', () => {
 
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Push Day');
     await addExerciseToRoutine(page, 'Barbell Bench Press');
+
+    // Adding an exercise clears the search box, so it's ready for the next search
+    // instead of still showing the previous term.
+    await expect(page.getByPlaceholder('Search all exercises')).toHaveValue('');
+
     await addExerciseToRoutine(page, 'Dumbbell Overhead Press');
     await page.getByRole('button', { name: 'Save routine' }).click();
 
