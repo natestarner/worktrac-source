@@ -200,3 +200,29 @@ the legacy `categories` table. Backend `mvn verify` (84 tests) and frontend Vite
 Rationale for the whole three-part cleanup (fork removal, setup-fields → per-person, tags):
 onboarding more household members meant lock-in on a lean, single-model data layer with no
 dead scaffolding.
+
+## Update — 2026-07-17: system exercise library expanded 15 → 111 (V34)
+
+The original 15 seeded system exercises (V7/V16) were too sparse to be useful once the
+favorites/search model above shipped — the whole point of "searched, not dumped" only pays
+off with a catalog worth searching. `V34__expand_system_exercise_library.sql` grows the
+shared (`account_id IS NULL`) library to 111 entries at the same naming granularity already
+established (equipment/variant prefix + movement, e.g. "Barbell Bench Press" vs. "Dumbbell
+Incline Bench Press"), including a proper set of dedicated machine variants the original
+seed was missing almost entirely (Machine Chest Press, Smith Machine Squat, Assisted Pull-up
+Machine, etc.).
+
+Two existing entries were renamed to disambiguate from new siblings, following the same
+precedent V16 set: `Tricep Pushdown` → `Cable Tricep Pushdown`, `Deadlift` → `Barbell
+Deadlift`. Both renames are scoped to `account_id IS NULL`, so any household that already
+forked/personalized one of these keeps its own copy untouched — consistent with "preloaded
+exercises are immutable" above (this only touches the shared row's display name, not any
+person's overlay).
+
+Sourcing decision: hand-curated rather than imported from an external exercise database
+(e.g. `free-exercise-db`) — the existing names follow a specific convention an imported
+dataset would need heavy renaming to match anyway, and the schema no longer carries
+category/muscle-group metadata (dropped in V33) for such a source to populate.
+
+Pure data migration — no schema, API, or frontend changes. Backend `mvn verify` (84 tests)
+green.
