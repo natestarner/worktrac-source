@@ -33,8 +33,7 @@ export default function ConfigureExerciseModal({
     if (!trimmed || trimmed === exercise.name || busy) return;
     setBusy(true);
     try {
-      // Pass the current base field names so a pure rename doesn't clear them.
-      await updateExercise(exercise.id, { name: trimmed, setupFieldNames: (exercise.setupFields || []).map((f) => f.name) });
+      await updateExercise(exercise.id, { name: trimmed });
       if (onExerciseChanged) await onExerciseChanged();
     } finally {
       setBusy(false);

@@ -108,7 +108,7 @@ class ExerciseFavoritesTest {
 
     @Test
     void editingAPreloadedExerciseIsRejected() throws Exception {
-        String body = objectMapper.writeValueAsString(Map.of("name", "Renamed", "setupFieldNames", List.of()));
+        String body = objectMapper.writeValueAsString(Map.of("name", "Renamed"));
         mockMvc.perform(put("/api/exercises/" + benchPressId)
                         .header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -130,7 +130,7 @@ class ExerciseFavoritesTest {
     @Test
     void editingYourOwnExerciseWorksInPlace() throws Exception {
         long id = addOwnExercise(tokenA, "My Curl");
-        String body = objectMapper.writeValueAsString(Map.of("name", "My Curl v2", "setupFieldNames", List.of()));
+        String body = objectMapper.writeValueAsString(Map.of("name", "My Curl v2"));
         mockMvc.perform(put("/api/exercises/" + id)
                         .header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -314,7 +314,7 @@ class ExerciseFavoritesTest {
     }
 
     private long addOwnExercise(String token, String name) throws Exception {
-        String body = objectMapper.writeValueAsString(Map.of("name", name, "setupFieldNames", List.of()));
+        String body = objectMapper.writeValueAsString(Map.of("name", name));
         return objectMapper.readTree(mockMvc.perform(post("/api/exercises")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)

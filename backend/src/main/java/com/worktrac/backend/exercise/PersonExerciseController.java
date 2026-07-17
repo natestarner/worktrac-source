@@ -15,9 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 // Per-person view of exercises: the Log picker list (favorites UNION logged), favoriting,
-// category filing, and the custom setup-field overlay. Shares the /api/people/{personId}/
-// exercises namespace with SetupValueController (base setup fields), which lives on the
-// /{exerciseId}/setup-* subpaths.
+// category filing, and the per-person setup-field overlay. All setup fields are per-person
+// now; they live on the /{exerciseId}/custom-fields subpaths.
 @RestController
 @RequestMapping("/api/people/{personId}/exercises")
 public class PersonExerciseController {
