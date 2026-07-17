@@ -62,9 +62,22 @@ Ensure the change is summarized where it belongs before shipping:
   2. Start backend `local` profile and frontend dev server — the frontend **must be on port
      3000** (local CORS only allows 3000; a stray 3000 server bumps Vite to 3001+ and causes
      silent 403s).
-  3. `cd e2e && E2E_BASE_URL=http://localhost:3000 E2E_TEST_SUPPORT_KEY=<local-key> npx playwright test`
-     (use the local backend's configured support key).
-  4. Tear the local app back down when done.
+  3. `cd e2e && E2E_BASE_URL=http://localhost:3000 E2E_TEST_SUPPORT_KEY=<value from
+     backend/src/main/resources/application-local.yml's app.email.test-support-key>
+     npx playwright test`.
+     - Registration in the local flow calls the real Azure Communication Services email
+       API even though the e2e helper reads the confirmation code back via the
+       test-support endpoint rather than an inbox — so `ACS_EMAIL_CONNECTION_STRING` and
+       `ACS_EMAIL_SENDER_ADDRESS` must already be set in your shell environment (a
+       free-tier ACS resource is fine), or every e2e test that registers a household
+       fails at registration.
+  4. Tear the local app back down: killing the launching shell command is **not
+     enough** — `mvn spring-boot:run` forks a separate `java` process and `npm run dev`
+     forks a separate `node`/vite process that both survive their parent being killed.
+     Kill whatever is actually listening on 8080 and 3000 (e.g. find the PID via
+     `netstat`/`lsof` and `taskkill`/`kill` it), not just the wrapper command. Leftover
+     processes here don't just waste resources — they hold file locks on the worktree
+     that will block its removal in step 13.
 
 ### 4. Resolve issues
 Fix any failures from step 3; re-run until green (bounded retries). If a failure is
@@ -75,6 +88,11 @@ Commit on the current worktree branch with a Conventional Commit message
 (`feat(scope):` / `fix(scope):` / `refactor:` / `docs:` / `test:`). Never commit to `main`.
 
 ### 6. Push the branch to remote
+Before pushing, confirm the branch name is clean (`git branch --show-current`) —
+`EnterWorktree`'s auto-generated names (e.g. `worktree-fix+scope-description` when a
+`/`-containing name was requested) aren't suitable as the PR's branch; rename first if
+needed: `git branch -m <old> <new>`.
+
 `git push -u origin <branch>` — this triggers `ci.yml` (`backend-ci` + `frontend-ci`).
 
 ### 7. Ensure branch CI passes
@@ -89,8 +107,16 @@ On failure: read logs (`gh run view <run-id> --log-failed`), fix, commit, re-pus
 - `gh pr create --base main --head <branch> --title "<conventional title>" --body "<from step 1>"`
   (skip create if a PR already exists).
 - Wait for required checks: `gh pr checks <pr> --watch` until `backend-ci` + `frontend-ci` pass.
-- Merge: `gh pr merge <pr> --squash --delete-branch` (squash keeps conventional-commit
-  history clean; deletes the remote branch).
+- Merge: `gh pr merge <pr> --squash` (squash keeps conventional-commit history clean).
+  **Do NOT pass `--delete-branch`**: that flag makes `gh` try to check out the base
+  branch (`main`) locally afterward, which fails with
+  `fatal: 'main' is already used by worktree at ...` every time, since this project's
+  workflow always keeps `main` checked out in the primary working directory while you
+  work from a worktree. If you see that error, don't retry the merge command — check
+  `gh pr view <pr> --json state,mergedAt` first; the merge itself likely already
+  succeeded via the API before the local git operation failed, and retrying just
+  reports "already merged."
+- Delete the remote branch explicitly instead: `git push origin --delete <branch>`.
 
 ### 10. Ensure post-merge CI/CD completes
 Watch the `main`-push run (`gh run list --branch main --limit 1`): `backend-ci`,
@@ -117,7 +143,11 @@ promote→deploy chain. If it's infra/secret/config, stop and report.
 - Report a summary of what shipped, with links: the source `main` Actions run, the
   `worktrac-deploy` `deploy-lower.yml` run, the `playwright-report` artifact, and the lower
   URLs above.
-- Cleanup: the remote branch was deleted at merge; remove the local worktree
-  (`ExitWorktree` with `action: remove`, or `git worktree remove`) now that it's merged, and
-  leave the primary working directory on a clean, up-to-date `main`
+- Cleanup: the remote branch was already deleted explicitly in step 9; remove the local
+  worktree (`ExitWorktree` with `action: remove`, or `git worktree remove`) now that it's
+  merged, and leave the primary working directory on a clean, up-to-date `main`
   (`git -C <primary> pull --ff-only`).
+- If worktree removal fails with a "busy"/"in use"/"resource busy" error, a local process
+  from step 3.4 is still holding a file handle open in the worktree — find the orphaned
+  `java`/`node` process rooted at the worktree's path (e.g. inspect running processes'
+  command lines) and kill it before retrying the removal.
