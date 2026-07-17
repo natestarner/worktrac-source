@@ -68,12 +68,6 @@ public class SetupValue {
         return field;
     }
 
-    // Used only when forking a system exercise -- re-points this value from the
-    // original exercise's field to the matching field on the account-owned fork.
-    public void setField(ExerciseSetupField field) {
-        this.field = field;
-    }
-
     public String getValue() {
         return value;
     }
