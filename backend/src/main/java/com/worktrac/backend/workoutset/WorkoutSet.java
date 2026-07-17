@@ -105,12 +105,6 @@ public class WorkoutSet {
         return exercise;
     }
 
-    // Used only when forking a system exercise -- re-points this set from the shared
-    // original to the account-owned fork.
-    public void setExercise(Exercise exercise) {
-        this.exercise = exercise;
-    }
-
     public BigDecimal getWeight() {
         return weight;
     }

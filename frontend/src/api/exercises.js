@@ -1,24 +1,25 @@
 import { apiClient } from './client';
 
-// The full catalog, used for search. categoryId is optional now that categories are per-person.
+// The full catalog, used for search. Exercises carry no taxonomy of their own -- organization is
+// via per-person tags (see setExerciseTags below).
 export function listExercises() {
   return apiClient.get('/api/exercises');
 }
 
-export function addExercise({ name, categoryId, setupFieldNames }) {
-  return apiClient.post('/api/exercises', { name, categoryId, setupFieldNames });
+export function addExercise({ name }) {
+  return apiClient.post('/api/exercises', { name });
 }
 
-export function updateExercise(exerciseId, { name, categoryId, setupFieldNames }) {
-  return apiClient.put(`/api/exercises/${exerciseId}`, { name, categoryId, setupFieldNames });
+export function updateExercise(exerciseId, { name }) {
+  return apiClient.put(`/api/exercises/${exerciseId}`, { name });
 }
 
 export function removeExercise(exerciseId) {
   return apiClient.delete(`/api/exercises/${exerciseId}`);
 }
 
-// --- Per-person view: the Log picker list (favorites UNION logged), favoriting, category
-// filing, and the custom setup-field overlay ---
+// --- Per-person view: the Log picker list (favorites UNION logged), favoriting, tag
+// application, and the custom setup-field overlay ---
 
 export function listPersonExercises(personId) {
   return apiClient.get(`/api/people/${personId}/exercises`);
@@ -32,8 +33,8 @@ export function unfavoriteExercise(personId, exerciseId) {
   return apiClient.delete(`/api/people/${personId}/exercises/${exerciseId}/favorite`);
 }
 
-export function setExerciseCategory(personId, exerciseId, personCategoryId) {
-  return apiClient.put(`/api/people/${personId}/exercises/${exerciseId}/category`, { personCategoryId });
+export function setExerciseTags(personId, exerciseId, tagNames) {
+  return apiClient.put(`/api/people/${personId}/exercises/${exerciseId}/tags`, { tags: tagNames });
 }
 
 export function listCustomFields(personId, exerciseId) {

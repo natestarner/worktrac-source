@@ -6,10 +6,9 @@ vi.mock('../../api/exercises', () => ({
   addCustomField: vi.fn(),
   updateCustomField: vi.fn(),
   removeCustomField: vi.fn(),
-  setExerciseCategory: vi.fn(),
+  setExerciseTags: vi.fn(),
   updateExercise: vi.fn(),
 }));
-vi.mock('../../api/personCategories', () => ({ createPersonCategory: vi.fn() }));
 
 function renderModal(exercise) {
   return render(
@@ -17,12 +16,12 @@ function renderModal(exercise) {
       exercise={exercise}
       personId={1}
       exerciseId={exercise.id}
-      currentCategoryId={null}
-      categories={[]}
+      allTags={[]}
+      appliedTagNames={[]}
       customFields={[]}
       onClose={vi.fn()}
       onFieldsChanged={vi.fn()}
-      onCategoryChanged={vi.fn()}
+      onTagsChanged={vi.fn()}
       onExerciseChanged={vi.fn()}
       onRequestDelete={vi.fn()}
     />,
@@ -31,7 +30,7 @@ function renderModal(exercise) {
 
 describe('ConfigureExerciseModal ownership', () => {
   it('shows "Created by you" plus rename + delete for your own exercise', () => {
-    renderModal({ id: 1, name: 'My Curl', isGlobal: false, setupFields: [] });
+    renderModal({ id: 1, name: 'My Curl', isGlobal: false });
 
     expect(screen.getByText('Created by you')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
@@ -39,7 +38,7 @@ describe('ConfigureExerciseModal ownership', () => {
   });
 
   it('shows "Preloaded exercise" and no rename/delete for a shared exercise', () => {
-    renderModal({ id: 2, name: 'Barbell Bench Press', isGlobal: true, setupFields: [] });
+    renderModal({ id: 2, name: 'Barbell Bench Press', isGlobal: true });
 
     expect(screen.getByText('Preloaded exercise')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();

@@ -1,5 +1,6 @@
-package com.worktrac.backend.exercise;
+package com.worktrac.backend.tag;
 
+import com.worktrac.backend.account.Account;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -15,35 +16,34 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
+// A tag in the household's shared tagging vocabulary. Tags belong to the account, so everyone
+// in the household picks from the same free-text set; which exercises each person tags stays
+// per-person (person_exercise_tags). Replaces the per-person "categories" concept.
 @Entity
-@Table(name = "exercise_setup_fields")
-public class ExerciseSetupField {
+@Table(name = "tags")
+public class Tag {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "exercise_id", nullable = false)
-    private Exercise exercise;
+    @JoinColumn(name = "account_id", nullable = false)
+    private Account account;
 
     @Column(nullable = false, length = 100)
     private String name;
-
-    @Column(name = "sort_order", nullable = false)
-    private int sortOrder;
 
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    protected ExerciseSetupField() {
+    protected Tag() {
     }
 
-    public ExerciseSetupField(Exercise exercise, String name, int sortOrder) {
-        this.exercise = exercise;
+    public Tag(Account account, String name) {
+        this.account = account;
         this.name = name;
-        this.sortOrder = sortOrder;
     }
 
     @PrePersist
@@ -57,8 +57,8 @@ public class ExerciseSetupField {
         return id;
     }
 
-    public Exercise getExercise() {
-        return exercise;
+    public Account getAccount() {
+        return account;
     }
 
     public String getName() {
@@ -67,14 +67,6 @@ public class ExerciseSetupField {
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public int getSortOrder() {
-        return sortOrder;
-    }
-
-    public void setSortOrder(int sortOrder) {
-        this.sortOrder = sortOrder;
     }
 
     public Instant getCreatedAt() {

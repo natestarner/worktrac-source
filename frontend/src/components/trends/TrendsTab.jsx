@@ -5,39 +5,19 @@ import RangeToggle from './RangeToggle';
 import SummaryCards from './SummaryCards';
 import WeeklyFrequencyChart from './WeeklyFrequencyChart';
 import VolumeChart from './VolumeChart';
-import CategoryBalanceChart from './CategoryBalanceChart';
 import ExerciseTrendSection from './ExerciseTrendSection';
 import Skeleton from '../shared/Skeleton';
 
 const cardStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 18px' };
 
 // One placeholder shape per real chart component below (WeeklyFrequencyChart,
-// VolumeChart, CategoryBalanceChart, ExerciseTrendChart) -- each mirrors that
-// component's own padding/label/body dimensions so nothing resizes when real data
-// replaces it.
+// VolumeChart, ExerciseTrendChart) -- each mirrors that component's own
+// padding/label/body dimensions so nothing resizes when real data replaces it.
 function BarChartSkeleton() {
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 12px 8px' }}>
       <Skeleton width={130} height={13} style={{ margin: '0 8px 8px' }} />
       <Skeleton width="100%" height={160} radius={8} />
-    </div>
-  );
-}
-
-function CategoryBalanceSkeleton() {
-  return (
-    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
-      <Skeleton width={150} height={13} style={{ marginBottom: 12 }} />
-      <Skeleton width="100%" height={20} radius={6} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
-        {[120, 96, 108].map((w, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Skeleton width={10} height={10} radius={3} />
-            <Skeleton width={w} height={13} />
-            <Skeleton width={60} height={13} style={{ marginLeft: 'auto' }} />
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -66,7 +46,6 @@ function TrendsSkeleton() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
         <BarChartSkeleton />
         <BarChartSkeleton />
-        <CategoryBalanceSkeleton />
       </div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
         <Skeleton width={140} height={13} style={{ marginBottom: 12 }} />
@@ -108,7 +87,6 @@ export default function TrendsTab() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
         <WeeklyFrequencyChart weeks={overview.weeks} />
         <VolumeChart weeks={overview.weeks} defaultUnit={defaultUnit} />
-        <CategoryBalanceChart breakdown={overview.categoryBreakdown} />
       </div>
 
       <ExerciseTrendSection

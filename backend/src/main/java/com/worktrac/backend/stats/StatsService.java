@@ -127,13 +127,6 @@ public class StatsService {
         return new BestDto(set.getWeight(), set.getReps(), set.getUnit(), est1rm, set.getSession().getStartedAt());
     }
 
-    // The exercise's legacy shared category, used only for the Trends muscle-group balance
-    // chart. User-created exercises are uncategorized now (category is per-person), so they
-    // fall under "Uncategorized" rather than NPE-ing.
-    private static String categoryNameOf(Exercise exercise) {
-        return exercise.getCategory() == null ? "Uncategorized" : exercise.getCategory().getName();
-    }
-
     // Used by WorkoutSetService to determine isPR when logging a new set: the previous
     // best must be read BEFORE the new set is inserted, and compared in a common unit.
     public Optional<BigDecimal> getBestComparableLb(Long personId, Long exerciseId) {
@@ -227,29 +220,16 @@ public class StatsService {
         LocalDate lastWindowEnd = today.minusDays(30);
         BigDecimal volumeThisMonthLb = BigDecimal.ZERO;
         BigDecimal volumeLastMonthLb = BigDecimal.ZERO;
-        Map<String, Integer> categoryCounts = new LinkedHashMap<>();
-        int categoryWindowSets = 0;
         for (WorkoutSet s : all) {
             LocalDate date = sessionDate.get(s.getSession().getId());
             if (!date.isBefore(thisWindowStart) && !date.isAfter(today)) {
                 BigDecimal volumeLb = unitConverter.toLb(s.getWeight().multiply(BigDecimal.valueOf(s.getReps())), s.getUnit());
                 volumeThisMonthLb = volumeThisMonthLb.add(volumeLb);
-                categoryCounts.merge(categoryNameOf(s.getExercise()), 1, Integer::sum);
-                categoryWindowSets++;
             } else if (!date.isBefore(lastWindowStart) && !date.isAfter(lastWindowEnd)) {
                 BigDecimal volumeLb = unitConverter.toLb(s.getWeight().multiply(BigDecimal.valueOf(s.getReps())), s.getUnit());
                 volumeLastMonthLb = volumeLastMonthLb.add(volumeLb);
             }
         }
-
-        int finalCategoryWindowSets = categoryWindowSets;
-        List<CategoryShareDto> categoryBreakdown = categoryCounts.entrySet().stream()
-                .map(e -> new CategoryShareDto(e.getKey(), e.getValue(),
-                        finalCategoryWindowSets == 0 ? 0.0
-                                : BigDecimal.valueOf(100.0 * e.getValue() / finalCategoryWindowSets)
-                                        .setScale(1, RoundingMode.HALF_UP).doubleValue()))
-                .sorted(Comparator.comparing(CategoryShareDto::setCount, Comparator.reverseOrder()))
-                .toList();
 
         return new TrendsOverviewDto(
                 weeklyPoints,
@@ -257,8 +237,7 @@ public class StatsService {
                 workoutCountByWeek.getOrDefault(currentWeekStart, 0),
                 workoutCountByWeek.getOrDefault(currentWeekStart.minusWeeks(1), 0),
                 volumeThisMonthLb.setScale(1, RoundingMode.HALF_UP),
-                volumeLastMonthLb.setScale(1, RoundingMode.HALF_UP),
-                categoryBreakdown);
+                volumeLastMonthLb.setScale(1, RoundingMode.HALF_UP));
     }
 
     @Transactional(readOnly = true)

@@ -9,6 +9,5 @@ public record TrendsOverviewDto(
         int workoutsThisWeek,
         int workoutsLastWeek,
         BigDecimal volumeThisMonthLb,
-        BigDecimal volumeLastMonthLb,
-        List<CategoryShareDto> categoryBreakdown) {
+        BigDecimal volumeLastMonthLb) {
 }

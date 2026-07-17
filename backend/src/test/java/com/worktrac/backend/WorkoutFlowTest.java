@@ -315,7 +315,7 @@ class WorkoutFlowTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         String[] lines = csvResponse.split("\n");
-        assertEquals("Date,Time,Exercise,Category,Set #,Weight,Unit,Reps,Est. 1RM", lines[0]);
+        assertEquals("Date,Time,Exercise,Tags,Set #,Weight,Unit,Reps,Est. 1RM", lines[0]);
         assertEquals(2, lines.length, "header + one set row");
         assertTrue(lines[1].contains("200"));
     }

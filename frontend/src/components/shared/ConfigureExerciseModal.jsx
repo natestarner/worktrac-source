@@ -1,31 +1,30 @@
 import { useState } from 'react';
-import { addCustomField, updateCustomField, removeCustomField, setExerciseCategory, updateExercise } from '../../api/exercises';
-import { createPersonCategory } from '../../api/personCategories';
+import { addCustomField, updateCustomField, removeCustomField, setExerciseTags, updateExercise } from '../../api/exercises';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
 
 // One place to personalize an exercise: rename/delete (your own exercises only), which of the
-// person's categories it's filed under, and the custom setup fields they've added. Setting a
-// field's *value* still happens by tapping its pill on the exercise screen -- this modal is
-// about structure, not values. Preloaded exercises are shared and immutable, so they show a
-// "Preloaded exercise" badge and no rename/delete.
+// account's tags are applied to it (for this person), and the custom setup fields they've added.
+// Setting a field's *value* still happens by tapping its pill on the exercise screen -- this
+// modal is about structure, not values. Preloaded exercises are shared and immutable, so they
+// show a "Preloaded exercise" badge and no rename/delete.
 export default function ConfigureExerciseModal({
   exercise,
   personId,
   exerciseId,
-  currentCategoryId,
-  categories,
+  allTags = [],
+  appliedTagNames = [],
   customFields,
   onClose,
   onFieldsChanged,
-  onCategoryChanged,
+  onTagsChanged,
   onExerciseChanged,
   onRequestDelete,
 }) {
   const isOwn = exercise && !exercise.isGlobal;
   const [name, setName] = useState(exercise?.name || '');
   const [newFieldName, setNewFieldName] = useState('');
-  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newTagName, setNewTagName] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function saveName() {
@@ -33,36 +32,45 @@ export default function ConfigureExerciseModal({
     if (!trimmed || trimmed === exercise.name || busy) return;
     setBusy(true);
     try {
-      // Pass the current base field names so a pure rename doesn't clear them.
-      await updateExercise(exercise.id, { name: trimmed, setupFieldNames: (exercise.setupFields || []).map((f) => f.name) });
+      await updateExercise(exercise.id, { name: trimmed });
       if (onExerciseChanged) await onExerciseChanged();
     } finally {
       setBusy(false);
     }
   }
 
-  async function fileCategory(categoryId) {
+  // The exercise's currently-applied tag names, compared case-insensitively so a chip's selected
+  // state matches regardless of how the vocabulary happens to be cased.
+  const selectedLower = new Set(appliedTagNames.map((n) => n.toLowerCase()));
+  const isSelected = (tagName) => selectedLower.has(tagName.toLowerCase());
+
+  // Apply the full new set of selected tag names, then let the parent refetch the exercise.
+  // createdNew flags that a brand-new name was introduced, so the account tag list gets refetched
+  // too (so it shows up as a chip).
+  async function applyTags(selectedNames, createdNew = false) {
     setBusy(true);
     try {
-      await setExerciseCategory(personId, exerciseId, categoryId);
-      await onCategoryChanged();
+      await setExerciseTags(personId, exerciseId, selectedNames);
+      await onTagsChanged(createdNew);
     } finally {
       setBusy(false);
     }
   }
 
-  async function createAndFileCategory() {
-    const trimmed = newCategoryName.trim();
+  async function toggleTag(tagName) {
+    if (busy) return;
+    const next = isSelected(tagName)
+      ? appliedTagNames.filter((n) => n.toLowerCase() !== tagName.toLowerCase())
+      : [...appliedTagNames, tagName];
+    await applyTags(next);
+  }
+
+  async function addTag() {
+    const trimmed = newTagName.trim();
     if (!trimmed || busy) return;
-    setBusy(true);
-    try {
-      const created = await createPersonCategory(personId, trimmed);
-      await setExerciseCategory(personId, exerciseId, created.id);
-      setNewCategoryName('');
-      await onCategoryChanged();
-    } finally {
-      setBusy(false);
-    }
+    setNewTagName('');
+    if (isSelected(trimmed)) return; // already applied -- nothing to do
+    await applyTags([...appliedTagNames, trimmed], true);
   }
 
   async function addField() {
@@ -84,8 +92,6 @@ export default function ConfigureExerciseModal({
     await removeCustomField(personId, exerciseId, field.id);
     await onFieldsChanged();
   }
-
-  const options = [{ id: null, name: 'Uncategorized' }, ...categories];
 
   return (
     <Modal width={360} onScrim={onClose}>
@@ -117,15 +123,16 @@ export default function ConfigureExerciseModal({
         </>
       )}
 
-      <div style={labelStyle}>Category</div>
+      <div style={labelStyle}>Tags</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-        {options.map((c) => {
-          const active = (c.id ?? null) === (currentCategoryId ?? null);
+        {allTags.map((t) => {
+          const active = isSelected(t.name);
           return (
             <button
-              key={c.id ?? 'none'}
-              onClick={() => fileCategory(c.id)}
+              key={t.id}
+              onClick={() => toggleTag(t.name)}
               disabled={busy}
+              aria-pressed={active}
               style={{
                 padding: '8px 14px',
                 borderRadius: 999,
@@ -137,26 +144,29 @@ export default function ConfigureExerciseModal({
                 cursor: 'pointer',
               }}
             >
-              {c.name}
+              {t.name}
             </button>
           );
         })}
+        {allTags.length === 0 && (
+          <div style={{ fontSize: 13, color: 'var(--color-faint)' }}>No tags yet.</div>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         <input
-          value={newCategoryName}
-          onChange={(e) => setNewCategoryName(e.target.value)}
+          value={newTagName}
+          onChange={(e) => setNewTagName(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
-              createAndFileCategory();
+              addTag();
             }
           }}
-          placeholder="New category"
+          placeholder="New tag"
           style={inputStyle}
         />
-        <button onClick={createAndFileCategory} disabled={busy || !newCategoryName.trim()} style={smallButtonStyle}>
-          Create
+        <button onClick={addTag} disabled={busy || !newTagName.trim()} style={smallButtonStyle}>
+          Add
         </button>
       </div>
 

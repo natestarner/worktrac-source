@@ -134,6 +134,22 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - Conventional commits: `feat(scope):`, `fix(scope):`, `docs:`, `test:`
 - All PRs require CI to pass before merge
 
+## Development Workflow
+- **All code changes are made in a git worktree, never edited directly on `main` in the
+  primary working directory.** Create the worktree under `.claude/worktrees/<branch>` (the
+  `EnterWorktree` tooling does this) on a new branch, iterate there, and keep the primary
+  working directory on a clean `main`. Each logical change / PR gets its own worktree.
+- One worktree = one branch = one logical change (one PR). Don't pile unrelated changes into
+  the same worktree.
+- When a change is ready to ship, use the **`/deploy-to-lower`** slash command
+  (`.claude/commands/deploy-to-lower.md`). It is **user-triggered only** — never invoke it
+  yourself. It documents requirements, adds/updates tests (incl. Playwright e2e), runs the
+  full test suite locally, opens the PR, merges to `main`, and then monitors the automated
+  lower deploy (backend + frontend + smoke + e2e) through to a green result.
+- Because branch protection forbids direct pushes to `main`, every path to `main` — including
+  any automated fix — goes through a PR with `backend-ci` + `frontend-ci` green. Never
+  force-push or bypass branch protection.
+
 ## Flyway Migration Rules
 - NEVER edit or rename a migration file that has already been applied — create a new one
 - One logical change per migration file (don't combine table creates)

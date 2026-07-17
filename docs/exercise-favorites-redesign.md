@@ -33,7 +33,8 @@ Goal: make the catalog **searched, not dumped**; let each **person** curate what
 - **Categories are per-person, user-created.** Exercises ship **uncategorized**
   (`exercises.category_id` made nullable); a person builds their own categories and files
   exercises into them. "Recommendations" = the seeded global category names, offered as
-  one-tap starters.
+  one-tap starters. (**Superseded 2026-07-17 — see the update entry at the bottom: categories
+  are replaced by shared, free-text, many-to-many tags.**)
 - **Only user-created exercises can be renamed/deleted**, and that happens on the exercise's
   own screen — the ⚙ **"Customize this exercise"** modal — which shows a **"Created by you"**
   vs **"Preloaded exercise"** badge so it's obvious why the option is/ isn't there.
@@ -87,6 +88,8 @@ Goal: make the catalog **searched, not dumped**; let each **person** curate what
 - **Base vs. overlay setup fields on your own exercises.** A user-created exercise can carry
   base fields (from creation) *and* per-person overlay fields; both render identically as
   value pills. Accepted as a minor, invisible-to-user wart rather than special-casing it.
+  (**Superseded 2026-07-16 — see the update entry at the bottom: shared "base" setup fields
+  (System A) were removed; all setup fields are per-person now, so the wart is gone.**)
 
 ## Data model & migrations
 
@@ -102,6 +105,8 @@ New tables (Flyway V19–V24):
 
 The old `forked_from_id` column and any existing forked rows are kept for historical data but
 are never triggered again. Logged sets, history, PRs, and exports are untouched by all of this.
+(**Superseded 2026-07-16 — see the update entry at the bottom: the `forked_from_id` column and
+the whole fork-on-edit code path have now been removed.**)
 
 The PR board and Trends stopped surfacing the legacy per-exercise category and were made
 null-safe (user-created exercises have no base category).
@@ -114,3 +119,84 @@ null-safe (user-created exercises have no base category).
   recommendations, routine auto-favorite, global edit/delete rejected, PRs safe for
   uncategorized exercises) and all pre-existing suites.
 - Frontend build, lint, and tests green.
+
+## Update — 2026-07-16: fork-on-edit machinery removed (V25)
+
+The favorites rebuild retired fork-on-edit but deliberately *kept* the `forked_from_id`
+column and the re-pointing helpers around for historical data (see the note in "Data model &
+migrations"). They were never triggered again — nothing ever set `forked_from_id`, so it was
+`NULL` on every row and the visibility query's exclusion subquery was a permanent no-op.
+
+That dead scaffolding has now been removed (behavior-preserving):
+
+- **Migration `V25__drop_forked_from_from_exercises.sql`** drops the
+  `IX_exercises_forked_from_id` index, the `FK_exercises_forked_from` FK, and the
+  `forked_from_id` column.
+- `Exercise.forkedFrom` (+ getter/setter) removed; `ExerciseRepository.findVisibleToAccount`
+  simplified to "every global exercise ∪ this account's own."
+- The unused fork re-point helpers removed:
+  `SetupValueRepository.findByField_IdAndPerson_IdIn` + `SetupValue.setField`,
+  `WorkoutSetRepository.findByPerson_IdInAndExercise_Id` + `WorkoutSet.setExercise`,
+  `RoutineExerciseRepository.findByExercise_IdAndRoutine_Person_IdIn` +
+  `RoutineExercise.setExercise` (all had zero callers).
+
+Rationale: with more people onboarding, keep `main` lean — dead history-re-pointing code is
+exactly the kind of risky-looking scaffolding worth deleting once it's provably unreachable.
+
+## Update — 2026-07-16: setup fields are now per-person only (V26–V28)
+
+The original model kept **two** setup-field systems side by side: shared field *names* on the
+exercise (`exercise_setup_fields`, seeded for the 14 system exercises) with per-person *values*
+in `setup_values` ("System A"), plus fully per-person fields with name+value inline on the
+`person_exercise` overlay (`person_exercise_fields`, "System B"). The two rendered identically
+as pills (the "wart" above), and two different modals each wrote to a different store.
+
+That is now collapsed to **one system: all setup fields are per-person** (System B). Rationale:
+with more people onboarding, one clear model ("your fields on your exercises") beats a hidden
+shared/overlay split; it removes a whole table, DTO field, and editor modal.
+
+- **Migrations:** `V26` back-fills every entered `setup_values` row into
+  `person_exercise_fields` (creating the `person_exercise` overlay row as needed, preserving
+  name/value/sort order) so no real data is lost; `V27` drops `setup_values`; `V28` drops
+  `exercise_setup_fields`. Seeded base-field *names* a person never entered a value for are
+  intentionally not carried over.
+- **Backend:** deleted the `setupvalue` package and `ExerciseSetupField*`; removed
+  `Exercise.setupFields`, `ExerciseRequest.setupFieldNames`, and `setupFields` from
+  `ExerciseDto`/`PersonExerciseDto`; account-deletion now cascades via
+  `person_exercise/person_exercise_fields`.
+- **Frontend:** deleted `api/setupValues.js` and the System-A `SetupFieldEditorModal`; removed
+  the base-field section from Add/Edit exercise and the System-A pills + fetch from
+  `ExerciseDetail`; the per-person fields (still on the `.../custom-fields` endpoints) are the
+  only setup-field UI.
+- Backend `mvn verify` (87 tests) and frontend Vitest (98 tests) green.
+- **Deferred:** renaming the per-person `/custom-fields` endpoints to `/setup-fields` (pure
+  cosmetics, larger cross-stack ripple) — left for a follow-up.
+
+## Update — 2026-07-17: categories replaced by tags (V29–V33)
+
+Per-person categories (a single category per exercise) were too rigid — a Romanian deadlift
+is legs *and* hamstrings *and* a hinge. Categories are replaced by **tags**: a shared,
+per-account, free-text vocabulary applied to exercises **many-to-many**, per person.
+
+Decisions:
+- **Shared vocabulary, per-person assignment.** Tags belong to the account (everyone picks
+  from the same free-text set — `GET /api/tags`), but which exercises each *person* tags stays
+  per-person (`person_exercise_tags`). Consistent with the app's per-person overlay model.
+- **Free-text, created on the fly.** Applying a tag by a name that doesn't exist yet upserts
+  it into the account vocabulary (`TagService.getOrCreate`, case-insensitive de-dup via DB
+  collation). No curated list, no "recommendations".
+- **Both category systems removed.** The legacy account/global `categories` taxonomy AND the
+  per-person `person_categories` are dropped — tags fully supersede them.
+- **Trends "category balance" chart removed** (it keyed off the legacy category; a set can now
+  belong to multiple tags, which breaks the 100%-stacked framing). CSV export's old "Category"
+  column (which also had a latent NPE) becomes a per-person **"Tags"** column.
+
+Migrations: `V29` creates `tags` (account-scoped, `UNIQUE(account_id, name)`); `V30` creates
+the `person_exercise_tags` join (both FKs cascade); `V31` back-fills tags + assignments from
+`person_categories`; `V32` drops `person_categories`; `V33` drops `exercises.category_id` +
+the legacy `categories` table. Backend `mvn verify` (84 tests) and frontend Vitest (98 tests)
++ build green.
+
+Rationale for the whole three-part cleanup (fork removal, setup-fields → per-person, tags):
+onboarding more household members meant lock-in on a lean, single-model data layer with no
+dead scaffolding.

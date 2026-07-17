@@ -2,28 +2,21 @@ package com.worktrac.backend.exercise;
 
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
-import com.worktrac.backend.category.Category;
-import com.worktrac.backend.category.CategoryRepository;
 import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.common.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class ExerciseService {
 
     private final ExerciseRepository exerciseRepository;
-    private final CategoryRepository categoryRepository;
     private final AccountRepository accountRepository;
 
-    public ExerciseService(ExerciseRepository exerciseRepository, CategoryRepository categoryRepository,
-                            AccountRepository accountRepository) {
+    public ExerciseService(ExerciseRepository exerciseRepository, AccountRepository accountRepository) {
         this.exerciseRepository = exerciseRepository;
-        this.categoryRepository = categoryRepository;
         this.accountRepository = accountRepository;
     }
 
@@ -39,16 +32,13 @@ public class ExerciseService {
     @Transactional
     public ExerciseDto add(Long accountId, ExerciseRequest request) {
         Account account = accountRepository.getReferenceById(accountId);
-        Category category = request.categoryId() == null ? null : requireVisibleCategory(accountId, request.categoryId());
-
-        Exercise exercise = new Exercise(account, category, request.name().trim());
-        syncSetupFields(exercise, request.setupFieldNamesOrEmpty());
+        Exercise exercise = new Exercise(account, request.name().trim());
         return ExerciseDto.from(exerciseRepository.save(exercise));
     }
 
     // Editing is only for an account's own exercises. Preloaded (global) exercises are shared
     // and immutable in the favorites model -- to customise one you favorite it and add your own
-    // setup fields via the personalization overlay, or add your own exercise. We therefore no
+    // setup fields via the per-person overlay, or add your own exercise. We therefore no
     // longer fork-on-edit; a global edit attempt is rejected outright.
     @Transactional
     public ExerciseDto update(Long accountId, Long exerciseId, ExerciseRequest request) {
@@ -56,11 +46,8 @@ public class ExerciseService {
         if (exercise.isGlobal()) {
             throw new ForbiddenException("Preloaded exercises can't be edited -- favorite it, or add your own");
         }
-        Category category = request.categoryId() == null ? null : requireVisibleCategory(accountId, request.categoryId());
 
         exercise.setName(request.name().trim());
-        exercise.setCategory(category);
-        syncSetupFields(exercise, request.setupFieldNamesOrEmpty());
         return ExerciseDto.from(exercise);
     }
 
@@ -83,41 +70,5 @@ public class ExerciseService {
             throw new NotFoundException("No such exercise");
         }
         return exercise;
-    }
-
-    // Diffs the exercise's setup fields against the desired names, preserving existing field
-    // rows (and therefore anyone's already-recorded setup values) for names that survive the
-    // edit, rather than always clearing and recreating -- which would cascade-delete every
-    // setup value on every edit, even a pure rename.
-    private void syncSetupFields(Exercise exercise, List<String> desiredNames) {
-        List<String> trimmed = desiredNames.stream()
-                .map(String::trim)
-                .filter(n -> !n.isEmpty())
-                .toList();
-
-        exercise.getSetupFields().removeIf(field -> !trimmed.contains(field.getName()));
-
-        Map<String, ExerciseSetupField> existingByName = new HashMap<>();
-        exercise.getSetupFields().forEach(field -> existingByName.put(field.getName(), field));
-
-        int order = 0;
-        for (String name : trimmed) {
-            ExerciseSetupField existing = existingByName.get(name);
-            if (existing != null) {
-                existing.setSortOrder(order++);
-            } else {
-                exercise.getSetupFields().add(new ExerciseSetupField(exercise, name, order++));
-            }
-        }
-    }
-
-    private Category requireVisibleCategory(Long accountId, Long categoryId) {
-        Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new NotFoundException("No such category"));
-        boolean visible = category.isGlobal() || category.getAccount().getId().equals(accountId);
-        if (!visible) {
-            throw new NotFoundException("No such category");
-        }
-        return category;
     }
 }

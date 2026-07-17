@@ -27,10 +27,6 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
 
     List<WorkoutSet> findByPerson_IdOrderByCreatedAtAsc(Long personId);
 
-    // Used when forking a system exercise: re-points this account's own logged sets
-    // from the shared original to the account-owned fork.
-    List<WorkoutSet> findByPerson_IdInAndExercise_Id(List<Long> personIds, Long exerciseId);
-
     Optional<WorkoutSet> findByIdAndPerson_Id(Long id, Long personId);
 
     // Defense-in-depth: confirms a set belongs to the caller's account by walking
