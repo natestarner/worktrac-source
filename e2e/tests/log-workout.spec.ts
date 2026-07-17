@@ -55,6 +55,17 @@ test.describe('Log workout', () => {
     await page.screenshot({ path: 'test-results/profile-tab.png' });
   });
 
+  test('search is forgiving of word order', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+
+    // "barbell squat" isn't a contiguous substring of "Barbell Back Squat" -- the older
+    // exact-substring matcher would miss it. Token-based matching should still find it,
+    // and clicking the result should select that exercise.
+    await page.getByPlaceholder('Search all exercises').fill('barbell squat');
+    await page.getByRole('button', { name: 'Barbell Back Squat' }).click();
+    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+  });
+
   test('nudges a routine-less person to create one, links to Routines, and stays dismissed', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
 

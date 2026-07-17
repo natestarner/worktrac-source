@@ -10,10 +10,12 @@ export async function pickExercise(page: Page, name: string) {
 }
 
 // The routine builder's "Add exercise to routine" pool likewise defaults to favorites/logged,
-// so search the catalog, then tap the "+ Name" chip.
+// so search the catalog, then tap the result row (search results render as a plain-name list,
+// same as the Log picker -- the "+ Name" chip styling only applies to the default
+// favorites/logged view, not search results).
 export async function addExerciseToRoutine(page: Page, name: string) {
   await page.getByPlaceholder('Search all exercises').fill(name);
-  await page.getByRole('button', { name: `+ ${name}`, exact: true }).click();
+  await page.getByRole('button', { name, exact: true }).click();
 }
 
 // Create a custom exercise via the always-present "+ Add your own exercise" button (on the Log

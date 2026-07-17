@@ -4,6 +4,8 @@ import AddEditExerciseModal from '../settings/AddEditExerciseModal';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
+import ExerciseSearchResults from '../shared/ExerciseSearchResults';
+import { searchExercises } from '../../utils/exerciseSearch';
 
 // Same favorites/logged-first-then-search model as the Log picker: the "Add exercise to
 // routine" pool defaults to the person's own list (personExercises); typing a search reveals
@@ -27,8 +29,8 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   const unselected = (e) => !selectedIds.includes(e.id);
 
   // Mirrors the Log picker: default view is the person's list split into "Favorites" and
-  // "Other Previously Logged"; typing a search reveals the whole catalog (flat).
-  const searchResults = searching ? catalog.filter((e) => unselected(e) && e.name.toLowerCase().includes(term)) : [];
+  // "Other Previously Logged"; typing a search reveals the whole catalog, ranked.
+  const searchResults = searching ? searchExercises(catalog.filter(unselected), exerciseFilter) : [];
   const favorites = personExercises.filter((e) => e.isFavorite && unselected(e));
   const otherLogged = personExercises.filter((e) => !e.isFavorite && unselected(e));
   const groups = [];
@@ -147,17 +149,12 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
       />
 
       {searching ? (
-        searchResults.length === 0 ? (
-          <div style={hintStyle}>No exercises match "{exerciseFilter}".</div>
-        ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
-            {searchResults.map((ex) => (
-              <button key={ex.id} onClick={() => addExercise(ex.id)} style={addChipStyle}>
-                + {ex.name}
-              </button>
-            ))}
-          </div>
-        )
+        <ExerciseSearchResults
+          results={searchResults}
+          term={exerciseFilter}
+          onSelect={addExercise}
+          emptyMessage={`No exercises match "${exerciseFilter}".`}
+        />
       ) : groups.length === 0 ? (
         <div style={hintStyle}>Your favorited and logged exercises appear here. Search above to add any other exercise.</div>
       ) : (

@@ -1,5 +1,7 @@
 import { useAppState } from '../../context/AppStateContext';
+import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import Skeleton from '../shared/Skeleton';
+import { searchExercises } from '../../utils/exerciseSearch';
 
 // The Log picker. By default it shows only this person's list -- the exercises they've
 // favorited or logged a set for -- split into two headings: "Favorites" and "Other Previously
@@ -26,8 +28,8 @@ export default function ExercisePicker({
   if (favorites.length > 0) groups.push({ id: 'favorites', name: 'Favorites', items: favorites });
   if (otherLogged.length > 0) groups.push({ id: 'other', name: 'Other Previously Logged', items: otherLogged });
 
-  // Search view: filter the whole catalog by name (flat).
-  const searchResults = searching ? catalog.filter((e) => e.name.toLowerCase().includes(term)) : [];
+  // Search view: ranked, token-based matching across the whole catalog.
+  const searchResults = searching ? searchExercises(catalog, exerciseSearch) : [];
 
   const showRoutineQuickStart = !searching && !hasActiveRoutine && routines.length > 0;
   const hasList = personExercises.length > 0;
@@ -97,18 +99,15 @@ export default function ExercisePicker({
 
       {/* Search results across the whole catalog */}
       {!loading && searching && (
-        searchResults.length === 0 ? (
-          <div style={emptyStyle}>No exercises match "{exerciseSearch}".</div>
-        ) : (
-          <div style={{ marginBottom: 20 }}>
-            <div style={sectionLabelStyle}>Search results</div>
-            <div style={chipWrapStyle}>
-              {searchResults.map((ex) => (
-                <ExerciseChip key={ex.id} name={ex.name} onSelect={() => onSelectExercise(ex.id)} />
-              ))}
-            </div>
-          </div>
-        )
+        <div style={{ marginBottom: 20 }}>
+          <div style={sectionLabelStyle}>Search results</div>
+          <ExerciseSearchResults
+            results={searchResults}
+            term={exerciseSearch}
+            onSelect={onSelectExercise}
+            emptyMessage={`No exercises match "${exerciseSearch}".`}
+          />
+        </div>
       )}
 
       {/* Default view: Favorites + Other Previously Logged */}

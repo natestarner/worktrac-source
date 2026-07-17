@@ -44,11 +44,12 @@ describe('RoutineFormModal exercise selection', () => {
     expect(screen.getByRole('button', { name: '+ Bench Press' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Squat' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '+ Bent-Over Row' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '+ Cable Fly' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cable Fly' })).not.toBeInTheDocument();
 
-    // Searching reveals the whole catalog (incl. non-favorited Cable Fly).
+    // Searching reveals the whole catalog (incl. non-favorited Cable Fly), rendered as a
+    // plain-name list row rather than a "+ Name" chip.
     fireEvent.change(screen.getByPlaceholderText('Search all exercises'), { target: { value: 'ca' } });
-    expect(screen.getByRole('button', { name: '+ Cable Fly' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cable Fly' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('Search all exercises'), { target: { value: 'zzz' } });
     expect(screen.getByText('No exercises match "zzz".')).toBeInTheDocument();
@@ -68,7 +69,7 @@ describe('RoutineFormModal exercise selection', () => {
 
     const filterInput = screen.getByPlaceholderText('Search all exercises');
     fireEvent.change(filterInput, { target: { value: 'ca' } });
-    fireEvent.click(screen.getByRole('button', { name: '+ Cable Fly' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cable Fly' }));
 
     expect(filterInput).toHaveValue('');
   });
