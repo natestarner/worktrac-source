@@ -117,7 +117,7 @@ export default function ExercisePicker({
       {!loading && !searching && (
         !hasList ? (
           <div style={emptyStyle}>
-            No exercises yet. Search above to find an exercise and log a set, or favorite it from its page.
+            No favorite exercises yet. Search the exercise library above to find one, or add your own below.
           </div>
         ) : (
           groups.map((group) => (
