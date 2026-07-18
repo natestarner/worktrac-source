@@ -10,6 +10,9 @@ test.describe('Log workout', () => {
 
     // A fresh person's picker is empty -- search the catalog to pick an exercise.
     await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+    await expect(
+      page.getByText('No favorite exercises yet. Search the exercise library above to find one, or add your own below.')
+    ).toBeVisible();
     await pickExercise(page, 'Barbell Bench Press');
     await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
 
