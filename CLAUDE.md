@@ -136,6 +136,32 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   which emails eventually 429 under repeated requests). Any future change to this flow
   (new error message, a "no account found" UI state, etc.) must preserve that indistinguishability.
 
+## Admin Portal Notes
+- **`ADMIN_EMAILS` (an env var wired per-environment in the `worktrac-deploy` repo) is the
+  real source of truth for who is an admin** — `users.role` (`'USER'`/`'ADMIN'`) is only a
+  cache of it, never edited by hand. It's reconciled in two places:
+  - `AuthService.login` — promotes or demotes on every login, so removing someone from the
+    allowlist takes effect on their next login without a redeploy.
+  - `AdminBootstrap` (an `ApplicationRunner`) — promotes any already-registered listed user
+    once at startup, so a freshly added `ADMIN_EMAILS` entry doesn't require that person to
+    log out and back in first. It never demotes; only login does.
+  - `RegistrationService.confirmEmail`'s auto-login does **not** reconcile — a brand-new
+    admin-allowlisted registration is still `USER` until their first explicit `/api/auth/login`.
+  - The JWT carries the role as a claim (`JwtService`); `JwtAuthenticationFilter` builds the
+    Spring Security authority from it. A token minted before this claim existed parses with
+    role defaulting to `USER`, not failing closed to `ADMIN` — never invert that default.
+- **`/api/admin/**` is gated at the route level** (`SecurityConfig` → `hasRole("ADMIN")`),
+  not per-controller-method — `AdminController`/`AdminService` are the one place in the app
+  that deliberately reads across every account instead of scoping to
+  `CurrentUser.accountId()`. Admin DTOs must never include `password_hash` or
+  `pending_registrations.code_hash` — curate every field added to them.
+- **Read-only in this phase** — no admin action mutates app data. Login-attempt/email-sent
+  audit logging (a natural next step) is deliberately deferred, not part of this feature.
+- Frontend: `AdminRoute` redirects a non-admin (even if authenticated) to `/app/log` rather
+  than showing an access-denied screen, so the portal's existence isn't revealed to ordinary
+  users. It's a standalone layout (`AdminShell`) under `/admin`, not a tab inside the
+  workout app's `AppShell`/`TabsNav`.
+
 ## Frontend State Notes
 - **Every person has their own independent client-side state.** Whatever a person is
   currently doing or viewing — which tab/screen, selected exercise, routine position,
