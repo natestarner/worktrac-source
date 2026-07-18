@@ -229,7 +229,7 @@ public class RegistrationService {
         User user = userRepository.save(new User(account, email, passwordHash));
         Person person = personRepository.save(new Person(account, personName, true));
 
-        String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail());
+        String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole());
         return new AuthResponse(token, UserDto.from(user), AccountDto.from(account), PersonDto.from(person));
     }
 }

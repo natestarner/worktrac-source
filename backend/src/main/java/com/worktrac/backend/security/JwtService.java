@@ -25,13 +25,14 @@ public class JwtService {
         this.key = Keys.hmacShaKeyFor(jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateToken(Long userId, Long accountId, String email) {
+    public String generateToken(Long userId, Long accountId, String email, String role) {
         Instant now = Instant.now();
         Instant expiry = now.plus(jwtProperties.getExpirationMinutes(), ChronoUnit.MINUTES);
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim("accountId", accountId)
                 .claim("email", email)
+                .claim("role", role)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiry))
                 .signWith(key)
@@ -49,7 +50,10 @@ public class JwtService {
             Long userId = Long.valueOf(claims.getSubject());
             Long accountId = claims.get("accountId", Number.class).longValue();
             String email = claims.get("email", String.class);
-            return Optional.of(new AccountPrincipal(userId, accountId, email));
+            // Defaults to USER for tokens issued before the role claim existed, so
+            // pre-existing 30-day tokens keep working without forcing a re-login.
+            String role = claims.get("role", String.class);
+            return Optional.of(new AccountPrincipal(userId, accountId, email, role == null ? "USER" : role));
         } catch (JwtException | IllegalArgumentException ex) {
             return Optional.empty();
         }

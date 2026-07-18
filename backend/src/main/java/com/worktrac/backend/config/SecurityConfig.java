@@ -40,9 +40,11 @@ public class SecurityConfig {
                                 "/api/auth/resend-code", "/api/auth/forgot-password", "/api/auth/reset-password",
                                 "/api/auth/resend-reset-code", "/api/auth/test/pending-code").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
-                .exceptionHandling(e -> e.authenticationEntryPoint(
-                        (request, response, authException) -> response.sendError(401, "Unauthorized")))
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint((request, response, authException) -> response.sendError(401, "Unauthorized"))
+                        .accessDeniedHandler((request, response, deniedException) -> response.sendError(403, "Forbidden")))
                 // Order matters here: addFilterBefore resolves each filter's position
                 // imperatively as this chain executes, so JwtAuthenticationFilter must be given
                 // a registered order (relative to the standard UsernamePasswordAuthenticationFilter)

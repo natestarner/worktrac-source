@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 export default function UserMenu() {
-  const { people, logout } = useAuth();
+  const { people, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
@@ -82,6 +82,12 @@ export default function UserMenu() {
         >
           <MenuItem label="Profile" onClick={() => go('/app/profile')} />
           <MenuItem label="App Settings" onClick={() => go('/app/settings')} />
+          {isAdmin && (
+            <>
+              <div style={{ borderTop: '1px solid var(--color-border)' }} />
+              <MenuItem label="Admin Portal" onClick={() => go('/admin')} />
+            </>
+          )}
           <div style={{ borderTop: '1px solid var(--color-border)' }} />
           <MenuItem label="Logout" onClick={handleLogout} />
         </div>
