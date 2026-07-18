@@ -23,6 +23,19 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+  # Azure Container Apps' ingress is the sole external entry point for this container --
+  # nothing can reach port 8080 directly, bypassing it -- and it sets X-Forwarded-* headers
+  # itself on every request it forwards, so trusting them here is safe. "framework" (Spring's
+  # own ForwardedHeaderFilter, a plain Servlet Filter) is used instead of Tomcat's
+  # RemoteIpValve because a Valve only runs inside a real embedded Tomcat connector and is
+  # invisible to MockMvc-based tests (MockMvc drives the filter chain directly, never a real
+  # connector) -- RemoteIpValve would make this behavior untestable. Safe locally too: with no
+  # reverse proxy in front of `mvn spring-boot:run`, ordinary local requests never carry
+  # X-Forwarded-* headers, so this filter has nothing to rewrite and getRemoteAddr() behaves
+  # exactly as before. Without this, the per-IP registration/reset rate limiter
+  # (RegistrationRateLimiter) bucketed every external user under the ingress's own hop
+  # address instead of the real client IP.
+  forward-headers-strategy: framework
 
 management:
   endpoints:

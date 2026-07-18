@@ -1,5 +1,6 @@
 package com.worktrac.backend.config;
 
+import com.worktrac.backend.security.AuthRequestLoggingFilter;
 import com.worktrac.backend.security.JwtAuthenticationFilter;
 import com.worktrac.backend.security.JwtService;
 import org.springframework.context.annotation.Bean;
@@ -42,7 +43,14 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint(
                         (request, response, authException) -> response.sendError(401, "Unauthorized")))
-                .addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
+                // Order matters here: addFilterBefore resolves each filter's position
+                // imperatively as this chain executes, so JwtAuthenticationFilter must be given
+                // a registered order (relative to the standard UsernamePasswordAuthenticationFilter)
+                // before anything can be positioned relative to it -- registering
+                // AuthRequestLoggingFilter first would throw "does not have a registered order"
+                // (confirmed by a real BeanCreationException without this ordering).
+                .addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new AuthRequestLoggingFilter(), JwtAuthenticationFilter.class);
         return http.build();
     }
 }
