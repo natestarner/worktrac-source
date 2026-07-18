@@ -203,7 +203,9 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - Spring profiles: `local` for development, `lower` for lower env, `production` for prod
 - The `local` profile uses Docker SQL Server on localhost:1434 (see note above)
 - NEVER commit passwords, tokens, or connection strings to code
-- Database free tier auto-pauses — expect cold start delays
+- Lower and production SQL Databases are on the Basic tier (switched 2026-07-18 from
+  serverless auto-pause, which added cold-start delays after idle periods — see the
+  incident below). Local dev's Dockerized SQL Server was never affected by this.
 
 ## Resolved Incident: Trivy scan failure (2026-07-09)
 - `docker-build`'s vulnerability scan started failing (silent exit code 1, no console
@@ -228,3 +230,52 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   if a real HIGH/CRITICAL finding ever fails the build, patching/upgrading the flagged
   dependency (rather than narrowing `vuln-type`) is the preferred fix, since it keeps
   full scan coverage instead of trading it away.
+
+## Resolved Incident: silent registration failures in production (2026-07-17)
+- Two people's registration attempts in production left zero trace anywhere: no
+  verification-code email sent (confirmed absent in Azure Communication Services), and no
+  error anywhere in the backend container logs.
+- Investigation ruled out, in order: an ACS send failure (a manual re-test sent
+  successfully, proving ACS credentials/connectivity were fine); container cold start
+  (min-replicas for `worktrac-backend-prod` had already been bumped to 1 days earlier);
+  and a production deploy landing mid-attempt (confirmed the deploy that evening had
+  already finished before the two people tried). SQL Database auto-pause was live at the
+  time and couldn't be ruled out, which is why lower/production were switched to Basic
+  tier (see the note above) during this investigation, before root cause was fully
+  confirmed.
+- The investigation kept hitting a dead end for a structural reason, not a data-availability
+  one: the backend produced **zero log output** for a registration attempt on almost every
+  path (success, rate-limit rejection, and most ordinary failures were all silent), so
+  there was nothing to inspect even with full Log Analytics access.
+- Separately, code reading surfaced a real, independent bug: `AuthController` read the
+  client IP via `servletRequest.getRemoteAddr()` with nothing trusting `X-Forwarded-For`.
+  Since Azure Container Apps' ingress is the sole external entry point and is a reverse
+  proxy, `getRemoteAddr()` always returned the ingress's own hop address — meaning the
+  "per-IP" registration/password-reset rate limit was accidentally a single bucket shared
+  by every external user of the whole app, not a per-household limit.
+- Fix (backend, `fix(auth): trust X-Forwarded-For and add auth request logging`):
+  `server.forward-headers-strategy: framework` in `application.yml` fixes the IP-bucketing
+  bug for all four affected endpoints at once. `RegistrationService` now logs the outcome
+  of every register/confirm/resend attempt (including which rate-limit bucket rejected a
+  request). A new front-door `AuthRequestLoggingFilter` on `/api/auth/**` logs
+  method/path/ip/email/status/duration for every request regardless of how deep it got,
+  closing the gap for requests that die before reaching any service (CORS rejection,
+  `@Valid` binding failures, an unhandled exception). The filter extracts only the `email`
+  field from the request body (never password or verification code).
+- A real bug surfaced while wiring up the new filter: registering it via
+  `.addFilterBefore(newFilter, JwtAuthenticationFilter.class)` *before*
+  `JwtAuthenticationFilter` itself had been given a registered order (via its own
+  `addFilterBefore` call relative to the standard `UsernamePasswordAuthenticationFilter`)
+  broke Spring Security startup entirely ("The Filter class ... does not have a registered
+  order"). `addFilterBefore` resolves each filter's position imperatively as the builder
+  chain executes — order the calls so any filter referenced as a `beforeFilter` argument
+  has already been given a position by an earlier call.
+- Also surfaced (unrelated to the fix itself, but found while verifying it): backend JUnit
+  tests run 4 test classes concurrently by default, each spinning up its own Testcontainers
+  SQL Server instance. On a dev machine that also keeps `worktrac-sqlserver` and
+  `inttime-sqlserver` running continuously, adding one more SQL-backed test class pushed a
+  4-way run over the host's available async-I/O resources and crashed every container
+  outright (`fs.aio-max-nr`). Empirically, 2-way parallelism didn't crash but was *slower*
+  than 1-way (containers thrash instead of parallelizing once host resources are this
+  contended) — `backend/src/test/resources/junit-platform.properties` is now pinned to
+  `parallelism=1` on this basis, with the measurements in its comment.
