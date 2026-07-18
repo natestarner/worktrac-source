@@ -20,6 +20,8 @@ import com.worktrac.backend.user.dto.ConfirmEmailRequest;
 import com.worktrac.backend.user.dto.RegisterRequest;
 import com.worktrac.backend.user.dto.RegisterStartedResponse;
 import com.worktrac.backend.user.dto.ResendCodeRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -38,6 +40,8 @@ import java.util.Optional;
 // AuthService into a class covering five distinct concerns.
 @Service
 public class RegistrationService {
+
+    private static final Logger log = LoggerFactory.getLogger(RegistrationService.class);
 
     private static final int MAX_ATTEMPTS = 5;
     private static final Duration RESEND_COOLDOWN = Duration.ofSeconds(60);
@@ -81,9 +85,10 @@ public class RegistrationService {
     public RegisterStartedResponse register(RegisterRequest request, String ipAddress) {
         String email = request.email().trim().toLowerCase();
         if (userRepository.existsByEmail(email)) {
+            log.warn("Registration rejected for {} from ip {}: account already exists", email, ipAddress);
             throw new ConflictException("An account with that email already exists");
         }
-        checkSendAllowed(ipAddress);
+        checkSendAllowed(email, ipAddress);
 
         String code = generateCode();
         Instant now = clock.instant();
@@ -104,6 +109,7 @@ public class RegistrationService {
         pendingRegistrationRepository.save(pending);
 
         sendCode(email, code);
+        log.info("Registration started for {} from ip {}", email, ipAddress);
         return new RegisterStartedResponse(email);
     }
 
@@ -117,23 +123,30 @@ public class RegistrationService {
     public AuthResponse confirmEmail(ConfirmEmailRequest request) {
         String email = request.email().trim().toLowerCase();
         PendingRegistration pending = pendingRegistrationRepository.findByEmail(email)
-                .orElseThrow(() -> new NotFoundException("No pending registration for that email"));
+                .orElseThrow(() -> {
+                    log.warn("Confirm-email failed for {}: no pending registration", email);
+                    return new NotFoundException("No pending registration for that email");
+                });
 
         if (pending.getExpiresAt().isBefore(clock.instant())) {
+            log.warn("Confirm-email failed for {}: code expired", email);
             throw new ExpiredException("This code has expired -- request a new one");
         }
         if (pending.getAttemptCount() >= MAX_ATTEMPTS) {
+            log.warn("Confirm-email failed for {}: locked out after {} incorrect attempts", email, MAX_ATTEMPTS);
             throw new LockedException("Too many incorrect attempts -- request a new code");
         }
         if (!passwordEncoder.matches(request.code(), pending.getCodeHash())) {
             pending.incrementAttemptCount();
             pendingRegistrationRepository.save(pending);
+            log.warn("Confirm-email failed for {}: incorrect code (attempt {})", email, pending.getAttemptCount());
             throw new UnauthorizedException("Incorrect code");
         }
 
         // Race guard: another confirm/register could have taken this email between when this
         // request started and now.
         if (userRepository.existsByEmail(email)) {
+            log.warn("Confirm-email failed for {}: account already exists (race)", email);
             throw new ConflictException("An account with that email already exists");
         }
 
@@ -141,6 +154,7 @@ public class RegistrationService {
                 email, pending.getPasswordHash(), pending.getPersonName(), pending.getAccountName());
         pendingRegistrationRepository.deleteByEmail(email);
         eventPublisher.publishEvent(new RegistrationConfirmedEvent(email));
+        log.info("Registration confirmed for {}", email);
         return response;
     }
 
@@ -148,17 +162,22 @@ public class RegistrationService {
     public void resendCode(ResendCodeRequest request, String ipAddress) {
         String email = request.email().trim().toLowerCase();
         PendingRegistration pending = pendingRegistrationRepository.findByEmail(email)
-                .orElseThrow(() -> new NotFoundException("No pending registration for that email"));
+                .orElseThrow(() -> {
+                    log.warn("Resend-code failed for {} from ip {}: no pending registration", email, ipAddress);
+                    return new NotFoundException("No pending registration for that email");
+                });
 
         Instant now = clock.instant();
         if (pending.getLastSentAt().plus(RESEND_COOLDOWN).isAfter(now)) {
+            log.warn("Resend-code rejected for {} from ip {}: cooldown active", email, ipAddress);
             throw new TooManyRequestsException("Please wait before requesting another code");
         }
         if (pending.getResendCount() >= MAX_RESENDS_PER_WINDOW
                 && pending.getLastSentAt().plus(RESEND_WINDOW).isAfter(now)) {
+            log.warn("Resend-code rejected for {} from ip {}: resend window limit reached", email, ipAddress);
             throw new TooManyRequestsException("Too many code requests -- please try again later");
         }
-        checkSendAllowed(ipAddress);
+        checkSendAllowed(email, ipAddress);
 
         String code = generateCode();
         pending.setCodeHash(passwordEncoder.encode(code));
@@ -169,18 +188,21 @@ public class RegistrationService {
         pendingRegistrationRepository.save(pending);
 
         sendCode(email, code);
+        log.info("Code resent for {} from ip {}", email, ipAddress);
     }
 
     private Instant expiresAt(Instant now) {
         return now.plus(Duration.ofMinutes(emailProperties.getCodeExpirationMinutes()));
     }
 
-    private void checkSendAllowed(String ipAddress) {
+    private void checkSendAllowed(String email, String ipAddress) {
         if (!rateLimiter.tryConsumeGlobal()) {
+            log.warn("Registration email send blocked by global rate limit for {} from ip {}", email, ipAddress);
             throw new TooManyRequestsException(
                     "Too many verification emails sent recently -- please try again later");
         }
         if (!rateLimiter.tryConsumePerIp(ipAddress)) {
+            log.warn("Registration email send blocked by per-IP rate limit for {} from ip {}", email, ipAddress);
             throw new TooManyRequestsException("Too many requests from this address -- please try again later");
         }
     }
