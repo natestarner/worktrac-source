@@ -38,7 +38,7 @@ export async function registerHousehold(page: Page, request: APIRequestContext, 
 // doesn't land on. Retrying tolerates that transient case (confirmed live 2026-07-13 as the
 // cause of an intermittent "Unexpected end of JSON input" failure) without masking a real
 // bug -- if the code is genuinely never sent, this still fails after the deadline.
-async function fetchPendingCode(request: APIRequestContext, apiUrl: string, email: string): Promise<string> {
+export async function fetchPendingCode(request: APIRequestContext, apiUrl: string, email: string): Promise<string> {
   const deadline = Date.now() + 10_000;
   while (true) {
     const response = await request.get(`${apiUrl}/api/auth/test/pending-code`, {

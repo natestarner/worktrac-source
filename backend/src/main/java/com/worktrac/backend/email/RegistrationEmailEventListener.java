@@ -1,5 +1,7 @@
 package com.worktrac.backend.email;
 
+import com.worktrac.backend.user.PasswordResetCodeIssuedEvent;
+import com.worktrac.backend.user.PasswordResetConfirmedEvent;
 import com.worktrac.backend.user.RegistrationConfirmedEvent;
 import com.worktrac.backend.user.VerificationCodeIssuedEvent;
 import org.slf4j.Logger;
@@ -43,6 +45,26 @@ public class RegistrationEmailEventListener {
             emailService.sendRegistrationSuccess(event.email());
         } catch (Exception e) {
             log.error("Failed to send registration-success email to {}", event.email(), e);
+        }
+    }
+
+    @Async("emailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onPasswordResetCodeIssued(PasswordResetCodeIssuedEvent event) {
+        try {
+            emailService.sendPasswordResetCode(event.email(), event.rawCode());
+        } catch (Exception e) {
+            log.error("Failed to send password-reset code email to {}", event.email(), e);
+        }
+    }
+
+    @Async("emailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onPasswordResetConfirmed(PasswordResetConfirmedEvent event) {
+        try {
+            emailService.sendPasswordResetSuccess(event.email());
+        } catch (Exception e) {
+            log.error("Failed to send password-reset-success email to {}", event.email(), e);
         }
     }
 }

@@ -16,6 +16,20 @@ export function resendCode({ email }) {
   return apiClient.post('/api/auth/resend-code', { email });
 }
 
+// Always resolves, even for an email with no account -- the backend response is deliberately
+// generic so this endpoint can't be used to discover which emails are registered.
+export function requestPasswordReset({ email }) {
+  return apiClient.post('/api/auth/forgot-password', { email });
+}
+
+export function resetPassword({ email, code, password }) {
+  return apiClient.post('/api/auth/reset-password', { email, code, password });
+}
+
+export function resendResetCode({ email }) {
+  return apiClient.post('/api/auth/resend-reset-code', { email });
+}
+
 export function login({ email, password }) {
   return apiClient.post('/api/auth/login', { email, password });
 }

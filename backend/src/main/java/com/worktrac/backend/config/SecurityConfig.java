@@ -36,7 +36,8 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/confirm-email",
-                                "/api/auth/resend-code", "/api/auth/test/pending-code").permitAll()
+                                "/api/auth/resend-code", "/api/auth/forgot-password", "/api/auth/reset-password",
+                                "/api/auth/resend-reset-code", "/api/auth/test/pending-code").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint(
