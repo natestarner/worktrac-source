@@ -46,3 +46,5 @@ app:
     # back down via its own property source, which gives it an isolated Spring context.
     per-ip-per-hour: 1000
     global-email-sends-per-hour: 1000
+  admin:
+    emails: ${ADMIN_EMAILS:nate+huddleadmin@starner.co}

@@ -8,6 +8,7 @@ import ConfirmEmailPage from './routes/ConfirmEmailPage';
 import ForgotPasswordPage from './routes/ForgotPasswordPage';
 import ResetPasswordPage from './routes/ResetPasswordPage';
 import ProtectedRoute from './routes/ProtectedRoute';
+import AdminRoute from './routes/AdminRoute';
 import AppShell from './routes/AppShell';
 import LogTab from './components/log/LogTab';
 import HistoryTab from './components/history/HistoryTab';
@@ -16,6 +17,11 @@ import RoutinesTab from './components/routines/RoutinesTab';
 import TrendsTab from './components/trends/TrendsTab';
 import AppSettingsTab from './components/settings/AppSettingsTab';
 import ProfileTab from './components/profile/ProfileTab';
+import AdminShell from './routes/admin/AdminShell';
+import AdminOverview from './routes/admin/AdminOverview';
+import AdminAccounts from './routes/admin/AdminAccounts';
+import AdminPeople from './routes/admin/AdminPeople';
+import AdminPending from './routes/admin/AdminPending';
 
 export default function App() {
   return (
@@ -39,6 +45,14 @@ export default function App() {
                 <Route path="trends" element={<TrendsTab />} />
                 <Route path="settings" element={<AppSettingsTab />} />
                 <Route path="profile" element={<ProfileTab />} />
+              </Route>
+            </Route>
+            <Route element={<AdminRoute />}>
+              <Route path="/admin" element={<AdminShell />}>
+                <Route index element={<AdminOverview />} />
+                <Route path="accounts" element={<AdminAccounts />} />
+                <Route path="people" element={<AdminPeople />} />
+                <Route path="pending" element={<AdminPending />} />
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

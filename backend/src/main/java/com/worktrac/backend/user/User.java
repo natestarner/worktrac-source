@@ -34,6 +34,12 @@ public class User {
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
+    // 'USER' or 'ADMIN'. The env-driven ADMIN_EMAILS allowlist is the real source of
+    // truth (see AdminProperties) -- this column is a cache reconciled at login and at
+    // startup, never edited directly.
+    @Column(nullable = false, length = 20)
+    private String role = "USER";
+
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -72,6 +78,14 @@ public class User {
 
     public void updatePasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 
     public Instant getCreatedAt() {

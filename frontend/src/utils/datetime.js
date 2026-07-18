@@ -44,3 +44,18 @@ export function formatRestTime(sec) {
   const s = sec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
 }
+
+// Full date+time label for timestamps that can be arbitrarily old (admin portal signup/
+// activity dates) -- formatDateLabel's "Today"/"Yesterday" relative framing only makes
+// sense for recent workout activity. Handles null (e.g. an account with no sessions yet
+// has no lastActivityAt).
+export function formatDateTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}

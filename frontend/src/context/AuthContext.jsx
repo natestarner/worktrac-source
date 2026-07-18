@@ -88,10 +88,13 @@ export function AuthProvider({ children }) {
     setState((s) => ({ ...s, account: data.account, people: data.people }));
   }, []);
 
+  const isAdmin = state.user?.role === 'ADMIN';
+
   return (
     <AuthContext.Provider
       value={{
         ...state,
+        isAdmin,
         login,
         register,
         confirmEmail,

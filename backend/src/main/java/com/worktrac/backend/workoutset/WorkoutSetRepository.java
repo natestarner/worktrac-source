@@ -34,4 +34,8 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     Optional<WorkoutSet> findByIdAndSession_Person_Account_Id(Long id, Long accountId);
 
     boolean existsByExercise_Id(Long exerciseId);
+
+    // Admin-only: [accountId, count] pairs across ALL accounts, consumed only by AdminService.
+    @Query("SELECT ws.session.person.account.id, COUNT(ws) FROM WorkoutSet ws GROUP BY ws.session.person.account.id")
+    List<Object[]> countGroupedByAccount();
 }

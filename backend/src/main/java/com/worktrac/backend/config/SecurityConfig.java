@@ -40,9 +40,20 @@ public class SecurityConfig {
                                 "/api/auth/resend-code", "/api/auth/forgot-password", "/api/auth/reset-password",
                                 "/api/auth/resend-reset-code", "/api/auth/test/pending-code").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
-                .exceptionHandling(e -> e.authenticationEntryPoint(
-                        (request, response, authException) -> response.sendError(401, "Unauthorized")))
+                // setStatus, not sendError: sendError triggers the servlet container's internal
+                // forward to /error, which re-runs the whole security filter chain for that
+                // forwarded dispatch -- and since this app is stateless (no session-persisted
+                // SecurityContext), that second pass sees an anonymous principal, not the
+                // original JWT auth. For a plain 401 that's invisible (anonymous -> still 401),
+                // but for accessDeniedHandler's 403 case the forwarded, now-anonymous request
+                // fails .anyRequest().authenticated() and gets sent to the entry point instead,
+                // silently downgrading every real 403 into a 401 (confirmed live: MockMvc never
+                // catches this since it doesn't perform a real container-level error dispatch).
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint((request, response, authException) -> response.setStatus(401))
+                        .accessDeniedHandler((request, response, deniedException) -> response.setStatus(403)))
                 // Order matters here: addFilterBefore resolves each filter's position
                 // imperatively as this chain executes, so JwtAuthenticationFilter must be given
                 // a registered order (relative to the standard UsernamePasswordAuthenticationFilter)
