@@ -26,6 +26,8 @@ public class EmailService {
     private final int codeExpirationMinutes;
     private final String verificationCodeTemplate;
     private final String registrationSuccessTemplate;
+    private final String passwordResetCodeTemplate;
+    private final String passwordResetSuccessTemplate;
 
     public EmailService(EmailProperties properties) {
         this.emailClient = new EmailClientBuilder()
@@ -37,6 +39,8 @@ public class EmailService {
         this.codeExpirationMinutes = properties.getCodeExpirationMinutes();
         this.verificationCodeTemplate = loadTemplate("templates/email/verification-code.html");
         this.registrationSuccessTemplate = loadTemplate("templates/email/registration-success.html");
+        this.passwordResetCodeTemplate = loadTemplate("templates/email/password-reset-code.html");
+        this.passwordResetSuccessTemplate = loadTemplate("templates/email/password-reset-success.html");
     }
 
     public void sendVerificationCode(String toEmail, String code) {
@@ -56,6 +60,24 @@ public class EmailService {
 
         send(toEmail, "You're all set! Your Huddle account is confirmed",
                 "Your Huddle account is confirmed and ready to go. Open the app: " + appUrl, html);
+    }
+
+    public void sendPasswordResetCode(String toEmail, String code) {
+        String html = passwordResetCodeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{CODE_PART_1}}", code.substring(0, 3))
+                .replace("{{CODE_PART_2}}", code.substring(3))
+                .replace("{{EXPIRATION_MINUTES}}", String.valueOf(codeExpirationMinutes));
+
+        send(toEmail, "Your Huddle password reset code", plainTextPasswordResetCode(code), html);
+    }
+
+    public void sendPasswordResetSuccess(String toEmail) {
+        String html = passwordResetSuccessTemplate.replace("{{LOGO_URL}}", logoUrl);
+
+        send(toEmail, "Your Huddle password was changed",
+                "The password on your Huddle account was just reset. If this wasn't you, reset it again right away.",
+                html);
     }
 
     // Email clients need a real, absolute image URL (inline <svg> and data: URIs are both
@@ -86,6 +108,10 @@ public class EmailService {
 
     private String plainTextVerificationCode(String code) {
         return "Your verification code is " + code + ". It expires in " + codeExpirationMinutes + " minutes.";
+    }
+
+    private String plainTextPasswordResetCode(String code) {
+        return "Your password reset code is " + code + ". It expires in " + codeExpirationMinutes + " minutes.";
     }
 
     private String loadTemplate(String classpathLocation) {

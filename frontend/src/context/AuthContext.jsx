@@ -5,7 +5,10 @@ import {
   login as apiLogin,
   me as apiMe,
   register as apiRegister,
+  requestPasswordReset as apiRequestPasswordReset,
   resendCode as apiResendCode,
+  resendResetCode as apiResendResetCode,
+  resetPassword as apiResetPassword,
 } from '../api/auth';
 import { getAuthToken, setAuthToken, setUnauthorizedHandler } from '../api/client';
 
@@ -59,6 +62,20 @@ export function AuthProvider({ children }) {
     return apiResendCode({ email });
   }, []);
 
+  // Does not log the user in -- reset requires re-entering the new password at /login
+  // afterward, same as any other password change.
+  const requestPasswordReset = useCallback(async ({ email }) => {
+    return apiRequestPasswordReset({ email });
+  }, []);
+
+  const resetPassword = useCallback(async ({ email, code, password }) => {
+    return apiResetPassword({ email, code, password });
+  }, []);
+
+  const resendResetCode = useCallback(async ({ email }) => {
+    return apiResendResetCode({ email });
+  }, []);
+
   const logout = useCallback(() => {
     setAuthToken(null);
     setState({ status: 'unauthenticated', user: null, account: null, people: [] });
@@ -72,7 +89,20 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, confirmEmail, resendCode, logout, refreshPeople }}>
+    <AuthContext.Provider
+      value={{
+        ...state,
+        login,
+        register,
+        confirmEmail,
+        resendCode,
+        requestPasswordReset,
+        resetPassword,
+        resendResetCode,
+        logout,
+        refreshPeople,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

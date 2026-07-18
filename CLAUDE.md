@@ -126,6 +126,16 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
     storing an empty string, so "has a note" can be tested by row presence alone — don't
     special-case empty strings anywhere downstream.
 
+## Auth Notes
+- **Password reset (`POST /api/auth/forgot-password`, `/reset-password`,
+  `/resend-reset-code`) is deliberately non-enumerating** — see `PasswordResetService.java`.
+  Requesting a reset for an email with no account must return the exact same response as a
+  registered one: same `200`, same generic body, and it must consume the same rate-limit
+  quota (`checkSendAllowed` runs *before* the `existsByEmail` check, not after — gating it
+  only on the known-email branch would let an attacker distinguish "known" from "unknown" by
+  which emails eventually 429 under repeated requests). Any future change to this flow
+  (new error message, a "no account found" UI state, etc.) must preserve that indistinguishability.
+
 ## Frontend State Notes
 - **Every person has their own independent client-side state.** Whatever a person is
   currently doing or viewing — which tab/screen, selected exercise, routine position,

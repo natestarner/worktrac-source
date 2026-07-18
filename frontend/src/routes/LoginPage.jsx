@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/shared/Spinner';
 import logoLight from '../assets/huddle-lockup-barlow-light.svg';
@@ -8,10 +8,12 @@ import logoDark from '../assets/huddle-lockup-barlow-dark.svg';
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const successMessage = location.state?.message;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -59,6 +61,22 @@ export default function LoginPage() {
           />
         </picture>
 
+        {successMessage && (
+          <div
+            style={{
+              background: 'var(--color-pr-bg)',
+              color: 'var(--color-text)',
+              borderRadius: 10,
+              padding: '10px 14px',
+              fontSize: 13,
+              marginBottom: 16,
+              textAlign: 'left',
+            }}
+          >
+            {successMessage}
+          </div>
+        )}
+
         {error && (
           <div
             style={{
@@ -91,6 +109,10 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
           style={inputStyle}
         />
+
+        <div style={{ textAlign: 'right', marginTop: -6, marginBottom: 12 }}>
+          <Link to="/forgot-password" style={{ fontSize: 13, color: 'var(--color-muted)' }}>Forgot password?</Link>
+        </div>
 
         <button type="submit" disabled={submitting} style={{ ...primaryButtonStyle, position: 'relative' }}>
           <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Log in</span>
