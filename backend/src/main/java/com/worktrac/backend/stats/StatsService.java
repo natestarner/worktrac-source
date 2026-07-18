@@ -3,6 +3,8 @@ package com.worktrac.backend.stats;
 import com.worktrac.backend.exercise.Exercise;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
+import com.worktrac.backend.sessionexercisenote.SessionExerciseNote;
+import com.worktrac.backend.sessionexercisenote.SessionExerciseNoteRepository;
 import com.worktrac.backend.workoutset.WorkoutSet;
 import com.worktrac.backend.workoutset.WorkoutSetRepository;
 import org.springframework.stereotype.Service;
@@ -31,14 +33,16 @@ public class StatsService {
     private static final int MAX_WEEKS = 260;
 
     private final WorkoutSetRepository workoutSetRepository;
+    private final SessionExerciseNoteRepository sessionExerciseNoteRepository;
     private final PersonService personService;
     private final EpleyCalculator epleyCalculator;
     private final UnitConverter unitConverter;
     private final Clock clock;
 
-    public StatsService(WorkoutSetRepository workoutSetRepository, PersonService personService,
-                         EpleyCalculator epleyCalculator, UnitConverter unitConverter, Clock clock) {
+    public StatsService(WorkoutSetRepository workoutSetRepository, SessionExerciseNoteRepository sessionExerciseNoteRepository,
+                         PersonService personService, EpleyCalculator epleyCalculator, UnitConverter unitConverter, Clock clock) {
         this.workoutSetRepository = workoutSetRepository;
+        this.sessionExerciseNoteRepository = sessionExerciseNoteRepository;
         this.personService = personService;
         this.epleyCalculator = epleyCalculator;
         this.unitConverter = unitConverter;
@@ -86,7 +90,10 @@ public class StatsService {
                 .sorted(Comparator.comparing(WorkoutSet::getCreatedAt))
                 .map(s -> new SetSummaryDto(s.getWeight(), s.getReps(), s.getUnit()))
                 .toList();
-        return Optional.of(new LastSessionDto(bestSessionId, bestStartedAt, sets));
+        String note = sessionExerciseNoteRepository.findBySession_IdAndExercise_Id(bestSessionId, exerciseId)
+                .map(SessionExerciseNote::getNote)
+                .orElse(null);
+        return Optional.of(new LastSessionDto(bestSessionId, bestStartedAt, sets, note));
     }
 
     @Transactional(readOnly = true)

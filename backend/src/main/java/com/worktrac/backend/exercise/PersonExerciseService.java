@@ -43,8 +43,13 @@ public class PersonExerciseService {
         this.personService = personService;
     }
 
-    // The person's Log picker: every exercise they've favorited or logged a set for, carrying
-    // their personalization. Anything else in the catalog is reachable only via search.
+    // The person's Log picker: every exercise they've favorited, logged a set for, or left
+    // a standing note on, carrying their personalization. Anything else in the catalog is
+    // reachable only via search. A note has to count here the same way favoriting does --
+    // otherwise a note set on an exercise the person hasn't favorited/logged yet is
+    // unreachable through the picker afterward (personExercises.find() would miss it and
+    // fall back to the note-less catalog DTO), making the note effectively invisible right
+    // after saving it.
     @Transactional(readOnly = true)
     public List<PersonExerciseDto> listForPerson(Long accountId, Long personId) {
         Person person = personService.requireOwnedPerson(personId, accountId);
@@ -54,7 +59,7 @@ public class PersonExerciseService {
         for (PersonExercise pe : personExerciseRepository.findByPerson_Id(person.getId())) {
             Long exId = pe.getExercise().getId();
             byExerciseId.put(exId, pe);
-            if (pe.isFavorite()) {
+            if (pe.isFavorite() || (pe.getNote() != null && !pe.getNote().isBlank())) {
                 pickerIds.add(exId);
             }
         }
@@ -98,6 +103,18 @@ public class PersonExerciseService {
         PersonExercise pe = getOrCreate(person, exercise);
         pe.getTags().clear();
         pe.getTags().addAll(resolved);
+        return PersonExerciseDto.of(exercise, pe);
+    }
+
+    // The standing per-person note: a blank/whitespace-only value clears it back to null
+    // rather than storing an empty string.
+    @Transactional
+    public PersonExerciseDto setNote(Long accountId, Long personId, Long exerciseId, String note) {
+        Person person = personService.requireOwnedPerson(personId, accountId);
+        Exercise exercise = requireVisibleExercise(accountId, exerciseId);
+        PersonExercise pe = getOrCreate(person, exercise);
+        String trimmed = note == null ? "" : note.trim();
+        pe.setNote(trimmed.isEmpty() ? null : trimmed);
         return PersonExerciseDto.of(exercise, pe);
     }
 

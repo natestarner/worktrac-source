@@ -5,6 +5,7 @@ import { useUI } from '../../context/UIContext';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets, logLiveSet, logSetIntoSession, deleteSet } from '../../api/sets';
 import { listCustomFields, favoriteExercise, unfavoriteExercise, removeExercise } from '../../api/exercises';
+import { getSessionExerciseNote, saveLiveExerciseNote, saveSessionExerciseNote } from '../../api/notes';
 import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import WeightRepsStepper from './WeightRepsStepper';
@@ -12,6 +13,7 @@ import NumericKeypad from '../shared/NumericKeypad';
 import CustomFieldEditorModal from '../shared/CustomFieldEditorModal';
 import ConfigureExerciseModal from '../shared/ConfigureExerciseModal';
 import EditSetModal from '../shared/EditSetModal';
+import ExerciseNoteModal from '../shared/ExerciseNoteModal';
 import Button from '../shared/Button';
 import Skeleton from '../shared/Skeleton';
 
@@ -29,7 +31,7 @@ export default function ExerciseDetail({
   const activePersonName = people.length >= 2 ? people.find((p) => p.id === personId)?.name : null;
   const activePersonFirstName = activePersonName?.split(' ')[0];
   const { weightDraft, repsDraft, setWeightDraft, setRepsDraft } = useAppState();
-  const { showCelebration, startRestTimer, openConfirm } = useUI();
+  const { showCelebration, showToast, startRestTimer, openConfirm } = useUI();
 
   const contextSessionId = editingSessionId || liveSession?.id || null;
 
@@ -42,6 +44,8 @@ export default function ExerciseDetail({
   const [editingSet, setEditingSet] = useState(null);
   const [ready, setReady] = useState(false);
   const [justAddedSetId, setJustAddedSetId] = useState(null);
+  const [sessionNote, setSessionNote] = useState(null);
+  const [showSessionNoteModal, setShowSessionNoteModal] = useState(false);
 
   const defaultUnit = account?.defaultUnit || 'lb';
 
@@ -58,14 +62,34 @@ export default function ExerciseDetail({
   function refetchCustomFields() {
     return listCustomFields(personId, exercise.id).then(setCustomFields);
   }
+  function refetchSessionNote() {
+    if (!contextSessionId) {
+      setSessionNote(null);
+      return Promise.resolve();
+    }
+    return getSessionExerciseNote(contextSessionId, exercise.id).then((dto) => setSessionNote(dto?.note || null));
+  }
 
   useEffect(() => {
     setReady(false);
-    Promise.all([refetchSummary(), refetchSessionSets(), refetchCustomFields()]).finally(() =>
+    Promise.all([refetchSummary(), refetchSessionSets(), refetchCustomFields(), refetchSessionNote()]).finally(() =>
       setReady(true),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercise.id, contextSessionId]);
+
+  // Saving a note before any set is logged (contextSessionId is still null) must still
+  // materialize the live session, exactly like handleLogSet does for the first set of a
+  // workout -- see SessionExerciseNoteService.upsertLiveNote on the backend.
+  async function handleSaveSessionNote(note) {
+    const result = editingSessionId
+      ? await saveSessionExerciseNote(editingSessionId, exercise.id, note)
+      : await saveLiveExerciseNote(personId, { exerciseId: exercise.id, note });
+    if (!editingSessionId) await refetchLiveSession();
+    setSessionNote(result.note);
+    showToast(result.note ? 'Note saved' : 'Note cleared');
+    await refetchSummary();
+  }
 
   async function handleToggleFavorite() {
     if (exercise.isFavorite) await unfavoriteExercise(personId, exercise.id);
@@ -174,6 +198,14 @@ export default function ExerciseDetail({
               {exercise.isFavorite ? '★' : '☆'}
             </button>
             <button
+              onClick={() => setShowSessionNoteModal(true)}
+              aria-label={sessionNote ? 'Edit note for this session' : 'Add a note for this session'}
+              title={sessionNote ? 'Edit note for this session' : 'Add a note for this session'}
+              style={{ ...iconButtonStyle, fontSize: 19, color: sessionNote ? 'var(--color-accent)' : 'var(--color-faint)' }}
+            >
+              📝
+            </button>
+            <button
               onClick={() => setShowConfigureModal(true)}
               aria-label="Customize this exercise"
               title="Customize this exercise"
@@ -190,6 +222,20 @@ export default function ExerciseDetail({
                 </span>
               ))}
             </div>
+          )}
+
+          {exercise.note && (
+            <button onClick={() => setShowConfigureModal(true)} style={pinnedNoteStyle}>
+              <span style={{ marginRight: 6 }}>📌</span>
+              {exercise.note}
+            </button>
+          )}
+
+          {sessionNote && (
+            <button onClick={() => setShowSessionNoteModal(true)} style={sessionNoteStyle}>
+              <span style={{ marginRight: 6 }}>📝</span>
+              {sessionNote}
+            </button>
           )}
 
           {customFields.length > 0 && (
@@ -223,6 +269,12 @@ export default function ExerciseDetail({
               <div className="summary-card" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16 }}>
                 <div style={cardLabelStyle}>Last time &middot; {lastLabel}</div>
                 <div className="summary-card-value" style={{ fontWeight: 700 }}>{lastSetsText}</div>
+                {summary?.lastSession?.note && (
+                  <div style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--color-muted)', marginTop: 4 }}>
+                    <span style={{ marginRight: 4 }}>📝</span>
+                    {summary.lastSession.note}
+                  </div>
+                )}
               </div>
               <div className="summary-card" style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 16 }}>
                 <div style={{ ...cardLabelStyle, color: 'var(--color-pr-text)' }}>Best &middot; Est. 1RM</div>
@@ -390,6 +442,16 @@ export default function ExerciseDetail({
           }}
         />
       )}
+
+      {showSessionNoteModal && (
+        <ExerciseNoteModal
+          title="Note for this session"
+          subtitle="Just for today's workout -- shown again next time in your Last time card"
+          initialNote={sessionNote || ''}
+          onClose={() => setShowSessionNoteModal(false)}
+          onSave={handleSaveSessionNote}
+        />
+      )}
     </div>
   );
 }
@@ -433,6 +495,33 @@ const tagChipStyle = {
   color: 'var(--color-muted)',
   fontSize: 12,
   fontWeight: 700,
+};
+
+// A standing per-person note (persists across every session for this exercise) -- neutral
+// border so it reads as "always true", distinct from the session note's accent border
+// below ("true today").
+const pinnedNoteStyle = {
+  display: 'block',
+  width: '100%',
+  boxSizing: 'border-box',
+  textAlign: 'left',
+  background: 'var(--color-subtle-bg)',
+  border: 'none',
+  borderLeft: '3px solid var(--color-border)',
+  borderRadius: 8,
+  padding: '10px 14px',
+  fontSize: 13,
+  color: 'var(--color-muted)',
+  cursor: 'pointer',
+  marginBottom: 10,
+};
+
+// A note scoped to the current session -- accent border distinguishes it from the
+// standing note above.
+const sessionNoteStyle = {
+  ...pinnedNoteStyle,
+  borderLeft: '3px solid var(--color-accent)',
+  color: 'var(--color-text)',
 };
 
 function setupPillStyle(value) {

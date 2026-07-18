@@ -15,7 +15,8 @@ public record PersonExerciseDto(
         String trackingType,
         boolean isGlobal,
         boolean isFavorite,
-        List<TagDto> tags
+        List<TagDto> tags,
+        String note
 ) {
     public static PersonExerciseDto of(Exercise exercise, PersonExercise personExercise) {
         boolean favorite = personExercise != null && personExercise.isFavorite();
@@ -24,12 +25,14 @@ public record PersonExerciseDto(
                         .map(TagDto::from)
                         .sorted(Comparator.comparing(TagDto::name, String.CASE_INSENSITIVE_ORDER))
                         .toList();
+        String note = personExercise == null ? null : personExercise.getNote();
         return new PersonExerciseDto(
                 exercise.getId(),
                 exercise.getName(),
                 exercise.getTrackingType(),
                 exercise.isGlobal(),
                 favorite,
-                tags);
+                tags,
+                note);
     }
 }

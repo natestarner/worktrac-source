@@ -100,6 +100,31 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   - Computed from the app's injected `Clock` bean (`ClockConfig`), not `Instant.now()`,
     so it's deterministically testable with `MutableClock` (see `RestSecondsTest.java`),
     matching the same pattern `WorkoutSessionService` uses for its 8-hour staleness rule.
+- **Exercise notes** are two independent, coexisting features — don't conflate them:
+  - **Persistent note** (`person_exercise.note`, added in
+    `V35__add_note_to_person_exercise.sql`) — a standing per-person reminder shown every
+    session for that exercise (e.g. "keep elbows tucked"). Set via
+    `PersonExerciseService.setNote` / `PUT /api/people/{personId}/exercises/{exerciseId}/note`.
+    Isolated per person the same way `is_favorite` already is. A note (like favoriting)
+    also puts the exercise in the person's Log picker (`PersonExerciseService.listForPerson`
+    — picker = favorites UNION noted UNION logged) even if it was never favorited or
+    logged: without this, the frontend's `personExercises.find()` would miss it and fall
+    back to the note-less catalog DTO, making a just-saved note invisible on screen.
+  - **Session note** (`session_exercise_notes` table, added in
+    `V36__create_session_exercise_notes.sql`) — scoped to one workout, keyed on
+    `(session_id, exercise_id)`. Managed by `SessionExerciseNoteService`
+    (`com.worktrac.backend.sessionexercisenote`). Two write paths mirror the
+    `logLiveSet`/`logSetIntoSession` split above: `PUT
+    /api/people/{personId}/live-exercise-notes` calls
+    `WorkoutSessionService.getOrCreateLiveSession` first, so a note can be saved *before
+    any set is logged* in a workout; `PUT
+    /api/sessions/{sessionId}/exercises/{exerciseId}/note` targets an explicit (typically
+    past) session directly. The previous session's note is surfaced back via
+    `StatsService.getLastSession`'s `LastSessionDto.note` (the "Last time" card) and via
+    `WorkoutSessionService`'s History DTOs (`HistoryEntryDto.note`).
+  - **Both types: a blank/whitespace-only save deletes the underlying row** rather than
+    storing an empty string, so "has a note" can be tested by row presence alone — don't
+    special-case empty strings anywhere downstream.
 
 ## Frontend State Notes
 - **Every person has their own independent client-side state.** Whatever a person is
