@@ -79,7 +79,27 @@ export default function HistoryTab() {
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '4px 20px' }}>
             {session.entries.map((entry, i) => (
               <div key={entry.exerciseId} style={{ padding: '14px 0', borderBottom: i < session.entries.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{entry.exerciseName}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, flexShrink: 0 }}>{entry.exerciseName}</div>
+                  {entry.note && (
+                    <div
+                      title={entry.note}
+                      style={{
+                        fontSize: 12,
+                        fontStyle: 'italic',
+                        color: 'var(--color-muted)',
+                        minWidth: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        textAlign: 'right',
+                      }}
+                    >
+                      <span style={{ marginRight: 4 }}>📝</span>
+                      {entry.note}
+                    </div>
+                  )}
+                </div>
                 <div style={{ fontSize: 14, color: 'var(--color-muted)' }}>
                   {entry.sets.map((s) => `${s.weight}${s.unit || 'lb'}×${s.reps}`).join('   ')}
                 </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { addCustomField, updateCustomField, removeCustomField, setExerciseTags, updateExercise } from '../../api/exercises';
+import { setPersistentNote } from '../../api/notes';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
 
@@ -23,6 +24,7 @@ export default function ConfigureExerciseModal({
 }) {
   const isOwn = exercise && !exercise.isGlobal;
   const [name, setName] = useState(exercise?.name || '');
+  const [note, setNote] = useState(exercise?.note || '');
   const [newFieldName, setNewFieldName] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -33,6 +35,21 @@ export default function ConfigureExerciseModal({
     setBusy(true);
     try {
       await updateExercise(exercise.id, { name: trimmed });
+      if (onExerciseChanged) await onExerciseChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // A standing reminder for this exercise (e.g. "keep elbows tucked", "go light -- bad
+  // knee"), shown every session -- distinct from the per-session note reachable from the
+  // exercise screen's note glyph. Auto-saves on blur, matching the Name field above.
+  async function saveNote() {
+    const trimmed = note.trim();
+    if (trimmed === (exercise.note || '') || busy) return;
+    setBusy(true);
+    try {
+      await setPersistentNote(personId, exerciseId, trimmed);
       if (onExerciseChanged) await onExerciseChanged();
     } finally {
       setBusy(false);
@@ -122,6 +139,18 @@ export default function ConfigureExerciseModal({
           </div>
         </>
       )}
+
+      <div style={labelStyle}>Standing note</div>
+      <div style={{ fontSize: 12, color: 'var(--color-faint)', marginBottom: 8 }}>Shown every time you do this exercise</div>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        onBlur={saveNote}
+        maxLength={1000}
+        rows={2}
+        placeholder="e.g. Keep elbows tucked, bad knee -- go light"
+        style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit', marginBottom: 20 }}
+      />
 
       <div style={labelStyle}>Tags</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>

@@ -28,8 +28,9 @@ import java.util.Set;
 
 // One person's personalization of a shared exercise, layered on top without ever mutating the
 // exercise row. Holds whether it's favorited (shows in their picker), which of the household's
-// shared tags they've applied to it, plus any custom setup fields they added. A person's picker
-// list = these favorites UNION every exercise they have a logged set for.
+// shared tags they've applied to it, any custom setup fields they added, and a standing note
+// (also shows in their picker -- see PersonExerciseService.listForPerson). A person's picker
+// list = these favorites UNION noted exercises UNION every exercise they have a logged set for.
 @Entity
 @Table(name = "person_exercise")
 public class PersonExercise {
@@ -48,6 +49,12 @@ public class PersonExercise {
 
     @Column(name = "is_favorite", nullable = false)
     private boolean favorite = false;
+
+    // A standing reminder for this exercise, shown to this person every session (e.g.
+    // "keep elbows tucked", "go light -- bad knee"). Distinct from a session note, which
+    // is scoped to a single workout -- see the sessionexercisenote package.
+    @Column(length = 1000)
+    private String note;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "person_exercise_tags",
@@ -96,6 +103,14 @@ public class PersonExercise {
 
     public void setFavorite(boolean favorite) {
         this.favorite = favorite;
+    }
+
+    public String getNote() {
+        return note;
+    }
+
+    public void setNote(String note) {
+        this.note = note;
     }
 
     public Set<Tag> getTags() {

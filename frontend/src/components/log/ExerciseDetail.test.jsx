@@ -6,6 +6,7 @@ import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets, logLiveSet, logSetIntoSession } from '../../api/sets';
+import { getSessionExerciseNote, saveLiveExerciseNote, saveSessionExerciseNote } from '../../api/notes';
 
 // ExerciseDetail's handleLogSet only starts the 90s rest timer for a LIVE set --
 // never for a set logged while editing a past/retroactive session. This is the one
@@ -34,6 +35,11 @@ vi.mock('../../api/exercises', () => ({
   favoriteExercise: vi.fn(),
   unfavoriteExercise: vi.fn(),
 }));
+vi.mock('../../api/notes', () => ({
+  getSessionExerciseNote: vi.fn(),
+  saveLiveExerciseNote: vi.fn(),
+  saveSessionExerciseNote: vi.fn(),
+}));
 const exercise = { id: 1, name: 'Bench Press', tags: [], isFavorite: true, setupFields: [] };
 
 function renderExerciseDetail(props = {}) {
@@ -58,9 +64,10 @@ describe('ExerciseDetail rest-timer live-vs-retroactive gating', () => {
     startRestTimer = vi.fn();
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
     useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
-    useUI.mockReturnValue({ showCelebration: vi.fn(), startRestTimer, openConfirm: vi.fn() });
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer, openConfirm: vi.fn() });
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
     listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
     logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
     logSetIntoSession.mockResolvedValue({ isPR: false, best: null, session: { id: 102 }, set: { id: 202 } });
   });
@@ -99,9 +106,10 @@ describe('ExerciseDetail PR celebration payload', () => {
     showCelebration = vi.fn();
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
     useAppState.mockReturnValue({ weightDraft: 0, repsDraft: 12, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
-    useUI.mockReturnValue({ showCelebration, startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    useUI.mockReturnValue({ showCelebration, showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
     listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -139,5 +147,80 @@ describe('ExerciseDetail PR celebration payload', () => {
     await waitFor(() =>
       expect(showCelebration).toHaveBeenCalledWith(expect.objectContaining({ isBodyweight: false, est1rmText: '208 lb' })),
     );
+  });
+});
+
+// The session note glyph must be ghosted with no callout when the current session has no
+// note, and filled with a readable callout once one exists -- see ExerciseDetail.jsx's
+// sessionNote state and the pinnedNoteStyle/sessionNoteStyle callouts. Saving before any
+// set is logged still must go through the live-note endpoint (mirrors handleLogSet).
+describe('ExerciseDetail exercise notes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    listSessionSets.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows a ghosted glyph and no callout when the session has no note', async () => {
+    getSessionExerciseNote.mockResolvedValue(null);
+    renderExerciseDetail({ liveSession: { id: 101 } });
+
+    expect(await screen.findByRole('button', { name: 'Add a note for this session' })).toBeInTheDocument();
+    expect(screen.queryByText('Shoulder felt off today')).not.toBeInTheDocument();
+  });
+
+  it('shows a filled glyph and a callout once the session has a note', async () => {
+    getSessionExerciseNote.mockResolvedValue({ sessionId: 101, exerciseId: 1, note: 'Shoulder felt off today' });
+    renderExerciseDetail({ liveSession: { id: 101 } });
+
+    expect(await screen.findByRole('button', { name: 'Edit note for this session' })).toBeInTheDocument();
+    expect(screen.getByText('Shoulder felt off today')).toBeInTheDocument();
+  });
+
+  it('surfaces the previous session note in the Last time card', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: { sessionId: 55, startedAt: '2026-07-01T12:00:00Z', sets: [{ weight: 135, reps: 8, unit: 'lb' }], note: 'Felt strong' },
+      best: null,
+    });
+    getSessionExerciseNote.mockResolvedValue(null);
+    renderExerciseDetail();
+
+    expect(await screen.findByText('Felt strong')).toBeInTheDocument();
+  });
+
+  it('saves a note before any set is logged through the live-note endpoint', async () => {
+    const showToast = vi.fn();
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast, startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getSessionExerciseNote.mockResolvedValue(null);
+    saveLiveExerciseNote.mockResolvedValue({ sessionId: 101, exerciseId: 1, note: 'Cut it short' });
+    renderExerciseDetail({ liveSession: null });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a note for this session' }));
+    fireEvent.change(screen.getByPlaceholderText('Write a note...'), { target: { value: 'Cut it short' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(saveLiveExerciseNote).toHaveBeenCalledWith(7, { exerciseId: 1, note: 'Cut it short' }));
+    expect(showToast).toHaveBeenCalledWith('Note saved');
+    expect(saveSessionExerciseNote).not.toHaveBeenCalled();
+  });
+
+  it('saves through the explicit-session endpoint when editing a past session', async () => {
+    getSessionExerciseNote.mockResolvedValue(null);
+    saveSessionExerciseNote.mockResolvedValue({ sessionId: 55, exerciseId: 1, note: 'Backfilled note' });
+    renderExerciseDetail({ editingSessionId: 55, liveSession: null });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a note for this session' }));
+    fireEvent.change(screen.getByPlaceholderText('Write a note...'), { target: { value: 'Backfilled note' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(saveSessionExerciseNote).toHaveBeenCalledWith(55, 1, 'Backfilled note'));
+    expect(saveLiveExerciseNote).not.toHaveBeenCalled();
   });
 });

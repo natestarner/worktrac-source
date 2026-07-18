@@ -1,6 +1,7 @@
 package com.worktrac.backend.exercise;
 
 import com.worktrac.backend.security.CurrentUser;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,9 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-// Per-person view of exercises: the Log picker list (favorites UNION logged), favoriting,
-// applying the household's shared tags, and the per-person setup-field overlay. All setup
-// fields are per-person now; they live on the /{exerciseId}/custom-fields subpaths.
+// Per-person view of exercises: the Log picker list (favorites UNION noted UNION logged),
+// favoriting, applying the household's shared tags, the standing per-person note, and the
+// per-person setup-field overlay. All setup fields are per-person now; they live on the
+// /{exerciseId}/custom-fields subpaths.
 @RestController
 @RequestMapping("/api/people/{personId}/exercises")
 public class PersonExerciseController {
@@ -42,6 +44,12 @@ public class PersonExerciseController {
     @DeleteMapping("/{exerciseId}/favorite")
     public PersonExerciseDto unfavorite(@PathVariable Long personId, @PathVariable Long exerciseId) {
         return personExerciseService.setFavorite(currentUser.accountId(), personId, exerciseId, false);
+    }
+
+    @PutMapping("/{exerciseId}/note")
+    public PersonExerciseDto setNote(@PathVariable Long personId, @PathVariable Long exerciseId,
+                                      @Valid @RequestBody PersonExerciseNoteRequest request) {
+        return personExerciseService.setNote(currentUser.accountId(), personId, exerciseId, request.note());
     }
 
     @PutMapping("/{exerciseId}/tags")

@@ -3,6 +3,8 @@ package com.worktrac.backend.workoutsession;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
+import com.worktrac.backend.sessionexercisenote.SessionExerciseNote;
+import com.worktrac.backend.sessionexercisenote.SessionExerciseNoteRepository;
 import com.worktrac.backend.stats.SetSummaryDto;
 import com.worktrac.backend.workoutset.WorkoutSet;
 import com.worktrac.backend.workoutset.WorkoutSetRepository;
@@ -29,13 +31,16 @@ public class WorkoutSessionService {
 
     private final WorkoutSessionRepository workoutSessionRepository;
     private final WorkoutSetRepository workoutSetRepository;
+    private final SessionExerciseNoteRepository sessionExerciseNoteRepository;
     private final PersonService personService;
     private final Clock clock;
 
     public WorkoutSessionService(WorkoutSessionRepository workoutSessionRepository, WorkoutSetRepository workoutSetRepository,
-                                  PersonService personService, Clock clock) {
+                                  SessionExerciseNoteRepository sessionExerciseNoteRepository, PersonService personService,
+                                  Clock clock) {
         this.workoutSessionRepository = workoutSessionRepository;
         this.workoutSetRepository = workoutSetRepository;
+        this.sessionExerciseNoteRepository = sessionExerciseNoteRepository;
         this.personService = personService;
         this.clock = clock;
     }
@@ -127,13 +132,25 @@ public class WorkoutSessionService {
             setsBySession.computeIfAbsent(s.getSession().getId(), k -> new ArrayList<>()).add(s);
         }
 
+        // One bulk query for every session note across this person's history, rather than
+        // one query per (session, exercise) entry -- grouped in memory the same way sets
+        // already are above.
+        Map<Long, Map<Long, String>> notesBySessionThenExercise = new LinkedHashMap<>();
+        for (SessionExerciseNote n : sessionExerciseNoteRepository.findBySession_IdIn(List.copyOf(setsBySession.keySet()))) {
+            notesBySessionThenExercise
+                    .computeIfAbsent(n.getSession().getId(), k -> new LinkedHashMap<>())
+                    .put(n.getExercise().getId(), n.getNote());
+        }
+
         return workoutSessionRepository.findByPerson_IdOrderByStartedAtDesc(person.getId()).stream()
                 .filter(session -> setsBySession.containsKey(session.getId()))
-                .map(session -> toHistorySessionDto(session, setsBySession.get(session.getId())))
+                .map(session -> toHistorySessionDto(session, setsBySession.get(session.getId()),
+                        notesBySessionThenExercise.getOrDefault(session.getId(), Map.of())))
                 .toList();
     }
 
-    private HistorySessionDto toHistorySessionDto(WorkoutSession session, List<WorkoutSet> sessionSets) {
+    private HistorySessionDto toHistorySessionDto(WorkoutSession session, List<WorkoutSet> sessionSets,
+                                                   Map<Long, String> notesByExercise) {
         Map<Long, List<WorkoutSet>> byExercise = new LinkedHashMap<>();
         for (WorkoutSet s : sessionSets) {
             byExercise.computeIfAbsent(s.getExercise().getId(), k -> new ArrayList<>()).add(s);
@@ -142,7 +159,8 @@ public class WorkoutSessionService {
                 .map(sets -> new HistoryEntryDto(
                         sets.get(0).getExercise().getId(),
                         sets.get(0).getExercise().getName(),
-                        sets.stream().map(s -> new SetSummaryDto(s.getWeight(), s.getReps(), s.getUnit())).toList()))
+                        sets.stream().map(s -> new SetSummaryDto(s.getWeight(), s.getReps(), s.getUnit())).toList(),
+                        notesByExercise.get(sets.get(0).getExercise().getId())))
                 .toList();
         return new HistorySessionDto(session.getId(), session.getStartedAt(), session.getEndedAt(), session.isManual(), entries);
     }
