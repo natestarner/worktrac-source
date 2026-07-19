@@ -95,6 +95,9 @@ export default function LoginPage() {
 
         <input
           type="email"
+          id="email"
+          name="email"
+          autoComplete="username"
           required
           placeholder="Email"
           value={email}
@@ -103,6 +106,9 @@ export default function LoginPage() {
         />
         <input
           type="password"
+          id="password"
+          name="password"
+          autoComplete="current-password"
           required
           placeholder="Password"
           value={password}

@@ -122,6 +122,9 @@ export default function ResetPasswordPage() {
         <label style={labelStyle}>Reset code</label>
         <input
           autoFocus
+          id="reset-code"
+          name="one-time-code"
+          autoComplete="one-time-code"
           inputMode="numeric"
           maxLength={6}
           placeholder="123456"
@@ -143,6 +146,9 @@ export default function ResetPasswordPage() {
         <label style={labelStyle}>New password</label>
         <input
           type="password"
+          id="new-password"
+          name="new-password"
+          autoComplete="new-password"
           placeholder="At least 8 characters"
           value={password}
           onChange={(e) => {

@@ -178,13 +178,14 @@ export default function LogTab() {
               type="date"
               value={toLocalDateStr(editingSession.startedAt)}
               onChange={handleEditingDateChange}
-              style={{ flex: 1, padding: '10px 12px', border: 'none', borderRadius: 8, fontSize: 14 }}
+              // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
+              style={{ flex: 1, padding: '10px 12px', border: 'none', borderRadius: 8, fontSize: 16 }}
             />
             <input
               type="time"
               value={toLocalTimeStr(editingSession.startedAt)}
               onChange={handleEditingTimeChange}
-              style={{ flex: 1, padding: '10px 12px', border: 'none', borderRadius: 8, fontSize: 14 }}
+              style={{ flex: 1, padding: '10px 12px', border: 'none', borderRadius: 8, fontSize: 16 }}
             />
           </div>
         </div>

@@ -1,12 +1,14 @@
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
+import { useRestTimerPreference } from '../../hooks/useRestTimerPreference';
 import { formatRestTime } from '../../utils/datetime';
 
 export default function RestTimerBar() {
   const { activePersonId } = useAppState();
   const { restTimers, addRestTime, skipRestTimer } = useUI();
+  const [enabled] = useRestTimerPreference(activePersonId);
   const restTimer = restTimers[activePersonId];
-  if (!restTimer) return null;
+  if (!enabled || !restTimer) return null;
 
   return (
     <div

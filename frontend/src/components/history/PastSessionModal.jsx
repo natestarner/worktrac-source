@@ -35,13 +35,14 @@ export default function PastSessionModal({ onClose }) {
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          style={{ flex: 1, padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 15 }}
+          // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
+          style={{ flex: 1, padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 16 }}
         />
         <input
           type="time"
           value={time}
           onChange={(e) => setTime(e.target.value)}
-          style={{ flex: 1, padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 15 }}
+          style={{ flex: 1, padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 16 }}
         />
       </div>
       <div style={{ display: 'flex', gap: 10 }}>

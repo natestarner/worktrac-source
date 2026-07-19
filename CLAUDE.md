@@ -211,6 +211,26 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   any automated fix — goes through a PR with `backend-ci` + `frontend-ci` green. Never
   force-push or bypass branch protection.
 
+### Concurrent Sessions
+- **Assume more than one Claude Code session may be working in this repo at the same time**,
+  each in its own worktree under `.claude/worktrees/`. Sessions have stepped on each other
+  before (shared local dev ports, shared log files, confusion over "missing" uncommitted
+  work) — check for a sibling session before taking an action that assumes you're the only
+  one here:
+  - Before running `/run-local` or anything else that binds ports 3000/8080: run
+    `git worktree list` to see whether other worktrees exist, and check whether something is
+    already listening on those ports before assuming it's safe to kill it — it may be another
+    session's live dev server, not stale state.
+  - Local dev log files under `/c/tmp` are shared/global, not per-worktree — treat their
+    presence or a recent mtime as a signal another session may be active, not as free to
+    overwrite.
+  - Before concluding "my uncommitted changes are missing" or "someone deleted my work,"
+    check `git reflog` and `git worktree list` — a sibling session may have already
+    committed and merged what looks missing.
+  - Before deleting or reusing a worktree directory, or force-pushing/rebasing a branch,
+    check `.claude/worktrees/` for sibling worktrees that may still be mid-task on a related
+    branch.
+
 ## Flyway Migration Rules
 - NEVER edit or rename a migration file that has already been applied — create a new one
 - One logical change per migration file (don't combine table creates)
@@ -232,6 +252,10 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - Lower and production SQL Databases are on the Basic tier (switched 2026-07-18 from
   serverless auto-pause, which added cold-start delays after idle periods — see the
   incident below). Local dev's Dockerized SQL Server was never affected by this.
+- Production Container Apps run with `min-replicas=1` (always warm, no cold starts). Lower
+  Container Apps still scale to 0 (cold starts possible there). Combined with the SQL tier
+  note above: lower's database is always-on but its container isn't; production is
+  always-on end-to-end.
 
 ## Resolved Incident: Trivy scan failure (2026-07-09)
 - `docker-build`'s vulnerability scan started failing (silent exit code 1, no console

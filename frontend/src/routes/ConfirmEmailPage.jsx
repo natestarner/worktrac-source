@@ -114,6 +114,9 @@ export default function ConfirmEmailPage() {
         <label style={labelStyle}>Verification code</label>
         <input
           autoFocus
+          id="verification-code"
+          name="one-time-code"
+          autoComplete="one-time-code"
           inputMode="numeric"
           maxLength={6}
           placeholder="123456"
