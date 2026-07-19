@@ -36,13 +36,14 @@ export default function ExerciseNoteModal({ title, subtitle, initialNote, onClos
         maxLength={1000}
         rows={4}
         placeholder="Write a note..."
+        // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
         style={{
           width: '100%',
           boxSizing: 'border-box',
           padding: 14,
           border: '1px solid var(--color-border)',
           borderRadius: 10,
-          fontSize: 15,
+          fontSize: 16,
           fontFamily: 'inherit',
           resize: 'vertical',
           marginBottom: 18,

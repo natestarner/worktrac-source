@@ -3,11 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AppSettingsTab from './AppSettingsTab';
 import { createTag } from '../../api/tags';
 import { useAuth } from '../../context/AuthContext';
+import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
 
 // Exercises are managed on the exercise screen now; Settings only keeps units, the household's
-// shared tag manager, and data export.
+// shared tag manager, data export, and the per-person rest timer toggle.
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('../../api/tags', () => ({
   createTag: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('../../api/tags', () => ({
 vi.mock('../../api/account', () => ({ updateDefaultUnit: vi.fn() }));
 vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
+vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 vi.mock('../../hooks/useTags', () => ({ useTags: vi.fn() }));
 
@@ -26,9 +28,11 @@ describe('AppSettingsTab tag management', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     createTag.mockResolvedValue({ id: 1, name: 'Legs' });
     refetchTags = vi.fn().mockResolvedValue();
-    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, refreshPeople: vi.fn() });
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [], refreshPeople: vi.fn() });
+    useAppState.mockReturnValue({ activePersonId: 7 });
     useUI.mockReturnValue({ openConfirm: vi.fn() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: refetchTags });
   });
@@ -59,5 +63,27 @@ describe('AppSettingsTab tag management', () => {
     render(<AppSettingsTab />);
     expect(screen.queryByRole('button', { name: '+ Add exercise' })).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Search all exercises to add')).not.toBeInTheDocument();
+  });
+});
+
+describe('AppSettingsTab rest timer toggle', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [], refreshPeople: vi.fn() });
+    useAppState.mockReturnValue({ activePersonId: 7 });
+    useUI.mockReturnValue({ openConfirm: vi.fn() });
+    useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
+  });
+
+  it('defaults to On and persists Off per person without affecting other people', () => {
+    render(<AppSettingsTab />);
+
+    expect(localStorage.getItem('workout-tracker-rest-timer-enabled-7')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Off' }));
+
+    expect(localStorage.getItem('workout-tracker-rest-timer-enabled-7')).toBe('false');
+    expect(localStorage.getItem('workout-tracker-rest-timer-enabled-8')).toBeNull();
   });
 });

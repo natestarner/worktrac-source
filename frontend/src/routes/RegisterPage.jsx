@@ -126,6 +126,9 @@ export default function RegisterPage() {
         <label style={labelStyle}>Email</label>
         <input
           type="email"
+          id="email"
+          name="email"
+          autoComplete="username"
           placeholder="you@example.com"
           value={email}
           onChange={(e) => {
@@ -139,6 +142,9 @@ export default function RegisterPage() {
         <label style={labelStyle}>Password</label>
         <input
           type="password"
+          id="password"
+          name="new-password"
+          autoComplete="new-password"
           placeholder="At least 8 characters"
           value={password}
           onChange={(e) => {

@@ -261,13 +261,14 @@ const labelStyle = {
   marginBottom: 10,
 };
 
+// 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
 const inputStyle = {
   flex: 1,
   boxSizing: 'border-box',
   padding: '10px 12px',
   border: '1px solid var(--color-border)',
   borderRadius: 10,
-  fontSize: 14,
+  fontSize: 16,
 };
 
 const smallButtonStyle = {

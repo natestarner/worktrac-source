@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
+import { useRestTimerPreference } from '../../hooks/useRestTimerPreference';
 import { updateDefaultUnit } from '../../api/account';
 import { createTag, deleteTag } from '../../api/tags';
 import { downloadAllPeopleZip } from '../../api/export';
@@ -12,13 +14,18 @@ import Skeleton from '../shared/Skeleton';
 
 // Exercises are managed on the exercise screen itself now (favorite star + the gear "Customize
 // this exercise" modal, which is also where you rename/delete your own exercises). Settings
-// only keeps account-level bits: units, the household's shared tag vocabulary, and data export.
+// only keeps account-level bits: units, the household's shared tag vocabulary, and data export
+// -- plus the rest timer toggle below, which is a per-person preference (see
+// useRestTimerPreference), not account-level like the rest of this screen.
 export default function AppSettingsTab() {
   const navigate = useNavigate();
-  const { account, refreshPeople } = useAuth();
+  const { account, people, refreshPeople } = useAuth();
+  const { activePersonId } = useAppState();
   const { openConfirm } = useUI();
 
   const { tags, loading: tagsLoading, refetch: refetchTags } = useTags();
+  const [restTimerEnabled, setRestTimerEnabled] = useRestTimerPreference(activePersonId);
+  const activePersonName = people.length >= 2 ? people.find((p) => p.id === activePersonId)?.name : null;
 
   const [newTagName, setNewTagName] = useState('');
   const [tagNameError, setTagNameError] = useState(false);
@@ -98,6 +105,42 @@ export default function AppSettingsTab() {
         </div>
       </div>
 
+      <div style={sectionLabelStyle}>Rest Timer</div>
+      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
+        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
+          Show a countdown{activePersonName ? ` for ${activePersonName}` : ''} after logging a set.
+          Rest time between sets is always recorded for Trends either way.
+        </div>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--color-subtle-bg)', borderRadius: 12, padding: 4, maxWidth: 220 }}>
+          {[
+            { value: true, label: 'On' },
+            { value: false, label: 'Off' },
+          ].map(({ value, label }) => {
+            const active = restTimerEnabled === value;
+            return (
+              <button
+                key={label}
+                onClick={() => setRestTimerEnabled(value)}
+                style={{
+                  flex: 1,
+                  padding: '10px 0',
+                  border: 'none',
+                  borderRadius: 9,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  background: active ? 'var(--color-surface)' : 'transparent',
+                  color: active ? 'var(--color-accent)' : 'var(--color-muted)',
+                  boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div style={sectionLabelStyle}>Tags</div>
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
         Shared tags anyone on this account can apply to exercises from an exercise&rsquo;s Customize screen.
@@ -129,12 +172,13 @@ export default function AppSettingsTab() {
             if (tagNameError) setTagNameError(false);
           }}
           placeholder="New tag name"
+          // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
           style={{
             flex: 1,
             padding: '12px 14px',
             border: `1px solid ${tagNameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
             borderRadius: 10,
-            fontSize: 14,
+            fontSize: 16,
           }}
         />
         <Button onClick={() => handleAddTag()} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
