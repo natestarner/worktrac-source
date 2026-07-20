@@ -8,6 +8,7 @@ import { formatDateLabel, formatTime, toLocalDateStr } from '../../utils/datetim
 import PastSessionModal from './PastSessionModal';
 import Button from '../shared/Button';
 import Skeleton from '../shared/Skeleton';
+import RefreshingPill from '../shared/RefreshingPill';
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
@@ -19,7 +20,7 @@ export default function HistoryTab() {
   const navigate = useNavigate();
   const { activePersonId, startEditingSession } = useAppState();
   const { people } = useAuth();
-  const { history, loading } = useHistory(activePersonId);
+  const { history, loading, isFetching } = useHistory(activePersonId);
   const [showPastSessionModal, setShowPastSessionModal] = useState(false);
 
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
@@ -39,6 +40,8 @@ export default function HistoryTab() {
           Export data
         </Button>
       </div>
+
+      <RefreshingPill show={isFetching && !loading} />
 
       {loading &&
         Array.from({ length: 3 }).map((_, i) => (

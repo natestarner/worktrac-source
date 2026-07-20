@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { getPrs } from '../../api/stats';
+import { useEffect } from 'react';
+import { usePrs } from '../../hooks/usePrs';
 import { useExerciseTrend } from '../../hooks/useExerciseTrend';
 import { formatDateLabel } from '../../utils/datetime';
 import { convertWeight } from '../../utils/formulas';
@@ -21,18 +21,16 @@ const selectStyle = {
 };
 
 export default function ExerciseTrendSection({ personId, exerciseId, onSelectExercise, weeks, defaultUnit }) {
-  const [loggedExercises, setLoggedExercises] = useState([]);
+  // Same cached PR list the PR board reads (queryKeys.prs), so the dropdown can't diverge from it.
+  const { prs: loggedExercises } = usePrs(personId);
 
+  // Default the dropdown to the first exercise once the list has loaded and none is selected yet.
   useEffect(() => {
-    if (!personId) return;
-    getPrs(personId).then((prs) => {
-      setLoggedExercises(prs);
-      if (!exerciseId && prs.length > 0) {
-        onSelectExercise(prs[0].exerciseId);
-      }
-    });
+    if (!exerciseId && loggedExercises.length > 0) {
+      onSelectExercise(loggedExercises[0].exerciseId);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [personId]);
+  }, [loggedExercises, exerciseId]);
 
   const { points, loading } = useExerciseTrend(personId, exerciseId, weeks);
 

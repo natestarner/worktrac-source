@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { copyRoutine } from '../../api/routines';
+import { queryKeys } from '../../api/queryKeys';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import Modal from '../shared/Modal';
@@ -9,6 +11,7 @@ import Button from '../shared/Button';
 export default function CopyRoutineModal({ routine, personId, onClose }) {
   const { people } = useAuth();
   const { showToast } = useUI();
+  const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState([]);
   const [error, setError] = useState(false);
 
@@ -25,6 +28,9 @@ export default function CopyRoutineModal({ routine, personId, onClose }) {
       return;
     }
     await copyRoutine(personId, routine.id, selectedIds);
+    // Invalidate each RECIPIENT's routines so the copy is there the moment you switch to them,
+    // not after the 60s staleTime -- the write targets other people's personId-keyed entries.
+    selectedIds.forEach((id) => queryClient.invalidateQueries({ queryKey: queryKeys.routines(id) }));
     const names = otherPeople.filter((p) => selectedIds.includes(p.id)).map((p) => p.name);
     showToast(`Copied "${routine.name}" to ${names.join(', ')}`);
     onClose();

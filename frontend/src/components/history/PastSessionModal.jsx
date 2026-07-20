@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { createPastSession } from '../../api/sessions';
+import { queryKeys } from '../../api/queryKeys';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { localDateTimeToIso, toLocalDateStr, toLocalTimeStr } from '../../utils/datetime';
@@ -10,6 +12,7 @@ import Button from '../shared/Button';
 
 export default function PastSessionModal({ onClose }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { activePersonId, startEditingSession } = useAppState();
   const { people } = useAuth();
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
@@ -21,6 +24,8 @@ export default function PastSessionModal({ onClose }) {
   async function handleStart() {
     const iso = localDateTimeToIso(date, time);
     const session = await createPastSession(activePersonId, iso);
+    // The new (empty) session belongs in this person's History immediately.
+    queryClient.invalidateQueries({ queryKey: queryKeys.history(activePersonId) });
     startEditingSession(session);
     onClose();
     navigate('/app/log');

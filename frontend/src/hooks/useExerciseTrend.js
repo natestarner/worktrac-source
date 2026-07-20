@@ -1,22 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getExerciseTrend } from '../api/trends';
+import { queryKeys } from '../api/queryKeys';
 
 export function useExerciseTrend(personId, exerciseId, weeks) {
-  const [points, setPoints] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const refetch = useCallback(() => {
-    if (!personId || !exerciseId) {
-      setPoints([]);
-      return Promise.resolve();
-    }
-    setLoading(true);
-    return getExerciseTrend(personId, exerciseId, weeks).then(setPoints).finally(() => setLoading(false));
-  }, [personId, exerciseId, weeks]);
+  const query = useQuery({
+    queryKey: queryKeys.exerciseTrend(personId, exerciseId, weeks),
+    queryFn: () => getExerciseTrend(personId, exerciseId, weeks),
+    enabled: !!personId && !!exerciseId,
+  });
 
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const refetch = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.exerciseTrend(personId, exerciseId, weeks) }),
+    [queryClient, personId, exerciseId, weeks],
+  );
 
-  return { points, loading, refetch };
+  return { points: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, refetch };
 }

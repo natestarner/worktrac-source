@@ -51,6 +51,13 @@ public class PersonService {
     }
 
     @Transactional
+    public PersonDto setRestTimerEnabled(Long accountId, Long personId, boolean enabled) {
+        Person person = requireOwnedPerson(personId, accountId);
+        person.setRestTimerEnabled(enabled);
+        return PersonDto.from(person);
+    }
+
+    @Transactional
     public void remove(Long accountId, Long personId) {
         Person person = requireOwnedPerson(personId, accountId);
         if (person.isPrimary()) {

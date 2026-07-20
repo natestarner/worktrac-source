@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderWithQuery } from '../../test/queryWrapper';
 import PRsTab from './PRsTab';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
@@ -24,7 +25,7 @@ describe('PRsTab', () => {
         best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208, sessionStartedAt: '2026-07-01T00:00:00Z' },
       },
     ]);
-    render(<PRsTab />);
+    renderWithQuery(<PRsTab />);
 
     await waitFor(() => expect(screen.getByText('208 lb')).toBeInTheDocument());
     expect(screen.getByText('185lb×5')).toBeInTheDocument();
@@ -38,7 +39,7 @@ describe('PRsTab', () => {
         best: { weight: 0, reps: 12, unit: 'lb', est1rm: 0, sessionStartedAt: '2026-07-01T00:00:00Z' },
       },
     ]);
-    render(<PRsTab />);
+    renderWithQuery(<PRsTab />);
 
     await waitFor(() => expect(screen.getByText('12 reps')).toBeInTheDocument());
     expect(screen.getByText('Bodyweight')).toBeInTheDocument();

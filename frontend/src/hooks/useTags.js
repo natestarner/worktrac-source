@@ -1,18 +1,24 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listTags } from '../api/tags';
+import { queryKeys } from '../api/queryKeys';
 
-// The account's shared tag vocabulary. Tags are account-level (no personId), fetched once on
-// mount; call refetch after a tag is created/renamed/deleted so new chips appear.
+// The account's shared tag vocabulary. Account-level (no personId in the key), so it's fetched
+// once and shared everywhere; invalidated after a tag is created/renamed/deleted so new chips
+// appear.
 export function useTags() {
-  const [tags, setTags] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const refetch = useCallback(() => listTags().then(setTags), []);
+  const query = useQuery({
+    queryKey: queryKeys.tags(),
+    queryFn: listTags,
+    staleTime: 30 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    setLoading(true);
-    refetch().finally(() => setLoading(false));
-  }, [refetch]);
+  const refetch = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.tags() }),
+    [queryClient],
+  );
 
-  return { tags, loading, refetch };
+  return { tags: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, refetch };
 }

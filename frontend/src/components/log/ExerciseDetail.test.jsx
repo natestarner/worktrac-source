@@ -1,5 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderWithQuery } from '../../test/queryWrapper';
 import ExerciseDetail from './ExerciseDetail';
 import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
@@ -43,7 +45,7 @@ vi.mock('../../api/notes', () => ({
 const exercise = { id: 1, name: 'Bench Press', tags: [], isFavorite: true, setupFields: [] };
 
 function renderExerciseDetail(props = {}) {
-  return render(
+  return renderWithQuery(
     <ExerciseDetail
       exercise={exercise}
       personId={7}
@@ -90,7 +92,9 @@ describe('ExerciseDetail rest-timer live-vs-retroactive gating', () => {
 
     fireEvent.click(await screen.findByText('Log set'));
 
-    await waitFor(() => expect(logSetIntoSession).toHaveBeenCalledWith(55, { exerciseId: 1, weight: 135, reps: 8 }));
+    await waitFor(() =>
+      expect(logSetIntoSession).toHaveBeenCalledWith(55, expect.objectContaining({ exerciseId: 1, weight: 135, reps: 8 })),
+    );
     expect(startRestTimer).not.toHaveBeenCalled();
   });
 });
@@ -222,5 +226,84 @@ describe('ExerciseDetail exercise notes', () => {
 
     await waitFor(() => expect(saveSessionExerciseNote).toHaveBeenCalledWith(55, 1, 'Backfilled note'));
     expect(saveLiveExerciseNote).not.toHaveBeenCalled();
+  });
+});
+
+// The summary/sets/etc. are keyed on personId (and the component is remounted via key={personId}
+// at the LogTab call site), so switching people can never surface the previous person's numbers.
+describe('ExerciseDetail per-person isolation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+    // Each person's summary is distinct; the mock answers by personId.
+    getExerciseSummary.mockImplementation((pid) =>
+      Promise.resolve({
+        lastSession: { startedAt: '2026-07-01T12:00:00Z', sets: [{ weight: pid === 7 ? 100 : 250, reps: 5, unit: 'lb' }] },
+        best: null,
+      }),
+    );
+  });
+
+  afterEach(() => vi.clearAllMocks());
+
+  it("shows the active person's last-time card, never the previous person's, on switch", async () => {
+    function Harness() {
+      const [pid, setPid] = useState(7);
+      return (
+        <div>
+          <button onClick={() => setPid(8)}>switch</button>
+          <ExerciseDetail
+            key={pid}
+            exercise={exercise}
+            personId={pid}
+            editingSessionId={null}
+            liveSession={null}
+            refetchLiveSession={vi.fn().mockResolvedValue()}
+            onBack={vi.fn()}
+          />
+        </div>
+      );
+    }
+    renderWithQuery(<Harness />);
+
+    expect(await screen.findByText('100lb×5')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('switch'));
+
+    expect(await screen.findByText('250lb×5')).toBeInTheDocument();
+    expect(screen.queryByText('100lb×5')).not.toBeInTheDocument();
+  });
+});
+
+// The old handleLogSet had no error handling: a failed write was silent. Now a failure surfaces a
+// message (and rolls back the optimistic set), so a logged set is never silently lost.
+describe('ExerciseDetail write-failure handling', () => {
+  let showToast;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    showToast = vi.fn();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast, startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+  });
+
+  afterEach(() => vi.clearAllMocks());
+
+  it('surfaces a message when a set fails to save (no more silent failures)', async () => {
+    const clientError = Object.assign(new Error('Weight required'), { status: 400 });
+    logLiveSet.mockRejectedValue(clientError);
+    renderExerciseDetail({ liveSession: { id: 101 } });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required'));
   });
 });

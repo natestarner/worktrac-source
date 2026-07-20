@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 
-// Shared by every admin screen (Overview, Users, Accounts, Pending) -- same
-// fetch/loading/error shape as useHistory/useTrendsOverview, generalized over the fetch
-// function since all four screens otherwise repeat the identical boilerplate.
+// Shared by every admin screen (Overview, Users, Accounts, Pending), generalized over the fetch
+// function since all four screens otherwise repeat the identical boilerplate. This is the last
+// hand-rolled fetch hook in the app -- the workout-app data hooks are TanStack Query (useQuery)
+// wrappers now; the read-only admin portal deliberately stays outside that cache.
 export function useAdminData(fetchFn) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);

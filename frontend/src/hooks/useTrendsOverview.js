@@ -1,19 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getTrendsOverview } from '../api/trends';
+import { queryKeys } from '../api/queryKeys';
 
 export function useTrendsOverview(personId, weeks) {
-  const [overview, setOverview] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const refetch = useCallback(() => {
-    if (!personId) return Promise.resolve();
-    setLoading(true);
-    return getTrendsOverview(personId, weeks).then(setOverview).finally(() => setLoading(false));
-  }, [personId, weeks]);
+  const query = useQuery({
+    queryKey: queryKeys.trendsOverview(personId, weeks),
+    queryFn: () => getTrendsOverview(personId, weeks),
+    enabled: !!personId,
+  });
 
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const refetch = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.trendsOverview(personId, weeks) }),
+    [queryClient, personId, weeks],
+  );
 
-  return { overview, loading, refetch };
+  return { overview: query.data ?? null, loading: query.isLoading, isFetching: query.isFetching, refetch };
 }

@@ -1,24 +1,15 @@
-import { useEffect, useState } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
-import { getPrs } from '../../api/stats';
+import { usePrs } from '../../hooks/usePrs';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import Skeleton from '../shared/Skeleton';
+import RefreshingPill from '../shared/RefreshingPill';
 
 export default function PRsTab() {
   const { activePersonId } = useAppState();
   const { people } = useAuth();
-  const [prs, setPrs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { prs, loading, isFetching } = usePrs(activePersonId);
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
-
-  useEffect(() => {
-    if (!activePersonId) return;
-    setLoading(true);
-    getPrs(activePersonId)
-      .then(setPrs)
-      .finally(() => setLoading(false));
-  }, [activePersonId]);
 
   if (loading) {
     return (
@@ -60,6 +51,7 @@ export default function PRsTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <RefreshingPill show={isFetching && !loading} />
       {prs.map((pr) => (
         <div
           key={pr.exerciseId}

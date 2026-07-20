@@ -1,35 +1,41 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
-import { useRestTimerPreference } from '../../hooks/useRestTimerPreference';
 import { updateDefaultUnit } from '../../api/account';
+import { setRestTimerPreference } from '../../api/people';
 import { createTag, deleteTag } from '../../api/tags';
 import { downloadAllPeopleZip } from '../../api/export';
 import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
 import Skeleton from '../shared/Skeleton';
 
-// Exercises are managed on the exercise screen itself now (favorite star + the gear "Customize
-// this exercise" modal, which is also where you rename/delete your own exercises). Settings
-// only keeps account-level bits: units, the household's shared tag vocabulary, and data export
-// -- plus the rest timer toggle below, which is a per-person preference (see
-// useRestTimerPreference), not account-level like the rest of this screen.
+// Every setting here is household-wide -- nothing is scoped to whichever person happens to be
+// active. Units and the shared tag vocabulary are account-level; the rest timer is a per-person
+// preference but shown for EVERY person at once so the whole household is configured from one
+// screen (not one toggle that depends on who's selected).
 export default function AppSettingsTab() {
   const navigate = useNavigate();
   const { account, people, refreshPeople } = useAuth();
-  const { activePersonId } = useAppState();
   const { openConfirm } = useUI();
 
   const { tags, loading: tagsLoading, refetch: refetchTags } = useTags();
-  const [restTimerEnabled, setRestTimerEnabled] = useRestTimerPreference(activePersonId);
-  const activePersonName = people.length >= 2 ? people.find((p) => p.id === activePersonId)?.name : null;
 
   const [newTagName, setNewTagName] = useState('');
   const [tagNameError, setTagNameError] = useState(false);
   const [pendingUnit, setPendingUnit] = useState(null);
+  const [pendingRestPerson, setPendingRestPerson] = useState(null);
+
+  async function handleRestTimerToggle(personId, value) {
+    setPendingRestPerson(personId);
+    try {
+      await setRestTimerPreference(personId, value);
+      await refreshPeople();
+    } finally {
+      setPendingRestPerson(null);
+    }
+  }
 
   async function handleUnitSelect(unit) {
     if (unit === account.defaultUnit || pendingUnit) return;
@@ -107,35 +113,48 @@ export default function AppSettingsTab() {
 
       <div style={sectionLabelStyle}>Rest Timer</div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
-        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
-          Show a countdown{activePersonName ? ` for ${activePersonName}` : ''} after logging a set.
-          Rest time between sets is always recorded for Trends either way.
+        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 16 }}>
+          Show a countdown after logging a set, per person. Rest time between sets is always recorded
+          for Trends either way.
         </div>
-        <div style={{ display: 'flex', gap: 4, background: 'var(--color-subtle-bg)', borderRadius: 12, padding: 4, maxWidth: 220 }}>
-          {[
-            { value: true, label: 'On' },
-            { value: false, label: 'Off' },
-          ].map(({ value, label }) => {
-            const active = restTimerEnabled === value;
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {people.map((person) => {
+            const personEnabled = person.restTimerEnabled ?? true;
+            const busy = pendingRestPerson === person.id;
             return (
-              <button
-                key={label}
-                onClick={() => setRestTimerEnabled(value)}
-                style={{
-                  flex: 1,
-                  padding: '10px 0',
-                  border: 'none',
-                  borderRadius: 9,
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  background: active ? 'var(--color-surface)' : 'transparent',
-                  color: active ? 'var(--color-accent)' : 'var(--color-muted)',
-                  boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                }}
-              >
-                {label}
-              </button>
+              <div key={person.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{person.name}</div>
+                <div style={{ display: 'flex', gap: 4, background: 'var(--color-subtle-bg)', borderRadius: 12, padding: 4, width: 160 }}>
+                  {[
+                    { value: true, label: 'On' },
+                    { value: false, label: 'Off' },
+                  ].map(({ value, label }) => {
+                    const active = personEnabled === value;
+                    return (
+                      <button
+                        key={label}
+                        onClick={() => handleRestTimerToggle(person.id, value)}
+                        disabled={busy}
+                        aria-label={`Rest timer ${label} for ${person.name}`}
+                        style={{
+                          flex: 1,
+                          padding: '9px 0',
+                          border: 'none',
+                          borderRadius: 9,
+                          fontSize: 14,
+                          fontWeight: 700,
+                          cursor: busy ? 'default' : 'pointer',
+                          background: active ? 'var(--color-surface)' : 'transparent',
+                          color: active ? 'var(--color-accent)' : 'var(--color-muted)',
+                          boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>

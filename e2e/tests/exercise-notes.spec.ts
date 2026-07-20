@@ -45,9 +45,11 @@ test.describe('Exercise notes', () => {
     await page.getByRole('button', { name: 'End workout' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
 
+    // Ending a workout from the exercise screen returns you to the Log picker automatically.
+    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+
     // --- A brand new session should show the standing note (always) but not the old
     // session note, and the "Last time" card should surface the PREVIOUS session's note. ---
-    await page.getByRole('button', { name: '← All exercises' }).click();
     await pickExercise(page, 'Barbell Bench Press');
 
     await expect(page.getByText('Keep elbows tucked, pause at chest')).toBeVisible();

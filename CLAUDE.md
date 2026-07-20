@@ -89,10 +89,17 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
     `frontend/src/components/log/ExerciseDetail.jsx`'s `handleLogSet`), never for
     real-time logging.
   - Null for the first set of an exercise in a session (nothing to diff against).
-  - Otherwise, computed once at insert time as the gap between now and the most recent
-    prior set's `created_at` for the *same session + same exercise* — scoped by exercise,
-    not just session, so supersetting into a different exercise between sets doesn't
-    corrupt the number.
+  - Otherwise, computed once at insert time as the gap between this set's effective logged
+    time and the most recent prior set's `created_at` for the *same session + same exercise*
+    — scoped by exercise, not just session, so supersetting into a different exercise between
+    sets doesn't corrupt the number.
+  - **"Effective logged time" is the client's `clientLoggedAt` when the request supplies it,
+    otherwise the server `Clock`.** A live-set write now carries the moment it actually
+    happened, and `created_at` honors it — so a set logged now but synced later (retry after a
+    dropped response, or a future offline replay) keeps an honest `created_at` and therefore an
+    honest rest gap, instead of measuring the sync moment. When `clientLoggedAt` is absent
+    (older/other callers) it falls back to the `Clock`, so the invariant below and
+    `RestSecondsTest` are unaffected.
   - **Immutable after insert**, by construction: `WorkoutSet.restSeconds` has no setter.
     Editing a set's weight/reps (`editSet`) must never touch it, and deleting or editing
     a neighboring set does not retroactively recompute it — it's a snapshot of what
@@ -100,6 +107,18 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   - Computed from the app's injected `Clock` bean (`ClockConfig`), not `Instant.now()`,
     so it's deterministically testable with `MutableClock` (see `RestSecondsTest.java`),
     matching the same pattern `WorkoutSessionService` uses for its 8-hour staleness rule.
+- **Log-set idempotency (`workout_sets.client_key`, added in `V40`/`V41`).** The log-set
+  request carries an optional client-generated `idempotencyKey`; `WorkoutSetService.findDuplicate`
+  returns the already-committed set (with `isPR = false`) instead of inserting a second row, so a
+  retried or offline-replayed write can't double-log. A unique filtered index backstops the
+  concurrent case. Blank/absent key ⇒ no dedup. This is what makes the frontend's optimistic
+  log-set + retry safe.
+- **Rest-timer display preference (`people.rest_timer_enabled`, added in `V39`).** A per-person
+  setting, but persisted account-side (not per-device localStorage) and surfaced on each person in
+  `/api/auth/me`, so Settings shows every person's toggle at once and it syncs across devices. Set
+  via `PUT /api/people/{personId}/rest-timer-preference`. Display-only: `rest_seconds` is recorded
+  regardless. A one-time client migration (`lib/restTimerMigration.js`) carries any legacy
+  localStorage value up on first load.
 - **Exercise notes** are two independent, coexisting features — don't conflate them:
   - **Persistent note** (`person_exercise.note`, added in
     `V35__add_note_to_person_exercise.sql`) — a standing per-person reminder shown every
@@ -171,21 +190,39 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - This is the client-side mirror of the Data Model Notes above: the backend keeps each
   person's *data* separate; the frontend must keep each person's *in-progress UI state*
   separate too. Same principle, different layer.
-- Implemented via two mechanisms:
-  - `AppStateContext` (`frontend/src/context/AppStateContext.jsx`) — a per-person
-    snapshot cache (`personSnapshots`), captured/restored on every person switch. Covers
-    navigation/draft state: current tab, selected exercise, routine position,
-    weight/reps drafts, exercise search, in-progress past-session edit.
+- Implemented via three mechanisms:
+  - **Server data → a `personId`-keyed TanStack Query cache** (`@tanstack/react-query`;
+    client + query keys in `frontend/src/lib/queryClient.js` and
+    `frontend/src/api/queryKeys.js`). Every read is a `useQuery` whose key includes the
+    `personId` (account-shared reads — the exercise catalog, tags — deliberately omit it so
+    they're fetched once and shared). Switching people reads a *different* cache entry, so
+    Person A's data can't render under Person B. Writes are `useMutation`s that invalidate the
+    right keys (single source of truth for the green "live session" dot + banner, PRs after a
+    set, etc.). The cache is persisted to IndexedDB (`PersistQueryClientProvider`) and cleared
+    on every auth change (`resetQueryCache`, since catalog/tags keys carry no accountId).
+    Never construct query keys inline — always go through the `queryKeys` factory.
+  - **Ephemeral per-person UI state → `AppStateContext`** (`frontend/src/context/AppStateContext.jsx`),
+    now a `byPerson[personId]` map (each person's own slice; `activePersonId` selects which is
+    live — no snapshot capture/restore). Covers current tab, selected exercise, routine
+    position, weight/reps drafts, exercise search, in-progress past-session edit. Persisted per
+    account to IndexedDB and rehydrated on load (first paint gated on it via `ProtectedRoute`),
+    so an active routine survives a reload. Slices for removed people are pruned
+    (`RECONCILE_PEOPLE`); the exposed context value still flattens the active slice to the top
+    level, so consumers read `selectedExerciseId`/`weightDraft`/etc. unchanged.
   - `UIContext` (`frontend/src/context/UIContext.jsx`) — state keyed by personId directly
     (e.g. `restTimers: { [personId]: {...} }`), used when a person's state needs to keep
     running independently in the background even while a *different* person is active
     (e.g. one person's rest timer must keep counting down while someone else takes their
-    turn logging a set).
+    turn logging a set). Unchanged by the rework.
+- **Freshness UX:** a cached view paints instantly; a small `RefreshingPill` (driven by
+  `isFetching && !isLoading`) announces any background refetch so an on-screen value never
+  changes silently. Skeletons show only on genuine first load (no cache yet).
 - **When adding new client-side state, ask:** "if two people were using this on the same
   device and traded off, would one person's state leak onto the other's screen, or get
   silently reset/destroyed by the other person's actions?" If yes, it needs to go through
-  one of the two mechanisms above — not a plain `useState` at the top of a shared
-  provider or component.
+  one of the three mechanisms above — server data as a personId-keyed query, ephemeral UI
+  state in `AppStateContext.byPerson`, or a personId-keyed `UIContext` map — not a plain
+  `useState` at the top of a shared provider or component.
 - Exception: toast messages, the destructive-action confirm dialog, and the PR
   celebration overlay are genuinely global, one-shot notifications tied to whatever the
   active person just did — they don't need to persist across a person switch.

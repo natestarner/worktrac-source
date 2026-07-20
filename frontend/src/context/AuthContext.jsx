@@ -11,6 +11,7 @@ import {
   resetPassword as apiResetPassword,
 } from '../api/auth';
 import { getAuthToken, setAuthToken, setUnauthorizedHandler } from '../api/client';
+import { resetQueryCache } from '../lib/queryClient';
 
 const AuthContext = createContext(null);
 
@@ -22,6 +23,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
+      resetQueryCache();
       setState({ status: 'unauthenticated', user: null, account: null, people: [] });
       navigate('/login');
     });
@@ -39,6 +41,9 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const { token } = await apiLogin({ email, password });
+    // Clear any cache left by a previously logged-in household on this device before we start
+    // fetching this account's data -- account-shared keys (catalog, tags) carry no accountId.
+    resetQueryCache();
     setAuthToken(token);
     const data = await apiMe();
     setState({ status: 'authenticated', ...data });
@@ -53,6 +58,7 @@ export function AuthProvider({ children }) {
 
   const confirmEmail = useCallback(async ({ email, code }) => {
     const { token } = await apiConfirmEmail({ email, code });
+    resetQueryCache();
     setAuthToken(token);
     const data = await apiMe();
     setState({ status: 'authenticated', ...data });
@@ -78,6 +84,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     setAuthToken(null);
+    resetQueryCache();
     setState({ status: 'unauthenticated', user: null, account: null, people: [] });
   }, []);
 

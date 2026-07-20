@@ -1,19 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getHistory } from '../api/sessions';
+import { queryKeys } from '../api/queryKeys';
 
 export function useHistory(personId) {
-  const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const refetch = useCallback(() => {
-    if (!personId) return Promise.resolve();
-    setLoading(true);
-    return getHistory(personId).then(setHistory).finally(() => setLoading(false));
-  }, [personId]);
+  const query = useQuery({
+    queryKey: queryKeys.history(personId),
+    queryFn: () => getHistory(personId),
+    enabled: !!personId,
+  });
 
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const refetch = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) }),
+    [queryClient, personId],
+  );
 
-  return { history, loading, refetch };
+  return { history: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, refetch };
 }
