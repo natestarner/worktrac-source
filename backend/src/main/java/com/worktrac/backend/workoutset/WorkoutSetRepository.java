@@ -33,6 +33,10 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     // set -> session -> person -> account, without trusting a client-supplied personId.
     Optional<WorkoutSet> findByIdAndSession_Person_Account_Id(Long id, Long accountId);
 
+    // Idempotency: an already-committed set for this client key. Account-scoped so a key can only
+    // ever match the caller's own set.
+    Optional<WorkoutSet> findByClientKeyAndSession_Person_Account_Id(String clientKey, Long accountId);
+
     boolean existsByExercise_Id(Long exerciseId);
 
     // Admin-only: [accountId, count] pairs across ALL accounts, consumed only by AdminService.

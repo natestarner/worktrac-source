@@ -7,6 +7,7 @@ import com.worktrac.backend.exercise.Exercise;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
+import com.worktrac.backend.stats.BestDto;
 import com.worktrac.backend.stats.StatsService;
 import com.worktrac.backend.workoutsession.WorkoutSession;
 import com.worktrac.backend.workoutsession.WorkoutSessionDto;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
 @Service
@@ -54,12 +56,21 @@ public class WorkoutSetService {
     @Transactional
     public LogSetResultDto logLiveSet(Long accountId, Long personId, LogSetRequest request) {
         Person person = personService.requireOwnedPerson(personId, accountId);
+        LogSetResultDto duplicate = findDuplicate(accountId, request.idempotencyKey());
+        if (duplicate != null) {
+            return duplicate;
+        }
         Account account = accountRepository.getReferenceById(accountId);
         Exercise exercise = requireVisibleExercise(accountId, request.exerciseId());
 
         WorkoutSession session = workoutSessionService.getOrCreateLiveSession(person);
-        Integer restSeconds = computeRestSeconds(session, exercise);
-        return insertSetAndDetectPr(person, session, exercise, request.weight(), request.reps(), account.getDefaultUnit(), restSeconds);
+        // The set's real logging time: the client's timestamp when supplied (so a delayed/offline
+        // sync stays accurate), otherwise now. rest_seconds is the gap from the prior set to THIS
+        // time, so it stays honest either way (no separate "null on replay" special-case needed).
+        Instant loggedAt = request.clientLoggedAt() != null ? request.clientLoggedAt() : clock.instant();
+        Integer restSeconds = computeRestSeconds(session, exercise, loggedAt);
+        return insertSetAndDetectPr(person, session, exercise, request.weight(), request.reps(),
+                account.getDefaultUnit(), restSeconds, loggedAt, request.idempotencyKey());
     }
 
     // Logs directly into an explicit session (retroactive session, or "editing a past
@@ -73,13 +84,39 @@ public class WorkoutSetService {
     // imprecise. See CLAUDE.md's Data Model Notes for the full rationale.
     @Transactional
     public LogSetResultDto logSetIntoSession(Long accountId, Long sessionId, LogSetRequest request) {
+        LogSetResultDto duplicate = findDuplicate(accountId, request.idempotencyKey());
+        if (duplicate != null) {
+            return duplicate;
+        }
         WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, accountId)
                 .orElseThrow(() -> new NotFoundException("No such session"));
         Person person = session.getPerson();
         Account account = accountRepository.getReferenceById(accountId);
         Exercise exercise = requireVisibleExercise(accountId, request.exerciseId());
 
-        return insertSetAndDetectPr(person, session, exercise, request.weight(), request.reps(), account.getDefaultUnit(), null);
+        // rest_seconds stays null here (this endpoint is never real-time logging -- see the method
+        // doc above), but created_at still honors the client timestamp when supplied.
+        Instant loggedAt = request.clientLoggedAt() != null ? request.clientLoggedAt() : clock.instant();
+        return insertSetAndDetectPr(person, session, exercise, request.weight(), request.reps(),
+                account.getDefaultUnit(), null, loggedAt, request.idempotencyKey());
+    }
+
+    // If this write's idempotency key already produced a set (a retried or offline-replayed
+    // request whose original actually committed), return that set instead of inserting a duplicate.
+    // isPR is reported false on the dedup path: the set already exists, so a replay is never itself
+    // a new PR. Null/blank key -> no dedup (nothing to key on).
+    private LogSetResultDto findDuplicate(Long accountId, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return null;
+        }
+        return workoutSetRepository.findByClientKeyAndSession_Person_Account_Id(idempotencyKey, accountId)
+                .map(existing -> {
+                    BestDto best = statsService.getBest(existing.getPerson().getId(), existing.getExercise().getId())
+                            .orElse(null);
+                    return new LogSetResultDto(WorkoutSetDto.from(existing), WorkoutSessionDto.from(existing.getSession()),
+                            false, best);
+                })
+                .orElse(null);
     }
 
     // Null if this is the first set of this exercise logged in the session (nothing to
@@ -89,17 +126,19 @@ public class WorkoutSetService {
     // doesn't corrupt the number. Uses the injected Clock (not Instant.now()) so this is
     // deterministically testable with a MutableClock, same as WorkoutSessionService's
     // staleness rule -- see RestSecondsTest.
-    private Integer computeRestSeconds(WorkoutSession session, Exercise exercise) {
+    private Integer computeRestSeconds(WorkoutSession session, Exercise exercise, Instant loggedAt) {
         return workoutSetRepository.findFirstBySession_IdAndExercise_IdOrderByCreatedAtDesc(session.getId(), exercise.getId())
-                .map(previous -> (int) Duration.between(previous.getCreatedAt(), clock.instant()).getSeconds())
+                .map(previous -> (int) Duration.between(previous.getCreatedAt(), loggedAt).getSeconds())
                 .orElse(null);
     }
 
     private LogSetResultDto insertSetAndDetectPr(Person person, WorkoutSession session, Exercise exercise,
-                                                  BigDecimal weight, int reps, String unit, Integer restSeconds) {
+                                                  BigDecimal weight, int reps, String unit, Integer restSeconds,
+                                                  Instant createdAt, String clientKey) {
         Optional<BigDecimal> prevBestComparableLb = statsService.getBestComparableLb(person.getId(), exercise.getId());
 
-        WorkoutSet set = workoutSetRepository.save(new WorkoutSet(session, person, exercise, weight, reps, unit, restSeconds));
+        WorkoutSet set = workoutSetRepository.save(
+                new WorkoutSet(session, person, exercise, weight, reps, unit, restSeconds, createdAt, clientKey));
 
         BigDecimal newComparableLb = statsService.comparableLb(weight, reps, unit);
         boolean isPR = prevBestComparableLb.isEmpty() || newComparableLb.compareTo(prevBestComparableLb.get()) > 0;

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../context/AppStateContext';
+import { migrateLegacyRestTimerPrefs } from '../lib/restTimerMigration';
 import Header from '../components/layout/Header';
 import PersonPillBar from '../components/layout/PersonPillBar';
 import TabsNav from '../components/layout/TabsNav';
@@ -11,11 +12,12 @@ import PRCelebration from '../components/shared/PRCelebration';
 import RestTimerBar from '../components/shared/RestTimerBar';
 
 export default function AppShell() {
-  const { people } = useAuth();
+  const { people, refreshPeople } = useAuth();
   const { activePersonId, selectPerson, lastTab, setLastTab } = useAppState();
   const location = useLocation();
   const navigate = useNavigate();
   const prevPersonIdRef = useRef(activePersonId);
+  const migratedRestTimerRef = useRef(false);
 
   useEffect(() => {
     if (!activePersonId && people.length > 0) {
@@ -24,8 +26,18 @@ export default function AppShell() {
     }
   }, [activePersonId, people, selectPerson]);
 
-  // Keep the active person's snapshot up to date with whichever tab they're on, so
-  // switching to someone else and back resumes on the same tab too.
+  // One-time migration of the legacy per-device rest-timer localStorage flag to the account-side
+  // preference, so anyone who'd turned it off before doesn't have it silently reset.
+  useEffect(() => {
+    if (migratedRestTimerRef.current || people.length === 0) return;
+    migratedRestTimerRef.current = true;
+    migrateLegacyRestTimerPrefs(people).then((changed) => {
+      if (changed) refreshPeople();
+    });
+  }, [people, refreshPeople]);
+
+  // Keep the active person's slice (`byPerson[id].lastTab`) in sync with whichever tab they're
+  // on, so switching to someone else and back resumes on the same tab too.
   useEffect(() => {
     if (activePersonId) setLastTab(location.pathname);
   }, [location.pathname, activePersonId, setLastTab]);

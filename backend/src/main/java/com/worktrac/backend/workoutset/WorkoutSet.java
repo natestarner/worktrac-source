@@ -68,11 +68,16 @@ public class WorkoutSet {
     @Column(name = "rest_seconds", updatable = false)
     private Integer restSeconds;
 
+    // Client-generated idempotency key (see V40/V41). Unique when present; lets a retried/replayed
+    // log-set be deduped by the service. Null for historical rows and any write without one.
+    @Column(name = "client_key", length = 64, updatable = false)
+    private String clientKey;
+
     protected WorkoutSet() {
     }
 
     public WorkoutSet(WorkoutSession session, Person person, Exercise exercise, BigDecimal weight, int reps, String unit,
-                       Integer restSeconds) {
+                       Integer restSeconds, Instant createdAt, String clientKey) {
         this.session = session;
         this.person = person;
         this.exercise = exercise;
@@ -80,6 +85,10 @@ public class WorkoutSet {
         this.reps = reps;
         this.unit = unit;
         this.restSeconds = restSeconds;
+        // May be null -> prePersist falls back to now(). When supplied (the client's real logging
+        // time) it's honored so a delayed/offline sync keeps an accurate created_at.
+        this.createdAt = createdAt;
+        this.clientKey = clientKey;
     }
 
     @PrePersist
@@ -131,5 +140,9 @@ public class WorkoutSet {
 
     public Integer getRestSeconds() {
         return restSeconds;
+    }
+
+    public String getClientKey() {
+        return clientKey;
     }
 }

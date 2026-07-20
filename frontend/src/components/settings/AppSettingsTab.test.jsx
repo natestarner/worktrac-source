@@ -2,13 +2,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AppSettingsTab from './AppSettingsTab';
 import { createTag } from '../../api/tags';
+import { setRestTimerPreference } from '../../api/people';
 import { useAuth } from '../../context/AuthContext';
-import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
 
-// Exercises are managed on the exercise screen now; Settings only keeps units, the household's
-// shared tag manager, data export, and the per-person rest timer toggle.
+// Every setting here is household-wide -- no dependence on which person is active. The rest timer
+// is per-person but shown for everyone at once, persisted account-side (not localStorage).
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('../../api/tags', () => ({
   createTag: vi.fn(),
@@ -18,8 +18,8 @@ vi.mock('../../api/tags', () => ({
 }));
 vi.mock('../../api/account', () => ({ updateDefaultUnit: vi.fn() }));
 vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
+vi.mock('../../api/people', () => ({ setRestTimerPreference: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
-vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 vi.mock('../../hooks/useTags', () => ({ useTags: vi.fn() }));
 
@@ -28,11 +28,9 @@ describe('AppSettingsTab tag management', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
     createTag.mockResolvedValue({ id: 1, name: 'Legs' });
     refetchTags = vi.fn().mockResolvedValue();
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [], refreshPeople: vi.fn() });
-    useAppState.mockReturnValue({ activePersonId: 7 });
     useUI.mockReturnValue({ openConfirm: vi.fn() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: refetchTags });
   });
@@ -67,23 +65,35 @@ describe('AppSettingsTab tag management', () => {
 });
 
 describe('AppSettingsTab rest timer toggle', () => {
+  let refreshPeople;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
-    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [], refreshPeople: vi.fn() });
-    useAppState.mockReturnValue({ activePersonId: 7 });
+    refreshPeople = vi.fn().mockResolvedValue();
+    setRestTimerPreference.mockResolvedValue({});
+    useAuth.mockReturnValue({
+      account: { defaultUnit: 'lb' },
+      people: [
+        { id: 7, name: 'Nate', restTimerEnabled: true },
+        { id: 8, name: 'Sam', restTimerEnabled: true },
+      ],
+      refreshPeople,
+    });
     useUI.mockReturnValue({ openConfirm: vi.fn() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
   });
 
-  it('defaults to On and persists Off per person without affecting other people', () => {
+  it('renders a toggle for every person and configures each independently', async () => {
     render(<AppSettingsTab />);
 
-    expect(localStorage.getItem('workout-tracker-rest-timer-enabled-7')).toBeNull();
+    // A per-person toggle for each household member, all shown at once.
+    expect(screen.getByRole('button', { name: 'Rest timer Off for Nate' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rest timer On for Sam' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Off' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rest timer Off for Nate' }));
 
-    expect(localStorage.getItem('workout-tracker-rest-timer-enabled-7')).toBe('false');
-    expect(localStorage.getItem('workout-tracker-rest-timer-enabled-8')).toBeNull();
+    await waitFor(() => expect(setRestTimerPreference).toHaveBeenCalledWith(7, false));
+    expect(setRestTimerPreference).not.toHaveBeenCalledWith(8, expect.anything());
+    expect(refreshPeople).toHaveBeenCalled();
   });
 });

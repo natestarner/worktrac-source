@@ -1,4 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { queryClient, persistOptions } from './lib/queryClient';
 import { AuthProvider } from './context/AuthContext';
 import { AppStateProvider } from './context/AppStateContext';
 import { UIProvider } from './context/UIContext';
@@ -25,10 +27,11 @@ import AdminPending from './routes/admin/AdminPending';
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppStateProvider>
-        <UIProvider>
-          <Routes>
+    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
+      <AuthProvider>
+        <AppStateProvider>
+          <UIProvider>
+            <Routes>
             <Route path="/" element={<Navigate to="/app/log" replace />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
@@ -55,10 +58,11 @@ export default function App() {
                 <Route path="pending" element={<AdminPending />} />
               </Route>
             </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </UIProvider>
-      </AppStateProvider>
-    </AuthProvider>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </UIProvider>
+        </AppStateProvider>
+      </AuthProvider>
+    </PersistQueryClientProvider>
   );
 }

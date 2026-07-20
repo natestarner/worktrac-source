@@ -1,19 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listRoutines } from '../api/routines';
+import { queryKeys } from '../api/queryKeys';
 
 export function useRoutines(personId) {
-  const [routines, setRoutines] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const refetch = useCallback(() => {
-    if (!personId) return Promise.resolve();
-    setLoading(true);
-    return listRoutines(personId).then(setRoutines).finally(() => setLoading(false));
-  }, [personId]);
+  const query = useQuery({
+    queryKey: queryKeys.routines(personId),
+    queryFn: () => listRoutines(personId),
+    enabled: !!personId,
+  });
 
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  const refetch = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.routines(personId) }),
+    [queryClient, personId],
+  );
 
-  return { routines, loading, refetch };
+  return { routines: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, refetch };
 }

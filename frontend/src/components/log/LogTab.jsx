@@ -68,6 +68,15 @@ export default function LogTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, selectedExerciseId]);
 
+  // Reconcile a persisted "in a routine" against reality: if the routine was deleted (on this or
+  // another device) since it was last active, drop the stale routine state rather than showing an
+  // empty routine banner.
+  useEffect(() => {
+    if (!routinesLoading && activeRoutineId && !routines.some((r) => r.id === activeRoutineId)) {
+      endRoutine();
+    }
+  }, [routinesLoading, activeRoutineId, routines, endRoutine]);
+
   // Returning to the picker refreshes the person's list so a just-logged exercise (or a
   // favorite/tag change made on the detail screen) shows up.
   useEffect(() => {
@@ -94,7 +103,9 @@ export default function LogTab() {
   async function handleExerciseCreated(created) {
     setAddExerciseName(null);
     setExerciseSearch('');
-    await refetchPersonExercises();
+    // Refresh both the person's picker list AND the shared catalog, so the new exercise also shows
+    // up in search (the catalog has a long staleTime and won't refetch on its own for a while).
+    await Promise.all([refetchPersonExercises(), refetchCatalog()]);
     if (created?.id) selectExercise(created.id);
   }
 
@@ -102,11 +113,13 @@ export default function LogTab() {
     const iso = localDateTimeToIso(e.target.value, toLocalTimeStr(editingSession.startedAt));
     const updated = await editSession(editingSession.id, iso);
     updateEditingSession(updated);
+    refetchHistory(); // keep the History tab's date/time for this session in sync
   }
   async function handleEditingTimeChange(e) {
     const iso = localDateTimeToIso(toLocalDateStr(editingSession.startedAt), e.target.value);
     const updated = await editSession(editingSession.id, iso);
     updateEditingSession(updated);
+    refetchHistory();
   }
 
   function handleStartRoutine(routine) {
@@ -300,6 +313,9 @@ export default function LogTab() {
 
       {selectedExercise && (
         <ExerciseDetail
+          // Remount on person switch so no local component state (keypad, editing-set, just-added
+          // highlight) can bleed from one person to the next -- the per-person isolation guarantee.
+          key={activePersonId}
           exercise={selectedExercise}
           personId={activePersonId}
           tags={tags}
@@ -328,6 +344,8 @@ export default function LogTab() {
           onEnded={() => {
             setShowEndWorkoutConfirm(false);
             endRoutine();
+            // Ending a workout from the exercise screen returns this person to their Log picker.
+            backToPicker();
             refetchLiveSession();
             showToast('Workout ended. Logging a set anytime starts a new one.');
           }}

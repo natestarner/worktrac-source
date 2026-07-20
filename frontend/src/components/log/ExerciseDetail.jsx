@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
+import { queryKeys } from '../../api/queryKeys';
+import { newId } from '../../utils/id';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets, logLiveSet, logSetIntoSession, deleteSet } from '../../api/sets';
 import { listCustomFields, favoriteExercise, unfavoriteExercise, removeExercise } from '../../api/exercises';
@@ -32,51 +35,63 @@ export default function ExerciseDetail({
   const activePersonFirstName = activePersonName?.split(' ')[0];
   const { weightDraft, repsDraft, setWeightDraft, setRepsDraft } = useAppState();
   const { showCelebration, showToast, startRestTimer, openConfirm } = useUI();
+  const queryClient = useQueryClient();
 
   const contextSessionId = editingSessionId || liveSession?.id || null;
 
-  const [summary, setSummary] = useState(null);
-  const [sessionSets, setSessionSets] = useState([]);
-  const [customFields, setCustomFields] = useState([]);
   const [keypadField, setKeypadField] = useState(null);
   const [editingCustomField, setEditingCustomField] = useState(null);
   const [showConfigureModal, setShowConfigureModal] = useState(false);
   const [editingSet, setEditingSet] = useState(null);
-  const [ready, setReady] = useState(false);
   const [justAddedSetId, setJustAddedSetId] = useState(null);
-  const [sessionNote, setSessionNote] = useState(null);
   const [showSessionNoteModal, setShowSessionNoteModal] = useState(false);
 
   const defaultUnit = account?.defaultUnit || 'lb';
 
-  function refetchSummary() {
-    return getExerciseSummary(personId, exercise.id, contextSessionId || undefined).then(setSummary);
-  }
-  function refetchSessionSets() {
-    if (!contextSessionId) {
-      setSessionSets([]);
-      return Promise.resolve();
-    }
-    return listSessionSets(contextSessionId, exercise.id).then(setSessionSets);
-  }
-  function refetchCustomFields() {
-    return listCustomFields(personId, exercise.id).then(setCustomFields);
-  }
-  function refetchSessionNote() {
-    if (!contextSessionId) {
-      setSessionNote(null);
-      return Promise.resolve();
-    }
-    return getSessionExerciseNote(contextSessionId, exercise.id).then((dto) => setSessionNote(dto?.note || null));
-  }
+  // All four reads are keyed on personId (directly, or via the person-scoped session id), so
+  // switching people can never surface the previous person's summary/sets/fields/note. Combined
+  // with the key={personId} remount at the LogTab call site, both the fetched data AND the local
+  // component state above are isolated per person.
+  const summaryQuery = useQuery({
+    queryKey: queryKeys.exerciseSummary(personId, exercise.id, contextSessionId),
+    queryFn: () => getExerciseSummary(personId, exercise.id, contextSessionId || undefined),
+    enabled: !!personId && !!exercise.id,
+    // contextSessionId collapses to null both "before this person has ever logged anything" and
+    // "after their live session just ended" -- two points in time with genuinely different
+    // summaries sharing the same cache key. staleTime 0 means a remount always revalidates in the
+    // background (the cached value still paints instantly; the RefreshingPill covers the gap)
+    // instead of ever serving a same-key-but-stale answer here.
+    staleTime: 0,
+  });
+  const sessionSetsQuery = useQuery({
+    queryKey: queryKeys.sessionSets(contextSessionId, exercise.id),
+    queryFn: () => listSessionSets(contextSessionId, exercise.id),
+    enabled: !!contextSessionId && !!exercise.id,
+  });
+  const customFieldsQuery = useQuery({
+    queryKey: queryKeys.customFields(personId, exercise.id),
+    queryFn: () => listCustomFields(personId, exercise.id),
+    enabled: !!personId && !!exercise.id,
+  });
+  const sessionNoteQuery = useQuery({
+    queryKey: queryKeys.sessionExerciseNote(contextSessionId, exercise.id),
+    queryFn: () => getSessionExerciseNote(contextSessionId, exercise.id),
+    enabled: !!contextSessionId && !!exercise.id,
+  });
 
-  useEffect(() => {
-    setReady(false);
-    Promise.all([refetchSummary(), refetchSessionSets(), refetchCustomFields(), refetchSessionNote()]).finally(() =>
-      setReady(true),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exercise.id, contextSessionId]);
+  const summary = summaryQuery.data ?? null;
+  const sessionSets = sessionSetsQuery.data ?? [];
+  const customFields = customFieldsQuery.data ?? [];
+  const sessionNote = sessionNoteQuery.data?.note || null;
+  // Skeleton only on genuine first load (no cached data yet); a cached revisit paints instantly.
+  const ready = !summaryQuery.isLoading && !customFieldsQuery.isLoading;
+
+  const refetchSummary = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.exerciseSummary(personId, exercise.id, contextSessionId) });
+  const refetchSessionSets = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.sessionSets(contextSessionId, exercise.id) });
+  const refetchCustomFields = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.customFields(personId, exercise.id) });
 
   // Saving a note before any set is logged (contextSessionId is still null) must still
   // materialize the live session, exactly like handleLogSet does for the first set of a
@@ -86,7 +101,11 @@ export default function ExerciseDetail({
       ? await saveSessionExerciseNote(editingSessionId, exercise.id, note)
       : await saveLiveExerciseNote(personId, { exerciseId: exercise.id, note });
     if (!editingSessionId) await refetchLiveSession();
-    setSessionNote(result.note);
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.sessionExerciseNote(contextSessionId, exercise.id),
+    });
+    // History shows this note inline next to the session's exercise entry -- keep it in sync.
+    await queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
     showToast(result.note ? 'Note saved' : 'Note cleared');
     await refetchSummary();
   }
@@ -143,31 +162,96 @@ export default function ExerciseDetail({
     setRepsDraft(repsDraft + 1);
   }
 
-  async function handleLogSet() {
-    const result = editingSessionId
-      ? await logSetIntoSession(editingSessionId, { exerciseId: exercise.id, weight: weightDraft, reps: repsDraft })
-      : await logLiveSet(personId, { exerciseId: exercise.id, weight: weightDraft, reps: repsDraft });
+  const logSetMutation = useMutation({
+    mutationFn: ({ weight, reps, idempotencyKey, clientLoggedAt }) =>
+      editingSessionId
+        ? logSetIntoSession(editingSessionId, { exerciseId: exercise.id, weight, reps, idempotencyKey, clientLoggedAt })
+        : logLiveSet(personId, { exerciseId: exercise.id, weight, reps, idempotencyKey, clientLoggedAt }),
+    // A client (4xx) error won't succeed on replay -- fail fast. Transient network/5xx errors get
+    // a few backed-off retries. When fully offline, TanStack's default networkMode pauses the
+    // mutation rather than failing it, so the optimistic set stays on screen and auto-resumes on
+    // reconnect; the idempotency key makes that replay safe (no double-insert). The durable
+    // across-app-close queue is the later offline phase.
+    retry: (failureCount, error) => {
+      if (error?.status >= 400 && error?.status < 500) return false;
+      return failureCount < 3;
+    },
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+    onMutate: async (vars) => {
+      // Show the set instantly. Only possible once a session exists to key the list on; the very
+      // first set of a brand-new workout has no session id yet, so it appears once the server
+      // materializes the session (onSettled -> refetch).
+      if (!contextSessionId) return {};
+      const key = queryKeys.sessionSets(contextSessionId, exercise.id);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData(key);
+      const optimisticSet = { id: vars.tempId, weight: vars.weight, reps: vars.reps, unit: defaultUnit, optimistic: true };
+      queryClient.setQueryData(key, (old = []) => [...old, optimisticSet]);
+      setJustAddedSetId(vars.tempId);
+      return { previous, key };
+    },
+    onError: (error, vars, context) => {
+      // Roll the optimistic set back and say so. (Reached only for a genuine failure -- an offline
+      // write is paused, not errored, so its set stays put and replays later.)
+      if (context?.key && context?.previous !== undefined) {
+        queryClient.setQueryData(context.key, context.previous);
+      }
+      const isClientError = error?.status >= 400 && error?.status < 500;
+      showToast(
+        isClientError
+          ? error.message || "Couldn't save that set"
+          : "Couldn't save that set -- check your connection and try again",
+      );
+    },
+    onSuccess: (result, variables) => {
+      setJustAddedSetId(result.set.id);
+      // PR celebration is driven by the server's authoritative isPR/best, never a refetch race;
+      // the weight/reps shown come from the exact values submitted (the mutation variables).
+      if (result.isPR) {
+        const isBodyweight = result.best.weight === 0;
+        showCelebration({
+          exerciseName: exercise.name,
+          isBodyweight,
+          setText: `${variables.weight} ${defaultUnit} × ${variables.reps}`,
+          est1rmText: isBodyweight ? `${variables.reps} reps` : `${result.best.est1rm} ${defaultUnit}`,
+        });
+      }
+    },
+    onSettled: () => {
+      refetchSummary();
+      refetchSessionSets();
+      if (!editingSessionId) refetchLiveSession();
+      queryClient.invalidateQueries({ queryKey: queryKeys.prs(personId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
+    },
+  });
 
-    if (!editingSessionId) {
-      startRestTimer(personId, 90);
-      await refetchLiveSession();
-    }
-    setJustAddedSetId(result.set.id);
-    if (result.isPR) {
-      const isBodyweight = result.best.weight === 0;
-      showCelebration({
-        exerciseName: exercise.name,
-        isBodyweight,
-        setText: `${weightDraft} ${defaultUnit} × ${repsDraft}`,
-        est1rmText: isBodyweight ? `${repsDraft} reps` : `${result.best.est1rm} ${defaultUnit}`,
-      });
-    }
-    await Promise.all([refetchSummary(), refetchSessionSets()]);
+  function handleLogSet() {
+    // Rest timer starts immediately for the "instant" feel; it's a live-only concept.
+    if (!editingSessionId) startRestTimer(personId, 90);
+    logSetMutation.mutate({
+      weight: weightDraft,
+      reps: repsDraft,
+      tempId: `optimistic-${newId()}`,
+      idempotencyKey: newId(),
+      clientLoggedAt: new Date().toISOString(),
+    });
   }
 
-  async function handleDeleteSet(setId) {
-    await deleteSet(setId);
-    await Promise.all([refetchSummary(), refetchSessionSets()]);
+  const deleteSetMutation = useMutation({
+    mutationFn: (setId) => deleteSet(setId),
+    onSettled: () => {
+      refetchSummary();
+      refetchSessionSets();
+      // Deleting a set can change what the best/PR is (e.g. removing the PR set itself) --
+      // keep the PR board and History in sync, mirroring the log-set and edit-set mutations.
+      queryClient.invalidateQueries({ queryKey: queryKeys.prs(personId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
+    },
+  });
+
+  function handleDeleteSet(setId) {
+    deleteSetMutation.mutate(setId);
   }
 
   const lastLabel = summary?.lastSession ? formatDateLabel(toLocalDateStr(summary.lastSession.startedAt)) : '';
@@ -368,14 +452,16 @@ export default function ExerciseDetail({
                           </span>
                         )}
                       </div>
-                      <div style={{ display: 'flex', gap: 14 }}>
-                        <button onClick={() => setEditingSet(set)} style={editLinkStyle}>
-                          Edit
-                        </button>
-                        <button onClick={() => openConfirm('Delete this set?', () => handleDeleteSet(set.id))} style={deleteLinkStyle}>
-                          Delete
-                        </button>
-                      </div>
+                      {!set.optimistic && (
+                        <div style={{ display: 'flex', gap: 14 }}>
+                          <button onClick={() => setEditingSet(set)} style={editLinkStyle}>
+                            Edit
+                          </button>
+                          <button onClick={() => openConfirm('Delete this set?', () => handleDeleteSet(set.id))} style={deleteLinkStyle}>
+                            Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -439,6 +525,10 @@ export default function ExerciseDetail({
             setEditingSet(null);
             refetchSummary();
             refetchSessionSets();
+            // An edited set can change a personal best -> keep the PR board and History in sync,
+            // matching what the log/delete-set mutations already invalidate.
+            queryClient.invalidateQueries({ queryKey: queryKeys.prs(personId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
           }}
         />
       )}

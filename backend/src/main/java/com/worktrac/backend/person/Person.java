@@ -34,6 +34,12 @@ public class Person {
     @Column(name = "is_primary", nullable = false)
     private boolean primary;
 
+    // Whether the on-screen rest timer is shown for this person (a per-person preference persisted
+    // account-side so it's consistent across devices; see V39). Defaults on. Controls display only
+    // -- rest_seconds is recorded regardless.
+    @Column(name = "rest_timer_enabled", nullable = false)
+    private boolean restTimerEnabled = true;
+
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -72,6 +78,14 @@ public class Person {
 
     public boolean isPrimary() {
         return primary;
+    }
+
+    public boolean isRestTimerEnabled() {
+        return restTimerEnabled;
+    }
+
+    public void setRestTimerEnabled(boolean restTimerEnabled) {
+        this.restTimerEnabled = restTimerEnabled;
     }
 
     public Instant getCreatedAt() {

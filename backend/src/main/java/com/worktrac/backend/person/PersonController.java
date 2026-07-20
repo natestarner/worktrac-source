@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -40,6 +41,14 @@ public class PersonController {
     @PatchMapping("/{personId}")
     public PersonDto rename(@PathVariable Long personId, @Valid @RequestBody AddPersonRequest request) {
         return personService.rename(currentUser.accountId(), personId, request.name());
+    }
+
+    // Household-wide settings are configured for every person from one screen, so this is keyed on
+    // an explicit personId rather than the active person.
+    @PutMapping("/{personId}/rest-timer-preference")
+    public PersonDto setRestTimerPreference(@PathVariable Long personId,
+                                            @Valid @RequestBody RestTimerPreferenceRequest request) {
+        return personService.setRestTimerEnabled(currentUser.accountId(), personId, request.enabled());
     }
 
     @DeleteMapping("/{personId}")

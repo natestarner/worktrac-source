@@ -10,6 +10,7 @@ import { removeRoutine } from '../../api/routines';
 import RoutineFormModal from './RoutineFormModal';
 import CopyRoutineModal from './CopyRoutineModal';
 import Skeleton from '../shared/Skeleton';
+import RefreshingPill from '../shared/RefreshingPill';
 
 export default function RoutinesTab() {
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export default function RoutinesTab() {
   const { openConfirm } = useUI();
   const { exercises: catalog, refetch: refetchCatalog } = useExercises();
   const { exercises: personExercises, refetch: refetchPersonExercises } = usePersonExercises(activePersonId);
-  const { routines, loading, refetch } = useRoutines(activePersonId);
+  const { routines, loading, isFetching, refetch } = useRoutines(activePersonId);
   const [modalRoutine, setModalRoutine] = useState(undefined); // undefined = closed, null = create, object = edit
   const [copyRoutine, setCopyRoutine] = useState(null); // null = closed, object = routine being copied
   const hasOtherPeople = people.some((p) => p.id !== activePersonId);
@@ -38,6 +39,8 @@ export default function RoutinesTab() {
       <button onClick={() => setModalRoutine(null)} style={newRoutineButtonStyle}>
         + New routine
       </button>
+
+      <RefreshingPill show={isFetching && !loading} />
 
       {loading && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -1,22 +1,25 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listPersonExercises } from '../api/exercises';
+import { queryKeys } from '../api/queryKeys';
 
-// A person's Log-picker list: the exercises they've favorited or logged a set for, each with
-// their personalization (isFavorite, applied tags). Everything else in the catalog is
-// reached via search (useExercises).
+// A person's Log-picker list: the exercises they've favorited, noted, or logged a set for, each
+// with their personalization (isFavorite, applied tags, note). Everything else in the catalog is
+// reached via search (useExercises). Keyed on personId so switching people reads that person's
+// own list, never the previous person's.
 export function usePersonExercises(personId) {
-  const [exercises, setExercises] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const refetch = useCallback(() => {
-    if (!personId) return Promise.resolve();
-    return listPersonExercises(personId).then(setExercises);
-  }, [personId]);
+  const query = useQuery({
+    queryKey: queryKeys.personExercises(personId),
+    queryFn: () => listPersonExercises(personId),
+    enabled: !!personId,
+  });
 
-  useEffect(() => {
-    setLoading(true);
-    refetch().finally(() => setLoading(false));
-  }, [refetch]);
+  const refetch = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.personExercises(personId) }),
+    [queryClient, personId],
+  );
 
-  return { exercises, loading, refetch };
+  return { exercises: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, refetch };
 }
