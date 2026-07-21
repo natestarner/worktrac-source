@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
@@ -46,6 +46,9 @@ export default function ExerciseDetail({
   const [justAddedSetId, setJustAddedSetId] = useState(null);
   const [showSessionNoteModal, setShowSessionNoteModal] = useState(false);
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+  // Resolvers for handleLogSet's tap-ack promise, keyed by tempId -- see logSetMutation's
+  // onMutate below.
+  const logAckResolvers = useRef(new Map());
 
   const defaultUnit = account?.defaultUnit || 'lb';
 
@@ -172,7 +175,10 @@ export default function ExerciseDetail({
     setRepsDraft(repsDraft + 1);
   }
 
+  const logSetMutationKey = ['logSet', personId, exercise.id];
+
   const logSetMutation = useMutation({
+    mutationKey: logSetMutationKey,
     mutationFn: ({ weight, reps, idempotencyKey, clientLoggedAt }) =>
       editingSessionId
         ? logSetIntoSession(editingSessionId, { exerciseId: exercise.id, weight, reps, idempotencyKey, clientLoggedAt })
@@ -191,14 +197,29 @@ export default function ExerciseDetail({
       // Show the set instantly. Only possible once a session exists to key the list on; the very
       // first set of a brand-new workout has no session id yet, so it appears once the server
       // materializes the session (onSettled -> refetch).
-      if (!contextSessionId) return {};
-      const key = queryKeys.sessionSets(contextSessionId, exercise.id);
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData(key);
-      const optimisticSet = { id: vars.tempId, weight: vars.weight, reps: vars.reps, unit: defaultUnit, optimistic: true };
-      queryClient.setQueryData(key, (old = []) => [...old, optimisticSet]);
-      setJustAddedSetId(vars.tempId);
-      return { previous, key };
+      //
+      // The whole body is wrapped in try/finally so handleLogSet's tap-ack promise always
+      // resolves -- including the no-session-yet early return, and even if cancelQueries/
+      // setQueryData somehow throws -- so the Log Set button can never hang. This step has no
+      // network dependency (cancelQueries/setQueryData are local cache operations), so it
+      // resolves quickly regardless of connectivity, unlike the mutation's own settlement, which
+      // TanStack's default networkMode:'online' can leave paused indefinitely while offline.
+      try {
+        if (!contextSessionId) return {};
+        const key = queryKeys.sessionSets(contextSessionId, exercise.id);
+        await queryClient.cancelQueries({ queryKey: key });
+        const previous = queryClient.getQueryData(key);
+        const optimisticSet = { id: vars.tempId, weight: vars.weight, reps: vars.reps, unit: defaultUnit, optimistic: true };
+        queryClient.setQueryData(key, (old = []) => [...old, optimisticSet]);
+        setJustAddedSetId(vars.tempId);
+        return { previous, key };
+      } finally {
+        const resolveAck = logAckResolvers.current.get(vars.tempId);
+        if (resolveAck) {
+          resolveAck();
+          logAckResolvers.current.delete(vars.tempId);
+        }
+      }
     },
     onError: (error, vars, context) => {
       // Roll the optimistic set back and say so. (Reached only for a genuine failure -- an offline
@@ -236,19 +257,36 @@ export default function ExerciseDetail({
     },
   });
 
+  // Every optimistic set row currently paused (offline, waiting to reconnect) rather than
+  // actively in flight/retrying -- read from the shared MutationCache via mutationKey rather
+  // than logSetMutation's own .isPaused, since that single hook instance only reflects the
+  // most recently dispatched call and can't distinguish rows if more than one set is
+  // outstanding at once. isPaused is only true while genuinely offline -- an online retry's
+  // backoff delay does not set it, so "Saving..." below still covers that case correctly.
+  const pausedTempIds = useMutationState({
+    filters: { mutationKey: logSetMutationKey, status: 'pending' },
+    select: (mutation) => (mutation.state.isPaused ? mutation.state.variables?.tempId : undefined),
+  }).filter(Boolean);
+
   function handleLogSet() {
     // Rest timer starts immediately for the "instant" feel; it's a live-only concept.
     if (!editingSessionId) startRestTimer(personId, 90);
-    // Returning the promise lets Button's built-in pending state (disable + spinner) cover
-    // the request -- the optimistic row makes it feel instant, but the button itself should
-    // still visibly acknowledge the tap rather than staying inertly clickable.
-    return logSetMutation.mutateAsync({
+    const tempId = `optimistic-${newId()}`;
+    // Button's pending window ends as soon as the optimistic write lands (onMutate, above),
+    // not once the server responds -- onMutate has no network dependency, so this resolves
+    // quickly even while offline. The real request continues independently via .mutate();
+    // its own progress is tracked per-row (Saving.../"Will sync..."), not by the button.
+    const ack = new Promise((resolve) => {
+      logAckResolvers.current.set(tempId, resolve);
+    });
+    logSetMutation.mutate({
       weight: weightDraft,
       reps: repsDraft,
-      tempId: `optimistic-${newId()}`,
+      tempId,
       idempotencyKey: newId(),
       clientLoggedAt: new Date().toISOString(),
     });
+    return ack;
   }
 
   const deleteSetMutation = useMutation({
@@ -264,7 +302,10 @@ export default function ExerciseDetail({
   });
 
   function handleDeleteSet(setId) {
-    deleteSetMutation.mutate(setId);
+    // Returned (not fire-and-forget) so ConfirmDialog's runConfirm genuinely awaits the
+    // request -- previously it closed the dialog on the next microtask instead of once the
+    // delete actually finished, leaving no feedback while it was in flight.
+    return deleteSetMutation.mutateAsync(setId);
   }
 
   const lastLabel = summary?.lastSession ? formatDateLabel(toLocalDateStr(summary.lastSession.startedAt)) : '';
@@ -473,10 +514,16 @@ export default function ExerciseDetail({
                         )}
                       </div>
                       {set.optimistic ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--color-muted)' }}>
-                          <span className="saving-dot" />
-                          Saving&hellip;
-                        </div>
+                        pausedTempIds.includes(set.id) ? (
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-muted)' }}>
+                            Will sync once you're back online
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--color-muted)' }}>
+                            <span className="saving-dot" />
+                            Saving&hellip;
+                          </div>
+                        )
                       ) : (
                         <div style={{ display: 'flex', gap: 14 }}>
                           <button onClick={() => setEditingSet(set)} style={editLinkStyle}>
