@@ -14,7 +14,11 @@ export default function Button({ onClick, style, children, disabled, ...rest }) 
       const result = onClick(event);
       if (result && typeof result.then === 'function') {
         setPending(true);
-        result.finally(() => setPending(false));
+        // Swallow a rejection here -- callers (e.g. a mutation's onError) are responsible for
+        // any user-facing error handling; this is only tracking pending state, not consuming
+        // the result, and letting the rejection go unhandled would otherwise surface as a
+        // console warning on top of whatever the caller already reported.
+        result.finally(() => setPending(false)).catch(() => {});
       }
     },
     [onClick],

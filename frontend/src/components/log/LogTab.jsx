@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
@@ -56,6 +56,7 @@ export default function LogTab() {
   const [showEndWorkoutConfirm, setShowEndWorkoutConfirm] = useState(false);
   const [addExerciseName, setAddExerciseName] = useState(null); // null = closed; string = create modal prefilled with this name
   const [routineBannerDismissed, setRoutineBannerDismissed] = useState(false);
+  const routinePillRefs = useRef({});
 
   const activeRoutine = activeRoutineId ? routines.find((r) => r.id === activeRoutineId) : null;
   const selectedExercise = selectedExerciseId
@@ -126,6 +127,16 @@ export default function LogTab() {
     startRoutine(routine.id, routine.exercises.map((e) => e.exerciseId));
   }
 
+  // Keep the current exercise's pill visible in the horizontally-scrolling strip as the
+  // routine advances -- with enough exercises in a routine, "Next exercise" would otherwise
+  // move the current pill off-screen with nothing scrolling it back into view.
+  useEffect(() => {
+    const pill = routinePillRefs.current[routineIndex];
+    // jsdom (unit tests) doesn't implement scrollIntoView -- guard rather than skip the effect
+    // entirely so real browsers still get it.
+    if (pill?.scrollIntoView) pill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, [routineIndex, activeRoutineId]);
+
   function handleNextExercise() {
     if (!activeRoutine) return;
     const exerciseIds = activeRoutine.exercises.map((e) => e.exerciseId);
@@ -173,7 +184,11 @@ export default function LogTab() {
       {editingSession && (
         <div style={{ background: 'var(--color-dark)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-bg)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            {/* var(--color-accent-contrast) (always white) rather than var(--color-bg) -- the
+                latter is meant as "page background", which is light in light mode but flips to
+                near-black in dark mode, making this text unreadable against the always-dark
+                chip background it sits on. */}
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent-contrast)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Editing past session
             </div>
             <button
@@ -247,6 +262,9 @@ export default function LogTab() {
               return (
                 <button
                   key={`${rc.exerciseId}-${idx}`}
+                  ref={(el) => {
+                    routinePillRefs.current[idx] = el;
+                  }}
                   onClick={() => jumpToRoutineIndex(idx, activeRoutine.exercises.map((e) => e.exerciseId))}
                   style={{
                     flexShrink: 0,

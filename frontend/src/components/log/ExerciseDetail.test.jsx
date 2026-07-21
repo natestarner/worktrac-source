@@ -307,3 +307,75 @@ describe('ExerciseDetail write-failure handling', () => {
     await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required'));
   });
 });
+
+// A tap that doesn't visibly acknowledge itself invites a second tap and reads as broken --
+// each of these controls must show *something* is happening while its request is in flight,
+// even though the underlying writes (optimistic set insert, near-instant favorite toggle) are
+// often too fast to notice most of the time.
+describe('ExerciseDetail in-flight visual feedback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    getSessionExerciseNote.mockResolvedValue(null);
+  });
+
+  afterEach(() => vi.clearAllMocks());
+
+  it('disables the Log Set button and shows a spinner until the write settles', async () => {
+    listSessionSets.mockResolvedValue([]);
+    let resolveLog;
+    logLiveSet.mockReturnValue(new Promise((resolve) => { resolveLog = resolve; }));
+    renderExerciseDetail({ liveSession: { id: 101 } });
+
+    const button = (await screen.findByText('Log set')).closest('button');
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button).toBeDisabled());
+
+    resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+
+    await waitFor(() => expect(button).not.toBeDisabled());
+  });
+
+  it('disables and pulses the favorite star until the toggle settles', async () => {
+    listSessionSets.mockResolvedValue([]);
+    let resolveToggle;
+    // exercise.isFavorite starts true, so a click calls unfavoriteExercise.
+    const { unfavoriteExercise } = await import('../../api/exercises');
+    unfavoriteExercise.mockReturnValue(new Promise((resolve) => { resolveToggle = resolve; }));
+    renderExerciseDetail();
+
+    const star = await screen.findByRole('button', { name: 'Remove from favorites' });
+    fireEvent.click(star);
+
+    await waitFor(() => expect(star).toBeDisabled());
+    expect(star.className).toContain('favorite-star-pending');
+
+    resolveToggle();
+
+    await waitFor(() => expect(star).not.toBeDisabled());
+    expect(star.className).not.toContain('favorite-star-pending');
+  });
+
+  it('shows a "Saving..." indicator (no Edit/Delete yet) on a set until it is confirmed', async () => {
+    listSessionSets.mockResolvedValue([]);
+    let resolveLog;
+    logLiveSet.mockReturnValue(new Promise((resolve) => { resolveLog = resolve; }));
+    renderExerciseDetail({ liveSession: { id: 101 } });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    expect(await screen.findByText(/Saving/)).toBeInTheDocument();
+    expect(screen.queryByText('Edit')).not.toBeInTheDocument();
+    expect(screen.queryByText('Delete')).not.toBeInTheDocument();
+
+    listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
+    resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+
+    await waitFor(() => expect(screen.getByText('Edit')).toBeInTheDocument());
+    expect(screen.queryByText(/Saving/)).not.toBeInTheDocument();
+  });
+});
