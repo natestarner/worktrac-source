@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
 import ExerciseDetail from './ExerciseDetail';
@@ -324,7 +325,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
 
   afterEach(() => vi.clearAllMocks());
 
-  it('disables the Log Set button and shows a spinner until the write settles', async () => {
+  it('re-enables the Log Set button once the optimistic write lands, without waiting for the server', async () => {
     listSessionSets.mockResolvedValue([]);
     let resolveLog;
     logLiveSet.mockReturnValue(new Promise((resolve) => { resolveLog = resolve; }));
@@ -333,11 +334,54 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     const button = (await screen.findByText('Log set')).closest('button');
     fireEvent.click(button);
 
-    await waitFor(() => expect(button).toBeDisabled());
+    // The button's pending window is scoped to the optimistic cache write (which has no
+    // network dependency), not the full request -- it should clear quickly even though the
+    // mocked request below is still unresolved. This matters because with the old
+    // mutateAsync-based wiring, the button would otherwise never re-enable if the request
+    // were paused offline (see the offline test below) -- there's no timeout on that promise.
+    await waitFor(() => expect(button).not.toBeDisabled());
+    expect(logLiveSet).toHaveBeenCalled();
+    expect(await screen.findByText(/Saving/)).toBeInTheDocument();
 
     resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+    await waitFor(() => expect(screen.queryByText(/Saving/)).not.toBeInTheDocument());
+  });
 
-    await waitFor(() => expect(button).not.toBeDisabled());
+  it("shows \"Will sync once you're back online\" while paused offline, then Saving once reconnected", async () => {
+    listSessionSets.mockResolvedValue([]);
+    let resolveLog;
+    logLiveSet.mockImplementation(() => new Promise((resolve) => { resolveLog = resolve; }));
+    renderExerciseDetail({ liveSession: { id: 101 } });
+
+    onlineManager.setOnline(false);
+    try {
+      const button = (await screen.findByText('Log set')).closest('button');
+      fireEvent.click(button);
+
+      // The tap-ack still resolves promptly even offline -- onMutate's cache write has no
+      // network dependency -- so the button must not hang the way it would have under the
+      // old mutateAsync-based wiring.
+      await waitFor(() => expect(button).not.toBeDisabled());
+      // TanStack pauses the mutation before ever invoking mutationFn while offline.
+      expect(logLiveSet).not.toHaveBeenCalled();
+      expect(await screen.findByText("Will sync once you're back online")).toBeInTheDocument();
+      expect(screen.queryByText(/Saving/)).not.toBeInTheDocument();
+
+      onlineManager.setOnline(true);
+      await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+      expect(await screen.findByText(/Saving/)).toBeInTheDocument();
+      expect(screen.queryByText("Will sync once you're back online")).not.toBeInTheDocument();
+
+      listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
+      resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+      await waitFor(() => expect(screen.getByText('Edit')).toBeInTheDocument());
+    } finally {
+      // Restore the real default -- onlineManager's #online starts at `true` with no
+      // navigator.onLine fallback in this TanStack version, so setOnline(undefined) would
+      // leave it falsy (behaving as offline) rather than resetting it, leaking into every
+      // later test in this file/run that shares this module-level singleton.
+      onlineManager.setOnline(true);
+    }
   });
 
   it('disables and pulses the favorite star until the toggle settles', async () => {

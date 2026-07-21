@@ -21,7 +21,10 @@ export default function ConfirmDialog() {
     <Modal width={320}>
       <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 22 }}>{confirmDialog.message}</div>
       <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={closeConfirm} disabled={pending} style={cancelButtonStyle}>
+        {/* Not disabled while pending: a delete tapped offline can sit paused for a long
+            time (see logSetMutation's analogous offline-pause handling in ExerciseDetail.jsx),
+            and the user must always be able to back out of the dialog, even mid-request. */}
+        <button onClick={closeConfirm} style={cancelButtonStyle}>
           Cancel
         </button>
         <button onClick={handleDelete} disabled={pending} style={{ ...deleteButtonStyle, position: 'relative' }}>
