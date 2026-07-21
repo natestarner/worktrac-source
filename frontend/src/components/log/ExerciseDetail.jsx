@@ -194,9 +194,12 @@ export default function ExerciseDetail({
     },
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
     onMutate: async (vars) => {
-      // Show the set instantly. Only possible once a session exists to key the list on; the very
-      // first set of a brand-new workout has no session id yet, so it appears once the server
-      // materializes the session (onSettled -> refetch).
+      // Show the set instantly by writing an optimistic row into the session-keyed cache.
+      // Only possible once a session exists to key the list on -- the very first set of a
+      // brand-new workout has no session id yet, so it can't be written here; that case is
+      // instead covered by pendingBeforeSession (derived below from the mutation cache via
+      // useMutationState), which shows a skeleton placeholder until the real session
+      // materializes and this exercise's sessionSets query picks up the confirmed row.
       //
       // The whole body is wrapped in try/finally so handleLogSet's tap-ack promise always
       // resolves -- including the no-session-yet early return, and even if cancelQueries/
@@ -205,7 +208,10 @@ export default function ExerciseDetail({
       // resolves quickly regardless of connectivity, unlike the mutation's own settlement, which
       // TanStack's default networkMode:'online' can leave paused indefinitely while offline.
       try {
-        if (!contextSessionId) return {};
+        if (!contextSessionId) {
+          setJustAddedSetId(vars.tempId);
+          return {};
+        }
         const key = queryKeys.sessionSets(contextSessionId, exercise.id);
         await queryClient.cancelQueries({ queryKey: key });
         const previous = queryClient.getQueryData(key);
@@ -257,16 +263,36 @@ export default function ExerciseDetail({
     },
   });
 
-  // Every optimistic set row currently paused (offline, waiting to reconnect) rather than
-  // actively in flight/retrying -- read from the shared MutationCache via mutationKey rather
-  // than logSetMutation's own .isPaused, since that single hook instance only reflects the
-  // most recently dispatched call and can't distinguish rows if more than one set is
-  // outstanding at once. isPaused is only true while genuinely offline -- an online retry's
-  // backoff delay does not set it, so "Saving..." below still covers that case correctly.
-  const pausedTempIds = useMutationState({
+  // Every log-set mutation for this exercise currently pending (in flight, retrying, or
+  // paused offline) -- read from the shared MutationCache via mutationKey rather than
+  // logSetMutation's own reactive state, since a single hook instance only reflects the most
+  // recently dispatched call and can't be trusted across an exercise switch (ExerciseDetail
+  // isn't remounted when a routine advances -- LogTab keys it on personId only; mutationKey
+  // embeds exercise.id fresh each render, so a stale exercise's mutation naturally won't match).
+  const pendingLogSets = useMutationState({
     filters: { mutationKey: logSetMutationKey, status: 'pending' },
-    select: (mutation) => (mutation.state.isPaused ? mutation.state.variables?.tempId : undefined),
-  }).filter(Boolean);
+    select: (mutation) => ({ tempId: mutation.state.variables?.tempId, isPaused: mutation.state.isPaused }),
+  }).filter((m) => m.tempId);
+
+  // isPaused is only true while genuinely offline -- an online retry's backoff delay does not
+  // set it, so "Saving..." below still covers that case correctly.
+  const pausedTempIds = pendingLogSets.filter((m) => m.isPaused).map((m) => m.tempId);
+
+  // Sets whose onMutate had nowhere to write an optimistic row yet (no session existed at
+  // dispatch time -- the very first set of a brand-new workout). Once a session exists,
+  // onMutate's own optimistic insert already puts a matching-tempId row directly into
+  // sessionSets, so this naturally excludes it there (no double-counting). Rendered as a
+  // skeleton (see below), not literal numbers -- there's a brief window between this mutation
+  // leaving 'pending' and the confirmed row actually landing in sessionSets via onSettled's
+  // refetch, and a skeleton reads as "still loading" through that gap rather than "data
+  // disappeared."
+  const pendingBeforeSession = pendingLogSets
+    .filter((m) => !sessionSets.some((real) => real.id === m.tempId))
+    .map((m) => ({ id: m.tempId, optimistic: true, skeleton: true }));
+
+  // Prepended, not appended -- these are chronologically the earliest set(s) of the session
+  // whenever they're non-empty, and [...displaySets].reverse() below shows most-recent-first.
+  const displaySets = [...pendingBeforeSession, ...sessionSets];
 
   function handleLogSet() {
     // Rest timer starts immediately for the "instant" feel; it's a live-only concept.
@@ -468,17 +494,18 @@ export default function ExerciseDetail({
         </div>
 
         <div className="log-sets-col">
-          {ready && sessionSets.length > 0 && (
+          {ready && displaySets.length > 0 && (
             <>
               <div className="log-sets-heading">This session</div>
               <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '8px 20px' }}>
-                {[...sessionSets].reverse().map((set, i) => {
-                  // sessionSets comes back from the API in the order logged (oldest
-                  // first) so "Set N" always labels a set's true chronological
-                  // position -- reverse only the rendering, not the numbering, so the
-                  // most recently logged set shows on top.
-                  const setNumber = sessionSets.length - i;
-                  const isPR = isPrSet(set.weight, set.reps, set.unit, bestComparableLb);
+                {[...displaySets].reverse().map((set, i) => {
+                  // displaySets is oldest-first (confirmed sets from the API, oldest first,
+                  // with any pre-session placeholder(s) prepended since they're chronologically
+                  // earliest) so "Set N" always labels a set's true chronological position --
+                  // reverse only the rendering, not the numbering, so the most recently logged
+                  // set shows on top.
+                  const setNumber = displaySets.length - i;
+                  const isPR = !set.skeleton && isPrSet(set.weight, set.reps, set.unit, bestComparableLb);
                   return (
                     <div
                       key={set.id}
@@ -489,30 +516,37 @@ export default function ExerciseDetail({
                         justifyContent: 'space-between',
                         padding: '14px 0',
                         borderRadius: 10,
-                        borderBottom: i < sessionSets.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
+                        borderBottom: i < displaySets.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ fontSize: 13, color: 'var(--color-muted)', fontWeight: 600, width: 44 }}>Set {setNumber}</div>
-                        <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}>
-                          {set.weight} {set.unit || 'lb'} &times; {set.reps}
+                      {set.skeleton ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <Skeleton width={40} height={13} />
+                          <Skeleton width={100} height={17} />
                         </div>
-                        {isPR && (
-                          <span
-                            style={{
-                              background: 'var(--color-success-bg)',
-                              color: 'var(--color-success)',
-                              fontSize: 11,
-                              fontWeight: 800,
-                              padding: '3px 8px',
-                              borderRadius: 999,
-                              letterSpacing: '0.03em',
-                            }}
-                          >
-                            PR
-                          </span>
-                        )}
-                      </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ fontSize: 13, color: 'var(--color-muted)', fontWeight: 600, width: 44 }}>Set {setNumber}</div>
+                          <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}>
+                            {set.weight} {set.unit || 'lb'} &times; {set.reps}
+                          </div>
+                          {isPR && (
+                            <span
+                              style={{
+                                background: 'var(--color-success-bg)',
+                                color: 'var(--color-success)',
+                                fontSize: 11,
+                                fontWeight: 800,
+                                padding: '3px 8px',
+                                borderRadius: 999,
+                                letterSpacing: '0.03em',
+                              }}
+                            >
+                              PR
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {set.optimistic ? (
                         pausedTempIds.includes(set.id) ? (
                           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-muted)' }}>

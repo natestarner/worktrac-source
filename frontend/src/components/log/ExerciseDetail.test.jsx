@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
@@ -421,5 +421,112 @@ describe('ExerciseDetail in-flight visual feedback', () => {
 
     await waitFor(() => expect(screen.getByText('Edit')).toBeInTheDocument());
     expect(screen.queryByText(/Saving/)).not.toBeInTheDocument();
+  });
+
+  // Logging the very first set of a brand-new workout has no live session yet, so
+  // onMutate has nowhere to write an optimistic row (queryKeys.sessionSets needs a real
+  // session id). Without a placeholder, the "This session" section stays entirely absent
+  // until the full create-session-and-log-set round trip completes -- these three tests
+  // cover the skeleton placeholder that fills that gap (see pendingBeforeSession in
+  // ExerciseDetail.jsx), derived from the shared MutationCache rather than local state.
+  it('shows a skeleton placeholder for the very first set of a brand-new workout (no session yet)', async () => {
+    listSessionSets.mockResolvedValue([]);
+    let resolveLog;
+    logLiveSet.mockReturnValue(new Promise((resolve) => { resolveLog = resolve; }));
+
+    // A harness that actually updates liveSession when refetchLiveSession is called --
+    // renderExerciseDetail's default stub just resolves without touching any state, which
+    // would leave contextSessionId null forever and never let the confirmed row appear
+    // (LogTab's real refetchLiveSession does update the liveSession it passes down).
+    function Harness() {
+      const [liveSession, setLiveSession] = useState(null);
+      return (
+        <ExerciseDetail
+          exercise={exercise}
+          personId={7}
+          editingSessionId={null}
+          liveSession={liveSession}
+          refetchLiveSession={async () => setLiveSession({ id: 101 })}
+          onBack={vi.fn()}
+        />
+      );
+    }
+    renderWithQuery(<Harness />);
+
+    // Before the click there's no session and nothing to show in "This session" -- the
+    // heading only renders once displaySets is non-empty.
+    expect(screen.queryByText('This session')).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    expect(await screen.findByText('This session')).toBeInTheDocument();
+    expect(screen.getByText(/Saving/)).toBeInTheDocument();
+
+    listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
+    resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+
+    await waitFor(() => expect(screen.getByText('Edit')).toBeInTheDocument());
+  });
+
+  it('does not leak a pending placeholder into a different exercise after a mid-flight switch', async () => {
+    const exerciseB = { id: 2, name: 'Squat', tags: [], isFavorite: false, setupFields: [] };
+    listSessionSets.mockResolvedValue([]);
+    let resolveLogA;
+    logLiveSet.mockImplementation(() => new Promise((resolve) => { resolveLogA = resolve; }));
+
+    function Harness() {
+      const [currentExercise, setCurrentExercise] = useState(exercise);
+      return (
+        <div>
+          <button onClick={() => setCurrentExercise(exerciseB)}>switch</button>
+          <ExerciseDetail
+            exercise={currentExercise}
+            personId={7}
+            editingSessionId={null}
+            liveSession={null}
+            refetchLiveSession={vi.fn().mockResolvedValue()}
+            onBack={vi.fn()}
+          />
+        </div>
+      );
+    }
+    renderWithQuery(<Harness />);
+
+    fireEvent.click(await screen.findByText('Log set'));
+    await waitFor(() => expect(screen.getByText('This session')).toBeInTheDocument());
+
+    // ExerciseDetail isn't remounted on an exercise switch (LogTab keys it on personId
+    // only, matched by this harness's lack of a key) -- switching mid-flight must not show
+    // exercise A's still-pending placeholder under exercise B.
+    fireEvent.click(screen.getByText('switch'));
+    expect(screen.queryByText('This session')).not.toBeInTheDocument();
+
+    // Settle exercise A's still-outstanding request so it doesn't leak into a later test;
+    // wrapped in act since nothing else here awaits the resulting state update.
+    await act(async () => {
+      resolveLogA({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+      await Promise.resolve();
+    });
+  });
+
+  it('removes the placeholder automatically if the first set fails to save', async () => {
+    listSessionSets.mockResolvedValue([]);
+    const showToast = vi.fn();
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast, startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    const clientError = Object.assign(new Error('Weight required'), { status: 400 });
+    // Controlled rejection (not mockRejectedValue) -- an immediately-rejected promise can
+    // leave 'pending' status before the placeholder assertion below ever gets to observe it.
+    let rejectLog;
+    logLiveSet.mockImplementation(() => new Promise((resolve, reject) => { rejectLog = reject; }));
+    renderExerciseDetail({ liveSession: null });
+
+    fireEvent.click(await screen.findByText('Log set'));
+    expect(await screen.findByText('This session')).toBeInTheDocument();
+
+    rejectLog(clientError);
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required'));
+    // No manual cleanup code runs here -- the mutation leaving 'pending' status on its own
+    // is what drops it from pendingBeforeSession.
+    await waitFor(() => expect(screen.queryByText('This session')).not.toBeInTheDocument());
   });
 });
