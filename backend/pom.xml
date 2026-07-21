@@ -31,7 +31,7 @@
              is on Java 25); do not use the bucket4j_jdk8-core artifact. -->
         <bucket4j.version>8.19.0</bucket4j.version>
         <caffeine.version>3.2.4</caffeine.version>
-        <azure-communication-email.version>1.0.22</azure-communication-email.version>
+        <azure-communication-email.version>1.1.4</azure-communication-email.version>
     </properties>
 
     <dependencies>
