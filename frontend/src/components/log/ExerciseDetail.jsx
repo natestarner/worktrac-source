@@ -45,6 +45,7 @@ export default function ExerciseDetail({
   const [editingSet, setEditingSet] = useState(null);
   const [justAddedSetId, setJustAddedSetId] = useState(null);
   const [showSessionNoteModal, setShowSessionNoteModal] = useState(false);
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
 
   const defaultUnit = account?.defaultUnit || 'lb';
 
@@ -111,9 +112,18 @@ export default function ExerciseDetail({
   }
 
   async function handleToggleFavorite() {
-    if (exercise.isFavorite) await unfavoriteExercise(personId, exercise.id);
-    else await favoriteExercise(personId, exercise.id);
-    if (onPersonalizationChanged) await onPersonalizationChanged();
+    // The star's own isFavorite comes from the parent's personExercises/catalog data, which
+    // only updates once onPersonalizationChanged's refetches resolve -- that round trip can
+    // take a moment, so pulse the star in the meantime rather than leaving the tap looking
+    // like it did nothing.
+    setIsTogglingFavorite(true);
+    try {
+      if (exercise.isFavorite) await unfavoriteExercise(personId, exercise.id);
+      else await favoriteExercise(personId, exercise.id);
+      if (onPersonalizationChanged) await onPersonalizationChanged();
+    } finally {
+      setIsTogglingFavorite(false);
+    }
   }
 
   function handleRequestDelete() {
@@ -229,7 +239,10 @@ export default function ExerciseDetail({
   function handleLogSet() {
     // Rest timer starts immediately for the "instant" feel; it's a live-only concept.
     if (!editingSessionId) startRestTimer(personId, 90);
-    logSetMutation.mutate({
+    // Returning the promise lets Button's built-in pending state (disable + spinner) cover
+    // the request -- the optimistic row makes it feel instant, but the button itself should
+    // still visibly acknowledge the tap rather than staying inertly clickable.
+    return logSetMutation.mutateAsync({
       weight: weightDraft,
       reps: repsDraft,
       tempId: `optimistic-${newId()}`,
@@ -276,8 +289,15 @@ export default function ExerciseDetail({
             <div style={{ minWidth: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em' }}>{exercise.name}</div>
             <button
               onClick={handleToggleFavorite}
+              disabled={isTogglingFavorite}
               aria-label={exercise.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              style={{ ...iconButtonStyle, fontSize: 20, color: exercise.isFavorite ? 'var(--color-accent)' : 'var(--color-faint)' }}
+              className={isTogglingFavorite ? 'favorite-star-pending' : undefined}
+              style={{
+                ...iconButtonStyle,
+                fontSize: 20,
+                color: exercise.isFavorite ? 'var(--color-accent)' : 'var(--color-faint)',
+                cursor: isTogglingFavorite ? 'default' : 'pointer',
+              }}
             >
               {exercise.isFavorite ? '★' : '☆'}
             </button>
@@ -452,7 +472,12 @@ export default function ExerciseDetail({
                           </span>
                         )}
                       </div>
-                      {!set.optimistic && (
+                      {set.optimistic ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--color-muted)' }}>
+                          <span className="saving-dot" />
+                          Saving&hellip;
+                        </div>
+                      ) : (
                         <div style={{ display: 'flex', gap: 14 }}>
                           <button onClick={() => setEditingSet(set)} style={editLinkStyle}>
                             Edit

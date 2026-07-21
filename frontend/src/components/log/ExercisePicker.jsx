@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import Skeleton from '../shared/Skeleton';
@@ -18,6 +19,7 @@ export default function ExercisePicker({
   hasActiveRoutine,
 }) {
   const { exerciseSearch, setExerciseSearch } = useAppState();
+  const searchInputRef = useRef(null);
   const term = exerciseSearch.trim().toLowerCase();
   const searching = term.length > 0;
 
@@ -70,8 +72,17 @@ export default function ExercisePicker({
       {showRoutineQuickStart && <div style={sectionLabelStyle}>Or pick an exercise</div>}
 
       <input
+        ref={searchInputRef}
         value={exerciseSearch}
         onChange={(e) => setExerciseSearch(e.target.value)}
+        // On mobile, the keyboard covers roughly the bottom half of the screen -- scrolling
+        // the input to the top of the viewport on focus keeps it visible above the keyboard
+        // and leaves the most possible room below it for search results.
+        onFocus={() => {
+          // jsdom (unit tests) doesn't implement scrollIntoView -- guard rather than skip this
+          // entirely so real browsers still get it.
+          if (searchInputRef.current?.scrollIntoView) searchInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }}
         placeholder="Search all exercises"
         style={{
           width: '100%',

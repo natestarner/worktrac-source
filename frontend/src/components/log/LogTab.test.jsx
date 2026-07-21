@@ -104,6 +104,19 @@ describe('LogTab routine nav button placement', () => {
     expect(screen.queryByText('Next exercise')).not.toBeInTheDocument();
   });
 
+  it('scrolls the current routine pill into view as the routine advances', () => {
+    // jsdom has no real layout/scrolling, so this only verifies the effect calls
+    // scrollIntoView on the newly-current pill -- not actual on-screen movement.
+    Element.prototype.scrollIntoView = vi.fn();
+    useAppState.mockReturnValue(baseAppState({ selectedExerciseId: 1, routineIndex: 0 }));
+    const { rerender } = render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    useAppState.mockReturnValue(baseAppState({ selectedExerciseId: 2, routineIndex: 1 }));
+    rerender(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  });
+
   it('ending the workout mid-routine also ends the routine', async () => {
     const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
     useAppState.mockReturnValue(appState);

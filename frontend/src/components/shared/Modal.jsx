@@ -22,6 +22,11 @@ export default function Modal({ width = 320, onScrim, children, align = 'center'
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--color-surface)',
+          // In light mode the dimmed scrim is far lighter than --color-surface, so the modal
+          // edge reads clearly without help. In dark mode --color-surface is close enough to
+          // the scrim-darkened backdrop that the two become indistinguishable -- the same
+          // border every card elsewhere already uses fixes it in both themes at once.
+          border: '1px solid var(--color-border)',
           borderRadius: align === 'bottom' ? '20px 20px 0 0' : 20,
           padding: 28,
           width,

@@ -50,6 +50,16 @@
     --color-success-bg: #163524;
     --color-pr-bg: #3a2417;
     --color-pr-border: #5a3520;
+    /* --color-pr-text unchanged (#a8532c) sits at ~2.7:1 on the dark-mode --color-pr-bg above
+       -- well under WCAG AA's 4.5:1 for text. Lightened for dark mode only; still reads as the
+       same warm PR-accent orange, just bright enough to be legible against a dark background. */
+    --color-pr-text: #e8935f;
+    /* --color-dark is meant to read as an intentionally-dark "chip" (routine progress button,
+       "editing past session" banner, numeric keypad, etc.), always paired with white text. Left
+       at its light-mode near-black value, it becomes ~1.05:1 against the dark-mode page/surface
+       colors above -- i.e. invisible, not just low-contrast. Given a lighter, still-dark tone
+       here so those chips stay visually distinct from the page in dark mode too. */
+    --color-dark: #5c5548;
 
     --skeleton-base: #2c2822;
     --skeleton-highlight: #3c372f;
@@ -272,6 +282,32 @@ button {
 
 .set-row-new {
   animation: newSetFlash 1.1s ease-out;
+}
+
+/* Continuous (not one-shot) pulse for controls that are waiting on a request they can't
+   optimistically resolve themselves -- the favorite star (isFavorite only flips once its
+   parent's refetch resolves) and the "Saving..." dot on an unconfirmed set row below. */
+@keyframes pendingPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.favorite-star-pending {
+  animation: pendingPulse 0.9s ease-in-out infinite;
+}
+
+.saving-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-muted);
+  display: inline-block;
+  animation: pendingPulse 0.9s ease-in-out infinite;
 }
 
 @keyframes toastIn {
