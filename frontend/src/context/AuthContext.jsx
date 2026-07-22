@@ -13,6 +13,7 @@ import {
 } from '../api/auth';
 import { getAuthToken, isOfflineError, setAuthToken, setUnauthorizedHandler } from '../api/client';
 import { resetQueryCache } from '../lib/queryClient';
+import { clearOutbox } from '../lib/outboxPersistence';
 import { clearAuthSnapshot, loadAuthSnapshot, saveAuthSnapshot } from '../lib/authSnapshot';
 import { requestPersistentStorage } from '../lib/durableStorage';
 
@@ -29,6 +30,9 @@ export function AuthProvider({ children }) {
     setUnauthorizedHandler(() => {
       resetQueryCache();
       clearAuthSnapshot();
+      // Deliberately does NOT clear the outbox (hardening #4): a token can expire mid-offline, and a
+      // queued write must survive the forced logout so it replays after the user logs back in as the
+      // same household -- never silently discarded. Only an explicit user logout clears it.
       setState(SIGNED_OUT);
       navigate('/login');
     });
@@ -134,6 +138,9 @@ export function AuthProvider({ children }) {
     setAuthToken(null);
     resetQueryCache();
     clearAuthSnapshot();
+    // Explicit logout DISCARDS queued writes (a different household may log in next). UserMenu warns
+    // first when the outbox is non-empty, so this is a confirmed choice, not silent data loss.
+    clearOutbox();
     setState(SIGNED_OUT);
   }, []);
 

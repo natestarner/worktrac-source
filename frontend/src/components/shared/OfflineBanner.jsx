@@ -1,13 +1,25 @@
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { useOutboxCount } from '../../hooks/useOutboxCount';
 
-// A persistent, always-visible banner while the device is offline, so the user is never in doubt
-// about which mode they're in. The reassuring copy is deliberate: the whole point of offline mode
-// is that entered data is safe and will sync, so the banner says exactly that. It renders nothing
-// while online. A per-write "waiting to sync" indicator and the outbox count land with the durable
-// outbox (PR 2); this banner is the top-level state signal.
+// The top-level offline signal, so the user is never in doubt about which mode they're in. While
+// offline it names exactly how many entered changes are safely queued ("N changes waiting to
+// sync") -- the reassurance that nothing is lost. While online it stays out of the way, except to
+// briefly announce writes still draining after a reconnect. Renders nothing when online with an
+// empty outbox.
 export default function OfflineBanner() {
   const online = useOnlineStatus();
-  if (online) return null;
+  const queued = useOutboxCount();
+
+  if (online && queued === 0) return null;
+
+  const queuedLabel = queued === 1 ? '1 change waiting to sync' : `${queued} changes waiting to sync`;
+
+  const message = online
+    ? `Syncing… ${queuedLabel}`
+    : queued > 0
+      ? `Offline — ${queuedLabel}. They'll sync when you reconnect.`
+      : 'Offline — your changes are saved on this device and will sync when you reconnect.';
+
   return (
     <div
       role="status"
@@ -34,7 +46,7 @@ export default function OfflineBanner() {
           background: 'var(--color-muted)',
         }}
       />
-      Offline — your changes are saved on this device and will sync when you reconnect.
+      {message}
     </div>
   );
 }

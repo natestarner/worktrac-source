@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { queryClient } from '../../lib/queryClient';
+import { getQueuedWriteCount } from '../../hooks/useOutboxCount';
 
 export default function UserMenu() {
   const { people, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [pendingLogoutCount, setPendingLogoutCount] = useState(0);
   const containerRef = useRef(null);
 
   const primaryName = people.find((p) => p.isPrimary)?.name || 'Account';
@@ -17,10 +20,14 @@ export default function UserMenu() {
     function handleClick(e) {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setOpen(false);
+        setPendingLogoutCount(0);
       }
     }
     function handleKey(e) {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        setOpen(false);
+        setPendingLogoutCount(0);
+      }
     }
     document.addEventListener('mousedown', handleClick);
     document.addEventListener('keydown', handleKey);
@@ -36,6 +43,22 @@ export default function UserMenu() {
   }
 
   function handleLogout() {
+    // Guard against silently discarding queued offline writes: logging out clears this device's
+    // outbox (a different household may log in next), so confirm inline if anything hasn't synced
+    // yet (hardening #4 -- a forced 401 logout, by contrast, preserves the outbox to replay after
+    // re-login; only this explicit user action discards). Reading the count off the app's singleton
+    // client keeps this a pure local-state confirm, with no extra context dependency in the header.
+    const queued = getQueuedWriteCount(queryClient);
+    if (queued > 0) {
+      setPendingLogoutCount(queued);
+    } else {
+      setOpen(false);
+      logout();
+    }
+  }
+
+  function confirmLogout() {
+    setPendingLogoutCount(0);
     setOpen(false);
     logout();
   }
@@ -89,12 +112,52 @@ export default function UserMenu() {
             </>
           )}
           <div style={{ borderTop: '1px solid var(--color-border)' }} />
-          <MenuItem label="Logout" onClick={handleLogout} />
+          {pendingLogoutCount > 0 ? (
+            <div role="alertdialog" aria-label="Unsynced changes" style={{ padding: '12px 16px' }}>
+              <div style={{ fontSize: 13, color: 'var(--color-text)', marginBottom: 10 }}>
+                {pendingLogoutCount === 1 ? '1 change hasn’t' : `${pendingLogoutCount} changes haven’t`} synced yet
+                and will be lost if you log out.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button role="menuitem" onClick={confirmLogout} style={dangerButtonStyle}>
+                  Log out anyway
+                </button>
+                <button onClick={() => setPendingLogoutCount(0)} style={cancelInlineStyle}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <MenuItem label="Logout" onClick={handleLogout} />
+          )}
         </div>
       )}
     </div>
   );
 }
+
+const dangerButtonStyle = {
+  flex: 1,
+  padding: '8px 10px',
+  background: 'var(--color-danger)',
+  color: '#fff',
+  border: 'none',
+  borderRadius: 8,
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const cancelInlineStyle = {
+  padding: '8px 10px',
+  background: 'none',
+  border: '1px solid var(--color-border)',
+  borderRadius: 8,
+  fontSize: 13,
+  fontWeight: 600,
+  color: 'var(--color-muted)',
+  cursor: 'pointer',
+};
 
 function MenuItem({ label, onClick }) {
   return (
