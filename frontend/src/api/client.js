@@ -31,6 +31,19 @@ class ApiError extends Error {
   }
 }
 
+// Distinguishes "couldn't reach the server" (offline, DNS/connection failure, timeout, or a
+// 5xx/gateway error -- incl. lower's scale-to-zero cold-start 503s) from a definitive client-side
+// rejection (a 4xx that is the server's real answer). Offline mode treats the former as
+// "try again later" -- boot from the cached identity, keep queued writes pending -- while a 4xx is
+// a genuine result to surface. A rejected fetch throws a TypeError with no `.status`, which counts
+// as unreachable. (The full write-replay taxonomy -- 408/429 as transient etc. -- lands with the
+// durable outbox; auth boot only needs the 4xx-vs-rest distinction.)
+export function isOfflineError(error) {
+  const status = error?.status;
+  if (status === undefined || status === null) return true;
+  return status >= 500;
+}
+
 async function request(path, { method = 'GET', body, isFormData = false } = {}) {
   const headers = {};
   if (!isFormData) headers['Content-Type'] = 'application/json';

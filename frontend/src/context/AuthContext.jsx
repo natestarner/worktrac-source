@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { onlineManager } from '@tanstack/react-query';
 import {
   confirmEmail as apiConfirmEmail,
   login as apiLogin,
@@ -10,12 +11,15 @@ import {
   resendResetCode as apiResendResetCode,
   resetPassword as apiResetPassword,
 } from '../api/auth';
-import { getAuthToken, setAuthToken, setUnauthorizedHandler } from '../api/client';
+import { getAuthToken, isOfflineError, setAuthToken, setUnauthorizedHandler } from '../api/client';
 import { resetQueryCache } from '../lib/queryClient';
+import { clearAuthSnapshot, loadAuthSnapshot, saveAuthSnapshot } from '../lib/authSnapshot';
+import { requestPersistentStorage } from '../lib/durableStorage';
 
 const AuthContext = createContext(null);
 
-const EMPTY = { status: 'loading', user: null, account: null, people: [] };
+const EMPTY = { status: 'loading', user: null, account: null, people: [], offline: false };
+const SIGNED_OUT = { status: 'unauthenticated', user: null, account: null, people: [], offline: false };
 
 export function AuthProvider({ children }) {
   const navigate = useNavigate();
@@ -24,19 +28,57 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     setUnauthorizedHandler(() => {
       resetQueryCache();
-      setState({ status: 'unauthenticated', user: null, account: null, people: [] });
+      clearAuthSnapshot();
+      setState(SIGNED_OUT);
       navigate('/login');
     });
   }, [navigate]);
 
   useEffect(() => {
     if (!getAuthToken()) {
-      setState({ status: 'unauthenticated', user: null, account: null, people: [] });
+      clearAuthSnapshot();
+      setState(SIGNED_OUT);
       return;
     }
     apiMe()
-      .then((data) => setState({ status: 'authenticated', ...data }))
-      .catch(() => setState({ status: 'unauthenticated', user: null, account: null, people: [] }));
+      .then((data) => {
+        // A verified live session -- record the identity so a later cold start with no network can
+        // still boot into the app, and mark durable storage so the offline cache isn't evicted.
+        saveAuthSnapshot(data);
+        requestPersistentStorage();
+        setState({ status: 'authenticated', offline: false, ...data });
+      })
+      .catch((error) => {
+        // Distinguish "session is actually invalid" from "we just couldn't reach the server".
+        // A 4xx (esp. 401) is the server's real answer -> sign out. A network/offline/5xx failure
+        // with a valid saved token + a last-known identity -> boot the app OFFLINE from the
+        // snapshot, so a valid session works with no connectivity instead of bouncing to /login.
+        const snapshot = loadAuthSnapshot();
+        if (isOfflineError(error) && snapshot) {
+          requestPersistentStorage();
+          setState({ status: 'authenticated', offline: true, ...snapshot });
+        } else {
+          clearAuthSnapshot();
+          setState(SIGNED_OUT);
+        }
+      });
+  }, []);
+
+  // When connectivity returns after an offline boot, silently reconcile the identity against the
+  // server (role/people may have changed) and drop the `offline` flag. A failure here is harmless --
+  // we simply stay on the cached identity until the next reconnect.
+  useEffect(() => {
+    return onlineManager.subscribe((online) => {
+      if (!online || !getAuthToken()) return;
+      apiMe()
+        .then((data) => {
+          saveAuthSnapshot(data);
+          setState((s) => (s.status === 'authenticated' ? { status: 'authenticated', offline: false, ...data } : s));
+        })
+        .catch(() => {
+          // Still unreachable (server down while network is up) -- keep the cached identity.
+        });
+    });
   }, []);
 
   const login = useCallback(async (email, password) => {
@@ -44,9 +86,12 @@ export function AuthProvider({ children }) {
     // Clear any cache left by a previously logged-in household on this device before we start
     // fetching this account's data -- account-shared keys (catalog, tags) carry no accountId.
     resetQueryCache();
+    clearAuthSnapshot();
     setAuthToken(token);
     const data = await apiMe();
-    setState({ status: 'authenticated', ...data });
+    saveAuthSnapshot(data);
+    requestPersistentStorage();
+    setState({ status: 'authenticated', offline: false, ...data });
   }, []);
 
   // Starts the pending registration (sends a verification code) -- no account exists yet, so
@@ -59,9 +104,12 @@ export function AuthProvider({ children }) {
   const confirmEmail = useCallback(async ({ email, code }) => {
     const { token } = await apiConfirmEmail({ email, code });
     resetQueryCache();
+    clearAuthSnapshot();
     setAuthToken(token);
     const data = await apiMe();
-    setState({ status: 'authenticated', ...data });
+    saveAuthSnapshot(data);
+    requestPersistentStorage();
+    setState({ status: 'authenticated', offline: false, ...data });
   }, []);
 
   const resendCode = useCallback(async ({ email }) => {
@@ -85,13 +133,16 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     setAuthToken(null);
     resetQueryCache();
-    setState({ status: 'unauthenticated', user: null, account: null, people: [] });
+    clearAuthSnapshot();
+    setState(SIGNED_OUT);
   }, []);
 
   // /api/auth/me returns account+people together; used both after adding/removing a
-  // person and after changing the account's default unit in Admin.
+  // person and after changing the account's default unit in Admin. Keep the offline-boot snapshot
+  // in step so a later cold start reflects the latest people/account too.
   const refreshPeople = useCallback(async () => {
     const data = await apiMe();
+    saveAuthSnapshot(data);
     setState((s) => ({ ...s, account: data.account, people: data.people }));
   }, []);
 

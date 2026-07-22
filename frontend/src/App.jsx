@@ -12,6 +12,7 @@ import ResetPasswordPage from './routes/ResetPasswordPage';
 import ProtectedRoute from './routes/ProtectedRoute';
 import AdminRoute from './routes/AdminRoute';
 import AppShell from './routes/AppShell';
+import ServiceWorkerUpdater from './components/shared/ServiceWorkerUpdater';
 import LogTab from './components/log/LogTab';
 import HistoryTab from './components/history/HistoryTab';
 import PRsTab from './components/prs/PRsTab';
@@ -31,6 +32,7 @@ export default function App() {
       <AuthProvider>
         <AppStateProvider>
           <UIProvider>
+            <ServiceWorkerUpdater />
             <Routes>
             <Route path="/" element={<Navigate to="/app/log" replace />} />
             <Route path="/login" element={<LoginPage />} />

@@ -10,6 +10,7 @@ import Toast from '../components/shared/Toast';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import PRCelebration from '../components/shared/PRCelebration';
 import RestTimerBar from '../components/shared/RestTimerBar';
+import OfflineBanner from '../components/shared/OfflineBanner';
 
 export default function AppShell() {
   const { people, refreshPeople } = useAuth();
@@ -57,6 +58,7 @@ export default function AppShell() {
 
   return (
     <div className="app-shell" style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+      <OfflineBanner />
       <Header />
       <PersonPillBar />
       <TabsNav />
