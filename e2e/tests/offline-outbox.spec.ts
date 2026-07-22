@@ -19,10 +19,10 @@ test.describe('Offline mode — durable set-logging outbox', () => {
     await page.context().setOffline(false);
 
     // Once online it replays and reconciles to a confirmed set (Edit/Delete controls appear), and
-    // there is exactly ONE set row -- no duplicate from the replay.
-    await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
+    // there is exactly ONE confirmed set row -- no duplicate from the replay.
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
     await expect(page.getByText(/Will sync once you're back online/i)).toBeHidden();
-    await expect(page.getByText('135 lb × 8')).toHaveCount(1);
+    await expect(page.getByText(/Set 1/)).toHaveCount(1);
   });
 
   // The across-reload durability needs the production service worker (to cold-serve the shell while

@@ -106,10 +106,16 @@ export default function ExerciseDetail({
   // session id drives reconciliation -- see SAVE_NOTE onSettled).
   function handleSaveSessionNote(note) {
     const trimmed = (note || '').trim();
-    queryClient.setQueryData(
-      queryKeys.sessionExerciseNote(contextSessionId, exercise.id),
-      trimmed ? { sessionId: contextSessionId, exerciseId: exercise.id, note } : null,
-    );
+    // Only write optimistically when a real session already keys the note. Saving a note BEFORE the
+    // first set (contextSessionId null) must NOT cache under the null key -- a later brand-new session
+    // is also keyed null, so a stale note there would wrongly bleed into it. In that case the note is
+    // reconciled via the mutation's returned session id (SAVE_NOTE onSettled) once it materializes.
+    if (contextSessionId) {
+      queryClient.setQueryData(
+        queryKeys.sessionExerciseNote(contextSessionId, exercise.id),
+        trimmed ? { sessionId: contextSessionId, exerciseId: exercise.id, note } : null,
+      );
+    }
     saveNoteMutation.mutate({
       mode: editingSessionId ? 'session' : 'live',
       personId,
