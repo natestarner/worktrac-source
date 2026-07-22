@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { queryClient, CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
@@ -100,6 +101,24 @@ export default function LogTab() {
   async function refreshPersonalization() {
     await Promise.all([refetchPersonExercises(), refetchTags(), refetchCatalog()]);
   }
+
+  // When an exercise created offline finally syncs, its temp id is replaced by the real server id.
+  // If the active person is still viewing that temp exercise, migrate the selection to the real id so
+  // the screen seamlessly picks up the synced exercise (and its now server-backed sets) instead of
+  // falling back to the picker when the temp row disappears from the refreshed catalog. Subscribes to
+  // the app's singleton mutation cache (the outbox lives there), so no query-context dependency here.
+  useEffect(() => {
+    return queryClient.getMutationCache().subscribe((event) => {
+      const mutation = event?.mutation;
+      if (!mutation || mutation.options.mutationKey?.[0] !== CREATE_EXERCISE_MUTATION_KEY[0]) return;
+      if (mutation.state.status !== 'success') return;
+      const tempId = mutation.state.variables?.tempId;
+      const realId = mutation.state.data?.id;
+      if (tempId && realId && selectedExerciseId === tempId) {
+        selectExercise(realId);
+      }
+    });
+  }, [queryClient, selectedExerciseId, selectExercise]);
 
   async function handleExerciseCreated(created) {
     setAddExerciseName(null);

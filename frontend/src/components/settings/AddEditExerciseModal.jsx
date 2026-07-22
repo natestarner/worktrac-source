@@ -1,8 +1,23 @@
 import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { addExercise, updateExercise, favoriteExercise } from '../../api/exercises';
+import { queryKeys } from '../../api/queryKeys';
+import { CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
+import { newTempExerciseId } from '../../lib/exerciseIdMap';
+import { newId } from '../../utils/id';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
+
+// Optimistically drop a just-created (offline) exercise into the shared catalog and this person's
+// picker list, so it's selectable and loggable immediately -- before its create has synced. Keyed by
+// the temp id; the real exercise takes its place when the create mutation's onSettled invalidates
+// these queries after sync.
+function insertOptimisticExercise(queryClient, personId, tempExercise) {
+  queryClient.setQueryData(queryKeys.exercises(), (old = []) => [...old, tempExercise]);
+  queryClient.setQueryData(queryKeys.personExercises(personId), (old = []) => [...old, tempExercise]);
+}
 
 // Add-your-own / edit-your-own exercise. Categories are per-person now, so there's no category
 // selector here -- a new exercise is created uncategorized and auto-favorited for the active
@@ -14,6 +29,11 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   const [name, setName] = useState(exercise?.name || initialName || '');
   const [nameError, setNameError] = useState(false);
   const [saving, setSaving] = useState(false);
+  const online = useOnlineStatus();
+  const queryClient = useQueryClient();
+  // Durable create (create + auto-favorite, both idempotent) so an offline create replays safely and
+  // records its temp->real id mapping on sync. See queryClient.js.
+  const createExerciseMutation = useMutation({ mutationKey: CREATE_EXERCISE_MUTATION_KEY });
 
   async function handleSave() {
     const trimmed = name.trim();
@@ -21,20 +41,47 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       setNameError(true);
       return;
     }
-    setSaving(true);
-    try {
-      if (isEditing) {
+
+    // Renaming an existing exercise stays online-only (it's a Customize-screen action, Tier 3).
+    if (isEditing) {
+      setSaving(true);
+      try {
         const updated = await updateExercise(exercise.id, { name: trimmed });
         onSaved(updated);
-      } else {
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    // Creating: online takes the simple direct path (unchanged). Offline, mint a temp exercise so it
+    // can be selected and logged against right now, and queue the durable create; the queued create +
+    // any set-logs against the temp id replay in order on reconnect and resolve to the real id.
+    if (online) {
+      setSaving(true);
+      try {
         const created = await addExercise({ name: trimmed });
-        // Auto-favorite so it lands in this person's picker immediately.
         if (personId) await favoriteExercise(personId, created.id);
         onSaved(created);
+      } finally {
+        setSaving(false);
       }
-    } finally {
-      setSaving(false);
+      return;
     }
+
+    const tempId = newTempExerciseId();
+    const tempExercise = {
+      id: tempId,
+      name: trimmed,
+      trackingType: 'strength',
+      isGlobal: false,
+      isFavorite: true,
+      tags: [],
+      optimistic: true,
+    };
+    insertOptimisticExercise(queryClient, personId, tempExercise);
+    createExerciseMutation.mutate({ tempId, name: trimmed, personId, idempotencyKey: newId() });
+    onSaved(tempExercise);
   }
 
   return (

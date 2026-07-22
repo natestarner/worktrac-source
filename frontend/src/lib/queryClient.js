@@ -3,7 +3,9 @@ import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persi
 import { get, set, del } from 'idb-keyval';
 import { queryKeys } from '../api/queryKeys';
 import { logLiveSet, logSetIntoSession } from '../api/sets';
+import { addExercise, favoriteExercise } from '../api/exercises';
 import { OUTBOX_SCOPE_ID } from './outboxPersistence';
+import { resolveExerciseId, setExerciseIdMapping } from './exerciseIdMap';
 
 // Bump when the shape of anything we cache changes incompatibly -- the persister discards a
 // restored cache whose buster doesn't match instead of hydrating stale/incompatible data.
@@ -41,6 +43,7 @@ export const queryClient = new QueryClient({
 // test/queryWrapper.jsx -- can be given the exact same defaults; tests pass `retry: false` so a
 // mocked rejection surfaces immediately instead of running the production backoff.
 export const LOG_SET_MUTATION_KEY = ['logSet'];
+export const CREATE_EXERCISE_MUTATION_KEY = ['createExercise'];
 
 // Failure taxonomy (hardening #8) as a pure, testable predicate: a real 4xx is the server's answer
 // -> stop. Anything else (a 5xx / cold-start 503 / timeout / gateway error == server unreachable, or
@@ -60,7 +63,10 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     scope: { id: OUTBOX_SCOPE_ID },
     mutationFn: (vars) => {
       const payload = {
-        exerciseId: vars.exerciseId,
+        // Resolve a temp exercise id (a set logged offline against a just-created, not-yet-synced
+        // exercise) to its real server id, now known because the create replayed first -- the shared
+        // serial scope guarantees that ordering (PR 4). A normal numeric id passes through unchanged.
+        exerciseId: resolveExerciseId(vars.exerciseId),
         weight: vars.weight,
         reps: vars.reps,
         idempotencyKey: vars.idempotencyKey,
@@ -85,6 +91,29 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       }
       client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
       client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+    },
+  });
+
+  // Durable "create your own exercise" (PR 4). One mutation does the two dependent server calls --
+  // create the exercise, then auto-favorite it -- both idempotent (create dedupes on idempotencyKey;
+  // favorite is an idempotent PUT), so a replay can't duplicate. On success it records the temp->real
+  // id mapping so any set-logs queued against the temp id resolve correctly, and refreshes the
+  // catalog/picker so the real exercise takes the optimistic temp one's place.
+  client.setMutationDefaults(CREATE_EXERCISE_MUTATION_KEY, {
+    scope: { id: OUTBOX_SCOPE_ID },
+    mutationFn: async (vars) => {
+      const created = await addExercise({ name: vars.name, idempotencyKey: vars.idempotencyKey });
+      if (vars.personId) await favoriteExercise(vars.personId, created.id);
+      return created;
+    },
+    retry: retry ?? shouldRetryWrite,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
+    onSettled: (created, _error, vars) => {
+      if (created?.id) {
+        setExerciseIdMapping(vars.tempId, created.id);
+        client.invalidateQueries({ queryKey: queryKeys.exercises() });
+        client.invalidateQueries({ queryKey: queryKeys.personExercises(vars.personId) });
+      }
     },
   });
 }

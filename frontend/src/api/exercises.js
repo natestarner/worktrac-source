@@ -6,8 +6,10 @@ export function listExercises() {
   return apiClient.get('/api/exercises');
 }
 
-export function addExercise({ name }) {
-  return apiClient.post('/api/exercises', { name });
+// idempotencyKey lets an offline-created exercise's create be replayed safely -- the server dedupes
+// on it (ExerciseService.add) and returns the same row instead of inserting a duplicate.
+export function addExercise({ name, idempotencyKey }) {
+  return apiClient.post('/api/exercises', { name, idempotencyKey });
 }
 
 export function updateExercise(exerciseId, { name }) {

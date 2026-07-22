@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class ExerciseService {
@@ -31,8 +32,20 @@ public class ExerciseService {
 
     @Transactional
     public ExerciseDto add(Long accountId, ExerciseRequest request) {
+        // Idempotent create: a retried or offline-replayed create carrying the same client key
+        // returns the already-committed exercise instead of inserting a second row. Blank/absent key
+        // => no dedup (mirrors WorkoutSetService.findDuplicate). A filtered unique index (V43)
+        // backstops the concurrent double-submit the pre-check can't see.
+        String clientKey = request.idempotencyKey();
+        boolean deduped = clientKey != null && !clientKey.isBlank();
+        if (deduped) {
+            Optional<Exercise> existing = exerciseRepository.findByClientKeyAndAccount_Id(clientKey, accountId);
+            if (existing.isPresent()) {
+                return ExerciseDto.from(existing.get());
+            }
+        }
         Account account = accountRepository.getReferenceById(accountId);
-        Exercise exercise = new Exercise(account, request.name().trim());
+        Exercise exercise = new Exercise(account, request.name().trim(), deduped ? clientKey : null);
         return ExerciseDto.from(exerciseRepository.save(exercise));
     }
 

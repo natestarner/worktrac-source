@@ -1,11 +1,14 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { onlineManager } from '@tanstack/react-query';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderWithQuery } from '../../test/queryWrapper';
 import AddEditExerciseModal from './AddEditExerciseModal';
 import { addExercise, favoriteExercise } from '../../api/exercises';
 
 // Categories and setup fields are per-person now, so the modal only collects a name; a new
 // exercise is created uncategorized and auto-favorited for the active person so it lands in
-// their picker.
+// their picker. Wrapped in a QueryClientProvider because creating now goes through a durable
+// mutation (so an offline create can queue); these tests exercise the ONLINE path.
 vi.mock('../../api/exercises', () => ({ addExercise: vi.fn(), updateExercise: vi.fn(), favoriteExercise: vi.fn() }));
 
 function lastAddButton() {
@@ -16,13 +19,15 @@ function lastAddButton() {
 describe('AddEditExerciseModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    onlineManager.setOnline(true);
     addExercise.mockResolvedValue({ id: 7 });
     favoriteExercise.mockResolvedValue({});
   });
+  afterEach(() => onlineManager.setOnline(true));
 
   it('creates an uncategorized exercise and auto-favorites it for the active person', async () => {
     const onSaved = vi.fn();
-    render(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
+    renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
 
     fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Cable Row' } });
     fireEvent.click(lastAddButton());
@@ -34,7 +39,7 @@ describe('AddEditExerciseModal', () => {
 
   it('shows an error and does not save when the name is blank', async () => {
     const onSaved = vi.fn();
-    render(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
+    renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
 
     fireEvent.click(lastAddButton());
 

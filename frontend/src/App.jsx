@@ -4,6 +4,7 @@ import { onlineManager } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { queryClient, persistOptions, resumeOutbox } from './lib/queryClient';
 import { attachOutboxPersistence, restoreOutbox } from './lib/outboxPersistence';
+import { loadExerciseIdMap } from './lib/exerciseIdMap';
 import { AuthProvider } from './context/AuthContext';
 import { AppStateProvider } from './context/AppStateContext';
 import { UIProvider } from './context/UIContext';
@@ -49,10 +50,11 @@ export default function App() {
       client={queryClient}
       persistOptions={persistOptions}
       onSuccess={async () => {
-        // The query cache (optimistic rows included) has just been restored. Now bring back any
-        // queued writes and, if we're online, replay them immediately; if offline, they stay paused
-        // and the onlineManager subscription above resumes them on reconnect.
-        await restoreOutbox(queryClient);
+        // The query cache (optimistic rows included) has just been restored. Bring back the temp->real
+        // exercise id map and any queued writes, then -- if online -- replay them; if offline, they
+        // stay paused and the onlineManager subscription above resumes them on reconnect. The id map
+        // is loaded first so a set queued against an offline-created exercise can resolve on replay.
+        await Promise.all([loadExerciseIdMap(), restoreOutbox(queryClient)]);
         if (onlineManager.isOnline()) resumeOutbox();
       }}
     >

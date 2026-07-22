@@ -16,5 +16,9 @@ public interface ExerciseRepository extends JpaRepository<Exercise, Long> {
 
     Optional<Exercise> findByIdAndAccount_Id(Long id, Long accountId);
 
+    // Account-scoped idempotency lookup for exercise creation, so a replayed offline create returns
+    // the already-committed exercise instead of inserting a duplicate.
+    Optional<Exercise> findByClientKeyAndAccount_Id(String clientKey, Long accountId);
+
     void deleteByAccount_Id(Long accountId);
 }
