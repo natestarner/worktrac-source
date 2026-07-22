@@ -51,12 +51,14 @@ test.describe('App Settings', () => {
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
-    await expect(page.getByRole('button', { name: /Sam/ })).toBeVisible();
+    // Scope to the person pill bar: /Sam/ unscoped also matches the "Rest timer On/Off for Sam"
+    // buttons on the Settings page, a strict-mode collision that flakes under parallel workers.
+    await expect(page.locator('.person-pill-bar').getByRole('button', { name: /Sam/ })).toBeVisible();
 
     await openProfile(page);
     await page.getByRole('button', { name: 'Remove' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
-    await expect(page.getByRole('button', { name: /Sam/ })).toHaveCount(0);
+    await expect(page.locator('.person-pill-bar').getByRole('button', { name: /Sam/ })).toHaveCount(0);
 
     // Switch default unit to kg.
     await openAppSettings(page);
