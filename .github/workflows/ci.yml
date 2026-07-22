@@ -176,7 +176,7 @@ jobs:
           path: deploy
 
       - name: Download frontend build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: frontend-build
           path: deploy/frontend-build
