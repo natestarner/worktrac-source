@@ -6,7 +6,7 @@ import { useUI } from '../../context/UIContext';
 import { queryKeys } from '../../api/queryKeys';
 import { newId } from '../../utils/id';
 import { getExerciseSummary } from '../../api/stats';
-import { listSessionSets, logLiveSet, logSetIntoSession, deleteSet } from '../../api/sets';
+import { listSessionSets, deleteSet } from '../../api/sets';
 import { listCustomFields, favoriteExercise, unfavoriteExercise, removeExercise } from '../../api/exercises';
 import { getSessionExerciseNote, saveLiveExerciseNote, saveSessionExerciseNote } from '../../api/notes';
 import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
@@ -175,24 +175,15 @@ export default function ExerciseDetail({
     setRepsDraft(repsDraft + 1);
   }
 
+  // Prefix-matches the registered defaults in queryClient.js (LOG_SET_MUTATION_KEY = ['logSet']),
+  // so the mutationFn, retry policy, serial replay scope, and server-truth reconciliation (onSettled)
+  // all come from there -- the same options a mutation RESTORED from the durable offline outbox
+  // replays with. This component only supplies the observer-side callbacks (optimistic insert,
+  // rollback, PR celebration), which are inherently interactive and don't apply to a silent replay.
   const logSetMutationKey = ['logSet', personId, exercise.id];
 
   const logSetMutation = useMutation({
     mutationKey: logSetMutationKey,
-    mutationFn: ({ weight, reps, idempotencyKey, clientLoggedAt }) =>
-      editingSessionId
-        ? logSetIntoSession(editingSessionId, { exerciseId: exercise.id, weight, reps, idempotencyKey, clientLoggedAt })
-        : logLiveSet(personId, { exerciseId: exercise.id, weight, reps, idempotencyKey, clientLoggedAt }),
-    // A client (4xx) error won't succeed on replay -- fail fast. Transient network/5xx errors get
-    // a few backed-off retries. When fully offline, TanStack's default networkMode pauses the
-    // mutation rather than failing it, so the optimistic set stays on screen and auto-resumes on
-    // reconnect; the idempotency key makes that replay safe (no double-insert). The durable
-    // across-app-close queue is the later offline phase.
-    retry: (failureCount, error) => {
-      if (error?.status >= 400 && error?.status < 500) return false;
-      return failureCount < 3;
-    },
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
     onMutate: async (vars) => {
       // Show the set instantly by writing an optimistic row into the session-keyed cache.
       // Only possible once a session exists to key the list on -- the very first set of a
@@ -242,6 +233,10 @@ export default function ExerciseDetail({
     },
     onSuccess: (result, variables) => {
       setJustAddedSetId(result.set.id);
+      // Pull the (possibly just-created) live session so its id propagates to the green dot, banner,
+      // and this screen's contextSessionId right away. Interactive-only: a replayed set has no
+      // observer here, so the registered default's liveSession invalidation covers that case.
+      if (!editingSessionId) refetchLiveSession?.();
       // PR celebration is driven by the server's authoritative isPR/best, never a refetch race;
       // the weight/reps shown come from the exact values submitted (the mutation variables).
       if (result.isPR) {
@@ -254,13 +249,9 @@ export default function ExerciseDetail({
         });
       }
     },
-    onSettled: () => {
-      refetchSummary();
-      refetchSessionSets();
-      if (!editingSessionId) refetchLiveSession();
-      queryClient.invalidateQueries({ queryKey: queryKeys.prs(personId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
-    },
+    // No onSettled here -- reconciliation (invalidate sets/summary/liveSession/prs/history to server
+    // truth) lives in the registered default so it ALSO runs when a queued write replays after a
+    // reload, when this component's observer no longer exists.
   });
 
   // Every log-set mutation for this exercise currently pending (in flight, retrying, or
@@ -305,7 +296,15 @@ export default function ExerciseDetail({
     const ack = new Promise((resolve) => {
       logAckResolvers.current.set(tempId, resolve);
     });
+    // Every field the replay needs is passed as serializable variables -- nothing captured from a
+    // closure -- so a mutation restored from the durable outbox after an app close can re-run
+    // identically. `mode`/`sessionId` tell the registered mutationFn which endpoint to hit.
     logSetMutation.mutate({
+      mode: editingSessionId ? 'session' : 'live',
+      personId,
+      sessionId: editingSessionId || null,
+      exerciseId: exercise.id,
+      unit: defaultUnit,
       weight: weightDraft,
       reps: repsDraft,
       tempId,

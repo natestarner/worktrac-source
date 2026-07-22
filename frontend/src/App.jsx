@@ -1,6 +1,9 @@
+import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { onlineManager } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { queryClient, persistOptions } from './lib/queryClient';
+import { queryClient, persistOptions, resumeOutbox } from './lib/queryClient';
+import { attachOutboxPersistence, restoreOutbox } from './lib/outboxPersistence';
 import { AuthProvider } from './context/AuthContext';
 import { AppStateProvider } from './context/AppStateContext';
 import { UIProvider } from './context/UIContext';
@@ -27,8 +30,32 @@ import AdminPeople from './routes/admin/AdminPeople';
 import AdminPending from './routes/admin/AdminPending';
 
 export default function App() {
+  useEffect(() => {
+    // Start capturing queued writes to the durable outbox, and replay them the moment connectivity
+    // returns. (Boot-time restore+resume happens in the persist provider's onSuccess below, after
+    // the query cache -- and thus the optimistic rows -- has been rehydrated.)
+    const detach = attachOutboxPersistence(queryClient);
+    const unsubscribeOnline = onlineManager.subscribe((online) => {
+      if (online) resumeOutbox();
+    });
+    return () => {
+      detach();
+      unsubscribeOnline();
+    };
+  }, []);
+
   return (
-    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={persistOptions}
+      onSuccess={async () => {
+        // The query cache (optimistic rows included) has just been restored. Now bring back any
+        // queued writes and, if we're online, replay them immediately; if offline, they stay paused
+        // and the onlineManager subscription above resumes them on reconnect.
+        await restoreOutbox(queryClient);
+        if (onlineManager.isOnline()) resumeOutbox();
+      }}
+    >
       <AuthProvider>
         <AppStateProvider>
           <UIProvider>
