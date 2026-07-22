@@ -1,18 +1,26 @@
 import { useState } from 'react';
-import { editSet } from '../../api/sets';
+import { queryClient, enqueueOutboxWrite, EDIT_SET_MUTATION_KEY } from '../../lib/queryClient';
+import { queryKeys } from '../../api/queryKeys';
 import WeightRepsStepper from '../log/WeightRepsStepper';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
 import Button from './Button';
 
-export default function EditSetModal({ set, onClose, onSaved }) {
+export default function EditSetModal({ set, personId, onClose, onSaved }) {
   const [weight, setWeight] = useState(set.weight);
   const [reps, setReps] = useState(set.reps);
-
+  // Durable so an edit made offline queues and replays; the registered default reconciles sets/PRs/
+  // History on sync. Only synced sets are editable (an unsynced set shows "will sync"), so set.id is
+  // a real server id here.
   const step = set.unit === 'kg' ? 2.5 : 5;
 
-  async function handleSave() {
-    await editSet(set.id, { weight, reps });
+  function handleSave() {
+    const sessionId = set.sessionId ?? null;
+    // Show the new values immediately (offline included, where the write settles only on reconnect).
+    queryClient.setQueryData(queryKeys.sessionSets(sessionId, set.exerciseId), (old = []) =>
+      old.map((s) => (s.id === set.id ? { ...s, weight, reps } : s)),
+    );
+    enqueueOutboxWrite(EDIT_SET_MUTATION_KEY, { setId: set.id, weight, reps, personId, sessionId, exerciseId: set.exerciseId });
     onSaved();
   }
 

@@ -384,24 +384,19 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     }
   });
 
-  it('disables and pulses the favorite star until the toggle settles', async () => {
+  it('toggles favorite through the durable mutation (no blocking spinner -- it is optimistic)', async () => {
     listSessionSets.mockResolvedValue([]);
-    let resolveToggle;
-    // exercise.isFavorite starts true, so a click calls unfavoriteExercise.
+    // exercise.isFavorite starts true, so a click unfavorites via the durable mutation.
     const { unfavoriteExercise } = await import('../../api/exercises');
-    unfavoriteExercise.mockReturnValue(new Promise((resolve) => { resolveToggle = resolve; }));
+    unfavoriteExercise.mockResolvedValue({});
     renderExerciseDetail();
 
     const star = await screen.findByRole('button', { name: 'Remove from favorites' });
     fireEvent.click(star);
 
-    await waitFor(() => expect(star).toBeDisabled());
-    expect(star.className).toContain('favorite-star-pending');
-
-    resolveToggle();
-
-    await waitFor(() => expect(star).not.toBeDisabled());
-    expect(star.className).not.toContain('favorite-star-pending');
+    await waitFor(() => expect(unfavoriteExercise).toHaveBeenCalledWith(7, 1));
+    // The star is never disabled now -- the toggle is optimistic and queues durably offline.
+    expect(star).not.toBeDisabled();
   });
 
   it('shows a "Saving..." indicator (no Edit/Delete yet) on a set until it is confirmed', async () => {

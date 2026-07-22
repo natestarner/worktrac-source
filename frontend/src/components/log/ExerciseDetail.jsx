@@ -6,9 +6,14 @@ import { useUI } from '../../context/UIContext';
 import { queryKeys } from '../../api/queryKeys';
 import { newId } from '../../utils/id';
 import { getExerciseSummary } from '../../api/stats';
-import { listSessionSets, deleteSet } from '../../api/sets';
-import { listCustomFields, favoriteExercise, unfavoriteExercise, removeExercise } from '../../api/exercises';
-import { getSessionExerciseNote, saveLiveExerciseNote, saveSessionExerciseNote } from '../../api/notes';
+import { listSessionSets } from '../../api/sets';
+import { listCustomFields, removeExercise } from '../../api/exercises';
+import { getSessionExerciseNote } from '../../api/notes';
+import {
+  DELETE_SET_MUTATION_KEY,
+  SAVE_NOTE_MUTATION_KEY,
+  FAVORITE_MUTATION_KEY,
+} from '../../lib/queryClient';
 import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import WeightRepsStepper from './WeightRepsStepper';
@@ -45,7 +50,6 @@ export default function ExerciseDetail({
   const [editingSet, setEditingSet] = useState(null);
   const [justAddedSetId, setJustAddedSetId] = useState(null);
   const [showSessionNoteModal, setShowSessionNoteModal] = useState(false);
-  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   // Resolvers for handleLogSet's tap-ack promise, keyed by tempId -- see logSetMutation's
   // onMutate below.
   const logAckResolvers = useRef(new Map());
@@ -90,43 +94,40 @@ export default function ExerciseDetail({
   // Skeleton only on genuine first load (no cached data yet); a cached revisit paints instantly.
   const ready = !summaryQuery.isLoading && !customFieldsQuery.isLoading;
 
-  const refetchSummary = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.exerciseSummary(personId, exercise.id, contextSessionId) });
-  const refetchSessionSets = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.sessionSets(contextSessionId, exercise.id) });
   const refetchCustomFields = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.customFields(personId, exercise.id) });
 
-  // Saving a note before any set is logged (contextSessionId is still null) must still
-  // materialize the live session, exactly like handleLogSet does for the first set of a
-  // workout -- see SessionExerciseNoteService.upsertLiveNote on the backend.
-  async function handleSaveSessionNote(note) {
-    const result = editingSessionId
-      ? await saveSessionExerciseNote(editingSessionId, exercise.id, note)
-      : await saveLiveExerciseNote(personId, { exerciseId: exercise.id, note });
-    if (!editingSessionId) await refetchLiveSession();
-    await queryClient.invalidateQueries({
-      queryKey: queryKeys.sessionExerciseNote(contextSessionId, exercise.id),
+  const saveNoteMutation = useMutation({ mutationKey: SAVE_NOTE_MUTATION_KEY });
+  const favoriteMutation = useMutation({ mutationKey: FAVORITE_MUTATION_KEY });
+
+  // Save/clear a session note. Durable + optimistic: the note is written into cache immediately (so
+  // it shows offline too) and the idempotent upsert queues and replays on reconnect. A live note that
+  // materializes the session before any set is logged is handled server-side on replay (the returned
+  // session id drives reconciliation -- see SAVE_NOTE onSettled).
+  function handleSaveSessionNote(note) {
+    const trimmed = (note || '').trim();
+    queryClient.setQueryData(
+      queryKeys.sessionExerciseNote(contextSessionId, exercise.id),
+      trimmed ? { sessionId: contextSessionId, exerciseId: exercise.id, note } : null,
+    );
+    saveNoteMutation.mutate({
+      mode: editingSessionId ? 'session' : 'live',
+      personId,
+      sessionId: editingSessionId || null,
+      exerciseId: exercise.id,
+      note,
     });
-    // History shows this note inline next to the session's exercise entry -- keep it in sync.
-    await queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
-    showToast(result.note ? 'Note saved' : 'Note cleared');
-    await refetchSummary();
+    showToast(trimmed ? 'Note saved' : 'Note cleared');
   }
 
-  async function handleToggleFavorite() {
-    // The star's own isFavorite comes from the parent's personExercises/catalog data, which
-    // only updates once onPersonalizationChanged's refetches resolve -- that round trip can
-    // take a moment, so pulse the star in the meantime rather than leaving the tap looking
-    // like it did nothing.
-    setIsTogglingFavorite(true);
-    try {
-      if (exercise.isFavorite) await unfavoriteExercise(personId, exercise.id);
-      else await favoriteExercise(personId, exercise.id);
-      if (onPersonalizationChanged) await onPersonalizationChanged();
-    } finally {
-      setIsTogglingFavorite(false);
-    }
+  // Favorite / unfavorite. Durable + optimistic: flip isFavorite in the picker/catalog caches now so
+  // the star responds instantly (offline included); the idempotent PUT/DELETE replays on reconnect.
+  function handleToggleFavorite() {
+    const next = !exercise.isFavorite;
+    const patch = (list = []) => list.map((e) => (e.id === exercise.id ? { ...e, isFavorite: next } : e));
+    queryClient.setQueryData(queryKeys.personExercises(personId), patch);
+    queryClient.setQueryData(queryKeys.exercises(), patch);
+    favoriteMutation.mutate({ personId, exerciseId: exercise.id, favorite: next });
   }
 
   function handleRequestDelete() {
@@ -314,23 +315,17 @@ export default function ExerciseDetail({
     return ack;
   }
 
-  const deleteSetMutation = useMutation({
-    mutationFn: (setId) => deleteSet(setId),
-    onSettled: () => {
-      refetchSummary();
-      refetchSessionSets();
-      // Deleting a set can change what the best/PR is (e.g. removing the PR set itself) --
-      // keep the PR board and History in sync, mirroring the log-set and edit-set mutations.
-      queryClient.invalidateQueries({ queryKey: queryKeys.prs(personId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
-    },
-  });
+  const deleteSetMutation = useMutation({ mutationKey: DELETE_SET_MUTATION_KEY });
 
   function handleDeleteSet(setId) {
-    // Returned (not fire-and-forget) so ConfirmDialog's runConfirm genuinely awaits the
-    // request -- previously it closed the dialog on the next microtask instead of once the
-    // delete actually finished, leaving no feedback while it was in flight.
-    return deleteSetMutation.mutateAsync(setId);
+    // Optimistically remove the row so it disappears immediately (offline too); the durable mutation
+    // reconciles sets/PRs/History on sync and treats a replay 404 (already deleted) as success. NOT
+    // awaited on the network -- awaiting would hang the confirm dialog while the mutation is paused
+    // offline; the local cache removal is synchronous, so the dialog closes right away.
+    queryClient.setQueryData(queryKeys.sessionSets(contextSessionId, exercise.id), (old = []) =>
+      old.filter((s) => s.id !== setId),
+    );
+    deleteSetMutation.mutate({ setId, personId, sessionId: contextSessionId, exerciseId: exercise.id });
   }
 
   const lastLabel = summary?.lastSession ? formatDateLabel(toLocalDateStr(summary.lastSession.startedAt)) : '';
@@ -355,14 +350,12 @@ export default function ExerciseDetail({
             <div style={{ minWidth: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em' }}>{exercise.name}</div>
             <button
               onClick={handleToggleFavorite}
-              disabled={isTogglingFavorite}
               aria-label={exercise.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              className={isTogglingFavorite ? 'favorite-star-pending' : undefined}
               style={{
                 ...iconButtonStyle,
                 fontSize: 20,
                 color: exercise.isFavorite ? 'var(--color-accent)' : 'var(--color-faint)',
-                cursor: isTogglingFavorite ? 'default' : 'pointer',
+                cursor: 'pointer',
               }}
             >
               {exercise.isFavorite ? '★' : '☆'}
@@ -625,16 +618,9 @@ export default function ExerciseDetail({
       {editingSet && (
         <EditSetModal
           set={editingSet}
+          personId={personId}
           onClose={() => setEditingSet(null)}
-          onSaved={() => {
-            setEditingSet(null);
-            refetchSummary();
-            refetchSessionSets();
-            // An edited set can change a personal best -> keep the PR board and History in sync,
-            // matching what the log/delete-set mutations already invalidate.
-            queryClient.invalidateQueries({ queryKey: queryKeys.prs(personId) });
-            queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
-          }}
+          onSaved={() => setEditingSet(null)}
         />
       )}
 

@@ -1,9 +1,11 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, MutationObserver } from '@tanstack/react-query';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { get, set, del } from 'idb-keyval';
 import { queryKeys } from '../api/queryKeys';
-import { logLiveSet, logSetIntoSession } from '../api/sets';
-import { addExercise, favoriteExercise } from '../api/exercises';
+import { logLiveSet, logSetIntoSession, editSet, deleteSet } from '../api/sets';
+import { addExercise, favoriteExercise, unfavoriteExercise } from '../api/exercises';
+import { saveLiveExerciseNote, saveSessionExerciseNote } from '../api/notes';
+import { endWorkout } from '../api/sessions';
 import { OUTBOX_SCOPE_ID } from './outboxPersistence';
 import { resolveExerciseId, setExerciseIdMapping } from './exerciseIdMap';
 
@@ -44,6 +46,11 @@ export const queryClient = new QueryClient({
 // mocked rejection surfaces immediately instead of running the production backoff.
 export const LOG_SET_MUTATION_KEY = ['logSet'];
 export const CREATE_EXERCISE_MUTATION_KEY = ['createExercise'];
+export const EDIT_SET_MUTATION_KEY = ['editSet'];
+export const DELETE_SET_MUTATION_KEY = ['deleteSet'];
+export const SAVE_NOTE_MUTATION_KEY = ['saveNote'];
+export const END_WORKOUT_MUTATION_KEY = ['endWorkout'];
+export const FAVORITE_MUTATION_KEY = ['favorite'];
 
 // Failure taxonomy (hardening #8) as a pure, testable predicate: a real 4xx is the server's answer
 // -> stop. Anything else (a 5xx / cold-start 503 / timeout / gateway error == server unreachable, or
@@ -116,6 +123,84 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       }
     },
   });
+
+  // The rest of the active-workout loop, all durable (outbox scope) so they queue offline and replay
+  // in order. `durable` factors out the shared scope + failure-taxonomy retry/backoff.
+  const durable = (extra) => ({
+    scope: { id: OUTBOX_SCOPE_ID },
+    retry: retry ?? shouldRetryWrite,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
+    ...extra,
+  });
+
+  const reconcileSetChange = (vars) => {
+    client.invalidateQueries({ queryKey: queryKeys.sessionSets(vars.sessionId, vars.exerciseId) });
+    client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, vars.sessionId) });
+    client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
+    client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+  };
+
+  // Edit a set's weight/reps. Only ever targets an already-synced set (an unsynced set shows "will
+  // sync", not Edit), so setId is a real id. Idempotent (same value re-applied).
+  client.setMutationDefaults(EDIT_SET_MUTATION_KEY, durable({
+    mutationFn: (vars) => editSet(vars.setId, { weight: vars.weight, reps: vars.reps }),
+    onSettled: (_d, _e, vars) => reconcileSetChange(vars),
+  }));
+
+  // Delete a set. A replay of an already-applied delete comes back 404 -- that's the intended end
+  // state (already gone), so treat it as success rather than a stuck error (hardening).
+  client.setMutationDefaults(DELETE_SET_MUTATION_KEY, durable({
+    mutationFn: async (vars) => {
+      try {
+        return await deleteSet(vars.setId);
+      } catch (error) {
+        if (error?.status === 404) return null;
+        throw error;
+      }
+    },
+    onSettled: (_d, _e, vars) => reconcileSetChange(vars),
+  }));
+
+  // Save/clear a note (blank clears it server-side). Natural idempotent upsert. A live note may
+  // materialize the session, so refresh liveSession too. exerciseId resolves through the id map so a
+  // note on an offline-created exercise lands on the real one.
+  client.setMutationDefaults(SAVE_NOTE_MUTATION_KEY, durable({
+    mutationFn: (vars) => {
+      const exerciseId = resolveExerciseId(vars.exerciseId);
+      return vars.mode === 'session'
+        ? saveSessionExerciseNote(vars.sessionId, exerciseId, vars.note)
+        : saveLiveExerciseNote(vars.personId, { exerciseId, note: vars.note });
+    },
+    onSettled: (data, _e, vars) => {
+      // A live note may have just materialized the session -- use the returned session id.
+      const sessionId = data?.sessionId ?? vars.sessionId ?? null;
+      client.invalidateQueries({ queryKey: queryKeys.sessionExerciseNote(sessionId, vars.exerciseId) });
+      client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
+      client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+      if (vars.mode !== 'session') client.invalidateQueries({ queryKey: queryKeys.liveSession(vars.personId) });
+    },
+  }));
+
+  // End the live workout. Idempotent (ending an already-ended/absent session is a no-op server-side).
+  client.setMutationDefaults(END_WORKOUT_MUTATION_KEY, durable({
+    mutationFn: (vars) => endWorkout(vars.personId),
+    onSettled: (_d, _e, vars) => {
+      client.invalidateQueries({ queryKey: queryKeys.liveSession(vars.personId) });
+      client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+    },
+  }));
+
+  // Favorite / unfavorite. Idempotent booleans; exerciseId resolves through the id map.
+  client.setMutationDefaults(FAVORITE_MUTATION_KEY, durable({
+    mutationFn: (vars) => {
+      const exerciseId = resolveExerciseId(vars.exerciseId);
+      return vars.favorite ? favoriteExercise(vars.personId, exerciseId) : unfavoriteExercise(vars.personId, exerciseId);
+    },
+    onSettled: (_d, _e, vars) => {
+      client.invalidateQueries({ queryKey: queryKeys.personExercises(vars.personId) });
+      client.invalidateQueries({ queryKey: queryKeys.exercises() });
+    },
+  }));
 }
 
 registerOfflineMutationDefaults(queryClient);
@@ -124,6 +209,18 @@ registerOfflineMutationDefaults(queryClient);
 // paused mutations resume; the shared scope keeps them strictly serial and in order.
 export function resumeOutbox() {
   return queryClient.resumePausedMutations();
+}
+
+// Fire a durable write against the app's singleton client WITHOUT a React observer -- for
+// fire-and-dismiss actions (end workout, edit set) whose component doesn't need reactive mutation
+// state. Keeps those modals free of a QueryClientProvider dependency, and the write still queues +
+// replays via the outbox exactly like a useMutation-dispatched one.
+export function enqueueOutboxWrite(mutationKey, variables) {
+  const observer = new MutationObserver(queryClient, {
+    ...queryClient.getMutationDefaults(mutationKey),
+    mutationKey,
+  });
+  return observer.mutate(variables).catch(() => {});
 }
 
 // IndexedDB (not localStorage) so the cache survives on iOS/PWA and is the same durable store
