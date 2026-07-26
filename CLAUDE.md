@@ -358,6 +358,11 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - Frontend: Vitest + React Testing Library
 - E2E: Playwright (run against deployed lower environment)
 - Minimum: write tests for any new endpoint or user-facing feature
+- `backend/src/test/resources/junit-platform.properties` is deliberately pinned to
+  `parallelism=1` — this dev machine also runs `inttime-sqlserver` continuously alongside
+  `worktrac-sqlserver`, and concurrent Testcontainers-backed test classes crash on
+  `fs.aio-max-nr` before parallelizing gets any faster. Don't re-enable it as a perf win
+  without re-checking host resource headroom.
 - **Connectivity-mode e2e helpers** (`e2e/tests/support/`): `offline.ts` (banner/outbox
   locators, `goHardOffline`/`goOnline`) and `faults.ts` (`failNetwork` — a rejected fetch, the
   only thing that drives lie-fi detection — vs. `failWithStatus` — a fulfilled 4xx/5xx, which
@@ -380,74 +385,28 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   always-on end-to-end.
 
 ## Resolved Incident: Trivy scan failure (2026-07-09)
-- `docker-build`'s vulnerability scan started failing (silent exit code 1, no console
-  output) on every push to `main` starting 2026-07-09, blocking `promote-to-lower`.
-- Root cause, confirmed via a controlled revert-and-retest and by inspecting the actual
-  SARIF result counts via the GitHub code-scanning API (not just the console log, which
-  prints nothing useful for `format: sarif`): Trivy's Java vulnerability database picked
-  up a new entry, `CVE-2026-10532` (`ch.qos.logback:logback-core` 1.5.34, severity LOW).
-  trivy-action failed the build on it despite the workflow's `severity: 'CRITICAL,HIGH'`
-  filter — a documented upstream bug
-  ([trivy-action#309](https://github.com/aquasecurity/trivy-action/issues/309)):
-  without `limit-severities-for-sarif: true`, the SARIF report is built with ALL
-  severities regardless of the `severity` input, and `exit-code` evaluates against that
-  unfiltered set. Not caused by app code or by a stale Trivy version — reproduced
-  identically against the prior day's exact passing dependency tree and on two different
-  Trivy binary versions.
-- Fix: bumped `logback.version` to `1.5.35` in `backend/pom.xml` (overriding Spring
-  Boot's managed version) to patch the actual CVE, which resolved the underlying finding
-  and let the scan pass cleanly again with full `os,library` coverage restored. Also
-  added `limit-severities-for-sarif: true` to the Trivy step so a future LOW/MEDIUM
-  finding on some other dependency can't silently fail the build the same way again —
-  if a real HIGH/CRITICAL finding ever fails the build, patching/upgrading the flagged
-  dependency (rather than narrowing `vuln-type`) is the preferred fix, since it keeps
-  full scan coverage instead of trading it away.
+- `docker-build`'s Trivy scan started silently failing every push despite the workflow's
+  `severity: 'CRITICAL,HIGH'` filter, because a LOW-severity CVE landed in a transitive dep
+  (`logback-core`) — an upstream trivy-action bug
+  ([trivy-action#309](https://github.com/aquasecurity/trivy-action/issues/309)): without
+  `limit-severities-for-sarif: true`, `exit-code` evaluates against the unfiltered SARIF set
+  regardless of the `severity` input.
+- **Takeaway:** `limit-severities-for-sarif: true` is now set on the Trivy step so a future
+  LOW/MEDIUM finding can't silently fail the build the same way again. If a real HIGH/CRITICAL
+  finding ever fails the build, patch/upgrade the flagged dependency rather than narrowing
+  `vuln-type` — that keeps full scan coverage instead of trading it away. Full investigation
+  narrative: `git log --grep=Trivy -i` (PRs #23, #24).
 
 ## Resolved Incident: silent registration failures in production (2026-07-17)
-- Two people's registration attempts in production left zero trace anywhere: no
-  verification-code email sent (confirmed absent in Azure Communication Services), and no
-  error anywhere in the backend container logs.
-- Investigation ruled out, in order: an ACS send failure (a manual re-test sent
-  successfully, proving ACS credentials/connectivity were fine); container cold start
-  (min-replicas for `worktrac-backend-prod` had already been bumped to 1 days earlier);
-  and a production deploy landing mid-attempt (confirmed the deploy that evening had
-  already finished before the two people tried). SQL Database auto-pause was live at the
-  time and couldn't be ruled out, which is why lower/production were switched to Basic
-  tier (see the note above) during this investigation, before root cause was fully
-  confirmed.
-- The investigation kept hitting a dead end for a structural reason, not a data-availability
-  one: the backend produced **zero log output** for a registration attempt on almost every
-  path (success, rate-limit rejection, and most ordinary failures were all silent), so
-  there was nothing to inspect even with full Log Analytics access.
-- Separately, code reading surfaced a real, independent bug: `AuthController` read the
-  client IP via `servletRequest.getRemoteAddr()` with nothing trusting `X-Forwarded-For`.
-  Since Azure Container Apps' ingress is the sole external entry point and is a reverse
-  proxy, `getRemoteAddr()` always returned the ingress's own hop address — meaning the
-  "per-IP" registration/password-reset rate limit was accidentally a single bucket shared
-  by every external user of the whole app, not a per-household limit.
-- Fix (backend, `fix(auth): trust X-Forwarded-For and add auth request logging`):
-  `server.forward-headers-strategy: framework` in `application.yml` fixes the IP-bucketing
-  bug for all four affected endpoints at once. `RegistrationService` now logs the outcome
-  of every register/confirm/resend attempt (including which rate-limit bucket rejected a
-  request). A new front-door `AuthRequestLoggingFilter` on `/api/auth/**` logs
-  method/path/ip/email/status/duration for every request regardless of how deep it got,
-  closing the gap for requests that die before reaching any service (CORS rejection,
-  `@Valid` binding failures, an unhandled exception). The filter extracts only the `email`
-  field from the request body (never password or verification code).
-- A real bug surfaced while wiring up the new filter: registering it via
-  `.addFilterBefore(newFilter, JwtAuthenticationFilter.class)` *before*
-  `JwtAuthenticationFilter` itself had been given a registered order (via its own
-  `addFilterBefore` call relative to the standard `UsernamePasswordAuthenticationFilter`)
-  broke Spring Security startup entirely ("The Filter class ... does not have a registered
-  order"). `addFilterBefore` resolves each filter's position imperatively as the builder
-  chain executes — order the calls so any filter referenced as a `beforeFilter` argument
-  has already been given a position by an earlier call.
-- Also surfaced (unrelated to the fix itself, but found while verifying it): backend JUnit
-  tests run 4 test classes concurrently by default, each spinning up its own Testcontainers
-  SQL Server instance. On a dev machine that also keeps `worktrac-sqlserver` and
-  `inttime-sqlserver` running continuously, adding one more SQL-backed test class pushed a
-  4-way run over the host's available async-I/O resources and crashed every container
-  outright (`fs.aio-max-nr`). Empirically, 2-way parallelism didn't crash but was *slower*
-  than 1-way (containers thrash instead of parallelizing once host resources are this
-  contended) — `backend/src/test/resources/junit-platform.properties` is now pinned to
-  `parallelism=1` on this basis, with the measurements in its comment.
+- Two registration attempts in production left zero trace anywhere (no email sent, no backend
+  log output) — traced to the backend logging almost nothing on the register/confirm/resend
+  path. Root-causing surfaced a real independent bug: `AuthController` read the client IP via
+  `servletRequest.getRemoteAddr()` with nothing trusting `X-Forwarded-For`, so behind Azure
+  Container Apps' reverse-proxy ingress the "per-IP" registration/password-reset rate limit was
+  accidentally one shared bucket for every external user, not per-household.
+- **Takeaway:** `server.forward-headers-strategy: framework` (`application.yml`) now trusts
+  `X-Forwarded-For`; `RegistrationService` and a front-door `AuthRequestLoggingFilter` on
+  `/api/auth/**` log every register/confirm/resend attempt and outcome (email only, never
+  password/code), so a repeat is diagnosable instead of a dead end. Full investigation
+  narrative and the Spring Security filter-ordering gotcha hit while wiring this up:
+  `git log --grep="X-Forwarded-For" -i` (PR #80).
