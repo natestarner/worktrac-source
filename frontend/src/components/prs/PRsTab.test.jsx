@@ -1,5 +1,6 @@
-import { screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { onlineManager } from '@tanstack/react-query';
+import { act, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
 import PRsTab from './PRsTab';
 import { useAppState } from '../../context/AppStateContext';
@@ -13,9 +14,11 @@ vi.mock('../../api/stats', () => ({ getPrs: vi.fn() }));
 describe('PRsTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    onlineManager.setOnline(true);
     useAppState.mockReturnValue({ activePersonId: 7 });
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
   });
+  afterEach(() => onlineManager.setOnline(true));
 
   it('shows the weight/1RM calc for a weighted PR', async () => {
     getPrs.mockResolvedValue([
@@ -44,5 +47,18 @@ describe('PRsTab', () => {
     await waitFor(() => expect(screen.getByText('12 reps')).toBeInTheDocument());
     expect(screen.getByText('Bodyweight')).toBeInTheDocument();
     expect(screen.queryByText('0lb×12')).not.toBeInTheDocument();
+  });
+
+  it('shows the offline data notice for the cached list only once offline', async () => {
+    getPrs.mockResolvedValue([
+      { exerciseId: 1, exerciseName: 'Bench Press', best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208, sessionStartedAt: '2026-07-01T00:00:00Z' } },
+    ]);
+    renderWithQuery(<PRsTab />);
+
+    await waitFor(() => expect(screen.getByText('Bench Press')).toBeInTheDocument());
+    expect(screen.queryByText(/Offline/)).not.toBeInTheDocument();
+
+    act(() => onlineManager.setOnline(false));
+    expect(screen.getByText(/Offline.*data as of/)).toBeInTheDocument();
   });
 });

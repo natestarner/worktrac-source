@@ -78,6 +78,41 @@ class CoreCrudControllerTest {
     }
 
     @Test
+    void creatingAnExerciseTwiceWithSameIdempotencyKeyDedupesToOneRow() throws Exception {
+        String key = UUID.randomUUID().toString();
+        String body = objectMapper.writeValueAsString(Map.of("name", "Landmine Press", "idempotencyKey", key));
+
+        String first = mockMvc.perform(post("/api/exercises")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long firstId = objectMapper.readTree(first).get("id").asLong();
+
+        // Replaying the SAME create (dropped response / offline replay) must return the existing
+        // exercise, not insert a second one.
+        String second = mockMvc.perform(post("/api/exercises")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long secondId = objectMapper.readTree(second).get("id").asLong();
+
+        assertEquals(firstId, secondId);
+
+        // And the catalog contains exactly one exercise by that name.
+        String list = mockMvc.perform(get("/api/exercises").header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        long count = 0;
+        for (JsonNode ex : objectMapper.readTree(list)) {
+            if (ex.get("name").asText().equals("Landmine Press")) count++;
+        }
+        assertEquals(1, count);
+    }
+
+    @Test
     void canRenamePrimaryAndNonPrimaryPerson() throws Exception {
         String meResponse = mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
                 .andReturn().getResponse().getContentAsString();

@@ -17,5 +17,5 @@ export function useHistory(personId) {
     [queryClient, personId],
   );
 
-  return { history: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, refetch };
+  return { history: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, updatedAt: query.dataUpdatedAt, refetch };
 }

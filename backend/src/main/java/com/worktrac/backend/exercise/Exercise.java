@@ -41,6 +41,12 @@ public class Exercise {
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted = false;
 
+    // A client-generated idempotency key for an offline-created exercise (see ExerciseService.add).
+    // Null for seeded/global exercises and any create without one. Set once at construction, never
+    // mutated -- like workout_sets.client_key.
+    @Column(name = "client_key", length = 64, updatable = false)
+    private String clientKey;
+
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -49,8 +55,13 @@ public class Exercise {
     }
 
     public Exercise(Account account, String name) {
+        this(account, name, null);
+    }
+
+    public Exercise(Account account, String name, String clientKey) {
         this.account = account;
         this.name = name;
+        this.clientKey = clientKey;
     }
 
     @PrePersist

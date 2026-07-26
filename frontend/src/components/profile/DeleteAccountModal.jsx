@@ -5,6 +5,7 @@ import { deleteAccount } from '../../api/account';
 import { downloadAllPeopleZip } from '../../api/export';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
+import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { cancelButtonStyle, deleteButtonStyle } from '../shared/ConfirmDialog';
 
 const CONFIRMATION_WORD = 'DELETE';
@@ -49,9 +50,11 @@ export default function DeleteAccountModal({ onClose }) {
               A zip with every person&apos;s workout history ({people.map((p) => p.name).join(', ')})
             </div>
           </div>
-          <button onClick={() => downloadAllPeopleZip()} style={downloadLinkStyle}>
-            Download all
-          </button>
+          <OfflineDisabledWrap message="Exporting needs a connection.">
+            <button onClick={() => downloadAllPeopleZip()} style={downloadLinkStyle}>
+              Download all
+            </button>
+          </OfflineDisabledWrap>
         </div>
       </div>
 

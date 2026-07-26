@@ -6,9 +6,15 @@ import { useUI } from '../../context/UIContext';
 import { queryKeys } from '../../api/queryKeys';
 import { newId } from '../../utils/id';
 import { getExerciseSummary } from '../../api/stats';
-import { listSessionSets, logLiveSet, logSetIntoSession, deleteSet } from '../../api/sets';
-import { listCustomFields, favoriteExercise, unfavoriteExercise, removeExercise } from '../../api/exercises';
-import { getSessionExerciseNote, saveLiveExerciseNote, saveSessionExerciseNote } from '../../api/notes';
+import { listSessionSets } from '../../api/sets';
+import { listCustomFields, removeExercise } from '../../api/exercises';
+import { getSessionExerciseNote } from '../../api/notes';
+import {
+  DELETE_SET_MUTATION_KEY,
+  SAVE_NOTE_MUTATION_KEY,
+  FAVORITE_MUTATION_KEY,
+} from '../../lib/queryClient';
+import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
 import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import WeightRepsStepper from './WeightRepsStepper';
@@ -45,7 +51,6 @@ export default function ExerciseDetail({
   const [editingSet, setEditingSet] = useState(null);
   const [justAddedSetId, setJustAddedSetId] = useState(null);
   const [showSessionNoteModal, setShowSessionNoteModal] = useState(false);
-  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   // Resolvers for handleLogSet's tap-ack promise, keyed by tempId -- see logSetMutation's
   // onMutate below.
   const logAckResolvers = useRef(new Map());
@@ -90,43 +95,46 @@ export default function ExerciseDetail({
   // Skeleton only on genuine first load (no cached data yet); a cached revisit paints instantly.
   const ready = !summaryQuery.isLoading && !customFieldsQuery.isLoading;
 
-  const refetchSummary = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.exerciseSummary(personId, exercise.id, contextSessionId) });
-  const refetchSessionSets = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.sessionSets(contextSessionId, exercise.id) });
   const refetchCustomFields = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.customFields(personId, exercise.id) });
 
-  // Saving a note before any set is logged (contextSessionId is still null) must still
-  // materialize the live session, exactly like handleLogSet does for the first set of a
-  // workout -- see SessionExerciseNoteService.upsertLiveNote on the backend.
-  async function handleSaveSessionNote(note) {
-    const result = editingSessionId
-      ? await saveSessionExerciseNote(editingSessionId, exercise.id, note)
-      : await saveLiveExerciseNote(personId, { exerciseId: exercise.id, note });
-    if (!editingSessionId) await refetchLiveSession();
-    await queryClient.invalidateQueries({
-      queryKey: queryKeys.sessionExerciseNote(contextSessionId, exercise.id),
+  const saveNoteMutation = useMutation({ mutationKey: SAVE_NOTE_MUTATION_KEY });
+  const favoriteMutation = useMutation({ mutationKey: FAVORITE_MUTATION_KEY });
+
+  // Save/clear a session note. Durable + optimistic: the note is written into cache immediately (so
+  // it shows offline too) and the idempotent upsert queues and replays on reconnect. A live note that
+  // materializes the session before any set is logged is handled server-side on replay (the returned
+  // session id drives reconciliation -- see SAVE_NOTE onSettled).
+  function handleSaveSessionNote(note) {
+    const trimmed = (note || '').trim();
+    // Only write optimistically when a real session already keys the note. Saving a note BEFORE the
+    // first set (contextSessionId null) must NOT cache under the null key -- a later brand-new session
+    // is also keyed null, so a stale note there would wrongly bleed into it. In that case the note is
+    // reconciled via the mutation's returned session id (SAVE_NOTE onSettled) once it materializes.
+    if (contextSessionId) {
+      queryClient.setQueryData(
+        queryKeys.sessionExerciseNote(contextSessionId, exercise.id),
+        trimmed ? { sessionId: contextSessionId, exerciseId: exercise.id, note } : null,
+      );
+    }
+    saveNoteMutation.mutate({
+      mode: editingSessionId ? 'session' : 'live',
+      personId,
+      sessionId: editingSessionId || null,
+      exerciseId: exercise.id,
+      note,
     });
-    // History shows this note inline next to the session's exercise entry -- keep it in sync.
-    await queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
-    showToast(result.note ? 'Note saved' : 'Note cleared');
-    await refetchSummary();
+    showToast(trimmed ? 'Note saved' : 'Note cleared');
   }
 
-  async function handleToggleFavorite() {
-    // The star's own isFavorite comes from the parent's personExercises/catalog data, which
-    // only updates once onPersonalizationChanged's refetches resolve -- that round trip can
-    // take a moment, so pulse the star in the meantime rather than leaving the tap looking
-    // like it did nothing.
-    setIsTogglingFavorite(true);
-    try {
-      if (exercise.isFavorite) await unfavoriteExercise(personId, exercise.id);
-      else await favoriteExercise(personId, exercise.id);
-      if (onPersonalizationChanged) await onPersonalizationChanged();
-    } finally {
-      setIsTogglingFavorite(false);
-    }
+  // Favorite / unfavorite. Durable + optimistic: flip isFavorite in the picker/catalog caches now so
+  // the star responds instantly (offline included); the idempotent PUT/DELETE replays on reconnect.
+  function handleToggleFavorite() {
+    const next = !exercise.isFavorite;
+    const patch = (list = []) => list.map((e) => (e.id === exercise.id ? { ...e, isFavorite: next } : e));
+    queryClient.setQueryData(queryKeys.personExercises(personId), patch);
+    queryClient.setQueryData(queryKeys.exercises(), patch);
+    favoriteMutation.mutate({ personId, exerciseId: exercise.id, favorite: next });
   }
 
   function handleRequestDelete() {
@@ -175,31 +183,23 @@ export default function ExerciseDetail({
     setRepsDraft(repsDraft + 1);
   }
 
+  // Prefix-matches the registered defaults in queryClient.js (LOG_SET_MUTATION_KEY = ['logSet']),
+  // so the mutationFn, retry policy, serial replay scope, and server-truth reconciliation (onSettled)
+  // all come from there -- the same options a mutation RESTORED from the durable offline outbox
+  // replays with. This component only supplies the observer-side callbacks (optimistic insert,
+  // rollback, PR celebration), which are inherently interactive and don't apply to a silent replay.
   const logSetMutationKey = ['logSet', personId, exercise.id];
 
   const logSetMutation = useMutation({
     mutationKey: logSetMutationKey,
-    mutationFn: ({ weight, reps, idempotencyKey, clientLoggedAt }) =>
-      editingSessionId
-        ? logSetIntoSession(editingSessionId, { exerciseId: exercise.id, weight, reps, idempotencyKey, clientLoggedAt })
-        : logLiveSet(personId, { exerciseId: exercise.id, weight, reps, idempotencyKey, clientLoggedAt }),
-    // A client (4xx) error won't succeed on replay -- fail fast. Transient network/5xx errors get
-    // a few backed-off retries. When fully offline, TanStack's default networkMode pauses the
-    // mutation rather than failing it, so the optimistic set stays on screen and auto-resumes on
-    // reconnect; the idempotency key makes that replay safe (no double-insert). The durable
-    // across-app-close queue is the later offline phase.
-    retry: (failureCount, error) => {
-      if (error?.status >= 400 && error?.status < 500) return false;
-      return failureCount < 3;
-    },
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
     onMutate: async (vars) => {
       // Show the set instantly by writing an optimistic row into the session-keyed cache.
       // Only possible once a session exists to key the list on -- the very first set of a
       // brand-new workout has no session id yet, so it can't be written here; that case is
       // instead covered by pendingBeforeSession (derived below from the mutation cache via
-      // useMutationState), which shows a skeleton placeholder until the real session
-      // materializes and this exercise's sessionSets query picks up the confirmed row.
+      // useMutationState), which shows the entered weight/reps directly from the mutation's
+      // variables until the real session materializes and this exercise's sessionSets query
+      // picks up the confirmed row.
       //
       // The whole body is wrapped in try/finally so handleLogSet's tap-ack promise always
       // resolves -- including the no-session-yet early return, and even if cancelQueries/
@@ -209,6 +209,21 @@ export default function ExerciseDetail({
       // TanStack's default networkMode:'online' can leave paused indefinitely while offline.
       try {
         if (!contextSessionId) {
+          // Seed a provisional live session (id: null, so it can never leak into
+          // contextSessionId/activeSessionId or any id-keyed query) so the banner/green
+          // dot/End-workout button light up immediately -- whether this write is paused
+          // offline, in flight, or retrying against a server that's down (a set logged
+          // against an unreachable backend is just as "session started" as one that's
+          // genuinely offline; neither should leave the user staring at no feedback until
+          // a request that may never succeed finally settles). `?? prev` keeps the
+          // EARLIEST start time across multiple sets logged before the session syncs and
+          // never clobbers a real (or already-seeded) session. The real session (with the
+          // correct startedAt) replaces this once it actually syncs, via the registered
+          // liveSession invalidation; EndWorkoutConfirmModal already clears it the same way.
+          queryClient.setQueryData(
+            queryKeys.liveSession(personId),
+            (prev) => prev ?? { id: null, startedAt: vars.clientLoggedAt },
+          );
           setJustAddedSetId(vars.tempId);
           return {};
         }
@@ -228,20 +243,25 @@ export default function ExerciseDetail({
       }
     },
     onError: (error, vars, context) => {
-      // Roll the optimistic set back and say so. (Reached only for a genuine failure -- an offline
-      // write is paused, not errored, so its set stays put and replays later.)
+      // A genuine 4xx is the server's definitive answer (bad input, a rejected request) -- roll
+      // the optimistic set back and say so; it's not coming back on its own. Anything else (5xx /
+      // timeout / network failure, reached only once shouldRetryWrite's retries are exhausted) is
+      // transient: the write stays queued, visible (see unsyncedLogSets below), and durable via
+      // the outbox, so there's nothing to roll back and no alarming toast -- it syncs once the
+      // server/connection recovers, exactly like a paused-offline write.
+      const isClientError = error?.status >= 400 && error?.status < 500;
+      if (!isClientError) return;
       if (context?.key && context?.previous !== undefined) {
         queryClient.setQueryData(context.key, context.previous);
       }
-      const isClientError = error?.status >= 400 && error?.status < 500;
-      showToast(
-        isClientError
-          ? error.message || "Couldn't save that set"
-          : "Couldn't save that set -- check your connection and try again",
-      );
+      showToast(error.message || "Couldn't save that set");
     },
     onSuccess: (result, variables) => {
       setJustAddedSetId(result.set.id);
+      // Pull the (possibly just-created) live session so its id propagates to the green dot, banner,
+      // and this screen's contextSessionId right away. Interactive-only: a replayed set has no
+      // observer here, so the registered default's liveSession invalidation covers that case.
+      if (!editingSessionId) refetchLiveSession?.();
       // PR celebration is driven by the server's authoritative isPR/best, never a refetch race;
       // the weight/reps shown come from the exact values submitted (the mutation variables).
       if (result.isPR) {
@@ -254,41 +274,68 @@ export default function ExerciseDetail({
         });
       }
     },
-    onSettled: () => {
-      refetchSummary();
-      refetchSessionSets();
-      if (!editingSessionId) refetchLiveSession();
-      queryClient.invalidateQueries({ queryKey: queryKeys.prs(personId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
-    },
+    // No onSettled here -- reconciliation (invalidate sets/summary/liveSession/prs/history to server
+    // truth) lives in the registered default so it ALSO runs when a queued write replays after a
+    // reload, when this component's observer no longer exists.
   });
 
-  // Every log-set mutation for this exercise currently pending (in flight, retrying, or
-  // paused offline) -- read from the shared MutationCache via mutationKey rather than
-  // logSetMutation's own reactive state, since a single hook instance only reflects the most
-  // recently dispatched call and can't be trusted across an exercise switch (ExerciseDetail
-  // isn't remounted when a routine advances -- LogTab keys it on personId only; mutationKey
-  // embeds exercise.id fresh each render, so a stale exercise's mutation naturally won't match).
-  const pendingLogSets = useMutationState({
-    filters: { mutationKey: logSetMutationKey, status: 'pending' },
-    select: (mutation) => ({ tempId: mutation.state.variables?.tempId, isPaused: mutation.state.isPaused }),
-  }).filter((m) => m.tempId);
+  // Every log-set mutation for this exercise that hasn't synced yet -- in flight, retrying,
+  // paused offline, or terminal-errored against an unreachable server -- read from the shared
+  // MutationCache via mutationKey rather than logSetMutation's own reactive state, since a single
+  // hook instance only reflects the most recently dispatched call and can't be trusted across an
+  // exercise switch (ExerciseDetail isn't remounted when a routine advances -- LogTab keys it on
+  // personId only; mutationKey embeds exercise.id fresh each render, so a stale exercise's
+  // mutation naturally won't match). Deliberately not filtered to `status: 'pending'` -- a write
+  // whose retries are exhausted (server down/unreachable) settles into 'error' but must stay
+  // exactly as visible and durable as a paused one; only a definitive 4xx (the server's real
+  // answer, rolled back by onError above) is excluded here.
+  const unsyncedLogSets = useMutationState({
+    filters: { mutationKey: logSetMutationKey },
+    select: (mutation) => ({
+      tempId: mutation.state.variables?.tempId,
+      status: mutation.state.status,
+      isPaused: mutation.state.isPaused,
+      failureCount: mutation.state.failureCount,
+      errorStatus: mutation.state.error?.status,
+      weight: mutation.state.variables?.weight,
+      reps: mutation.state.variables?.reps,
+      unit: mutation.state.variables?.unit,
+      clientLoggedAt: mutation.state.variables?.clientLoggedAt,
+    }),
+  }).filter(
+    (m) => m.tempId && m.status !== 'success' && !(m.status === 'error' && m.errorStatus >= 400 && m.errorStatus < 500),
+  );
 
-  // isPaused is only true while genuinely offline -- an online retry's backoff delay does not
-  // set it, so "Saving..." below still covers that case correctly.
-  const pausedTempIds = pendingLogSets.filter((m) => m.isPaused).map((m) => m.tempId);
+  // "Saving..." is reserved for a write's very first attempt while it's genuinely in flight.
+  // Once it's paused (offline), already failed at least once and is retrying, or sitting in a
+  // transient error (retries exhausted, server still down), it's exactly as durable and editable
+  // as an already-synced set (see offlineSetEdits.js -- lookup is by tempId regardless of
+  // status), so it gets Edit/Delete instead of an indefinite spinner over a request that may
+  // never succeed.
+  const editableTempIds = unsyncedLogSets
+    .filter((m) => m.isPaused || m.status === 'error' || m.failureCount > 0)
+    .map((m) => m.tempId);
 
   // Sets whose onMutate had nowhere to write an optimistic row yet (no session existed at
   // dispatch time -- the very first set of a brand-new workout). Once a session exists,
   // onMutate's own optimistic insert already puts a matching-tempId row directly into
-  // sessionSets, so this naturally excludes it there (no double-counting). Rendered as a
-  // skeleton (see below), not literal numbers -- there's a brief window between this mutation
-  // leaving 'pending' and the confirmed row actually landing in sessionSets via onSettled's
-  // refetch, and a skeleton reads as "still loading" through that gap rather than "data
-  // disappeared."
-  const pendingBeforeSession = pendingLogSets
+  // sessionSets, so this naturally excludes it there (no double-counting).
+  //
+  // The weight/reps are already known the instant a set is logged -- they're sitting right in
+  // the mutation's own variables -- so always show them for real rather than an opaque shimmer,
+  // regardless of whether this write is paused offline, still in flight, or stuck retrying
+  // against a down server: "still saving" next to a blank row reads as "the app doesn't know
+  // what I entered," which isn't true, and a request that never confirms would otherwise leave a
+  // skeleton showing indefinitely instead of the values the user actually entered.
+  // Sorted by clientLoggedAt, not left in mutation-cache order -- that order isn't chronological
+  // (restoreOutbox hydrates paused mutations before not-paused ones on reload, and
+  // replacePendingLogSet removes+re-dispatches a mutation on edit, appending it to the end of the
+  // cache) and the "Set N" labels below are position-based, so a cache reorder would otherwise
+  // silently relabel a set out from under the row a user is about to edit.
+  const pendingBeforeSession = unsyncedLogSets
     .filter((m) => !sessionSets.some((real) => real.id === m.tempId))
-    .map((m) => ({ id: m.tempId, optimistic: true, skeleton: true }));
+    .map((m) => ({ id: m.tempId, optimistic: true, weight: m.weight, reps: m.reps, unit: m.unit, clientLoggedAt: m.clientLoggedAt }))
+    .sort((a, b) => new Date(a.clientLoggedAt ?? 0) - new Date(b.clientLoggedAt ?? 0));
 
   // Prepended, not appended -- these are chronologically the earliest set(s) of the session
   // whenever they're non-empty, and [...displaySets].reverse() below shows most-recent-first.
@@ -305,7 +352,15 @@ export default function ExerciseDetail({
     const ack = new Promise((resolve) => {
       logAckResolvers.current.set(tempId, resolve);
     });
+    // Every field the replay needs is passed as serializable variables -- nothing captured from a
+    // closure -- so a mutation restored from the durable outbox after an app close can re-run
+    // identically. `mode`/`sessionId` tell the registered mutationFn which endpoint to hit.
     logSetMutation.mutate({
+      mode: editingSessionId ? 'session' : 'live',
+      personId,
+      sessionId: editingSessionId || null,
+      exerciseId: exercise.id,
+      unit: defaultUnit,
       weight: weightDraft,
       reps: repsDraft,
       tempId,
@@ -315,23 +370,28 @@ export default function ExerciseDetail({
     return ack;
   }
 
-  const deleteSetMutation = useMutation({
-    mutationFn: (setId) => deleteSet(setId),
-    onSettled: () => {
-      refetchSummary();
-      refetchSessionSets();
-      // Deleting a set can change what the best/PR is (e.g. removing the PR set itself) --
-      // keep the PR board and History in sync, mirroring the log-set and edit-set mutations.
-      queryClient.invalidateQueries({ queryKey: queryKeys.prs(personId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
-    },
-  });
+  const deleteSetMutation = useMutation({ mutationKey: DELETE_SET_MUTATION_KEY });
 
-  function handleDeleteSet(setId) {
-    // Returned (not fire-and-forget) so ConfirmDialog's runConfirm genuinely awaits the
-    // request -- previously it closed the dialog on the next microtask instead of once the
-    // delete actually finished, leaving no feedback while it was in flight.
-    return deleteSetMutation.mutateAsync(setId);
+  function handleDeleteSet(set) {
+    // Optimistically remove the row so it disappears immediately (offline too). Guarded on
+    // contextSessionId because a set logged before any session exists yet (pendingBeforeSession)
+    // was never written into this cache in the first place -- nothing to strip there.
+    if (contextSessionId) {
+      queryClient.setQueryData(queryKeys.sessionSets(contextSessionId, exercise.id), (old = []) =>
+        old.filter((s) => s.id !== set.id),
+      );
+    }
+    if (set.optimistic) {
+      // Not yet synced -- there's no server row to delete, only a still-pending create. Cancel it
+      // outright rather than queuing a delete that would 404 (see offlineSetEdits.js).
+      cancelPendingLogSet(queryClient, set.id);
+      return;
+    }
+    // Durable mutation reconciles sets/PRs/History on sync and treats a replay 404 (already
+    // deleted) as success. NOT awaited on the network -- awaiting would hang the confirm dialog
+    // while the mutation is paused offline; the local cache removal above is synchronous, so the
+    // dialog closes right away.
+    deleteSetMutation.mutate({ setId: set.id, personId, sessionId: contextSessionId, exerciseId: exercise.id });
   }
 
   const lastLabel = summary?.lastSession ? formatDateLabel(toLocalDateStr(summary.lastSession.startedAt)) : '';
@@ -356,14 +416,12 @@ export default function ExerciseDetail({
             <div style={{ minWidth: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em' }}>{exercise.name}</div>
             <button
               onClick={handleToggleFavorite}
-              disabled={isTogglingFavorite}
               aria-label={exercise.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              className={isTogglingFavorite ? 'favorite-star-pending' : undefined}
               style={{
                 ...iconButtonStyle,
                 fontSize: 20,
                 color: exercise.isFavorite ? 'var(--color-accent)' : 'var(--color-faint)',
-                cursor: isTogglingFavorite ? 'default' : 'pointer',
+                cursor: 'pointer',
               }}
             >
               {exercise.isFavorite ? '★' : '☆'}
@@ -494,7 +552,11 @@ export default function ExerciseDetail({
         </div>
 
         <div className="log-sets-col">
-          {ready && displaySets.length > 0 && (
+          {/* Not gated on `ready` -- displaySets (optimistic rows + sessionSets) is already
+              fully available independent of summaryQuery/customFieldsQuery, so a slow/hanging
+              past-sets/PR read must never hold back a set the user just logged. Only the summary
+              cards above legitimately wait on `ready`. */}
+          {displaySets.length > 0 && (
             <>
               <div className="log-sets-heading">This session</div>
               <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '8px 20px' }}>
@@ -505,7 +567,7 @@ export default function ExerciseDetail({
                   // reverse only the rendering, not the numbering, so the most recently logged
                   // set shows on top.
                   const setNumber = displaySets.length - i;
-                  const isPR = !set.skeleton && isPrSet(set.weight, set.reps, set.unit, bestComparableLb);
+                  const isPR = isPrSet(set.weight, set.reps, set.unit, bestComparableLb);
                   return (
                     <div
                       key={set.id}
@@ -519,51 +581,42 @@ export default function ExerciseDetail({
                         borderBottom: i < displaySets.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
                       }}
                     >
-                      {set.skeleton ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <Skeleton width={40} height={13} />
-                          <Skeleton width={100} height={17} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ fontSize: 13, color: 'var(--color-muted)', fontWeight: 600, width: 44 }}>Set {setNumber}</div>
+                        <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}>
+                          {set.weight} {set.unit || 'lb'} &times; {set.reps}
+                        </div>
+                        {isPR && (
+                          <span
+                            style={{
+                              background: 'var(--color-success-bg)',
+                              color: 'var(--color-success)',
+                              fontSize: 11,
+                              fontWeight: 800,
+                              padding: '3px 8px',
+                              borderRadius: 999,
+                              letterSpacing: '0.03em',
+                            }}
+                          >
+                            PR
+                          </span>
+                        )}
+                      </div>
+                      {set.optimistic && !editableTempIds.includes(set.id) ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--color-muted)' }}>
+                          <span className="saving-dot" />
+                          Saving&hellip;
                         </div>
                       ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ fontSize: 13, color: 'var(--color-muted)', fontWeight: 600, width: 44 }}>Set {setNumber}</div>
-                          <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}>
-                            {set.weight} {set.unit || 'lb'} &times; {set.reps}
-                          </div>
-                          {isPR && (
-                            <span
-                              style={{
-                                background: 'var(--color-success-bg)',
-                                color: 'var(--color-success)',
-                                fontSize: 11,
-                                fontWeight: 800,
-                                padding: '3px 8px',
-                                borderRadius: 999,
-                                letterSpacing: '0.03em',
-                              }}
-                            >
-                              PR
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {set.optimistic ? (
-                        pausedTempIds.includes(set.id) ? (
-                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-muted)' }}>
-                            Will sync once you're back online
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--color-muted)' }}>
-                            <span className="saving-dot" />
-                            Saving&hellip;
-                          </div>
-                        )
-                      ) : (
+                        // A paused-offline (or transient-erroring) set -- still just a pending create
+                        // in the outbox, no server row yet -- is just as editable/deletable as a
+                        // synced one -- see offlineSetEdits.js. Delete cancels the pending create
+                        // outright rather than queuing a delete against a set id that doesn't exist yet.
                         <div style={{ display: 'flex', gap: 14 }}>
                           <button onClick={() => setEditingSet(set)} style={editLinkStyle}>
                             Edit
                           </button>
-                          <button onClick={() => openConfirm('Delete this set?', () => handleDeleteSet(set.id))} style={deleteLinkStyle}>
+                          <button onClick={() => openConfirm('Delete this set?', () => handleDeleteSet(set))} style={deleteLinkStyle}>
                             Delete
                           </button>
                         </div>
@@ -626,16 +679,11 @@ export default function ExerciseDetail({
       {editingSet && (
         <EditSetModal
           set={editingSet}
+          personId={personId}
+          exerciseId={exercise.id}
+          sessionId={contextSessionId}
           onClose={() => setEditingSet(null)}
-          onSaved={() => {
-            setEditingSet(null);
-            refetchSummary();
-            refetchSessionSets();
-            // An edited set can change a personal best -> keep the PR board and History in sync,
-            // matching what the log/delete-set mutations already invalidate.
-            queryClient.invalidateQueries({ queryKey: queryKeys.prs(personId) });
-            queryClient.invalidateQueries({ queryKey: queryKeys.history(personId) });
-          }}
+          onSaved={() => setEditingSet(null)}
         />
       )}
 

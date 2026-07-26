@@ -5,6 +5,7 @@ import { createPastSession } from '../../api/sessions';
 import { queryKeys } from '../../api/queryKeys';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
+import { useRequireOnline } from '../../hooks/useRequireOnline';
 import { localDateTimeToIso, toLocalDateStr, toLocalTimeStr } from '../../utils/datetime';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
@@ -15,13 +16,17 @@ export default function PastSessionModal({ onClose }) {
   const queryClient = useQueryClient();
   const { activePersonId, startEditingSession } = useAppState();
   const { people } = useAuth();
+  const { online, requireOnline } = useRequireOnline();
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
 
   const now = new Date().toISOString();
   const [date, setDate] = useState(toLocalDateStr(now));
   const [time, setTime] = useState(toLocalTimeStr(now));
 
-  async function handleStart() {
+  // Online-only (Tier 3): createPastSession has no idempotency key, so a queued offline replay would
+  // duplicate the session -- gate it rather than let it queue. Retroactive entry is a sit-at-home
+  // action anyway, never done mid-workout with no signal.
+  const handleStart = requireOnline(async () => {
     const iso = localDateTimeToIso(date, time);
     const session = await createPastSession(activePersonId, iso);
     // The new (empty) session belongs in this person's History immediately.
@@ -29,7 +34,7 @@ export default function PastSessionModal({ onClose }) {
     startEditingSession(session);
     onClose();
     navigate('/app/log');
-  }
+  }, 'You need a connection to log a past workout.');
 
   return (
     <Modal width={340} onScrim={onClose}>
@@ -50,13 +55,29 @@ export default function PastSessionModal({ onClose }) {
           style={{ flex: 1, padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 16 }}
         />
       </div>
+      {!online && (
+        <div style={{ fontSize: 12, color: 'var(--color-muted)', marginBottom: 12 }}>
+          Logging a past workout needs a connection.
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 10 }}>
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel
         </button>
         <Button
           onClick={handleStart}
-          style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
+          disabled={!online}
+          style={{
+            flex: 1,
+            padding: 14,
+            background: online ? 'var(--color-accent)' : 'var(--color-faint)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 10,
+            fontSize: 15,
+            fontWeight: 700,
+            cursor: online ? 'pointer' : 'not-allowed',
+          }}
         >
           Start adding sets
         </Button>

@@ -37,6 +37,14 @@ public class SessionExerciseNoteService {
     // Live path: saving a note before any set has been logged must still materialize a
     // live session -- otherwise there is nothing to key the note on yet -- exactly like
     // WorkoutSetService.logLiveSet does for the first set of a workout.
+    //
+    // Known, deliberately-deferred gap: unlike logLiveSet, this path has no client-supplied
+    // timestamp to pass to getOrCreateLiveSession (the live-note request carries no
+    // clientLoggedAt equivalent), so a session materialized here while offline still gets
+    // startedAt = whenever the note write actually replays, not when the note was really
+    // saved. Narrower than the logged-a-set case (requires saving a note, offline, before
+    // any set that same workout) and not plumbed for now -- see the offline-active-loop
+    // work that fixed the set-logging case for the full reasoning.
     @Transactional
     public SessionExerciseNoteDto upsertLiveNote(Long accountId, Long personId, Long exerciseId, String note) {
         Person person = personService.requireOwnedPerson(personId, accountId);

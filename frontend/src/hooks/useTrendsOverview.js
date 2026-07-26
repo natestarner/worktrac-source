@@ -17,5 +17,5 @@ export function useTrendsOverview(personId, weeks) {
     [queryClient, personId, weeks],
   );
 
-  return { overview: query.data ?? null, loading: query.isLoading, isFetching: query.isFetching, refetch };
+  return { overview: query.data ?? null, loading: query.isLoading, isFetching: query.isFetching, updatedAt: query.dataUpdatedAt, refetch };
 }

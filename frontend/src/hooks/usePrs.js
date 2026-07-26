@@ -17,5 +17,5 @@ export function usePrs(personId) {
     [queryClient, personId],
   );
 
-  return { prs: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, refetch };
+  return { prs: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, updatedAt: query.dataUpdatedAt, refetch };
 }

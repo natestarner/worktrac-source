@@ -1,13 +1,35 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useUI } from '../../context/UIContext';
 import { listSessionSets, deleteSet } from '../../api/sets';
+import { queryKeys } from '../../api/queryKeys';
+import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
 import Skeleton from '../shared/Skeleton';
+import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 
 export default function SessionSummary({ entries, loading, sessionId, onSelectExercise, onChanged }) {
   const { openConfirm } = useUI();
+  const queryClient = useQueryClient();
 
   async function handleRemove(entry) {
-    const sets = await listSessionSets(sessionId, entry.exerciseId);
-    await Promise.all(sets.map((s) => deleteSet(s.id)));
+    // Not-yet-synced sets in this entry (see useSessionEntries.js) have no server row -- cancel
+    // their pending creates outright instead of trying to delete something that doesn't exist yet.
+    const optimisticIds = entry.sets.filter((s) => s.optimistic).map((s) => s.id);
+    optimisticIds.forEach((tempId) => {
+      cancelPendingLogSet(queryClient, tempId);
+      if (sessionId) {
+        queryClient.setQueryData(queryKeys.sessionSets(sessionId, entry.exerciseId), (old = []) =>
+          old.filter((s) => s.id !== tempId),
+        );
+      }
+    });
+
+    // Already-synced sets in this entry still go through this direct (online-only) removal --
+    // pre-existing behavior, unchanged here; making it durable/offline-safe is a separate gap
+    // from the one this fixes (a not-yet-synced entry being removable at all).
+    if (optimisticIds.length < entry.sets.length) {
+      const sets = await listSessionSets(sessionId, entry.exerciseId);
+      await Promise.all(sets.map((s) => deleteSet(s.id)));
+    }
     onChanged();
   }
 
@@ -64,9 +86,18 @@ export default function SessionSummary({ entries, loading, sessionId, onSelectEx
               <button onClick={() => onSelectExercise(entry.exerciseId)} style={editLinkStyle}>
                 Edit
               </button>
-              <button onClick={() => openConfirm(`Remove ${entry.exerciseName} from this session?`, () => handleRemove(entry))} style={removeLinkStyle}>
-                Remove
-              </button>
+              {/* Removing an entry that has any already-synced set still needs a connection (see
+                  handleRemove's direct listSessionSets+deleteSet branch above) -- an entry that's
+                  only offline-logged so far can still be removed offline (cancels the pending
+                  create locally, no network call). */}
+              <OfflineDisabledWrap
+                message="Removing this needs a connection."
+                when={entry.sets.some((s) => !s.optimistic)}
+              >
+                <button onClick={() => openConfirm(`Remove ${entry.exerciseName} from this session?`, () => handleRemove(entry))} style={removeLinkStyle}>
+                  Remove
+                </button>
+              </OfflineDisabledWrap>
             </div>
           </div>
         ))}

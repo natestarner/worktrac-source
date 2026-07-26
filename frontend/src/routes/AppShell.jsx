@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../context/AppStateContext';
 import { migrateLegacyRestTimerPrefs } from '../lib/restTimerMigration';
+import { tryForceUpdate } from '../lib/swUpdate';
+import { useOfflineCacheWarming } from '../hooks/useOfflineCacheWarming';
 import Header from '../components/layout/Header';
 import PersonPillBar from '../components/layout/PersonPillBar';
 import TabsNav from '../components/layout/TabsNav';
@@ -10,14 +13,25 @@ import Toast from '../components/shared/Toast';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import PRCelebration from '../components/shared/PRCelebration';
 import RestTimerBar from '../components/shared/RestTimerBar';
+import OfflineBanner from '../components/shared/OfflineBanner';
+import ConnectionTroubleBanner from '../components/shared/ConnectionTroubleBanner';
+import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
 
 export default function AppShell() {
   const { people, refreshPeople } = useAuth();
-  const { activePersonId, selectPerson, lastTab, setLastTab } = useAppState();
+  const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId } = useAppState();
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const prevPersonIdRef = useRef(activePersonId);
+  const prevPathRef = useRef(location.pathname);
+  const prevExerciseIdRef = useRef(selectedExerciseId);
   const migratedRestTimerRef = useRef(false);
+
+  // Proactively warms every person's logging-essentials data into the offline cache (not just
+  // whichever person/tab is on screen), so a device hand-off mid-outage still has something to
+  // render. See useOfflineCacheWarming.js for the full trigger list.
+  useOfflineCacheWarming(people);
 
   useEffect(() => {
     if (!activePersonId && people.length > 0) {
@@ -43,13 +57,49 @@ export default function AppShell() {
   }, [location.pathname, activePersonId, setLastTab]);
 
   // Only navigate when the active person actually changes (not on the initial
-  // auto-select above, which must never steal a directly-loaded/refreshed URL).
+  // auto-select above, which must never steal a directly-loaded/refreshed URL). Also the "switch
+  // person" forced-reload trigger: a person switch is a natural pause point, checked against
+  // whichever person is being LEFT (they're the one who might have a write still in flight) -- see
+  // swUpdate.js/pendingWrites.js. A no-op when no update is pending.
   useEffect(() => {
     if (prevPersonIdRef.current && activePersonId && prevPersonIdRef.current !== activePersonId) {
+      tryForceUpdate(queryClient, prevPersonIdRef.current);
       navigate(lastTab);
     }
     prevPersonIdRef.current = activePersonId;
-  }, [activePersonId, lastTab, navigate]);
+  }, [activePersonId, lastTab, navigate, queryClient]);
+
+  // "Switch section" forced-reload trigger -- location.pathname only changes on a top-level tab
+  // change (Log/History/PRs/Routines/Trends/...), never on selecting an exercise within a tab
+  // (that's client-state, not a route change), so this fires exactly on section switches.
+  useEffect(() => {
+    if (prevPathRef.current !== location.pathname) {
+      tryForceUpdate(queryClient, activePersonId);
+      prevPathRef.current = location.pathname;
+    }
+  }, [location.pathname, activePersonId, queryClient]);
+
+  // "Switch exercise" forced-reload trigger. This is the riskiest of the automatic triggers --
+  // logging a set and immediately moving to the next exercise (mid-superset, mid-routine) is core,
+  // frequent usage -- which is exactly why tryForceUpdate's in-flight-write guard exists: it skips
+  // applying if the just-logged set's write hasn't reached a durable (paused-or-settled) state yet.
+  useEffect(() => {
+    if (prevExerciseIdRef.current !== selectedExerciseId) {
+      tryForceUpdate(queryClient, activePersonId);
+      prevExerciseIdRef.current = selectedExerciseId;
+    }
+  }, [selectedExerciseId, activePersonId, queryClient]);
+
+  // "Tab regains visibility" forced-reload trigger -- the moment someone returns to a backgrounded
+  // tab (laptop wake, app-switch back) is a low-risk pause point, and often coincides with the
+  // longest idle gap (so the most likely time an update has been sitting available for a while).
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') tryForceUpdate(queryClient, activePersonId);
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [queryClient, activePersonId]);
 
   if (!activePersonId) {
     return null;
@@ -57,6 +107,9 @@ export default function AppShell() {
 
   return (
     <div className="app-shell" style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+      <OfflineBanner />
+      <ConnectionTroubleBanner />
+      <OfflineRecoveryPrompt />
       <Header />
       <PersonPillBar />
       <TabsNav />

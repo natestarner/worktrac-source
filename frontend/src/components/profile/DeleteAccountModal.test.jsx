@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { onlineManager } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DeleteAccountModal from './DeleteAccountModal';
 import { deleteAccount } from '../../api/account';
 import { downloadAllPeopleZip } from '../../api/export';
@@ -17,12 +18,14 @@ describe('DeleteAccountModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    onlineManager.setOnline(true);
     logout = vi.fn();
     useAuth.mockReturnValue({
       people: [{ id: 1, name: 'Alex' }, { id: 2, name: 'Sam' }],
       logout,
     });
   });
+  afterEach(() => onlineManager.setOnline(true));
 
   it('keeps the delete button disabled until DELETE is typed exactly', () => {
     render(<DeleteAccountModal onClose={vi.fn()} />);
@@ -66,5 +69,13 @@ describe('DeleteAccountModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Download all' }));
     expect(downloadAllPeopleZip).toHaveBeenCalled();
+  });
+
+  it('disables "Download all" while offline', () => {
+    render(<DeleteAccountModal onClose={vi.fn()} />);
+
+    act(() => onlineManager.setOnline(false));
+
+    expect(screen.getByRole('button', { name: 'Download all' })).toBeDisabled();
   });
 });

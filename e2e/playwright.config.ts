@@ -6,6 +6,9 @@ const isDeployedEnv = !!process.env.E2E_BASE_URL;
 
 export default defineConfig({
   testDir: './tests',
+  // Durability specs need the production service worker (absent in `vite dev`) -- they run via
+  // `npm run test:pwa` (playwright.pwa.config.ts) against a preview build instead.
+  testIgnore: ['**/offline-durability.spec.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,      // Fail if test.only is left in CI
   retries: process.env.CI ? 2 : 0,   // Retry flaky tests in CI only

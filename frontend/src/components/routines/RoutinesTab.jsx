@@ -11,6 +11,8 @@ import RoutineFormModal from './RoutineFormModal';
 import CopyRoutineModal from './CopyRoutineModal';
 import Skeleton from '../shared/Skeleton';
 import RefreshingPill from '../shared/RefreshingPill';
+import OfflineDataNotice from '../shared/OfflineDataNotice';
+import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 
 export default function RoutinesTab() {
   const navigate = useNavigate();
@@ -19,7 +21,7 @@ export default function RoutinesTab() {
   const { openConfirm } = useUI();
   const { exercises: catalog, refetch: refetchCatalog } = useExercises();
   const { exercises: personExercises, refetch: refetchPersonExercises } = usePersonExercises(activePersonId);
-  const { routines, loading, isFetching, refetch } = useRoutines(activePersonId);
+  const { routines, loading, isFetching, refetch, updatedAt } = useRoutines(activePersonId);
   const [modalRoutine, setModalRoutine] = useState(undefined); // undefined = closed, null = create, object = edit
   const [copyRoutine, setCopyRoutine] = useState(null); // null = closed, object = routine being copied
   const hasOtherPeople = people.some((p) => p.id !== activePersonId);
@@ -36,11 +38,14 @@ export default function RoutinesTab() {
 
   return (
     <div>
-      <button onClick={() => setModalRoutine(null)} style={newRoutineButtonStyle}>
-        + New routine
-      </button>
+      <OfflineDisabledWrap message="Creating a routine needs a connection.">
+        <button onClick={() => setModalRoutine(null)} style={newRoutineButtonStyle}>
+          + New routine
+        </button>
+      </OfflineDisabledWrap>
 
       <RefreshingPill show={isFetching && !loading} />
+      <OfflineDataNotice updatedAt={updatedAt} />
 
       {loading && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -73,19 +78,25 @@ export default function RoutinesTab() {
               <div style={{ fontSize: 16, fontWeight: 700 }}>{r.name}</div>
               <div style={{ display: 'flex', gap: 14 }}>
                 {hasOtherPeople && (
-                  <button onClick={() => setCopyRoutine(r)} style={editLinkStyle}>
-                    Copy to&hellip;
-                  </button>
+                  <OfflineDisabledWrap message="Copying a routine needs a connection.">
+                    <button onClick={() => setCopyRoutine(r)} style={editLinkStyle}>
+                      Copy to&hellip;
+                    </button>
+                  </OfflineDisabledWrap>
                 )}
-                <button onClick={() => setModalRoutine(r)} style={editLinkStyle}>
-                  Edit
-                </button>
-                <button
-                  onClick={() => openConfirm(`Delete "${r.name}"? This can't be undone.`, () => handleDelete(r))}
-                  style={deleteLinkStyle}
-                >
-                  Delete
-                </button>
+                <OfflineDisabledWrap message="Editing a routine needs a connection.">
+                  <button onClick={() => setModalRoutine(r)} style={editLinkStyle}>
+                    Edit
+                  </button>
+                </OfflineDisabledWrap>
+                <OfflineDisabledWrap message="Deleting a routine needs a connection.">
+                  <button
+                    onClick={() => openConfirm(`Delete "${r.name}"? This can't be undone.`, () => handleDelete(r))}
+                    style={deleteLinkStyle}
+                  >
+                    Delete
+                  </button>
+                </OfflineDisabledWrap>
               </div>
             </div>
             <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 14 }}>

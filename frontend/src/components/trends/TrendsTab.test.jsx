@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { onlineManager } from '@tanstack/react-query';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TrendsTab from './TrendsTab';
 import { useAppState } from '../../context/AppStateContext';
@@ -79,5 +80,20 @@ describe('TrendsTab', () => {
 
     fireEvent.click(screen.getByText('4wk'));
     expect(setTrendsRange).toHaveBeenCalledWith(4);
+  });
+
+  it('shows the offline data notice only while offline', () => {
+    onlineManager.setOnline(true);
+    useTrendsOverview.mockReturnValue({
+      overview: overviewWithActivity,
+      loading: false,
+      updatedAt: new Date('2026-07-22T15:00:00').getTime(),
+    });
+    render(<TrendsTab />);
+    expect(screen.queryByText(/Offline/)).not.toBeInTheDocument();
+
+    act(() => onlineManager.setOnline(false));
+    expect(screen.getByText(/Offline.*data as of/)).toBeInTheDocument();
+    onlineManager.setOnline(true);
   });
 });

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { queryClient, CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
+import { tryForceUpdate } from '../../lib/swUpdate';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
@@ -8,6 +10,7 @@ import { useTags } from '../../hooks/useTags';
 import { useRoutines } from '../../hooks/useRoutines';
 import { useLiveSession } from '../../hooks/useLiveSession';
 import { useHistory } from '../../hooks/useHistory';
+import { useSessionEntries } from '../../hooks/useSessionEntries';
 import { editSession } from '../../api/sessions';
 import { formatTime, localDateTimeToIso, toLocalDateStr, toLocalTimeStr } from '../../utils/datetime';
 import ExercisePicker from './ExercisePicker';
@@ -52,6 +55,10 @@ export default function LogTab() {
   const { routines, loading: routinesLoading } = useRoutines(activePersonId);
   const { session: liveSession, refetch: refetchLiveSession } = useLiveSession(activePersonId);
   const activeSessionId = editingSession?.id || liveSession?.id || null;
+  // A provisional offline liveSession ({ id: null }, seeded in ExerciseDetail.jsx while genuinely
+  // offline) has no server id to key history on, but it IS an active session -- the summary list
+  // below must still show for it, sourced from pending mutations instead (see useSessionEntries).
+  const hasActiveSession = !!editingSession || !!liveSession;
   const { history, loading: historyLoading, refetch: refetchHistory } = useHistory(activeSessionId ? activePersonId : null);
   const [showEndWorkoutConfirm, setShowEndWorkoutConfirm] = useState(false);
   const [addExerciseName, setAddExerciseName] = useState(null); // null = closed; string = create modal prefilled with this name
@@ -62,7 +69,8 @@ export default function LogTab() {
   const selectedExercise = selectedExerciseId
     ? personExercises.find((e) => e.id === selectedExerciseId) || catalog.find((e) => e.id === selectedExerciseId) || null
     : null;
-  const sessionEntries = activeSessionId ? history.find((s) => s.id === activeSessionId)?.entries ?? [] : [];
+  const serverSessionEntries = activeSessionId ? history.find((s) => s.id === activeSessionId)?.entries ?? [] : [];
+  const sessionEntries = useSessionEntries({ personId: activePersonId, serverEntries: serverSessionEntries, exercises: catalog });
 
   useEffect(() => {
     if (activeSessionId && !selectedExerciseId) refetchHistory();
@@ -100,6 +108,24 @@ export default function LogTab() {
   async function refreshPersonalization() {
     await Promise.all([refetchPersonExercises(), refetchTags(), refetchCatalog()]);
   }
+
+  // When an exercise created offline finally syncs, its temp id is replaced by the real server id.
+  // If the active person is still viewing that temp exercise, migrate the selection to the real id so
+  // the screen seamlessly picks up the synced exercise (and its now server-backed sets) instead of
+  // falling back to the picker when the temp row disappears from the refreshed catalog. Subscribes to
+  // the app's singleton mutation cache (the outbox lives there), so no query-context dependency here.
+  useEffect(() => {
+    return queryClient.getMutationCache().subscribe((event) => {
+      const mutation = event?.mutation;
+      if (!mutation || mutation.options.mutationKey?.[0] !== CREATE_EXERCISE_MUTATION_KEY[0]) return;
+      if (mutation.state.status !== 'success') return;
+      const tempId = mutation.state.variables?.tempId;
+      const realId = mutation.state.data?.id;
+      if (tempId && realId && selectedExerciseId === tempId) {
+        selectExercise(realId);
+      }
+    });
+  }, [queryClient, selectedExerciseId, selectExercise]);
 
   async function handleExerciseCreated(created) {
     setAddExerciseName(null);
@@ -306,10 +332,10 @@ export default function LogTab() {
         </div>
       )}
 
-      {activeSessionId && !selectedExercise && (
+      {hasActiveSession && !selectedExercise && (
         <SessionSummary
           entries={sessionEntries}
-          loading={historyLoading}
+          loading={activeSessionId ? historyLoading : false}
           sessionId={activeSessionId}
           onSelectExercise={selectExercise}
           onChanged={refetchHistory}
@@ -366,6 +392,10 @@ export default function LogTab() {
             backToPicker();
             refetchLiveSession();
             showToast('Workout ended. Logging a set anytime starts a new one.');
+            // An explicit "I'm done with this session" signal -- one of the forced-reload trigger
+            // points (guarded: a no-op if the END_WORKOUT write itself, or anything else for this
+            // person, is still in flight and not yet durable). See swUpdate.js.
+            tryForceUpdate(queryClient, activePersonId);
           }}
         />
       )}

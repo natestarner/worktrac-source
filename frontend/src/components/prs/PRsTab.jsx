@@ -4,11 +4,12 @@ import { usePrs } from '../../hooks/usePrs';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import Skeleton from '../shared/Skeleton';
 import RefreshingPill from '../shared/RefreshingPill';
+import OfflineDataNotice from '../shared/OfflineDataNotice';
 
 export default function PRsTab() {
   const { activePersonId } = useAppState();
   const { people } = useAuth();
-  const { prs, loading, isFetching } = usePrs(activePersonId);
+  const { prs, loading, isFetching, updatedAt } = usePrs(activePersonId);
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
 
   if (loading) {
@@ -52,6 +53,7 @@ export default function PRsTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <RefreshingPill show={isFetching && !loading} />
+      <OfflineDataNotice updatedAt={updatedAt} />
       {prs.map((pr) => (
         <div
           key={pr.exerciseId}

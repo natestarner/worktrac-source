@@ -9,6 +9,8 @@ import PastSessionModal from './PastSessionModal';
 import Button from '../shared/Button';
 import Skeleton from '../shared/Skeleton';
 import RefreshingPill from '../shared/RefreshingPill';
+import OfflineDataNotice from '../shared/OfflineDataNotice';
+import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
@@ -20,7 +22,7 @@ export default function HistoryTab() {
   const navigate = useNavigate();
   const { activePersonId, startEditingSession } = useAppState();
   const { people } = useAuth();
-  const { history, loading, isFetching } = useHistory(activePersonId);
+  const { history, loading, isFetching, updatedAt } = useHistory(activePersonId);
   const [showPastSessionModal, setShowPastSessionModal] = useState(false);
 
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
@@ -33,15 +35,20 @@ export default function HistoryTab() {
   return (
     <div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
-        <button onClick={() => setShowPastSessionModal(true)} style={secondaryButtonStyle}>
-          + Log a past workout
-        </button>
-        <Button onClick={() => downloadPersonCsv(activePersonId)} style={outlineButtonStyle}>
-          Export data
-        </Button>
+        <OfflineDisabledWrap message="Logging a past workout needs a connection.">
+          <button onClick={() => setShowPastSessionModal(true)} style={secondaryButtonStyle}>
+            + Log a past workout
+          </button>
+        </OfflineDisabledWrap>
+        <OfflineDisabledWrap message="Exporting needs a connection.">
+          <Button onClick={() => downloadPersonCsv(activePersonId)} style={outlineButtonStyle}>
+            Export data
+          </Button>
+        </OfflineDisabledWrap>
       </div>
 
       <RefreshingPill show={isFetching && !loading} />
+      <OfflineDataNotice updatedAt={updatedAt} />
 
       {loading &&
         Array.from({ length: 3 }).map((_, i) => (

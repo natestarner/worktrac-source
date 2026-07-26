@@ -227,6 +227,83 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   celebration overlay are genuinely global, one-shot notifications tied to whatever the
   active person just did — they don't need to persist across a person switch.
 
+## Offline Mode Notes
+- **Three connectivity states, not two:** fully online; online but the backend is
+  unreachable/erroring while `navigator.onLine` still reports `true` ("lie-fi" — captive-portal
+  wifi, a dead upstream, flaky cellular); and offline (auto hard-offline, or a user-elected
+  manual pin). Each has different UI and different write semantics — see the table below.
+- **Connectivity detection layers:**
+  - `useOnlineStatus` (`frontend/src/hooks/useOnlineStatus.js`) reads TanStack's `onlineManager`
+    — the single source of truth every other piece of offline UI/gating reads. Reflects hard
+    offline (`navigator.onLine`) or the manual pin (see below); never lie-fi.
+  - **Manual pin** (`frontend/src/lib/offlineMode.js`): `pinOffline()`/`unpinOffline()` drive
+    `onlineManager` directly (device-global, `localStorage` key `worktrac-offline-pinned`,
+    re-applied at module load so it survives reload before the first query fires). Entered via
+    the "Go offline" button on `ConnectionTroubleBanner`; only ever exited by the user (the
+    `OfflineBanner`'s "Go back online" or `OfflineRecoveryPrompt`'s "Resume syncing" — both
+    gated on `probeReachability()` actually succeeding first). Never auto-unpins on its own,
+    even if the connection flickers back — a pin the user set on purpose stays until they lift
+    it.
+  - **Lie-fi detection** (`frontend/src/lib/reachabilityMonitor.js`): every request's outcome in
+    `api/client.js` feeds a consecutive-failure counter; a real completed response (even a
+    4xx/5xx — the server answered) resets it to zero, only a genuine network-level failure
+    (rejected fetch) counts. After 3 in a row, `ConnectionTroubleBanner` suggests "Go offline".
+    This is the *only* signal that can't be driven by Playwright's `context.setOffline()` — it
+    needs request-level fault injection (`e2e/tests/support/faults.ts`'s `failNetwork`, not
+    `failWithStatus`, which fulfills a real response and therefore never trips this).
+- **The durable write outbox** (`frontend/src/lib/outboxPersistence.js` +
+  `frontend/src/lib/queryClient.js`): every offline-capable write shares one TanStack mutation
+  scope (`OUTBOX_SCOPE_ID`) so queued writes replay strictly serially, in enqueue order, on
+  reconnect (an exercise-create replays before a set logged against its temp id). Persisted to
+  its own IndexedDB key (`worktrac-outbox:<accountId>`) — deliberately separate from the query
+  cache's persister, so neither the query cache's 24h `maxAge` nor an app-update `buster` bump
+  can ever silently drop a queued write. Every write carries a client-generated idempotency key
+  so a replay (or a retried/duplicated dispatch) can't double-insert; delete-set treats a replay
+  404 as success. `flushOutbox()` (resume paused + re-dispatch terminal-errored) runs on
+  reconnect, on regaining tab visibility while online, after login, and from the "Go back
+  online"/"Resume syncing" buttons.
+- **Mutation coverage — active-loop (durable, offline-capable) vs. Tier-3 (online-gated):**
+  | Feature | Offline? |
+  |---|---|
+  | Log/edit/delete a set, session start/end, session note, favorite/unfavorite, create a custom exercise | ✅ durable outbox |
+  | Add person, routine CRUD, tags, default unit, rest-timer preference, exercise rename/tags/custom fields, log a past workout, export, delete account, edit person | ❌ gated — needs a connection |
+
+  Tier-3 actions are gated because some (e.g. `createPastSession`) are **not idempotent** and
+  would duplicate on replay, and others are management actions where "queue it silently" would
+  be surprising. Gating is `useRequireOnline` (wraps a handler; shows a calm "needs a
+  connection" toast and disables the control) or `OfflineDisabledWrap` (greys out/disables an
+  entry-point button with a `title` tooltip) — both read `useOnlineStatus` only, so they do
+  **not** react to lie-fi (mode 2); a Tier-3 write attempted during lie-fi is simply attempted
+  and fails/succeeds for real, same as fully online.
+- **Per-row UI state:** "Saving…" is reserved for a write's very first in-flight attempt.
+  Once it's paused (offline), has failed and is retrying, or is sitting in a transient error, it
+  gets Edit/Delete controls immediately — exactly as durable/editable as an already-synced row
+  — rather than an indefinite spinner over a request that may never succeed (see
+  `ExerciseDetail.jsx`'s `editableTempIds`). The banner's outbox count ("N changes waiting to
+  sync") is what signals "not yet synced", not the row itself.
+- **Offline cache warming** (`frontend/src/lib/offlineCacheWarm.js` /
+  `useOfflineCacheWarming.js`): proactively prefetches every household member's
+  logging-essentials (live session, person exercises, routines, history) in the background —
+  not just whichever person/tab is on screen — so a device hand-off mid-outage (a sibling grabs
+  the iPad) still renders instead of spinning forever. Deliberately excludes analytics
+  (PRs/trends) and `ExerciseDetail`'s interaction-scoped queries.
+- **Cold boot offline:** `AuthContext` boots authenticated-but-`offline:true` from a saved
+  identity snapshot (`localStorage`) when `/me` fails with a network error or 5xx and a token +
+  snapshot exist; a real 401 still bounces to `/login`. Requires the production service worker
+  to precache the app shell (`vite-plugin-pwa`, `generateSW`, `registerType:'prompt'`) —
+  **disabled in `vite dev`** (no bundle to precache there) and in Vitest. Exercise it locally via
+  `npm run build && npm run preview`, or `cd e2e && npm run test:pwa`
+  (`playwright.pwa.config.ts`), which builds + previews on port 3000 (needed for local CORS —
+  `vite preview`'s proxy forwards the browser's real `Origin` header through, so it can't just
+  run on a different port without also reconfiguring `CORS_ALLOWED_ORIGINS`) and runs only
+  `offline-durability.spec.ts` (`.spec.ts` files elsewhere are `testIgnore`d from that config,
+  and `offline-durability.spec.ts` itself is excluded from the fast default project).
+- **Logout data-loss guard** (`frontend/src/components/layout/UserMenu.jsx`): an explicit user
+  logout with a non-empty outbox shows an inline warn-and-confirm ("N changes haven't synced yet
+  and will be lost") before discarding it — a different household may log in next, so the outbox
+  can't just carry over. A forced 401 logout, by contrast, preserves the outbox to replay after
+  re-login.
+
 ## Git Workflow
 - Branch from `main`, PR back to `main`
 - Conventional commits: `feat(scope):`, `fix(scope):`, `docs:`, `test:`
@@ -281,6 +358,14 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - Frontend: Vitest + React Testing Library
 - E2E: Playwright (run against deployed lower environment)
 - Minimum: write tests for any new endpoint or user-facing feature
+- **Connectivity-mode e2e helpers** (`e2e/tests/support/`): `offline.ts` (banner/outbox
+  locators, `goHardOffline`/`goOnline`) and `faults.ts` (`failNetwork` — a rejected fetch, the
+  only thing that drives lie-fi detection — vs. `failWithStatus` — a fulfilled 4xx/5xx, which
+  does not). Use these instead of ad hoc `context.setOffline`/`page.route` calls so new specs
+  stay consistent with which fault type actually exercises which code path (see Offline Mode
+  Notes above). Service-worker-dependent specs (cold boot, reload-while-offline) live in
+  `offline-durability.spec.ts` and run only via `cd e2e && npm run test:pwa`
+  (`playwright.pwa.config.ts`), never the fast default project.
 
 ## Important Notes
 - Spring profiles: `local` for development, `lower` for lower env, `production` for prod
