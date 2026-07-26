@@ -1,55 +1,37 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { pickExercise } from './support/exercises';
+import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 // PR 2 of offline mode: a set logged with no connection is never lost -- it queues in the durable
-// outbox, shows "will sync", and replays exactly once when connectivity returns (idempotency key
-// prevents a double-insert).
+// outbox and replays exactly once when connectivity returns (idempotency key prevents a
+// double-insert). A paused (offline) write is immediately as durable/editable as a synced one --
+// "Saving…" is reserved for a write's very first in-flight attempt, so a paused set shows
+// Edit/Delete right away, not a spinner (see ExerciseDetail.jsx's editableTempIds) -- the outbox
+// count in the banner is what signals "not yet synced" here, not the row itself.
+//
+// The across-reload/close durability case (queued write survives a reload or a full browser
+// close+reopen while still offline) needs the production service worker to cold-serve the app
+// shell, so it lives in offline-durability.spec.ts (run against a preview build), not here.
 test.describe('Offline mode — durable set-logging outbox', () => {
   test('a set logged offline queues, then syncs exactly once on reconnect', async ({ page, request }) => {
     await registerHousehold(page, request, 'Casey');
     await pickExercise(page, 'Barbell Bench Press');
 
-    await page.context().setOffline(true);
+    await goHardOffline(page);
     await page.getByRole('button', { name: /Log set/ }).click();
 
-    // Optimistic row is on screen immediately, flagged as queued -- not lost, not errored.
-    await expect(page.getByText(/Will sync once you're back online/i)).toBeVisible();
-
-    await page.context().setOffline(false);
-
-    // Once online it replays and reconciles to a confirmed set (Edit/Delete controls appear), and
-    // there is exactly ONE confirmed set row -- no duplicate from the replay.
+    // Optimistic row is on screen immediately, already editable/deletable (not lost, not
+    // errored) -- the banner's outbox count is what says "not yet synced".
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
-    await expect(page.getByText(/Will sync once you're back online/i)).toBeHidden();
-    await expect(page.getByText(/Set 1/)).toHaveCount(1);
-  });
+    await expect(outboxCountText(page, 1)).toBeVisible();
 
-  // The across-reload durability needs the production service worker (to cold-serve the shell while
-  // offline) + the persisted caches, so this runs against the deployed target only.
-  test('a queued set survives a reload while still offline, then syncs on reconnect', async ({ page, request }) => {
-    test.skip(
-      !process.env.E2E_BASE_URL,
-      'reload-while-offline requires the production service worker, absent in local vite dev',
-    );
+    await goOnline(page);
+    await waitForOutboxDrain(page);
 
-    await registerHousehold(page, request, 'Morgan');
-    await pickExercise(page, 'Barbell Bench Press');
-
-    await page.reload();
-    await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, { timeout: 20000 });
-
-    await page.context().setOffline(true);
-    await page.getByRole('button', { name: /Log set/ }).click();
-    await expect(page.getByText(/Will sync once you're back online/i)).toBeVisible();
-
-    // Kill + reopen the app while STILL offline: the queued write must survive (durable outbox) and
-    // the optimistic row must still be shown as pending.
-    await page.reload();
-    await expect(page.getByText(/Will sync once you're back online/i)).toBeVisible();
-
-    await page.context().setOffline(false);
-    await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
-    await expect(page.getByText('135 lb × 8')).toHaveCount(1);
+    // Once online it replays and reconciles to a confirmed set, and there is exactly ONE
+    // confirmed set row -- no duplicate from the replay.
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+    await expect(page.getByText('Set 1')).toHaveCount(1);
   });
 });
