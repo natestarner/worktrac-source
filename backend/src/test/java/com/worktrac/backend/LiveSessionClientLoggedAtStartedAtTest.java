@@ -25,6 +25,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -134,7 +135,13 @@ class LiveSessionClientLoggedAtStartedAtTest {
         JsonNode second = logLiveSet(Map.of("clientLoggedAt", secondSetLoggedAt.toString()));
 
         Instant sessionStartedAtAfterSecondSet = Instant.parse(second.get("session").get("startedAt").asText());
-        assertEquals(originalStartedAt, sessionStartedAtAfterSecondSet,
+        // Truncated to microseconds before comparing: the first response reflects the
+        // in-memory Instant from the insert's persistence context, while the second re-reads
+        // the row from SQL Server, whose datetime2 column rounds to 100ns -- an exact
+        // nanosecond comparison is flaky on that rounding alone, not a real rewrite (a genuine
+        // rewrite would land on the 10-minutes-later clock or the unrelated 2026-06-02
+        // clientLoggedAt, both trivially outside microsecond tolerance).
+        assertEquals(originalStartedAt.truncatedTo(ChronoUnit.MICROS), sessionStartedAtAfterSecondSet.truncatedTo(ChronoUnit.MICROS),
                 "a clientLoggedAt on a set logged into an already-existing session must never rewrite that session's startedAt");
     }
 }
