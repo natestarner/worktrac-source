@@ -64,9 +64,24 @@ public class WorkoutSessionService {
 
     // Resolves the session a live-logged set should attach to: reuses the active
     // session (bumping last_activity_at), auto-closes and replaces a stale one, or
-    // starts a brand new session if none exists.
+    // starts a brand new session if none exists. No client timestamp available here --
+    // falls back to the server clock, matching every caller before offline replay
+    // needed to honor an original client-side start time.
     @Transactional
     public WorkoutSession getOrCreateLiveSession(Person person) {
+        return getOrCreateLiveSession(person, null);
+    }
+
+    // Same as above, but honors clientLoggedAt (when supplied) for a BRAND NEW session's
+    // startedAt -- so a set logged offline and replayed later after reconnecting still
+    // records when the workout actually started, not when the replay reached the server.
+    // Only the new-session branch uses it: lastActivityAt (the reuse branch) only feeds the
+    // 8-hour AUTOCLOSE staleness check below, which is read-time-relative and can only ever
+    // judge a session MORE stale using now() than clientLoggedAt would, never flip a
+    // should-be-closed session into "still live" incorrectly -- so it's left on the server
+    // clock. rest_seconds is independent (computed from each set's own createdAt).
+    @Transactional
+    public WorkoutSession getOrCreateLiveSession(Person person, Instant clientLoggedAt) {
         Optional<WorkoutSession> live = getLiveSession(person);
         Instant now = Instant.now(clock);
         if (live.isPresent()) {
@@ -74,7 +89,8 @@ public class WorkoutSessionService {
             session.setLastActivityAt(now);
             return session;
         }
-        return workoutSessionRepository.save(new WorkoutSession(person, now, false));
+        Instant startedAt = clientLoggedAt != null ? clientLoggedAt : now;
+        return workoutSessionRepository.save(new WorkoutSession(person, startedAt, false));
     }
 
     @Transactional(readOnly = true)

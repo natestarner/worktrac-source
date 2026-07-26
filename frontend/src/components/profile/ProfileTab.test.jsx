@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { onlineManager } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProfileTab from './ProfileTab';
 import { removePerson, updatePerson } from '../../api/people';
@@ -17,6 +18,7 @@ describe('ProfileTab', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    onlineManager.setOnline(true);
     refreshPeople = vi.fn().mockResolvedValue();
     openConfirm = vi.fn((message, onConfirm) => onConfirm());
     removePerson.mockResolvedValue();
@@ -84,5 +86,17 @@ describe('ProfileTab', () => {
 
     await waitFor(() => expect(updatePerson).toHaveBeenCalledWith(1, 'Nathaniel'));
     expect(refreshPeople).toHaveBeenCalled();
+  });
+
+  it('disables Edit, Remove, and Delete account while offline', () => {
+    render(<ProfileTab />);
+
+    act(() => onlineManager.setOnline(false));
+
+    screen.getAllByRole('button', { name: 'Edit' }).forEach((btn) => expect(btn).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
+
+    onlineManager.setOnline(true);
   });
 });

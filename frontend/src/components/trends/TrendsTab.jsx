@@ -8,6 +8,7 @@ import VolumeChart from './VolumeChart';
 import ExerciseTrendSection from './ExerciseTrendSection';
 import Skeleton from '../shared/Skeleton';
 import RefreshingPill from '../shared/RefreshingPill';
+import OfflineDataNotice from '../shared/OfflineDataNotice';
 
 const cardStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 18px' };
 
@@ -62,7 +63,7 @@ export default function TrendsTab() {
   const { account } = useAuth();
   const defaultUnit = account?.defaultUnit || 'lb';
 
-  const { overview, loading, isFetching } = useTrendsOverview(activePersonId, trendsRangeWeeks);
+  const { overview, loading, isFetching, updatedAt } = useTrendsOverview(activePersonId, trendsRangeWeeks);
 
   if (loading || !overview) {
     return <TrendsSkeleton />;
@@ -80,6 +81,7 @@ export default function TrendsTab() {
   return (
     <div>
       <RefreshingPill show={isFetching && !loading} />
+      <OfflineDataNotice updatedAt={updatedAt} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <RangeToggle weeks={trendsRangeWeeks} onChange={setTrendsRange} />
       </div>

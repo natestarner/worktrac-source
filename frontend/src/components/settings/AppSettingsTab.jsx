@@ -7,9 +7,13 @@ import { updateDefaultUnit } from '../../api/account';
 import { setRestTimerPreference } from '../../api/people';
 import { createTag, deleteTag } from '../../api/tags';
 import { downloadAllPeopleZip } from '../../api/export';
+import { useOfflinePin } from '../../hooks/useOfflinePin';
+import { useRequireOnline } from '../../hooks/useRequireOnline';
+import { pinOffline, unpinOffline } from '../../lib/offlineMode';
 import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
 import Skeleton from '../shared/Skeleton';
+import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 
 // Every setting here is household-wide -- nothing is scoped to whichever person happens to be
 // active. Units and the shared tag vocabulary are account-level; the rest timer is a per-person
@@ -19,6 +23,8 @@ export default function AppSettingsTab() {
   const navigate = useNavigate();
   const { account, people, refreshPeople } = useAuth();
   const { openConfirm } = useUI();
+  const offlinePinned = useOfflinePin();
+  const { online, requireOnline } = useRequireOnline();
 
   const { tags, loading: tagsLoading, refetch: refetchTags } = useTags();
 
@@ -64,6 +70,11 @@ export default function AppSettingsTab() {
     await refetchTags();
   }
 
+  const guardedUnitSelect = requireOnline(handleUnitSelect, 'Changing units needs a connection.');
+  const guardedRestTimerToggle = requireOnline(handleRestTimerToggle, 'Changing this needs a connection.');
+  const guardedAddTag = requireOnline(handleAddTag, 'Adding a tag needs a connection.');
+  const guardedDeleteTag = requireOnline(handleDeleteTag, 'Deleting a tag needs a connection.');
+
   return (
     <div>
       <button onClick={() => navigate(-1)} style={backButtonStyle}>
@@ -83,8 +94,9 @@ export default function AppSettingsTab() {
             return (
               <button
                 key={unit}
-                onClick={() => handleUnitSelect(unit)}
-                disabled={!!pendingUnit}
+                onClick={() => guardedUnitSelect(unit)}
+                disabled={!!pendingUnit || !online}
+                title={online ? undefined : 'Changing units needs a connection.'}
                 style={{
                   flex: 1,
                   padding: '10px 0',
@@ -92,10 +104,11 @@ export default function AppSettingsTab() {
                   borderRadius: 9,
                   fontSize: 14,
                   fontWeight: 700,
-                  cursor: 'pointer',
+                  cursor: online ? 'pointer' : 'not-allowed',
                   background: active ? 'var(--color-surface)' : 'transparent',
                   color: textColor,
                   boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  opacity: online ? 1 : 0.6,
                   position: 'relative',
                 }}
               >
@@ -105,6 +118,44 @@ export default function AppSettingsTab() {
                     <Spinner size={14} color={textColor} />
                   </span>
                 )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={sectionLabelStyle}>Offline Mode</div>
+      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
+        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
+          Turn this on if you&rsquo;re somewhere with a bad connection. The app stops trying to reach
+          the server &mdash; everything you log is saved on this device and syncs automatically once
+          you turn it back off.
+        </div>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--color-subtle-bg)', borderRadius: 12, padding: 4, maxWidth: 220 }}>
+          {[
+            { value: false, label: 'Off' },
+            { value: true, label: 'On' },
+          ].map(({ value, label }) => {
+            const active = offlinePinned === value;
+            return (
+              <button
+                key={label}
+                onClick={() => (value ? pinOffline() : unpinOffline())}
+                aria-label={`Offline mode ${label}`}
+                style={{
+                  flex: 1,
+                  padding: '10px 0',
+                  border: 'none',
+                  borderRadius: 9,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  background: active ? 'var(--color-surface)' : 'transparent',
+                  color: active ? 'var(--color-accent)' : 'var(--color-muted)',
+                  boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                }}
+              >
+                {label}
               </button>
             );
           })}
@@ -133,8 +184,9 @@ export default function AppSettingsTab() {
                     return (
                       <button
                         key={label}
-                        onClick={() => handleRestTimerToggle(person.id, value)}
-                        disabled={busy}
+                        onClick={() => guardedRestTimerToggle(person.id, value)}
+                        disabled={busy || !online}
+                        title={online ? undefined : 'Changing this needs a connection.'}
                         aria-label={`Rest timer ${label} for ${person.name}`}
                         style={{
                           flex: 1,
@@ -143,10 +195,11 @@ export default function AppSettingsTab() {
                           borderRadius: 9,
                           fontSize: 14,
                           fontWeight: 700,
-                          cursor: busy ? 'default' : 'pointer',
+                          cursor: busy || !online ? 'default' : 'pointer',
                           background: active ? 'var(--color-surface)' : 'transparent',
                           color: active ? 'var(--color-accent)' : 'var(--color-muted)',
                           boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                          opacity: online ? 1 : 0.6,
                         }}
                       >
                         {label}
@@ -170,12 +223,14 @@ export default function AppSettingsTab() {
           tags.map((t) => (
             <div key={t.id} style={categoryChipStyle}>
               {t.name}
-              <button
-                onClick={() => openConfirm(`Delete tag "${t.name}"? It will be removed from every exercise it's applied to.`, () => handleDeleteTag(t))}
-                style={{ background: 'none', border: 'none', color: 'var(--color-faint)', fontSize: 15, cursor: 'pointer' }}
-              >
-                &times;
-              </button>
+              <OfflineDisabledWrap message="Deleting a tag needs a connection.">
+                <button
+                  onClick={() => openConfirm(`Delete tag "${t.name}"? It will be removed from every exercise it's applied to.`, () => guardedDeleteTag(t))}
+                  style={{ background: 'none', border: 'none', color: 'var(--color-faint)', fontSize: 15, cursor: 'pointer' }}
+                >
+                  &times;
+                </button>
+              </OfflineDisabledWrap>
             </div>
           ))}
         {!tagsLoading && tags.length === 0 && (
@@ -200,9 +255,11 @@ export default function AppSettingsTab() {
             fontSize: 16,
           }}
         />
-        <Button onClick={() => handleAddTag()} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-          Add
-        </Button>
+        <OfflineDisabledWrap message="Adding a tag needs a connection.">
+          <Button onClick={() => guardedAddTag()} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            Add
+          </Button>
+        </OfflineDisabledWrap>
       </div>
       {tagNameError && (
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 18 }}>Enter a tag name.</div>
@@ -213,9 +270,11 @@ export default function AppSettingsTab() {
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
           Download a CSV of every set ever logged, for every person on this account &mdash; one file per person, zipped together.
         </div>
-        <Button onClick={downloadAllPeopleZip} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-          Export all data
-        </Button>
+        <OfflineDisabledWrap message="Exporting needs a connection.">
+          <Button onClick={downloadAllPeopleZip} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            Export all data
+          </Button>
+        </OfflineDisabledWrap>
       </div>
     </div>
   );

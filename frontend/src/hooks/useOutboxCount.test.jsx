@@ -51,4 +51,19 @@ describe('getQueuedWriteCount', () => {
     await client.resumePausedMutations();
     expect(getQueuedWriteCount(client)).toBe(0);
   });
+
+  it('counts a write that has terminal-errored, not just a paused one', async () => {
+    const client = newClient();
+    logLiveSet.mockRejectedValueOnce({ status: 500 });
+    dispatchLogSet(client);
+    await vi.waitFor(() => expect(getQueuedWriteCount(client)).toBe(1));
+  });
+
+  it('does not count a brand-new online write during its normal fast first attempt (no banner flash)', async () => {
+    const client = newClient();
+    logLiveSet.mockReturnValue(new Promise(() => {})); // never resolves -- first attempt still in flight
+    dispatchLogSet(client);
+    await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+    expect(getQueuedWriteCount(client)).toBe(0);
+  });
 });

@@ -63,11 +63,14 @@ public class WorkoutSetService {
         Account account = accountRepository.getReferenceById(accountId);
         Exercise exercise = requireVisibleExercise(accountId, request.exerciseId());
 
-        WorkoutSession session = workoutSessionService.getOrCreateLiveSession(person);
         // The set's real logging time: the client's timestamp when supplied (so a delayed/offline
-        // sync stays accurate), otherwise now. rest_seconds is the gap from the prior set to THIS
-        // time, so it stays honest either way (no separate "null on replay" special-case needed).
+        // sync stays accurate), otherwise now. Computed BEFORE getOrCreateLiveSession so a session
+        // auto-created right here (the first set of a brand-new workout) is stamped with when the
+        // workout actually started, not whenever this replay happened to reach the server.
         Instant loggedAt = request.clientLoggedAt() != null ? request.clientLoggedAt() : clock.instant();
+        WorkoutSession session = workoutSessionService.getOrCreateLiveSession(person, loggedAt);
+        // rest_seconds is the gap from the prior set to THIS time, so it stays honest either way
+        // (no separate "null on replay" special-case needed).
         Integer restSeconds = computeRestSeconds(session, exercise, loggedAt);
         return insertSetAndDetectPr(person, session, exercise, request.weight(), request.reps(),
                 account.getDefaultUnit(), restSeconds, loggedAt, request.idempotencyKey());

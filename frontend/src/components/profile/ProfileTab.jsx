@@ -5,6 +5,7 @@ import { useUI } from '../../context/UIContext';
 import { removePerson } from '../../api/people';
 import EditPersonModal from './EditPersonModal';
 import DeleteAccountModal from './DeleteAccountModal';
+import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 
 export default function ProfileTab() {
   const { user, account, people, refreshPeople } = useAuth();
@@ -50,18 +51,22 @@ export default function ProfileTab() {
               {p.isPrimary && <span style={badgeStyle}>PRIMARY</span>}
             </div>
             <div style={{ display: 'flex', gap: 14 }}>
-              <button onClick={() => setEditingPerson(p)} style={editLinkStyle}>
-                Edit
-              </button>
-              {!p.isPrimary && (
-                <button
-                  onClick={() =>
-                    openConfirm(`Remove ${p.name}? This deletes all of their sessions, sets, routines, and setup values.`, () => handleRemovePerson(p))
-                  }
-                  style={deleteLinkStyle}
-                >
-                  Remove
+              <OfflineDisabledWrap message="Editing needs a connection.">
+                <button onClick={() => setEditingPerson(p)} style={editLinkStyle}>
+                  Edit
                 </button>
+              </OfflineDisabledWrap>
+              {!p.isPrimary && (
+                <OfflineDisabledWrap message="Removing a person needs a connection.">
+                  <button
+                    onClick={() =>
+                      openConfirm(`Remove ${p.name}? This deletes all of their sessions, sets, routines, and setup values.`, () => handleRemovePerson(p))
+                    }
+                    style={deleteLinkStyle}
+                  >
+                    Remove
+                  </button>
+                </OfflineDisabledWrap>
               )}
             </div>
           </div>
@@ -84,9 +89,11 @@ export default function ProfileTab() {
               Permanently deletes all data for everyone on this account.
             </div>
           </div>
-          <button onClick={() => setShowDeleteAccount(true)} style={deleteLinkStyle}>
-            Delete
-          </button>
+          <OfflineDisabledWrap message="Deleting your account needs a connection.">
+            <button onClick={() => setShowDeleteAccount(true)} style={deleteLinkStyle}>
+              Delete
+            </button>
+          </OfflineDisabledWrap>
         </div>
       </div>
 

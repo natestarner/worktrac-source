@@ -1,21 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
+import { applyUpdate, isUpdateAvailable, subscribeUpdateAvailable } from '../../lib/swUpdate';
 
-// Surfaces "a new version is ready" without ever reloading mid-workout on its own. The service
-// worker (registered in main.jsx with `registerType: 'prompt'`) dispatches a `pwa:needrefresh`
-// window event and stashes its update function on `window.__pwaUpdateSW` when a new build has been
-// fetched and is waiting. We show a dismissible prompt; the user chooses when to reload, so an
-// active set is never interrupted. Using a window event (not the plugin's React virtual module)
-// keeps this component free of build-only imports, so it renders and tests like any other.
+// Fallback surface for "a new version is ready" -- AppShell/LogTab's forced-reload triggers
+// (person/section/exercise switch, ending a workout, tab visibility regained) apply a pending
+// update automatically at the next safe pause point, so most users never see this. It only matters
+// for someone who parks on one screen for a long session without navigating anywhere. Never
+// reloads on its own even then -- the user chooses when, so an active set is never interrupted.
 export default function ServiceWorkerUpdater() {
-  const [needRefresh, setNeedRefresh] = useState(false);
+  const available = useSyncExternalStore(subscribeUpdateAvailable, isUpdateAvailable, () => false);
+  // Local to this component, deliberately separate from the shared `available` flag -- dismissing
+  // only hides THIS banner. It must NOT clear `available`, or a forced-reload trigger firing a
+  // moment later (switching person/section/exercise, ending a workout) would have nothing to apply.
+  const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => {
-    const onNeedRefresh = () => setNeedRefresh(true);
-    window.addEventListener('pwa:needrefresh', onNeedRefresh);
-    return () => window.removeEventListener('pwa:needrefresh', onNeedRefresh);
-  }, []);
-
-  if (!needRefresh) return null;
+  if (!available || dismissed) return null;
 
   return (
     <div
@@ -43,7 +41,7 @@ export default function ServiceWorkerUpdater() {
       <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>A new version is available.</span>
       <button
         type="button"
-        onClick={() => window.__pwaUpdateSW?.(true)}
+        onClick={() => applyUpdate()}
         style={{
           padding: '6px 14px',
           borderRadius: 999,
@@ -58,7 +56,7 @@ export default function ServiceWorkerUpdater() {
       </button>
       <button
         type="button"
-        onClick={() => setNeedRefresh(false)}
+        onClick={() => setDismissed(true)}
         style={{
           padding: '6px 10px',
           borderRadius: 999,

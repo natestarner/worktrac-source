@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
 import { useLiveSession } from '../../hooks/useLiveSession';
 import AddPersonModal from '../shared/AddPersonModal';
+import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 
 function initials(name) {
   return name.trim().slice(0, 1).toUpperCase();
@@ -85,23 +86,25 @@ export default function PersonPillBar() {
         {people.map((p) => (
           <PersonPill key={p.id} person={p} active={p.id === activePersonId} onSelect={() => selectPerson(p.id)} />
         ))}
-        <button
-          onClick={() => setShowAddPerson(true)}
-          style={{
-            flexShrink: 0,
-            padding: '10px 16px',
-            borderRadius: 999,
-            border: '1px dashed var(--color-faint)',
-            background: 'none',
-            color: 'var(--color-muted)',
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          + Add person
-        </button>
+        <OfflineDisabledWrap message="Adding a person needs a connection.">
+          <button
+            onClick={() => setShowAddPerson(true)}
+            style={{
+              flexShrink: 0,
+              padding: '10px 16px',
+              borderRadius: 999,
+              border: '1px dashed var(--color-faint)',
+              background: 'none',
+              color: 'var(--color-muted)',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            + Add person
+          </button>
+        </OfflineDisabledWrap>
       </div>
       {/* Rendered outside the sticky pill bar above: position:sticky + z-index there
           creates a stacking context that would trap this fixed-position modal behind

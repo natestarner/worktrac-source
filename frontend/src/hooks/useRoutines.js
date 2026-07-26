@@ -17,5 +17,5 @@ export function useRoutines(personId) {
     [queryClient, personId],
   );
 
-  return { routines: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, refetch };
+  return { routines: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, updatedAt: query.dataUpdatedAt, refetch };
 }

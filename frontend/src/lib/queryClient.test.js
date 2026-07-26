@@ -1,6 +1,14 @@
-import { MutationObserver, QueryClient } from '@tanstack/react-query';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults, shouldRetryWrite } from './queryClient';
+import { MutationObserver, QueryClient, onlineManager } from '@tanstack/react-query';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  LOG_SET_MUTATION_KEY,
+  clearOutboxMutations,
+  flushOutbox,
+  queryClient,
+  registerOfflineMutationDefaults,
+  resetQueryCache,
+  shouldRetryWrite,
+} from './queryClient';
 import { logLiveSet, logSetIntoSession } from '../api/sets';
 
 vi.mock('../api/sets', () => ({
@@ -62,5 +70,96 @@ describe('registerOfflineMutationDefaults dispatches to the right endpoint', () 
     await dispatch({ mode: 'session', sessionId: 42, personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k2', clientLoggedAt: 't' });
     expect(logSetIntoSession).toHaveBeenCalledWith(42, expect.objectContaining({ exerciseId: 3, idempotencyKey: 'k2' }));
     expect(logLiveSet).not.toHaveBeenCalled();
+  });
+});
+
+// These three exercise the app's singleton client (its defaults are already registered at module
+// load with the real shouldRetryWrite policy), the same way UserMenu.test.jsx does -- flushOutbox,
+// clearOutboxMutations, and resetQueryCache all operate on that singleton, not a client parameter.
+describe('flushOutbox / clearOutboxMutations / resetQueryCache (singleton client)', () => {
+  function dispatchOnSingleton(variables, extraOptions = {}) {
+    const observer = new MutationObserver(queryClient, {
+      ...queryClient.getMutationDefaults(LOG_SET_MUTATION_KEY),
+      mutationKey: LOG_SET_MUTATION_KEY,
+      ...extraOptions,
+    });
+    observer.mutate(variables).catch(() => {});
+    return observer;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+  });
+
+  afterEach(() => {
+    // Drop everything WITHOUT resuming/settling it -- resuming would fire a real request in jsdom.
+    queryClient.getMutationCache().clear();
+    queryClient.getQueryCache().clear();
+    onlineManager.setOnline(true);
+  });
+
+  it('flushOutbox resumes paused (offline-queued) mutations', async () => {
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 1 }, set: { id: 1 } });
+    onlineManager.setOnline(false);
+    dispatchOnSingleton({ mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'flush-paused', clientLoggedAt: 't' });
+    await vi.waitFor(() =>
+      expect(queryClient.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1),
+    );
+
+    onlineManager.setOnline(true);
+    await flushOutbox();
+
+    expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ idempotencyKey: 'flush-paused' }));
+  });
+
+  it('flushOutbox re-dispatches a write stuck in a terminal error state (nothing left to resume on its own)', async () => {
+    logLiveSet.mockRejectedValueOnce({ status: 500 }).mockResolvedValue({ isPR: false, best: null, session: { id: 1 }, set: { id: 1 } });
+    dispatchOnSingleton(
+      { mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'flush-errored', clientLoggedAt: 't' },
+      { retry: false },
+    );
+    await vi.waitFor(() => {
+      const [mutation] = queryClient.getMutationCache().getAll();
+      expect(mutation.state.status).toBe('error');
+    });
+
+    await flushOutbox();
+
+    await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalledTimes(2));
+    expect(logLiveSet).toHaveBeenLastCalledWith(7, expect.objectContaining({ idempotencyKey: 'flush-errored' }));
+  });
+
+  it('flushOutbox leaves a mid-retry (pending, not paused) write alone rather than double-firing it', async () => {
+    logLiveSet.mockReturnValue(new Promise(() => {})); // never resolves -- stays pending
+    dispatchOnSingleton({ mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'flush-pending', clientLoggedAt: 't' });
+    await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalledTimes(1));
+
+    await flushOutbox();
+
+    expect(logLiveSet).toHaveBeenCalledTimes(1);
+  });
+
+  it('clearOutboxMutations evicts every outbox-scoped mutation from the live cache', async () => {
+    onlineManager.setOnline(false);
+    dispatchOnSingleton({ mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'clear-me', clientLoggedAt: 't' });
+    await vi.waitFor(() => expect(queryClient.getMutationCache().getAll()).toHaveLength(1));
+
+    clearOutboxMutations();
+
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(0);
+  });
+
+  it('resetQueryCache clears the query cache but preserves queued outbox mutations (the regression this fixes)', async () => {
+    onlineManager.setOnline(false);
+    dispatchOnSingleton({ mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'survive-reset', clientLoggedAt: 't' });
+    await vi.waitFor(() => expect(queryClient.getMutationCache().getAll()).toHaveLength(1));
+    queryClient.setQueryData(['some-query'], 'cached-value');
+
+    resetQueryCache();
+
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(1);
+    expect(queryClient.getMutationCache().getAll()[0].state.variables).toMatchObject({ idempotencyKey: 'survive-reset' });
   });
 });

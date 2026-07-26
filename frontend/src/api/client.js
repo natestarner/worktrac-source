@@ -1,6 +1,14 @@
 import { getApiUrl } from '../config';
+import { reachabilityMonitor } from '../lib/reachabilityMonitor';
 
 const TOKEN_STORAGE_KEY = 'workout-tracker-token';
+
+// A request that never gets a response (a dead upstream, captive-portal wifi, a hung TCP
+// connection) would otherwise hang indefinitely -- navigator.onLine still reports "online" in
+// exactly this case, so nothing else would ever time it out. Bounding it here keeps a stuck
+// request from blocking forever and gives reachabilityMonitor a failure to count within a
+// reasonable window.
+const REQUEST_TIMEOUT_MS = 15000;
 
 let token = localStorage.getItem(TOKEN_STORAGE_KEY) || null;
 let onUnauthorized = null;
@@ -50,11 +58,27 @@ async function request(path, { method = 'GET', body, isFormData = false } = {}) 
   const hadToken = Boolean(token);
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const response = await fetch(getApiUrl(path), {
-    method,
-    headers,
-    body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(getApiUrl(path), {
+      method,
+      headers,
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    reachabilityMonitor.recordFailure();
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  // Any response at all -- even a 4xx/5xx -- proves this device's network path reached a server,
+  // which is exactly the thing navigator.onLine can't confirm (see reachabilityMonitor.js).
+  reachabilityMonitor.recordSuccess();
 
   // A 401 only means "your session expired" if this request actually carried a token --
   // public/unauthenticated endpoints (login, register, confirm-email, resend-code) also

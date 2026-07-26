@@ -14,5 +14,7 @@ export function renderWithQuery(ui, options) {
   // Give the test client the same durable-write defaults the app registers (so log-set has its
   // mutationFn/scope/reconciliation), but with retries off so a mocked rejection fails fast.
   registerOfflineMutationDefaults(queryClient, { retry: false });
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>, options);
+  // Expose the client alongside RTL's usual render result so a test can inspect the cache
+  // directly (e.g. an optimistically-seeded liveSession entry) without needing its own provider.
+  return { ...render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>, options), queryClient };
 }

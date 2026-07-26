@@ -15,6 +15,9 @@
   --color-pr-border: #f0c4ab;
   --color-pr-text: #a8532c;
   --color-dark: #1c1b19;
+  --color-warning-bg: #fdf3d6;
+  --color-warning-border: #eecd6b;
+  --color-warning-text: #7a5c05;
 
   --skeleton-base: #ece7de;
   --skeleton-highlight: #f8f6f2;
@@ -50,6 +53,9 @@
     --color-success-bg: #163524;
     --color-pr-bg: #3a2417;
     --color-pr-border: #5a3520;
+    --color-warning-bg: #3a2f0c;
+    --color-warning-border: #5c4a14;
+    --color-warning-text: #e8c766;
     /* --color-pr-text unchanged (#a8532c) sits at ~2.7:1 on the dark-mode --color-pr-bg above
        -- well under WCAG AA's 4.5:1 for text. Lightened for dark mode only; still reads as the
        same warm PR-accent orange, just bright enough to be legible against a dark background. */

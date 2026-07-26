@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { addCustomField, updateCustomField, removeCustomField, setExerciseTags, updateExercise } from '../../api/exercises';
 import { setPersistentNote } from '../../api/notes';
+import { useRequireOnline } from '../../hooks/useRequireOnline';
 import Modal from './Modal';
+import OfflineNotice from './OfflineNotice';
 import { cancelButtonStyle } from './ConfirmDialog';
 
 // One place to personalize an exercise: rename/delete (your own exercises only), which of the
@@ -28,6 +30,8 @@ export default function ConfigureExerciseModal({
   const [newFieldName, setNewFieldName] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [busy, setBusy] = useState(false);
+  const { online, requireOnline } = useRequireOnline();
+  const locked = busy || !online;
 
   async function saveName() {
     const trimmed = name.trim();
@@ -110,12 +114,23 @@ export default function ConfigureExerciseModal({
     await onFieldsChanged();
   }
 
+  const guardedSaveName = requireOnline(saveName, 'Editing needs a connection.');
+  const guardedSaveNote = requireOnline(saveNote, 'Editing needs a connection.');
+  const guardedToggleTag = requireOnline(toggleTag, 'Editing needs a connection.');
+  const guardedAddTag = requireOnline(addTag, 'Editing needs a connection.');
+  const guardedAddField = requireOnline(addField, 'Editing needs a connection.');
+  const guardedRenameField = requireOnline(renameField, 'Editing needs a connection.');
+  const guardedRemoveField = requireOnline(removeField, 'Editing needs a connection.');
+  const guardedRequestDelete = requireOnline(onRequestDelete, 'Deleting needs a connection.');
+
   return (
     <Modal width={360} onScrim={onClose}>
       <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Customize this exercise</div>
       <div style={{ marginBottom: 18 }}>
         <span style={isOwn ? ownBadgeStyle : preloadedBadgeStyle}>{isOwn ? 'Created by you' : 'Preloaded exercise'}</span>
       </div>
+
+      <OfflineNotice message="Editing needs a connection -- your current setup is still shown below." />
 
       {isOwn && (
         <>
@@ -127,13 +142,18 @@ export default function ConfigureExerciseModal({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  saveName();
+                  guardedSaveName();
                 }
               }}
-              onBlur={saveName}
-              style={inputStyle}
+              onBlur={guardedSaveName}
+              disabled={locked}
+              style={{ ...inputStyle, opacity: locked ? 0.6 : 1 }}
             />
-            <button onClick={saveName} disabled={busy || !name.trim() || name.trim() === exercise.name} style={smallButtonStyle}>
+            <button
+              onClick={guardedSaveName}
+              disabled={locked || !name.trim() || name.trim() === exercise.name}
+              style={{ ...smallButtonStyle, opacity: locked ? 0.5 : 1, cursor: locked ? 'not-allowed' : 'pointer' }}
+            >
               Save
             </button>
           </div>
@@ -145,11 +165,12 @@ export default function ConfigureExerciseModal({
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        onBlur={saveNote}
+        onBlur={guardedSaveNote}
+        disabled={locked}
         maxLength={1000}
         rows={2}
         placeholder="e.g. Keep elbows tucked, bad knee -- go light"
-        style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit', marginBottom: 20 }}
+        style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit', marginBottom: 20, opacity: locked ? 0.6 : 1 }}
       />
 
       <div style={labelStyle}>Tags</div>
@@ -159,8 +180,8 @@ export default function ConfigureExerciseModal({
           return (
             <button
               key={t.id}
-              onClick={() => toggleTag(t.name)}
-              disabled={busy}
+              onClick={() => guardedToggleTag(t.name)}
+              disabled={locked}
               aria-pressed={active}
               style={{
                 padding: '8px 14px',
@@ -170,7 +191,8 @@ export default function ConfigureExerciseModal({
                 color: active ? '#fff' : 'var(--color-text)',
                 fontSize: 13,
                 fontWeight: 700,
-                cursor: 'pointer',
+                cursor: locked ? 'not-allowed' : 'pointer',
+                opacity: locked ? 0.6 : 1,
               }}
             >
               {t.name}
@@ -188,13 +210,18 @@ export default function ConfigureExerciseModal({
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
-              addTag();
+              guardedAddTag();
             }
           }}
+          disabled={locked}
           placeholder="New tag"
-          style={inputStyle}
+          style={{ ...inputStyle, opacity: locked ? 0.6 : 1 }}
         />
-        <button onClick={addTag} disabled={busy || !newTagName.trim()} style={smallButtonStyle}>
+        <button
+          onClick={guardedAddTag}
+          disabled={locked || !newTagName.trim()}
+          style={{ ...smallButtonStyle, opacity: locked ? 0.5 : 1, cursor: locked ? 'not-allowed' : 'pointer' }}
+        >
           Add
         </button>
       </div>
@@ -205,13 +232,15 @@ export default function ConfigureExerciseModal({
           <div key={field.id} style={{ display: 'flex', gap: 8 }}>
             <input
               defaultValue={field.name}
-              onBlur={(e) => renameField(field, e.target.value)}
-              style={{ ...inputStyle, flex: 1 }}
+              onBlur={(e) => guardedRenameField(field, e.target.value)}
+              disabled={locked}
+              style={{ ...inputStyle, flex: 1, opacity: locked ? 0.6 : 1 }}
             />
             <button
-              onClick={() => removeField(field)}
+              onClick={() => guardedRemoveField(field)}
+              disabled={locked}
               aria-label={`Remove ${field.name}`}
-              style={{ ...smallButtonStyle, background: 'var(--color-subtle-bg)', color: 'var(--color-danger)' }}
+              style={{ ...smallButtonStyle, background: 'var(--color-subtle-bg)', color: 'var(--color-danger)', opacity: locked ? 0.5 : 1, cursor: locked ? 'not-allowed' : 'pointer' }}
             >
               &times;
             </button>
@@ -228,19 +257,28 @@ export default function ConfigureExerciseModal({
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
-              addField();
+              guardedAddField();
             }
           }}
+          disabled={locked}
           placeholder="Add a field (e.g. seat height)"
-          style={inputStyle}
+          style={{ ...inputStyle, opacity: locked ? 0.6 : 1 }}
         />
-        <button onClick={addField} disabled={!newFieldName.trim()} style={smallButtonStyle}>
+        <button
+          onClick={guardedAddField}
+          disabled={locked || !newFieldName.trim()}
+          style={{ ...smallButtonStyle, opacity: locked ? 0.5 : 1, cursor: locked ? 'not-allowed' : 'pointer' }}
+        >
           Add
         </button>
       </div>
 
       {isOwn && (
-        <button onClick={onRequestDelete} style={{ ...cancelButtonStyle, width: '100%', color: 'var(--color-danger)', marginBottom: 10 }}>
+        <button
+          onClick={guardedRequestDelete}
+          disabled={!online}
+          style={{ ...cancelButtonStyle, width: '100%', color: 'var(--color-danger)', marginBottom: 10, opacity: online ? 1 : 0.5, cursor: online ? 'pointer' : 'not-allowed' }}
+        >
           Delete this exercise
         </button>
       )}

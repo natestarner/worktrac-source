@@ -205,12 +205,6 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
 
 registerOfflineMutationDefaults(queryClient);
 
-// Replay any queued writes now (called on reconnect and after the outbox is restored on boot). Only
-// paused mutations resume; the shared scope keeps them strictly serial and in order.
-export function resumeOutbox() {
-  return queryClient.resumePausedMutations();
-}
-
 // Fire a durable write against the app's singleton client WITHOUT a React observer -- for
 // fire-and-dismiss actions (end workout, edit set) whose component doesn't need reactive mutation
 // state. Keeps those modals free of a QueryClientProvider dependency, and the write still queues +
@@ -221,6 +215,44 @@ export function enqueueOutboxWrite(mutationKey, variables) {
     mutationKey,
   });
   return observer.mutate(variables).catch(() => {});
+}
+
+// Replay every queued write now: paused ones via TanStack's own `resumePausedMutations` (which
+// keeps them strictly serial, in order, via the shared outbox scope), PLUS any write that's sitting
+// in a terminal ERROR state (exhausted retries, or a definitive 4xx like an expired session) --
+// those have nothing left to resume on their own, so they're re-dispatched fresh from their
+// persisted variables, safe because every durable write is idempotent by design. A write that's
+// currently mid-retry (pending, not paused) is left alone rather than double-fired.
+//
+// Called on reconnect, after the outbox is restored on boot, after a successful (re-)login, and
+// from the offline banner's guarded "Go back online" button.
+export function flushOutbox() {
+  const resumed = queryClient.resumePausedMutations();
+  const cache = queryClient.getMutationCache();
+  const stuck = cache
+    .getAll()
+    .filter((m) => m.options.scope?.id === OUTBOX_SCOPE_ID && m.state.status === 'error')
+    .sort((a, b) => (a.state.submittedAt ?? 0) - (b.state.submittedAt ?? 0));
+  stuck.forEach((m) => {
+    const { mutationKey } = m.options;
+    const variables = m.state.variables;
+    cache.remove(m);
+    enqueueOutboxWrite(mutationKey, variables);
+  });
+  return resumed;
+}
+
+// Evicts every outbox-scoped mutation from the LIVE in-memory cache only -- does NOT touch the
+// persisted IndexedDB copy under whichever account currently owns it. Used when a different
+// account is about to become active and a stale write must not be able to replay under the wrong
+// session (see AuthContext's adoptOutboxAccount), and by an explicit logout's full discard
+// (alongside clearOutbox, which removes the IndexedDB copy too).
+export function clearOutboxMutations() {
+  const cache = queryClient.getMutationCache();
+  cache
+    .getAll()
+    .filter((m) => m.options.scope?.id === OUTBOX_SCOPE_ID)
+    .forEach((m) => cache.remove(m));
 }
 
 // IndexedDB (not localStorage) so the cache survives on iOS/PWA and is the same durable store
@@ -256,7 +288,12 @@ export const persistOptions = {
 // vocabulary are keyed WITHOUT an accountId, so without this a second household logging in on
 // the same device could read the first household's cached catalog. Clearing both the live cache
 // and the persisted copy on any auth change makes cross-account bleed impossible.
+//
+// QUERIES only -- deliberately does not touch the mutation cache (queryClient.clear() used to,
+// which is what silently wiped the durable outbox on every login/401 before this fix). The outbox
+// has its own account-scoped isolation (see outboxPersistence.js's adoptOutboxAccount usage in
+// AuthContext), so it doesn't need this blunt clear-everything approach to stay safe.
 export function resetQueryCache() {
-  queryClient.clear();
+  queryClient.getQueryCache().clear();
   queryPersister.removeClient();
 }

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient, getAuthToken, isOfflineError, setAuthToken, setUnauthorizedHandler } from './client';
+import { __resetReachabilityForTests, reachabilityMonitor } from '../lib/reachabilityMonitor';
 
 function jsonResponse(body, status = 200) {
   return Promise.resolve(
@@ -68,6 +69,51 @@ describe('apiClient', () => {
     global.fetch.mockReturnValue(jsonResponse({ message: 'Cannot delete the primary person on an account' }, 409));
 
     await expect(apiClient.delete('/api/people/1')).rejects.toThrow('Cannot delete the primary person on an account');
+  });
+});
+
+describe('apiClient reachability reporting', () => {
+  beforeEach(() => {
+    setAuthToken(null);
+    setUnauthorizedHandler(null);
+    global.fetch = vi.fn();
+    __resetReachabilityForTests();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    __resetReachabilityForTests();
+  });
+
+  it('records a success on any completed response, even a non-2xx one', async () => {
+    global.fetch.mockReturnValue(jsonResponse({ message: 'not found' }, 404));
+
+    await expect(apiClient.get('/api/whatever')).rejects.toThrow();
+
+    reachabilityMonitor.recordFailure();
+    reachabilityMonitor.recordFailure();
+    // A 4xx is the server's real answer -- it must have already reset the failure count to 0,
+    // so two more failures alone aren't enough to cross the trouble threshold.
+    expect(reachabilityMonitor.isTrouble()).toBe(false);
+  });
+
+  it('records a failure when fetch itself rejects (no response reached at all)', async () => {
+    global.fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await expect(apiClient.get('/api/whatever')).rejects.toThrow();
+    await expect(apiClient.get('/api/whatever')).rejects.toThrow();
+    await expect(apiClient.get('/api/whatever')).rejects.toThrow();
+
+    expect(reachabilityMonitor.isTrouble()).toBe(true);
+  });
+
+  it('attaches an AbortController signal so a hung request can be bounded by a timeout', async () => {
+    global.fetch.mockReturnValue(jsonResponse({ ok: true }));
+
+    await apiClient.get('/api/whoami');
+
+    const [, options] = global.fetch.mock.calls[0];
+    expect(options.signal).toBeInstanceOf(AbortSignal);
   });
 });
 

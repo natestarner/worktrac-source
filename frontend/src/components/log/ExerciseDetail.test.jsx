@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
-import { onlineManager } from '@tanstack/react-query';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { onlineManager, MutationObserver } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
+import { queryKeys } from '../../api/queryKeys';
 import ExerciseDetail from './ExerciseDetail';
 import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
@@ -347,7 +348,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     await waitFor(() => expect(screen.queryByText(/Saving/)).not.toBeInTheDocument());
   });
 
-  it("shows \"Will sync once you're back online\" while paused offline, then Saving once reconnected", async () => {
+  it('allows editing/deleting a paused-offline set, then shows Saving once reconnected', async () => {
     listSessionSets.mockResolvedValue([]);
     let resolveLog;
     logLiveSet.mockImplementation(() => new Promise((resolve) => { resolveLog = resolve; }));
@@ -364,13 +365,16 @@ describe('ExerciseDetail in-flight visual feedback', () => {
       await waitFor(() => expect(button).not.toBeDisabled());
       // TanStack pauses the mutation before ever invoking mutationFn while offline.
       expect(logLiveSet).not.toHaveBeenCalled();
-      expect(await screen.findByText("Will sync once you're back online")).toBeInTheDocument();
+      // A paused-offline set is just as editable/deletable as a synced one now (see
+      // offlineSetEdits.js) -- no more opaque "Will sync..." placeholder.
+      expect(await screen.findByText('Edit')).toBeInTheDocument();
+      expect(screen.getByText('Delete')).toBeInTheDocument();
       expect(screen.queryByText(/Saving/)).not.toBeInTheDocument();
 
       onlineManager.setOnline(true);
       await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
       expect(await screen.findByText(/Saving/)).toBeInTheDocument();
-      expect(screen.queryByText("Will sync once you're back online")).not.toBeInTheDocument();
+      expect(screen.queryByText('Edit')).not.toBeInTheDocument();
 
       listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
       resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
@@ -422,9 +426,9 @@ describe('ExerciseDetail in-flight visual feedback', () => {
   // onMutate has nowhere to write an optimistic row (queryKeys.sessionSets needs a real
   // session id). Without a placeholder, the "This session" section stays entirely absent
   // until the full create-session-and-log-set round trip completes -- these three tests
-  // cover the skeleton placeholder that fills that gap (see pendingBeforeSession in
+  // cover the placeholder that fills that gap (see pendingBeforeSession in
   // ExerciseDetail.jsx), derived from the shared MutationCache rather than local state.
-  it('shows a skeleton placeholder for the very first set of a brand-new workout (no session yet)', async () => {
+  it('shows the entered weight/reps for the very first set of a brand-new workout (no session yet) while its write is in flight', async () => {
     listSessionSets.mockResolvedValue([]);
     let resolveLog;
     logLiveSet.mockReturnValue(new Promise((resolve) => { resolveLog = resolve; }));
@@ -455,6 +459,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     fireEvent.click(await screen.findByText('Log set'));
 
     expect(await screen.findByText('This session')).toBeInTheDocument();
+    expect(screen.getByText('135 lb × 8')).toBeInTheDocument();
     expect(screen.getByText(/Saving/)).toBeInTheDocument();
 
     listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
@@ -523,5 +528,302 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     // No manual cleanup code runs here -- the mutation leaving 'pending' status on its own
     // is what drops it from pendingBeforeSession.
     await waitFor(() => expect(screen.queryByText('This session')).not.toBeInTheDocument());
+  });
+
+  // The weight/reps are already known (they're right in the mutation's own variables) the
+  // instant a set is logged -- while genuinely offline there's no reason to show an opaque
+  // shimmer instead of them, unlike the brief online round-trip above which still does.
+  it('shows real weight/reps (not a skeleton) for the first set of a brand-new workout while paused offline', async () => {
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockImplementation(() => new Promise(() => {})); // never resolves -- stays paused
+    renderExerciseDetail({ liveSession: null });
+
+    onlineManager.setOnline(false);
+    try {
+      fireEvent.click(await screen.findByText('Log set'));
+
+      expect(await screen.findByText('135 lb × 8')).toBeInTheDocument();
+      expect(screen.getByText('Edit')).toBeInTheDocument();
+      expect(screen.getByText('Delete')).toBeInTheDocument();
+      expect(logLiveSet).not.toHaveBeenCalled();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it('deleting a paused-offline set (before a session exists) cancels its pending create', async () => {
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockImplementation(() => new Promise(() => {})); // never resolves -- stays paused
+    useUI.mockReturnValue({
+      showCelebration: vi.fn(),
+      showToast: vi.fn(),
+      startRestTimer: vi.fn(),
+      openConfirm: (_msg, onConfirm) => onConfirm(),
+    });
+    const { queryClient } = renderExerciseDetail({ liveSession: null });
+
+    onlineManager.setOnline(false);
+    try {
+      fireEvent.click(await screen.findByText('Log set'));
+      expect(await screen.findByText('Delete')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('Delete'));
+
+      await waitFor(() => expect(screen.queryByText('135 lb × 8')).not.toBeInTheDocument());
+      // Cancelled outright -- not left queued as a delete against a set id that doesn't exist.
+      expect(queryClient.getMutationCache().getAll().filter((m) => m.state.status === 'pending')).toHaveLength(0);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it('editing a paused-offline set replaces the pending create with the corrected values', async () => {
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockImplementation(() => new Promise(() => {})); // never resolves -- stays paused
+    renderExerciseDetail({ liveSession: { id: 101 } });
+
+    onlineManager.setOnline(false);
+    try {
+      fireEvent.click(await screen.findByText('Log set'));
+      expect(await screen.findByText('135 lb × 8')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('Edit'));
+      // Scoped to the modal dialog -- ExerciseDetail's own "log a new set" weight/reps steppers
+      // stay mounted in the background behind the overlay and have their own "+"/"−" buttons too.
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getAllByText('+')[0]); // Weight stepper's "+" (Reps' is the second)
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      expect(await screen.findByText('140 lb × 8')).toBeInTheDocument();
+      expect(logLiveSet).not.toHaveBeenCalled();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  // Regression test: pendingBeforeSession used to inherit raw mutation-cache order, but
+  // replacePendingLogSet (offlineSetEdits.js) removes a mutation and re-dispatches it via a
+  // fresh MutationObserver, which re-appends it to the END of the cache -- reordering the
+  // array out from under the position-based "Set N" labels. Editing the chronologically
+  // earlier of two pending sets used to make its label swap onto the OTHER set instead.
+  // pendingBeforeSession must stay sorted by clientLoggedAt (independent of cache order) so
+  // the label a user taps "Edit" on always stays bound to the set they meant to edit.
+  it('keeps "Set N" labels bound to the correct set after editing an earlier pending set', async () => {
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockImplementation(() => new Promise(() => {})); // never resolves -- stays paused
+    const { queryClient } = renderExerciseDetail({ liveSession: null });
+
+    onlineManager.setOnline(false);
+    try {
+      const button = (await screen.findByText('Log set')).closest('button');
+
+      // Set 1: logged first, through the real UI flow.
+      fireEvent.click(button);
+      expect(await screen.findByText('135 lb × 8')).toBeInTheDocument();
+
+      // Set 2: dispatched directly against the mutation cache (bypassing the mocked, static
+      // useAppState draft) with distinct weight/reps and a later clientLoggedAt -- exactly how
+      // outboxPersistence's restoreOutbox re-dispatches a persisted mutation via a fresh
+      // MutationObserver using the same registered defaults (see offlineSetEdits.js's
+      // replacePendingLogSet, which does the same thing on edit).
+      const mutationKey = ['logSet', 7, exercise.id];
+      await act(async () => {
+        new MutationObserver(queryClient, { ...queryClient.getMutationDefaults(mutationKey), mutationKey })
+          .mutate({
+            mode: 'live',
+            personId: 7,
+            sessionId: null,
+            exerciseId: exercise.id,
+            unit: 'lb',
+            weight: 145,
+            reps: 12,
+            tempId: 'test-temp-2',
+            idempotencyKey: 'test-idem-2',
+            clientLoggedAt: new Date(Date.now() + 1000).toISOString(),
+          })
+          .catch(() => {});
+      });
+
+      expect(await screen.findByText('145 lb × 12')).toBeInTheDocument();
+      const set2Row = screen.getByText('145 lb × 12').parentElement;
+      expect(within(set2Row).getByText('Set 2')).toBeInTheDocument();
+
+      // Edit Set 1 (the older/first-logged set) -- bump its weight by one stepper click (+5).
+      // replacePendingLogSet removes Set 1's mutation and re-dispatches it, appending it to the
+      // END of the mutation cache -- without the clientLoggedAt sort this used to relabel it as
+      // "Set 2" and leave Set 2's untouched data wearing the "Set 1" label instead.
+      const set1Row = screen.getByText('135 lb × 8').parentElement;
+      fireEvent.click(within(set1Row.parentElement).getByText('Edit'));
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(within(dialog).getAllByText('+')[0]);
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      // Set 1's own row reflects the edit; Set 2 is untouched and keeps its own label.
+      const editedRow = (await screen.findByText('140 lb × 8')).parentElement;
+      expect(within(editedRow).getByText('Set 1')).toBeInTheDocument();
+      const unchangedRow = screen.getByText('145 lb × 12').parentElement;
+      expect(within(unchangedRow).getByText('Set 2')).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  // Nothing exists server-side to key a "session in progress" banner/dot on until this
+  // queued write actually replays, so onMutate optimistically seeds a provisional session
+  // (id: null, so it can never leak into contextSessionId/activeSessionId or any id-keyed
+  // query -- see ExerciseDetail.jsx's onMutate) directly into the same liveSession cache
+  // entry LogTab/PersonPillBar already read.
+  it('seeds a provisional live session (id: null) while offline so the banner/dot can appear before syncing', async () => {
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockImplementation(() => new Promise(() => {}));
+    const { queryClient } = renderExerciseDetail({ liveSession: null });
+
+    onlineManager.setOnline(false);
+    try {
+      fireEvent.click(await screen.findByText('Log set'));
+
+      await waitFor(() =>
+        expect(queryClient.getQueryData(queryKeys.liveSession(7))).toEqual(
+          expect.objectContaining({ id: null, startedAt: expect.any(String) }),
+        ),
+      );
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it('keeps the earliest offline-logged start time across multiple sets before the session syncs', async () => {
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockImplementation(() => new Promise(() => {}));
+    const { queryClient } = renderExerciseDetail({ liveSession: null });
+
+    onlineManager.setOnline(false);
+    try {
+      const button = (await screen.findByText('Log set')).closest('button');
+      fireEvent.click(button);
+      await waitFor(() => expect(queryClient.getQueryData(queryKeys.liveSession(7))).toBeTruthy());
+      const firstStartedAt = queryClient.getQueryData(queryKeys.liveSession(7)).startedAt;
+
+      await waitFor(() => expect(button).not.toBeDisabled());
+      fireEvent.click(button);
+
+      // Still the first set's timestamp -- the second dispatch must not clobber it.
+      expect(queryClient.getQueryData(queryKeys.liveSession(7)).startedAt).toBe(firstStartedAt);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  // The seed is unconditional (not gated on online/offline): a set logged against a server that's
+  // slow, unreachable, or down is just as "session started" as one logged genuinely offline --
+  // the banner must never wait on a request that might take a while (or never) to confirm. The
+  // ordinary fast online round-trip still reconciles to the real session within a fraction of a
+  // second via refetchLiveSession/the registered invalidation, same as before.
+  it('seeds a provisional live session immediately even for the ordinary online first-set round trip', async () => {
+    listSessionSets.mockResolvedValue([]);
+    let resolveLog;
+    logLiveSet.mockImplementation(() => new Promise((resolve) => { resolveLog = resolve; }));
+    const { queryClient } = renderExerciseDetail({ liveSession: null });
+
+    fireEvent.click(await screen.findByText('Log set'));
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+
+    expect(queryClient.getQueryData(queryKeys.liveSession(7))).toEqual(
+      expect.objectContaining({ id: null, startedAt: expect.any(String) }),
+    );
+
+    await act(async () => {
+      resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+      await Promise.resolve();
+    });
+  });
+
+  // The server-down repro: online (not paused), but the write never confirms because the backend
+  // is unreachable. Once shouldRetryWrite's retries are exhausted (immediately here, since the
+  // test client registers retry:false) the mutation settles into a transient (non-4xx) error --
+  // this must render exactly like a paused-offline set (real numbers, Edit/Delete, no alarm),
+  // not get stuck as an indefinite "Saving..." skeleton with no session banner.
+  it('shows real weight/reps and stays editable -- not stuck on "Saving..." -- when a first set terminal-errors against an unreachable server', async () => {
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockRejectedValue({ status: 500 });
+    renderExerciseDetail({ liveSession: null });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(screen.getByText('135 lb × 8')).toBeInTheDocument());
+    expect(await screen.findByText('Edit')).toBeInTheDocument();
+    expect(screen.getByText('Delete')).toBeInTheDocument();
+    expect(screen.queryByText(/Saving/)).not.toBeInTheDocument();
+  });
+
+  it('seeds the provisional live session even when the first set terminal-errors against an unreachable server', async () => {
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockRejectedValue({ status: 503 });
+    const { queryClient } = renderExerciseDetail({ liveSession: null });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() =>
+      expect(queryClient.getQueryData(queryKeys.liveSession(7))).toEqual(
+        expect.objectContaining({ id: null, startedAt: expect.any(String) }),
+      ),
+    );
+  });
+
+  it('does not roll back the set or show an alarming toast for a transient (non-4xx) failure -- it stays queued instead', async () => {
+    listSessionSets.mockResolvedValue([]);
+    const showToast = vi.fn();
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast, startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    logLiveSet.mockRejectedValue({ status: 500 });
+    renderExerciseDetail({ liveSession: null });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(screen.getByText('135 lb × 8')).toBeInTheDocument());
+    expect(showToast).not.toHaveBeenCalled();
+    expect(screen.getByText('This session')).toBeInTheDocument();
+  });
+});
+
+// Regression tests: the "This session" sets column used to be gated on `ready`
+// (!summaryQuery.isLoading && !customFieldsQuery.isLoading), even though displaySets
+// (optimistic rows + sessionSets) needs neither query. Against a down/hanging backend,
+// summaryQuery.isLoading can stay true for tens of seconds (15s timeout x retries), during
+// which an already-logged (or already-synced) set would vanish from view for no reason. The
+// sets column must render as soon as its own data is available, independent of the summary
+// read's loading state -- only the summary cards legitimately wait on `ready`.
+describe('ExerciseDetail sets list independent of the summary/PR read', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getSessionExerciseNote.mockResolvedValue(null);
+  });
+
+  afterEach(() => vi.clearAllMocks());
+
+  it('renders an already-synced set immediately even while the summary/PR read is still hanging', async () => {
+    getExerciseSummary.mockImplementation(() => new Promise(() => {})); // hangs -- simulates DB down
+    listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
+    renderExerciseDetail({ liveSession: { id: 101 } });
+
+    expect(await screen.findByText('This session')).toBeInTheDocument();
+    expect(screen.getByText('135 lb × 8')).toBeInTheDocument();
+    // The summary cards, unlike the sets list, legitimately stay in their loading state.
+    expect(screen.queryByText(/Last time/)).not.toBeInTheDocument();
+  });
+
+  it('renders a freshly-logged set immediately even while the summary/PR read is still hanging', async () => {
+    getExerciseSummary.mockImplementation(() => new Promise(() => {})); // hangs -- simulates DB down
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockImplementation(() => new Promise(() => {})); // write also hangs against the down server
+    renderExerciseDetail({ liveSession: { id: 101 } });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    expect(await screen.findByText('This session')).toBeInTheDocument();
+    expect(screen.getByText('135 lb × 8')).toBeInTheDocument();
+    expect(screen.queryByText(/Last time/)).not.toBeInTheDocument();
   });
 });

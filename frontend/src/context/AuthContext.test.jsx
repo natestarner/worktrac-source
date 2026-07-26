@@ -1,9 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from './AuthContext';
-import { confirmEmail as apiConfirmEmail, me as apiMe, register as apiRegister } from '../api/auth';
+import { confirmEmail as apiConfirmEmail, login as apiLogin, me as apiMe, register as apiRegister } from '../api/auth';
 import { getAuthToken, setAuthToken } from '../api/client';
+import { clearOutboxMutations, flushOutbox } from '../lib/queryClient';
+import { __resetOutboxAccountForTests, setOutboxAccountId } from '../lib/outboxPersistence';
 
 vi.mock('../api/auth', () => ({
   login: vi.fn(),
@@ -17,11 +19,19 @@ vi.mock('../api/client', () => ({
   setAuthToken: vi.fn(),
   setUnauthorizedHandler: vi.fn(),
 }));
+// Real queryClient singleton + resetQueryCache (safe under jsdom, no indexedDB needed for a query
+// cache clear); only clearOutboxMutations/flushOutbox are spied on, to verify login()/confirmEmail()
+// call them correctly without needing a real mutation cache round-trip (that's covered at the
+// queryClient.js/outboxPersistence.js layer already).
+vi.mock('../lib/queryClient', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, clearOutboxMutations: vi.fn(), flushOutbox: vi.fn() };
+});
 
 // register() only starts the pending registration (no account exists yet); confirmEmail() is
 // what actually logs the user in, once the code checks out and the account gets created.
 function Harness() {
-  const { status, register, confirmEmail } = useAuth();
+  const { status, register, confirmEmail, login } = useAuth();
   return (
     <div>
       <span data-testid="status">{status}</span>
@@ -29,6 +39,7 @@ function Harness() {
         register
       </button>
       <button onClick={() => confirmEmail({ email: 'alex@example.com', code: '123456' })}>confirm</button>
+      <button onClick={() => login('alex@example.com', 'password123')}>login</button>
     </div>
   );
 }
@@ -47,7 +58,10 @@ describe('AuthContext register/confirmEmail split', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getAuthToken.mockReturnValue(null);
+    __resetOutboxAccountForTests();
   });
+
+  afterEach(() => __resetOutboxAccountForTests());
 
   it('register starts the pending registration but does not store a token or authenticate', async () => {
     apiRegister.mockResolvedValue({ email: 'alex@example.com' });
@@ -83,5 +97,50 @@ describe('AuthContext register/confirmEmail split', () => {
     );
     expect(setAuthToken).toHaveBeenCalledWith('tok-123');
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'));
+  });
+});
+
+describe('AuthContext login outbox account adoption', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getAuthToken.mockReturnValue(null);
+    __resetOutboxAccountForTests();
+    apiLogin.mockResolvedValue({ token: 'tok-456' });
+    apiMe.mockResolvedValue({ user: { email: 'alex@example.com' }, account: { id: 5 }, people: [{ id: 1 }] });
+  });
+
+  afterEach(() => __resetOutboxAccountForTests());
+
+  it('the SAME account logging back in (e.g. after a 401) does not evict the live outbox', async () => {
+    setOutboxAccountId(5); // this account already owns whatever's in the live mutation cache
+    renderHarness();
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
+
+    fireEvent.click(screen.getByText('login'));
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'));
+    expect(clearOutboxMutations).not.toHaveBeenCalled();
+    expect(flushOutbox).toHaveBeenCalled();
+  });
+
+  it('a DIFFERENT account logging in evicts whatever the prior account left in the live outbox', async () => {
+    setOutboxAccountId(999); // a different household's queued writes are still sitting in memory
+    renderHarness();
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
+
+    fireEvent.click(screen.getByText('login'));
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'));
+    expect(clearOutboxMutations).toHaveBeenCalled();
+  });
+
+  it('a first-ever login (no prior pointer) does not evict anything', async () => {
+    renderHarness();
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
+
+    fireEvent.click(screen.getByText('login'));
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'));
+    expect(clearOutboxMutations).not.toHaveBeenCalled();
   });
 });
