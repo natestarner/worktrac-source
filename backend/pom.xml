@@ -26,6 +26,10 @@
         <!-- CVE-2026-10532 (logback-core, fixed in 1.5.35): override Spring Boot's
              managed version until the parent BOM picks up the patched release itself. -->
         <logback.version>1.5.35</logback.version>
+        <!-- CVE-2026-59901/55831/55833/56745/56816 (netty-codec-compression/http/http3,
+             fixed in 4.2.16.Final): override Spring Boot's managed 4.2.15.Final until the
+             parent BOM picks up the patched release itself. -->
+        <netty.version>4.2.16.Final</netty.version>
         <!-- NOTE: verify these are still the latest stable versions on Maven Central
              before your first build. bucket4j_jdk17-core targets JDK 17+ (this project
              is on Java 25); do not use the bucket4j_jdk8-core artifact. -->
