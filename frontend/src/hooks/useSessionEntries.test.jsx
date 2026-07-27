@@ -104,6 +104,19 @@ describe('useSessionEntries', () => {
     expect(result.current[0].exerciseName).toBe('Zercher Squat');
   });
 
+  it('prefers the name carried on the logSet mutation itself over the catalog, so a reload with an empty/refetching catalog still shows the real name', async () => {
+    const client = newClient();
+    onlineManager.setOnline(false);
+    dispatch(client, LOG_SET_MUTATION_KEY, {
+      mode: 'live', personId: 7, exerciseId: 2, exerciseName: 'Squat', weight: 225, reps: 3, unit: 'lb', idempotencyKey: 'z', clientLoggedAt: 't', tempId: 'temp-z',
+    });
+
+    // The catalog is empty here, as it is right after a reload before it refetches.
+    const { result } = renderWithClient(client, { personId: 7, serverEntries: [], exercises: [] });
+    await vi.waitFor(() => expect(result.current).toHaveLength(1));
+    expect(result.current[0].exerciseName).toBe('Squat');
+  });
+
   it('ignores another person\'s pending sets', async () => {
     const client = newClient();
     onlineManager.setOnline(false);

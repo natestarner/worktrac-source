@@ -6,6 +6,7 @@ import { CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
 import { newTempExerciseId } from '../../lib/exerciseIdMap';
 import { newId } from '../../utils/id';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { useUI } from '../../context/UIContext';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
@@ -24,12 +25,13 @@ function insertOptimisticExercise(queryClient, personId, tempExercise) {
 // person (file it into a category later from the picker). Setup fields are also per-person and
 // added later from the exercise's Customize screen. Editing is only reachable for the account's
 // own exercises; preloaded ones are favorite-as-is.
-export default function AddEditExerciseModal({ exercise, personId, initialName = '', onClose, onSaved }) {
+export default function AddEditExerciseModal({ exercise, personId, initialName = '', requireSyncedExercise = false, onClose, onSaved }) {
   const isEditing = !!exercise;
   const [name, setName] = useState(exercise?.name || initialName || '');
   const [nameError, setNameError] = useState(false);
   const [saving, setSaving] = useState(false);
   const online = useOnlineStatus();
+  const { showToast } = useUI();
   const queryClient = useQueryClient();
   // Durable create (create + auto-favorite, both idempotent) so an offline create replays safely and
   // records its temp->real id mapping on sync. See queryClient.js.
@@ -43,32 +45,55 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
     }
 
     // Renaming an existing exercise stays online-only (it's a Customize-screen action, Tier 3).
+    // Gated up front so a dead-but-reachable backend (lie-fi) shows a toast right away instead of
+    // hanging for the request timeout; caught too, since the request can still fail/timeout after
+    // starting -- either way Save must never leave the button stuck and the modal never closing.
     if (isEditing) {
+      if (!online) {
+        showToast('You need a connection to do that.');
+        return;
+      }
       setSaving(true);
       try {
         const updated = await updateExercise(exercise.id, { name: trimmed });
         onSaved(updated);
+      } catch {
+        showToast("Couldn't save -- check your connection and try again.");
       } finally {
         setSaving(false);
       }
       return;
     }
 
-    // Creating: online takes the simple direct path (unchanged). Offline, mint a temp exercise so it
-    // can be selected and logged against right now, and queue the durable create; the queued create +
-    // any set-logs against the temp id replay in order on reconnect and resolve to the real id.
-    if (online) {
+    // A caller that needs a real, already-synced exercise id (the Routines form sends the created
+    // exercise's id straight into its own non-durable, non-idempotent createRoutine/updateRoutine
+    // call, which can't be replayed against a temp id) opts into the online-only path via
+    // requireSyncedExercise. Same lie-fi guard as the rename path above: a dead-but-reachable
+    // backend toasts immediately/on failure instead of hanging Save forever.
+    if (requireSyncedExercise) {
+      if (!online) {
+        showToast('You need a connection to do that.');
+        return;
+      }
       setSaving(true);
       try {
         const created = await addExercise({ name: trimmed });
         if (personId) await favoriteExercise(personId, created.id);
         onSaved(created);
+      } catch {
+        showToast("Couldn't create -- check your connection and try again.");
       } finally {
         setSaving(false);
       }
       return;
     }
 
+    // Every other caller (the Log tab): always take the optimistic outbox path, even while
+    // genuinely online -- Save closes instantly and can never hang against a dead-but-reachable
+    // backend. Mint a temp exercise so it can be selected and logged against right now, and queue
+    // the durable create; the queued create + any set-logs against the temp id replay in order on
+    // reconnect (or near-instantly if actually online) and resolve to the real id -- see LogTab's
+    // mutation-cache subscription, which remaps the current selection from temp to real on sync.
     const tempId = newTempExerciseId();
     const tempExercise = {
       id: tempId,

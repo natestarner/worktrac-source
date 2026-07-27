@@ -100,4 +100,12 @@ describe('describeOutboxMutation', () => {
     expect(result.personName).toBe('Someone');
     expect(result.exerciseName).toBe('an exercise');
   });
+
+  it('prefers the name carried on the mutation itself over the catalog lookup, so a reload with an empty/refetching catalog still shows the real name', () => {
+    const result = describeOutboxMutation(
+      { mutationKey: ['logSet', 7, 42], variables: { personId: 7, exerciseId: 42, exerciseName: 'Bench Press', weight: 135, reps: 5, unit: 'lb' } },
+      { peopleById, exercisesById: {} }, // catalog empty, as it is right after a reload
+    );
+    expect(result.exerciseName).toBe('Bench Press');
+  });
 });

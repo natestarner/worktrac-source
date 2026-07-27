@@ -11,7 +11,7 @@ import Button from './Button';
 // exerciseId/sessionId are always taken from the caller's own context (ExerciseDetail already
 // knows both) rather than read off `set` -- a synced set carries them too, but an offline-logged,
 // not-yet-synced optimistic row never does, so this is the one code path that works for both.
-export default function EditSetModal({ set, personId, exerciseId, sessionId, onClose, onSaved }) {
+export default function EditSetModal({ set, personId, exerciseId, exerciseName, sessionId, onClose, onSaved }) {
   // Via context (not the app singleton) so this finds/patches whichever client actually dispatched
   // the pending logSet mutation being edited -- the same client ExerciseDetail's useMutation used.
   const queryClient = useQueryClient();
@@ -35,7 +35,7 @@ export default function EditSetModal({ set, personId, exerciseId, sessionId, onC
     } else {
       // Only reached for an already-synced set (an unsynced set shows Edit/Delete too now, but
       // routes through the branch above), so set.id is a real id here.
-      enqueueOutboxWrite(EDIT_SET_MUTATION_KEY, { setId: set.id, weight, reps, personId, sessionId, exerciseId });
+      enqueueOutboxWrite(EDIT_SET_MUTATION_KEY, { setId: set.id, weight, reps, personId, sessionId, exerciseId, exerciseName });
     }
     onSaved();
   }

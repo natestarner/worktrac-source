@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useQueryClient, onlineManager } from '@tanstack/react-query';
+import { useQueryClient, onlineManager, useIsRestoring } from '@tanstack/react-query';
 import { warmOfflineCache } from '../lib/offlineCacheWarm';
 
 // Keeps other people's/tabs' data warm in the offline cache during a long session, on top of the
@@ -14,8 +14,19 @@ export const WARM_INTERVAL_MS = 5 * 60 * 1000;
 // foregrounded, so a pinned-offline or backgrounded device never fires a warm attempt.
 export function useOfflineCacheWarming(people) {
   const queryClient = useQueryClient();
+  // warmOfflineCache's queryClient.prefetchQuery calls are imperative, so -- unlike a useQuery
+  // observer -- they are NOT held back by PersistQueryClientProvider while the persisted cache is
+  // still hydrating. Without this gate, a lie-fi reload (dead backend, but onlineManager still
+  // reports online) can fire a prefetch against that dead backend before hydrate() has populated
+  // history/live-session, leaving those queries stuck data-less/pending -- which is what made
+  // History and session exercises render blank only in lie-fi, never in full offline (where
+  // warming never runs at all). Waiting for restore to finish first means hydrate always wins the
+  // race, so a warm attempt can only ever refresh already-cached data, never race it.
+  const isRestoring = useIsRestoring();
 
   useEffect(() => {
+    if (isRestoring) return undefined;
+
     function warm() {
       warmOfflineCache(queryClient, people);
     }
@@ -43,5 +54,5 @@ export function useOfflineCacheWarming(people) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `people` is compared by identity from
     // useAuth(); a new array each render (e.g. `data.people` from a fresh /me response) is exactly
     // the signal that should re-run the initial warm with the updated roster.
-  }, [queryClient, people]);
+  }, [queryClient, people, isRestoring]);
 }
