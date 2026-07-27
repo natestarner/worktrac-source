@@ -262,6 +262,20 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   404 as success. `flushOutbox()` (resume paused + re-dispatch terminal-errored) runs on
   reconnect, on regaining tab visibility while online, after login, and from the "Go back
   online"/"Resume syncing" buttons.
+  - **Retries forever on a transient failure** (`shouldRetryWrite` in `queryClient.js`): a 5xx,
+    timeout, or statusless network error backs off (capped at 30s) but never gives up — a
+    connectivity problem alone can never be the reason a queued write is lost or silently stops
+    trying. Only a definitive 4xx (the server's real answer) stops retrying, since a write that
+    can never succeed would otherwise permanently head-of-line-block every write queued behind it
+    in the shared serial scope. A dependent write (log-set/note/favorite) that still resolves to
+    an unmapped temp exercise id throws a status-less (therefore retryable) error instead of
+    dispatching a value the backend can't parse — see the Resolved Incident below.
+  - **Gated on an authenticated session:** `flushOutbox()` and `restoreOutbox()` (boot) no-op /
+    hydrate everything as paused when there is no current auth token, rather than firing a queued
+    write with no `Authorization` header — that tokenless request would 401, and a 401 can itself
+    tear down a session that a moment later *does* have a valid token. This is what makes a
+    forced-401 logout preserve the outbox safely instead of risking a login loop on the next
+    sign-in.
 - **Mutation coverage — active-loop (durable, offline-capable) vs. Tier-3 (online-gated):**
   | Feature | Offline? |
   |---|---|
@@ -289,7 +303,10 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   (PRs/trends) and `ExerciseDetail`'s interaction-scoped queries.
 - **Cold boot offline:** `AuthContext` boots authenticated-but-`offline:true` from a saved
   identity snapshot (`localStorage`) when `/me` fails with a network error or 5xx and a token +
-  snapshot exist; a real 401 still bounces to `/login`. Requires the production service worker
+  snapshot exist; a real 401 still bounces to `/login`. **No snapshot yet** (a fresh profile, or
+  one just cleared) and a transient `/me` failure holds on the loading skeleton and retries with
+  capped, doubling backoff (`RECONNECT_RETRY_BASE_MS`/`RECONNECT_RETRY_MAX_MS`) instead of
+  signing out — the token may be perfectly valid; the server just hasn't answered yet. Requires the production service worker
   to precache the app shell (`vite-plugin-pwa`, `generateSW`, `registerType:'prompt'`) —
   **disabled in `vite dev`** (no bundle to precache there) and in Vitest. Exercise it locally via
   `npm run build && npm run preview`, or `cd e2e && npm run test:pwa`
@@ -410,3 +427,32 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   password/code), so a repeat is diagnosable instead of a dead end. Full investigation
   narrative and the Spring Security filter-ordering gotcha hit while wiring this up:
   `git log --grep="X-Forwarded-For" -i` (PR #80).
+
+## Resolved Incident: a local DB outage force-logged the user out instead of degrading gracefully (2026-07-27)
+- Reproduced locally (log in, take the database down, create an exercise, log a set against it,
+  wait): the app eventually got a **401 from `live-sets`** and bounced to `/login`, even though the
+  session itself was never actually invalid. Three independent, stacking causes:
+  1. An unhandled exception on an authenticated route (a malformed request body, a
+     `DataAccessException`) escaped `GlobalExceptionHandler` and hit the servlet container's
+     `/error` re-dispatch, which re-runs the stateless security chain as **anonymous** and turns
+     even a benign failure into a 401 — the exact mechanism already documented on
+     `SecurityConfig`'s `exceptionHandling` block, but nothing upstream of it actually prevented an
+     exception from reaching that path. Concretely reachable because an exercise-create that
+     couldn't reach the DB used to give up after a bounded number of retries without ever
+     recording its temp→real id mapping, so a queued log-set replayed with the raw
+     `"temp-exercise-<uuid>"` placeholder string, which the backend's `Long`-typed field couldn't
+     parse.
+  2. `flushOutbox()`/`restoreOutbox()` replayed queued writes with no check for a live session, so
+     a write dispatched with a stale/cleared token 401'd and could tear a *freshly re-established*
+     session back down — a handful of stuck queued writes turned re-login into a bounce loop.
+  3. A cold boot whose `/me` call failed with no saved identity snapshot yet available signed the
+     user out immediately, even though the failure was a transient outage, not an invalid token.
+- **Takeaway:** `GlobalExceptionHandler` now answers every failure mode (malformed request, DB
+  outage, anything else unhandled) with an honest 400/503/500 instead of letting it escape to
+  `/error`. Durable writes retry transient failures forever instead of giving up (see Offline Mode
+  Notes), and a dependent write refuses to dispatch with an unresolved temp id. `flushOutbox`/
+  `restoreOutbox` gate on an authenticated token, and `/me`'s boot retry backs off instead of
+  signing out on a transient failure. The general lesson: a DB/backend outage must always degrade
+  to "queue and retry," never to "the session is invalid" — those are different failure classes and
+  conflating them is what turns an infrastructure blip into a data-loss-flavored user-facing bug.
+  Full investigation narrative: `git log --grep="never logs the user out\|login loop" -i`.
