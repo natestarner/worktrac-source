@@ -6,6 +6,7 @@ import { logLiveSet, logSetIntoSession, editSet, deleteSet } from '../api/sets';
 import { addExercise, favoriteExercise, unfavoriteExercise } from '../api/exercises';
 import { saveLiveExerciseNote, saveSessionExerciseNote } from '../api/notes';
 import { endWorkout } from '../api/sessions';
+import { getAuthToken } from '../api/client';
 import { OUTBOX_SCOPE_ID } from './outboxPersistence';
 import { resolveExerciseId, setExerciseIdMapping } from './exerciseIdMap';
 
@@ -225,8 +226,14 @@ export function enqueueOutboxWrite(mutationKey, variables) {
 // currently mid-retry (pending, not paused) is left alone rather than double-fired.
 //
 // Called on reconnect, after the outbox is restored on boot, after a successful (re-)login, and
-// from the offline banner's guarded "Go back online" button.
+// from the offline banner's guarded "Go back online" button -- every one of those call sites can
+// fire while there is no authenticated session (a stale/cleared token, or the moment right after a
+// forced sign-out), so this is the single choke point that guarantees a queued write NEVER
+// dispatches with no Authorization header. Without a token that request would 401, and a 401 can
+// itself tear a session back down (see api/client.js's unauthorized handler) -- exactly the
+// mechanism that turned a handful of queued offline writes into a login loop.
 export function flushOutbox() {
+  if (!getAuthToken()) return [];
   const resumed = queryClient.resumePausedMutations();
   const cache = queryClient.getMutationCache();
   const stuck = cache

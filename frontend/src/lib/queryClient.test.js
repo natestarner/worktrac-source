@@ -10,6 +10,7 @@ import {
   shouldRetryWrite,
 } from './queryClient';
 import { logLiveSet, logSetIntoSession } from '../api/sets';
+import { setAuthToken } from '../api/client';
 
 vi.mock('../api/sets', () => ({
   logLiveSet: vi.fn(),
@@ -90,6 +91,10 @@ describe('flushOutbox / clearOutboxMutations / resetQueryCache (singleton client
   beforeEach(() => {
     vi.clearAllMocks();
     onlineManager.setOnline(true);
+    // flushOutbox is gated on an authenticated session (see queryClient.js) -- these tests are all
+    // exercising the REPLAY mechanics assuming a logged-in user; the no-token gate itself is
+    // covered separately below.
+    setAuthToken('test-token');
   });
 
   afterEach(() => {
@@ -97,6 +102,7 @@ describe('flushOutbox / clearOutboxMutations / resetQueryCache (singleton client
     queryClient.getMutationCache().clear();
     queryClient.getQueryCache().clear();
     onlineManager.setOnline(true);
+    setAuthToken(null);
   });
 
   it('flushOutbox resumes paused (offline-queued) mutations', async () => {
@@ -161,5 +167,49 @@ describe('flushOutbox / clearOutboxMutations / resetQueryCache (singleton client
     expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
     expect(queryClient.getMutationCache().getAll()).toHaveLength(1);
     expect(queryClient.getMutationCache().getAll()[0].state.variables).toMatchObject({ idempotencyKey: 'survive-reset' });
+  });
+
+  // The login-loop bug: flushOutbox used to fire regardless of whether there was a session to
+  // replay against. A queued write dispatched with no Authorization header 401s, and that 401 can
+  // itself tear down a session that a moment later DOES have a valid token -- turning a handful of
+  // stale queued writes into a bounce-to-/login loop. flushOutbox is the single choke point every
+  // replay trigger (reconnect, boot restore, post-login, the offline banner's "Go back online")
+  // funnels through, so gating it here closes the loop everywhere at once.
+  describe('flushOutbox requires an authenticated session', () => {
+    it('does nothing (no network call) when there is no auth token', async () => {
+      logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 1 }, set: { id: 1 } });
+      onlineManager.setOnline(false);
+      dispatchOnSingleton({ mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'no-token', clientLoggedAt: 't' });
+      await vi.waitFor(() =>
+        expect(queryClient.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1),
+      );
+
+      setAuthToken(null);
+      onlineManager.setOnline(true);
+      const resumed = await flushOutbox();
+
+      expect(logLiveSet).not.toHaveBeenCalled();
+      expect(resumed).toEqual([]);
+      // Still paused -- nothing was resumed or dispatched, so nothing was lost either.
+      expect(queryClient.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1);
+    });
+
+    it('replays normally once a token is present again', async () => {
+      logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 1 }, set: { id: 1 } });
+      onlineManager.setOnline(false);
+      dispatchOnSingleton({ mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'token-returns', clientLoggedAt: 't' });
+      await vi.waitFor(() =>
+        expect(queryClient.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1),
+      );
+
+      setAuthToken(null);
+      onlineManager.setOnline(true);
+      await flushOutbox();
+      expect(logLiveSet).not.toHaveBeenCalled();
+
+      setAuthToken('fresh-token');
+      await flushOutbox();
+      expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ idempotencyKey: 'token-returns' }));
+    });
   });
 });

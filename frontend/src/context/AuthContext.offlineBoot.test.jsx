@@ -1,9 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuthProvider, useAuth } from './AuthContext';
+import { AuthProvider, useAuth, RECONNECT_RETRY_BASE_MS, RECONNECT_RETRY_MAX_MS } from './AuthContext';
 import { me as apiMe } from '../api/auth';
-import { getAuthToken } from '../api/client';
+import { getAuthToken, setAuthToken } from '../api/client';
 import { clearAuthSnapshot, loadAuthSnapshot, saveAuthSnapshot } from '../lib/authSnapshot';
 import { requestPersistentStorage } from '../lib/durableStorage';
 import { getOutboxAccountId, __resetOutboxAccountForTests } from '../lib/outboxPersistence';
@@ -117,19 +117,97 @@ describe('AuthContext offline boot', () => {
     expect(screen.getByTestId('offline').textContent).toBe('true');
   });
 
-  it('401 (session truly invalid) => unauthenticated and snapshot cleared, even with a snapshot present', async () => {
+  it('401 (session truly invalid) => unauthenticated, snapshot cleared, and the stale token wiped too', async () => {
     apiMe.mockRejectedValue({ status: 401 });
     loadAuthSnapshot.mockReturnValue(SNAPSHOT);
     renderHarness();
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
     expect(clearAuthSnapshot).toHaveBeenCalled();
+    // A stale token left behind here would ride the next login POST and, if the backend also
+    // rejects it, the 401 handler would tear the fresh session right back down (Fix 3).
+    expect(setAuthToken).toHaveBeenCalledWith(null);
   });
 
-  it('network failure but NO snapshot => unauthenticated (nothing to boot from)', async () => {
-    apiMe.mockRejectedValue(new TypeError('Failed to fetch'));
-    loadAuthSnapshot.mockReturnValue(null);
-    renderHarness();
-    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
+  // The kick-to-login bug: a hard refresh while the server/DB is unreachable used to sign the user
+  // out purely because there was no snapshot yet to fall back to -- even though the token itself
+  // was perfectly valid and the server was just transiently unreachable.
+  describe('offline error with a valid token but no snapshot -- hold and retry, never sign out', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('stays on the loading state instead of signing out, and does not touch the token or snapshot', async () => {
+      apiMe.mockRejectedValue(new TypeError('Failed to fetch'));
+      loadAuthSnapshot.mockReturnValue(null);
+      renderHarness();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByTestId('status').textContent).toBe('loading');
+      expect(setAuthToken).not.toHaveBeenCalled();
+      expect(clearAuthSnapshot).not.toHaveBeenCalled();
+
+      // Still holding after the first retry attempt fires and fails again.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECONNECT_RETRY_BASE_MS);
+      });
+      expect(screen.getByTestId('status').textContent).toBe('loading');
+      expect(apiMe.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('recovers to authenticated once a retried /me finally succeeds', async () => {
+      apiMe.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      apiMe.mockResolvedValueOnce(SNAPSHOT);
+      loadAuthSnapshot.mockReturnValue(null);
+      renderHarness();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByTestId('status').textContent).toBe('loading');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECONNECT_RETRY_BASE_MS);
+      });
+      expect(screen.getByTestId('status').textContent).toBe('authenticated');
+      expect(screen.getByTestId('offline').textContent).toBe('false');
+    });
+
+    it('a genuine 401 on a later retry attempt still signs out (does not retry forever)', async () => {
+      apiMe.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      apiMe.mockRejectedValueOnce({ status: 401 });
+      loadAuthSnapshot.mockReturnValue(null);
+      renderHarness();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByTestId('status').textContent).toBe('loading');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(RECONNECT_RETRY_BASE_MS);
+      });
+      expect(screen.getByTestId('status').textContent).toBe('unauthenticated');
+      expect(setAuthToken).toHaveBeenCalledWith(null);
+    });
+
+    it('caps the retry delay rather than backing off unbounded', async () => {
+      apiMe.mockRejectedValue(new TypeError('Failed to fetch'));
+      loadAuthSnapshot.mockReturnValue(null);
+      renderHarness();
+
+      let delay = RECONNECT_RETRY_BASE_MS;
+      for (let i = 0; i < 6; i += 1) {
+        // eslint-disable-next-line no-await-in-loop -- deliberately sequential: each iteration
+        // must observe the PRIOR attempt's failure before the next delay is knowable.
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(delay);
+        });
+        delay = Math.min(delay * 2, RECONNECT_RETRY_MAX_MS);
+      }
+      expect(screen.getByTestId('status').textContent).toBe('loading');
+      expect(delay).toBe(RECONNECT_RETRY_MAX_MS);
+    });
   });
 
   it('an online boot success adopts the outbox account pointer for this account', async () => {
