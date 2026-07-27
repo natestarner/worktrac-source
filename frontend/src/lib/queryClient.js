@@ -7,7 +7,7 @@ import { addExercise, favoriteExercise, unfavoriteExercise } from '../api/exerci
 import { saveLiveExerciseNote, saveSessionExerciseNote } from '../api/notes';
 import { endWorkout } from '../api/sessions';
 import { OUTBOX_SCOPE_ID } from './outboxPersistence';
-import { resolveExerciseId, setExerciseIdMapping } from './exerciseIdMap';
+import { resolveExerciseId, setExerciseIdMapping, isTempExerciseId } from './exerciseIdMap';
 
 // Bump when the shape of anything we cache changes incompatibly -- the persister discards a
 // restored cache whose buster doesn't match instead of hydrating stale/incompatible data.
@@ -53,12 +53,35 @@ export const END_WORKOUT_MUTATION_KEY = ['endWorkout'];
 export const FAVORITE_MUTATION_KEY = ['favorite'];
 
 // Failure taxonomy (hardening #8) as a pure, testable predicate: a real 4xx is the server's answer
-// -> stop. Anything else (a 5xx / cold-start 503 / timeout / gateway error == server unreachable, or
-// a fetch reject with no status) is transient -> keep retrying with backoff rather than dropping the
-// write. (Fully offline never reaches here -- networkMode pauses the mutation before it errors.)
-export function shouldRetryWrite(failureCount, error) {
+// -> stop, since retrying it can never succeed and (in the serial outbox scope) would otherwise
+// block every write queued behind it forever. Anything else (a 5xx / cold-start 503 / timeout /
+// gateway error == server unreachable, or a fetch reject with no status) is transient -> retry
+// FOREVER with backoff rather than eventually dropping the write and going quiet. "Durable" means
+// a connectivity problem can never be the reason a write is lost or silently stops trying; only a
+// definitive rejection from the server can end retries. (Fully offline never reaches here --
+// networkMode pauses the mutation before it errors.)
+export function shouldRetryWrite(_failureCount, error) {
   if (error?.status >= 400 && error?.status < 500) return false;
-  return failureCount < 8;
+  return true;
+}
+
+// Thrown by a dependent write's mutationFn (log-set, note, favorite) when the exercise id it needs
+// is still an unresolved temp id -- i.e. the exercise-create it depends on hasn't synced yet. This
+// error carries no `.status`, so shouldRetryWrite treats it as transient and keeps retrying/requeuing
+// rather than sending the raw "temp-exercise-<uuid>" string to the server: the backend's exerciseId
+// field is a Long, so that request can never succeed and previously surfaced as a malformed-request
+// failure that (before the backend fix) collapsed into a session-killing 401.
+class UnresolvedExerciseIdError extends Error {
+  constructor(tempId) {
+    super(`Exercise ${tempId} has not finished syncing yet`);
+    this.name = 'UnresolvedExerciseIdError';
+  }
+}
+
+function requireResolvedExerciseId(id) {
+  const resolved = resolveExerciseId(id);
+  if (isTempExerciseId(resolved)) throw new UnresolvedExerciseIdError(resolved);
+  return resolved;
 }
 
 export function registerOfflineMutationDefaults(client, { retry } = {}) {
@@ -73,7 +96,9 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         // Resolve a temp exercise id (a set logged offline against a just-created, not-yet-synced
         // exercise) to its real server id, now known because the create replayed first -- the shared
         // serial scope guarantees that ordering (PR 4). A normal numeric id passes through unchanged.
-        exerciseId: resolveExerciseId(vars.exerciseId),
+        // If the create hasn't synced yet (still resolves to a temp id), this throws instead of
+        // sending the server a string it can't parse as a Long -- see requireResolvedExerciseId.
+        exerciseId: requireResolvedExerciseId(vars.exerciseId),
         weight: vars.weight,
         reps: vars.reps,
         idempotencyKey: vars.idempotencyKey,
@@ -166,7 +191,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
   // note on an offline-created exercise lands on the real one.
   client.setMutationDefaults(SAVE_NOTE_MUTATION_KEY, durable({
     mutationFn: (vars) => {
-      const exerciseId = resolveExerciseId(vars.exerciseId);
+      const exerciseId = requireResolvedExerciseId(vars.exerciseId);
       return vars.mode === 'session'
         ? saveSessionExerciseNote(vars.sessionId, exerciseId, vars.note)
         : saveLiveExerciseNote(vars.personId, { exerciseId, note: vars.note });
@@ -193,7 +218,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
   // Favorite / unfavorite. Idempotent booleans; exerciseId resolves through the id map.
   client.setMutationDefaults(FAVORITE_MUTATION_KEY, durable({
     mutationFn: (vars) => {
-      const exerciseId = resolveExerciseId(vars.exerciseId);
+      const exerciseId = requireResolvedExerciseId(vars.exerciseId);
       return vars.favorite ? favoriteExercise(vars.personId, exerciseId) : unfavoriteExercise(vars.personId, exerciseId);
     },
     onSettled: (_d, _e, vars) => {

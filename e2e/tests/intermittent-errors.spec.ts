@@ -1,8 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { pickExercise, addOwnExercise } from './support/exercises';
 import { failNetwork, failWithStatus } from './support/faults';
-import { troubleBanner, goOfflineButton, offlineSavedLocallyBanner, outboxCountText } from './support/offline';
+import {
+  troubleBanner,
+  goOfflineButton,
+  offlineSavedLocallyBanner,
+  outboxCountText,
+  waitForOutboxDrain,
+  goHardOffline,
+  goOnline,
+} from './support/offline';
 
 // Mode 2: the backend is unreachable or erroring, but the browser is still "online"
 // (navigator.onLine never flips) and the user has NOT elected offline mode. Distinct from a real
@@ -90,5 +98,53 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
 
     faults.stop();
     await page.context().setOffline(false);
+  });
+
+  // Regression test for the bug where creating an exercise and logging a set against it, then
+  // finding the backend still unreachable (a real DB outage, not a lost connection), eventually
+  // returned a 401 from live-sets and force-logged the user out. Root cause (see
+  // GlobalExceptionHandler + queryClient.js): the create's own retries used to give up after a
+  // bounded number of attempts without ever recording the temp->real exercise id mapping, so the
+  // queued log-set replayed with the raw "temp-exercise-<uuid>" placeholder, which the backend
+  // couldn't parse and (before the fix) answered with a session-killing 401 instead of an honest
+  // error. Durable writes now retry transient failures forever (never give up for a connectivity
+  // reason) and a dependent write refuses to dispatch with an unresolved temp id, so neither half
+  // of that chain can fire anymore.
+  //
+  // The create+log-set is built while genuinely offline (context.setOffline) rather than via a
+  // lie-fi route intercept: this worktree's checked-out AddEditExerciseModal only takes the
+  // durable/temp-id path when navigator.onLine is false (the "always durable, even while lie-fi"
+  // fix lives in a separate, not-yet-merged worktree). Once reconnected with the backend still
+  // unreachable, the queued create is RESUMED and starts actively retrying for real (accumulating
+  // real failureCount, unlike a paused mutation) -- which is exactly the state that used to run out
+  // its retry budget and trigger the bug, regardless of how the mutation got there.
+  test('creating an exercise and logging a set, then finding the backend still unreachable after reconnecting, never logs the user out', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Sasha');
+
+    await goHardOffline(page);
+    await addOwnExercise(page, 'Unreachable Backend Press');
+    await expect(outboxCountText(page, 1)).toBeVisible();
+
+    // Logging a set against the just-created (still temp-id) exercise queues right behind the
+    // create in the same serial outbox scope.
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(outboxCountText(page, 2)).toBeVisible();
+
+    // Reconnect, but the database is still down -- the queued create resumes and starts actively
+    // (not paused) retrying against a dead endpoint.
+    const faults = await failNetwork(page, '**/api/exercises');
+    await goOnline(page);
+
+    // A few real failing attempts is enough to prove the point -- with the fix there's no retry
+    // budget to exhaust, so nothing waits for exhaustion here.
+    await page.waitForTimeout(5000);
+    await expect(page).toHaveURL(/\/app\//);
+
+    // Once the database recovers, both queued writes replay in order and reconcile to server truth.
+    faults.stop();
+    await waitForOutboxDrain(page, 30000);
+    await expect(page).toHaveURL(/\/app\//);
+    await expect(page.getByText('Set 1')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
   });
 });

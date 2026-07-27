@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { MutationObserver, QueryClient, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -9,6 +10,7 @@ import {
   resetQueryCache,
   shouldRetryWrite,
 } from './queryClient';
+import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './exerciseIdMap';
 import { logLiveSet, logSetIntoSession } from '../api/sets';
 
 vi.mock('../api/sets', () => ({
@@ -36,9 +38,11 @@ describe('shouldRetryWrite (failure taxonomy, hardening #8)', () => {
     expect(shouldRetryWrite(0, new TypeError('Failed to fetch'))).toBe(true);
   });
 
-  it('eventually gives up after enough transient failures (bounded backoff)', () => {
+  it('never gives up on a transient failure, no matter how many attempts have failed', () => {
     expect(shouldRetryWrite(7, { status: 503 })).toBe(true);
-    expect(shouldRetryWrite(8, { status: 503 })).toBe(false);
+    expect(shouldRetryWrite(8, { status: 503 })).toBe(true);
+    expect(shouldRetryWrite(100, { status: 503 })).toBe(true);
+    expect(shouldRetryWrite(100, new TypeError('Failed to fetch'))).toBe(true);
   });
 });
 
@@ -70,6 +74,54 @@ describe('registerOfflineMutationDefaults dispatches to the right endpoint', () 
     await dispatch({ mode: 'session', sessionId: 42, personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k2', clientLoggedAt: 't' });
     expect(logSetIntoSession).toHaveBeenCalledWith(42, expect.objectContaining({ exerciseId: 3, idempotencyKey: 'k2' }));
     expect(logLiveSet).not.toHaveBeenCalled();
+  });
+});
+
+describe('dependent writes guard against an unresolved temp exercise id', () => {
+  let client;
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await clearExerciseIdMap();
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 1 }, set: { id: 1 } });
+    client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    registerOfflineMutationDefaults(client, { retry: false });
+  });
+  afterEach(async () => {
+    await clearExerciseIdMap();
+  });
+
+  function dispatch(variables) {
+    const observer = new MutationObserver(client, {
+      ...client.getMutationDefaults(LOG_SET_MUTATION_KEY),
+      mutationKey: LOG_SET_MUTATION_KEY,
+    });
+    return observer.mutate(variables);
+  }
+
+  it('throws a status-less (retryable) error instead of posting a raw temp id, and never calls the API', async () => {
+    const tempId = newTempExerciseId();
+    let caughtError;
+    await dispatch({ mode: 'live', personId: 7, exerciseId: tempId, weight: 100, reps: 5, idempotencyKey: 'k3', clientLoggedAt: 't' }).catch(
+      (error) => {
+        caughtError = error;
+      },
+    );
+
+    expect(caughtError).toBeInstanceOf(Error);
+    expect(caughtError.status).toBeUndefined();
+    // shouldRetryWrite must treat this as transient (no `.status`), not as a definitive 4xx --
+    // that's what makes it requeue/retry rather than surface as a stuck failure.
+    expect(shouldRetryWrite(0, caughtError)).toBe(true);
+    expect(logLiveSet).not.toHaveBeenCalled();
+  });
+
+  it('resolves and dispatches normally once the create has synced and mapped the id', async () => {
+    const tempId = newTempExerciseId();
+    setExerciseIdMapping(tempId, 555);
+
+    await dispatch({ mode: 'live', personId: 7, exerciseId: tempId, weight: 100, reps: 5, idempotencyKey: 'k4', clientLoggedAt: 't' });
+
+    expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ exerciseId: 555 }));
   });
 });
 
