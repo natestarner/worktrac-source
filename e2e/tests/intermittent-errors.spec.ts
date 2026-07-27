@@ -168,4 +168,42 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
 
     faults.stop();
   });
+
+  // Regression test for the bug where creating an exercise and logging a set against it while the
+  // backend was unreachable (a real DB outage, not a lost connection -- navigator.onLine stays true
+  // the whole time) eventually returned a 401 from live-sets and force-logged the user out. Root
+  // cause (see GlobalExceptionHandler + queryClient.js): the create's own retries used to give up
+  // after a bounded number of attempts without ever recording the temp->real exercise id mapping,
+  // so the queued log-set replayed with the raw "temp-exercise-<uuid>" placeholder, which the
+  // backend couldn't parse and (before the fix) answered with a session-killing 401 instead of an
+  // honest error. Durable writes now retry transient failures forever (never give up for a
+  // connectivity reason) and a dependent write refuses to dispatch with an unresolved temp id, so
+  // neither half of that chain can fire anymore. Now that the create-exercise modal always takes
+  // the durable/optimistic path (even while lie-fi -- see the sibling test above), this reproduces
+  // with a single continuous lie-fi window, matching the original bug report exactly rather than
+  // needing a hard-offline-then-reconnect workaround.
+  test('creating an exercise and logging a set against it while the backend is unreachable never logs the user out', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Sasha');
+
+    const faults = await failNetwork(page, '**/api/**');
+    await addOwnExercise(page, 'Unreachable Backend Press');
+    await expect(outboxCountText(page, 1)).toBeVisible();
+
+    // Logging a set against the just-created (still temp-id) exercise queues right behind the
+    // create in the same serial outbox scope.
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(outboxCountText(page, 2)).toBeVisible();
+
+    // The core assertion: still on the authenticated app, never bounced to /login, no matter how
+    // long the backend stays unreachable.
+    await page.waitForTimeout(5000);
+    await expect(page).toHaveURL(/\/app\//);
+
+    // Once the backend recovers, both queued writes replay in order and reconcile to server truth.
+    faults.stop();
+    await waitForOutboxDrain(page, 30000);
+    await expect(page).toHaveURL(/\/app\//);
+    await expect(page.getByText('Set 1')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+  });
 });
