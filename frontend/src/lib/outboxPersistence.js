@@ -1,5 +1,6 @@
 import { get, set, del } from 'idb-keyval';
 import { MutationObserver, dehydrate, hydrate } from '@tanstack/react-query';
+import { getAuthToken } from '../api/client';
 
 // The durable write outbox: every not-yet-synced (outbox-scoped) mutation, persisted to its OWN
 // IndexedDB key -- deliberately separate from the query cache's persister.
@@ -130,12 +131,31 @@ async function readOutboxKey(key) {
 //    no-op, not a duplicate). The dispatch is inlined here (mirroring queryClient.js's
 //    enqueueOutboxWrite) rather than imported, to avoid a circular import between this file and
 //    queryClient.js (which imports OUTBOX_SCOPE_ID from here).
+//
+// Both of the above assume there's a session to replay against. Boot runs BEFORE AuthContext has
+// verified anything (this function is called from App.jsx's persist-provider onSuccess, a sibling
+// of AuthProvider, not a descendant), so the only signal available this early is whether a token
+// currently sits in storage (getAuthToken() -- see api/client.js). With none (freshly signed out,
+// or a token an earlier 401 already cleared), NOTHING here may fire a network request: doing so
+// would 401 with no Authorization header, and that 401 can itself tear down a session that a
+// moment later *does* have a valid token (a write queued from a completely unrelated earlier
+// failure landing right after a fresh login). So with no token, everything -- paused AND
+// not-paused alike -- is hydrated as PAUSED instead of dispatched. That's a safe, well-tested
+// state to sit in: flushOutbox()'s own resumePausedMutations() (also gated on a token, see
+// queryClient.js) resumes it the moment a real session exists again, whether that's this same
+// boot (a token was already present) or a later login.
 export async function restoreOutbox(queryClient, accountId) {
   if (!idbAvailable) return;
   try {
     const key = outboxKeyFor(accountId);
     const dehydrated = await readOutboxKey(key);
     if (!dehydrated?.mutations?.length) return;
+
+    if (!getAuthToken()) {
+      const asPaused = dehydrated.mutations.map((m) => ({ ...m, state: { ...m.state, isPaused: true } }));
+      hydrate(queryClient, { mutations: asPaused, queries: [] });
+      return;
+    }
 
     const paused = dehydrated.mutations.filter((m) => m.state.isPaused);
     const notPaused = dehydrated.mutations

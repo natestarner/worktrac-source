@@ -10,7 +10,13 @@ import { isTempExerciseId } from './exerciseIdMap';
 export function describeOutboxMutation({ mutationKey, variables = {} } = {}, { peopleById = {}, exercisesById = {}, tempExerciseNames = {} } = {}) {
   const kind = mutationKey?.[0] ?? 'unknown';
   const personName = peopleById[variables.personId]?.name || 'Someone';
-  const exerciseName = resolveExerciseName(variables.exerciseId, exercisesById, tempExerciseNames);
+  // Prefer the name the dispatch site already knew (carried on the mutation's own durable
+  // `variables`) over the render-time catalog lookup below. `exercisesById`/`tempExerciseNames` are
+  // rebuilt from live, non-durable queries (the exercise catalog; sibling in-queue creates) that are
+  // empty/refetching right after a reload -- especially in lie-fi, where that refetch can hang
+  // against a dead-but-reachable backend -- so relying on them alone degrades a perfectly good
+  // queued write's label to a generic "an exercise"/"a new exercise" until the catalog resolves.
+  const exerciseName = variables.exerciseName || resolveExerciseName(variables.exerciseId, exercisesById, tempExerciseNames);
 
   switch (kind) {
     case 'logSet':

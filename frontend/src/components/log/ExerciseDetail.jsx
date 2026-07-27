@@ -122,6 +122,7 @@ export default function ExerciseDetail({
       personId,
       sessionId: editingSessionId || null,
       exerciseId: exercise.id,
+      exerciseName: exercise.name,
       note,
     });
     showToast(trimmed ? 'Note saved' : 'Note cleared');
@@ -134,7 +135,7 @@ export default function ExerciseDetail({
     const patch = (list = []) => list.map((e) => (e.id === exercise.id ? { ...e, isFavorite: next } : e));
     queryClient.setQueryData(queryKeys.personExercises(personId), patch);
     queryClient.setQueryData(queryKeys.exercises(), patch);
-    favoriteMutation.mutate({ personId, exerciseId: exercise.id, favorite: next });
+    favoriteMutation.mutate({ personId, exerciseId: exercise.id, exerciseName: exercise.name, favorite: next });
   }
 
   function handleRequestDelete() {
@@ -360,6 +361,7 @@ export default function ExerciseDetail({
       personId,
       sessionId: editingSessionId || null,
       exerciseId: exercise.id,
+      exerciseName: exercise.name,
       unit: defaultUnit,
       weight: weightDraft,
       reps: repsDraft,
@@ -391,7 +393,7 @@ export default function ExerciseDetail({
     // deleted) as success. NOT awaited on the network -- awaiting would hang the confirm dialog
     // while the mutation is paused offline; the local cache removal above is synchronous, so the
     // dialog closes right away.
-    deleteSetMutation.mutate({ setId: set.id, personId, sessionId: contextSessionId, exerciseId: exercise.id });
+    deleteSetMutation.mutate({ setId: set.id, personId, sessionId: contextSessionId, exerciseId: exercise.id, exerciseName: exercise.name });
   }
 
   const lastLabel = summary?.lastSession ? formatDateLabel(toLocalDateStr(summary.lastSession.startedAt)) : '';
@@ -681,6 +683,7 @@ export default function ExerciseDetail({
           set={editingSet}
           personId={personId}
           exerciseId={exercise.id}
+          exerciseName={exercise.name}
           sessionId={contextSessionId}
           onClose={() => setEditingSet(null)}
           onSaved={() => setEditingSet(null)}

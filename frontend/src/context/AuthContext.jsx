@@ -22,6 +22,12 @@ const AuthContext = createContext(null);
 const EMPTY = { status: 'loading', user: null, account: null, people: [], offline: false };
 const SIGNED_OUT = { status: 'unauthenticated', user: null, account: null, people: [], offline: false };
 
+// Backoff for retrying /me at boot when the server/DB is unreachable and there's no snapshot to
+// fall back to (see the boot effect below) -- capped, doubling delay, same shape as the durable
+// outbox's own retryDelay (queryClient.js).
+export const RECONNECT_RETRY_BASE_MS = 2000;
+export const RECONNECT_RETRY_MAX_MS = 30000;
+
 // Records which account currently owns whatever's sitting in the live outbox. If a DIFFERENT
 // account is becoming active than the one the outbox pointer says owns it (a shared device: A's
 // session expired and B logs in before A returns), evict the in-memory outbox mutations so they
@@ -68,32 +74,64 @@ export function AuthProvider({ children }) {
     if (!getAuthToken()) {
       clearAuthSnapshot();
       setState(SIGNED_OUT);
-      return;
+      return undefined;
     }
-    apiMe()
-      .then((data) => {
-        // A verified live session -- record the identity so a later cold start with no network can
-        // still boot into the app, and mark durable storage so the offline cache isn't evicted.
-        saveAuthSnapshot(data);
-        adoptOutboxAccount(data.account?.id);
-        requestPersistentStorage();
-        setState({ status: 'authenticated', offline: false, ...data });
-      })
-      .catch((error) => {
-        // Distinguish "session is actually invalid" from "we just couldn't reach the server".
-        // A 4xx (esp. 401) is the server's real answer -> sign out. A network/offline/5xx failure
-        // with a valid saved token + a last-known identity -> boot the app OFFLINE from the
-        // snapshot, so a valid session works with no connectivity instead of bouncing to /login.
-        const snapshot = loadAuthSnapshot();
-        if (isOfflineError(error) && snapshot) {
-          adoptOutboxAccount(snapshot.account?.id);
+
+    let cancelled = false;
+    let retryTimer = null;
+
+    function attemptMe(nextDelayMs) {
+      apiMe()
+        .then((data) => {
+          if (cancelled) return;
+          // A verified live session -- record the identity so a later cold start with no network
+          // can still boot into the app, and mark durable storage so the offline cache isn't
+          // evicted.
+          saveAuthSnapshot(data);
+          adoptOutboxAccount(data.account?.id);
           requestPersistentStorage();
-          setState({ status: 'authenticated', offline: true, ...snapshot });
-        } else {
-          clearAuthSnapshot();
-          setState(SIGNED_OUT);
-        }
-      });
+          setState({ status: 'authenticated', offline: false, ...data });
+        })
+        .catch((error) => {
+          if (cancelled) return;
+          // Distinguish "session is actually invalid" from "we just couldn't reach the server".
+          // A 4xx (esp. 401) is the server's real answer -> sign out. A network/offline/5xx
+          // failure with a valid saved token + a last-known identity -> boot the app OFFLINE from
+          // the snapshot, so a valid session works with no connectivity instead of bouncing to
+          // /login.
+          const snapshot = loadAuthSnapshot();
+          if (isOfflineError(error) && snapshot) {
+            adoptOutboxAccount(snapshot.account?.id);
+            requestPersistentStorage();
+            setState({ status: 'authenticated', offline: true, ...snapshot });
+          } else if (isOfflineError(error)) {
+            // Offline-type failure (unreachable server, DB down, timeout) but no snapshot to fall
+            // back to -- this token may be perfectly valid; the server just hasn't answered yet
+            // (e.g. a brand-new device, or one that's never completed a first successful boot).
+            // Signing out here would discard a live session over what's very likely a transient
+            // outage. Stay on the loading skeleton (ProtectedRoute treats `loading` the same as
+            // the initial boot -- never /login) and keep retrying with backoff instead; a genuine
+            // invalid-session 4xx still falls to the branch below on any attempt.
+            retryTimer = setTimeout(() => {
+              if (!cancelled) attemptMe(Math.min(nextDelayMs * 2, RECONNECT_RETRY_MAX_MS));
+            }, nextDelayMs);
+          } else {
+            // A genuine sign-out (a real 4xx -- the token itself is invalid) must clear the token
+            // too, not just the snapshot -- otherwise it rides on the next login POST, and if the
+            // backend also rejects THAT (same invalid/stale token), client.js's 401 handler tears
+            // the fresh session right back down. Mirrors the unauthorized handler below.
+            setAuthToken(null);
+            clearAuthSnapshot();
+            setState(SIGNED_OUT);
+          }
+        });
+    }
+
+    attemptMe(RECONNECT_RETRY_BASE_MS);
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, []);
 
   // When connectivity returns after an offline boot, silently reconcile the identity against the

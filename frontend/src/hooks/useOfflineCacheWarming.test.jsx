@@ -1,4 +1,5 @@
-import { onlineManager } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, onlineManager, IsRestoringProvider } from '@tanstack/react-query';
+import { render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../test/queryWrapper';
 import { useOfflineCacheWarming, WARM_INTERVAL_MS } from './useOfflineCacheWarming';
@@ -18,6 +19,17 @@ function setVisibility(state) {
 function Probe({ people }) {
   useOfflineCacheWarming(people);
   return null;
+}
+
+// Simulates being rendered under PersistQueryClientProvider while its cache restore is still in
+// flight -- renderWithQuery's plain QueryClientProvider never sets this, so useIsRestoring()
+// otherwise defaults to false (see @tanstack/react-query's IsRestoringProvider).
+function ProbeRestoring({ people, isRestoring }) {
+  return (
+    <IsRestoringProvider value={isRestoring}>
+      <Probe people={people} />
+    </IsRestoringProvider>
+  );
 }
 
 describe('useOfflineCacheWarming', () => {
@@ -102,6 +114,35 @@ describe('useOfflineCacheWarming', () => {
     vi.advanceTimersByTime(WARM_INTERVAL_MS);
 
     expect(warmOfflineCache).toHaveBeenCalledTimes(1); // only the initial mount warm
+  });
+
+  // The lie-fi reload bug: warmOfflineCache's prefetchQuery calls are imperative and, unlike a
+  // useQuery observer, are NOT automatically held back while PersistQueryClientProvider is still
+  // restoring the persisted cache. Without this gate, a warm attempt could race the cache
+  // hydrate() and leave history/live-session stuck data-less against a dead-but-reachable backend.
+  it('does not warm while the persisted cache is still restoring', () => {
+    // Plain render + a fixed wrapper (rather than renderWithQuery) so `rerender` keeps the same
+    // QueryClientProvider across the isRestoring flip below -- renderWithQuery wraps `ui` inline,
+    // and RTL's rerender swaps out exactly what's passed to it, which would otherwise drop that
+    // wrapping on the second render.
+    const client = new QueryClient();
+    const { rerender } = render(<ProbeRestoring people={PEOPLE} isRestoring />, {
+      wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+    });
+    expect(warmOfflineCache).not.toHaveBeenCalled();
+
+    rerender(<ProbeRestoring people={PEOPLE} isRestoring={false} />);
+    expect(warmOfflineCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not warm on an online transition or periodic tick while still restoring', () => {
+    renderWithQuery(<ProbeRestoring people={PEOPLE} isRestoring />);
+
+    onlineManager.setOnline(false);
+    onlineManager.setOnline(true);
+    vi.advanceTimersByTime(WARM_INTERVAL_MS);
+
+    expect(warmOfflineCache).not.toHaveBeenCalled();
   });
 
   it('clears the interval and listeners on unmount', () => {

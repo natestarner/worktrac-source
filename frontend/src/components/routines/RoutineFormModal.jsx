@@ -195,6 +195,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
           exercise={null}
           personId={personId}
           initialName={exerciseFilter.trim()}
+          requireSyncedExercise
           onClose={() => setAddingExercise(false)}
           onSaved={handleExerciseCreated}
         />

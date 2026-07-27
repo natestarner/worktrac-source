@@ -24,7 +24,11 @@ function readPendingMutations(queryClient) {
     });
 }
 
-function resolveExerciseName(exerciseId, exercisesById, tempExerciseNames) {
+function resolveExerciseName(exerciseId, exercisesById, tempExerciseNames, carriedName) {
+  // The dispatch site's own carried name (see ExerciseDetail.jsx's logSetMutation.mutate) beats the
+  // catalog/temp-name lookups below, which are rebuilt from live queries that are empty/refetching
+  // right after a reload -- see outboxDescribe.js for the same reasoning.
+  if (carriedName) return carriedName;
   if (isTempExerciseId(exerciseId)) return tempExerciseNames[exerciseId] || 'a new exercise';
   return exercisesById[exerciseId]?.name || 'an exercise';
 }
@@ -77,7 +81,7 @@ export function useSessionEntries({ personId, serverEntries, exercises }) {
     if (!pendingByExercise.has(vars.exerciseId)) {
       pendingByExercise.set(vars.exerciseId, {
         exerciseId: vars.exerciseId,
-        exerciseName: resolveExerciseName(vars.exerciseId, exercisesById, tempExerciseNames),
+        exerciseName: resolveExerciseName(vars.exerciseId, exercisesById, tempExerciseNames, vars.exerciseName),
         sets: [],
       });
     }
