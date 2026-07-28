@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useIsRestoring } from '@tanstack/react-query';
 import LogTab from './LogTab';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
@@ -30,6 +31,10 @@ vi.mock('../../hooks/useRoutines', () => ({ useRoutines: vi.fn() }));
 vi.mock('../../hooks/useLiveSession', () => ({ useLiveSession: vi.fn() }));
 vi.mock('../../hooks/useHistory', () => ({ useHistory: vi.fn() }));
 vi.mock('../../hooks/useSessionEntries', () => ({ useSessionEntries: vi.fn() }));
+vi.mock('@tanstack/react-query', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, useIsRestoring: vi.fn(() => false) };
+});
 vi.mock('../../api/sessions', () => ({ endWorkout: vi.fn().mockResolvedValue(), editSession: vi.fn() }));
 vi.mock('../../lib/swUpdate', () => ({ tryForceUpdate: vi.fn() }));
 vi.mock('./ExercisePicker', () => ({ default: () => <div>exercise-picker</div> }));
@@ -86,6 +91,7 @@ describe('LogTab routine nav button placement', () => {
     useLiveSession.mockReturnValue({ session: null, refetch: vi.fn() });
     useHistory.mockReturnValue({ history: [], loading: false, refetch: vi.fn() });
     useSessionEntries.mockReturnValue([]);
+    useIsRestoring.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -162,6 +168,38 @@ describe('LogTab routine nav button placement', () => {
 
     await waitFor(() => expect(endWorkout).toHaveBeenCalledWith(7));
     expect(tryForceUpdate).toHaveBeenCalledWith(queryClient, 7);
+  });
+
+  // Regression test: right after a reload, the persisted query cache may not have rehydrated the
+  // routines list yet, so `routines` reads as empty ([]) with `routinesLoading` already false (the
+  // fetch is gated behind restoration completing, not yet dispatched). Without the `!isRestoring`
+  // gate, that transient emptiness looked identical to "the routine was really deleted" and wrongly
+  // ended an active routine on every reload -- reproduced live against the lower environment (higher
+  // latency widened the race window enough to hit consistently; local dev's near-zero latency never
+  // saw it).
+  it('does not end the routine while the persisted cache is still restoring, even if routines briefly reads empty', () => {
+    const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
+    useAppState.mockReturnValue(appState);
+    useRoutines.mockReturnValue({ routines: [], loading: false });
+    useIsRestoring.mockReturnValue(true);
+
+    render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    expect(appState.endRoutine).not.toHaveBeenCalled();
+  });
+
+  // Once restoration has actually finished and the routine genuinely isn't in the (now real) list,
+  // the existing cleanup behavior must still fire -- this isn't gated on `isRestoring` staying true
+  // forever, only on the transient restore window.
+  it('still ends the routine once restoration has finished and it is genuinely gone', () => {
+    const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
+    useAppState.mockReturnValue(appState);
+    useRoutines.mockReturnValue({ routines: [], loading: false });
+    useIsRestoring.mockReturnValue(false);
+
+    render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    expect(appState.endRoutine).toHaveBeenCalled();
   });
 
   // While offline with no live session yet, ExerciseDetail's onMutate optimistically seeds a

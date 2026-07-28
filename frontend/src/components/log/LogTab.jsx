@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useIsRestoring } from '@tanstack/react-query';
 import { queryClient, CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
 import { tryForceUpdate } from '../../lib/swUpdate';
 import { useAppState } from '../../context/AppStateContext';
@@ -25,6 +26,7 @@ function routineBannerDismissKey(personId) {
 
 export default function LogTab() {
   const navigate = useNavigate();
+  const isRestoring = useIsRestoring();
   const { showToast } = useUI();
   const {
     activePersonId,
@@ -79,12 +81,17 @@ export default function LogTab() {
 
   // Reconcile a persisted "in a routine" against reality: if the routine was deleted (on this or
   // another device) since it was last active, drop the stale routine state rather than showing an
-  // empty routine banner.
+  // empty routine banner. Gated on `!isRestoring` too -- right after a reload, the persisted query
+  // cache may not have rehydrated the routines list yet, so `routines` briefly reads as empty with
+  // `routinesLoading` already false (the fetch hasn't been dispatched yet, only gated behind
+  // restoration completing) -- without this gate that transient emptiness looks identical to "the
+  // routine was really deleted" and wrongly ends an active routine on every reload (see
+  // useOfflineCacheWarming.js for the same restoration race, fixed the same way).
   useEffect(() => {
-    if (!routinesLoading && activeRoutineId && !routines.some((r) => r.id === activeRoutineId)) {
+    if (!isRestoring && !routinesLoading && activeRoutineId && !routines.some((r) => r.id === activeRoutineId)) {
       endRoutine();
     }
-  }, [routinesLoading, activeRoutineId, routines, endRoutine]);
+  }, [isRestoring, routinesLoading, activeRoutineId, routines, endRoutine]);
 
   // Returning to the picker refreshes the person's list so a just-logged exercise (or a
   // favorite/tag change made on the detail screen) shows up.
