@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useIsRestoring } from '@tanstack/react-query';
 import { queryClient, CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
 import { tryForceUpdate } from '../../lib/swUpdate';
 import { useAppState } from '../../context/AppStateContext';
@@ -26,7 +25,6 @@ function routineBannerDismissKey(personId) {
 
 export default function LogTab() {
   const navigate = useNavigate();
-  const isRestoring = useIsRestoring();
   const { showToast } = useUI();
   const {
     activePersonId,
@@ -54,7 +52,12 @@ export default function LogTab() {
   // The full catalog powers search and lets us resolve a search-selected exercise that isn't
   // in the person's list yet.
   const { exercises: catalog, refetch: refetchCatalog } = useExercises();
-  const { routines, loading: routinesLoading, isFetching: routinesFetching } = useRoutines(activePersonId);
+  const {
+    routines,
+    loading: routinesLoading,
+    isFetching: routinesFetching,
+    updatedAt: routinesUpdatedAt,
+  } = useRoutines(activePersonId);
   const { session: liveSession, refetch: refetchLiveSession } = useLiveSession(activePersonId);
   const activeSessionId = editingSession?.id || liveSession?.id || null;
   // A provisional offline liveSession ({ id: null }, seeded in ExerciseDetail.jsx while genuinely
@@ -81,22 +84,29 @@ export default function LogTab() {
 
   // Reconcile a persisted "in a routine" against reality: if the routine was deleted (on this or
   // another device) since it was last active, drop the stale routine state rather than showing an
-  // empty routine banner. Gated on `!isRestoring && !routinesFetching`, not just `!routinesLoading`
-  // -- the query cache persister is throttled (writes at most once/second, see queryClient.js's
-  // queryPersister), so a reload shortly after creating/advancing a routine can restore a STALE
-  // snapshot that predates it: restoration of that stale (but present) snapshot completes normally
-  // (satisfying `!isRestoring`), and `routinesLoading` (TanStack's `isLoading`) is already false
-  // because `data` isn't `undefined` -- it's just wrong -- while the real list is still being
-  // fetched in the background. Without waiting for that background fetch too
-  // (`!routinesFetching`), the stale-empty snapshot looks identical to "the routine was really
-  // deleted" and wrongly ends an active routine on reload (see useOfflineCacheWarming.js for the
-  // same restoration race in a different spot, fixed the same way -- though that one didn't need
-  // the extra isFetching check since it's an imperative prefetch, not a persisted stale-read).
+  // empty routine banner.
+  //
+  // Trustworthiness of `routines` for this DESTRUCTIVE decision hinges on `routinesUpdatedAt`
+  // (TanStack's `dataUpdatedAt`), not `routinesLoading`/`isFetching` -- both of those read as
+  // "settled" (false) in states where `routines` is NOT yet trustworthy: (a) right after a reload,
+  // before `activePersonId` itself has resolved, the query is simply `enabled: false` -- neither
+  // loading nor fetching, `data` still `undefined` -> `routines` defaults to `[]`, indistinguishable
+  // from "genuinely empty and settled"; (b) once enabled, the query-cache persister is throttled
+  // (writes at most once/second, see queryClient.js's `queryPersister`), so a reload shortly after
+  // creating/advancing a routine can restore a STALE snapshot that predates it -- `isLoading` is
+  // already false because `data` isn't `undefined`, it's just wrong, while the real list is still
+  // being fetched in the background. `dataUpdatedAt` sidesteps both: it stays `0`/falsy until a REAL
+  // fetch has actually completed at least once, so `!routinesUpdatedAt` alone covers every case
+  // where `routines` can't yet be trusted, and `!routinesFetching` additionally guards against
+  // acting on data that's about to be superseded by an in-flight refetch (see
+  // useOfflineCacheWarming.js for the same class of persisted-cache-restoration race in a different
+  // spot).
   useEffect(() => {
-    if (!isRestoring && !routinesLoading && !routinesFetching && activeRoutineId && !routines.some((r) => r.id === activeRoutineId)) {
+    if (!routinesUpdatedAt || routinesFetching) return;
+    if (activeRoutineId && !routines.some((r) => r.id === activeRoutineId)) {
       endRoutine();
     }
-  }, [isRestoring, routinesLoading, routinesFetching, activeRoutineId, routines, endRoutine]);
+  }, [routinesUpdatedAt, routinesFetching, activeRoutineId, routines, endRoutine]);
 
   // Returning to the picker refreshes the person's list so a just-logged exercise (or a
   // favorite/tag change made on the detail screen) shows up.
