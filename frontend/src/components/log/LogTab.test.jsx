@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useIsRestoring } from '@tanstack/react-query';
 import LogTab from './LogTab';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
@@ -31,10 +30,6 @@ vi.mock('../../hooks/useRoutines', () => ({ useRoutines: vi.fn() }));
 vi.mock('../../hooks/useLiveSession', () => ({ useLiveSession: vi.fn() }));
 vi.mock('../../hooks/useHistory', () => ({ useHistory: vi.fn() }));
 vi.mock('../../hooks/useSessionEntries', () => ({ useSessionEntries: vi.fn() }));
-vi.mock('@tanstack/react-query', async (importOriginal) => {
-  const actual = await importOriginal();
-  return { ...actual, useIsRestoring: vi.fn(() => false) };
-});
 vi.mock('../../api/sessions', () => ({ endWorkout: vi.fn().mockResolvedValue(), editSession: vi.fn() }));
 vi.mock('../../lib/swUpdate', () => ({ tryForceUpdate: vi.fn() }));
 vi.mock('./ExercisePicker', () => ({ default: () => <div>exercise-picker</div> }));
@@ -87,11 +82,10 @@ describe('LogTab routine nav button placement', () => {
     useExercises.mockReturnValue({ exercises: [{ id: 1, name: 'Bench Press' }, { id: 2, name: 'Overhead Press' }], loading: false });
     usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
-    useRoutines.mockReturnValue({ routines: [routine], loading: false, isFetching: false });
+    useRoutines.mockReturnValue({ routines: [routine], loading: false, isFetching: false, updatedAt: Date.now() });
     useLiveSession.mockReturnValue({ session: null, refetch: vi.fn() });
     useHistory.mockReturnValue({ history: [], loading: false, refetch: vi.fn() });
     useSessionEntries.mockReturnValue([]);
-    useIsRestoring.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -170,49 +164,46 @@ describe('LogTab routine nav button placement', () => {
     expect(tryForceUpdate).toHaveBeenCalledWith(queryClient, 7);
   });
 
-  // Regression test: right after a reload, the persisted query cache may not have rehydrated the
-  // routines list yet, so `routines` reads as empty ([]) with `routinesLoading` already false (the
-  // fetch is gated behind restoration completing, not yet dispatched). Without the `!isRestoring`
-  // gate, that transient emptiness looked identical to "the routine was really deleted" and wrongly
-  // ended an active routine on every reload -- reproduced live against the lower environment (higher
-  // latency widened the race window enough to hit consistently; local dev's near-zero latency never
-  // saw it).
-  it('does not end the routine while the persisted cache is still restoring, even if routines briefly reads empty', () => {
+  // Regression test: `routinesLoading`/`isFetching` both read as "settled" (false) in states where
+  // `routines` is NOT yet trustworthy -- e.g. right after a reload, before `activePersonId` itself
+  // has resolved, the query is `enabled: false` (neither loading nor fetching), so `routines`
+  // defaults to `[]`, indistinguishable from "genuinely empty and settled". `updatedAt`
+  // (dataUpdatedAt) sidesteps this: it's falsy until a real fetch has ever completed, regardless of
+  // why. Reproduced live against the lower environment (higher latency widened the window enough to
+  // hit consistently; local dev's near-zero latency never saw it).
+  it('does not end the routine before the routines query has ever completed a real fetch (updatedAt falsy), even if routines reads empty', () => {
     const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
     useAppState.mockReturnValue(appState);
-    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false });
-    useIsRestoring.mockReturnValue(true);
+    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false, updatedAt: 0 });
 
     render(<MemoryRouter><LogTab /></MemoryRouter>);
 
     expect(appState.endRoutine).not.toHaveBeenCalled();
   });
 
-  // A second, narrower race than the isRestoring one above: the query persister is throttled (at
-  // most once/second), so a reload shortly after creating/advancing a routine can restore a STALE
-  // snapshot that predates it. Restoring that stale-but-present snapshot completes normally
-  // (isRestoring -> false) and `loading` (isLoading) is already false since data isn't undefined --
-  // it's just wrong -- while the real list is still being background-fetched (isFetching: true).
-  // This is exactly what broke the isRestoring-only fix: it must also wait for isFetching to clear.
-  it('does not end the routine while the routines query is still fetching in the background, even once restoration has cleared', () => {
+  // A second, narrower race: the query cache persister is throttled (at most once/second, see
+  // queryClient.js's queryPersister), so a reload shortly after creating/advancing a routine can
+  // restore a STALE (but present, non-zero updatedAt) snapshot that predates it, while the real list
+  // is still being fetched in the background (isFetching: true). updatedAt alone doesn't catch this
+  // -- it must also wait for isFetching to clear before trusting a stale-but-present list.
+  it('does not end the routine while the routines query is still fetching in the background, even with a non-zero (but stale) updatedAt', () => {
     const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
     useAppState.mockReturnValue(appState);
-    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: true });
-    useIsRestoring.mockReturnValue(false);
+    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: true, updatedAt: Date.now() - 5000 });
 
     render(<MemoryRouter><LogTab /></MemoryRouter>);
 
     expect(appState.endRoutine).not.toHaveBeenCalled();
   });
 
-  // Once restoration AND the background fetch have both actually finished and the routine
-  // genuinely isn't in the (now real) list, the existing cleanup behavior must still fire -- this
-  // isn't gated on either flag staying true forever, only on the transient windows above.
-  it('still ends the routine once restoration and fetching have both finished and it is genuinely gone', () => {
+  // Once a real fetch has completed (updatedAt truthy) and nothing is still in flight, and the
+  // routine genuinely isn't in the (now real) list, the existing cleanup behavior must still fire --
+  // this isn't gated on either signal staying "not ready" forever, only on the transient windows
+  // above.
+  it('still ends the routine once a real fetch has completed and it is genuinely gone', () => {
     const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
     useAppState.mockReturnValue(appState);
-    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false });
-    useIsRestoring.mockReturnValue(false);
+    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false, updatedAt: Date.now() });
 
     render(<MemoryRouter><LogTab /></MemoryRouter>);
 
