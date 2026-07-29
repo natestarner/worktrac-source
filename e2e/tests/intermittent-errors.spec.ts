@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { pickExercise, addOwnExercise } from './support/exercises';
 import { failNetwork, failWithStatus } from './support/faults';
-import { troubleBanner, goOfflineButton, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain } from './support/offline';
+import { troubleBanner, goOfflineButton, goBackOnlineButton, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 // Anchored to the path starting with /api/ right after the origin -- NOT a bare '**/api/**' glob.
 // In local dev only, Vite serves ES modules unbundled straight from source (e.g.
@@ -98,6 +98,14 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
 
     faults.stop();
     await page.context().setOffline(false);
+
+    // "Go back online" runs its own probeReachability() check (a real fetch to /actuator/health)
+    // before unpinning -- regression coverage for the bug where that probe always failed
+    // cross-origin in deployed environments (missing CORS registration on /actuator/health) even
+    // though the button's logic and the Settings toggle both drive the exact same pin flag.
+    await goBackOnlineButton(page).click();
+    await expect(page.getByText(/Still can.t reach the server/)).toBeHidden();
+    await expect(page.getByRole('button', { name: '+ New routine' })).toBeEnabled();
   });
 
   test('creating an exercise while lie-fi closes the dialog immediately instead of hanging, and syncs once reachable', async ({ page, request }) => {
