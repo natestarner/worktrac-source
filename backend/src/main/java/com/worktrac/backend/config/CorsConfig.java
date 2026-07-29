@@ -41,6 +41,12 @@ public class CorsConfig {
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);
+        // /actuator/health is permitAll() in SecurityConfig and used cross-origin by the frontend's
+        // probeReachability() (the offline banner's "Go back online" check) -- without a matching
+        // registration here it never gets Access-Control-Allow-Origin, so that fetch always fails
+        // as a network error in any deployed environment (frontend and backend on different origins),
+        // even though the endpoint itself answers fine.
+        source.registerCorsConfiguration("/actuator/health", configuration);
         return source;
     }
 }
