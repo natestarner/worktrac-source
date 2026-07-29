@@ -1,11 +1,13 @@
 package com.worktrac.backend.config;
 
+import com.worktrac.backend.email.EmailService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.MSSQLServerContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -33,6 +35,12 @@ class CorsConfigTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    // EmailService's real constructor builds a live Azure EmailClient from a connection string
+    // that isn't set in CI -- @MockitoBean replaces the bean entirely so that constructor never
+    // runs (same pattern as AccountDeletionTest).
+    @MockitoBean
+    private EmailService emailService;
 
     @Test
     void actuatorHealthAnswersCrossOriginRequestsFromAnAllowedOrigin() throws Exception {
