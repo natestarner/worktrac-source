@@ -4,24 +4,29 @@ import { listExercises, listPersonExercises } from '../api/exercises';
 import { listTags } from '../api/tags';
 import { listRoutines } from '../api/routines';
 import { getLiveSession, getHistory } from '../api/sessions';
+import { getPrs } from '../api/stats';
 
 // How fresh a warmed entry needs to be before prefetchQuery bothers refetching it -- kept short
 // (not the global 60s default) so the periodic re-run in useOfflineCacheWarming.js actually
 // refreshes each person's data on every tick instead of skipping everyone as still-fresh.
 const WARM_STALE_TIME = 30 * 1000;
 
-// The "logging essentials" bundle per person -- just enough to log a workout and see recent
-// history offline. Deliberately excludes prs/trendsOverview/exerciseTrend (the analytics fan-out
-// -- high cost keyed by exercise x range, low value mid-workout) and ExerciseDetail's four
-// interaction-scoped queries (exerciseSummary/sessionSets/customFields/sessionExerciseNote --
-// can't be enumerated without first knowing every exercise + the live-session id; the Log tab
-// reconstructs offline from the history cache + pending outbox writes instead).
+// The "logging essentials" bundle per person -- just enough to log a workout, see recent
+// history, and check PRs offline. Deliberately excludes trendsOverview/exerciseTrend (the
+// analytics fan-out -- high cost keyed by exercise x range, low value mid-workout) and
+// ExerciseDetail's session-scoped queries (sessionSets/customFields/sessionExerciseNote --
+// can't be enumerated without first knowing the live/edit session id). exerciseSummary
+// (Exercise Detail's "Last time"/"Best est. 1RM" card) is likewise not prefetched here, but for
+// a different reason: it's derived client-side from the already-warmed history cache when the
+// live query has no answer yet (offline or lie-fi) -- see deriveExerciseSummaryFromHistory.js
+// and ExerciseDetail.jsx -- rather than fanning out a prefetch per exercise.
 function personWarmTargets(personId) {
   return [
     { queryKey: queryKeys.liveSession(personId), queryFn: () => getLiveSession(personId) },
     { queryKey: queryKeys.personExercises(personId), queryFn: () => listPersonExercises(personId) },
     { queryKey: queryKeys.routines(personId), queryFn: () => listRoutines(personId) },
     { queryKey: queryKeys.history(personId), queryFn: () => getHistory(personId) },
+    { queryKey: queryKeys.prs(personId), queryFn: () => getPrs(personId) },
   ];
 }
 

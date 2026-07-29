@@ -297,10 +297,25 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   sync") is what signals "not yet synced", not the row itself.
 - **Offline cache warming** (`frontend/src/lib/offlineCacheWarm.js` /
   `useOfflineCacheWarming.js`): proactively prefetches every household member's
-  logging-essentials (live session, person exercises, routines, history) in the background —
-  not just whichever person/tab is on screen — so a device hand-off mid-outage (a sibling grabs
-  the iPad) still renders instead of spinning forever. Deliberately excludes analytics
-  (PRs/trends) and `ExerciseDetail`'s interaction-scoped queries.
+  logging-essentials (live session, person exercises, routines, history, PRs) in the background
+  — not just whichever person/tab is on screen — so a device hand-off mid-outage (a sibling
+  grabs the iPad) still renders instead of spinning forever. Deliberately still excludes
+  `trendsOverview`/`exerciseTrend` (the analytics fan-out — high cost keyed by exercise × range,
+  low value mid-workout) and `ExerciseDetail`'s session-scoped queries (`sessionSets`,
+  `customFields`, `sessionExerciseNote` — can't be enumerated without knowing the live/edit
+  session id).
+  - `exerciseSummary` (Exercise Detail's "Last time"/"Best est. 1RM" card) is likewise not
+    prefetched, but for a different reason: `frontend/src/utils/exerciseSummaryFromHistory.js`
+    derives it client-side from the already-warmed `history` cache whenever the live query has
+    no answer yet (`isPaused` — hard offline/manual pin — or `isError` — lie-fi: the fetch is
+    attempted since `navigator.onLine` is true, but the backend is unreachable). Because
+    `history` is unpaginated (every session, every set), this produces the *same* answer
+    `StatsService#getLastSession`/`#getBest` would, not an approximation. Once stuck, the
+    derived value is preferred **over** `summaryQuery.data` too, not just used when data is
+    absent — `contextSessionId` collapses to the same `null` cache key both "before this person
+    has ever logged anything" and "after their live session just ended," so a stale answer from
+    the first of those moments can already be cached under that exact key by the time the
+    second one needs it, and a stuck live query can never revalidate it away on its own.
 - **Cold boot offline:** `AuthContext` boots authenticated-but-`offline:true` from a saved
   identity snapshot (`localStorage`) when `/me` fails with a network error or 5xx and a token +
   snapshot exist; a real 401 still bounces to `/login`. **No snapshot yet** (a fresh profile, or
