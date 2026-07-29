@@ -25,12 +25,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -135,13 +135,18 @@ class LiveSessionClientLoggedAtStartedAtTest {
         JsonNode second = logLiveSet(Map.of("clientLoggedAt", secondSetLoggedAt.toString()));
 
         Instant sessionStartedAtAfterSecondSet = Instant.parse(second.get("session").get("startedAt").asText());
-        // Truncated to microseconds before comparing: the first response reflects the
-        // in-memory Instant from the insert's persistence context, while the second re-reads
-        // the row from SQL Server, whose datetime2 column rounds to 100ns -- an exact
-        // nanosecond comparison is flaky on that rounding alone, not a real rewrite (a genuine
-        // rewrite would land on the 10-minutes-later clock or the unrelated 2026-06-02
-        // clientLoggedAt, both trivially outside microsecond tolerance).
-        assertEquals(originalStartedAt.truncatedTo(ChronoUnit.MICROS), sessionStartedAtAfterSecondSet.truncatedTo(ChronoUnit.MICROS),
-                "a clientLoggedAt on a set logged into an already-existing session must never rewrite that session's startedAt");
+        // Compared with a small tolerance, not exact/truncated equality: the first response
+        // reflects the in-memory Instant from the insert's persistence context, while the
+        // second re-reads the row from SQL Server, whose datetime2 column rounds to 100ns.
+        // truncatedTo(MICROS) alone isn't enough -- when the true sub-microsecond remainder
+        // sits right at a microsecond boundary, that 100ns rounding can push the DB-read value
+        // into the *next* whole microsecond (e.g. ...836 vs ...837), which truncation doesn't
+        // absorb since it floors rather than rounds. A 1ms tolerance comfortably covers that
+        // rounding noise while still failing hard on a genuine rewrite (the 10-minutes-later
+        // clock or the unrelated 2026-06-02 clientLoggedAt, both many orders of magnitude
+        // outside this tolerance).
+        Duration drift = Duration.between(originalStartedAt, sessionStartedAtAfterSecondSet).abs();
+        assertTrue(drift.compareTo(Duration.ofMillis(1)) < 0,
+                "a clientLoggedAt on a set logged into an already-existing session must never rewrite that session's startedAt (drift: " + drift + ")");
     }
 }

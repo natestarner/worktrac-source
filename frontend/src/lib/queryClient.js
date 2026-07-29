@@ -304,6 +304,22 @@ export const queryPersister = createAsyncStoragePersister({
   throttleTime: 1000,
 });
 
+// TanStack's own default (`query.state.status === 'success'`) drops a query the instant its most
+// recent fetch attempt fails -- even if it's still holding perfectly good data from an earlier
+// success. During lie-fi (backend unreachable, navigator.onLine still true), ordinary background
+// refetches (window-focus, the offline-cache-warm cycle, a mutation's onSettled invalidation) keep
+// firing and failing, so more and more queries accumulate this status while their `data` sits
+// untouched in memory -- harmless on its own. But a silent forced reload (swUpdate.js's
+// tryForceUpdate, which fires on an ordinary section/person switch whenever a new SW build is
+// available) can land while a query is in exactly that state: hydrate() then has nothing on disk
+// to restore it with, so the section boots data-less and the immediate refetch fails too (backend
+// still down) -- rendering blank until real connectivity returns, even though nothing was ever
+// actually lost server-side. Persisting on `data` presence instead of last-attempt status closes
+// that gap.
+export function shouldDehydrateQuery(query) {
+  return query.state.status === 'success' || query.state.data !== undefined;
+}
+
 export const persistOptions = {
   persister: queryPersister,
   maxAge: ONE_DAY,
@@ -313,6 +329,7 @@ export const persistOptions = {
   // an app update (which changes the buster and discards this cache) can never drop a queued write.
   dehydrateOptions: {
     shouldDehydrateMutation: () => false,
+    shouldDehydrateQuery,
   },
 };
 

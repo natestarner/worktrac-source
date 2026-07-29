@@ -1,13 +1,15 @@
 import 'fake-indexeddb/auto';
-import { MutationObserver, QueryClient, onlineManager } from '@tanstack/react-query';
+import { MutationObserver, QueryClient, dehydrate, hydrate, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   LOG_SET_MUTATION_KEY,
   clearOutboxMutations,
   flushOutbox,
+  persistOptions,
   queryClient,
   registerOfflineMutationDefaults,
   resetQueryCache,
+  shouldDehydrateQuery,
   shouldRetryWrite,
 } from './queryClient';
 import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './exerciseIdMap';
@@ -44,6 +46,52 @@ describe('shouldRetryWrite (failure taxonomy, hardening #8)', () => {
     expect(shouldRetryWrite(8, { status: 503 })).toBe(true);
     expect(shouldRetryWrite(100, { status: 503 })).toBe(true);
     expect(shouldRetryWrite(100, new TypeError('Failed to fetch'))).toBe(true);
+  });
+});
+
+describe('shouldDehydrateQuery (lie-fi persisted-cache gap)', () => {
+  it('persists a query in the normal success state (unchanged default behavior)', () => {
+    const query = { state: { status: 'success', data: ['a'] } };
+    expect(shouldDehydrateQuery(query)).toBe(true);
+  });
+
+  it('still persists a query whose last background refetch failed, as long as it still has data -- the regression this closes', () => {
+    const query = { state: { status: 'error', data: ['a', 'b'] } };
+    expect(shouldDehydrateQuery(query)).toBe(true);
+  });
+
+  it('does not persist a query with no data yet (pending / never successfully fetched)', () => {
+    const query = { state: { status: 'pending', data: undefined } };
+    expect(shouldDehydrateQuery(query)).toBe(false);
+
+    const erroredWithNoData = { state: { status: 'error', data: undefined } };
+    expect(shouldDehydrateQuery(erroredWithNoData)).toBe(false);
+  });
+
+  it('end-to-end: a query with good data survives a dehydrate -> hydrate round trip on a fresh client even after a failed background refetch, using the app\'s real persistOptions', async () => {
+    const client = new QueryClient();
+    const key = ['history', 7];
+
+    // A normal successful fetch while online.
+    await client.fetchQuery({ queryKey: key, queryFn: () => Promise.resolve(['workout-A', 'workout-B']) });
+
+    // Lie-fi: a background refetch (window focus / offline-cache-warm cycle) fires against the
+    // now-unreachable backend and fails. Per TanStack's default reducer this flips status ->
+    // 'error' but leaves `data` untouched in memory.
+    await client
+      .fetchQuery({ queryKey: key, queryFn: () => Promise.reject(new Error('Failed to fetch')), retry: false })
+      .catch(() => {});
+    expect(client.getQueryCache().find({ queryKey: key }).state.status).toBe('error');
+
+    // A silent forced reload lands right now (swUpdate.js's tryForceUpdate, triggered by an
+    // ordinary section/person switch): dehydrate what the persister would have written to
+    // IndexedDB on its next throttled tick, then hydrate a brand-new client from it -- what boot
+    // does on the next page load.
+    const dehydrated = dehydrate(client, persistOptions.dehydrateOptions);
+    const freshClientAfterReload = new QueryClient();
+    hydrate(freshClientAfterReload, dehydrated);
+
+    expect(freshClientAfterReload.getQueryData(key)).toEqual(['workout-A', 'workout-B']);
   });
 });
 
