@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { onlineManager, MutationObserver } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { onlineManager, MutationObserver, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
 import { queryKeys } from '../../api/queryKeys';
+import { registerOfflineMutationDefaults } from '../../lib/queryClient';
 import ExerciseDetail from './ExerciseDetail';
 import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
@@ -11,6 +12,7 @@ import { useUI } from '../../context/UIContext';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets, logLiveSet, logSetIntoSession } from '../../api/sets';
 import { getSessionExerciseNote, saveLiveExerciseNote, saveSessionExerciseNote } from '../../api/notes';
+import { getHistory } from '../../api/sessions';
 
 // ExerciseDetail's handleLogSet only starts the 90s rest timer for a LIVE set --
 // never for a set logged while editing a past/retroactive session. This is the one
@@ -43,6 +45,12 @@ vi.mock('../../api/notes', () => ({
   getSessionExerciseNote: vi.fn(),
   saveLiveExerciseNote: vi.fn(),
   saveSessionExerciseNote: vi.fn(),
+}));
+// Backs the offline/lie-fi fallback's useHistory() read -- defaults to empty so every existing
+// test in this file (which doesn't care about history) is unaffected; the fallback tests below
+// override this per-case.
+vi.mock('../../api/sessions', () => ({
+  getHistory: vi.fn().mockResolvedValue([]),
 }));
 const exercise = { id: 1, name: 'Bench Press', tags: [], isFavorite: true, setupFields: [] };
 
@@ -825,5 +833,97 @@ describe('ExerciseDetail sets list independent of the summary/PR read', () => {
     expect(await screen.findByText('This session')).toBeInTheDocument();
     expect(screen.getByText('135 lb × 8')).toBeInTheDocument();
     expect(screen.queryByText(/Last time/)).not.toBeInTheDocument();
+  });
+});
+
+// Exercise Detail's "Last time"/"Best est. 1RM" card is interaction-scoped (queryKeys.exerciseSummary
+// is keyed on personId + exerciseId + contextSessionId), so it's realistic to open a given
+// (exercise, session) combination for the first time while the live query can't get an answer --
+// either genuinely offline, or online-but-unreachable ("lie-fi"). Both must resolve from the
+// already-warmed history cache (see offlineCacheWarm.js / exerciseSummaryFromHistory.js) instead
+// of hanging on a skeleton or falsely showing "No sets yet"/"No PR yet".
+describe('ExerciseDetail summary fallback to warmed history (offline + lie-fi)', () => {
+  const historyWithBenchPress = [
+    {
+      id: 55,
+      startedAt: '2026-07-01T12:00:00Z',
+      endedAt: '2026-07-01T13:00:00Z',
+      manual: false,
+      entries: [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ weight: 135, reps: 8, unit: 'lb' }], note: null }],
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+  });
+
+  it('derives Last time/Best est. 1RM from the warmed history cache when hard offline with no exerciseSummary cache entry', async () => {
+    // Never resolves -- while offline, TanStack pauses the fetch before invoking this at all.
+    getExerciseSummary.mockImplementation(() => new Promise(() => {}));
+
+    // Seed the history cache directly rather than going through a live fetch: going offline
+    // BEFORE render (as the real scenario requires, so exerciseSummary's own fetch is paused
+    // rather than merely "still fetching") would equally pause history's own first fetch if it
+    // had to happen live here -- exactly the bug this test is meant to prove is fixed. Seeding
+    // models "history was already warmed while online, sometime before this component mounted",
+    // which is what offlineCacheWarm.js actually guarantees in the real app.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
+    registerOfflineMutationDefaults(queryClient, { retry: false });
+    queryClient.setQueryData(queryKeys.history(7), historyWithBenchPress);
+
+    onlineManager.setOnline(false);
+    try {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ExerciseDetail
+            exercise={exercise}
+            personId={7}
+            editingSessionId={null}
+            liveSession={null}
+            refetchLiveSession={vi.fn().mockResolvedValue()}
+            onBack={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText('135lb×8')).toBeInTheDocument();
+      expect(screen.getByText(/171 lb\s*\(135lb×8\)/)).toBeInTheDocument();
+      expect(getExerciseSummary).not.toHaveBeenCalled();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it('derives Last time/Best est. 1RM from the warmed history cache during lie-fi (fetch attempted but fails)', async () => {
+    getHistory.mockResolvedValue(historyWithBenchPress);
+    // Stays online per onlineManager, but the request itself fails -- e.g. a rejected fetch
+    // against an unreachable backend. Test client has retry: false, so this settles fast.
+    getExerciseSummary.mockRejectedValue(new Error('network error'));
+
+    renderExerciseDetail();
+
+    expect(await screen.findByText('135lb×8')).toBeInTheDocument();
+    expect(screen.getByText(/171 lb\s*\(135lb×8\)/)).toBeInTheDocument();
+    await waitFor(() => expect(getExerciseSummary).toHaveBeenCalled());
+  });
+
+  it('still shows the normal loading state (not a premature "No sets yet") while the request is merely slow, not paused or errored', async () => {
+    getHistory.mockResolvedValue(historyWithBenchPress);
+    getExerciseSummary.mockImplementation(() => new Promise(() => {})); // hangs -- online, still in flight
+
+    renderExerciseDetail();
+
+    await waitFor(() => expect(screen.queryByText(/Last time/)).not.toBeInTheDocument());
+    expect(screen.queryByText('135lb×8')).not.toBeInTheDocument();
   });
 });

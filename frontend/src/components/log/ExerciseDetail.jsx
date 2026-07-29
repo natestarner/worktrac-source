@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
+import { useHistory } from '../../hooks/useHistory';
 import { queryKeys } from '../../api/queryKeys';
 import { newId } from '../../utils/id';
 import { getExerciseSummary } from '../../api/stats';
@@ -16,6 +17,7 @@ import {
 } from '../../lib/queryClient';
 import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
 import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
+import { deriveExerciseSummaryFromHistory } from '../../utils/exerciseSummaryFromHistory';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import WeightRepsStepper from './WeightRepsStepper';
 import NumericKeypad from '../shared/NumericKeypad';
@@ -88,12 +90,49 @@ export default function ExerciseDetail({
     enabled: !!contextSessionId && !!exercise.id,
   });
 
-  const summary = summaryQuery.data ?? null;
+  // Offline/lie-fi fallback for the "Last time"/"Best est. 1RM" card: reads the already-warmed
+  // history cache (see offlineCacheWarm.js) instead of a network round trip. Unpaginated history
+  // makes this the SAME answer the server would give, not an approximation -- see
+  // exerciseSummaryFromHistory.js. `history` is the same cache the Log tab already reads for
+  // this person, so this is never a new request.
+  const { history, loading: historyLoading } = useHistory(personId);
+  const derivedSummary = useMemo(
+    // historyLoading gates this to avoid a false "No sets yet"/"No PR yet" flash from an empty
+    // [] default before history's own first fetch has actually resolved (online or offline).
+    () => (historyLoading ? null : deriveExerciseSummaryFromHistory(history, exercise.id, contextSessionId)),
+    [history, historyLoading, exercise.id, contextSessionId],
+  );
+
+  // Prefer the derived value once the live query has definitively given up -- paused (hard
+  // offline/manual pin, never even attempts) or errored (lie-fi: the fetch IS attempted since
+  // navigator.onLine is true, but the backend is unreachable, so it fails and -- with this
+  // client's default retry: 2 -- eventually settles into isError). Gating on isPaused alone
+  // would miss lie-fi entirely, since TanStack Query only pauses a fetch when onlineManager
+  // reports offline; it does not pause a fetch that's failing for a different reason.
+  // Deliberately NOT falling back just because data is merely absent (isLoading, still
+  // in-flight/retrying) -- a slow-but-eventually-successful request, or one hanging against a
+  // down-but-not-yet-timed-out backend, should still show its normal loading state rather than
+  // jump to a possibly-stale derived answer.
+  //
+  // Once stuck, derivedSummary is preferred OVER summaryQuery.data (not just used when data is
+  // absent) -- contextSessionId collapses to the same `null` cache key both "before this person
+  // has ever logged anything" and "after their live session just ended" (see the comment on
+  // summaryQuery above), so a stale cached answer from the FIRST of those two moments can already
+  // be sitting under this exact key by the time the second one needs it. `staleTime: 0` means that
+  // stale value paints instantly and a background revalidation kicks off to correct it -- fine
+  // online (the RefreshingPill covers the brief gap), but if that revalidation is the one that
+  // gets stuck, the stale-but-present answer would otherwise stand forever. `history` doesn't have
+  // this collapsed-key problem, so it's the more trustworthy source once the live query can't
+  // confirm which of the two moments its cached data actually belongs to.
+  const summary = summaryQuery.isPaused || summaryQuery.isError
+    ? (derivedSummary ?? summaryQuery.data ?? null)
+    : (summaryQuery.data ?? null);
   const sessionSets = sessionSetsQuery.data ?? [];
   const customFields = customFieldsQuery.data ?? [];
   const sessionNote = sessionNoteQuery.data?.note || null;
-  // Skeleton only on genuine first load (no cached data yet); a cached revisit paints instantly.
-  const ready = !summaryQuery.isLoading && !customFieldsQuery.isLoading;
+  // Skeleton only when there's truly nothing to show yet: no server data, no derivable history,
+  // and the summary query hasn't settled (and isn't paused offline, which would never settle).
+  const ready = (summary != null || !summaryQuery.isLoading || summaryQuery.isPaused) && !customFieldsQuery.isLoading;
 
   const refetchCustomFields = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.customFields(personId, exercise.id) });
