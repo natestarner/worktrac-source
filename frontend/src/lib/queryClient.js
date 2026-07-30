@@ -246,9 +246,24 @@ export function enqueueOutboxWrite(mutationKey, variables) {
 // Replay every queued write now: paused ones via TanStack's own `resumePausedMutations` (which
 // keeps them strictly serial, in order, via the shared outbox scope), PLUS any write that's sitting
 // in a terminal ERROR state (exhausted retries, or a definitive 4xx like an expired session) --
-// those have nothing left to resume on their own, so they're re-dispatched fresh from their
-// persisted variables, safe because every durable write is idempotent by design. A write that's
-// currently mid-retry (pending, not paused) is left alone rather than double-fired.
+// those have nothing left to resume on their own, so they're restarted fresh from their persisted
+// variables, safe because every durable write is idempotent by design. A write that's currently
+// mid-retry (pending, not paused) is left alone rather than double-fired.
+//
+// Restarted IN PLACE (`m.execute(...)` on the existing Mutation object) rather than removed and
+// re-dispatched via a new mutation -- removing and recreating always re-registers at the END of
+// the shared outbox scope's array, which is what actually determines replay order (TanStack's
+// scope FIFO is registration order, not submittedAt), so it could let a write that's stuck behind
+// a dependency (e.g. a log-set against a not-yet-synced exercise) jump ahead of writes genuinely
+// submitted later. Reusing the same object never changes its position. This is only safe because
+// `state.status === 'error'` here means the mutation's retryer already fully settled (rejected) --
+// there is no live retry loop left to race against a second one; had it been 'pending' (offline or
+// mid-backoff), a second `execute()` call would start a competing retryer without cancelling the
+// first. `execute()` on a terminal-error mutation stamps `submittedAt` to now as part of its
+// normal re-dispatch (see mutation.ts's 'pending' reducer case), so it's restored to the original
+// value immediately after -- once the synchronous part of `execute()` has run -- so a later
+// restoreOutbox restore (after a reload) still sorts it by true enqueue time, not by whenever it
+// last got kicked.
 //
 // Called on reconnect, after the outbox is restored on boot, after a successful (re-)login, and
 // from the offline banner's guarded "Go back online" button -- every one of those call sites can
@@ -266,10 +281,9 @@ export function flushOutbox() {
     .filter((m) => m.options.scope?.id === OUTBOX_SCOPE_ID && m.state.status === 'error')
     .sort((a, b) => (a.state.submittedAt ?? 0) - (b.state.submittedAt ?? 0));
   stuck.forEach((m) => {
-    const { mutationKey } = m.options;
-    const variables = m.state.variables;
-    cache.remove(m);
-    enqueueOutboxWrite(mutationKey, variables);
+    const submittedAt = m.state.submittedAt;
+    m.execute(m.state.variables).catch(() => {});
+    m.state = { ...m.state, submittedAt };
   });
   return resumed;
 }

@@ -367,11 +367,13 @@ export default function ExerciseDetail({
   // against a down server: "still saving" next to a blank row reads as "the app doesn't know
   // what I entered," which isn't true, and a request that never confirms would otherwise leave a
   // skeleton showing indefinitely instead of the values the user actually entered.
-  // Sorted by clientLoggedAt, not left in mutation-cache order -- that order isn't chronological
-  // (restoreOutbox hydrates paused mutations before not-paused ones on reload, and
-  // replacePendingLogSet removes+re-dispatches a mutation on edit, appending it to the end of the
-  // cache) and the "Set N" labels below are position-based, so a cache reorder would otherwise
-  // silently relabel a set out from under the row a user is about to edit.
+  // Sorted by clientLoggedAt, not left in mutation-cache order. restoreOutbox (outboxPersistence.js)
+  // now registers restored writes in a single submittedAt-sorted pass, so a reload alone no longer
+  // reorders the cache -- but replacePendingLogSet (offlineSetEdits.js) still removes+re-dispatches
+  // a mutation on edit, which re-registers it at the end of the live scope array for the rest of
+  // this session (only its *persisted* submittedAt is corrected, for after a subsequent reload).
+  // The "Set N" labels below are position-based, so this belt-and-suspenders sort keeps them
+  // correct regardless.
   const pendingBeforeSession = unsyncedLogSets
     .filter((m) => !sessionSets.some((real) => real.id === m.tempId))
     .map((m) => ({ id: m.tempId, optimistic: true, weight: m.weight, reps: m.reps, unit: m.unit, clientLoggedAt: m.clientLoggedAt }))

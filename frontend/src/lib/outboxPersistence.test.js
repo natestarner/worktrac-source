@@ -125,6 +125,49 @@ describe('offline outbox persistence', () => {
     expect(keysInOrder).toEqual(['first', 'second']);
   });
 
+  // Regression test: the two cohorts used to be registered as two separate batches -- every
+  // PAUSED write hydrated first, THEN every not-paused write dispatched -- rather than one pass
+  // merged by true submittedAt. Under lie-fi (navigator.onLine stays true), an actively-retrying
+  // write is never "paused", so an earlier-submitted write that's mid-retry could end up
+  // registered into the shared outbox scope AFTER a later-submitted write that happened to be
+  // genuinely paused -- reversing their real order.
+  it('replays an earlier-submitted, not-paused (mid-retry) write before a later-submitted, paused one -- the mixed-cohort case', async () => {
+    const client1 = newClient();
+
+    // Submitted first, but stays mid-retry (not paused) rather than settling -- lie-fi.
+    logLiveSet.mockReturnValueOnce(new Promise(() => {}));
+    dispatchLogSet(client1, liveSetVars({ reps: 5, idempotencyKey: 'earlier-not-paused' }));
+    await vi.waitFor(() => {
+      const [mutation] = client1.getMutationCache().getAll();
+      expect(mutation.state.status).toBe('pending');
+      expect(mutation.state.isPaused).toBe(false);
+    });
+
+    // Submitted second, but genuinely offline -- paused.
+    onlineManager.setOnline(false);
+    dispatchLogSet(client1, liveSetVars({ reps: 6, idempotencyKey: 'later-paused' }));
+    await vi.waitFor(() => {
+      const paused = client1.getMutationCache().getAll().filter((m) => m.state.isPaused);
+      expect(paused).toHaveLength(1);
+    });
+
+    await persistOutboxNow(client1, ACCOUNT);
+
+    // Reload: a fresh client restores the outbox, then connectivity returns for real. Clear the
+    // call log first -- the still-hanging client1 attempt above already recorded one call, and we
+    // only care about the replay order client2 actually produces.
+    logLiveSet.mockClear();
+    const client2 = newClient();
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+    await restoreOutbox(client2, ACCOUNT);
+    onlineManager.setOnline(true);
+    await client2.resumePausedMutations();
+
+    await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalledTimes(2));
+    const keysInOrder = logLiveSet.mock.calls.map(([, payload]) => payload.idempotencyKey);
+    expect(keysInOrder).toEqual(['earlier-not-paused', 'later-paused']);
+  });
+
   it('eagerly persists on enqueue via the mutation-cache subscription', async () => {
     const client = newClient();
     const detach = attachOutboxPersistence(client, ACCOUNT);

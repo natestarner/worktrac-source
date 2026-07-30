@@ -236,6 +236,60 @@ describe('flushOutbox / clearOutboxMutations / resetQueryCache (singleton client
     expect(logLiveSet).toHaveBeenLastCalledWith(7, expect.objectContaining({ idempotencyKey: 'flush-errored' }));
   });
 
+  // Regression test: flushOutbox used to restart a stuck write by removing it and dispatching a
+  // brand-new mutation, which always registers at the END of the shared outbox scope's array --
+  // the thing that actually governs replay order (TanStack's scope FIFO is registration order,
+  // not submittedAt). That could let a write stuck behind a dependency (e.g. a log-set against a
+  // not-yet-synced exercise) jump ahead of writes genuinely submitted later. Restarting the SAME
+  // object in place (`m.execute(...)`) never changes its array position.
+  it('flushOutbox restarts a stuck (terminal-error) mutation in place, without moving it in the shared scope', async () => {
+    logLiveSet.mockRejectedValueOnce({ status: 500 });
+    dispatchOnSingleton(
+      { mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'stuck-in-place', clientLoggedAt: 't' },
+      { retry: false },
+    );
+    await vi.waitFor(() => {
+      const [mutation] = queryClient.getMutationCache().getAll();
+      expect(mutation.state.status).toBe('error');
+    });
+    const [before] = queryClient.getMutationCache().getAll();
+
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 1 }, set: { id: 1 } });
+    await flushOutbox();
+
+    const [after] = queryClient.getMutationCache().getAll();
+    expect(after).toBe(before); // same object -- its scope-array slot never moved.
+    await vi.waitFor(() => expect(after.state.status).toBe('success'));
+  });
+
+  it('flushOutbox preserves the original submittedAt of a restarted stuck write, for correct ordering on a later restore', async () => {
+    logLiveSet.mockRejectedValueOnce({ status: 500 });
+    dispatchOnSingleton(
+      { mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'stuck-submitted-at', clientLoggedAt: 't' },
+      { retry: false },
+    );
+    await vi.waitFor(() => {
+      const [mutation] = queryClient.getMutationCache().getAll();
+      expect(mutation.state.status).toBe('error');
+    });
+    const originalSubmittedAt = queryClient.getMutationCache().getAll()[0].state.submittedAt;
+
+    // Fake timers only from here -- the dispatch/error above already settled via microtasks
+    // (retry: false), so real timers are fine for that `vi.waitFor`; this is just to make "time
+    // actually passed before the restart" observable instead of a same-millisecond fluke.
+    vi.useFakeTimers();
+    try {
+      vi.advanceTimersByTime(60_000);
+      logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 1 }, set: { id: 1 } });
+      await flushOutbox();
+
+      const [restarted] = queryClient.getMutationCache().getAll();
+      expect(restarted.state.submittedAt).toBe(originalSubmittedAt);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('flushOutbox leaves a mid-retry (pending, not paused) write alone rather than double-firing it', async () => {
     logLiveSet.mockReturnValue(new Promise(() => {})); // never resolves -- stays pending
     dispatchOnSingleton({ mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'flush-pending', clientLoggedAt: 't' });

@@ -1,16 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { pickExercise, addOwnExercise } from './support/exercises';
-import { failNetwork, failWithStatus } from './support/faults';
+import { API_ONLY, failNetwork, failWithStatus } from './support/faults';
 import { troubleBanner, goOfflineButton, goBackOnlineButton, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain } from './support/offline';
-
-// Anchored to the path starting with /api/ right after the origin -- NOT a bare '**/api/**' glob.
-// In local dev only, Vite serves ES modules unbundled straight from source (e.g.
-// http://localhost:3000/src/api/queryKeys.js), which also contains "/api/" as a path segment; a
-// reload while that broader pattern is active blocks the app's own JS modules, not just backend
-// calls, and the page never renders at all. Only the reload-based tests below need this --
-// production/lower serves bundled, hashed assets with no such collision.
-const API_ONLY = /^https?:\/\/[^/]+\/api\//;
 
 // Mode 2: the backend is unreachable or erroring, but the browser is still "online"
 // (navigator.onLine never flips) and the user has NOT elected offline mode. Distinct from a real
