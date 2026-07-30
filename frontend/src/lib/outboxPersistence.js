@@ -120,10 +120,24 @@ async function readOutboxKey(key) {
 }
 
 // Rehydrate queued writes into the mutation cache on app boot (or after login re-adopts an
-// account -- see AuthContext's adoptOutboxAccount). Split by how they were left:
+// account -- see AuthContext's adoptOutboxAccount).
+//
+// CRITICAL: every write shares one TanStack mutation scope (OUTBOX_SCOPE_ID) so they replay one
+// at a time -- but the order that guarantee actually enforces is REGISTRATION order into that
+// scope (i.e. call order of hydrate()/`.mutate()`), not submittedAt. Restoring paused and
+// not-paused writes as two separate batches (hydrate everything paused, THEN dispatch everything
+// not-paused) used to register a later-submitted-but-currently-paused write ahead of an
+// earlier-submitted-but-still-retrying one (lie-fi: a write stays not-paused since
+// navigator.onLine is true) -- e.g. an exercise-create actively retrying under lie-fi would lose
+// its scope slot to a log-set against it that happened to be paused at persist time, permanently
+// wedging the log-set behind an exercise id that can never resolve, and since a retrying
+// mutation's status never leaves 'pending', it never releases the scope for anything else either.
+// One merged pass, sorted by submittedAt, keeps registration order equal to true enqueue order
+// regardless of which cohort each entry falls into.
+//
+// Per entry:
 //  - PAUSED writes are restored via TanStack's own `hydrate`, then the caller resumes them with
-//    `resumePausedMutations()` (see flushOutbox in queryClient.js) once connectivity is confirmed --
-//    the well-tested existing path, unchanged.
+//    `resumePausedMutations()` (see flushOutbox in queryClient.js) once connectivity is confirmed.
 //  - Anything else (pending mid-retry, or terminal error at persist time) has no live retry to
 //    resume -- hydrating it as inert history would leave it stuck forever with nothing to ever
 //    continue it. Re-dispatch it fresh from its persisted variables instead. Safe because every
@@ -140,10 +154,11 @@ async function readOutboxKey(key) {
 // would 401 with no Authorization header, and that 401 can itself tear down a session that a
 // moment later *does* have a valid token (a write queued from a completely unrelated earlier
 // failure landing right after a fresh login). So with no token, everything -- paused AND
-// not-paused alike -- is hydrated as PAUSED instead of dispatched. That's a safe, well-tested
-// state to sit in: flushOutbox()'s own resumePausedMutations() (also gated on a token, see
-// queryClient.js) resumes it the moment a real session exists again, whether that's this same
-// boot (a token was already present) or a later login.
+// not-paused alike -- is hydrated as PAUSED instead of dispatched, still sorted by submittedAt so
+// a later resume replays in true order too. That's a safe, well-tested state to sit in:
+// flushOutbox()'s own resumePausedMutations() (also gated on a token, see queryClient.js) resumes
+// it the moment a real session exists again, whether that's this same boot (a token was already
+// present) or a later login.
 export async function restoreOutbox(queryClient, accountId) {
   if (!idbAvailable) return;
   try {
@@ -151,25 +166,29 @@ export async function restoreOutbox(queryClient, accountId) {
     const dehydrated = await readOutboxKey(key);
     if (!dehydrated?.mutations?.length) return;
 
+    const bySubmittedAt = (a, b) => (a.state.submittedAt ?? 0) - (b.state.submittedAt ?? 0);
+
     if (!getAuthToken()) {
-      const asPaused = dehydrated.mutations.map((m) => ({ ...m, state: { ...m.state, isPaused: true } }));
+      const asPaused = dehydrated.mutations
+        .slice()
+        .sort(bySubmittedAt)
+        .map((m) => ({ ...m, state: { ...m.state, isPaused: true } }));
       hydrate(queryClient, { mutations: asPaused, queries: [] });
       return;
     }
 
-    const paused = dehydrated.mutations.filter((m) => m.state.isPaused);
-    const notPaused = dehydrated.mutations
-      .filter((m) => !m.state.isPaused)
-      .sort((a, b) => (a.state.submittedAt ?? 0) - (b.state.submittedAt ?? 0));
+    const ordered = dehydrated.mutations.slice().sort(bySubmittedAt);
 
-    if (paused.length) hydrate(queryClient, { mutations: paused, queries: [] });
-
-    notPaused.forEach(({ mutationKey, state }) => {
+    ordered.forEach((m) => {
+      if (m.state.isPaused) {
+        hydrate(queryClient, { mutations: [m], queries: [] });
+        return;
+      }
       const observer = new MutationObserver(queryClient, {
-        ...queryClient.getMutationDefaults(mutationKey),
-        mutationKey,
+        ...queryClient.getMutationDefaults(m.mutationKey),
+        mutationKey: m.mutationKey,
       });
-      observer.mutate(state.variables).catch(() => {});
+      observer.mutate(m.state.variables).catch(() => {});
     });
   } catch {
     // A corrupt/unreadable outbox must never crash boot; the durable store is best-effort.

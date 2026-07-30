@@ -29,16 +29,30 @@ export function cancelPendingLogSet(queryClient, tempId) {
 // tempId, idempotencyKey, and clientLoggedAt so identity and rest-timing stay honest once it
 // eventually syncs. Returns the new variables (a caller can use them to patch a cache row in
 // place), or null if the set already synced out from under the edit (mutation no longer pending).
+//
+// Removing the old mutation and dispatching a fresh one is unavoidable here (there's no public
+// TanStack API to update an in-flight Mutation's variables in place -- see the note on
+// `Mutation.execute` in queryClient.js's flushOutbox, which only safely reuses the same object
+// for an already-*settled* (terminal-error) mutation, not one that may still have a live retry
+// loop running). That means the corrected write lands at the END of the shared outbox scope's
+// live array, same as before this fix -- so within the SAME session, a write already queued
+// behind the one being edited could still replay ahead of it. What this DOES fix: the new
+// mutation now keeps the ORIGINAL submittedAt (read below before removing) instead of "now", so
+// once outboxPersistence.js's restoreOutbox restores it after any reload, it sorts back into its
+// true enqueue-order position rather than jumping to the back of the queue permanently.
 export function replacePendingLogSet(queryClient, tempId, { weight, reps }) {
   const mutation = findPendingLogSet(queryClient, tempId);
   if (!mutation) return null;
   const mutationKey = mutation.options.mutationKey;
   const vars = { ...mutation.state.variables, weight, reps };
+  const submittedAt = mutation.state.submittedAt;
   queryClient.getMutationCache().remove(mutation);
   const observer = new MutationObserver(queryClient, {
     ...queryClient.getMutationDefaults(mutationKey),
     mutationKey,
   });
   observer.mutate(vars).catch(() => {});
+  const replacement = findPendingLogSet(queryClient, tempId);
+  if (replacement) replacement.state = { ...replacement.state, submittedAt };
   return vars;
 }

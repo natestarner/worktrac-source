@@ -1,5 +1,13 @@
 import { Page, Route } from '@playwright/test';
 
+// Anchored to the path starting with /api/ right after the origin -- NOT a bare '**/api/**' glob.
+// In local dev only, Vite serves ES modules unbundled straight from source (e.g.
+// http://localhost:3000/src/api/queryKeys.js), which also contains "/api/" as a path segment; a
+// reload while that broader pattern is active blocks the app's own JS modules, not just backend
+// calls, and the page never renders at all. Only reload-based fault tests need this --
+// production/lower serves bundled, hashed assets with no such collision.
+export const API_ONLY = /^https?:\/\/[^/]+\/api\//;
+
 // Aborts matching requests to simulate a dead connection -- a rejected fetch with no `.status`,
 // which is exactly what api/client.js's isOfflineError/retry logic and reachabilityMonitor both
 // treat as "the network path failed", NOT a server answer. This is the only fault type that can

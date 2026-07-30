@@ -105,5 +105,30 @@ describe('offlineSetEdits', () => {
       const client = newClient();
       expect(replacePendingLogSet(client, 'no-such-temp-id', { weight: 100, reps: 1 })).toBeNull();
     });
+
+    // Regression test: the replacement mutation used to be re-dispatched with a fresh
+    // submittedAt ("now"), so a reload shortly after an edit would sort it as if it had been
+    // submitted last -- potentially behind writes it was actually queued ahead of. Restoring the
+    // original submittedAt is what lets a later restoreOutbox sort (outboxPersistence.js) put it
+    // back in its true enqueue-order position. Fake timers make the "time actually passed
+    // between logging and editing" distinction observable instead of a same-millisecond fluke.
+    it('preserves the original submittedAt across the edit, for correct ordering on a later restore', async () => {
+      vi.useFakeTimers();
+      try {
+        const client = newClient();
+        onlineManager.setOnline(false);
+        dispatchLogSet(client);
+        const originalSubmittedAt = pendingMutations(client)[0].state.submittedAt;
+
+        vi.advanceTimersByTime(60_000);
+        replacePendingLogSet(client, 'optimistic-a', { weight: 140, reps: 3 });
+
+        const [replaced] = pendingMutations(client);
+        expect(replaced.state.submittedAt).toBe(originalSubmittedAt);
+        expect(replaced.state.submittedAt).not.toBe(Date.now());
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

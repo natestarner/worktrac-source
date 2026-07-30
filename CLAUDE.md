@@ -254,7 +254,9 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - **The durable write outbox** (`frontend/src/lib/outboxPersistence.js` +
   `frontend/src/lib/queryClient.js`): every offline-capable write shares one TanStack mutation
   scope (`OUTBOX_SCOPE_ID`) so queued writes replay strictly serially, in enqueue order, on
-  reconnect (an exercise-create replays before a set logged against its temp id). Persisted to
+  reconnect (an exercise-create replays before a set logged against its temp id) — see the
+  Resolved Incident below for the mechanism this guarantee actually depends on and one narrower
+  case (editing a still-queued offline set) that isn't fully covered yet. Persisted to
   its own IndexedDB key (`worktrac-outbox:<accountId>`) — deliberately separate from the query
   cache's persister, so neither the query cache's 24h `maxAge` nor an app-update `buster` bump
   can ever silently drop a queued write. Every write carries a client-generated idempotency key
@@ -507,4 +509,38 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - **Takeaway:** `CorsConfig.java` now also registers `/actuator/health`. Any future
   cross-origin frontend call to a non-`/api/**` backend path (another actuator endpoint, etc.)
   needs its own registration here too — CORS is per-path, not per-security-rule; `permitAll()`
+  in `SecurityConfig` only controls auth, not CORS headers.
+
+## Resolved Incident: the durable outbox could replay out of enqueue order under lie-fi + a reload, deadlocking every queued write (2026-07-29)
+- Reproduced in lower: create a custom exercise, log sets against it, with lie-fi and a page
+  reload or two mixed in. On reconnect, **nothing synced** — a log-set had replayed before the
+  exercise-create it depended on, so its `exerciseId` was still an unresolved temp id.
+- Root cause: TanStack's shared mutation scope (`OUTBOX_SCOPE_ID`) really does serialize writes
+  one at a time, but the order it enforces is **registration order into the scope's internal
+  array**, not `submittedAt`. `restoreOutbox` used to split restored writes into two batches —
+  hydrate every *paused* write, THEN dispatch every *not-paused* write — instead of one pass
+  merged by true submit time. Under lie-fi, `navigator.onLine` stays `true`, so an
+  actively-retrying write (e.g. the exercise-create) is never marked paused; if a *later*
+  write (e.g. the dependent log-set) happened to be genuinely paused at persist time, a reload
+  would register it into the scope ahead of the earlier create. And because a mutation whose
+  `mutationFn` keeps throwing (`shouldRetryWrite` retries forever on anything but a definitive
+  4xx) never leaves `state.status = 'pending'`, it never releases its scope slot — permanently
+  blocking every *other* queued write behind it too, not just the misordered one.
+  `flushOutbox`'s stuck-mutation retry had the identical defect (remove-then-recreate always
+  re-registers at the end of the scope's array, regardless of true submit order).
+- **Takeaway:** `restoreOutbox` now merges paused and not-paused writes into one
+  `submittedAt`-sorted pass before registering anything, so registration order always matches
+  true enqueue order. `flushOutbox`'s stuck-retry now restarts the same `Mutation` object in
+  place (`m.execute(...)`) instead of removing and recreating it — safe there specifically
+  because a terminal-`'error'` mutation's retryer has already fully settled, unlike a `'pending'`
+  one, which could still have a live retry loop that a second `execute()` call would race rather
+  than cancel. **Known follow-up, not yet fixed:** `offlineSetEdits.js`'s
+  `replacePendingLogSet` (editing a still-queued offline set's weight/reps) still has to
+  remove-and-recreate the mutation (no public TanStack API updates a live mutation's variables
+  in place), which still moves it to the end of the *live in-memory* scope array for the rest
+  of that session — only its persisted `submittedAt` is corrected, which fixes ordering after a
+  *subsequent reload* but not immediately within the same session. Fully closing that gap needs
+  either a retryer-cancellation API TanStack doesn't expose, or an app-owned ordering layer
+  independent of the scope's registration order. Full investigation narrative:
+  `git log --grep="outbox" -i --grep="replay order" -i`.
   in `SecurityConfig` only controls auth, not CORS headers.
