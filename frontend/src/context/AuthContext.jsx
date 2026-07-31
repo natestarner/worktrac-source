@@ -71,7 +71,8 @@ export function AuthProvider({ children }) {
   }, [navigate]);
 
   useEffect(() => {
-    if (!getAuthToken()) {
+    const tokenAtStart = getAuthToken();
+    if (!tokenAtStart) {
       clearAuthSnapshot();
       setState(SIGNED_OUT);
       return undefined;
@@ -80,10 +81,24 @@ export function AuthProvider({ children }) {
     let cancelled = false;
     let retryTimer = null;
 
+    // This effect only runs once per app mount ([] deps) -- it is NOT re-run or cancelled by a
+    // later logout()/login() the way AppStateContext's hydrate effect is (that one's deps track
+    // `status`, so it re-runs and cancels itself). A slow /me from this boot attempt can therefore
+    // still be in flight when the user logs out and back in again (confirmed live: a page reload's
+    // boot /me was still pending when the subsequent login's own request fired ~200ms later under
+    // real network latency). If that stale response is then applied unconditionally, it silently
+    // overwrites the newer login's state -- including login()'s `freshLogin` flag, which
+    // AppStateContext depends on to reset every person's last-open tab (see the "logging out and
+    // back in resets every person's tab" e2e regression this was caught by). Comparing the current
+    // token against the one this attempt started with detects exactly that case.
+    function isStale() {
+      return cancelled || getAuthToken() !== tokenAtStart;
+    }
+
     function attemptMe(nextDelayMs) {
       apiMe()
         .then((data) => {
-          if (cancelled) return;
+          if (isStale()) return;
           // A verified live session -- record the identity so a later cold start with no network
           // can still boot into the app, and mark durable storage so the offline cache isn't
           // evicted.
@@ -93,7 +108,7 @@ export function AuthProvider({ children }) {
           setState({ status: 'authenticated', offline: false, ...data });
         })
         .catch((error) => {
-          if (cancelled) return;
+          if (isStale()) return;
           // Distinguish "session is actually invalid" from "we just couldn't reach the server".
           // A 4xx (esp. 401) is the server's real answer -> sign out. A network/offline/5xx
           // failure with a valid saved token + a last-known identity -> boot the app OFFLINE from
@@ -113,7 +128,7 @@ export function AuthProvider({ children }) {
             // the initial boot -- never /login) and keep retrying with backoff instead; a genuine
             // invalid-session 4xx still falls to the branch below on any attempt.
             retryTimer = setTimeout(() => {
-              if (!cancelled) attemptMe(Math.min(nextDelayMs * 2, RECONNECT_RETRY_MAX_MS));
+              if (!isStale()) attemptMe(Math.min(nextDelayMs * 2, RECONNECT_RETRY_MAX_MS));
             }, nextDelayMs);
           } else {
             // A genuine sign-out (a real 4xx -- the token itself is invalid) must clear the token
@@ -140,8 +155,12 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     return onlineManager.subscribe((online) => {
       if (!online || !getAuthToken()) return;
+      // Same staleness class as the boot effect above: this subscription lives for the whole app
+      // session, so its apiMe() call can still be in flight when a logout+login happens meanwhile.
+      const tokenAtCall = getAuthToken();
       apiMe()
         .then((data) => {
+          if (getAuthToken() !== tokenAtCall) return; // a newer login/logout happened meanwhile
           saveAuthSnapshot(data);
           // Spread the previous state first so an in-flight `freshLogin` flag (see login()/
           // confirmEmail() below) isn't silently clobbered back to falsy if this reconcile happens
