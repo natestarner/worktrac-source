@@ -209,6 +209,16 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
     so an active routine survives a reload. Slices for removed people are pruned
     (`RECONCILE_PEOPLE`); the exposed context value still flattens the active slice to the top
     level, so consumers read `selectedExerciseId`/`weightDraft`/etc. unchanged.
+    - **`lastTab` (current tab) is the one exception to "always restore where a person left
+      off."** A mid-session reload must resume the persisted tab (`status` alone can't tell a
+      reload apart from a fresh login — both land on `status === 'authenticated'`), but an
+      actual login/registration must always land every person on Log, not wherever the
+      previous session happened to be. `AuthContext.login`/`confirmEmail` set a `freshLogin`
+      flag on their `setState` call (never set by the silent boot/reconnect paths); the
+      `HYDRATE` reducer case in `AppStateContext.jsx` resets every restored person's `lastTab`
+      to `/app/log` when it's set. Any future field that should behave like `lastTab` (reset on
+      login, preserved on reload) should key off the same `resetTab`/`freshLogin` plumbing
+      rather than inventing a second signal.
   - `UIContext` (`frontend/src/context/UIContext.jsx`) — state keyed by personId directly
     (e.g. `restTimers: { [personId]: {...} }`), used when a person's state needs to keep
     running independently in the background even while a *different* person is active

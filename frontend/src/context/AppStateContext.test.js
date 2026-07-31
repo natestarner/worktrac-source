@@ -186,4 +186,29 @@ describe('AppStateContext reducer', () => {
     const reconciled = reducer(state, { type: 'RECONCILE_PEOPLE', personIds: [1, 2, 3] });
     expect(reconciled).toBe(state);
   });
+
+  it('HYDRATE with resetTab resets every restored person back to the Log tab (a fresh login)', () => {
+    const restored = reducer(initialState, {
+      type: 'HYDRATE',
+      activePersonId: 1,
+      byPerson: {
+        1: { ...PERSON_DEFAULTS, lastTab: '/app/trends', weightDraft: 225 },
+        2: { ...PERSON_DEFAULTS, lastTab: '/app/history' },
+      },
+      resetTab: true,
+    });
+    expect(restored.byPerson[1].lastTab).toBe('/app/log');
+    expect(restored.byPerson[2].lastTab).toBe('/app/log');
+    // Only the tab is reset -- the rest of each person's restored slice is untouched.
+    expect(restored.byPerson[1].weightDraft).toBe(225);
+  });
+
+  it('HYDRATE without resetTab (a mid-session reload) leaves each person\'s last tab alone', () => {
+    const restored = reducer(initialState, {
+      type: 'HYDRATE',
+      activePersonId: 1,
+      byPerson: { 1: { ...PERSON_DEFAULTS, lastTab: '/app/trends' } },
+    });
+    expect(restored.byPerson[1].lastTab).toBe('/app/trends');
+  });
 });
