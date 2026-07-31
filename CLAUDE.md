@@ -112,7 +112,11 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   returns the already-committed set (with `isPR = false`) instead of inserting a second row, so a
   retried or offline-replayed write can't double-log. A unique filtered index backstops the
   concurrent case. Blank/absent key ⇒ no dedup. This is what makes the frontend's optimistic
-  log-set + retry safe.
+  log-set + retry safe. **Correcting a set's weight/reps must never be expressed as a re-dispatch
+  of its create under the same `idempotencyKey`** — `findDuplicate` returns the already-committed
+  row regardless of the new payload, so a same-key edit-via-recreate is silently discarded if the
+  original create already landed. See the "editing a still-queued offline set" Resolved Incident
+  below: an edit is always a genuinely separate `EDIT_SET` write, never a mutation of the create.
 - **Rest-timer display preference (`people.rest_timer_enabled`, added in `V39`).** A per-person
   setting, but persisted account-side (not per-device localStorage) and surfaced on each person in
   `/api/auth/me`, so Settings shows every person's toggle at once and it syncs across devices. Set
@@ -264,9 +268,9 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - **The durable write outbox** (`frontend/src/lib/outboxPersistence.js` +
   `frontend/src/lib/queryClient.js`): every offline-capable write shares one TanStack mutation
   scope (`OUTBOX_SCOPE_ID`) so queued writes replay strictly serially, in enqueue order, on
-  reconnect (an exercise-create replays before a set logged against its temp id) — see the
-  Resolved Incident below for the mechanism this guarantee actually depends on and one narrower
-  case (editing a still-queued offline set) that isn't fully covered yet. Persisted to
+  reconnect (an exercise-create replays before a set logged against its temp id, and an edit
+  queued against a still-syncing set replays after the create it depends on — see the two
+  Resolved Incidents below for the mechanism this guarantee depends on). Persisted to
   its own IndexedDB key (`worktrac-outbox:<accountId>`) — deliberately separate from the query
   cache's persister, so neither the query cache's 24h `maxAge` nor an app-update `buster` bump
   can ever silently drop a queued write. Every write carries a client-generated idempotency key
@@ -544,16 +548,67 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   place (`m.execute(...)`) instead of removing and recreating it — safe there specifically
   because a terminal-`'error'` mutation's retryer has already fully settled, unlike a `'pending'`
   one, which could still have a live retry loop that a second `execute()` call would race rather
-  than cancel. **Known follow-up, not yet fixed:** `offlineSetEdits.js`'s
-  `replacePendingLogSet` (editing a still-queued offline set's weight/reps) still has to
-  remove-and-recreate the mutation (no public TanStack API updates a live mutation's variables
-  in place), which still moves it to the end of the *live in-memory* scope array for the rest
-  of that session — only its persisted `submittedAt` is corrected, which fixes ordering after a
-  *subsequent reload* but not immediately within the same session. Fully closing that gap needs
-  either a retryer-cancellation API TanStack doesn't expose, or an app-owned ordering layer
-  independent of the scope's registration order. Full investigation narrative:
-  `git log --grep="outbox" -i --grep="replay order" -i`.
-  in `SecurityConfig` only controls auth, not CORS headers.
+  than cancel. **The "editing a still-queued offline set" follow-up flagged here is now
+  resolved** — see the next Resolved Incident entry below (2026-07-30): rather than finding a
+  way to reorder/reuse the queued create's mutation, editing a pending set no longer touches the
+  create at all. Full investigation narrative for this entry: `git log --grep="outbox" -i
+  --grep="replay order" -i`.
+
+## Resolved Incident: editing a still-queued offline set could reorder it, or silently lose the edit (2026-07-30)
+- Follow-up to the entry above. Two related problems in `offlineSetEdits.js`'s
+  `replacePendingLogSet` (used whenever `EditSetModal` saves a change to a set that hasn't synced
+  yet): (1) it removed the pending `logSet` create and re-dispatched a fresh one, which — like the
+  bug above — always re-registers at the *end* of the shared outbox scope's array, so it could
+  still jump ahead of/behind other queued writes within the same session (only a *subsequent
+  reload* self-corrected it, via the already-fixed `restoreOutbox`). (2) More seriously: the
+  re-dispatched create kept the SAME `idempotencyKey` as the original. If that original create had
+  already reached the server under lie-fi (response lost, or a retry landed after a dropped first
+  attempt), the re-dispatch collided with `WorkoutSetService.findDuplicate`
+  (`backend/.../workoutset/WorkoutSetService.java`), which keys **only** on `idempotencyKey` and
+  returns the already-committed row **ignoring the new payload** — so the edited weight/reps were
+  silently discarded, with no error surfaced anywhere.
+- Investigation also confirmed a hard constraint against the "obvious" alternative fix (edit the
+  queued create in place): traced against the exact pinned `@tanstack/react-query@5.101.2` source,
+  there is **no public API to cancel an in-flight mutation's retry loop**, and calling
+  `Mutation.execute(newVars)` on an already-`'pending'` mutation takes an internal `restored`
+  branch that skips the `state.variables` update entirely — so even if cancellation weren't a
+  problem, the UI wouldn't show the edited values. In-place editing was never viable.
+- **Takeaway:** editing a pending set no longer touches its queued create at all. It's now a
+  genuinely separate, durable `EDIT_SET` write targeting the create's `tempId`, resolved to the
+  real set id via a new `frontend/src/lib/setIdMap.js` — structurally identical to
+  `exerciseIdMap.js`'s existing temp-exercise-id resolution, just applied to a second entity.
+  `LOG_SET`'s `onSettled` records the tempId→realId mapping on success (mirroring
+  `CREATE_EXERCISE`'s); `EDIT_SET`'s `mutationFn` resolves through it via `requireResolvedSetId`,
+  throwing the same status-less/retryable shape as `requireResolvedExerciseId` when the create
+  hasn't synced yet, so the shared serial scope guarantees the create replays first. This makes
+  editing a pending set behave identically to editing an already-synced one in every connectivity
+  mode (online / hard-offline / lie-fi) — same code path, differing only in whether the target id
+  starts temp or real — and fixes both problems above: the create is never removed or reordered,
+  and there is no same-key re-dispatch for `findDuplicate` to collide with.
+- **Accepted UX costs, deliberately not engineered away (documented here, not just in code, so a
+  future change doesn't "fix" them into new special-casing):**
+  - **A brief revert-then-correct flicker is possible on reconnect**, but *only* for a set edited
+    before it ever synced. The create still commits its **original** value first (by design — see
+    above), then the separate `EDIT_SET` applies the correction; each write's `onSettled`
+    invalidates the relevant queries, so a refetch between the two could briefly repaint the
+    original value before the corrected one lands. An already-synced set has no queued create in
+    play, so this never happens for the common (online) case. Rejected fix: special-casing the
+    hard-offline path to fold the correction into the create's own outgoing payload (avoiding the
+    second write entirely) — this would require branching by connectivity mode at write time,
+    reintroducing exactly the kind of mode-specific special-casing this whole redesign exists to
+    get away from, for a cosmetic, self-correcting flicker.
+  - **PR celebration can reflect the pre-edit value.** Because the create is never touched, a set
+    that was a PR *as originally logged* can still trigger "New PR!" on sync even if it was edited
+    down before reconnecting. This is a deliberate consequence of leaving the create alone, not an
+    oversight — suppressing it would mean tracking "was this pending set edited" as extra state and
+    threading it into PR detection, again the kind of special-casing being avoided. Narrow in
+    practice (requires editing a PR-setting set before it ever syncs) and arguably more honest than
+    the alternative (a PR you actually hit not being celebrated because you fixed a typo in it
+    later).
+  - Both costs are confined to "a set edited before it ever synced" — never afflict editing an
+    already-synced set — and were an explicit, discussed trade favoring one uniform code path over
+    chasing every polish case. See `git log --grep="editing a still-queued" -i` for the full
+    design discussion.
 
 ## Resolved Incident: a stale boot `/me` response could silently clobber a fresh login's `freshLogin` flag (2026-07-31)
 - Caught by a new e2e regression test (`multi-person.spec.ts`) that failed only in the deployed

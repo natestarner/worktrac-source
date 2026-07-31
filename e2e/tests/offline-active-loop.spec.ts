@@ -46,6 +46,47 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
     await expect(page.getByText('55 lb')).toBeVisible();
   });
 
+  // Editing a set that hasn't synced YET (unlike the already-synced case above) used to remove and
+  // re-dispatch its pending create, which could reorder it in the shared outbox scope and, under
+  // lie-fi, risked the backend silently discarding the edit (idempotency dedup keyed only on the
+  // create's own key). It's now a genuinely separate durable EDIT_SET write targeting the create's
+  // temp id (see offlineSetEdits.js/setIdMap.js) -- both writes queue independently and the
+  // corrected value is what's actually persisted server-side, not just an optimistic display that
+  // could revert.
+  test('editing a not-yet-synced set offline queues a separate write and the correction survives reconnect', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Rowan');
+    await pickExercise(page, 'Barbell Bench Press');
+
+    await goHardOffline(page);
+
+    // Log a set while offline -- its create is queued, not yet synced.
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+    await expect(outboxCountText(page, 1)).toBeVisible();
+
+    // Edit it before it ever syncs.
+    await page.getByRole('button', { name: 'Edit' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.locator('.stepper-row').first().getByRole('button', { name: '+' }).click();
+    await dialog.locator('.stepper-row').first().getByRole('button', { name: '+' }).click();
+    await dialog.getByRole('button', { name: 'Save' }).click();
+
+    // Shows the correction immediately, and now TWO writes are queued -- the original create plus
+    // the separate edit -- not one replaced mutation.
+    await expect(page.getByText('55 lb')).toBeVisible();
+    await expect(outboxCountText(page, 2)).toBeVisible();
+
+    await goOnline(page);
+    await waitForOutboxDrain(page);
+
+    // The corrected value is what actually landed server-side -- if the edit had been silently
+    // dropped (the bug this fixes), a refetch here would have reverted to the original 45 lb.
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+    await expect(page.getByText('55 lb')).toBeVisible();
+    await page.reload();
+    await expect(page.getByText('55 lb')).toBeVisible();
+  });
+
   test('favoriting and saving a session note offline both queue and land on reconnect', async ({ page, request }) => {
     await registerHousehold(page, request, 'Cameron');
     await pickExercise(page, 'Barbell Bench Press');

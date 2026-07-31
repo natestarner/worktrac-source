@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { MutationObserver, QueryClient, dehydrate, hydrate, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  EDIT_SET_MUTATION_KEY,
   LOG_SET_MUTATION_KEY,
   clearOutboxMutations,
   flushOutbox,
@@ -13,7 +14,8 @@ import {
   shouldRetryWrite,
 } from './queryClient';
 import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './exerciseIdMap';
-import { logLiveSet, logSetIntoSession } from '../api/sets';
+import { _getMappingForTest, clearSetIdMap, setSetIdMapping } from './setIdMap';
+import { editSet, logLiveSet, logSetIntoSession } from '../api/sets';
 import { setAuthToken } from '../api/client';
 
 vi.mock('../api/sets', () => ({
@@ -171,6 +173,94 @@ describe('dependent writes guard against an unresolved temp exercise id', () => 
     await dispatch({ mode: 'live', personId: 7, exerciseId: tempId, weight: 100, reps: 5, idempotencyKey: 'k4', clientLoggedAt: 't' });
 
     expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ exerciseId: 555 }));
+  });
+});
+
+// LOG_SET's onSettled recording the temp->real SET id mapping -- this is what lets an EDIT_SET
+// queued against a still-syncing set's tempId resolve once the create lands (see the next describe
+// block and offlineSetEdits.js's redesign away from mutating the queued create in place).
+describe('logSet onSettled records the temp->real set id mapping', () => {
+  let client;
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await clearSetIdMap();
+    client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    registerOfflineMutationDefaults(client, { retry: false });
+  });
+  afterEach(async () => {
+    await clearSetIdMap();
+  });
+
+  function dispatch(variables) {
+    const observer = new MutationObserver(client, {
+      ...client.getMutationDefaults(LOG_SET_MUTATION_KEY),
+      mutationKey: LOG_SET_MUTATION_KEY,
+    });
+    return observer.mutate(variables);
+  }
+
+  it('maps tempId -> the real set id returned by the server on success', async () => {
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 1 }, set: { id: 4242 } });
+
+    await dispatch({ mode: 'live', personId: 7, exerciseId: 3, weight: 100, reps: 5, tempId: 'optimistic-abc', idempotencyKey: 'k5', clientLoggedAt: 't' });
+
+    expect(_getMappingForTest('optimistic-abc')).toBe(4242);
+  });
+
+  it('does not record a mapping when the write fails', async () => {
+    logLiveSet.mockRejectedValueOnce({ status: 500 });
+
+    await dispatch({ mode: 'live', personId: 7, exerciseId: 3, weight: 100, reps: 5, tempId: 'optimistic-def', idempotencyKey: 'k6', clientLoggedAt: 't' }).catch(() => {});
+
+    expect(_getMappingForTest('optimistic-def')).toBeUndefined();
+  });
+});
+
+describe('EDIT_SET guards against an unresolved temp set id (a set logged offline, not yet synced)', () => {
+  let client;
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await clearSetIdMap();
+    editSet.mockResolvedValue({ id: 1, weight: 140, reps: 3 });
+    client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    registerOfflineMutationDefaults(client, { retry: false });
+  });
+  afterEach(async () => {
+    await clearSetIdMap();
+  });
+
+  function dispatch(variables) {
+    const observer = new MutationObserver(client, {
+      ...client.getMutationDefaults(EDIT_SET_MUTATION_KEY),
+      mutationKey: EDIT_SET_MUTATION_KEY,
+    });
+    return observer.mutate(variables);
+  }
+
+  it('throws a status-less (retryable) error instead of posting a raw temp id, and never calls the API', async () => {
+    let caughtError;
+    await dispatch({ setId: 'optimistic-not-synced-yet', weight: 140, reps: 3, personId: 7, sessionId: null, exerciseId: 3, exerciseName: 'Squat' }).catch((error) => {
+      caughtError = error;
+    });
+
+    expect(caughtError).toBeInstanceOf(Error);
+    expect(caughtError.status).toBeUndefined();
+    expect(shouldRetryWrite(0, caughtError)).toBe(true);
+    expect(editSet).not.toHaveBeenCalled();
+  });
+
+  it('resolves and dispatches normally once the create has synced and mapped the id', async () => {
+    setSetIdMapping('optimistic-now-synced', 4242);
+
+    await dispatch({ setId: 'optimistic-now-synced', weight: 140, reps: 3, personId: 7, sessionId: null, exerciseId: 3, exerciseName: 'Squat' });
+
+    expect(editSet).toHaveBeenCalledWith(4242, { weight: 140, reps: 3 });
+  });
+
+  it('a real numeric setId (an already-synced set) passes through unchanged', async () => {
+    await dispatch({ setId: 999, weight: 140, reps: 3, personId: 7, sessionId: 10, exerciseId: 3, exerciseName: 'Squat' });
+
+    expect(editSet).toHaveBeenCalledWith(999, { weight: 140, reps: 3 });
   });
 });
 

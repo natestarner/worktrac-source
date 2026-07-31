@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { enqueueOutboxWrite, EDIT_SET_MUTATION_KEY } from '../../lib/queryClient';
-import { replacePendingLogSet } from '../../lib/offlineSetEdits';
+import { dispatchDurableWrite, EDIT_SET_MUTATION_KEY } from '../../lib/queryClient';
+import { patchPendingLogSetDisplay } from '../../lib/offlineSetEdits';
 import { queryKeys } from '../../api/queryKeys';
 import WeightRepsStepper from '../log/WeightRepsStepper';
 import Modal from './Modal';
@@ -29,14 +29,20 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
       );
     }
     if (set.optimistic) {
-      // Not yet synced -- "editing" it means correcting the pending create, not queuing a write
-      // against a set id that doesn't exist yet. See offlineSetEdits.js.
-      replacePendingLogSet(queryClient, set.id, { weight, reps });
-    } else {
-      // Only reached for an already-synced set (an unsynced set shows Edit/Delete too now, but
-      // routes through the branch above), so set.id is a real id here.
-      enqueueOutboxWrite(EDIT_SET_MUTATION_KEY, { setId: set.id, weight, reps, personId, sessionId, exerciseId, exerciseName });
+      // Not yet synced -- the queued CREATE is deliberately left untouched (see offlineSetEdits.js
+      // for why: no public API to edit or cancel an in-flight mutation, and re-dispatching it under
+      // the same idempotency key risks the backend silently discarding the edit). Only the
+      // pre-session display needs a direct patch; once a session exists the setQueryData above
+      // already covers it.
+      patchPendingLogSetDisplay(queryClient, set.id, { weight, reps });
     }
+    // Always a real, separate EDIT_SET write -- set.id is the tempId for an optimistic row
+    // (resolved once its create syncs, see queryClient.js's requireResolvedSetId/setSetIdMapping)
+    // or a real id for an already-synced one. Editing a pending set now behaves identically to
+    // editing a synced set in every connectivity mode. Dispatched against the same context
+    // `queryClient` used above (not the app-singleton-only enqueueOutboxWrite) so it lands in the
+    // exact mutation cache holding the matching pending create.
+    dispatchDurableWrite(queryClient, EDIT_SET_MUTATION_KEY, { setId: set.id, weight, reps, personId, sessionId, exerciseId, exerciseName });
     onSaved();
   }
 

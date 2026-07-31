@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { getExerciseSummary } from '../../api/stats';
-import { listSessionSets, logLiveSet, logSetIntoSession } from '../../api/sets';
+import { editSet, listSessionSets, logLiveSet, logSetIntoSession } from '../../api/sets';
 import { getSessionExerciseNote, saveLiveExerciseNote, saveSessionExerciseNote } from '../../api/notes';
 import { getHistory } from '../../api/sessions';
 
@@ -29,6 +29,7 @@ vi.mock('../../api/sets', () => ({
   logLiveSet: vi.fn(),
   logSetIntoSession: vi.fn(),
   deleteSet: vi.fn(),
+  editSet: vi.fn(),
 }));
 vi.mock('../../api/exercises', () => ({
   listCustomFields: vi.fn().mockResolvedValue([]),
@@ -585,15 +586,24 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     }
   });
 
-  it('editing a paused-offline set replaces the pending create with the corrected values', async () => {
+  // Editing a not-yet-synced set no longer touches its queued create at all -- it queues a
+  // genuinely separate, durable EDIT_SET write targeting the create's tempId (resolved once the
+  // create syncs, see queryClient.js's requireResolvedSetId/setSetIdMapping and
+  // offlineSetEdits.js's patchPendingLogSetDisplay). This is what makes editing a pending set
+  // behave identically to editing a synced one in every connectivity mode, and avoids both
+  // reordering the create in the shared outbox scope and the backend's idempotency dedup silently
+  // discarding the edit if the create had already reached the server under lie-fi.
+  it('editing a paused-offline set shows the corrected values immediately and queues a separate EDIT_SET, without removing or recreating the create', async () => {
     listSessionSets.mockResolvedValue([]);
     logLiveSet.mockImplementation(() => new Promise(() => {})); // never resolves -- stays paused
-    renderExerciseDetail({ liveSession: { id: 101 } });
+    editSet.mockImplementation(() => new Promise(() => {})); // never resolves -- stays paused
+    const { queryClient } = renderExerciseDetail({ liveSession: { id: 101 } });
 
     onlineManager.setOnline(false);
     try {
       fireEvent.click(await screen.findByText('Log set'));
       expect(await screen.findByText('135 lb × 8')).toBeInTheDocument();
+      const createBefore = queryClient.getMutationCache().getAll().find((m) => m.options.mutationKey[0] === 'logSet');
 
       fireEvent.click(screen.getByText('Edit'));
       // Scoped to the modal dialog -- ExerciseDetail's own "log a new set" weight/reps steppers
@@ -602,21 +612,32 @@ describe('ExerciseDetail in-flight visual feedback', () => {
       fireEvent.click(within(dialog).getAllByText('+')[0]); // Weight stepper's "+" (Reps' is the second)
       fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
 
+      // The row shows the correction immediately...
       expect(await screen.findByText('140 lb × 8')).toBeInTheDocument();
+      // ...but the CREATE itself was never removed or recreated -- same object, same slot in the
+      // shared outbox scope, so it can't be pushed out of enqueue order the way the old
+      // replacePendingLogSet approach could.
+      const create = queryClient.getMutationCache().getAll().find((m) => m.options.mutationKey[0] === 'logSet');
+      expect(create).toBe(createBefore);
       expect(logLiveSet).not.toHaveBeenCalled();
+      // A separate, genuinely new EDIT_SET write carries the correction.
+      const edit = queryClient.getMutationCache().getAll().find((m) => m.options.mutationKey[0] === 'editSet');
+      expect(edit).toBeDefined();
+      expect(edit.state.variables).toMatchObject({ weight: 140, reps: 8 });
+      expect(editSet).not.toHaveBeenCalled(); // still paused offline
     } finally {
       onlineManager.setOnline(true);
     }
   });
 
-  // Regression test: pendingBeforeSession used to inherit raw mutation-cache order, but
-  // replacePendingLogSet (offlineSetEdits.js) removes a mutation and re-dispatches it via a
-  // fresh MutationObserver, which re-appends it to the END of the cache -- reordering the
-  // array out from under the position-based "Set N" labels. Editing the chronologically
-  // earlier of two pending sets used to make its label swap onto the OTHER set instead.
-  // pendingBeforeSession must stay sorted by clientLoggedAt (independent of cache order) so
-  // the label a user taps "Edit" on always stays bound to the set they meant to edit.
-  it('keeps "Set N" labels bound to the correct set after editing an earlier pending set', async () => {
+  // pendingBeforeSession sorts by clientLoggedAt rather than trusting raw mutation-cache order --
+  // now purely defensive (editing no longer reorders the cache; see the test above and
+  // ExerciseDetail.jsx's comment on pendingBeforeSession), but the underlying guarantee ("Set N"
+  // labels are position-based, so they must reflect true logging order regardless of array order)
+  // is still worth protecting directly: construct a genuine mismatch (a set arriving in the cache
+  // AFTER an earlier one, but with an EARLIER clientLoggedAt) and confirm the labels still land on
+  // true chronological order, not array/insertion order.
+  it('keeps "Set N" labels in true chronological (clientLoggedAt) order even when cache/array order disagrees', async () => {
     listSessionSets.mockResolvedValue([]);
     logLiveSet.mockImplementation(() => new Promise(() => {})); // never resolves -- stays paused
     const { queryClient } = renderExerciseDetail({ liveSession: null });
@@ -625,15 +646,14 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     try {
       const button = (await screen.findByText('Log set')).closest('button');
 
-      // Set 1: logged first, through the real UI flow.
+      // "Set 2" (by array/insertion order): dispatched first, but with a LATER clientLoggedAt --
+      // through the real UI flow.
       fireEvent.click(button);
       expect(await screen.findByText('135 lb × 8')).toBeInTheDocument();
 
-      // Set 2: dispatched directly against the mutation cache (bypassing the mocked, static
-      // useAppState draft) with distinct weight/reps and a later clientLoggedAt -- exactly how
-      // outboxPersistence's restoreOutbox re-dispatches a persisted mutation via a fresh
-      // MutationObserver using the same registered defaults (see offlineSetEdits.js's
-      // replacePendingLogSet, which does the same thing on edit).
+      // "Set 1" (by true clientLoggedAt): dispatched SECOND against the mutation cache (bypassing
+      // the mocked, static useAppState draft), but stamped with an EARLIER clientLoggedAt -- e.g.
+      // an offline replay ordering quirk, independent of any edit.
       const mutationKey = ['logSet', 7, exercise.id];
       await act(async () => {
         new MutationObserver(queryClient, { ...queryClient.getMutationDefaults(mutationKey), mutationKey })
@@ -647,30 +667,16 @@ describe('ExerciseDetail in-flight visual feedback', () => {
             reps: 12,
             tempId: 'test-temp-2',
             idempotencyKey: 'test-idem-2',
-            clientLoggedAt: new Date(Date.now() + 1000).toISOString(),
+            clientLoggedAt: new Date(Date.now() - 1000).toISOString(),
           })
           .catch(() => {});
       });
 
-      expect(await screen.findByText('145 lb × 12')).toBeInTheDocument();
-      const set2Row = screen.getByText('145 lb × 12').parentElement;
-      expect(within(set2Row).getByText('Set 2')).toBeInTheDocument();
-
-      // Edit Set 1 (the older/first-logged set) -- bump its weight by one stepper click (+5).
-      // replacePendingLogSet removes Set 1's mutation and re-dispatches it, appending it to the
-      // END of the mutation cache -- without the clientLoggedAt sort this used to relabel it as
-      // "Set 2" and leave Set 2's untouched data wearing the "Set 1" label instead.
-      const set1Row = screen.getByText('135 lb × 8').parentElement;
-      fireEvent.click(within(set1Row.parentElement).getByText('Edit'));
-      const dialog = screen.getByRole('dialog');
-      fireEvent.click(within(dialog).getAllByText('+')[0]);
-      fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-
-      // Set 1's own row reflects the edit; Set 2 is untouched and keeps its own label.
-      const editedRow = (await screen.findByText('140 lb × 8')).parentElement;
-      expect(within(editedRow).getByText('Set 1')).toBeInTheDocument();
-      const unchangedRow = screen.getByText('145 lb × 12').parentElement;
-      expect(within(unchangedRow).getByText('Set 2')).toBeInTheDocument();
+      // Despite arriving SECOND in the cache, its EARLIER clientLoggedAt puts it first on screen.
+      const earlierRow = (await screen.findByText('145 lb × 12')).parentElement;
+      expect(within(earlierRow).getByText('Set 1')).toBeInTheDocument();
+      const laterRow = screen.getByText('135 lb × 8').parentElement;
+      expect(within(laterRow).getByText('Set 2')).toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);
     }

@@ -54,7 +54,13 @@ describe('EditSetModal', () => {
     expect(onSaved).toHaveBeenCalled();
   });
 
-  it('editing a not-yet-synced (optimistic) set replaces its pending create instead of queuing EDIT_SET', async () => {
+  // Editing a not-yet-synced set used to remove and re-dispatch its pending create -- which always
+  // re-registered at the end of the shared outbox scope's array (reordering it out from under any
+  // write already queued behind it) and, under lie-fi, risked the backend's idempotency dedup
+  // silently discarding the edit if the create had already reached the server. It's now a
+  // genuinely separate EDIT_SET write targeting the create's tempId, leaving the create itself
+  // completely untouched -- see offlineSetEdits.js and queryClient.js's requireResolvedSetId.
+  it('editing a not-yet-synced (optimistic) set queues a genuinely separate EDIT_SET write, without removing or recreating the create', async () => {
     const set = { id: 'temp-a', weight: 135, reps: 5, unit: 'lb', optimistic: true };
     const { queryClient } = renderWithQuery(
       <EditSetModal set={set} personId={7} exerciseId={1} sessionId={101} onClose={onClose} onSaved={onSaved} />,
@@ -62,15 +68,43 @@ describe('EditSetModal', () => {
     onlineManager.setOnline(false);
     dispatchLogSet(queryClient, 'temp-a');
     await waitFor(() => expect(pendingMutations(queryClient)).toHaveLength(1));
+    const [createBefore] = pendingMutations(queryClient);
 
     fireEvent.click(screen.getAllByText('+')[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(editSet).not.toHaveBeenCalled();
-    const pending = pendingMutations(queryClient);
-    expect(pending).toHaveLength(1);
-    expect(pending[0].state.variables).toMatchObject({ weight: 140, reps: 5, tempId: 'temp-a' });
+    // Both the original create (still paused) and a new, separate EDIT_SET write (also paused,
+    // targeting the create's tempId) are now queued.
+    await waitFor(() => expect(pendingMutations(queryClient)).toHaveLength(2));
+    const [create, edit] = pendingMutations(queryClient);
+    // Same object, not a remove+recreate -- this is the actual ordering guarantee: the create
+    // never left its slot in the shared outbox scope, so it can't be pushed out of enqueue order.
+    expect(create).toBe(createBefore);
+    expect(create.options.mutationKey[0]).toBe('logSet');
+    expect(edit.options.mutationKey[0]).toBe('editSet');
+    expect(edit.state.variables).toMatchObject({ setId: 'temp-a', weight: 140, reps: 5 });
+    expect(editSet).not.toHaveBeenCalled(); // still paused offline, neither write has dispatched yet
     expect(onSaved).toHaveBeenCalled();
+  });
+
+  it("patches the pending create's display (pre-session, no sessionSets row yet) so the edited values show immediately", async () => {
+    const set = { id: 'temp-b', weight: 135, reps: 5, unit: 'lb', optimistic: true };
+    // No sessionId -- the very first set of a brand-new offline workout, before a session exists.
+    const { queryClient } = renderWithQuery(
+      <EditSetModal set={set} personId={7} exerciseId={1} sessionId={null} onClose={onClose} onSaved={onSaved} />,
+    );
+    onlineManager.setOnline(false);
+    dispatchLogSet(queryClient, 'temp-b', { sessionId: null });
+    await waitFor(() => expect(pendingMutations(queryClient)).toHaveLength(1));
+
+    fireEvent.click(screen.getAllByText('+')[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    // The create's OWN displayed variables reflect the edit immediately (this is what
+    // pendingBeforeSession in ExerciseDetail.jsx reads for a pre-session row) -- even though the
+    // create still commits its original values once it syncs (see the previous test).
+    const create = pendingMutations(queryClient).find((m) => m.options.mutationKey[0] === 'logSet');
+    expect(create.state.variables).toMatchObject({ weight: 140, reps: 5 });
   });
 
   it('patches the sessionSets cache row in place so the new value shows without waiting for sync', async () => {
