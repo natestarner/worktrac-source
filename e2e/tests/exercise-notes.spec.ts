@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { pickExercise } from './support/exercises';
+import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 // Exercise notes are two independent, coexisting features (see CLAUDE.md's Data Model
 // Notes): a standing per-person note shown every session, and a per-session note scoped
@@ -110,5 +111,35 @@ test.describe('Exercise notes', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click();
 
     await expect(page.getByText('Go light -- bad knee')).toHaveCount(0);
+  });
+
+  // Regression: contextSessionId (see CLAUDE.md's Offline Mode Notes) stays null for a person's
+  // entire offline/lie-fi stretch, not just before their first set, so a session note saved in
+  // that window used to be invisible until the write actually reached the server -- durably
+  // queued, but nothing on screen showed it. This exercises ExerciseDetail.jsx's pendingLiveNote
+  // fallback, which mirrors the technique already used for a set logged before any session exists.
+  test('a session note saved offline before any session exists is visible immediately, not just after reconnect', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+    await pickExercise(page, 'Barbell Bench Press');
+
+    await expect(page.getByText('Session in progress')).toHaveCount(0);
+    await goHardOffline(page);
+
+    await page.getByRole('button', { name: 'Add a note for this session' }).click();
+    await page.getByPlaceholder('Write a note...').fill('Cut it short, felt off');
+    await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+
+    // Visible right away, still offline -- the durable write is queued but unresolved.
+    await expect(page.getByText('Cut it short, felt off')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit note for this session' })).toBeVisible();
+    await expect(outboxCountText(page, 1)).toBeVisible();
+
+    await goOnline(page);
+    await waitForOutboxDrain(page);
+
+    // Still visible once the write actually reaches the server and the real session
+    // materializes (reconciled via SAVE_NOTE's onSettled).
+    await expect(page.getByText('Cut it short, felt off')).toBeVisible();
+    await expect(page.getByText('Session in progress')).toBeVisible();
   });
 });

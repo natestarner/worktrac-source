@@ -238,6 +238,45 @@ describe('ExerciseDetail exercise notes', () => {
     await waitFor(() => expect(saveSessionExerciseNote).toHaveBeenCalledWith(55, 1, 'Backfilled note'));
     expect(saveLiveExerciseNote).not.toHaveBeenCalled();
   });
+
+  // Regression test: a note saved while contextSessionId is null (no session has synced yet --
+  // true before the first set of a brand-new workout, and for the rest of an offline/lie-fi
+  // stretch even after one, since the placeholder liveSession seeded by logSetMutation.onMutate
+  // is deliberately `{ id: null }`) used to be invisible until the write actually reached the
+  // server and SAVE_NOTE's onSettled invalidation refetched -- impossible while paused offline.
+  // See pendingLiveNote in ExerciseDetail.jsx, which mirrors pendingBeforeSession's technique for
+  // sets: read the pending mutation's own variables straight from the shared MutationCache.
+  it('shows a note saved before any session exists while paused offline, not just after reconnect', async () => {
+    getSessionExerciseNote.mockResolvedValue(null);
+    let resolveSave;
+    saveLiveExerciseNote.mockReturnValue(new Promise((resolve) => { resolveSave = resolve; }));
+    renderExerciseDetail({ liveSession: null });
+
+    onlineManager.setOnline(false);
+    try {
+      fireEvent.click(await screen.findByRole('button', { name: 'Add a note for this session' }));
+      fireEvent.change(screen.getByPlaceholderText('Write a note...'), { target: { value: 'Cut it short' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      // TanStack pauses the mutation before ever invoking mutationFn while offline -- the note
+      // must still render from the pending mutation's variables, not from a completed request.
+      expect(saveLiveExerciseNote).not.toHaveBeenCalled();
+      // Wait for the modal to close (handleSave's onSave-then-onClose chain) before querying by
+      // text -- while it's still open, the modal's own <textarea> also contains "Cut it short",
+      // which would collide with the callout's text.
+      await waitFor(() => expect(screen.queryByPlaceholderText('Write a note...')).not.toBeInTheDocument());
+      expect(await screen.findByRole('button', { name: 'Edit note for this session' })).toBeInTheDocument();
+      expect(screen.getByText('Cut it short')).toBeInTheDocument();
+
+      onlineManager.setOnline(true);
+      await waitFor(() => expect(saveLiveExerciseNote).toHaveBeenCalledWith(7, { exerciseId: 1, note: 'Cut it short' }));
+      resolveSave({ sessionId: 101, exerciseId: 1, note: 'Cut it short' });
+      // Still visible once the write actually settles too.
+      expect(await screen.findByText('Cut it short')).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
 });
 
 // The summary/sets/etc. are keyed on personId (and the component is remounted via key={personId}
