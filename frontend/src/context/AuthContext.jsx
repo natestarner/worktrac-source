@@ -143,7 +143,10 @@ export function AuthProvider({ children }) {
       apiMe()
         .then((data) => {
           saveAuthSnapshot(data);
-          setState((s) => (s.status === 'authenticated' ? { status: 'authenticated', offline: false, ...data } : s));
+          // Spread the previous state first so an in-flight `freshLogin` flag (see login()/
+          // confirmEmail() below) isn't silently clobbered back to falsy if this reconcile happens
+          // to fire in the same tick as a fresh login.
+          setState((s) => (s.status === 'authenticated' ? { ...s, offline: false, ...data } : s));
         })
         .catch(() => {
           // Still unreachable (server down while network is up) -- keep the cached identity.
@@ -168,7 +171,10 @@ export function AuthProvider({ children }) {
     if (switchedAccount) await restoreOutbox(queryClient);
     if (onlineManager.isOnline()) flushOutbox();
     requestPersistentStorage();
-    setState({ status: 'authenticated', offline: false, ...data });
+    // freshLogin distinguishes this explicit, credentials-based sign-in from a silent boot/reconnect
+    // reconciliation -- AppStateContext reads it to reset every person's last-open tab back to Log,
+    // since resuming wherever the previous user left off is only correct on a mid-session reload.
+    setState({ status: 'authenticated', offline: false, freshLogin: true, ...data });
   }, []);
 
   // Starts the pending registration (sends a verification code) -- no account exists yet, so
@@ -191,7 +197,9 @@ export function AuthProvider({ children }) {
     if (switchedAccount) await restoreOutbox(queryClient);
     if (onlineManager.isOnline()) flushOutbox();
     requestPersistentStorage();
-    setState({ status: 'authenticated', offline: false, ...data });
+    // See login()'s comment on freshLogin -- a brand-new confirmed registration is equally a "start
+    // fresh on Log" moment, not a resume.
+    setState({ status: 'authenticated', offline: false, freshLogin: true, ...data });
   }, []);
 
   const resendCode = useCallback(async ({ email }) => {

@@ -64,6 +64,44 @@ test.describe('Multi-person switching', () => {
     await expect(page).toHaveURL(/\/app\/history/);
   });
 
+  test('logging out and back in resets every person\'s tab to Log, not wherever they left off', async ({ page, request }) => {
+    const email = await registerHousehold(page, request, 'Alex');
+
+    await page.getByRole('button', { name: '+ Add person' }).click();
+    await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
+    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
+
+    // Sam (auto-selected after being added) browses to Routines.
+    await page.getByRole('link', { name: 'Routines' }).click();
+    await expect(page).toHaveURL(/\/app\/routines/);
+
+    // Switch to Alex and browse to Trends.
+    await personPill(page, 'Alex').click();
+    await page.getByRole('link', { name: 'Trends' }).click();
+    await expect(page).toHaveURL(/\/app\/trends/);
+
+    // A mid-session reload must still resume Alex's last tab (Trends) -- unaffected by this fix,
+    // which only resets tabs on a real login, never a reload.
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/trends/);
+
+    // Log out and back in as the same household -- this IS a fresh login, not a reload.
+    await page.locator('.header-bar').getByRole('button').click();
+    await page.getByRole('menuitem', { name: 'Logout' }).click();
+    await expect(page).toHaveURL(/\/login/);
+
+    await page.getByPlaceholder('Email').fill(email);
+    await page.getByPlaceholder('Password').fill('password123');
+    await page.getByRole('button', { name: 'Log in' }).click();
+
+    // Alex (still the active person from before logout) lands on Log, not Trends.
+    await expect(page).toHaveURL(/\/app\/log/);
+
+    // Sam, who was on Routines, also now starts on Log.
+    await personPill(page, 'Sam').click();
+    await expect(page).toHaveURL(/\/app\/log/);
+  });
+
   test('switching people away from an in-progress past-session edit and back resumes it', async ({ page, request }) => {
     await registerHousehold(page, request, 'Alex');
 
@@ -109,6 +147,20 @@ test.describe('Multi-person switching', () => {
     // having switched away).
     await personPill(page, 'Alex').click();
     await expect(page.getByText('Rest')).toBeVisible();
+  });
+
+  test('ending the workout stops that person\'s rest timer', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Alex');
+    await pickExercise(page, 'Barbell Bench Press');
+
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await expect(page.getByText('New PR!')).toBeVisible();
+    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await expect(page.getByText('Rest')).toBeVisible();
+
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await expect(page.getByText('Rest')).toHaveCount(0);
   });
 
   test('switching people preserves a half-typed exercise search', async ({ page, request }) => {

@@ -78,7 +78,7 @@ function baseAppState(overrides = {}) {
 describe('LogTab routine nav button placement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useUI.mockReturnValue({ showToast: vi.fn() });
+    useUI.mockReturnValue({ showToast: vi.fn(), skipRestTimer: vi.fn() });
     useExercises.mockReturnValue({ exercises: [{ id: 1, name: 'Bench Press' }, { id: 2, name: 'Overhead Press' }], loading: false });
     usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
@@ -134,10 +134,12 @@ describe('LogTab routine nav button placement', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   });
 
-  it('ending the workout mid-routine also ends the routine', async () => {
+  it('ending the workout mid-routine also ends the routine and stops that person\'s rest timer', async () => {
     const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
     useAppState.mockReturnValue(appState);
     useLiveSession.mockReturnValue({ session: { id: 55, startedAt: '2026-07-15T12:00:00Z' }, refetch: vi.fn() });
+    const skipRestTimer = vi.fn();
+    useUI.mockReturnValue({ showToast: vi.fn(), skipRestTimer });
     render(<MemoryRouter><LogTab /></MemoryRouter>);
 
     // The live-session bar and the confirm modal's own button share the label "End
@@ -148,6 +150,7 @@ describe('LogTab routine nav button placement', () => {
 
     await waitFor(() => expect(endWorkout).toHaveBeenCalledWith(7));
     expect(appState.endRoutine).toHaveBeenCalled();
+    expect(skipRestTimer).toHaveBeenCalledWith(7);
   });
 
   it('ending the workout is a forced-reload trigger point', async () => {

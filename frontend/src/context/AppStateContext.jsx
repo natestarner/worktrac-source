@@ -45,10 +45,20 @@ function updateActive(state, patch) {
 export { initialState, PERSON_DEFAULTS };
 export function reducer(state, action) {
   switch (action.type) {
-    case 'HYDRATE':
+    case 'HYDRATE': {
       // Replace wholesale from persisted (or empty) state -- also clears any in-memory slice left
       // over from a previously logged-in account on this device.
-      return { activePersonId: action.activePersonId ?? null, byPerson: action.byPerson ?? {} };
+      const byPerson = action.byPerson ?? {};
+      // On a fresh login (action.resetTab), every person starts back on Log rather than resuming
+      // wherever they were last -- that "resume last screen" behavior is only correct for a
+      // mid-session reload, which never sets resetTab.
+      const finalByPerson = action.resetTab
+        ? Object.fromEntries(
+            Object.entries(byPerson).map(([id, slice]) => [id, { ...slice, lastTab: '/app/log' }]),
+          )
+        : byPerson;
+      return { activePersonId: action.activePersonId ?? null, byPerson: finalByPerson };
+    }
     case 'RECONCILE_PEOPLE': {
       // Drop slices for people no longer in the account, and null out activePersonId if the active
       // person was removed (AppShell then auto-selects). Returns the same state ref when there's
@@ -122,7 +132,7 @@ export function reducer(state, action) {
 const AppStateContext = createContext(null);
 
 export function AppStateProvider({ children }) {
-  const { status, account, people } = useAuth();
+  const { status, account, people, freshLogin } = useAuth();
   const [state, dispatch] = useReducer(reducer, initialState);
   const [hydrated, setHydrated] = useState(false);
   const accountId = account?.id ?? null;
@@ -143,12 +153,18 @@ export function AppStateProvider({ children }) {
         type: 'HYDRATE',
         activePersonId: loaded?.activePersonId ?? null,
         byPerson: loaded?.byPerson ?? {},
+        resetTab: freshLogin,
       });
       setHydrated(true);
     });
     return () => {
       cancelled = true;
     };
+    // freshLogin deliberately excluded -- it's read once via closure at the moment `status` flips to
+    // 'authenticated' (set synchronously alongside status in the same login()/confirmEmail() call), so
+    // including it would needlessly re-run this effect (and flash the hydrate skeleton) whenever the
+    // online-reconcile effect later resets `freshLogin` to falsy on the same authenticated session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, accountId]);
 
   // Prune slices for removed people (and recover a dangling activePersonId) whenever the people
