@@ -332,6 +332,29 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
     has ever logged anything" and "after their live session just ended," so a stale answer from
     the first of those moments can already be cached under that exact key by the time the
     second one needs it, and a stuck live query can never revalidate it away on its own.
+- **A per-session display value needs its own pending-mutation fallback, not just a durable
+  write — being queued in the outbox is not the same as being visible.** `contextSessionId`
+  (`liveSession?.id || editingSessionId`, in `ExerciseDetail.jsx`) stays `null` for a person's
+  *entire* offline/lie-fi stretch, not just before their first set: the placeholder `liveSession`
+  seeded by `logSetMutation.onMutate` is deliberately `{ id: null }` so it can never leak into
+  `contextSessionId`, and the real id only arrives once the create-session round trip actually
+  reaches the server. Any query keyed on that id (`sessionSets`, `sessionExerciseNote`,
+  `exerciseSummary`) is `enabled: !!contextSessionId` and so never even runs during that window —
+  its write can be durably queued and guaranteed to sync later, while the value it produced stays
+  invisible on screen the whole time. Three fallbacks in `ExerciseDetail.jsx` use the same
+  technique to close this gap: `pendingBeforeSession` (an unsynced set, read from the log-set
+  mutation's own variables via `useMutationState`), `derivedSummary` (the "Last time"/"Best"
+  card, derived from the already-warmed `history` cache instead — see below), and
+  `pendingLiveNote` (a session note saved before/without a synced session, read from the pending
+  `SAVE_NOTE` mutation's own variables the same way `pendingBeforeSession` does). **When adding a
+  new per-session display value, ask the same question posed for per-person state above:** would
+  it stay blank for a person whose current session hasn't synced yet, even though the underlying
+  write is durable and guaranteed to succeed? If yes, it needs one of these two techniques —
+  derive it from an already-warmed, session-independent cache (`history`) if one exists, or read
+  it straight from the relevant mutation's own variables via `useMutationState` (filtered by
+  `mutationKey` plus the relevant person/exercise ids, excluding `status === 'success'` and a
+  definitive-4xx failure) — rather than relying on cache invalidation alone, which is a no-op
+  while paused offline.
 - **Cold boot offline:** `AuthContext` boots authenticated-but-`offline:true` from a saved
   identity snapshot (`localStorage`) when `/me` fails with a network error or 5xx and a token +
   snapshot exist; a real 401 still bounces to `/login`. **No snapshot yet** (a fresh profile, or

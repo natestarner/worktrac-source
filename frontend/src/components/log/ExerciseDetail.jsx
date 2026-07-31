@@ -12,7 +12,6 @@ import { listCustomFields, removeExercise } from '../../api/exercises';
 import { getSessionExerciseNote } from '../../api/notes';
 import {
   DELETE_SET_MUTATION_KEY,
-  SAVE_NOTE_MUTATION_KEY,
   FAVORITE_MUTATION_KEY,
 } from '../../lib/queryClient';
 import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
@@ -129,7 +128,46 @@ export default function ExerciseDetail({
     : (summaryQuery.data ?? null);
   const sessionSets = sessionSetsQuery.data ?? [];
   const customFields = customFieldsQuery.data ?? [];
-  const sessionNote = sessionNoteQuery.data?.note || null;
+  // Prefix-matches the registered defaults in queryClient.js (SAVE_NOTE_MUTATION_KEY =
+  // ['saveNote']), same as logSetMutationKey below -- so this component's own saveNoteMutation
+  // state stays isolated per exercise (LogTab doesn't remount ExerciseDetail when a routine
+  // advances between exercises), and useMutationState below can filter on the key alone instead
+  // of re-checking personId/exerciseId by hand.
+  const saveNoteMutationKey = ['saveNote', personId, exercise.id];
+
+  // sessionExerciseNote fallback for the same collapsed-null-key gap documented above on
+  // summaryQuery/derivedSummary and on pendingBeforeSession below: contextSessionId stays null
+  // for this person's ENTIRE offline/lie-fi stretch, not just before their first set -- the
+  // placeholder liveSession seeded in logSetMutation.onMutate is deliberately `{ id: null }` so
+  // it can never leak into contextSessionId, and the real id only arrives once the
+  // create-session round trip actually reaches the server. sessionNoteQuery doesn't even run
+  // in that state (enabled: !!contextSessionId), so read the pending SAVE_NOTE mutation's own
+  // variables straight from the shared MutationCache instead -- the same technique
+  // pendingBeforeSession uses for sets. Only `mode: 'live'` mutations are relevant here; a
+  // `mode: 'session'` note (editing a past session) always has a real, already-known
+  // editingSessionId and so never hits this gap.
+  const pendingLiveNote = useMutationState({
+    filters: { mutationKey: saveNoteMutationKey },
+    select: (mutation) => ({
+      status: mutation.state.status,
+      submittedAt: mutation.state.submittedAt,
+      errorStatus: mutation.state.error?.status,
+      mode: mutation.state.variables?.mode,
+      note: mutation.state.variables?.note,
+    }),
+  })
+    .filter(
+      (m) =>
+        m.mode === 'live' &&
+        m.status !== 'success' &&
+        !(m.status === 'error' && m.errorStatus >= 400 && m.errorStatus < 500),
+    )
+    .sort((a, b) => b.submittedAt - a.submittedAt)[0] ?? null;
+  const sessionNote = contextSessionId
+    ? sessionNoteQuery.data?.note || null
+    : (pendingLiveNote?.note || '').trim()
+      ? pendingLiveNote.note
+      : null;
   // Skeleton only when there's truly nothing to show yet: no server data, no derivable history,
   // and the summary query hasn't settled (and isn't paused offline, which would never settle).
   const ready = (summary != null || !summaryQuery.isLoading || summaryQuery.isPaused) && !customFieldsQuery.isLoading;
@@ -137,7 +175,7 @@ export default function ExerciseDetail({
   const refetchCustomFields = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.customFields(personId, exercise.id) });
 
-  const saveNoteMutation = useMutation({ mutationKey: SAVE_NOTE_MUTATION_KEY });
+  const saveNoteMutation = useMutation({ mutationKey: saveNoteMutationKey });
   const favoriteMutation = useMutation({ mutationKey: FAVORITE_MUTATION_KEY });
 
   // Save/clear a session note. Durable + optimistic: the note is written into cache immediately (so
@@ -146,10 +184,13 @@ export default function ExerciseDetail({
   // session id drives reconciliation -- see SAVE_NOTE onSettled).
   function handleSaveSessionNote(note) {
     const trimmed = (note || '').trim();
-    // Only write optimistically when a real session already keys the note. Saving a note BEFORE the
-    // first set (contextSessionId null) must NOT cache under the null key -- a later brand-new session
-    // is also keyed null, so a stale note there would wrongly bleed into it. In that case the note is
-    // reconciled via the mutation's returned session id (SAVE_NOTE onSettled) once it materializes.
+    // Only write optimistically into the query cache when a real session already keys the note.
+    // Saving a note while contextSessionId is null (no session has synced yet -- true before the
+    // first set of a brand-new workout, and for the rest of an offline/lie-fi stretch even after
+    // one) must NOT cache under the null key -- a later, genuinely different session also starts
+    // out keyed null, so a stale note there would wrongly bleed into it. `sessionNote` above
+    // covers that gap in the meantime via pendingLiveNote; once the session id syncs, SAVE_NOTE's
+    // onSettled reconciles the real cache entry from the mutation's returned session id.
     if (contextSessionId) {
       queryClient.setQueryData(
         queryKeys.sessionExerciseNote(contextSessionId, exercise.id),
