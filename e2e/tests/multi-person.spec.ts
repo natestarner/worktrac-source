@@ -102,6 +102,70 @@ test.describe('Multi-person switching', () => {
     await expect(page).toHaveURL(/\/app\/log/);
   });
 
+  // Regression test for a real race caught in the deployed lower environment: a page reload kicks
+  // off AuthContext's boot `/api/auth/me` call, which is NOT cancelled by a subsequent logout+login
+  // (that effect only runs once per app mount). Under real network latency, that boot call was
+  // still in flight when the following login's own request fired ~200ms later; when the stale
+  // response finally resolved, it silently overwrote the fresh login's `freshLogin` flag, so the
+  // tab-reset fix above never fired for anyone but the already-active person (who landed on Log via
+  // LoginPage's own unconditional navigate, not the reset itself). Delaying the reload's /me call
+  // here forces that same interleaving deterministically.
+  test('a slow boot /me from a just-reloaded page cannot clobber a fresh login that completes before it resolves', async ({ page, request }) => {
+    const email = await registerHousehold(page, request, 'Alex');
+
+    await page.getByRole('button', { name: '+ Add person' }).click();
+    await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
+    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
+
+    await page.getByRole('link', { name: 'Routines' }).click();
+    await expect(page).toHaveURL(/\/app\/routines/);
+
+    await personPill(page, 'Alex').click();
+    await page.getByRole('link', { name: 'Trends' }).click();
+    await expect(page).toHaveURL(/\/app\/trends/);
+
+    // Hold only the NEXT /me call (the reload's boot call) open indefinitely -- released
+    // explicitly below, WHILE genuinely signed out. That's the exact window that matters: if the
+    // stale response resolves there, it flips AuthContext's `status` from 'unauthenticated' back to
+    // 'authenticated' on its own -- with no `freshLogin` flag, since the real login() call hasn't
+    // run yet -- so AppStateContext's hydrate effect fires once, early, with the wrong (falsy)
+    // resetTab. When login() completes moments later it sets `status` to the SAME value
+    // ('authenticated'), so React's dependency check never sees a change and the hydrate effect
+    // does not fire again -- the correct resetTab:true is never applied. (Releasing the stale
+    // response only after the real login has already finished, tried first, does NOT reproduce
+    // this: by then the hydrate effect has already run correctly and re-applying the same `status`
+    // value a second time is a no-op.)
+    let releaseStaleMe;
+    const staleMeGate = new Promise((resolve) => { releaseStaleMe = resolve; });
+    let holdNextMe = true;
+    await page.route('**/api/auth/me', async (route) => {
+      if (holdNextMe) {
+        holdNextMe = false;
+        await staleMeGate;
+      }
+      await route.continue();
+    });
+
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/trends/);
+
+    await page.locator('.header-bar').getByRole('button').click();
+    await page.getByRole('menuitem', { name: 'Logout' }).click();
+    await expect(page).toHaveURL(/\/login/);
+
+    releaseStaleMe();
+    await page.waitForTimeout(300);
+
+    await page.getByPlaceholder('Email').fill(email);
+    await page.getByPlaceholder('Password').fill('password123');
+    await page.getByRole('button', { name: 'Log in' }).click();
+
+    await expect(page).toHaveURL(/\/app\/log/);
+
+    await personPill(page, 'Sam').click();
+    await expect(page).toHaveURL(/\/app\/log/);
+  });
+
   test('switching people away from an in-progress past-session edit and back resumes it', async ({ page, request }) => {
     await registerHousehold(page, request, 'Alex');
 
