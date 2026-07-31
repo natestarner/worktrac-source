@@ -368,12 +368,12 @@ export default function ExerciseDetail({
   // what I entered," which isn't true, and a request that never confirms would otherwise leave a
   // skeleton showing indefinitely instead of the values the user actually entered.
   // Sorted by clientLoggedAt, not left in mutation-cache order. restoreOutbox (outboxPersistence.js)
-  // now registers restored writes in a single submittedAt-sorted pass, so a reload alone no longer
-  // reorders the cache -- but replacePendingLogSet (offlineSetEdits.js) still removes+re-dispatches
-  // a mutation on edit, which re-registers it at the end of the live scope array for the rest of
-  // this session (only its *persisted* submittedAt is corrected, for after a subsequent reload).
-  // The "Set N" labels below are position-based, so this belt-and-suspenders sort keeps them
-  // correct regardless.
+  // now registers restored writes in a single submittedAt-sorted pass on reload, and editing a
+  // pending set (EditSetModal.jsx / offlineSetEdits.js's patchPendingLogSetDisplay) no longer
+  // removes or re-dispatches the underlying create -- it only patches its displayed variables and
+  // queues a genuinely separate EDIT_SET write -- so neither path reorders the cache anymore. This
+  // sort is now purely defensive: the "Set N" labels below are position-based, so it's kept as a
+  // belt-and-suspenders guarantee rather than relying on mutation-cache order being chronological.
   const pendingBeforeSession = unsyncedLogSets
     .filter((m) => !sessionSets.some((real) => real.id === m.tempId))
     .map((m) => ({ id: m.tempId, optimistic: true, weight: m.weight, reps: m.reps, unit: m.unit, clientLoggedAt: m.clientLoggedAt }))

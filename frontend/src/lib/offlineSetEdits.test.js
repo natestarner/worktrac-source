@@ -1,6 +1,6 @@
 import { MutationObserver, QueryClient, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cancelPendingLogSet, replacePendingLogSet } from './offlineSetEdits';
+import { cancelPendingLogSet, patchPendingLogSetDisplay } from './offlineSetEdits';
 import { LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from './queryClient';
 import { logLiveSet } from '../api/sets';
 
@@ -74,61 +74,76 @@ describe('offlineSetEdits', () => {
     });
   });
 
-  describe('replacePendingLogSet', () => {
-    it('replaces the pending create with corrected weight/reps, preserving identity fields', async () => {
+  // patchPendingLogSetDisplay is display-only: it never touches what the queued CREATE sends to
+  // the server (the correction is a genuinely separate EDIT_SET write -- see queryClient.js and
+  // EditSetModal.jsx). These tests cover exactly that split: the display updates immediately, the
+  // create's own wire payload does not, and -- the actual regression this whole redesign fixes --
+  // the create is never removed or re-registered, so it can't be pushed out of its true enqueue
+  // order in the shared outbox scope the way the old replacePendingLogSet approach could.
+  describe('patchPendingLogSetDisplay', () => {
+    it("updates the pending create's displayed variables without changing what it sends to the server", async () => {
       const client = newClient();
       onlineManager.setOnline(false);
       dispatchLogSet(client, { weight: 135, reps: 5 });
       await vi.waitFor(() => expect(pendingMutations(client)).toHaveLength(1));
 
-      const result = replacePendingLogSet(client, 'optimistic-a', { weight: 140, reps: 3 });
+      patchPendingLogSetDisplay(client, 'optimistic-a', { weight: 140, reps: 3 });
 
-      expect(result).toMatchObject({
-        weight: 140,
-        reps: 3,
-        tempId: 'optimistic-a',
-        idempotencyKey: 'idem-a',
-        clientLoggedAt: '2026-07-22T10:00:00.000Z',
-        personId: 7,
-        exerciseId: 1,
-      });
-      // Still exactly one pending mutation -- the old one was replaced, not left duplicated.
-      expect(pendingMutations(client)).toHaveLength(1);
+      const [mutation] = pendingMutations(client);
+      expect(mutation.state.variables).toMatchObject({ weight: 140, reps: 3, idempotencyKey: 'idem-a', tempId: 'optimistic-a' });
 
+      // The CREATE still commits the ORIGINAL values once it syncs -- by design. The correction
+      // reaches the server via a separately-queued EDIT_SET write, not by changing this payload.
       onlineManager.setOnline(true);
       await client.resumePausedMutations();
       await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalledTimes(1));
-      expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 140, reps: 3, idempotencyKey: 'idem-a' }));
+      expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 135, reps: 5 }));
     });
 
-    it('returns null when no mutation matches the tempId (already synced or never existed)', () => {
+    it('does not remove or reorder the pending create -- same object, same scope position', async () => {
       const client = newClient();
-      expect(replacePendingLogSet(client, 'no-such-temp-id', { weight: 100, reps: 1 })).toBeNull();
+      onlineManager.setOnline(false);
+      dispatchLogSet(client);
+      await vi.waitFor(() => expect(pendingMutations(client)).toHaveLength(1));
+      const [before] = pendingMutations(client);
+
+      patchPendingLogSetDisplay(client, 'optimistic-a', { weight: 140, reps: 3 });
+
+      const [after] = pendingMutations(client);
+      expect(after).toBe(before); // same Mutation instance -- its scope-array slot never moved
     });
 
-    // Regression test: the replacement mutation used to be re-dispatched with a fresh
-    // submittedAt ("now"), so a reload shortly after an edit would sort it as if it had been
-    // submitted last -- potentially behind writes it was actually queued ahead of. Restoring the
-    // original submittedAt is what lets a later restoreOutbox sort (outboxPersistence.js) put it
-    // back in its true enqueue-order position. Fake timers make the "time actually passed
-    // between logging and editing" distinction observable instead of a same-millisecond fluke.
-    it('preserves the original submittedAt across the edit, for correct ordering on a later restore', async () => {
-      vi.useFakeTimers();
-      try {
-        const client = newClient();
-        onlineManager.setOnline(false);
-        dispatchLogSet(client);
-        const originalSubmittedAt = pendingMutations(client)[0].state.submittedAt;
+    it('preserves the original submittedAt (never touched, since nothing is removed/recreated)', async () => {
+      const client = newClient();
+      onlineManager.setOnline(false);
+      dispatchLogSet(client);
+      await vi.waitFor(() => expect(pendingMutations(client)).toHaveLength(1));
+      const originalSubmittedAt = pendingMutations(client)[0].state.submittedAt;
 
-        vi.advanceTimersByTime(60_000);
-        replacePendingLogSet(client, 'optimistic-a', { weight: 140, reps: 3 });
+      patchPendingLogSetDisplay(client, 'optimistic-a', { weight: 140, reps: 3 });
 
-        const [replaced] = pendingMutations(client);
-        expect(replaced.state.submittedAt).toBe(originalSubmittedAt);
-        expect(replaced.state.submittedAt).not.toBe(Date.now());
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(pendingMutations(client)[0].state.submittedAt).toBe(originalSubmittedAt);
+    });
+
+    it('notifies the mutation cache so a mounted useMutationState re-renders with the correction immediately', async () => {
+      const client = newClient();
+      onlineManager.setOnline(false);
+      dispatchLogSet(client);
+      await vi.waitFor(() => expect(pendingMutations(client)).toHaveLength(1));
+
+      const listener = vi.fn();
+      const unsubscribe = client.getMutationCache().subscribe(listener);
+      listener.mockClear();
+
+      patchPendingLogSetDisplay(client, 'optimistic-a', { weight: 140, reps: 3 });
+
+      expect(listener).toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it('is a no-op when no mutation matches the tempId (already synced or never existed)', () => {
+      const client = newClient();
+      expect(() => patchPendingLogSetDisplay(client, 'no-such-temp-id', { weight: 100, reps: 1 })).not.toThrow();
     });
   });
 });

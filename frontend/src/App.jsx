@@ -9,6 +9,7 @@ import { attachOutboxPersistence, restoreOutbox } from './lib/outboxPersistence'
 // stays pinned across a reload instead of racing the boot sequence back online for a moment.
 import './lib/offlineMode';
 import { loadExerciseIdMap } from './lib/exerciseIdMap';
+import { loadSetIdMap } from './lib/setIdMap';
 import { AuthProvider } from './context/AuthContext';
 import { AppStateProvider } from './context/AppStateContext';
 import { UIProvider } from './context/UIContext';
@@ -65,13 +66,14 @@ export default function App() {
       persistOptions={persistOptions}
       onSuccess={async () => {
         // The query cache (optimistic rows included) has just been restored. Bring back the temp->real
-        // exercise id map and any queued writes -- for whichever account was last known to own the
-        // outbox (see outboxPersistence.js's getOutboxAccountId; this runs before AuthContext has
-        // even confirmed identity, so it relies on that synchronous localStorage pointer, not React
-        // state) -- then, if online, replay them; if offline, they stay queued and the onlineManager
-        // subscription above flushes them on reconnect. The id map loads first so a set queued
-        // against an offline-created exercise can resolve on replay.
-        await Promise.all([loadExerciseIdMap(), restoreOutbox(queryClient)]);
+        // exercise AND set id maps and any queued writes -- for whichever account was last known to
+        // own the outbox (see outboxPersistence.js's getOutboxAccountId; this runs before AuthContext
+        // has even confirmed identity, so it relies on that synchronous localStorage pointer, not
+        // React state) -- then, if online, replay them; if offline, they stay queued and the
+        // onlineManager subscription above flushes them on reconnect. Both id maps load first so a
+        // set logged against an offline-created exercise, or an edit queued against a not-yet-synced
+        // set, can resolve on replay.
+        await Promise.all([loadExerciseIdMap(), loadSetIdMap(), restoreOutbox(queryClient)]);
         if (onlineManager.isOnline()) flushOutbox();
       }}
     >

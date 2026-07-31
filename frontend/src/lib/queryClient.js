@@ -9,6 +9,7 @@ import { endWorkout } from '../api/sessions';
 import { getAuthToken } from '../api/client';
 import { OUTBOX_SCOPE_ID } from './outboxPersistence';
 import { resolveExerciseId, setExerciseIdMapping, isTempExerciseId } from './exerciseIdMap';
+import { resolveSetId, setSetIdMapping, isTempSetId } from './setIdMap';
 
 // Bump when the shape of anything we cache changes incompatibly -- the persister discards a
 // restored cache whose buster doesn't match instead of hydrating stale/incompatible data.
@@ -85,6 +86,25 @@ function requireResolvedExerciseId(id) {
   return resolved;
 }
 
+// Same shape as UnresolvedExerciseIdError, for a durable edit dispatched against a set that hasn't
+// synced yet -- see EDIT_SET_MUTATION_KEY below and offlineSetEdits.js's setIdMap-based redesign
+// (an edit to a still-queued set is now a genuinely separate write targeting the create's tempId,
+// never a mutation of the queued create itself -- TanStack has no public way to update or cancel an
+// in-flight mutation, and mutating the create in place risks the backend's idempotency dedup
+// silently discarding the edit if the original create had already reached the server).
+class UnresolvedSetIdError extends Error {
+  constructor(tempId) {
+    super(`Set ${tempId} has not finished syncing yet`);
+    this.name = 'UnresolvedSetIdError';
+  }
+}
+
+function requireResolvedSetId(id) {
+  const resolved = resolveSetId(id);
+  if (isTempSetId(resolved)) throw new UnresolvedSetIdError(resolved);
+  return resolved;
+}
+
 export function registerOfflineMutationDefaults(client, { retry } = {}) {
   client.setMutationDefaults(LOG_SET_MUTATION_KEY, {
     // One shared scope => queued writes replay STRICTLY SERIALLY in enqueue order (hardening #2), so
@@ -116,6 +136,12 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     // so History/PRs/sets reconcile to server truth once a queued write finally syncs. Uses the
     // server's returned session id when present (a live set's session may not exist at dispatch).
     onSettled: (data, _error, vars) => {
+      // Record the temp->real set id mapping on success, so any EDIT_SET queued against this set's
+      // tempId (see offlineSetEdits.js) resolves correctly once it replays -- mirrors
+      // CREATE_EXERCISE's onSettled below recording the temp->real EXERCISE id mapping.
+      if (data?.set?.id && vars.tempId) {
+        setSetIdMapping(vars.tempId, data.set.id);
+      }
       const sessionId = data?.session?.id ?? vars.sessionId ?? null;
       client.invalidateQueries({ queryKey: queryKeys.sessionSets(sessionId, vars.exerciseId) });
       client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
@@ -166,10 +192,16 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
   };
 
-  // Edit a set's weight/reps. Only ever targets an already-synced set (an unsynced set shows "will
-  // sync", not Edit), so setId is a real id. Idempotent (same value re-applied).
+  // Edit a set's weight/reps. Also reachable against a set that hasn't synced yet -- correcting a
+  // still-queued offline set is now a genuinely separate durable write targeting the create's tempId
+  // (see offlineSetEdits.js), never a mutation of the queued create itself, so setId resolves through
+  // the same temp-id map exerciseId does above. A real numeric id (the common, already-synced case)
+  // passes through unchanged. If the create hasn't synced yet (still resolves to a temp id), this
+  // throws instead of sending the server a string it can't parse as a Long -- see requireResolvedSetId
+  // -- and the shared serial outbox scope guarantees the create replays first, exactly like
+  // requireResolvedExerciseId above. Idempotent (same value re-applied).
   client.setMutationDefaults(EDIT_SET_MUTATION_KEY, durable({
-    mutationFn: (vars) => editSet(vars.setId, { weight: vars.weight, reps: vars.reps }),
+    mutationFn: (vars) => editSet(requireResolvedSetId(vars.setId), { weight: vars.weight, reps: vars.reps }),
     onSettled: (_d, _e, vars) => reconcileSetChange(vars),
   }));
 
@@ -231,16 +263,27 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
 
 registerOfflineMutationDefaults(queryClient);
 
-// Fire a durable write against the app's singleton client WITHOUT a React observer -- for
-// fire-and-dismiss actions (end workout, edit set) whose component doesn't need reactive mutation
-// state. Keeps those modals free of a QueryClientProvider dependency, and the write still queues +
-// replays via the outbox exactly like a useMutation-dispatched one.
-export function enqueueOutboxWrite(mutationKey, variables) {
-  const observer = new MutationObserver(queryClient, {
-    ...queryClient.getMutationDefaults(mutationKey),
+// Fire a durable write against an EXPLICIT client, without a React observer. Shared by
+// enqueueOutboxWrite below (the app singleton) and by any caller that already has its own
+// QueryClient via context and needs the write to land in that SAME mutation cache -- e.g.
+// EditSetModal.jsx dispatching an EDIT_SET write that must resolve a temp set id against whichever
+// client's cache holds the matching pending `logSet` create (see setIdMap.js/offlineSetEdits.js).
+export function dispatchDurableWrite(client, mutationKey, variables) {
+  const observer = new MutationObserver(client, {
+    ...client.getMutationDefaults(mutationKey),
     mutationKey,
   });
   return observer.mutate(variables).catch(() => {});
+}
+
+// Fire a durable write against the app's singleton client WITHOUT a React observer -- for
+// fire-and-dismiss actions (end workout) whose component has no QueryClientProvider dependency at
+// all (see EndWorkoutConfirmModal.jsx, which imports the singleton directly and never calls
+// useQueryClient()). The write still queues + replays via the outbox exactly like a
+// useMutation-dispatched one. A component that already has `useQueryClient()` should call
+// dispatchDurableWrite with its own context client instead of this -- see there for why.
+export function enqueueOutboxWrite(mutationKey, variables) {
+  return dispatchDurableWrite(queryClient, mutationKey, variables);
 }
 
 // Replay every queued write now: paused ones via TanStack's own `resumePausedMutations` (which
