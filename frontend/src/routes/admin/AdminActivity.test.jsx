@@ -87,6 +87,21 @@ describe('AdminActivity', () => {
     expect(screen.getByText('VERIFICATION_EMAIL_FAILED')).toBeInTheDocument();
   });
 
+  it('treats the new safety-net event types as issues and password-reset sends as positive', async () => {
+    listRegistrationEvents.mockResolvedValue([
+      { ...SAMPLE_EVENTS[0], id: 3, eventType: 'REGISTRATION_EMAIL_DISPATCH_MISSING' },
+      { ...SAMPLE_EVENTS[0], id: 4, eventType: 'ADMIN_ALERT_FAILED' },
+      { ...SAMPLE_EVENTS[0], id: 5, eventType: 'PASSWORD_RESET_EMAIL_SENT' },
+    ]);
+    render(<AdminActivity />);
+
+    fireEvent.click(await screen.findByLabelText('Only show issues'));
+
+    expect(screen.getByText('REGISTRATION_EMAIL_DISPATCH_MISSING')).toBeInTheDocument();
+    expect(screen.getByText('ADMIN_ALERT_FAILED')).toBeInTheDocument();
+    expect(screen.queryByText('PASSWORD_RESET_EMAIL_SENT')).not.toBeInTheDocument();
+  });
+
   it('renders a legend explaining event colors and the sent-vs-delivered distinction', async () => {
     render(<AdminActivity />);
     await screen.findByText('REGISTER_STARTED');
@@ -108,7 +123,9 @@ describe('AdminActivity', () => {
   it('toggling an alert-settings checkbox saves and refetches the settings', async () => {
     render(<AdminActivity />);
 
-    const sendFailureCheckbox = await screen.findByLabelText('A verification or success email fails to send');
+    const sendFailureCheckbox = await screen.findByLabelText(
+      "A verification, success, or password-reset email fails to send, or a registration's email dispatch never runs at all",
+    );
     expect(sendFailureCheckbox).toBeChecked();
 
     updateRegistrationAlertSettings.mockResolvedValue({ ...DEFAULT_SETTINGS, alertOnSendFailure: false });

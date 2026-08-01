@@ -253,6 +253,30 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
     real account yet (no `users` row), so re-registering the same email already works —
     `register()` only checks `users`, not `pending_registrations`, and replaces the stale
     pending row with a fresh code. Adding a resend button would have been redundant.
+- **The async email-dispatch pipeline itself can never silently swallow a task — see the
+  2026-08-01 blind-spots incident below.** `AsyncConfig`'s `emailTaskExecutor` uses
+  `CallerRunsPolicy`, not the `ThreadPoolTaskExecutor` default (`AbortPolicy`, which silently
+  throws/drops a task when the pool+queue are saturated with nowhere for a `@Async void`
+  method's exception to go). `RegistrationEmailEventListener`'s four handlers (verification
+  code, registration success, password-reset code, password-reset success — all four now
+  covered identically, see below) isolate the SEND attempt from the AUDIT WRITE in separate
+  try/catches (`sendAndRecord`/`recordSafely`): a failure while persisting the *SENT* audit row
+  itself must never be misreported as the email having failed, since the send may have
+  genuinely succeeded — conflating the two would falsely trigger a "send failure" admin alert
+  for an email that actually went out. `AdminAlertEventListener` records `ADMIN_ALERT_FAILED`
+  (not just a log line) if the alert email itself fails to send — deliberately not in
+  `RegistrationAuditService`'s `ALERTABLE` set, since an alert about a failed alert would
+  recurse. `RegistrationDispatchWatchdog` (`@Scheduled`, every 5 minutes, `SchedulingConfig`
+  enables `@EnableScheduling` app-wide) is the last-resort safety net for failure modes nobody
+  has specifically anticipated: it queries for any `REGISTER_STARTED` with no
+  `VERIFICATION_EMAIL_SENT`/`FAILED` recorded within a 2-minute grace period and records
+  `REGISTRATION_EMAIL_DISPATCH_MISSING` (alertable, reuses the `alertOnSendFailure` toggle) —
+  this is what makes "no blind spots" actually true rather than true only for failure modes
+  someone thought to `catch`.
+  - **Password-reset emails (`PasswordResetService`) get the identical SENT/FAILED audit
+    coverage** as registration emails (`PASSWORD_RESET_EMAIL_SENT/FAILED`,
+    `PASSWORD_RESET_SUCCESS_EMAIL_SENT/FAILED`) — previously these had zero audit trail at all,
+    only a bare `log.error`, which was itself an undiagnosed blind spot in a sibling flow.
 - Frontend: `AdminRoute` redirects a non-admin (even if authenticated) to `/app/log` rather
   than showing an access-denied screen, so the portal's existence isn't revealed to ordinary
   users. It's a standalone layout (`AdminShell`) under `/admin`, not a tab inside the
@@ -271,12 +295,27 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
     (`e2e/tests/support/auth.ts`'s `registerHousehold`), which always generates emails as
     `e2e-<timestamp>-<random>@example.com`. `example.com` is an IANA-reserved (RFC 2606) domain
     that can never resolve to a real mailbox, so `email LIKE 'e2e-%@example.com'`
-    (`findByEmailLike`/`countByEmailLike`/`deleteByEmailLike` on `UserRepository`,
+    (`findAccountIdsByEmailLike`/`countByEmailLike` on `UserRepository`,
     `RegistrationEventRepository`, `PendingRegistrationRepository`) can never accidentally match
-    a genuine user's account. Deletes accounts via the existing `AccountDeletionService` cascade
-    (people/exercises/tags/workout data — already covered by `AccountDeletionTest`), plus the
-    `registration_events`/`pending_registrations` rows for those emails, which aren't tied to
-    `account_id` and would otherwise survive account deletion untouched.
+    a genuine user's account.
+  - **Genuine bulk SQL deletes, not a per-account loop — fixed 2026-08-01 after a real lower
+    timeout.** An earlier version looped `AccountDeletionService.deleteAccount(Long)` once per
+    matching account; Spring Data JPA's derived `deleteByAccount_Id`/`deleteByEmailLike` methods
+    (used by that per-account cascade) load and remove every matching entity one at a time
+    rather than issuing a single `DELETE` statement, so once lower had accumulated hundreds of
+    e2e accounts across repeated deploys' e2e runs, one click took long enough to exceed the
+    frontend's request timeout — and the client timing out did **not** cancel the still-running
+    backend transaction, whose DB load is suspected to have contributed to the async
+    email-dispatch blind spot described above. `deleteAll()` now issues one bulk
+    `DELETE ... WHERE account_id IN (...)` (or `email LIKE ...`) per table across every matching
+    account at once (`deleteByAccountIdIn` on `PersonRepository`/`ExerciseRepository`/
+    `TagRepository`/`UserRepository`, `deleteByEmailLikeBulk` on
+    `RegistrationEventRepository`/`PendingRegistrationRepository`, and Spring Data's own
+    `deleteAllByIdInBatch` for `accounts`) — order still matters for the same FK reasons as
+    `AccountDeletionService` (untouched, still the real single-account self-service-delete
+    path). The frontend's `deleteTestData()` call also carries its own longer `timeoutMs`
+    (60s vs. the shared 15s default, via `apiClient.delete`'s new options parameter in
+    `client.js`) as a second line of defense.
   - **The real safety net is `TestDataAdminController`'s `@Profile({"local", "lower"})`** —
     identical two-layer defense to the e2e test-support endpoint (`TestSupportController`): these
     routes don't exist as Spring beans at all outside local/lower, so this can never run in
@@ -814,3 +853,48 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   re-orders (not just preserves already-ordered input), and a `useOutboxItems` test proving the
   *displayed* list order survives a reload. Full investigation narrative:
   `git log --grep="enqueueSeq\|outbox.*reorder" -i`.
+
+## Resolved Incident: a registration's verification email vanished with zero trace, and the test-data-cleanup delete timed out (2026-08-01)
+- User testing in lower hit two issues in one session: (1) clicking "Delete all e2e test data"
+  timed out client-side with the data never actually deleted, and (2) registering
+  `nate+2@starner.co` showed `REGISTER_STARTED` in the Activity tab with **no** corresponding
+  `VERIFICATION_EMAIL_SENT`/`FAILED` event ever appearing, and no OTP email arrived — "It seems
+  to have gone into a blackhole."
+- Root cause of (1): `TestDataCleanupService.deleteAll()` (added in PR #113) looped
+  `AccountDeletionService.deleteAccount(Long)` once per matching e2e account. Spring Data JPA's
+  derived `deleteByAccount_Id`/`deleteByEmailLike` methods that cascade calls (used there)
+  select every matching entity and remove it one at a time rather than issuing a single `DELETE`
+  statement — fine for one account, but lower had accumulated hundreds across repeated deploys'
+  e2e runs, and the resulting total round trips exceeded the frontend's 15s request timeout.
+- Root cause of (2), and how it connects to (1): the client timing out does **not** cancel the
+  backend's still-running transaction — that long-running, DB-heavy delete is suspected to have
+  contributed to `AsyncConfig`'s `emailTaskExecutor` (a small bounded `ThreadPoolTaskExecutor`)
+  hitting its queue capacity at the same moment a real registration's verification-email
+  dispatch was submitted. The executor's default `RejectedExecutionHandler` is `AbortPolicy`,
+  which throws a `TaskRejectedException` with nowhere for an `@Async void` method to route it —
+  the task simply never ran, and because `RegistrationEmailEventListener`'s SENT/FAILED
+  audit-recording code lives *inside* that task body, nothing was ever written to
+  `registration_events` for it. `REGISTER_STARTED` alone had already committed synchronously
+  inside `register()`'s own request thread, which is why that one event *did* show up.
+- Investigating this surfaced a second, independent, previously-latent bug while reviewing the
+  same listener: if a send genuinely *succeeded* but the subsequent `VERIFICATION_EMAIL_SENT`
+  audit-write itself then threw (a transient DB hiccup at that exact moment), the single
+  try/catch wrapping both calls would catch that exception and record `VERIFICATION_EMAIL_FAILED`
+  instead — silently misreporting a successfully-delivered email as failed, which would also have
+  falsely triggered an admin "send failure" alert for an email that actually went out fine.
+- **Takeaway, per an explicit, broader user mandate ("every part of the registration process
+  needs appropriate logging/visibility/alerting — no blind spots where it's unknown what
+  happened"):** rather than patching just the one reported scenario, the whole pipeline was
+  audited end to end and hardened at every layer described in the Admin Portal Notes entries
+  above — `AsyncConfig`'s `CallerRunsPolicy` (a saturated queue can never again drop a task
+  silently), `RegistrationEmailEventListener`'s send/audit-write separation (a failure to persist
+  can never be misreported as a send failure), `RegistrationDispatchWatchdog`'s periodic
+  reconciliation (a safety net for failure modes nobody has specifically anticipated, not just
+  the ones with their own `catch` block), `ADMIN_ALERT_FAILED` visibility (an alert that itself
+  fails to send is no longer only a log line), identical audit coverage extended to the
+  previously-uninstrumented password-reset email flow, and `TestDataCleanupService`'s genuine
+  bulk-delete rewrite (plus a longer, dedicated frontend timeout as a second line of defense).
+  The general lesson, consistent with the durable-outbox principle already established for
+  offline writes: an async dispatch mechanism must never have a code path where "the task didn't
+  run" and "the task ran and nothing went wrong" are indistinguishable from the outside. Full
+  investigation narrative: `git log --grep="blind spot\|CallerRunsPolicy\|DISPATCH_MISSING" -i`.

@@ -52,14 +52,14 @@ export function isOfflineError(error) {
   return status >= 500;
 }
 
-async function request(path, { method = 'GET', body, isFormData = false } = {}) {
+async function request(path, { method = 'GET', body, isFormData = false, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
   const headers = {};
   if (!isFormData) headers['Content-Type'] = 'application/json';
   const hadToken = Boolean(token);
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   let response;
   try {
@@ -109,7 +109,7 @@ export const apiClient = {
   post: (path, body) => request(path, { method: 'POST', body }),
   put: (path, body) => request(path, { method: 'PUT', body }),
   patch: (path, body) => request(path, { method: 'PATCH', body }),
-  delete: (path, body) => request(path, { method: 'DELETE', body }),
+  delete: (path, body, options) => request(path, { method: 'DELETE', body, ...options }),
   getRaw: async (path) => {
     const headers = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;

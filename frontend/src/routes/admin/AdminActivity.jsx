@@ -21,6 +21,8 @@ const POSITIVE_EVENT_TYPES = new Set([
   'CONFIRM_SUCCESS',
   'VERIFICATION_EMAIL_SENT',
   'SUCCESS_EMAIL_SENT',
+  'PASSWORD_RESET_EMAIL_SENT',
+  'PASSWORD_RESET_SUCCESS_EMAIL_SENT',
   'EMAIL_DELIVERED',
 ]);
 
@@ -125,7 +127,16 @@ function ActivityLegend() {
         EMAIL_SUPPRESSED / EMAIL_QUARANTINED / EMAIL_DELIVERY_FAILED are the actual, true outcome,
         reported later by Event Grid -- this is the only way to know whether an email really
         arrived, and the detail column carries the recipient server's real diagnostic (e.g. the
-        SMTP bounce reason).
+        SMTP bounce reason). PASSWORD_RESET_EMAIL_* / PASSWORD_RESET_SUCCESS_EMAIL_* are the same
+        two levels for the password-reset flow.
+      </div>
+      <div>
+        <strong>Safety-net events:</strong> REGISTRATION_EMAIL_DISPATCH_MISSING means a
+        registration started but no VERIFICATION_EMAIL_SENT/FAILED ever showed up for it within a
+        few minutes -- the dispatch never ran at all (not the same as it running and failing,
+        which the types above already cover). ADMIN_ALERT_FAILED means an alert email about one of
+        these events itself failed to send -- if you see this, whatever it names still happened,
+        you just weren't emailed about it; check the Detail column and this feed directly.
       </div>
     </div>
   );
@@ -180,7 +191,8 @@ function AlertSettingsPanel() {
           disabled={saving}
           onChange={(e) => handleToggle('alertOnSendFailure', e.target.checked)}
         />
-        A verification or success email fails to send
+        A verification, success, or password-reset email fails to send, or a registration's email
+        dispatch never runs at all
       </label>
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
         <input

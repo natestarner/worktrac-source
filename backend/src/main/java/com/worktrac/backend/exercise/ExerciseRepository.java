@@ -1,6 +1,7 @@
 package com.worktrac.backend.exercise;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,4 +22,11 @@ public interface ExerciseRepository extends JpaRepository<Exercise, Long> {
     Optional<Exercise> findByClientKeyAndAccount_Id(String clientKey, Long accountId);
 
     void deleteByAccount_Id(Long accountId);
+
+    // Genuine single-statement bulk delete for TestDataCleanupService -- see
+    // PersonRepository.deleteByAccountIdIn's comment for why this is safe and preferred over the
+    // derived, entity-at-a-time deleteByAccount_Id above for that specific caller.
+    @Modifying
+    @Query("DELETE FROM Exercise e WHERE e.account.id IN :accountIds")
+    void deleteByAccountIdIn(@Param("accountIds") List<Long> accountIds);
 }

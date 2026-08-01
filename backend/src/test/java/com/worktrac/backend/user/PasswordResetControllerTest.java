@@ -3,6 +3,9 @@ package com.worktrac.backend.user;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.config.EmailProperties;
 import com.worktrac.backend.email.EmailService;
+import com.worktrac.backend.registrationaudit.RegistrationEvent;
+import com.worktrac.backend.registrationaudit.RegistrationEventRepository;
+import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.support.MutableClock;
 import com.worktrac.backend.support.RegistrationTestSupport;
 import org.junit.jupiter.api.Test;
@@ -22,15 +25,21 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -69,10 +78,29 @@ class PasswordResetControllerTest {
     @Autowired
     private EmailProperties emailProperties;
 
+    @Autowired
+    private RegistrationEventRepository registrationEventRepository;
+
     @MockitoBean
     private EmailService emailService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // The two password-reset email-outcome events are recorded from RegistrationEmailEventListener's
+    // @Async handler, on a different thread than the request that triggered them -- poll briefly
+    // rather than assuming the row is already committed the instant the HTTP response returns
+    // (mirrors RegistrationAuditServiceTest's identical helper for the registration flow).
+    private List<RegistrationEvent> awaitEventsFor(String email, RegistrationEventType type) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 3000;
+        while (System.currentTimeMillis() < deadline) {
+            List<RegistrationEvent> matches = registrationEventRepository.findAll().stream()
+                    .filter(e -> e.getEmail().equals(email) && e.getEventType() == type)
+                    .toList();
+            if (!matches.isEmpty()) return matches;
+            Thread.sleep(50);
+        }
+        return List.of();
+    }
 
     private String uniqueEmail(String label) {
         return label + "-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
@@ -252,5 +280,39 @@ class PasswordResetControllerTest {
                 .andExpect(status().isOk());
 
         verify(emailService, never()).sendPasswordResetCode(anyString(), anyString());
+    }
+
+    // Password-reset emails previously had zero audit coverage at all (see
+    // RegistrationEventType's PASSWORD_RESET_* entries) -- a real production incident (this
+    // exact user not receiving a reset code) was invisible with no trace anywhere. These two
+    // tests prove that gap is closed with the same SENT/FAILED pattern the registration flow
+    // already had.
+    @Test
+    void passwordResetCodeSentIsRecordedWithMessageId() throws Exception {
+        String email = registerRealUser("reset-audit-sent", "Avery");
+        when(emailService.sendPasswordResetCode(eq(email), anyString())).thenReturn("reset-msg-1");
+
+        requestReset(email);
+
+        List<RegistrationEvent> sent = awaitEventsFor(email, RegistrationEventType.PASSWORD_RESET_EMAIL_SENT);
+        assertEquals(1, sent.size());
+        assertEquals("reset-msg-1", sent.get(0).getMessageId());
+    }
+
+    @Test
+    void passwordResetCodeSendFailureIsRecordedWithReasonAndAlertsAdmin() throws Exception {
+        String email = registerRealUser("reset-audit-fail", "Bailey");
+        doThrow(new RuntimeException("ACS send did not succeed: status=FAILED code=Throttled"))
+                .when(emailService).sendPasswordResetCode(eq(email), anyString());
+
+        requestReset(email);
+
+        List<RegistrationEvent> failed = awaitEventsFor(email, RegistrationEventType.PASSWORD_RESET_EMAIL_FAILED);
+        assertEquals(1, failed.size());
+        assertTrue(failed.get(0).getDetail().contains("Throttled"));
+
+        // Default RegistrationAlertSettings has alertOnSendFailure = true (V45 seed), and
+        // PASSWORD_RESET_EMAIL_FAILED is now in AdminAlertEventListener's SEND_FAILURE_TYPES.
+        verify(emailService, timeout(3000)).sendAdminAlert(any(), anyString(), contains("Throttled"));
     }
 }

@@ -1,9 +1,11 @@
 package com.worktrac.backend.admin;
 
-import com.worktrac.backend.account.AccountDeletionService;
+import com.worktrac.backend.account.AccountRepository;
+import com.worktrac.backend.exercise.ExerciseRepository;
+import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.registrationaudit.RegistrationEventRepository;
+import com.worktrac.backend.tag.TagRepository;
 import com.worktrac.backend.user.PendingRegistrationRepository;
-import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +30,22 @@ import java.util.List;
 // The stronger safety net is TestDataAdminController's own @Profile({"local", "lower"}) --
 // this service itself has no environment check, because the routes that call it simply don't
 // exist as beans in production at all (see that controller's own comment).
+//
+// deleteAll() deliberately does NOT reuse AccountDeletionService.deleteAccount(Long) in a loop
+// over every matching account, unlike an earlier version of this class. Lower had accumulated
+// hundreds of e2e accounts across repeated deploys' e2e runs, and Spring Data JPA's derived
+// deleteByAccount_Id (used by that per-account cascade) loads and removes every matching entity
+// one at a time rather than issuing a single DELETE statement -- looping it once per account
+// made this endpoint's total DB round trips scale with (test accounts) x (tables x rows per
+// account), which took long enough in lower to exceed the frontend's request timeout. The
+// timeout didn't cancel the still-running backend transaction, and that transaction's DB load
+// is suspected to have contributed to a real production-adjacent incident where an unrelated
+// registration's async email dispatch silently never ran (see AsyncConfig's CallerRunsPolicy
+// comment). Every table below is instead cleared with one bulk `DELETE ... WHERE ... IN (...)`
+// statement across every matching account at once (see e.g. PersonRepository.deleteByAccountIdIn),
+// and accounts themselves via Spring Data's own deleteAllByIdInBatch. Order still matters for
+// the same FK reasons as AccountDeletionService (people before the exercises/tags/user rows they
+// may reference, all before the account row itself).
 @Service
 public class TestDataCleanupService {
 
@@ -36,22 +54,30 @@ public class TestDataCleanupService {
     static final String E2E_EMAIL_PATTERN = "e2e-%@example.com";
 
     private final UserRepository userRepository;
-    private final AccountDeletionService accountDeletionService;
+    private final PersonRepository personRepository;
+    private final ExerciseRepository exerciseRepository;
+    private final TagRepository tagRepository;
+    private final AccountRepository accountRepository;
     private final RegistrationEventRepository registrationEventRepository;
     private final PendingRegistrationRepository pendingRegistrationRepository;
 
-    public TestDataCleanupService(UserRepository userRepository, AccountDeletionService accountDeletionService,
+    public TestDataCleanupService(UserRepository userRepository, PersonRepository personRepository,
+                                   ExerciseRepository exerciseRepository, TagRepository tagRepository,
+                                   AccountRepository accountRepository,
                                    RegistrationEventRepository registrationEventRepository,
                                    PendingRegistrationRepository pendingRegistrationRepository) {
         this.userRepository = userRepository;
-        this.accountDeletionService = accountDeletionService;
+        this.personRepository = personRepository;
+        this.exerciseRepository = exerciseRepository;
+        this.tagRepository = tagRepository;
+        this.accountRepository = accountRepository;
         this.registrationEventRepository = registrationEventRepository;
         this.pendingRegistrationRepository = pendingRegistrationRepository;
     }
 
     @Transactional(readOnly = true)
     public AdminTestDataPreviewDto preview() {
-        long accountCount = userRepository.findByEmailLike(E2E_EMAIL_PATTERN).size();
+        long accountCount = userRepository.findAccountIdsByEmailLike(E2E_EMAIL_PATTERN).size();
         long eventCount = registrationEventRepository.countByEmailLike(E2E_EMAIL_PATTERN);
         long pendingCount = pendingRegistrationRepository.countByEmailLike(E2E_EMAIL_PATTERN);
         return new AdminTestDataPreviewDto(accountCount, eventCount, pendingCount);
@@ -59,18 +85,22 @@ public class TestDataCleanupService {
 
     @Transactional
     public AdminTestDataPreviewDto deleteAll() {
-        List<User> testUsers = userRepository.findByEmailLike(E2E_EMAIL_PATTERN);
+        List<Long> accountIds = userRepository.findAccountIdsByEmailLike(E2E_EMAIL_PATTERN);
         long eventCount = registrationEventRepository.countByEmailLike(E2E_EMAIL_PATTERN);
         long pendingCount = pendingRegistrationRepository.countByEmailLike(E2E_EMAIL_PATTERN);
 
-        for (User user : testUsers) {
-            accountDeletionService.deleteAccount(user.getAccount().getId());
+        if (!accountIds.isEmpty()) {
+            personRepository.deleteByAccountIdIn(accountIds);
+            exerciseRepository.deleteByAccountIdIn(accountIds);
+            tagRepository.deleteByAccountIdIn(accountIds);
+            userRepository.deleteByAccountIdIn(accountIds);
+            accountRepository.deleteAllByIdInBatch(accountIds);
         }
-        registrationEventRepository.deleteByEmailLike(E2E_EMAIL_PATTERN);
-        pendingRegistrationRepository.deleteByEmailLike(E2E_EMAIL_PATTERN);
+        registrationEventRepository.deleteByEmailLikeBulk(E2E_EMAIL_PATTERN);
+        pendingRegistrationRepository.deleteByEmailLikeBulk(E2E_EMAIL_PATTERN);
 
         log.info("Deleted e2e test data: {} accounts, {} registration events, {} pending registrations",
-                testUsers.size(), eventCount, pendingCount);
-        return new AdminTestDataPreviewDto(testUsers.size(), eventCount, pendingCount);
+                accountIds.size(), eventCount, pendingCount);
+        return new AdminTestDataPreviewDto(accountIds.size(), eventCount, pendingCount);
     }
 }

@@ -55,8 +55,14 @@ class TestDataAdminControllerProfileTest {
     private void registerMockRepositories(AnnotationConfigApplicationContext context) {
         context.registerBean(com.worktrac.backend.user.UserRepository.class,
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.user.UserRepository.class));
-        context.registerBean(com.worktrac.backend.account.AccountDeletionService.class,
-                () -> org.mockito.Mockito.mock(com.worktrac.backend.account.AccountDeletionService.class));
+        context.registerBean(com.worktrac.backend.person.PersonRepository.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.person.PersonRepository.class));
+        context.registerBean(com.worktrac.backend.exercise.ExerciseRepository.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.exercise.ExerciseRepository.class));
+        context.registerBean(com.worktrac.backend.tag.TagRepository.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.tag.TagRepository.class));
+        context.registerBean(com.worktrac.backend.account.AccountRepository.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.account.AccountRepository.class));
         context.registerBean(com.worktrac.backend.registrationaudit.RegistrationEventRepository.class,
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.registrationaudit.RegistrationEventRepository.class));
         context.registerBean(com.worktrac.backend.user.PendingRegistrationRepository.class,
