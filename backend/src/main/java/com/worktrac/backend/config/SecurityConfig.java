@@ -40,6 +40,9 @@ public class SecurityConfig {
                                 "/api/auth/resend-code", "/api/auth/forgot-password", "/api/auth/reset-password",
                                 "/api/auth/resend-reset-code", "/api/auth/test/pending-code").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // Server-to-server (Azure Event Grid), no JWT possible -- gated instead
+                        // by EmailDeliveryWebhookController's own query-param shared secret.
+                        .requestMatchers("/api/webhooks/email-delivery").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 // setStatus, not sendError: sendError triggers the servlet container's internal

@@ -4,6 +4,11 @@ import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonRepository;
+import com.worktrac.backend.registrationaudit.RegistrationAlertSettings;
+import com.worktrac.backend.registrationaudit.RegistrationAlertSettingsService;
+import com.worktrac.backend.registrationaudit.RegistrationEvent;
+import com.worktrac.backend.registrationaudit.RegistrationEventRepository;
+import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.user.PendingRegistration;
 import com.worktrac.backend.user.PendingRegistrationRepository;
 import com.worktrac.backend.user.UserRepository;
@@ -19,6 +24,8 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 // The one place in the app that deliberately reads across every account instead of
 // scoping to CurrentUser.accountId() -- gated at the route level in SecurityConfig
@@ -32,18 +39,36 @@ public class AdminService {
     private final WorkoutSessionRepository workoutSessionRepository;
     private final WorkoutSetRepository workoutSetRepository;
     private final PendingRegistrationRepository pendingRegistrationRepository;
+    private final RegistrationEventRepository registrationEventRepository;
+    private final RegistrationAlertSettingsService registrationAlertSettingsService;
     private final Clock clock;
+
+    // The subset of RegistrationEventType that represents a known email send/delivery outcome
+    // for a given address -- used to compute each Pending row's lastEmailStatus/lastEmailAt.
+    private static final Set<RegistrationEventType> EMAIL_OUTCOME_TYPES = Set.of(
+            RegistrationEventType.VERIFICATION_EMAIL_SENT,
+            RegistrationEventType.VERIFICATION_EMAIL_FAILED,
+            RegistrationEventType.EMAIL_DELIVERED,
+            RegistrationEventType.EMAIL_BOUNCED,
+            RegistrationEventType.EMAIL_DELIVERY_FAILED,
+            RegistrationEventType.EMAIL_FILTERED_SPAM,
+            RegistrationEventType.EMAIL_SUPPRESSED,
+            RegistrationEventType.EMAIL_QUARANTINED);
 
     public AdminService(AccountRepository accountRepository, UserRepository userRepository,
                          PersonRepository personRepository, WorkoutSessionRepository workoutSessionRepository,
                          WorkoutSetRepository workoutSetRepository,
-                         PendingRegistrationRepository pendingRegistrationRepository, Clock clock) {
+                         PendingRegistrationRepository pendingRegistrationRepository,
+                         RegistrationEventRepository registrationEventRepository,
+                         RegistrationAlertSettingsService registrationAlertSettingsService, Clock clock) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
         this.workoutSessionRepository = workoutSessionRepository;
         this.workoutSetRepository = workoutSetRepository;
         this.pendingRegistrationRepository = pendingRegistrationRepository;
+        this.registrationEventRepository = registrationEventRepository;
+        this.registrationAlertSettingsService = registrationAlertSettingsService;
         this.clock = clock;
     }
 
@@ -105,18 +130,81 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public List<AdminPendingRegistrationDto> listPendingRegistrations() {
+        Instant now = clock.instant();
         return pendingRegistrationRepository.findAll().stream()
                 .sorted(Comparator.comparing(PendingRegistration::getCreatedAt).reversed())
-                .map(pending -> new AdminPendingRegistrationDto(
-                        pending.getId(),
-                        pending.getEmail(),
-                        pending.getAccountName(),
-                        pending.getPersonName(),
-                        pending.getCreatedAt(),
-                        pending.getExpiresAt(),
-                        pending.getAttemptCount(),
-                        pending.getResendCount()))
+                .map(pending -> toAdminPendingRegistrationDto(pending, now))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<AdminRegistrationEventDto> listRegistrationEvents() {
+        return registrationEventRepository.findTop500ByOrderByCreatedAtDesc().stream()
+                .map(event -> new AdminRegistrationEventDto(
+                        event.getId(),
+                        event.getEmail(),
+                        event.getEventType().name(),
+                        event.getDetail(),
+                        event.getIpAddress(),
+                        event.getMessageId(),
+                        event.getCreatedAt()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public AdminRegistrationAlertSettingsDto getRegistrationAlertSettings() {
+        return toAlertSettingsDto(registrationAlertSettingsService.get());
+    }
+
+    @Transactional
+    public AdminRegistrationAlertSettingsDto updateRegistrationAlertSettings(
+            AdminRegistrationAlertSettingsDto request) {
+        RegistrationAlertSettings updated = registrationAlertSettingsService.update(
+                request.alertOnRegistrationConfirmed(), request.alertOnSendFailure(),
+                request.alertOnDeliveryFailure());
+        return toAlertSettingsDto(updated);
+    }
+
+    private AdminRegistrationAlertSettingsDto toAlertSettingsDto(RegistrationAlertSettings settings) {
+        return new AdminRegistrationAlertSettingsDto(
+                settings.isAlertOnRegistrationConfirmed(),
+                settings.isAlertOnSendFailure(),
+                settings.isAlertOnDeliveryFailure());
+    }
+
+    private AdminPendingRegistrationDto toAdminPendingRegistrationDto(PendingRegistration pending, Instant now) {
+        Optional<RegistrationEvent> lastEmailEvent = registrationEventRepository
+                .findFirstByEmailAndEventTypeInOrderByCreatedAtDesc(pending.getEmail(), EMAIL_OUTCOME_TYPES);
+
+        String lastEmailStatus = lastEmailEvent.map(e -> describeEmailStatus(e.getEventType())).orElse("UNKNOWN");
+        Instant lastEmailAt = lastEmailEvent.map(RegistrationEvent::getCreatedAt).orElse(null);
+
+        return new AdminPendingRegistrationDto(
+                pending.getId(),
+                pending.getEmail(),
+                pending.getAccountName(),
+                pending.getPersonName(),
+                pending.getCreatedAt(),
+                pending.getExpiresAt(),
+                pending.getAttemptCount(),
+                pending.getResendCount(),
+                lastEmailStatus,
+                lastEmailAt,
+                pending.getExpiresAt().isBefore(now));
+    }
+
+    private String describeEmailStatus(RegistrationEventType eventType) {
+        return switch (eventType) {
+            case VERIFICATION_EMAIL_SENT -> "SENT";
+            case VERIFICATION_EMAIL_FAILED -> "FAILED";
+            case EMAIL_DELIVERED -> "DELIVERED";
+            case EMAIL_BOUNCED -> "BOUNCED";
+            case EMAIL_DELIVERY_FAILED -> "DELIVERY_FAILED";
+            case EMAIL_FILTERED_SPAM -> "SPAM";
+            case EMAIL_SUPPRESSED -> "SUPPRESSED";
+            case EMAIL_QUARANTINED -> "QUARANTINED";
+            default -> "UNKNOWN";
+        };
     }
 
     private AdminPersonDto toAdminPersonDto(Person person, Map<Long, String> emailByAccount) {

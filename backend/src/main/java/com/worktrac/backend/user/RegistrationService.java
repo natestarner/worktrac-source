@@ -14,6 +14,8 @@ import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonDto;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.ratelimit.RegistrationRateLimiter;
+import com.worktrac.backend.registrationaudit.RegistrationAuditService;
+import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.security.JwtService;
 import com.worktrac.backend.user.dto.AuthResponse;
 import com.worktrac.backend.user.dto.ConfirmEmailRequest;
@@ -59,6 +61,7 @@ public class RegistrationService {
     private final RegistrationRateLimiter rateLimiter;
     private final Optional<TestCodeCache> testCodeCache;
     private final Clock clock;
+    private final RegistrationAuditService auditService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public RegistrationService(AccountRepository accountRepository, UserRepository userRepository,
@@ -67,7 +70,7 @@ public class RegistrationService {
                                 PasswordEncoder passwordEncoder, JwtService jwtService,
                                 ApplicationEventPublisher eventPublisher, EmailProperties emailProperties,
                                 RegistrationRateLimiter rateLimiter, Optional<TestCodeCache> testCodeCache,
-                                Clock clock) {
+                                Clock clock, RegistrationAuditService auditService) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
@@ -79,6 +82,7 @@ public class RegistrationService {
         this.rateLimiter = rateLimiter;
         this.testCodeCache = testCodeCache;
         this.clock = clock;
+        this.auditService = auditService;
     }
 
     @Transactional
@@ -86,9 +90,11 @@ public class RegistrationService {
         String email = request.email().trim().toLowerCase();
         if (userRepository.existsByEmail(email)) {
             log.warn("Registration rejected for {} from ip {}: account already exists", email, ipAddress);
+            auditService.record(email, RegistrationEventType.REGISTER_DUPLICATE_EMAIL,
+                    "Account already exists", ipAddress);
             throw new ConflictException("An account with that email already exists");
         }
-        checkSendAllowed(email, ipAddress);
+        checkSendAllowed(email, ipAddress, RegistrationEventType.REGISTER_RATE_LIMITED);
 
         String code = generateCode();
         Instant now = clock.instant();
@@ -110,6 +116,7 @@ public class RegistrationService {
 
         sendCode(email, code);
         log.info("Registration started for {} from ip {}", email, ipAddress);
+        auditService.record(email, RegistrationEventType.REGISTER_STARTED, null, ipAddress);
         return new RegisterStartedResponse(email);
     }
 
@@ -125,21 +132,29 @@ public class RegistrationService {
         PendingRegistration pending = pendingRegistrationRepository.findByEmail(email)
                 .orElseThrow(() -> {
                     log.warn("Confirm-email failed for {}: no pending registration", email);
+                    auditService.record(email, RegistrationEventType.CONFIRM_NOT_FOUND, null);
                     return new NotFoundException("No pending registration for that email");
                 });
 
         if (pending.getExpiresAt().isBefore(clock.instant())) {
             log.warn("Confirm-email failed for {}: code expired", email);
+            auditService.record(email, RegistrationEventType.CONFIRM_EXPIRED, null);
             throw new ExpiredException("This code has expired -- request a new one");
         }
         if (pending.getAttemptCount() >= MAX_ATTEMPTS) {
             log.warn("Confirm-email failed for {}: locked out after {} incorrect attempts", email, MAX_ATTEMPTS);
+            auditService.record(email, RegistrationEventType.CONFIRM_LOCKED,
+                    "Locked out after " + MAX_ATTEMPTS + " incorrect attempts");
             throw new LockedException("Too many incorrect attempts -- request a new code");
         }
         if (!passwordEncoder.matches(request.code(), pending.getCodeHash())) {
             pending.incrementAttemptCount();
             pendingRegistrationRepository.save(pending);
             log.warn("Confirm-email failed for {}: incorrect code (attempt {})", email, pending.getAttemptCount());
+            // This audit row must survive the throw below -- see confirmEmail's
+            // noRollbackFor comment and RegistrationAuditService's own REQUIRES_NEW comment.
+            auditService.record(email, RegistrationEventType.CONFIRM_WRONG_CODE,
+                    "Incorrect code (attempt " + pending.getAttemptCount() + " of " + MAX_ATTEMPTS + ")");
             throw new UnauthorizedException("Incorrect code");
         }
 
@@ -147,6 +162,8 @@ public class RegistrationService {
         // request started and now.
         if (userRepository.existsByEmail(email)) {
             log.warn("Confirm-email failed for {}: account already exists (race)", email);
+            auditService.record(email, RegistrationEventType.REGISTER_DUPLICATE_EMAIL,
+                    "Account already exists (detected during confirm-email race check)");
             throw new ConflictException("An account with that email already exists");
         }
 
@@ -155,6 +172,8 @@ public class RegistrationService {
         pendingRegistrationRepository.deleteByEmail(email);
         eventPublisher.publishEvent(new RegistrationConfirmedEvent(email));
         log.info("Registration confirmed for {}", email);
+        auditService.record(email, RegistrationEventType.CONFIRM_SUCCESS,
+                "Account created (accountId=" + response.account().id() + ")");
         return response;
     }
 
@@ -164,20 +183,25 @@ public class RegistrationService {
         PendingRegistration pending = pendingRegistrationRepository.findByEmail(email)
                 .orElseThrow(() -> {
                     log.warn("Resend-code failed for {} from ip {}: no pending registration", email, ipAddress);
+                    auditService.record(email, RegistrationEventType.RESEND_NOT_FOUND, null, ipAddress);
                     return new NotFoundException("No pending registration for that email");
                 });
 
         Instant now = clock.instant();
         if (pending.getLastSentAt().plus(RESEND_COOLDOWN).isAfter(now)) {
             log.warn("Resend-code rejected for {} from ip {}: cooldown active", email, ipAddress);
+            auditService.record(email, RegistrationEventType.RESEND_THROTTLED, "Cooldown active", ipAddress);
             throw new TooManyRequestsException("Please wait before requesting another code");
         }
         if (pending.getResendCount() >= MAX_RESENDS_PER_WINDOW
                 && pending.getLastSentAt().plus(RESEND_WINDOW).isAfter(now)) {
             log.warn("Resend-code rejected for {} from ip {}: resend window limit reached", email, ipAddress);
+            auditService.record(email, RegistrationEventType.RESEND_THROTTLED,
+                    "Resend window limit reached (" + MAX_RESENDS_PER_WINDOW + " per " + RESEND_WINDOW.toMinutes()
+                            + " min)", ipAddress);
             throw new TooManyRequestsException("Too many code requests -- please try again later");
         }
-        checkSendAllowed(email, ipAddress);
+        checkSendAllowed(email, ipAddress, RegistrationEventType.REGISTER_RATE_LIMITED);
 
         String code = generateCode();
         pending.setCodeHash(passwordEncoder.encode(code));
@@ -189,20 +213,26 @@ public class RegistrationService {
 
         sendCode(email, code);
         log.info("Code resent for {} from ip {}", email, ipAddress);
+        auditService.record(email, RegistrationEventType.RESEND_REQUESTED,
+                "Resend #" + pending.getResendCount(), ipAddress);
     }
 
     private Instant expiresAt(Instant now) {
         return now.plus(Duration.ofMinutes(emailProperties.getCodeExpirationMinutes()));
     }
 
-    private void checkSendAllowed(String email, String ipAddress) {
+    // eventType lets the two call sites (register vs resendCode) record under the same rate-
+    // limit event category while the detail string still says which check tripped.
+    private void checkSendAllowed(String email, String ipAddress, RegistrationEventType eventType) {
         if (!rateLimiter.tryConsumeGlobal()) {
             log.warn("Registration email send blocked by global rate limit for {} from ip {}", email, ipAddress);
+            auditService.record(email, eventType, "Global email send rate limit exceeded", ipAddress);
             throw new TooManyRequestsException(
                     "Too many verification emails sent recently -- please try again later");
         }
         if (!rateLimiter.tryConsumePerIp(ipAddress)) {
             log.warn("Registration email send blocked by per-IP rate limit for {} from ip {}", email, ipAddress);
+            auditService.record(email, eventType, "Per-IP rate limit exceeded (ip " + ipAddress + ")", ipAddress);
             throw new TooManyRequestsException("Too many requests from this address -- please try again later");
         }
     }

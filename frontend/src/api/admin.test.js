@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getOverview, getHealth, listAccounts, listPendingRegistrations, listPeople } from './admin';
+import {
+  getOverview,
+  getHealth,
+  listAccounts,
+  listPendingRegistrations,
+  listPeople,
+  listRegistrationEvents,
+  getRegistrationAlertSettings,
+  updateRegistrationAlertSettings,
+} from './admin';
 import { setAuthToken } from './client';
 
 function jsonResponse(body, status = 200) {
@@ -42,5 +51,24 @@ describe('admin api', () => {
   it('getHealth hits GET /api/admin/health', async () => {
     await getHealth();
     expect(global.fetch.mock.calls[0][0]).toBe('/api/admin/health');
+  });
+
+  it('listRegistrationEvents hits GET /api/admin/registration-events', async () => {
+    await listRegistrationEvents();
+    expect(global.fetch.mock.calls[0][0]).toBe('/api/admin/registration-events');
+  });
+
+  it('getRegistrationAlertSettings hits GET /api/admin/registration-alert-settings', async () => {
+    await getRegistrationAlertSettings();
+    expect(global.fetch.mock.calls[0][0]).toBe('/api/admin/registration-alert-settings');
+  });
+
+  it('updateRegistrationAlertSettings hits PUT /api/admin/registration-alert-settings with the body', async () => {
+    const settings = { alertOnRegistrationConfirmed: true, alertOnSendFailure: false, alertOnDeliveryFailure: true };
+    await updateRegistrationAlertSettings(settings);
+    const [url, options] = global.fetch.mock.calls[0];
+    expect(url).toBe('/api/admin/registration-alert-settings');
+    expect(options.method).toBe('PUT');
+    expect(JSON.parse(options.body)).toEqual(settings);
   });
 });
