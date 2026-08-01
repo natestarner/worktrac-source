@@ -1,12 +1,18 @@
+// A real (in-memory) IndexedDB so the reload-simulation test below can exercise the actual
+// persist/restore path, not a no-op. Imported first so `indexedDB` is defined before the modules
+// under test read `typeof indexedDB`.
+import 'fake-indexeddb/auto';
 import { MutationObserver, QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOutboxItems } from './useOutboxItems';
 import { CREATE_EXERCISE_MUTATION_KEY, LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from '../lib/queryClient';
+import { persistOutboxNow, restoreOutbox } from '../lib/outboxPersistence';
 import { useAuth } from '../context/AuthContext';
 import { useExercises } from './useExercises';
 import { logLiveSet } from '../api/sets';
 import { addExercise } from '../api/exercises';
+import { setAuthToken } from '../api/client';
 
 vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('./useExercises', () => ({ useExercises: vi.fn() }));
@@ -127,5 +133,60 @@ describe('useOutboxItems', () => {
     const { result } = renderWithClient(client);
     await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalled());
     expect(result.current).toEqual([]);
+  });
+
+  // Regression test for the reported bug: the list used to sort by TanStack's own `submittedAt`,
+  // which gets RE-STAMPED to "now" every time a write is re-executed -- including restoreOutbox's
+  // re-dispatch of an actively-retrying (not-paused, e.g. lie-fi) write after a reload. That made an
+  // earlier-enqueued write visibly sink BELOW a later one in this exact list, even though the
+  // underlying replay order was still correct. Sorting by enqueueSeq instead (immutable, never
+  // re-stamped by a reload) keeps the displayed order matching true enqueue order.
+  describe('display order survives a reload (enqueueSeq, not submittedAt)', () => {
+    const ACCOUNT = 'outbox-items-reload-acct';
+
+    beforeEach(() => setAuthToken('test-token'));
+    afterEach(() => setAuthToken(null));
+
+    it('keeps an earlier-enqueued write listed ahead of a later one, even though the earlier one\'s submittedAt gets re-stamped by the reload', async () => {
+      // Enqueued first (enqueueSeq: 1), but stays mid-retry (not paused) rather than settling --
+      // lie-fi (navigator.onLine stays true, only the backend is unreachable).
+      logLiveSet.mockReturnValueOnce(new Promise(() => {}));
+      const client1 = newClient();
+      dispatch(client1, LOG_SET_MUTATION_KEY, {
+        mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb', idempotencyKey: 'earlier', clientLoggedAt: 't', tempId: 'temp-earlier', enqueueSeq: 1,
+      });
+      await vi.waitFor(() => {
+        const [mutation] = client1.getMutationCache().getAll();
+        expect(mutation.state.status).toBe('pending');
+        expect(mutation.state.isPaused).toBe(false);
+      });
+
+      // Enqueued second (enqueueSeq: 2), but genuinely offline -- paused.
+      onlineManager.setOnline(false);
+      dispatch(client1, LOG_SET_MUTATION_KEY, {
+        mode: 'live', personId: 7, exerciseId: 1, weight: 999, reps: 9, unit: 'lb', idempotencyKey: 'later', clientLoggedAt: 't', tempId: 'temp-later', enqueueSeq: 2,
+      });
+      await vi.waitFor(() => {
+        const paused = client1.getMutationCache().getAll().filter((m) => m.state.isPaused);
+        expect(paused).toHaveLength(1);
+      });
+      await persistOutboxNow(client1, ACCOUNT);
+
+      // Reload: a fresh client restores. The device stays hard-offline through the restore itself
+      // (deliberately, for THIS test) so neither write actually attempts a request or settles --
+      // isolating the display-order assertion from network timing/auto-continuation entirely. The
+      // "earlier" write was not-paused at persist time, so restoreOutbox re-dispatches it fresh here
+      // -- freshly re-stamping its submittedAt to now, well past "later"'s untouched, original,
+      // smaller submittedAt (restored via hydrate, unchanged). Its enqueueSeq (1) must still win.
+      const client2 = newClient();
+      await restoreOutbox(client2, ACCOUNT);
+      await vi.waitFor(() => {
+        expect(client2.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(2);
+      });
+
+      const { result } = renderWithClient(client2);
+      await vi.waitFor(() => expect(result.current).toHaveLength(2));
+      expect(result.current.map((item) => item.detail)).toEqual(['logged 135 lb × 5', 'logged 999 lb × 9']);
+    });
   });
 });

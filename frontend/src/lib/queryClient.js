@@ -10,6 +10,7 @@ import { getAuthToken } from '../api/client';
 import { OUTBOX_SCOPE_ID } from './outboxPersistence';
 import { resolveExerciseId, setExerciseIdMapping, isTempExerciseId } from './exerciseIdMap';
 import { resolveSetId, setSetIdMapping, isTempSetId } from './setIdMap';
+import { byEnqueueOrder, withEnqueueSeq } from './outboxSequence';
 
 // Bump when the shape of anything we cache changes incompatibly -- the persister discards a
 // restored cache whose buster doesn't match instead of hydrating stale/incompatible data.
@@ -273,7 +274,9 @@ export function dispatchDurableWrite(client, mutationKey, variables) {
     ...client.getMutationDefaults(mutationKey),
     mutationKey,
   });
-  return observer.mutate(variables).catch(() => {});
+  // Stamps an immutable enqueueSeq the first time this write is dispatched (a no-op if variables
+  // already carries one, e.g. a restore re-dispatch) -- see outboxSequence.js.
+  return observer.mutate(withEnqueueSeq(variables)).catch(() => {});
 }
 
 // Fire a durable write against the app's singleton client WITHOUT a React observer -- for
@@ -295,18 +298,22 @@ export function enqueueOutboxWrite(mutationKey, variables) {
 //
 // Restarted IN PLACE (`m.execute(...)` on the existing Mutation object) rather than removed and
 // re-dispatched via a new mutation -- removing and recreating always re-registers at the END of
-// the shared outbox scope's array, which is what actually determines replay order (TanStack's
-// scope FIFO is registration order, not submittedAt), so it could let a write that's stuck behind
-// a dependency (e.g. a log-set against a not-yet-synced exercise) jump ahead of writes genuinely
-// submitted later. Reusing the same object never changes its position. This is only safe because
+// the shared outbox scope's array, which is what actually determines LIVE replay order (TanStack's
+// scope FIFO is registration order), so it could let a write that's stuck behind a dependency
+// (e.g. a log-set against a not-yet-synced exercise) jump ahead of writes genuinely submitted
+// later. Reusing the same object never changes its position. This is only safe because
 // `state.status === 'error'` here means the mutation's retryer already fully settled (rejected) --
 // there is no live retry loop left to race against a second one; had it been 'pending' (offline or
 // mid-backoff), a second `execute()` call would start a competing retryer without cancelling the
-// first. `execute()` on a terminal-error mutation stamps `submittedAt` to now as part of its
-// normal re-dispatch (see mutation.ts's 'pending' reducer case), so it's restored to the original
-// value immediately after -- once the synchronous part of `execute()` has run -- so a later
-// restoreOutbox restore (after a reload) still sorts it by true enqueue time, not by whenever it
-// last got kicked.
+// first.
+//
+// The stuck list itself is sorted by `byEnqueueOrder` (outboxSequence.js's immutable, app-assigned
+// `enqueueSeq`, stamped once into `variables` at first dispatch) rather than TanStack's own
+// `submittedAt` -- `execute()` re-stamps `submittedAt` to "now" as part of its normal re-dispatch
+// (mutation.ts's 'pending' reducer case), so keying restore/reconnect ordering off it would require
+// capturing and restoring it around every re-execute, in every place that ever re-runs a mutation,
+// forever. `enqueueSeq` lives in `variables`, which `execute()` never touches, so there is nothing
+// to preserve here -- a later restoreOutbox restore (after a reload) sorts by the same untouched key.
 //
 // Called on reconnect, after the outbox is restored on boot, after a successful (re-)login, and
 // from the offline banner's guarded "Go back online" button -- every one of those call sites can
@@ -322,11 +329,9 @@ export function flushOutbox() {
   const stuck = cache
     .getAll()
     .filter((m) => m.options.scope?.id === OUTBOX_SCOPE_ID && m.state.status === 'error')
-    .sort((a, b) => (a.state.submittedAt ?? 0) - (b.state.submittedAt ?? 0));
+    .sort(byEnqueueOrder);
   stuck.forEach((m) => {
-    const submittedAt = m.state.submittedAt;
     m.execute(m.state.variables).catch(() => {});
-    m.state = { ...m.state, submittedAt };
   });
   return resumed;
 }

@@ -352,32 +352,30 @@ describe('flushOutbox / clearOutboxMutations / resetQueryCache (singleton client
     await vi.waitFor(() => expect(after.state.status).toBe('success'));
   });
 
-  it('flushOutbox preserves the original submittedAt of a restarted stuck write, for correct ordering on a later restore', async () => {
+  // Was: "flushOutbox preserves the original submittedAt of a restarted stuck write, for correct
+  // ordering on a later restore" -- that capture-and-restore dance is now deleted from flushOutbox
+  // entirely (see the comment above it). The invariant a LATER restoreOutbox depends on is that
+  // whatever ordering key a write carries survives a flushOutbox restart untouched -- previously
+  // that required manually saving/restoring submittedAt around execute() (since execute() itself
+  // re-stamps it); now it's true for free, because enqueueSeq lives in `variables`, which execute()
+  // never touches at all.
+  it('flushOutbox preserves enqueueSeq (the ordering key a later restore depends on) across a restart, with no special-case handling needed', async () => {
     logLiveSet.mockRejectedValueOnce({ status: 500 });
     dispatchOnSingleton(
-      { mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'stuck-submitted-at', clientLoggedAt: 't' },
+      { mode: 'live', personId: 7, exerciseId: 1, weight: 100, reps: 5, idempotencyKey: 'stuck-seq', clientLoggedAt: 't', enqueueSeq: 7 },
       { retry: false },
     );
     await vi.waitFor(() => {
       const [mutation] = queryClient.getMutationCache().getAll();
       expect(mutation.state.status).toBe('error');
     });
-    const originalSubmittedAt = queryClient.getMutationCache().getAll()[0].state.submittedAt;
 
-    // Fake timers only from here -- the dispatch/error above already settled via microtasks
-    // (retry: false), so real timers are fine for that `vi.waitFor`; this is just to make "time
-    // actually passed before the restart" observable instead of a same-millisecond fluke.
-    vi.useFakeTimers();
-    try {
-      vi.advanceTimersByTime(60_000);
-      logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 1 }, set: { id: 1 } });
-      await flushOutbox();
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 1 }, set: { id: 1 } });
+    await flushOutbox();
 
-      const [restarted] = queryClient.getMutationCache().getAll();
-      expect(restarted.state.submittedAt).toBe(originalSubmittedAt);
-    } finally {
-      vi.useRealTimers();
-    }
+    const [restarted] = queryClient.getMutationCache().getAll();
+    expect(restarted.state.variables.enqueueSeq).toBe(7);
+    await vi.waitFor(() => expect(restarted.state.status).toBe('success'));
   });
 
   it('flushOutbox leaves a mid-retry (pending, not paused) write alone rather than double-firing it', async () => {
