@@ -51,7 +51,8 @@ export default function AdminTable({ columns, rows, rowKey, emptyMessage }) {
                   style={{
                     padding: '12px 16px',
                     borderBottom: '1px solid var(--color-border)',
-                    whiteSpace: 'nowrap',
+                    whiteSpace: col.wrap ? 'normal' : 'nowrap',
+                    maxWidth: col.wrap ? 420 : undefined,
                   }}
                 >
                   {col.render ? col.render(row) : row[col.key]}

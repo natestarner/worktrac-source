@@ -17,6 +17,14 @@ public enum RegistrationEventType {
     CONFIRM_LOCKED,
     CONFIRM_NOT_FOUND,
 
+    // A request to one of the three registration endpoints that never reached
+    // RegistrationService at all -- a malformed body, a validation failure, a database
+    // outage, or any other exception GlobalExceptionHandler had to catch. Deliberately one
+    // catch-all type rather than one per handler; the detail string carries the specific
+    // cause. See GlobalExceptionHandler's own comment for why this can never cover a genuine
+    // full outage (recording it is itself a database write).
+    UNEXPECTED_ERROR,
+
     // Level 1: did ACS accept the send?
     VERIFICATION_EMAIL_SENT,
     VERIFICATION_EMAIL_FAILED,
