@@ -31,3 +31,13 @@ export function updateRegistrationAlertSettings(settings) {
 export function getHealth() {
   return apiClient.get('/api/admin/health');
 }
+
+// Both only exist as routes in local/lower -- see TestDataAdminController's own comment for why
+// this is gated at the Spring bean level, not just hidden here.
+export function previewTestData() {
+  return apiClient.get('/api/admin/test-data/preview');
+}
+
+export function deleteTestData() {
+  return apiClient.delete('/api/admin/test-data');
+}

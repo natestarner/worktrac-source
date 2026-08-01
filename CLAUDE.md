@@ -181,11 +181,13 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   that deliberately reads across every account instead of scoping to
   `CurrentUser.accountId()`. Admin DTOs must never include `password_hash`,
   `pending_registrations.code_hash`, or any hashed value — curate every field added to them.
-- **Read-only, with exactly one narrow, sanctioned exception:**
-  `PUT /api/admin/registration-alert-settings` (below). Every other admin endpoint remains
-  read-only — that mutation is alerting *configuration*, not application data, and was a
-  deliberate, discussed trade, not scope creep. Any future admin action that touches app data
-  needs the same explicit sign-off this one got.
+- **Read-only, with exactly two narrow, sanctioned exceptions** (any future admin action that
+  touches app data needs the same explicit sign-off these two got):
+  1. `PUT /api/admin/registration-alert-settings` (below) — alerting *configuration*, not
+     application data.
+  2. `DELETE /api/admin/test-data` (below) — genuinely deletes rows, but only ones matching the
+     e2e suite's own exact, unmistakable email pattern; see its own entry for the full safety
+     design.
 - **Registration observability (`registration_events` table, `V44__create_registration_events.sql`,
   `com.worktrac.backend.registrationaudit` package) — added 2026-07-31 after a production
   registration silently failed with zero trace anywhere.** Every step of the registration
@@ -255,6 +257,37 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   than showing an access-denied screen, so the portal's existence isn't revealed to ordinary
   users. It's a standalone layout (`AdminShell`) under `/admin`, not a tab inside the
   workout app's `AppShell`/`TabsNav`. Tabs: Overview, Accounts, People, Pending, **Activity**.
+  `AdminShell` also mounts `Toast`/`ConfirmDialog` (unlike the rest of `AppShell`'s globals,
+  which are workout-specific and irrelevant here) — needed by the test-data cleanup action
+  below; without them, `openConfirm()`/`showToast()` called from an admin route would update
+  `UIContext` state that nothing in the admin tree ever renders.
+- **"Delete all e2e test data" (`DELETE /api/admin/test-data`, `com.worktrac.backend.admin`'s
+  `TestDataCleanupService`/`TestDataAdminController`) — the second deliberate exception to the
+  read-only-admin-portal rule.** Lets an admin wipe every trace of the Playwright e2e suite's
+  own data on demand, from a button on the Activity tab, to clear the noise it leaves in
+  Accounts/Pending/Activity.
+  - **Identification is a single, precise pattern, not a heuristic:** every one of this repo's
+    e2e specs creates its test households through exactly one shared helper
+    (`e2e/tests/support/auth.ts`'s `registerHousehold`), which always generates emails as
+    `e2e-<timestamp>-<random>@example.com`. `example.com` is an IANA-reserved (RFC 2606) domain
+    that can never resolve to a real mailbox, so `email LIKE 'e2e-%@example.com'`
+    (`findByEmailLike`/`countByEmailLike`/`deleteByEmailLike` on `UserRepository`,
+    `RegistrationEventRepository`, `PendingRegistrationRepository`) can never accidentally match
+    a genuine user's account. Deletes accounts via the existing `AccountDeletionService` cascade
+    (people/exercises/tags/workout data — already covered by `AccountDeletionTest`), plus the
+    `registration_events`/`pending_registrations` rows for those emails, which aren't tied to
+    `account_id` and would otherwise survive account deletion untouched.
+  - **The real safety net is `TestDataAdminController`'s `@Profile({"local", "lower"})`** —
+    identical two-layer defense to the e2e test-support endpoint (`TestSupportController`): these
+    routes don't exist as Spring beans at all outside local/lower, so this can never run in
+    production even by mistake, regardless of what the UI does or doesn't hide. Still gated by
+    the existing `/api/admin/** → hasRole('ADMIN')` rule in `SecurityConfig` on top of that.
+  - **Preview before delete, not just a generic confirm.** `GET
+    /api/admin/test-data/preview` returns the same `AdminTestDataPreviewDto` (account count,
+    registration-event count, pending-registration count) that the `DELETE` call itself
+    returns, so the Activity tab's button shows the admin exactly what's about to go inside the
+    shared global `ConfirmDialog` before they commit — a deliberate, discussed choice over a
+    plain "are you sure?".
 
 ## Frontend State Notes
 - **Every person has their own independent client-side state.** Whatever a person is

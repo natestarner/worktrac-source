@@ -8,6 +8,8 @@ import {
   listRegistrationEvents,
   getRegistrationAlertSettings,
   updateRegistrationAlertSettings,
+  previewTestData,
+  deleteTestData,
 } from './admin';
 import { setAuthToken } from './client';
 
@@ -70,5 +72,17 @@ describe('admin api', () => {
     expect(url).toBe('/api/admin/registration-alert-settings');
     expect(options.method).toBe('PUT');
     expect(JSON.parse(options.body)).toEqual(settings);
+  });
+
+  it('previewTestData hits GET /api/admin/test-data/preview', async () => {
+    await previewTestData();
+    expect(global.fetch.mock.calls[0][0]).toBe('/api/admin/test-data/preview');
+  });
+
+  it('deleteTestData hits DELETE /api/admin/test-data', async () => {
+    await deleteTestData();
+    const [url, options] = global.fetch.mock.calls[0];
+    expect(url).toBe('/api/admin/test-data');
+    expect(options.method).toBe('DELETE');
   });
 });

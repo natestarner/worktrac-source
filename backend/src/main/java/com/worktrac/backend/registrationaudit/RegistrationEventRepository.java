@@ -17,4 +17,11 @@ public interface RegistrationEventRepository extends JpaRepository<RegistrationE
     // from.
     Optional<RegistrationEvent> findFirstByEmailAndEventTypeInOrderByCreatedAtDesc(
             String email, Collection<RegistrationEventType> eventTypes);
+
+    // Admin-only test-data cleanup (see TestDataCleanupService). Not tied to account_id (this
+    // table has no such column -- events persist even after the account they describe is
+    // deleted), so this is the only way to clean these rows up alongside the accounts.
+    long countByEmailLike(String pattern);
+
+    long deleteByEmailLike(String pattern);
 }

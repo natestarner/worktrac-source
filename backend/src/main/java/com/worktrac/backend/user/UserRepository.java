@@ -17,6 +17,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     long countByCreatedAtAfter(Instant cutoff);
 
+    // Admin-only test-data cleanup: finds every account whose login email matches the e2e
+    // Playwright suite's exact pattern (see TestDataCleanupService for the full pattern string
+    // and why it's safe to match this broadly).
+    List<User> findByEmailLike(String pattern);
+
     // Admin-only: [accountId, email] / [accountId, role] pairs across ALL accounts, for
     // the admin portal's Accounts grid. Every account has exactly one User today
     // (registration only ever creates one), so this is unambiguous; if that ever
