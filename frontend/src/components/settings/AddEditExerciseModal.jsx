@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { addExercise, updateExercise, favoriteExercise } from '../../api/exercises';
 import { queryKeys } from '../../api/queryKeys';
 import { CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
 import { newTempExerciseId } from '../../lib/exerciseIdMap';
 import { newId } from '../../utils/id';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { useDurableMutation } from '../../hooks/useDurableMutation';
 import { useUI } from '../../context/UIContext';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
@@ -35,7 +36,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   const queryClient = useQueryClient();
   // Durable create (create + auto-favorite, both idempotent) so an offline create replays safely and
   // records its temp->real id mapping on sync. See queryClient.js.
-  const createExerciseMutation = useMutation({ mutationKey: CREATE_EXERCISE_MUTATION_KEY });
+  const createExerciseMutation = useDurableMutation({ mutationKey: CREATE_EXERCISE_MUTATION_KEY });
 
   async function handleSave() {
     const trimmed = name.trim();

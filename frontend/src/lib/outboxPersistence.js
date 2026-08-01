@@ -1,6 +1,7 @@
 import { get, set, del } from 'idb-keyval';
 import { MutationObserver, dehydrate, hydrate } from '@tanstack/react-query';
 import { getAuthToken } from '../api/client';
+import { byEnqueueOrder, seedOutboxSeq } from './outboxSequence';
 
 // The durable write outbox: every not-yet-synced (outbox-scoped) mutation, persisted to its OWN
 // IndexedDB key -- deliberately separate from the query cache's persister.
@@ -124,16 +125,20 @@ async function readOutboxKey(key) {
 //
 // CRITICAL: every write shares one TanStack mutation scope (OUTBOX_SCOPE_ID) so they replay one
 // at a time -- but the order that guarantee actually enforces is REGISTRATION order into that
-// scope (i.e. call order of hydrate()/`.mutate()`), not submittedAt. Restoring paused and
+// scope (i.e. call order of hydrate()/`.mutate()`), not any timestamp. Restoring paused and
 // not-paused writes as two separate batches (hydrate everything paused, THEN dispatch everything
-// not-paused) used to register a later-submitted-but-currently-paused write ahead of an
-// earlier-submitted-but-still-retrying one (lie-fi: a write stays not-paused since
+// not-paused) used to register a later-enqueued-but-currently-paused write ahead of an
+// earlier-enqueued-but-still-retrying one (lie-fi: a write stays not-paused since
 // navigator.onLine is true) -- e.g. an exercise-create actively retrying under lie-fi would lose
 // its scope slot to a log-set against it that happened to be paused at persist time, permanently
 // wedging the log-set behind an exercise id that can never resolve, and since a retrying
 // mutation's status never leaves 'pending', it never releases the scope for anything else either.
-// One merged pass, sorted by submittedAt, keeps registration order equal to true enqueue order
-// regardless of which cohort each entry falls into.
+// One merged pass, sorted by `byEnqueueOrder` (outboxSequence.js's immutable, app-assigned
+// `enqueueSeq`, stamped once into `variables` at first dispatch and never touched again), keeps
+// registration order equal to true enqueue order regardless of which cohort each entry falls
+// into, and -- unlike TanStack's own `submittedAt` -- stays correct across any number of reloads,
+// since re-dispatching a write here never re-stamps its `enqueueSeq` (it's just data in
+// `variables`, not framework mutation state).
 //
 // Per entry:
 //  - PAUSED writes are restored via TanStack's own `hydrate`, then the caller resumes them with
@@ -144,7 +149,15 @@ async function readOutboxKey(key) {
 //    durable write is idempotent by design (a replay of one that already reached the server is a
 //    no-op, not a duplicate). The dispatch is inlined here (mirroring queryClient.js's
 //    enqueueOutboxWrite) rather than imported, to avoid a circular import between this file and
-//    queryClient.js (which imports OUTBOX_SCOPE_ID from here).
+//    queryClient.js (which imports OUTBOX_SCOPE_ID from here). `m.state.variables` already
+//    carries this write's original `enqueueSeq` (dehydrate/hydrate round-trips `variables`
+//    intact), so this re-dispatch doesn't need to stamp one -- only a genuinely NEW write (via
+//    dispatchDurableWrite/useDurableMutation) does that.
+//
+// Also seeds the app-wide enqueueSeq counter (seedOutboxSeq) to one past the highest seq found in
+// this restored batch, before dispatching anything -- so a brand-new write made right after
+// restore (the user taps "Log set" while a reload is still settling) can never be assigned a seq
+// that collides with or sorts before an already-queued one.
 //
 // Both of the above assume there's a session to replay against. Boot runs BEFORE AuthContext has
 // verified anything (this function is called from App.jsx's persist-provider onSuccess, a sibling
@@ -154,11 +167,11 @@ async function readOutboxKey(key) {
 // would 401 with no Authorization header, and that 401 can itself tear down a session that a
 // moment later *does* have a valid token (a write queued from a completely unrelated earlier
 // failure landing right after a fresh login). So with no token, everything -- paused AND
-// not-paused alike -- is hydrated as PAUSED instead of dispatched, still sorted by submittedAt so
-// a later resume replays in true order too. That's a safe, well-tested state to sit in:
-// flushOutbox()'s own resumePausedMutations() (also gated on a token, see queryClient.js) resumes
-// it the moment a real session exists again, whether that's this same boot (a token was already
-// present) or a later login.
+// not-paused alike -- is hydrated as PAUSED instead of dispatched, still sorted by
+// `byEnqueueOrder` so a later resume replays in true order too. That's a safe, well-tested state
+// to sit in: flushOutbox()'s own resumePausedMutations() (also gated on a token, see
+// queryClient.js) resumes it the moment a real session exists again, whether that's this same
+// boot (a token was already present) or a later login.
 export async function restoreOutbox(queryClient, accountId) {
   if (!idbAvailable) return;
   try {
@@ -166,18 +179,19 @@ export async function restoreOutbox(queryClient, accountId) {
     const dehydrated = await readOutboxKey(key);
     if (!dehydrated?.mutations?.length) return;
 
-    const bySubmittedAt = (a, b) => (a.state.submittedAt ?? 0) - (b.state.submittedAt ?? 0);
+    const maxSeq = dehydrated.mutations.reduce((max, m) => Math.max(max, m.state.variables?.enqueueSeq ?? 0), 0);
+    seedOutboxSeq(maxSeq + 1);
 
     if (!getAuthToken()) {
       const asPaused = dehydrated.mutations
         .slice()
-        .sort(bySubmittedAt)
+        .sort(byEnqueueOrder)
         .map((m) => ({ ...m, state: { ...m.state, isPaused: true } }));
       hydrate(queryClient, { mutations: asPaused, queries: [] });
       return;
     }
 
-    const ordered = dehydrated.mutations.slice().sort(bySubmittedAt);
+    const ordered = dehydrated.mutations.slice().sort(byEnqueueOrder);
 
     ordered.forEach((m) => {
       if (m.state.isPaused) {

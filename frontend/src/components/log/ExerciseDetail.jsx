@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useHistory } from '../../hooks/useHistory';
+import { useDurableMutation } from '../../hooks/useDurableMutation';
 import { queryKeys } from '../../api/queryKeys';
 import { newId } from '../../utils/id';
 import { getExerciseSummary } from '../../api/stats';
@@ -150,7 +151,9 @@ export default function ExerciseDetail({
     filters: { mutationKey: saveNoteMutationKey },
     select: (mutation) => ({
       status: mutation.state.status,
-      submittedAt: mutation.state.submittedAt,
+      // Immutable, app-assigned (see outboxSequence.js) -- unlike submittedAt, never re-stamped
+      // by a re-dispatch, so "pick the newest" stays correct across any number of reloads.
+      enqueueSeq: mutation.state.variables?.enqueueSeq,
       errorStatus: mutation.state.error?.status,
       mode: mutation.state.variables?.mode,
       note: mutation.state.variables?.note,
@@ -162,7 +165,7 @@ export default function ExerciseDetail({
         m.status !== 'success' &&
         !(m.status === 'error' && m.errorStatus >= 400 && m.errorStatus < 500),
     )
-    .sort((a, b) => b.submittedAt - a.submittedAt)[0] ?? null;
+    .sort((a, b) => (b.enqueueSeq ?? -1) - (a.enqueueSeq ?? -1))[0] ?? null;
   const sessionNote = contextSessionId
     ? sessionNoteQuery.data?.note || null
     : (pendingLiveNote?.note || '').trim()
@@ -175,8 +178,8 @@ export default function ExerciseDetail({
   const refetchCustomFields = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.customFields(personId, exercise.id) });
 
-  const saveNoteMutation = useMutation({ mutationKey: saveNoteMutationKey });
-  const favoriteMutation = useMutation({ mutationKey: FAVORITE_MUTATION_KEY });
+  const saveNoteMutation = useDurableMutation({ mutationKey: saveNoteMutationKey });
+  const favoriteMutation = useDurableMutation({ mutationKey: FAVORITE_MUTATION_KEY });
 
   // Save/clear a session note. Durable + optimistic: the note is written into cache immediately (so
   // it shows offline too) and the idempotent upsert queues and replays on reconnect. A live note that
@@ -271,7 +274,7 @@ export default function ExerciseDetail({
   // rollback, PR celebration), which are inherently interactive and don't apply to a silent replay.
   const logSetMutationKey = ['logSet', personId, exercise.id];
 
-  const logSetMutation = useMutation({
+  const logSetMutation = useDurableMutation({
     mutationKey: logSetMutationKey,
     onMutate: async (vars) => {
       // Show the set instantly by writing an optimistic row into the session-keyed cache.
@@ -409,12 +412,13 @@ export default function ExerciseDetail({
   // what I entered," which isn't true, and a request that never confirms would otherwise leave a
   // skeleton showing indefinitely instead of the values the user actually entered.
   // Sorted by clientLoggedAt, not left in mutation-cache order. restoreOutbox (outboxPersistence.js)
-  // now registers restored writes in a single submittedAt-sorted pass on reload, and editing a
-  // pending set (EditSetModal.jsx / offlineSetEdits.js's patchPendingLogSetDisplay) no longer
-  // removes or re-dispatches the underlying create -- it only patches its displayed variables and
-  // queues a genuinely separate EDIT_SET write -- so neither path reorders the cache anymore. This
-  // sort is now purely defensive: the "Set N" labels below are position-based, so it's kept as a
-  // belt-and-suspenders guarantee rather than relying on mutation-cache order being chronological.
+  // now registers restored writes in a single enqueue-order pass on reload (see outboxSequence.js),
+  // and editing a pending set (EditSetModal.jsx / offlineSetEdits.js's patchPendingLogSetDisplay) no
+  // longer removes or re-dispatches the underlying create -- it only patches its displayed
+  // variables and queues a genuinely separate EDIT_SET write -- so neither path reorders the cache
+  // anymore. This sort is now purely defensive: the "Set N" labels below are position-based, so
+  // it's kept as a belt-and-suspenders guarantee rather than relying on mutation-cache order being
+  // chronological.
   const pendingBeforeSession = unsyncedLogSets
     .filter((m) => !sessionSets.some((real) => real.id === m.tempId))
     .map((m) => ({ id: m.tempId, optimistic: true, weight: m.weight, reps: m.reps, unit: m.unit, clientLoggedAt: m.clientLoggedAt }))
@@ -454,7 +458,7 @@ export default function ExerciseDetail({
     return ack;
   }
 
-  const deleteSetMutation = useMutation({ mutationKey: DELETE_SET_MUTATION_KEY });
+  const deleteSetMutation = useDurableMutation({ mutationKey: DELETE_SET_MUTATION_KEY });
 
   function handleDeleteSet(set) {
     // Optimistically remove the row so it disappears immediately (offline too). Guarded on

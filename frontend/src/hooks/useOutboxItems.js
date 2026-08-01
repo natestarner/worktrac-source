@@ -1,14 +1,19 @@
 import { useRef, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { OUTBOX_SCOPE_ID } from '../lib/outboxPersistence';
+import { byEnqueueOrder } from '../lib/outboxSequence';
 import { describeOutboxMutation } from '../lib/outboxDescribe';
 import { useAuth } from '../context/AuthContext';
 import { useExercises } from './useExercises';
 
 // Same predicate as useOutboxCount's countQueuedWrites -- every currently queued/struggling
 // (paused, errored, or already-retried) outbox-scoped write, but here mapped into human-readable
-// detail for OutboxModal rather than just counted. Sorted by submittedAt so the list reads in the
-// order changes will actually replay.
+// detail for OutboxModal rather than just counted. Sorted by `byEnqueueOrder` (the same immutable,
+// app-assigned key restoreOutbox/flushOutbox reconstruct replay order with -- see
+// outboxSequence.js) so the list always reads in the order changes will actually replay, including
+// across a reload -- TanStack's own `submittedAt` gets re-stamped by a re-dispatch, which used to
+// make the list visibly reorder (e.g. a dependency sinking below the writes that depend on it)
+// even though the underlying replay order was still correct.
 function readQueuedMutations(queryClient) {
   return queryClient
     .getMutationCache()
@@ -18,7 +23,7 @@ function readQueuedMutations(queryClient) {
       const { isPaused, status, failureCount } = m.state;
       return isPaused || status === 'error' || failureCount > 0;
     })
-    .sort((a, b) => (a.state.submittedAt ?? 0) - (b.state.submittedAt ?? 0));
+    .sort(byEnqueueOrder);
 }
 
 export function useOutboxItems() {
