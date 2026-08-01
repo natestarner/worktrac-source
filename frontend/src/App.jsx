@@ -34,6 +34,7 @@ import AdminOverview from './routes/admin/AdminOverview';
 import AdminAccounts from './routes/admin/AdminAccounts';
 import AdminPeople from './routes/admin/AdminPeople';
 import AdminPending from './routes/admin/AdminPending';
+import AdminActivity from './routes/admin/AdminActivity';
 
 export default function App() {
   useEffect(() => {
@@ -106,6 +107,7 @@ export default function App() {
                 <Route path="accounts" element={<AdminAccounts />} />
                 <Route path="people" element={<AdminPeople />} />
                 <Route path="pending" element={<AdminPending />} />
+                <Route path="activity" element={<AdminActivity />} />
               </Route>
             </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

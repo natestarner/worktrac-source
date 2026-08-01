@@ -158,6 +158,9 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   only on the known-email branch would let an attacker distinguish "known" from "unknown" by
   which emails eventually 429 under repeated requests). Any future change to this flow
   (new error message, a "no account found" UI state, etc.) must preserve that indistinguishability.
+- **Registration is fully audited** (`registration_events` table, `V44`,
+  `com.worktrac.backend.registrationaudit` package) — see Admin Portal Notes below for what
+  this makes visible and how email delivery truth is captured end-to-end.
 
 ## Admin Portal Notes
 - **`ADMIN_EMAILS` (an env var wired per-environment in the `worktrac-deploy` repo) is the
@@ -176,14 +179,68 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - **`/api/admin/**` is gated at the route level** (`SecurityConfig` → `hasRole("ADMIN")`),
   not per-controller-method — `AdminController`/`AdminService` are the one place in the app
   that deliberately reads across every account instead of scoping to
-  `CurrentUser.accountId()`. Admin DTOs must never include `password_hash` or
-  `pending_registrations.code_hash` — curate every field added to them.
-- **Read-only in this phase** — no admin action mutates app data. Login-attempt/email-sent
-  audit logging (a natural next step) is deliberately deferred, not part of this feature.
+  `CurrentUser.accountId()`. Admin DTOs must never include `password_hash`,
+  `pending_registrations.code_hash`, or any hashed value — curate every field added to them.
+- **Read-only, with exactly one narrow, sanctioned exception:**
+  `PUT /api/admin/registration-alert-settings` (below). Every other admin endpoint remains
+  read-only — that mutation is alerting *configuration*, not application data, and was a
+  deliberate, discussed trade, not scope creep. Any future admin action that touches app data
+  needs the same explicit sign-off this one got.
+- **Registration observability (`registration_events` table, `V44__create_registration_events.sql`,
+  `com.worktrac.backend.registrationaudit` package) — added 2026-07-31 after a production
+  registration silently failed with zero trace anywhere.** Every step of the registration
+  lifecycle — form submitted, duplicate/rate-limited/locked/expired/wrong-code, confirmed +
+  account created, and the email outcome — is persisted as a `RegistrationEvent`
+  (`RegistrationAuditService.record`, called from `RegistrationService` and
+  `RegistrationEmailEventListener`). `REQUIRES_NEW` on `record()` is load-bearing: several
+  failure branches record-then-throw from a transaction that is NOT `noRollbackFor`-exempted
+  (unlike `confirmEmail`'s wrong-code branch), so without its own independent transaction the
+  audit row recording the very failure would be rolled back along with everything else.
+  Surfaced in the admin portal's **Activity** tab (full feed, `GET
+  /api/admin/registration-events`) and folded into the **Pending** tab as a per-row email
+  delivery-status badge + expired flag.
+  - **Two levels of email truth, both captured, never conflated:** (1) *send accepted* —
+    `EmailService.send` now inspects ACS's own `EmailSendResult.getStatus()`/`getError()`
+    instead of discarding it, throwing `EmailSendException` with the real ACS code/message on
+    anything but `SUCCEEDED`, and returns the ACS `messageId` on success. (2) *actually
+    delivered* — the ACS send being accepted does **not** mean the recipient ever got it; that
+    truth arrives later, out of band, via Azure Event Grid's
+    `Microsoft.Communication.EmailDeliveryReportReceived` events, ingested by
+    `EmailDeliveryWebhookController` (`POST /api/webhooks/email-delivery`,
+    `com.worktrac.backend.emaildelivery` package) and correlated back to the original send via
+    that same `messageId`. The webhook's `permitAll()` route (`SecurityConfig`) is gated
+    instead by a shared-secret query param (`EMAIL_DELIVERY_WEBHOOK_KEY`, wired per-environment
+    in `worktrac-deploy` — see `EmailDeliveryWebhookProperties`), since Event Grid is a
+    server-to-server caller with no JWT. **Requires an Azure Event Grid subscription on the
+    ACS resource pointing at this webhook to actually receive delivery reports** — this must
+    be set up per-environment (lower, then production) and the setup steps recorded in
+    `../worktrac_SDLC_setup_guide.md` once done, the same way other infra decisions are;
+    as of this writing that subscription has not yet been created in any environment.
+    Until it is, registrations still work and level-1 (send-accepted) events still record, but
+    `EMAIL_DELIVERED`/`EMAIL_BOUNCED`/etc. never arrive.
+  - **Every failure event's `detail` carries the real reason**, not just an event-type label:
+    ACS error code/message for a send failure, the recipient server's actual SMTP diagnostic
+    (`deliveryStatusDetails.statusMessage`, e.g. `"550 5.1.1 mailbox does not exist"`) for a
+    delivery failure, and the specific cause (which rate limiter, attempt number, etc.) for a
+    flow failure.
+  - **Alerting is admin-configurable, not hardcoded** — `registration_alert_settings`
+    (single seeded row, `V45__create_registration_alert_settings.sql`), three toggles (new
+    registration confirmed / send failure / delivery failure — the latter two default ON,
+    confirmed defaults OFF), read/written via `GET`+`PUT
+    /api/admin/registration-alert-settings` and the Activity tab's settings panel.
+    `AdminAlertEventListener` reacts to a `RegistrationAlertEvent` (published by
+    `RegistrationAuditService.record` for the alertable subset of event types) and, if the
+    matching toggle is on, emails every `ADMIN_EMAILS` address via
+    `EmailService.sendAdminAlert`. An alert-send failure is logged only — there is no
+    "alert about a failed alert" escalation.
+  - **No admin "resend" action was added, on purpose.** A stuck pending registration isn't a
+    real account yet (no `users` row), so re-registering the same email already works —
+    `register()` only checks `users`, not `pending_registrations`, and replaces the stale
+    pending row with a fresh code. Adding a resend button would have been redundant.
 - Frontend: `AdminRoute` redirects a non-admin (even if authenticated) to `/app/log` rather
   than showing an access-denied screen, so the portal's existence isn't revealed to ordinary
   users. It's a standalone layout (`AdminShell`) under `/admin`, not a tab inside the
-  workout app's `AppShell`/`TabsNav`.
+  workout app's `AppShell`/`TabsNav`. Tabs: Overview, Accounts, People, Pending, **Activity**.
 
 ## Frontend State Notes
 - **Every person has their own independent client-side state.** Whatever a person is

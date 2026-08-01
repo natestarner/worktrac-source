@@ -32,6 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 // Covers the whole admin RBAC surface in one Spring context/container (rather than one
@@ -52,7 +54,8 @@ class AdminAuthorizationTest {
 
     private static final String[] ADMIN_ROUTES = {
             "/api/admin/overview", "/api/admin/accounts", "/api/admin/people",
-            "/api/admin/pending-registrations", "/api/admin/health"
+            "/api/admin/pending-registrations", "/api/admin/health",
+            "/api/admin/registration-events", "/api/admin/registration-alert-settings"
     };
 
     @Container
@@ -224,5 +227,67 @@ class AdminAuthorizationTest {
 
         mockMvc.perform(get("/api/admin/overview").header("Authorization", "Bearer " + freshToken))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @Order(8)
+    void registrationAlertSettingsRoundTripRequiresAdminAndPersists() throws Exception {
+        // PUT is the one mutating admin endpoint -- unauthenticated/non-admin must be rejected
+        // exactly like every GET route above, not silently permitAll'd because it's a PUT.
+        String updateBody = objectMapper.writeValueAsString(Map.of(
+                "alertOnRegistrationConfirmed", true,
+                "alertOnSendFailure", false,
+                "alertOnDeliveryFailure", true));
+
+        mockMvc.perform(put("/api/admin/registration-alert-settings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isUnauthorized());
+
+        String nonAdminEmail = uniqueEmail("settings-non-admin");
+        String nonAdminToken = RegistrationTestSupport
+                .registerAndConfirm(mockMvc, objectMapper, testCodeCache, nonAdminEmail, "NonAdmin")
+                .get("token").asText();
+        mockMvc.perform(put("/api/admin/registration-alert-settings")
+                        .header("Authorization", "Bearer " + nonAdminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(put("/api/admin/registration-alert-settings")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.alertOnRegistrationConfirmed").value(true))
+                .andExpect(jsonPath("$.alertOnSendFailure").value(false))
+                .andExpect(jsonPath("$.alertOnDeliveryFailure").value(true));
+
+        mockMvc.perform(get("/api/admin/registration-alert-settings").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.alertOnRegistrationConfirmed").value(true))
+                .andExpect(jsonPath("$.alertOnSendFailure").value(false))
+                .andExpect(jsonPath("$.alertOnDeliveryFailure").value(true));
+    }
+
+    @Test
+    @Order(9)
+    void registrationEventsSurfaceRegisterStartedWithoutLeakingHashesOrCodes() throws Exception {
+        String email = uniqueEmail("activity-feed");
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("email", email, "password", "password123", "personName", "Feed"))))
+                .andExpect(status().isOk());
+
+        String response = mockMvc.perform(get("/api/admin/registration-events")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertTrue(response.contains(email));
+        assertTrue(response.contains("REGISTER_STARTED"));
+        assertFalse(response.contains("passwordHash"));
+        assertFalse(response.contains("codeHash"));
     }
 }

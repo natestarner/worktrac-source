@@ -4,6 +4,8 @@ import com.azure.communication.email.EmailClient;
 import com.azure.communication.email.EmailClientBuilder;
 import com.azure.communication.email.models.EmailMessage;
 import com.azure.communication.email.models.EmailSendResult;
+import com.azure.communication.email.models.EmailSendStatus;
+import com.azure.core.models.ResponseError;
 import com.azure.core.util.polling.PollResponse;
 import com.azure.core.util.polling.SyncPoller;
 import com.worktrac.backend.config.EmailProperties;
@@ -15,6 +17,7 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collection;
 
 @Service
 public class EmailService {
@@ -43,41 +46,51 @@ public class EmailService {
         this.passwordResetSuccessTemplate = loadTemplate("templates/email/password-reset-success.html");
     }
 
-    public void sendVerificationCode(String toEmail, String code) {
+    // Returns the ACS messageId -- the correlation key RegistrationEmailEventListener records
+    // alongside VERIFICATION_EMAIL_SENT so a later Event Grid delivery report (which only
+    // carries a messageId, not this email's context) can be matched back to this send.
+    public String sendVerificationCode(String toEmail, String code) {
         String html = verificationCodeTemplate
                 .replace("{{LOGO_URL}}", logoUrl)
                 .replace("{{CODE_PART_1}}", code.substring(0, 3))
                 .replace("{{CODE_PART_2}}", code.substring(3))
                 .replace("{{EXPIRATION_MINUTES}}", String.valueOf(codeExpirationMinutes));
 
-        send(toEmail, "Your Huddle verification code", plainTextVerificationCode(code), html);
+        return send(toEmail, "Your Huddle verification code", plainTextVerificationCode(code), html);
     }
 
-    public void sendRegistrationSuccess(String toEmail) {
+    public String sendRegistrationSuccess(String toEmail) {
         String html = registrationSuccessTemplate
                 .replace("{{LOGO_URL}}", logoUrl)
                 .replace("{{APP_URL}}", appUrl);
 
-        send(toEmail, "You're all set! Your Huddle account is confirmed",
+        return send(toEmail, "You're all set! Your Huddle account is confirmed",
                 "Your Huddle account is confirmed and ready to go. Open the app: " + appUrl, html);
     }
 
-    public void sendPasswordResetCode(String toEmail, String code) {
+    public String sendPasswordResetCode(String toEmail, String code) {
         String html = passwordResetCodeTemplate
                 .replace("{{LOGO_URL}}", logoUrl)
                 .replace("{{CODE_PART_1}}", code.substring(0, 3))
                 .replace("{{CODE_PART_2}}", code.substring(3))
                 .replace("{{EXPIRATION_MINUTES}}", String.valueOf(codeExpirationMinutes));
 
-        send(toEmail, "Your Huddle password reset code", plainTextPasswordResetCode(code), html);
+        return send(toEmail, "Your Huddle password reset code", plainTextPasswordResetCode(code), html);
     }
 
-    public void sendPasswordResetSuccess(String toEmail) {
+    public String sendPasswordResetSuccess(String toEmail) {
         String html = passwordResetSuccessTemplate.replace("{{LOGO_URL}}", logoUrl);
 
-        send(toEmail, "Your Huddle password was changed",
+        return send(toEmail, "Your Huddle password was changed",
                 "The password on your Huddle account was just reset. If this wasn't you, reset it again right away.",
                 html);
+    }
+
+    // Plain-text only (no template) -- this goes to the app's own admins, not end users, in
+    // response to a registration event they've opted into via the alert-settings toggle.
+    public void sendAdminAlert(Collection<String> toEmails, String subject, String body) {
+        if (toEmails.isEmpty()) return;
+        send(toEmails.toArray(new String[0]), subject, body, null);
     }
 
     // Email clients need a real, absolute image URL (inline <svg> and data: URIs are both
@@ -93,17 +106,44 @@ public class EmailService {
         }
     }
 
-    private void send(String toEmail, String subject, String plainText, String html) {
+    private String send(String toEmail, String subject, String plainText, String html) {
+        return send(new String[] {toEmail}, subject, plainText, html);
+    }
+
+    // Returns the ACS messageId on success; throws EmailSendException if ACS's own completed
+    // poll result reports anything other than SUCCEEDED. Previously this discarded
+    // response.getValue() entirely (poller.waitForCompletion() then nothing read from the
+    // result) -- a non-exception ACS failure (bad sender domain, auth issue, etc.) vanished
+    // with zero trace anywhere. This is "send accepted" truth only -- whether the message is
+    // later actually delivered, bounced, or spam-filtered is a separate, asynchronous truth
+    // reported by Event Grid (see emaildelivery.EmailDeliveryWebhookController) and correlated
+    // back to this send via the returned messageId.
+    private String send(String[] toEmails, String subject, String plainText, String html) {
         EmailMessage message = new EmailMessage()
                 .setSenderAddress(senderAddress)
-                .setToRecipients(toEmail)
+                .setToRecipients(toEmails)
                 .setSubject(subject)
-                .setBodyPlainText(plainText)
-                .setBodyHtml(html);
+                .setBodyPlainText(plainText);
+        if (html != null) {
+            message.setBodyHtml(html);
+        }
 
         SyncPoller<EmailSendResult, EmailSendResult> poller = emailClient.beginSend(message);
         PollResponse<EmailSendResult> response = poller.waitForCompletion();
-        response.getValue();
+        EmailSendResult result = response.getValue();
+
+        if (result.getStatus() != EmailSendStatus.SUCCEEDED) {
+            throw new EmailSendException(describeFailure(result));
+        }
+        return result.getId();
+    }
+
+    private String describeFailure(EmailSendResult result) {
+        ResponseError error = result.getError();
+        String code = error != null ? error.getCode() : "unknown";
+        String errorMessage = error != null ? error.getMessage() : "no error details returned by ACS";
+        return "ACS send did not succeed: status=" + result.getStatus() + " code=" + code
+                + " message=" + errorMessage;
     }
 
     private String plainTextVerificationCode(String code) {

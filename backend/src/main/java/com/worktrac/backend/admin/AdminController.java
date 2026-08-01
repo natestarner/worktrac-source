@@ -2,6 +2,8 @@ package com.worktrac.backend.admin;
 
 import org.springframework.boot.health.actuate.endpoint.HealthEndpoint;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -43,6 +45,25 @@ public class AdminController {
     @GetMapping("/pending-registrations")
     public List<AdminPendingRegistrationDto> pendingRegistrations() {
         return adminService.listPendingRegistrations();
+    }
+
+    @GetMapping("/registration-events")
+    public List<AdminRegistrationEventDto> registrationEvents() {
+        return adminService.listRegistrationEvents();
+    }
+
+    // The one mutating admin endpoint -- a narrow, sanctioned exception to the read-only
+    // invariant everywhere else in this controller (see class comment): this is alerting
+    // *configuration*, not application data.
+    @GetMapping("/registration-alert-settings")
+    public AdminRegistrationAlertSettingsDto registrationAlertSettings() {
+        return adminService.getRegistrationAlertSettings();
+    }
+
+    @PutMapping("/registration-alert-settings")
+    public AdminRegistrationAlertSettingsDto updateRegistrationAlertSettings(
+            @RequestBody AdminRegistrationAlertSettingsDto request) {
+        return adminService.updateRegistrationAlertSettings(request);
     }
 
     @GetMapping("/health")

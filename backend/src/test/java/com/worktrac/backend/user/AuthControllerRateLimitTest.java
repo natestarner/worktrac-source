@@ -2,6 +2,9 @@ package com.worktrac.backend.user;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.email.EmailService;
+import com.worktrac.backend.registrationaudit.RegistrationEvent;
+import com.worktrac.backend.registrationaudit.RegistrationEventRepository;
+import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.security.AuthRequestLoggingFilter;
 import com.worktrac.backend.support.LogCaptor;
 import org.junit.jupiter.api.Test;
@@ -17,6 +20,7 @@ import org.testcontainers.containers.MSSQLServerContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -45,6 +49,9 @@ class AuthControllerRateLimitTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private RegistrationEventRepository registrationEventRepository;
 
     @MockitoBean
     private EmailService emailService;
@@ -112,6 +119,28 @@ class AuthControllerRateLimitTest {
             assertTrue(logs.events().stream().anyMatch(e ->
                     e.getFormattedMessage().contains("blocked by per-IP rate limit")));
         }
+    }
+
+    @Test
+    void perIpRateLimitRejectionIsRecordedAsAuditEvent() throws Exception {
+        String rejectedEmail = uniqueEmail("audit-ratelimit");
+        mockMvc.perform(post("/api/auth/register")
+                        .header("X-Forwarded-For", "10.0.0.42")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody(uniqueEmail("audit-ratelimit-first"), "First")))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/auth/register")
+                        .header("X-Forwarded-For", "10.0.0.42")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody(rejectedEmail, "Rejected")))
+                .andExpect(status().isTooManyRequests());
+
+        List<RegistrationEvent> events = registrationEventRepository.findAll().stream()
+                .filter(e -> e.getEmail().equals(rejectedEmail))
+                .filter(e -> e.getEventType() == RegistrationEventType.REGISTER_RATE_LIMITED)
+                .toList();
+        org.junit.jupiter.api.Assertions.assertEquals(1, events.size());
+        assertTrue(events.get(0).getDetail().contains("Per-IP"));
     }
 
     @Test

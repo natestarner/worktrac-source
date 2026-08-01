@@ -48,3 +48,7 @@ app:
     global-email-sends-per-hour: 1000
   admin:
     emails: ${ADMIN_EMAILS:nate+huddleadmin@starner.co}
+  email-delivery-webhook:
+    # Local dev/tests never receive a real Event Grid callback (it's cloud-only), so a fixed,
+    # committed placeholder is safe here the same way jwt.secret and test-support-key above are.
+    key: local-dev-only-webhook-key-do-not-use-elsewhere
