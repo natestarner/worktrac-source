@@ -163,5 +163,16 @@ class AuthControllerRateLimitTest {
             assertTrue(serviceLogs.events().isEmpty(),
                     "RegistrationService should never be reached for a request that fails validation");
         }
+
+        // GlobalExceptionHandler.handleValidation records this too, with the email pulled from
+        // the ContentCachingRequestWrapper the real filter chain provides -- the pure-mock-based
+        // GlobalExceptionHandlerTest can't exercise that part since it doesn't go through a real
+        // filter chain, only this end-to-end request can.
+        List<RegistrationEvent> events = registrationEventRepository.findAll().stream()
+                .filter(e -> e.getEmail().equals(email))
+                .filter(e -> e.getEventType() == RegistrationEventType.UNEXPECTED_ERROR)
+                .toList();
+        org.junit.jupiter.api.Assertions.assertEquals(1, events.size());
+        assertTrue(events.get(0).getDetail().contains("Validation failed"));
     }
 }

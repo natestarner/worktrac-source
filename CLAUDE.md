@@ -197,8 +197,22 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   (unlike `confirmEmail`'s wrong-code branch), so without its own independent transaction the
   audit row recording the very failure would be rolled back along with everything else.
   Surfaced in the admin portal's **Activity** tab (full feed, `GET
-  /api/admin/registration-events`) and folded into the **Pending** tab as a per-row email
-  delivery-status badge + expired flag.
+  /api/admin/registration-events`, with a legend explaining event colors and the send-vs-delivered
+  distinction) and folded into the **Pending** tab as a per-row email delivery-status badge +
+  expired flag.
+  - **A request to `/api/auth/register`/`confirm-email`/`resend-code` that never reaches
+    `RegistrationService` at all is also captured**, as `RegistrationEventType.UNEXPECTED_ERROR` —
+    a malformed body, a Bean Validation failure, a `DataAccessException`, or anything else
+    `GlobalExceptionHandler` had to catch, with the real cause in `detail`. This does **not**
+    cover a genuine full outage (DB down / container crashed) — recording an event is itself a
+    database write, so if the database is unreachable there's nothing to record with; that class
+    of failure is only visible via Azure's own Container App log stream. Extracting the email for
+    this case needed `WebUtils.getNativeRequest(request, ContentCachingRequestWrapper.class)`, not
+    a plain `instanceof` check — confirmed by a real test failure without it: Spring Security
+    wraps the request in further layers between `AuthRequestLoggingFilter` (which populates the
+    `ContentCachingRequestWrapper` in the first place) and `GlobalExceptionHandler`, so the object
+    a `@ExceptionHandler` method actually receives is not that wrapper directly, only something
+    wrapping it.
   - **Two levels of email truth, both captured, never conflated:** (1) *send accepted* —
     `EmailService.send` now inspects ACS's own `EmailSendResult.getStatus()`/`getError()`
     instead of discarding it, throwing `EmailSendException` with the real ACS code/message on

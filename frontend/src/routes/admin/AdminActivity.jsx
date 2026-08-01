@@ -48,10 +48,85 @@ const COLUMNS = [
   { key: 'createdAt', label: 'Time', render: (row) => formatDateTime(row.createdAt) },
   { key: 'email', label: 'Email' },
   { key: 'eventType', label: 'Event', render: (row) => <EventBadge eventType={row.eventType} /> },
-  { key: 'detail', label: 'Detail', render: (row) => row.detail || '—' },
+  {
+    key: 'detail',
+    label: 'Detail',
+    wrap: true,
+    // title gives a native tooltip with the untruncated text too, in case the wrapped column
+    // still isn't wide enough for a very long SMTP diagnostic.
+    render: (row) => (row.detail ? <span title={row.detail}>{row.detail}</span> : '—'),
+  },
   { key: 'ipAddress', label: 'IP', render: (row) => row.ipAddress || '—' },
   { key: 'messageId', label: 'Message ID', render: (row) => row.messageId || '—' },
 ];
+
+// Explains the two things that are easy to misread at a glance: what each event type actually
+// means, and -- most importantly -- that a *_SENT event is not proof of delivery. Placed above
+// the alert settings panel per admin feedback that the raw event-type strings alone weren't
+// self-explanatory.
+function ActivityLegend() {
+  return (
+    <div
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 16,
+        padding: '16px 20px',
+        marginBottom: 20,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        fontSize: 13,
+      }}
+    >
+      <div style={{ fontSize: 14, fontWeight: 700 }}>Legend</div>
+      <div>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            padding: '2px 8px',
+            borderRadius: 6,
+            background: 'var(--color-success-bg)',
+            color: 'var(--color-success)',
+          }}
+        >
+          green
+        </span>{' '}
+        = expected step in a healthy registration.{' '}
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            padding: '2px 8px',
+            borderRadius: 6,
+            background: 'var(--color-warning-bg)',
+            color: 'var(--color-danger)',
+          }}
+        >
+          red
+        </span>{' '}
+        = worth a look -- check the Detail column for the reason.
+      </div>
+      <div>
+        <strong>Registration flow:</strong> REGISTER_STARTED / RESEND_REQUESTED / CONFIRM_SUCCESS
+        are the happy path. REGISTER_DUPLICATE_EMAIL, REGISTER_RATE_LIMITED, RESEND_THROTTLED,
+        RESEND_NOT_FOUND, and CONFIRM_WRONG_CODE / CONFIRM_EXPIRED / CONFIRM_LOCKED /
+        CONFIRM_NOT_FOUND are the ways it can fail before an account is created.
+      </div>
+      <div>
+        <strong>Email -- two different things, don't conflate them:</strong> *_EMAIL_SENT only
+        means Azure Communication Services <em>accepted</em> the send request -- it is NOT proof
+        the email reached anyone. *_EMAIL_FAILED means ACS rejected the send outright (detail has
+        the real ACS error). EMAIL_DELIVERED / EMAIL_BOUNCED / EMAIL_FILTERED_SPAM /
+        EMAIL_SUPPRESSED / EMAIL_QUARANTINED / EMAIL_DELIVERY_FAILED are the actual, true outcome,
+        reported later by Event Grid -- this is the only way to know whether an email really
+        arrived, and the detail column carries the recipient server's real diagnostic (e.g. the
+        SMTP bounce reason).
+      </div>
+    </div>
+  );
+}
 
 function AlertSettingsPanel() {
   const fetchFn = useCallback(() => getRegistrationAlertSettings(), []);
@@ -129,6 +204,7 @@ export default function AdminActivity() {
 
   return (
     <div>
+      <ActivityLegend />
       <AlertSettingsPanel />
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginBottom: 12 }}>

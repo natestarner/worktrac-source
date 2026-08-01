@@ -70,6 +70,24 @@ describe('AdminActivity', () => {
     expect(screen.getByText('VERIFICATION_EMAIL_FAILED')).toBeInTheDocument();
   });
 
+  it('renders a legend explaining event colors and the sent-vs-delivered distinction', async () => {
+    render(<AdminActivity />);
+    await screen.findByText('REGISTER_STARTED');
+
+    expect(screen.getByText('Legend')).toBeInTheDocument();
+    expect(screen.getByText(/not proof the email reached anyone/i)).toBeInTheDocument();
+  });
+
+  it('gives the Detail cell a title attribute with the full untruncated text', async () => {
+    const longDetail =
+      'ACS send did not succeed: status=FAILED code=SenderNotVerified message=The sender domain has not completed verification and cannot be used to send email until DNS records are confirmed';
+    listRegistrationEvents.mockResolvedValue([{ ...SAMPLE_EVENTS[1], detail: longDetail }]);
+    render(<AdminActivity />);
+
+    const cell = await screen.findByTitle(longDetail);
+    expect(cell).toHaveTextContent(longDetail);
+  });
+
   it('toggling an alert-settings checkbox saves and refetches the settings', async () => {
     render(<AdminActivity />);
 
