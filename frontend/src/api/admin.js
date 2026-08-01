@@ -38,6 +38,12 @@ export function previewTestData() {
   return apiClient.get('/api/admin/test-data/preview');
 }
 
+// A longer-than-default timeout, not the shared 15s: even after TestDataCleanupService's bulk-
+// delete rewrite, this can still touch every e2e account lower has accumulated across repeated
+// deploys' e2e runs in one request. The default 15s previously fired before the (then
+// one-account-at-a-time) delete finished, and the client timing out never canceled the backend's
+// still-running transaction -- the delete kept running to completion or failure with nobody able
+// to see the outcome. 60s gives real headroom without masking a genuine hang forever.
 export function deleteTestData() {
-  return apiClient.delete('/api/admin/test-data');
+  return apiClient.delete('/api/admin/test-data', undefined, { timeoutMs: 60000 });
 }

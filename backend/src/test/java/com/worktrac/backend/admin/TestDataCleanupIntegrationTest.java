@@ -88,9 +88,14 @@ class TestDataCleanupIntegrationTest {
                 "email", email, "password", "password123", "personName", personName));
     }
 
+    // Idempotent: two @Test methods in this class both need an admin token, and JUnit doesn't
+    // guarantee method order (no @TestMethodOrder here) -- registering ADMIN_EMAIL a second time
+    // would 409 as a duplicate, so only register once per class run.
     private String adminToken() throws Exception {
-        RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, ADMIN_EMAIL, "Admin");
-        adminBootstrap.run(new DefaultApplicationArguments());
+        if (userRepository.findByEmail(ADMIN_EMAIL).isEmpty()) {
+            RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, ADMIN_EMAIL, "Admin");
+            adminBootstrap.run(new DefaultApplicationArguments());
+        }
         String loginBody = objectMapper.writeValueAsString(Map.of("email", ADMIN_EMAIL, "password", "password123"));
         String response = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -153,6 +158,38 @@ class TestDataCleanupIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accountCount").value(0))
                 .andExpect(jsonPath("$.pendingRegistrationCount").value(0));
+    }
+
+    // Regression coverage for the bulk-delete rewrite: the previous implementation looped
+    // AccountDeletionService.deleteAccount(Long) once per matching account, which was slow
+    // enough at real lower-environment scale (hundreds of accumulated e2e accounts) to exceed
+    // the frontend's request timeout. This proves the new bulk `DELETE ... WHERE account_id IN
+    // (...)` path still correctly removes every one of several accounts in a single call, not
+    // just the single-account case the other test above already covered.
+    @Test
+    void deletesEveryMatchingAccountAtOnce() throws Exception {
+        String token = adminToken();
+
+        String[] testEmails = {e2eStyleEmail(), e2eStyleEmail(), e2eStyleEmail()};
+        for (int i = 0; i < testEmails.length; i++) {
+            RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, testEmails[i],
+                    "Bulk" + i);
+        }
+
+        mockMvc.perform(get("/api/admin/test-data/preview")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountCount").value(3));
+
+        mockMvc.perform(delete("/api/admin/test-data")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountCount").value(3));
+
+        for (String email : testEmails) {
+            assertTrue(userRepository.findByEmail(email).isEmpty(), email + " should have been deleted");
+        }
+        assertTrue(userRepository.findByEmail(ADMIN_EMAIL).isPresent(), "the admin account must survive");
     }
 
     @Test

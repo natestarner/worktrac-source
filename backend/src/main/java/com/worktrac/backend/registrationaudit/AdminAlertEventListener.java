@@ -16,8 +16,10 @@ import java.util.Set;
 // turned on in RegistrationAlertSettings, and if so, emailing every ADMIN_EMAILS address.
 // AFTER_COMMIT + @Async for the same reason as RegistrationEmailEventListener: this must never
 // run inside (or be able to roll back) the registration-audit write it's reacting to, and
-// nothing is waiting on its outcome. An alert-send failure is logged only -- there is no
-// "alert about a failed alert" escalation.
+// nothing is waiting on its outcome. An alert-send failure is recorded as ADMIN_ALERT_FAILED
+// (visible in the Activity feed, not just a log line) so "the underlying failure happened but
+// nobody was actually notified" isn't itself a blind spot -- deliberately not in
+// RegistrationAuditService's ALERTABLE set, since an alert about a failed alert would recurse.
 @Component
 public class AdminAlertEventListener {
 
@@ -25,7 +27,10 @@ public class AdminAlertEventListener {
 
     private static final Set<RegistrationEventType> SEND_FAILURE_TYPES = Set.of(
             RegistrationEventType.VERIFICATION_EMAIL_FAILED,
-            RegistrationEventType.SUCCESS_EMAIL_FAILED);
+            RegistrationEventType.SUCCESS_EMAIL_FAILED,
+            RegistrationEventType.PASSWORD_RESET_EMAIL_FAILED,
+            RegistrationEventType.PASSWORD_RESET_SUCCESS_EMAIL_FAILED,
+            RegistrationEventType.REGISTRATION_EMAIL_DISPATCH_MISSING);
 
     private static final Set<RegistrationEventType> DELIVERY_FAILURE_TYPES = Set.of(
             RegistrationEventType.EMAIL_BOUNCED,
@@ -37,12 +42,14 @@ public class AdminAlertEventListener {
     private final RegistrationAlertSettingsService settingsService;
     private final AdminProperties adminProperties;
     private final EmailService emailService;
+    private final RegistrationAuditService auditService;
 
     public AdminAlertEventListener(RegistrationAlertSettingsService settingsService, AdminProperties adminProperties,
-                                    EmailService emailService) {
+                                    EmailService emailService, RegistrationAuditService auditService) {
         this.settingsService = settingsService;
         this.adminProperties = adminProperties;
         this.emailService = emailService;
+        this.auditService = auditService;
     }
 
     @Async("emailTaskExecutor")
@@ -61,6 +68,13 @@ public class AdminAlertEventListener {
             emailService.sendAdminAlert(adminProperties.normalizedEmails(), subject, body);
         } catch (Exception e) {
             log.error("Failed to send admin alert email for {} ({})", event.email(), event.eventType(), e);
+            try {
+                auditService.record(event.email(), RegistrationEventType.ADMIN_ALERT_FAILED,
+                        "Alert for " + event.eventType() + " failed to send: " + e.getMessage(), null);
+            } catch (Exception recordFailure) {
+                log.error("Failed to persist ADMIN_ALERT_FAILED for {} ({})", event.email(), event.eventType(),
+                        recordFailure);
+            }
         }
     }
 

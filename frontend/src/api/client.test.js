@@ -115,6 +115,40 @@ describe('apiClient reachability reporting', () => {
     const [, options] = global.fetch.mock.calls[0];
     expect(options.signal).toBeInstanceOf(AbortSignal);
   });
+
+  // Regression test for the delete-test-data timeout bug: the shared 15s default fired before
+  // the (then one-account-at-a-time) backend delete finished, and the client timing out never
+  // canceled the still-running backend transaction. deleteTestData() now passes a longer
+  // timeoutMs specifically for this call (see admin.js) -- this proves apiClient.delete's new
+  // options parameter actually reaches the AbortController, not just that it's accepted and
+  // ignored.
+  it('honors a per-call timeoutMs option instead of the shared default', async () => {
+    vi.useFakeTimers();
+    global.fetch = vi.fn(
+      (url, options) =>
+        new Promise((resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        }),
+    );
+
+    let settled = false;
+    apiClient
+      .delete('/api/admin/test-data', undefined, { timeoutMs: 60000 })
+      .catch(() => {})
+      .finally(() => {
+        settled = true;
+      });
+
+    // Well past the shared 15s default, but still under the custom 60s -- must NOT have aborted.
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(settled).toBe(false);
+
+    // Now cross the custom 60s timeout and confirm it eventually does.
+    await vi.advanceTimersByTimeAsync(45000);
+    expect(settled).toBe(true);
+
+    vi.useRealTimers();
+  });
 });
 
 describe('isOfflineError', () => {

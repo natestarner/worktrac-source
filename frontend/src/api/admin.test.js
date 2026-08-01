@@ -85,4 +85,30 @@ describe('admin api', () => {
     expect(url).toBe('/api/admin/test-data');
     expect(options.method).toBe('DELETE');
   });
+
+  // Regression test for the delete-test-data timeout bug: the request used to abort at the
+  // shared 15s default before the (then one-account-at-a-time) backend delete could finish.
+  // Proves the wiring from admin.js through to client.js's per-call timeoutMs actually survives
+  // a slow response well past that old 15s default.
+  it('deleteTestData survives past the shared 15s default timeout', async () => {
+    vi.useFakeTimers();
+    global.fetch = vi.fn(
+      (url, options) =>
+        new Promise((resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        }),
+    );
+
+    let settled = false;
+    deleteTestData()
+      .catch(() => {})
+      .finally(() => {
+        settled = true;
+      });
+
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(settled).toBe(false);
+
+    vi.useRealTimers();
+  });
 });
