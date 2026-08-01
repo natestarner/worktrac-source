@@ -1,13 +1,24 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminActivity from './AdminActivity';
-import { listRegistrationEvents, getRegistrationAlertSettings, updateRegistrationAlertSettings } from '../../api/admin';
+import {
+  listRegistrationEvents,
+  getRegistrationAlertSettings,
+  updateRegistrationAlertSettings,
+  previewTestData,
+  deleteTestData,
+} from '../../api/admin';
+import { useUI } from '../../context/UIContext';
 
 vi.mock('../../api/admin', () => ({
   listRegistrationEvents: vi.fn(),
   getRegistrationAlertSettings: vi.fn(),
   updateRegistrationAlertSettings: vi.fn(),
+  previewTestData: vi.fn(),
+  deleteTestData: vi.fn(),
 }));
+
+vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 
 const SAMPLE_EVENTS = [
   {
@@ -37,11 +48,17 @@ const DEFAULT_SETTINGS = {
 };
 
 describe('AdminActivity', () => {
+  let openConfirm;
+  let showToast;
+
   beforeEach(() => {
     vi.clearAllMocks();
     listRegistrationEvents.mockResolvedValue(SAMPLE_EVENTS);
     getRegistrationAlertSettings.mockResolvedValue(DEFAULT_SETTINGS);
     updateRegistrationAlertSettings.mockResolvedValue(DEFAULT_SETTINGS);
+    openConfirm = vi.fn();
+    showToast = vi.fn();
+    useUI.mockReturnValue({ openConfirm, showToast });
   });
 
   it('renders the event feed once loaded', async () => {
@@ -106,5 +123,42 @@ describe('AdminActivity', () => {
       }),
     );
     await waitFor(() => expect(getRegistrationAlertSettings).toHaveBeenCalledTimes(2));
+  });
+
+  it('previews counts and opens the confirm dialog before deleting test data', async () => {
+    previewTestData.mockResolvedValue({ accountCount: 3, registrationEventCount: 42, pendingRegistrationCount: 1 });
+    render(<AdminActivity />);
+    await screen.findByText('REGISTER_STARTED');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete all e2e test data' }));
+
+    await waitFor(() => expect(previewTestData).toHaveBeenCalled());
+    expect(openConfirm).toHaveBeenCalledWith(
+      expect.stringContaining('3 test account(s), 42 activity event(s), and 1 pending registration(s)'),
+      expect.any(Function),
+    );
+    // Nothing deleted yet -- only confirming actually calls the delete endpoint.
+    expect(deleteTestData).not.toHaveBeenCalled();
+  });
+
+  it('deletes test data, shows a toast, and refetches the feed once the dialog is confirmed', async () => {
+    previewTestData.mockResolvedValue({ accountCount: 1, registrationEventCount: 2, pendingRegistrationCount: 0 });
+    deleteTestData.mockResolvedValue({ accountCount: 1, registrationEventCount: 2, pendingRegistrationCount: 0 });
+    render(<AdminActivity />);
+    await screen.findByText('REGISTER_STARTED');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete all e2e test data' }));
+    await waitFor(() => expect(openConfirm).toHaveBeenCalled());
+
+    // Simulate the shared ConfirmDialog's "Delete" button invoking the callback it was given.
+    const confirmCallback = openConfirm.mock.calls[0][1];
+    listRegistrationEvents.mockResolvedValue([]);
+    await act(async () => {
+      await confirmCallback();
+    });
+
+    expect(deleteTestData).toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith('Deleted all e2e test data.');
+    await waitFor(() => expect(listRegistrationEvents).toHaveBeenCalledTimes(2));
   });
 });

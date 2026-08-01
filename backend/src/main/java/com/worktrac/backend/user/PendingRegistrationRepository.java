@@ -9,4 +9,9 @@ public interface PendingRegistrationRepository extends JpaRepository<PendingRegi
     Optional<PendingRegistration> findByEmail(String email);
 
     void deleteByEmail(String email);
+
+    // Admin-only test-data cleanup (see TestDataCleanupService).
+    long countByEmailLike(String pattern);
+
+    long deleteByEmailLike(String pattern);
 }

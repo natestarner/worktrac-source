@@ -3,8 +3,11 @@ import {
   listRegistrationEvents,
   getRegistrationAlertSettings,
   updateRegistrationAlertSettings,
+  previewTestData,
+  deleteTestData,
 } from '../../api/admin';
 import { useAdminData } from '../../hooks/useAdminData';
+import { useUI } from '../../context/UIContext';
 import { formatDateTime } from '../../utils/datetime';
 import AdminTable from '../../components/admin/AdminTable';
 import Skeleton from '../../components/shared/Skeleton';
@@ -192,9 +195,57 @@ function AlertSettingsPanel() {
   );
 }
 
+// Wipes every account/activity-event/pending-registration matching the e2e suite's own email
+// pattern, to clear the noise those runs leave behind. Shows a preview count before the shared
+// global ConfirmDialog (see CLAUDE.md's Frontend State Notes on that being one of the few
+// genuinely-global, one-shot UI pieces) so the admin sees exactly what's about to go, not just a
+// generic "are you sure". Only rendered at all when the backend route actually exists (see
+// TestDataAdminController) -- a 404 there just leaves this button silently absent rather than
+// erroring, since it can never be reached in production anyway.
+function TestDataCleanupButton({ onDeleted }) {
+  const { openConfirm, showToast } = useUI();
+  const [checking, setChecking] = useState(false);
+
+  async function handleClick() {
+    setChecking(true);
+    try {
+      const preview = await previewTestData();
+      const message =
+        `Delete ${preview.accountCount} test account(s), ${preview.registrationEventCount} ` +
+        `activity event(s), and ${preview.pendingRegistrationCount} pending registration(s) ` +
+        `matching e2e-*@example.com? This cannot be undone.`;
+      openConfirm(message, async () => {
+        await deleteTestData();
+        showToast('Deleted all e2e test data.');
+        onDeleted();
+      });
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  return (
+    <button onClick={handleClick} disabled={checking} style={testDataButtonStyle}>
+      {checking ? 'Checking…' : 'Delete all e2e test data'}
+    </button>
+  );
+}
+
+const testDataButtonStyle = {
+  background: 'none',
+  border: '1px solid var(--color-border)',
+  borderRadius: 8,
+  padding: '8px 14px',
+  fontSize: 13,
+  fontWeight: 600,
+  color: 'var(--color-danger)',
+  cursor: 'pointer',
+  marginBottom: 20,
+};
+
 export default function AdminActivity() {
   const fetchFn = useCallback(() => listRegistrationEvents(), []);
-  const { data: events, loading, error } = useAdminData(fetchFn);
+  const { data: events, loading, error, refetch } = useAdminData(fetchFn);
   const [onlyIssues, setOnlyIssues] = useState(false);
 
   const rows = useMemo(() => {
@@ -206,6 +257,7 @@ export default function AdminActivity() {
     <div>
       <ActivityLegend />
       <AlertSettingsPanel />
+      <TestDataCleanupButton onDeleted={refetch} />
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginBottom: 12 }}>
         <input type="checkbox" checked={onlyIssues} onChange={(e) => setOnlyIssues(e.target.checked)} />

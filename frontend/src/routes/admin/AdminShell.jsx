@@ -1,5 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import Toast from '../../components/shared/Toast';
+import ConfirmDialog from '../../components/shared/ConfirmDialog';
 
 const TABS = [
   { path: '/admin', label: 'Overview', end: true },
@@ -11,7 +13,12 @@ const TABS = [
 
 // Deliberately its own standalone layout, not the workout app's AppShell/Header/TabsNav --
 // this is an owner-only observability tool, not another workout tab, and has no notion of
-// "active person" to carry.
+// "active person" to carry. Still mounts Toast/ConfirmDialog (unlike the rest of AppShell's
+// globals -- PRCelebration, RestTimerBar, offline banners -- which are workout-specific and
+// irrelevant here): both are driven by UIContext, which already wraps this shell via App.jsx's
+// provider tree, and the Activity tab's "delete all e2e test data" action needs both (a
+// confirm-before-delete dialog, then a success toast) -- without mounting them here, calling
+// openConfirm()/showToast() from inside the admin routes would update state nothing ever renders.
 export default function AdminShell() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -74,6 +81,9 @@ export default function AdminShell() {
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px' }}>
         <Outlet />
       </div>
+
+      <Toast />
+      <ConfirmDialog />
     </div>
   );
 }
