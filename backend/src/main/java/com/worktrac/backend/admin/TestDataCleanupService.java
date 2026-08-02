@@ -23,9 +23,14 @@ import java.util.List;
 //
 // Identification is a single, precise pattern: every one of this app's ~30 e2e specs creates
 // its test households through exactly one shared helper (e2e/tests/support/auth.ts's
-// registerHousehold), which always generates emails as "e2e-<timestamp>-<random>@example.com".
-// example.com is an IANA-reserved (RFC 2606) domain that can never resolve to a real mailbox, so
-// combined with the "e2e-" prefix this can never accidentally match a genuine user's email.
+// registerHousehold), which always generates emails as
+// "huddle+e2e-<timestamp>-<random>@starner.co" -- plus-addressed sub-addresses of a real
+// mailbox the team controls specifically to receive e2e traffic (switched 2026-08-02 from
+// e2e-<...>@example.com, which bounced every send since example.com is an IANA-reserved domain
+// that can never resolve to a real mailbox -- harmless for the app, but each bounce still
+// counted against the sending domain's ACS reputation). A genuine user would need to both own
+// huddle@starner.co and choose to register with this exact synthetic local part, so combined
+// with the "huddle+e2e-" prefix this can never accidentally match a real account either.
 //
 // The stronger safety net is TestDataAdminController's own @Profile({"local", "lower"}) --
 // this service itself has no environment check, because the routes that call it simply don't
@@ -51,7 +56,7 @@ public class TestDataCleanupService {
 
     private static final Logger log = LoggerFactory.getLogger(TestDataCleanupService.class);
 
-    static final String E2E_EMAIL_PATTERN = "e2e-%@example.com";
+    static final String E2E_EMAIL_PATTERN = "huddle+e2e-%@starner.co";
 
     private final UserRepository userRepository;
     private final PersonRepository personRepository;

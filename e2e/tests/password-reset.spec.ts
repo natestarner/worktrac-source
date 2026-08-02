@@ -40,7 +40,7 @@ test.describe('Password reset', () => {
   // Non-enumeration: an unregistered email must reach the exact same code-entry screen as a
   // registered one -- the form gives no indication either way.
   test('requesting a reset for an unregistered email reaches the same code-entry screen', async ({ page }) => {
-    const email = `e2e-unregistered-${Date.now()}@example.com`;
+    const email = `huddle+e2e-unregistered-${Date.now()}@starner.co`;
 
     await page.goto('/forgot-password');
     await page.getByPlaceholder('you@example.com').fill(email);

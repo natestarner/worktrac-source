@@ -9,8 +9,15 @@ import { APIRequestContext, Page, expect } from '@playwright/test';
 //
 // Centralized here instead of duplicated per spec file: seven spec files previously each
 // carried their own near-identical copy of this register-and-assert-redirect snippet.
+//
+// Recipient is a plus-addressed sub-address of a real mailbox (huddle@starner.co) the team
+// controls specifically to receive e2e traffic, filed into its own folder by a mail rule on
+// the "huddle+e2e-" prefix -- switched 2026-08-02 from e2e-<...>@example.com, which bounced
+// every send (example.com can never resolve to a real mailbox) and counted against the sending
+// domain's ACS reputation on every single e2e run. See TestDataCleanupService.E2E_EMAIL_PATTERN
+// for the backend side of this exact same pattern -- the two must stay in sync.
 export async function registerHousehold(page: Page, request: APIRequestContext, personName: string): Promise<string> {
-  const email = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
+  const email = `huddle+e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
 
   await page.goto('/register');
   await page.getByPlaceholder('e.g. Alex').fill(personName);

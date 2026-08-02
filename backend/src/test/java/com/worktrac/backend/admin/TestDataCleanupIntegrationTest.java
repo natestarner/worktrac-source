@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 // Proves the /api/admin/test-data endpoints only ever touch data matching the e2e suite's exact
-// email pattern (e2e-<timestamp>-<random>@example.com, from e2e/tests/support/auth.ts) --
+// email pattern (huddle+e2e-<timestamp>-<random>@starner.co, from e2e/tests/support/auth.ts) --
 // specifically that a confirmed e2e-style account, an unconfirmed e2e-style pending
 // registration, AND their registration_events all get removed, while a normal-looking account
 // (and its own registration_events) and the admin account itself all survive untouched. The
@@ -80,7 +80,7 @@ class TestDataCleanupIntegrationTest {
     // Deliberately mirrors e2e/tests/support/auth.ts's exact pattern -- this is the one and only
     // format TestDataCleanupService is designed to match.
     private String e2eStyleEmail() {
-        return "e2e-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + "@example.com";
+        return "huddle+e2e-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + "@starner.co";
     }
 
     private String registerBody(String email, String personName) throws Exception {
