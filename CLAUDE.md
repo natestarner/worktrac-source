@@ -30,26 +30,35 @@ behind existing pipeline/infra configuration before changing it.
 
 ## Common Commands
 ```bash
-# Local development
-cd backend && mvn spring-boot:run -Dspring-boot.run.profiles=local
-cd frontend && npm run dev
-cd e2e && npx playwright test
+# Local development — starts THIS worktree's own isolated stack (own ports, own database on
+# the shared SQL Server container). See "Isolated Per-Worktree Local Stacks" below.
+bash scripts/up.sh      # or the /run-local skill
+bash scripts/down.sh    # or the /stop-local skill
+
+cd e2e && bash ../scripts/e2e.sh   # e2e against THIS worktree's own running stack
 
 # Run backend tests
 cd backend && mvn verify
 
 # Run frontend tests
 cd frontend && npm test
-
-# Start local SQL Server (host port 1434 — see note below)
-docker start worktrac-sqlserver
 ```
+
+## Isolated Per-Worktree Local Stacks
+Every git worktree gets its own fully isolated local stack — own backend port, own frontend
+port, own database — so multiple worktrees (and therefore multiple Claude sessions) can run
+side by side with zero collision. Full design + troubleshooting: `docs/DEVELOPMENT.md`.
+Don't start the backend/frontend manually with hardcoded `:8080`/`:3000` outside of the
+primary `main` worktree — use `scripts/up.sh` (or `/run-local`) so ports/database are derived
+correctly for whichever worktree you're in.
 
 ## Local SQL Server Port
 This machine already runs another project's SQL Server container (`inttime-sqlserver`) on
 the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434** instead
 (`-p 1434:1433`). `application-local.yml` points at `localhost:1434` accordingly — don't
-"fix" this back to 1433.
+"fix" this back to 1433. **All worktrees share this one container** — see "Isolated
+Per-Worktree Local Stacks" above; isolation between worktrees comes from each using its own
+*database* on it, not from separate containers.
 
 ## Code Standards
 - Java: 4-space indentation, follow Spring Boot conventions
@@ -574,17 +583,16 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 
 ### Concurrent Sessions
 - **Assume more than one Claude Code session may be working in this repo at the same time**,
-  each in its own worktree under `.claude/worktrees/`. Sessions have stepped on each other
-  before (shared local dev ports, shared log files, confusion over "missing" uncommitted
-  work) — check for a sibling session before taking an action that assumes you're the only
-  one here:
-  - Before running `/run-local` or anything else that binds ports 3000/8080: run
-    `git worktree list` to see whether other worktrees exist, and check whether something is
-    already listening on those ports before assuming it's safe to kill it — it may be another
-    session's live dev server, not stale state.
-  - Local dev log files under `/c/tmp` are shared/global, not per-worktree — treat their
-    presence or a recent mtime as a signal another session may be active, not as free to
-    overwrite.
+  each in its own worktree under `.claude/worktrees/`. Local dev is now designed for this (see
+  "Isolated Per-Worktree Local Stacks" above / `docs/DEVELOPMENT.md`): `/run-local` and
+  `/stop-local` derive per-worktree ports and a per-worktree database automatically, and dev
+  logs live in each worktree's own `.dev-logs/`, not a shared location — so ordinary
+  `/run-local` use across parallel worktrees should no longer collide the way it used to.
+  Still worth checking for a sibling session before an action that isn't itself
+  worktree-scoped:
+  - Before deleting/reusing a worktree directory, or stopping the *shared*
+    `worktrac-sqlserver` container: run `git worktree list` to see whether other worktrees
+    exist and might depend on what you're about to touch.
   - Before concluding "my uncommitted changes are missing" or "someone deleted my work,"
     check `git reflog` and `git worktree list` — a sibling session may have already
     committed and merged what looks missing.
