@@ -195,8 +195,13 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     await expect(outboxCountText(page, 2)).toBeVisible();
 
     // The core assertion: still on the authenticated app, never bounced to /login, no matter how
-    // long the backend stays unreachable.
-    await page.waitForTimeout(5000);
+    // long the backend stays unreachable. Waiting on a fixed sleep here only proved "no logout
+    // within roughly 5s" -- tied to wall-clock time, not to the retry mechanism this test actually
+    // guards against. Instead wait for genuine proof that multiple retry attempts have actually
+    // hit the faulted endpoints (the exact mechanism a malformed-temp-id retry loop would exercise
+    // repeatedly), then assert -- deterministic regardless of how fast or slow retries happen to
+    // fire on a given run.
+    await expect.poll(() => faults.count(), { timeout: 15000 }).toBeGreaterThanOrEqual(3);
     await expect(page).toHaveURL(/\/app\//);
 
     // Once the backend recovers, both queued writes replay in order and reconcile to server truth.
