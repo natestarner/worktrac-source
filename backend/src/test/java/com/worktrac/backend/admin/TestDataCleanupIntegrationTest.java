@@ -78,9 +78,28 @@ class TestDataCleanupIntegrationTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Deliberately mirrors e2e/tests/support/auth.ts's exact pattern -- this is the one and only
-    // format TestDataCleanupService is designed to match.
+    // format TestDataCleanupService's CURRENT_EMAIL_PATTERN is designed to match.
     private String e2eStyleEmail() {
         return "huddle+e2e-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + "@starner.co";
+    }
+
+    // Mirrors live-email-canary.spec.ts's address -- under the same huddle@starner.co mailbox
+    // as e2eStyleEmail() above, but deliberately without the "e2e-" prefix EmailService's no-op
+    // check requires, so it still creates an account that needs the same cleanup coverage.
+    // A truncated UUID, not the full 36-char form e2eStyleEmail() uses -- "livewiretest" is 9
+    // characters longer than "e2e", and the full-UUID version of this local part exceeds
+    // RFC 5321's 64-character limit that Hibernate Validator's @Email enforces (confirmed by a
+    // real 400 "email must be a well-formed email address" without this).
+    private String liveWireStyleEmail() {
+        return "huddle+livewiretest-" + System.currentTimeMillis() + "-"
+                + UUID.randomUUID().toString().substring(0, 8) + "@starner.co";
+    }
+
+    // Mirrors the pattern used before the 2026-08-02 mailbox switch (see CLAUDE.md) --
+    // TestDataCleanupService.LEGACY_EMAIL_PATTERN exists specifically so any backlog of accounts
+    // created under this old format can still be cleaned up.
+    private String legacyE2eStyleEmail() {
+        return "e2e-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + "@example.com";
     }
 
     private String registerBody(String email, String personName) throws Exception {
@@ -189,6 +208,37 @@ class TestDataCleanupIntegrationTest {
         for (String email : testEmails) {
             assertTrue(userRepository.findByEmail(email).isEmpty(), email + " should have been deleted");
         }
+        assertTrue(userRepository.findByEmail(ADMIN_EMAIL).isPresent(), "the admin account must survive");
+    }
+
+    // Proves both the broadened current pattern (huddle+livewiretest-...) and the retained
+    // legacy pattern (e2e-...@example.com) get swept up together with the regular
+    // huddle+e2e-... pattern -- not just the narrow no-op-eligible slice of the mailbox.
+    @Test
+    void legacyExampleComAndLiveWireAddressesAreAlsoCleanedUp() throws Exception {
+        String token = adminToken();
+
+        String currentEmail = e2eStyleEmail();
+        String liveWireEmail = liveWireStyleEmail();
+        String legacyEmail = legacyE2eStyleEmail();
+
+        RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, currentEmail, "Current");
+        RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, liveWireEmail, "LiveWire");
+        RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, legacyEmail, "Legacy");
+
+        mockMvc.perform(get("/api/admin/test-data/preview")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountCount").value(3));
+
+        mockMvc.perform(delete("/api/admin/test-data")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountCount").value(3));
+
+        assertTrue(userRepository.findByEmail(currentEmail).isEmpty());
+        assertTrue(userRepository.findByEmail(liveWireEmail).isEmpty());
+        assertTrue(userRepository.findByEmail(legacyEmail).isEmpty());
         assertTrue(userRepository.findByEmail(ADMIN_EMAIL).isPresent(), "the admin account must survive");
     }
 

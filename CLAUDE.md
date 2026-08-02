@@ -293,7 +293,7 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   read-only-admin-portal rule.** Lets an admin wipe every trace of the Playwright e2e suite's
   own data on demand, from a button on the Activity tab, to clear the noise it leaves in
   Accounts/Pending/Activity.
-  - **Identification is a single, precise pattern, not a heuristic:** every one of this repo's
+  - **Identification matches two precise patterns, not a heuristic:** every one of this repo's
     e2e specs creates its test households through exactly one shared helper
     (`e2e/tests/support/auth.ts`'s `registerHousehold`), which always generates emails as
     `huddle+e2e-<timestamp>-<random>@starner.co` — a plus-addressed sub-address of a real mailbox
@@ -303,12 +303,34 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
     harmless to the app itself, but each bounce still counted against the sending domain's ACS
     reputation, and volume only grows as deploys get more frequent. A genuine user would need to
     both own `huddle@starner.co` and choose to register with this exact synthetic local part, so
-    `email LIKE 'huddle+e2e-%@starner.co'` (`findAccountIdsByEmailLike`/`countByEmailLike` on
-    `UserRepository`, `RegistrationEventRepository`, `PendingRegistrationRepository`) still can
-    never accidentally match a genuine user's account. **The e2e helper's pattern and
-    `TestDataCleanupService.E2E_EMAIL_PATTERN` must always change together** — they're
-    independently-maintained copies of the same literal string, not derived from one shared
-    constant.
+    `TestDataCleanupService.CURRENT_EMAIL_PATTERN` (`huddle+%@starner.co` —
+    `findAccountIdsByEmailLike`/`countByEmailLike` on `UserRepository`,
+    `RegistrationEventRepository`, `PendingRegistrationRepository`) still can never accidentally
+    match a genuine user's account. Deliberately broader than just the `huddle+e2e-` prefix
+    (see below) so it also catches `live-email-canary.spec.ts`'s `huddle+livewiretest-...`
+    address. `LEGACY_EMAIL_PATTERN` (`e2e-%@example.com`) is retained alongside it so any
+    pre-2026-08-02 backlog already sitting in a database can still be cleaned up. **The e2e
+    helper's pattern and both of `TestDataCleanupService`'s patterns must always change
+    together** — they're independently-maintained copies of the same literal strings, not
+    derived from one shared constant.
+  - **Real ACS traffic from e2e is now a single, deliberate exception, not every registration.**
+    `EmailProperties.e2eNoopRecipientPattern` (a regex, set only in `application-local.yml`/
+    `application-lower.yml` — empty, and therefore inert, in production) makes
+    `EmailService.send()` skip the real Azure Communication Services call entirely whenever
+    every recipient matches it, returning a synthetic `"noop-<uuid>"` messageId instead.
+    Everything above that one network call — `RegistrationEmailEventListener`,
+    `RegistrationAuditService`, the Activity tab — still runs for real, so a no-op'd send is
+    still fully visible in the audit trail as an ordinary `VERIFICATION_EMAIL_SENT`. The
+    configured pattern only matches the `huddle+e2e-` prefix (not the whole `huddle+%@starner.co`
+    cleanup namespace), so `e2e/tests/live-email-canary.spec.ts`'s `huddle+livewiretest-...`
+    address deliberately falls through to a real send every time — the one spec proving the real
+    registration → email pipeline still works end to end, since every other spec's registration
+    is now free (no real ACS call, no real bounce/reputation exposure). That spec can't just
+    check that the UI reached `/app/log` (the verification code is written to a local cache
+    synchronously, independent of whether the async send that follows succeeds, fails, or gets
+    no-op'd) — it polls a new test-support endpoint, `GET /api/auth/test/email-outcome`
+    (`TestSupportController`, gated identically to the existing `pending-code` endpoint), which
+    reads the real `VERIFICATION_EMAIL_SENT`/`FAILED` event back from `registration_events`.
   - **Genuine bulk SQL deletes, not a per-account loop — fixed 2026-08-01 after a real lower
     timeout.** An earlier version looped `AccountDeletionService.deleteAccount(Long)` once per
     matching account; Spring Data JPA's derived `deleteByAccount_Id`/`deleteByEmailLike` methods
@@ -596,6 +618,11 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   Notes above). Service-worker-dependent specs (cold boot, reload-while-offline) live in
   `offline-durability.spec.ts` and run only via `cd e2e && npm run test:pwa`
   (`playwright.pwa.config.ts`), never the fast default project.
+- **`live-email-canary.spec.ts` is the one spec that triggers a real ACS send** — see the
+  Admin Portal Notes' "Delete all e2e test data" entry above for why every other spec's
+  registration is now no-op'd instead. `registerHousehold` (`auth.ts`) takes an optional
+  `emailOverride` for this reason; every other call site should keep using its default-generated
+  `huddle+e2e-...` address, not pass one in.
 
 ## Important Notes
 - Spring profiles: `local` for development, `lower` for lower env, `production` for prod

@@ -35,6 +35,12 @@ app:
     # test-support-key is different: it only gates the local-only test-support endpoint on
     # your own machine, so (like the JWT secret above) a fixed, committed placeholder is safe.
     test-support-key: local-dev-only-e2e-test-key-do-not-use-elsewhere
+    # Not sensitive (it's a recipient-matching pattern, not a secret) -- safe to commit as a
+    # fixed literal, same reasoning as test-support-key above. Matches exactly what
+    # e2e/tests/support/auth.ts's registerHousehold generates; livewiretest addresses
+    # (live-email-canary.spec.ts) deliberately don't match, so that one spec still sends for
+    # real. Single-quoted so YAML doesn't try to interpret the backslashes.
+    e2e-noop-recipient-pattern: '^huddle\+e2e-.*@starner\.co$'
   rate-limit:
     # Rate limiting defends a deployed, internet-facing environment against abuse -- that's
     # not the threat model for a single developer or an automated test suite hitting

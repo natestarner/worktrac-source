@@ -31,6 +31,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -280,6 +281,45 @@ class AuthControllerTest {
                         .header("X-E2E-Test-Key", emailProperties.getTestSupportKey()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(testCodeCache.get(email)));
+    }
+
+    // Backs the e2e live-email-canary spec: proves it can tell a real send apart from one that
+    // never happened or failed, since the UI-level register+confirm flow alone can't (the code
+    // is written to TestCodeCache synchronously, independent of the async email dispatch).
+    @Test
+    void emailOutcomeEndpointRequiresMatchingKeyAndReturnsTheRecordedOutcome() throws Exception {
+        String email = uniqueEmail("emailoutcome");
+        when(emailService.sendVerificationCode(eq(email), anyString())).thenReturn("test-msg-outcome-1");
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody(email, "Outcome")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/auth/test/email-outcome").param("email", email))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/auth/test/email-outcome").param("email", email)
+                        .header("X-E2E-Test-Key", "wrong-key"))
+                .andExpect(status().isNotFound());
+
+        // Recorded asynchronously by RegistrationEmailEventListener -- poll briefly rather than
+        // assuming it's already committed the instant register()'s response returns.
+        long deadline = System.currentTimeMillis() + 3000;
+        String body = null;
+        while (System.currentTimeMillis() < deadline) {
+            var result = mockMvc.perform(get("/api/auth/test/email-outcome").param("email", email)
+                            .header("X-E2E-Test-Key", emailProperties.getTestSupportKey()))
+                    .andReturn();
+            if (result.getResponse().getStatus() == 200) {
+                body = result.getResponse().getContentAsString();
+                break;
+            }
+            Thread.sleep(100);
+        }
+        org.junit.jupiter.api.Assertions.assertNotNull(body, "expected an email outcome to eventually be recorded");
+        JsonNode outcome = objectMapper.readTree(body);
+        org.junit.jupiter.api.Assertions.assertEquals("SENT", outcome.get("status").asText());
+        org.junit.jupiter.api.Assertions.assertEquals("test-msg-outcome-1", outcome.get("messageId").asText());
     }
 
     @Test
