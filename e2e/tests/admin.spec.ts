@@ -104,7 +104,10 @@ test.describe('App Settings', () => {
     await page.getByRole('button', { name: 'Remove' }).click();
     await expect(page.getByRole('dialog')).toContainText('Remove Sam? This deletes all of their sessions, sets, routines, and setup values.');
     await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
-    await expect(page.getByRole('button', { name: /Sam/ })).toHaveCount(0);
+    // Scoped to .person-pill-bar for the same reason as the earlier /Sam/ checks in this
+    // file: an unscoped match can also catch the header's account-holder dropdown trigger
+    // or a per-person settings control showing the same name elsewhere on screen.
+    await expect(page.locator('.person-pill-bar').getByRole('button', { name: /Sam/ })).toHaveCount(0);
   });
 
   test('a custom setup field lets each person set their own value for it', async ({ page, request }) => {

@@ -638,6 +638,16 @@ Per-Worktree Local Stacks" above; isolation between worktrees comes from each us
   registration is now no-op'd instead. `registerHousehold` (`auth.ts`) takes an optional
   `emailOverride` for this reason; every other call site should keep using its default-generated
   `huddle+e2e-...` address, not pass one in.
+- **`bash scripts/e2e.sh` runs the suite against THIS worktree's own stack** (bringing it up
+  first via `scripts/up.sh` if isolated per-worktree stacks are wired up; otherwise falls back
+  to assuming the historical fixed-port stack is already running). A **global teardown**
+  (`e2e/tests/support/globalTeardown.ts`, wired into `playwright.config.ts`) calls the existing
+  `DELETE /api/admin/test-data` after every LOCAL run so repeated runs don't accumulate
+  `huddle+e2e-...` accounts — it bootstraps (or logs into) the default admin account itself and
+  is deliberately a no-op against any non-`localhost` `baseURL` (a real address on the team's
+  domain, `nate+huddleadmin@starner.co` by default, would otherwise be registered/logged into
+  for real against a deployed target). Never fails the run itself — any error is logged and
+  swallowed, since cleanup is a hygiene nicety, not a correctness gate.
 
 ## Important Notes
 - Spring profiles: `local` for development, `lower` for lower env, `production` for prod
