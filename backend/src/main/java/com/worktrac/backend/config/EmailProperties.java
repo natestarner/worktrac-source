@@ -22,6 +22,15 @@ public class EmailProperties {
     // endpoint's controller bean doesn't exist at all regardless of this value.
     private String testSupportKey;
 
+    // Only ever set in local/lower -- a regex EmailService checks every recipient against
+    // before actually calling Azure Communication Services. A full match skips the real send
+    // entirely (see EmailService.isE2eNoopRecipient), so the e2e suite's ~60 "just need an
+    // account" registrations stop generating real ACS traffic (and real bounces before the
+    // huddle+e2e-... mailbox switch). Left empty in production -- same two-layer-defense
+    // pattern as testSupportKey, not relied on alone: even if this were somehow non-empty there,
+    // a genuine user would still need to own huddle@starner.co to ever match it.
+    private String e2eNoopRecipientPattern;
+
     public String getConnectionString() {
         return connectionString;
     }
@@ -60,5 +69,13 @@ public class EmailProperties {
 
     public void setAppUrl(String appUrl) {
         this.appUrl = appUrl;
+    }
+
+    public String getE2eNoopRecipientPattern() {
+        return e2eNoopRecipientPattern;
+    }
+
+    public void setE2eNoopRecipientPattern(String e2eNoopRecipientPattern) {
+        this.e2eNoopRecipientPattern = e2eNoopRecipientPattern;
     }
 }

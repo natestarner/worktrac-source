@@ -9,6 +9,8 @@ import com.azure.core.models.ResponseError;
 import com.azure.core.util.polling.PollResponse;
 import com.azure.core.util.polling.SyncPoller;
 import com.worktrac.backend.config.EmailProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
@@ -17,10 +19,16 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Locale;
+import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Service
 public class EmailService {
+
+    private static final Logger log = LoggerFactory.getLogger(EmailService.class);
 
     private final EmailClient emailClient;
     private final String senderAddress;
@@ -31,6 +39,7 @@ public class EmailService {
     private final String registrationSuccessTemplate;
     private final String passwordResetCodeTemplate;
     private final String passwordResetSuccessTemplate;
+    private final Pattern e2eNoopRecipientPattern;
 
     public EmailService(EmailProperties properties) {
         this.emailClient = new EmailClientBuilder()
@@ -44,6 +53,10 @@ public class EmailService {
         this.registrationSuccessTemplate = loadTemplate("templates/email/registration-success.html");
         this.passwordResetCodeTemplate = loadTemplate("templates/email/password-reset-code.html");
         this.passwordResetSuccessTemplate = loadTemplate("templates/email/password-reset-success.html");
+        String noopPattern = properties.getE2eNoopRecipientPattern();
+        this.e2eNoopRecipientPattern = (noopPattern == null || noopPattern.isBlank())
+                ? null
+                : Pattern.compile(noopPattern);
     }
 
     // Returns the ACS messageId -- the correlation key RegistrationEmailEventListener records
@@ -118,7 +131,22 @@ public class EmailService {
     // later actually delivered, bounced, or spam-filtered is a separate, asynchronous truth
     // reported by Event Grid (see emaildelivery.EmailDeliveryWebhookController) and correlated
     // back to this send via the returned messageId.
+    //
+    // The e2e no-op check runs first: if e2eNoopRecipientPattern is configured (local/lower
+    // only -- see EmailProperties) and every recipient matches it, this skips the real ACS call
+    // entirely and returns a synthetic messageId instead. Everything above this method --
+    // RegistrationEmailEventListener, RegistrationAuditService, the Activity tab -- runs exactly
+    // as it would for a real send; only the actual network call to Azure is skipped. Requiring
+    // ALL recipients to match (not just one) means a mixed-recipient send (not something this
+    // app currently does, but a real guarantee worth keeping) can never be silently half-skipped.
     private String send(String[] toEmails, String subject, String plainText, String html) {
+        if (isE2eNoopRecipient(toEmails)) {
+            String syntheticMessageId = "noop-" + UUID.randomUUID();
+            log.info("Skipping real ACS send to e2e no-op recipient(s) {} (synthetic messageId={})",
+                    String.join(",", toEmails), syntheticMessageId);
+            return syntheticMessageId;
+        }
+
         EmailMessage message = new EmailMessage()
                 .setSenderAddress(senderAddress)
                 .setToRecipients(toEmails)
@@ -136,6 +164,14 @@ public class EmailService {
             throw new EmailSendException(describeFailure(result));
         }
         return result.getId();
+    }
+
+    private boolean isE2eNoopRecipient(String[] toEmails) {
+        if (e2eNoopRecipientPattern == null) {
+            return false;
+        }
+        return Arrays.stream(toEmails)
+                .allMatch(email -> e2eNoopRecipientPattern.matcher(email.toLowerCase(Locale.ROOT)).matches());
     }
 
     private String describeFailure(EmailSendResult result) {

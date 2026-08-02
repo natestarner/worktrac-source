@@ -21,6 +21,11 @@ spring:
     clean-disabled: true    # never allow clean outside local dev, even in lower env
 
 app:
+  email:
+    # Same pattern/reasoning as application-local.yml -- not sensitive, safe to commit as a
+    # fixed literal. Lower is the other profile e2e actually runs against (the deploy-lower.yml
+    # CI job), so it needs this too, not just local.
+    e2e-noop-recipient-pattern: '^huddle\+e2e-.*@starner\.co$'
   rate-limit:
     # application.yml's production-sane defaults (10/hour per-IP, 30/hour global) are sized
     # for real internet-facing abuse resistance, not for the e2e-tests CI job -- one run

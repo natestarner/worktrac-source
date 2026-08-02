@@ -1,6 +1,7 @@
 package com.worktrac.backend.user;
 
 import com.worktrac.backend.config.EmailProperties;
+import com.worktrac.backend.registrationaudit.RegistrationEventRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
@@ -17,6 +18,7 @@ class TestSupportControllerProfileTest {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
             context.getEnvironment().setActiveProfiles("local");
             context.register(TestSupportController.class, TestCodeCache.class, EmailProperties.class);
+            registerMockRegistrationEventRepository(context);
             context.refresh();
 
             assertEquals(1, context.getBeanNamesForType(TestSupportController.class).length);
@@ -28,10 +30,20 @@ class TestSupportControllerProfileTest {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
             context.getEnvironment().setActiveProfiles("production");
             context.register(TestSupportController.class, TestCodeCache.class, EmailProperties.class);
+            registerMockRegistrationEventRepository(context);
             context.refresh();
 
             assertEquals(0, context.getBeanNamesForType(TestSupportController.class).length);
             assertEquals(0, context.getBeanNamesForType(TestCodeCache.class).length);
         }
+    }
+
+    // TestSupportController (not @Profile-gated itself -- only relevant under local, where the
+    // controller bean it's a dependency of actually gets constructed) still needs this
+    // dependency satisfied for the context to refresh at all; this test only cares about the
+    // controller's registration, so a plain Mockito mock is enough.
+    private void registerMockRegistrationEventRepository(AnnotationConfigApplicationContext context) {
+        context.registerBean(RegistrationEventRepository.class,
+                () -> org.mockito.Mockito.mock(RegistrationEventRepository.class));
     }
 }

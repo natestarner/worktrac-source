@@ -14,10 +14,24 @@ import { APIRequestContext, Page, expect } from '@playwright/test';
 // controls specifically to receive e2e traffic, filed into its own folder by a mail rule on
 // the "huddle+e2e-" prefix -- switched 2026-08-02 from e2e-<...>@example.com, which bounced
 // every send (example.com can never resolve to a real mailbox) and counted against the sending
-// domain's ACS reputation on every single e2e run. See TestDataCleanupService.E2E_EMAIL_PATTERN
-// for the backend side of this exact same pattern -- the two must stay in sync.
-export async function registerHousehold(page: Page, request: APIRequestContext, personName: string): Promise<string> {
-  const email = `huddle+e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
+// domain's ACS reputation on every single e2e run. This "huddle+e2e-" prefix also matches
+// EmailProperties.e2eNoopRecipientPattern, so EmailService skips the real ACS send for it
+// entirely (see live-email-canary.spec.ts for the one deliberate exception, which passes its
+// own emailOverride here specifically so it does NOT match that prefix). See
+// TestDataCleanupService's CURRENT_EMAIL_PATTERN for the backend side of the cleanup pattern --
+// broader than just this prefix (also covers live-email-canary's address), but the two must
+// still stay in sync with whatever this function actually generates.
+//
+// emailOverride lets a caller supply its own address instead of the default e2e-noop'd pattern
+// -- used only by live-email-canary.spec.ts, which needs an address that deliberately does NOT
+// match the no-op pattern so it triggers a real send.
+export async function registerHousehold(
+  page: Page,
+  request: APIRequestContext,
+  personName: string,
+  emailOverride?: string,
+): Promise<string> {
+  const email = emailOverride ?? `huddle+e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
 
   await page.goto('/register');
   await page.getByPlaceholder('e.g. Alex').fill(personName);
@@ -58,6 +72,31 @@ export async function fetchPendingCode(request: APIRequestContext, apiUrl: strin
     }
     if (Date.now() >= deadline) {
       throw new Error(`No pending code appeared for ${email} within 10s (last status: ${response.status()})`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+}
+
+export type EmailOutcome = { status: 'SENT' | 'FAILED'; messageId: string | null; detail: string | null };
+
+// Backs live-email-canary.spec.ts -- polls the registration_events audit trail (via
+// TestSupportController's /api/auth/test/email-outcome) for the real outcome of a verification
+// email send, since a successful register+confirm alone can't distinguish a real send from a
+// no-op'd or failed one (the code is written to TestCodeCache synchronously, independent of the
+// async email dispatch). A longer deadline than fetchPendingCode's: this is waiting on a real
+// external network round trip to Azure Communication Services, not just an in-memory cache write.
+export async function fetchEmailOutcome(request: APIRequestContext, apiUrl: string, email: string): Promise<EmailOutcome> {
+  const deadline = Date.now() + 20_000;
+  while (true) {
+    const response = await request.get(`${apiUrl}/api/auth/test/email-outcome`, {
+      params: { email },
+      headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' },
+    });
+    if (response.ok()) {
+      return await response.json();
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`No email outcome recorded for ${email} within 20s (last status: ${response.status()})`);
     }
     await new Promise(resolve => setTimeout(resolve, 1000));
   }

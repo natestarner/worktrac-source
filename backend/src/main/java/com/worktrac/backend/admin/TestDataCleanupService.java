@@ -12,7 +12,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.function.ToLongFunction;
 
 // Lets an admin wipe every trace of the Playwright e2e suite's own test data from a
 // non-production database on demand, to clear the noise it creates in the Activity/Pending/
@@ -21,16 +23,21 @@ import java.util.List;
 // irreversibly deletes rows, and keeping it separate makes that boundary obvious at a glance
 // rather than diluting AdminService's own "read-only except..." class comment further.
 //
-// Identification is a single, precise pattern: every one of this app's ~30 e2e specs creates
-// its test households through exactly one shared helper (e2e/tests/support/auth.ts's
-// registerHousehold), which always generates emails as
-// "huddle+e2e-<timestamp>-<random>@starner.co" -- plus-addressed sub-addresses of a real
-// mailbox the team controls specifically to receive e2e traffic (switched 2026-08-02 from
-// e2e-<...>@example.com, which bounced every send since example.com is an IANA-reserved domain
-// that can never resolve to a real mailbox -- harmless for the app, but each bounce still
-// counted against the sending domain's ACS reputation). A genuine user would need to both own
-// huddle@starner.co and choose to register with this exact synthetic local part, so combined
-// with the "huddle+e2e-" prefix this can never accidentally match a real account either.
+// Identification matches TWO precise patterns, not a heuristic:
+// - CURRENT_EMAIL_PATTERN ("huddle+<...>@starner.co") -- every e2e spec creates its test
+//   households through exactly one shared helper (e2e/tests/support/auth.ts's
+//   registerHousehold), which generates "huddle+e2e-<timestamp>-<random>@starner.co", a
+//   plus-addressed sub-address of a real mailbox the team controls specifically to receive e2e
+//   traffic. Deliberately broader than just the "huddle+e2e-" prefix EmailService's no-op check
+//   uses (see EmailProperties.e2eNoopRecipientPattern) -- it also needs to catch
+//   "huddle+livewiretest-..." (live-email-canary.spec.ts's real-send canary, which must NOT
+//   match the no-op pattern, but still creates accounts that need cleaning up like any other
+//   e2e run). A genuine user would need to own huddle@starner.co to ever match either.
+// - LEGACY_EMAIL_PATTERN ("e2e-<...>@example.com") -- the pattern used before the 2026-08-02
+//   mailbox switch (see CLAUDE.md), retained so any backlog of pre-switch accounts already
+//   sitting in a database (created back when every send bounced against the IANA-reserved
+//   example.com) can still be cleaned up. Safe to remove once that backlog is confirmed empty
+//   in every environment.
 //
 // The stronger safety net is TestDataAdminController's own @Profile({"local", "lower"}) --
 // this service itself has no environment check, because the routes that call it simply don't
@@ -56,7 +63,9 @@ public class TestDataCleanupService {
 
     private static final Logger log = LoggerFactory.getLogger(TestDataCleanupService.class);
 
-    static final String E2E_EMAIL_PATTERN = "huddle+e2e-%@starner.co";
+    static final String CURRENT_EMAIL_PATTERN = "huddle+%@starner.co";
+    static final String LEGACY_EMAIL_PATTERN = "e2e-%@example.com";
+    private static final List<String> EMAIL_PATTERNS = List.of(CURRENT_EMAIL_PATTERN, LEGACY_EMAIL_PATTERN);
 
     private final UserRepository userRepository;
     private final PersonRepository personRepository;
@@ -82,17 +91,17 @@ public class TestDataCleanupService {
 
     @Transactional(readOnly = true)
     public AdminTestDataPreviewDto preview() {
-        long accountCount = userRepository.findAccountIdsByEmailLike(E2E_EMAIL_PATTERN).size();
-        long eventCount = registrationEventRepository.countByEmailLike(E2E_EMAIL_PATTERN);
-        long pendingCount = pendingRegistrationRepository.countByEmailLike(E2E_EMAIL_PATTERN);
+        long accountCount = matchingAccountIds().size();
+        long eventCount = countAcrossPatterns(registrationEventRepository::countByEmailLike);
+        long pendingCount = countAcrossPatterns(pendingRegistrationRepository::countByEmailLike);
         return new AdminTestDataPreviewDto(accountCount, eventCount, pendingCount);
     }
 
     @Transactional
     public AdminTestDataPreviewDto deleteAll() {
-        List<Long> accountIds = userRepository.findAccountIdsByEmailLike(E2E_EMAIL_PATTERN);
-        long eventCount = registrationEventRepository.countByEmailLike(E2E_EMAIL_PATTERN);
-        long pendingCount = pendingRegistrationRepository.countByEmailLike(E2E_EMAIL_PATTERN);
+        List<Long> accountIds = matchingAccountIds();
+        long eventCount = countAcrossPatterns(registrationEventRepository::countByEmailLike);
+        long pendingCount = countAcrossPatterns(pendingRegistrationRepository::countByEmailLike);
 
         if (!accountIds.isEmpty()) {
             personRepository.deleteByAccountIdIn(accountIds);
@@ -101,11 +110,23 @@ public class TestDataCleanupService {
             userRepository.deleteByAccountIdIn(accountIds);
             accountRepository.deleteAllByIdInBatch(accountIds);
         }
-        registrationEventRepository.deleteByEmailLikeBulk(E2E_EMAIL_PATTERN);
-        pendingRegistrationRepository.deleteByEmailLikeBulk(E2E_EMAIL_PATTERN);
+        EMAIL_PATTERNS.forEach(registrationEventRepository::deleteByEmailLikeBulk);
+        EMAIL_PATTERNS.forEach(pendingRegistrationRepository::deleteByEmailLikeBulk);
 
         log.info("Deleted e2e test data: {} accounts, {} registration events, {} pending registrations",
                 accountIds.size(), eventCount, pendingCount);
         return new AdminTestDataPreviewDto(accountIds.size(), eventCount, pendingCount);
+    }
+
+    // Patterns are mutually exclusive (one anchors on @starner.co, the other on @example.com),
+    // so simple concatenation across both never double-counts an account.
+    private List<Long> matchingAccountIds() {
+        List<Long> ids = new ArrayList<>();
+        EMAIL_PATTERNS.forEach(pattern -> ids.addAll(userRepository.findAccountIdsByEmailLike(pattern)));
+        return ids;
+    }
+
+    private long countAcrossPatterns(ToLongFunction<String> countByPattern) {
+        return EMAIL_PATTERNS.stream().mapToLong(countByPattern).sum();
     }
 }
