@@ -85,8 +85,12 @@ export type EmailOutcome = { status: 'SENT' | 'FAILED'; messageId: string | null
 // no-op'd or failed one (the code is written to TestCodeCache synchronously, independent of the
 // async email dispatch). A longer deadline than fetchPendingCode's: this is waiting on a real
 // external network round trip to Azure Communication Services, not just an in-memory cache write.
+// 30s, not 20s: confirmed too tight against real lower conditions (a 404-then-retry-succeeds
+// flake against the deployed lower environment, most likely lower's Container App scaling from
+// zero on a cold run) -- the same "real external call needs a re-tuned timeout" lesson the SDLC
+// guide's registration section already documents.
 export async function fetchEmailOutcome(request: APIRequestContext, apiUrl: string, email: string): Promise<EmailOutcome> {
-  const deadline = Date.now() + 20_000;
+  const deadline = Date.now() + 30_000;
   while (true) {
     const response = await request.get(`${apiUrl}/api/auth/test/email-outcome`, {
       params: { email },

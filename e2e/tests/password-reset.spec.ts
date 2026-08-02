@@ -47,6 +47,11 @@ test.describe('Password reset', () => {
     await page.getByRole('button', { name: 'Send reset code' }).click();
 
     await expect(page).toHaveURL(/\/reset-password/);
-    await expect(page.getByText(new RegExp(email))).toBeVisible();
+    // A plain string, not new RegExp(email): getByText does a substring match on a plain string
+    // by default, and the email now legitimately contains "+" (huddle+e2e-...@starner.co) --
+    // a regex metacharacter that silently broke this exact assertion in lower (confirmed via a
+    // real failure: "+" was interpreted as "one or more of the preceding character" instead of
+    // a literal plus sign, so the constructed pattern never matched the on-screen text).
+    await expect(page.getByText(email)).toBeVisible();
   });
 });
