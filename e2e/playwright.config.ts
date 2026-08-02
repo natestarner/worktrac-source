@@ -9,6 +9,9 @@ export default defineConfig({
   // Durability specs need the production service worker (absent in `vite dev`) -- they run via
   // `npm run test:pwa` (playwright.pwa.config.ts) against a preview build instead.
   testIgnore: ['**/offline-durability.spec.ts'],
+  // No-ops against a deployed target (lower/production) -- see the file's own localhost guard.
+  // Keeps repeated LOCAL runs from accumulating huddle+e2e-... accounts indefinitely.
+  globalTeardown: './tests/support/globalTeardown.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,      // Fail if test.only is left in CI
   retries: process.env.CI ? 2 : 0,   // Retry flaky tests in CI only

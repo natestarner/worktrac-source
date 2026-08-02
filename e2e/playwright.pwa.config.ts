@@ -7,10 +7,17 @@ import { defineConfig, devices } from '@playwright/test';
 // is a whole-run setting in Playwright, not per-project -- folding a `npm run build` into the main
 // config would pay that cost on every fast local run. Invoke via `npm run test:pwa`.
 //
-// Requires port 3000 to be free (stop any running `vite dev`/`vite preview` first): CORS locally
-// defaults to allowing only http://localhost:3000 (see backend's application.yml), and `vite
-// preview`'s own proxy forwards the browser's real Origin header through to the backend rather
-// than hiding it -- so this can't simply run on a different port without also reconfiguring CORS.
+// FRONTEND_PORT/VITE_BACKEND_ORIGIN let this run against a git worktree's own isolated stack
+// (see scripts/worktree-env.sh) instead of always assuming the primary worktree's fixed
+// 3000/8080 -- default to those historical values so an invocation with no env vars set
+// (a plain `npm run test:pwa`) behaves exactly as before. Whichever port is used must have
+// its origin covered by the backend's CORS_ALLOWED_ORIGINS (see backend's application.yml):
+// `vite preview`'s own proxy forwards the browser's real Origin header through to the backend
+// rather than hiding it, so this can't just run on an uncovered port.
+const FRONTEND_PORT = process.env.FRONTEND_PORT || '3000';
+const BACKEND_ORIGIN = process.env.VITE_BACKEND_ORIGIN || 'http://localhost:8080';
+const baseURL = `http://localhost:${FRONTEND_PORT}`;
+
 export default defineConfig({
   testDir: './tests',
   testMatch: ['**/offline-durability.spec.ts'],
@@ -26,15 +33,19 @@ export default defineConfig({
     timeout: 10000,
   },
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
   webServer: {
     command: 'npm --prefix ../frontend run build && npm --prefix ../frontend run preview',
-    url: 'http://localhost:3000',
+    url: baseURL,
     reuseExistingServer: false,
     timeout: 120000,
+    env: {
+      FRONTEND_PORT,
+      VITE_BACKEND_ORIGIN: BACKEND_ORIGIN,
+    },
   },
   projects: [
     {
