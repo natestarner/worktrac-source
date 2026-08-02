@@ -39,6 +39,14 @@ failures — subject to the guardrails.
 - Lower URLs: frontend `https://app.dev.huddle.fitness`
   (`https://black-flower-0c9bf9d0f.7.azurestaticapps.net`), backend health
   `https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io/actuator/health`.
+- **Lower is a single, shared, mutable environment — deploys serialize but don't gate on
+  green.** `deploy-lower.yml` has a `concurrency` group, so if another worktree's deploy is
+  already running, this one **queues** rather than overlapping (no two `e2e-tests` runs ever
+  hit the same lower DB at once). But the slot releases the instant a run finishes, **pass or
+  fail** — a red run is never held open waiting for a fix, and merges to `main` are never
+  blocked by it. Since `main` is linear, lower always converges to the latest merged commit
+  regardless. This means: **treat a lower e2e failure as possibly not yours** — see step 12's
+  attribution protocol before fixing anything.
 
 ## Runbook
 
@@ -134,10 +142,44 @@ workflow started:
 Watch that `worktrac-deploy` run to completion:
 `gh run watch -R $OWNER/worktrac-deploy <run-id> --exit-status`. Confirm all four jobs green:
 `deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`, `e2e-tests`.
-On failure: pull logs and the `playwright-report` artifact
-(`gh run download -R $OWNER/worktrac-deploy <run-id> -n playwright-report`). If the failure is
-code-caused, auto-fix via a new PR to source `main` (bounded), which re-triggers the whole
-promote→deploy chain. If it's infra/secret/config, stop and report.
+
+**On an `e2e-tests` failure, don't assume it's yours — another worktree's deploy may have
+queued behind this one (or just ahead of it) and surfaced the same red first.** Because lower
+is shared and deploys only serialize (see the pipeline fact above), a failure here can belong
+to whichever merge *first* introduced it. Work through these three steps, in order, before
+writing any fix:
+
+1. **Attribute by diff against the previous run.** Pull this run's failing specs (`gh run
+   download -R $OWNER/worktrac-deploy <run-id> -n playwright-report`, or `gh run view -R
+   $OWNER/worktrac-deploy <run-id> --log-failed`) and the **immediately preceding**
+   `deploy-lower.yml` run's failing specs (`gh run list -R $OWNER/worktrac-deploy
+   --workflow=deploy-lower.yml --limit 2` to find its run-id, then the same commands against
+   it). **A spec failing in both runs is pre-existing — it belongs to whatever merge is
+   already ahead of yours on `main`; skip it, don't fix it here.** Only a spec that's newly
+   failing (absent from the previous run's failures) is this deploy's to fix. If every failing
+   spec here already failed in the previous run, there is nothing for this `/deploy-to-lower`
+   invocation to fix — report that upstream and stop (don't re-fix someone else's in-flight
+   failure).
+2. **Claim ledger, for the case two deploys land too close together to diff cleanly** (the
+   "previous run" was still green when both started). Run these `gh issue`/`gh label` commands
+   with **no `-R`** — unlike the `worktrac-deploy` run/log commands above, these target the
+   current source repo (this skill always runs from inside a source-repo worktree, which `gh`
+   resolves automatically). Before starting a fix on a genuinely net-new failing spec: `gh
+   issue list --label lower-red --search "<spec-file-name> in:title" --state open`. If an open
+   issue already claims that spec, **skip it** — another session is already on it; don't
+   duplicate the work. Otherwise claim it yourself: `gh label create lower-red --color d73a4a
+   --force` (idempotent, creates the label the first time this is ever used, harmlessly no-ops
+   after), then `gh issue create --title "lower-red: <spec-file-name>" --label lower-red --body
+   "Claimed by an in-progress /deploy-to-lower run fixing this lower e2e failure."`. Reference
+   that issue number in the fix PR's body (`Closes #<n>`) so it closes automatically on merge,
+   releasing the claim.
+3. **Fix only what step 1 attributed to you**, via a new PR to source `main` (bounded retries,
+   same as step 10), which re-triggers the whole promote→deploy chain. A failure attributed to
+   an earlier merge is not yours to fix here — if it's still red after that earlier merge's own
+   fix should have landed, report it rather than fixing it yourself under this invocation.
+
+If the failure is infra/secret/config rather than code, stop and report regardless of
+attribution — you can't fix those either way.
 
 ### 13. Report & clean up
 - Report a summary of what shipped, with links: the source `main` Actions run, the
