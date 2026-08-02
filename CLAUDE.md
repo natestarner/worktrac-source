@@ -228,12 +228,15 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
     instead by a shared-secret query param (`EMAIL_DELIVERY_WEBHOOK_KEY`, wired per-environment
     in `worktrac-deploy` — see `EmailDeliveryWebhookProperties`), since Event Grid is a
     server-to-server caller with no JWT. **Requires an Azure Event Grid subscription on the
-    ACS resource pointing at this webhook to actually receive delivery reports** — this must
-    be set up per-environment (lower, then production) and the setup steps recorded in
-    `../worktrac_SDLC_setup_guide.md` once done, the same way other infra decisions are;
-    as of this writing that subscription has not yet been created in any environment.
-    Until it is, registrations still work and level-1 (send-accepted) events still record, but
-    `EMAIL_DELIVERED`/`EMAIL_BOUNCED`/etc. never arrive.
+    ACS resource pointing at this webhook to actually receive delivery reports** — set up for
+    both lower (`worktrac-comms-lower-topic`) and production (`worktrac-comms-prod-topic`,
+    added 2026-08-02 alongside the registration-observability feature's promotion to
+    production) as of this writing; setup steps recorded in `../worktrac_SDLC_setup_guide.md`
+    section 21. A future third environment would need the identical two-step
+    `az eventgrid system-topic create` + `az eventgrid system-topic event-subscription create`
+    (the dedicated subcommand — the generic `event-subscription create --source-resource-id`
+    does not work against this resource type) against its own ACS resource before its
+    `EMAIL_DELIVERED`/`EMAIL_BOUNCED`/etc. events would ever arrive.
   - **Every failure event's `detail` carries the real reason**, not just an event-type label:
     ACS error code/message for a send failure, the recipient server's actual SMTP diagnostic
     (`deliveryStatusDetails.statusMessage`, e.g. `"550 5.1.1 mailbox does not exist"`) for a
