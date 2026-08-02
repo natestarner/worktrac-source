@@ -1,5 +1,6 @@
 package com.worktrac.backend.admin;
 
+import com.worktrac.backend.support.AbstractIntegrationTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.registrationaudit.RegistrationEventRepository;
@@ -10,17 +11,13 @@ import com.worktrac.backend.user.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.DefaultApplicationArguments;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.Map;
 import java.util.UUID;
@@ -40,19 +37,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // deeper account-deletion cascade itself (people/exercises/tags/workout data) is already covered
 // by AccountDeletionTest; this test's job is only the identification + registration-audit-table
 // cleanup this feature adds on top of that.
-@SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("local")
-@Testcontainers
 @TestPropertySource(properties = "app.admin.emails=" + TestDataCleanupIntegrationTest.ADMIN_EMAIL)
-class TestDataCleanupIntegrationTest {
+class TestDataCleanupIntegrationTest extends AbstractIntegrationTest {
+
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registerDatasource(registry, TestDataCleanupIntegrationTest.class);
+    }
 
     static final String ADMIN_EMAIL = "admin-cleanup-test@example.com";
-
-    @Container
-    @ServiceConnection
-    static MSSQLServerContainer<?> sqlServer = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-latest")
-            .acceptLicense();
 
     @Autowired
     private MockMvc mockMvc;

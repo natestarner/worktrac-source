@@ -1,5 +1,6 @@
 package com.worktrac.backend.admin;
 
+import com.worktrac.backend.support.AbstractIntegrationTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.support.RegistrationTestSupport;
@@ -12,17 +13,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.DefaultApplicationArguments;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.Map;
 import java.util.UUID;
@@ -42,13 +39,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // establishes the one admin identity every later test reuses (ADMIN_EMAIL can only be
 // registered/confirmed once per running container, so it can't be repeated per method
 // the way uniqueEmail() lets ordinary users be).
-@SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("local")
-@Testcontainers
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @TestPropertySource(properties = "app.admin.emails=" + AdminAuthorizationTest.ADMIN_EMAIL)
-class AdminAuthorizationTest {
+class AdminAuthorizationTest extends AbstractIntegrationTest {
+
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registerDatasource(registry, AdminAuthorizationTest.class);
+    }
 
     static final String ADMIN_EMAIL = "admin-portal-test@example.com";
 
@@ -57,11 +56,6 @@ class AdminAuthorizationTest {
             "/api/admin/pending-registrations", "/api/admin/health",
             "/api/admin/registration-events", "/api/admin/registration-alert-settings"
     };
-
-    @Container
-    @ServiceConnection
-    static MSSQLServerContainer<?> sqlServer = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-latest")
-            .acceptLicense();
 
     // Real EmailService constructor builds a live Azure EmailClient -- mocked out so
     // registering test users never depends on a real ACS resource.

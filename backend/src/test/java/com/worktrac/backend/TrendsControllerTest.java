@@ -1,5 +1,6 @@
 package com.worktrac.backend;
 
+import com.worktrac.backend.support.AbstractIntegrationTest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.email.EmailService;
@@ -9,19 +10,15 @@ import com.worktrac.backend.user.TestCodeCache;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -39,16 +36,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // (PR marking) computed by StatsService, using a MutableClock to pin "today" so week
 // boundaries and the current-week-in-progress streak rule are deterministic. 2026-01-05 is
 // a Monday, used throughout as the fixed "current week start."
-@SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("local")
-@Testcontainers
-class TrendsControllerTest {
+class TrendsControllerTest extends AbstractIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    static MSSQLServerContainer<?> sqlServer = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-latest")
-            .acceptLicense();
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registerDatasource(registry, TrendsControllerTest.class);
+    }
 
     @TestConfiguration
     static class ClockTestConfig {
