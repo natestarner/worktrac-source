@@ -1,5 +1,6 @@
 package com.worktrac.backend.user;
 
+import com.worktrac.backend.support.AbstractIntegrationTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.config.EmailProperties;
 import com.worktrac.backend.email.EmailService;
@@ -11,18 +12,14 @@ import com.worktrac.backend.support.RegistrationTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Duration;
 import java.util.List;
@@ -46,16 +43,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // "local" is activated so app.jwt.secret resolves to the dev-only secret in
 // application-local.yml -- see AuthControllerTest for the full reasoning (identical setup, so
 // Spring reuses the same cached application context across both test classes).
-@SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("local")
-@Testcontainers
-class PasswordResetControllerTest {
+class PasswordResetControllerTest extends AbstractIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    static MSSQLServerContainer<?> sqlServer = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-latest")
-            .acceptLicense();
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registerDatasource(registry, PasswordResetControllerTest.class);
+    }
 
     @TestConfiguration
     static class ClockTestConfig {

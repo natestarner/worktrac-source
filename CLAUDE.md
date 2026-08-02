@@ -613,11 +613,18 @@ Per-Worktree Local Stacks" above; isolation between worktrees comes from each us
 - Frontend: Vitest + React Testing Library
 - E2E: Playwright (run against deployed lower environment)
 - Minimum: write tests for any new endpoint or user-facing feature
-- `backend/src/test/resources/junit-platform.properties` is deliberately pinned to
-  `parallelism=1` — this dev machine also runs `inttime-sqlserver` continuously alongside
-  `worktrac-sqlserver`, and concurrent Testcontainers-backed test classes crash on
-  `fs.aio-max-nr` before parallelizing gets any faster. Don't re-enable it as a perf win
-  without re-checking host resource headroom.
+- Every backend integration test (Spring context + database) extends
+  `backend/src/test/java/com/worktrac/backend/support/AbstractIntegrationTest.java`, which
+  starts ONE singleton `MSSQLServerContainer` for the whole JVM instead of each class starting
+  its own (24 classes used to mean 24 containers — the multi-container approach is what
+  originally crashed on `fs.aio-max-nr` and forced `parallelism=1`; see git history on
+  `junit-platform.properties`). Each class still gets its own isolated database on that one
+  container (via a `@DynamicPropertySource` method calling `registerDatasource`), so per-class
+  data isolation is unchanged. Class-level parallelism (`junit-platform.properties`) is back on
+  now that only one container is ever in play. `bash scripts/test-backend.sh unit` runs just
+  the ~10 non-container unit test classes (no DB, no Spring context, seconds not minutes) via
+  Surefire's `-DexcludedGroups=integration`; `bash scripts/test-backend.sh` (or plain `mvn
+  verify`) runs everything.
 - **Connectivity-mode e2e helpers** (`e2e/tests/support/`): `offline.ts` (banner/outbox
   locators, `goHardOffline`/`goOnline`) and `faults.ts` (`failNetwork` — a rejected fetch, the
   only thing that drives lie-fi detection — vs. `failWithStatus` — a fulfilled 4xx/5xx, which

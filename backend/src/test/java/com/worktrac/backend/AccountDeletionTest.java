@@ -1,5 +1,6 @@
 package com.worktrac.backend;
 
+import com.worktrac.backend.support.AbstractIntegrationTest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.account.AccountRepository;
@@ -12,16 +13,12 @@ import com.worktrac.backend.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.List;
 import java.util.Map;
@@ -40,16 +37,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // leaving every other account -- and every global/system exercise -- exactly as it was.
 // That isolation guarantee is the single most important thing to get right here, same as
 // MultiTenancyIsolationTest.
-@SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("local")
-@Testcontainers
-class AccountDeletionTest {
+class AccountDeletionTest extends AbstractIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    static MSSQLServerContainer<?> sqlServer = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-latest")
-            .acceptLicense();
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registerDatasource(registry, AccountDeletionTest.class);
+    }
 
     @Autowired
     private MockMvc mockMvc;
