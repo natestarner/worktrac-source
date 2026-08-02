@@ -16,6 +16,10 @@ export const API_ONLY = /^https?:\/\/[^/]+\/api\//;
 //
 // `times: Infinity` (the default) blocks indefinitely -- call `.stop()` on the returned handle (or
 // `.resume()` to re-arm it) to control the failure window from the test.
+//
+// `count()` reports how many requests have actually been intercepted-and-failed so far. This is
+// what lets a test wait on "the retry loop has genuinely made N attempts" (a real, observable
+// signal) instead of guessing how long that many retries might take with a fixed sleep.
 export async function failNetwork(page: Page, urlPattern: string | RegExp, times = Infinity) {
   let count = 0;
   let failing = true;
@@ -34,6 +38,7 @@ export async function failNetwork(page: Page, urlPattern: string | RegExp, times
     resume: () => {
       failing = true;
     },
+    count: () => count,
   };
 }
 
