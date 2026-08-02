@@ -9,10 +9,15 @@ import { VitePWA } from 'vite-plugin-pwa'
 // against a production build: `npm run build && npm run preview`.
 const isTest = process.env.VITEST
 
-// Shared by the dev server and `vite preview` so both reach the local backend on :8080 identically.
+// Shared by the dev server and `vite preview` so both reach the local backend identically.
+// Both the port and the backend origin are overridable via env vars so each git worktree can
+// run its own fully isolated stack (see scripts/worktree-env.sh) -- default to the historical
+// 3000/:8080 pairing so a plain `npm run dev` with no env vars set behaves exactly as before.
+const FRONTEND_PORT = Number(process.env.FRONTEND_PORT) || 3000
+const BACKEND_ORIGIN = process.env.VITE_BACKEND_ORIGIN || 'http://localhost:8080'
 const devProxy = {
-  '/api': { target: 'http://localhost:8080', changeOrigin: true },
-  '/actuator': { target: 'http://localhost:8080', changeOrigin: true },
+  '/api': { target: BACKEND_ORIGIN, changeOrigin: true },
+  '/actuator': { target: BACKEND_ORIGIN, changeOrigin: true },
 }
 
 const pwaPlugin = VitePWA({
@@ -52,16 +57,17 @@ export default defineConfig({
     jsx: 'automatic',
   },
   server: {
-    port: 3000,
+    port: FRONTEND_PORT,
     proxy: devProxy
   },
   // `vite preview` serves the PRODUCTION build -- the only build that includes the service worker --
   // so it's how you exercise offline cold-load locally: `npm run build && npm run preview`. Kept on
-  // port 3000 (the only CORS-allowed local origin) with the same /api proxy to the local backend on
-  // :8080. Note: after preview testing, unregister the service worker in DevTools before running
-  // `vite dev` again on :3000, or the stale SW will keep serving cached assets over the dev server.
+  // the SAME port as `server` above (the only CORS-allowed origin for this worktree, per
+  // CORS_ALLOWED_ORIGINS) with the same /api proxy target. Note: after preview testing, unregister
+  // the service worker in DevTools before running `vite dev` again on this port, or the stale SW
+  // will keep serving cached assets over the dev server.
   preview: {
-    port: 3000,
+    port: FRONTEND_PORT,
     proxy: devProxy
   },
   test: {

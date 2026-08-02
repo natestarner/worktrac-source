@@ -2,7 +2,11 @@ spring:
   datasource:
     # NOTE: host port 1434 (not the default 1433) — this machine already runs another
     # local SQL Server container (inttime-sqlserver) bound to 1433. See section 9.1.
-    url: jdbc:sqlserver://localhost:1434;database=worktrac;encrypt=false;trustServerCertificate=true
+    # Overridable via SPRING_DATASOURCE_URL so each git worktree can point at its own
+    # database on the SAME shared SQL Server container (see scripts/worktree-env.sh) --
+    # the default below is exactly the primary `main` worktree's database, so a plain
+    # `mvn spring-boot:run` with no env vars set behaves exactly as before.
+    url: ${SPRING_DATASOURCE_URL:jdbc:sqlserver://localhost:1434;database=worktrac;encrypt=false;trustServerCertificate=true}
     username: sa
     password: LocalDev123!
   jpa:
