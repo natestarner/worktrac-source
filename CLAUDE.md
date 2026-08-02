@@ -296,11 +296,19 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   - **Identification is a single, precise pattern, not a heuristic:** every one of this repo's
     e2e specs creates its test households through exactly one shared helper
     (`e2e/tests/support/auth.ts`'s `registerHousehold`), which always generates emails as
-    `e2e-<timestamp>-<random>@example.com`. `example.com` is an IANA-reserved (RFC 2606) domain
-    that can never resolve to a real mailbox, so `email LIKE 'e2e-%@example.com'`
-    (`findAccountIdsByEmailLike`/`countByEmailLike` on `UserRepository`,
-    `RegistrationEventRepository`, `PendingRegistrationRepository`) can never accidentally match
-    a genuine user's account.
+    `huddle+e2e-<timestamp>-<random>@starner.co` — a plus-addressed sub-address of a real mailbox
+    the team controls, filed into its own folder by a mail rule on the `huddle+e2e-` prefix.
+    **Switched 2026-08-02 from `e2e-<...>@example.com`**: that IANA-reserved (RFC 2606) domain
+    could never resolve to a real mailbox, so *every* e2e-generated registration bounced —
+    harmless to the app itself, but each bounce still counted against the sending domain's ACS
+    reputation, and volume only grows as deploys get more frequent. A genuine user would need to
+    both own `huddle@starner.co` and choose to register with this exact synthetic local part, so
+    `email LIKE 'huddle+e2e-%@starner.co'` (`findAccountIdsByEmailLike`/`countByEmailLike` on
+    `UserRepository`, `RegistrationEventRepository`, `PendingRegistrationRepository`) still can
+    never accidentally match a genuine user's account. **The e2e helper's pattern and
+    `TestDataCleanupService.E2E_EMAIL_PATTERN` must always change together** — they're
+    independently-maintained copies of the same literal string, not derived from one shared
+    constant.
   - **Genuine bulk SQL deletes, not a per-account loop — fixed 2026-08-01 after a real lower
     timeout.** An earlier version looped `AccountDeletionService.deleteAccount(Long)` once per
     matching account; Spring Data JPA's derived `deleteByAccount_Id`/`deleteByEmailLike` methods
