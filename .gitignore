@@ -33,6 +33,10 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+.env.worktree
+
+# === Per-worktree local dev logs (scripts/up.sh) ===
+.dev-logs/
 
 # === Claude Code ===
 .claude/settings.local.json

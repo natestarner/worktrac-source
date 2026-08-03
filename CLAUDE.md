@@ -30,26 +30,35 @@ behind existing pipeline/infra configuration before changing it.
 
 ## Common Commands
 ```bash
-# Local development
-cd backend && mvn spring-boot:run -Dspring-boot.run.profiles=local
-cd frontend && npm run dev
-cd e2e && npx playwright test
+# Local development — starts THIS worktree's own isolated stack (own ports, own database on
+# the shared SQL Server container). See "Isolated Per-Worktree Local Stacks" below.
+bash scripts/up.sh      # or the /run-local skill
+bash scripts/down.sh    # or the /stop-local skill
+
+cd e2e && bash ../scripts/e2e.sh   # e2e against THIS worktree's own running stack
 
 # Run backend tests
 cd backend && mvn verify
 
 # Run frontend tests
 cd frontend && npm test
-
-# Start local SQL Server (host port 1434 — see note below)
-docker start worktrac-sqlserver
 ```
+
+## Isolated Per-Worktree Local Stacks
+Every git worktree gets its own fully isolated local stack — own backend port, own frontend
+port, own database — so multiple worktrees (and therefore multiple Claude sessions) can run
+side by side with zero collision. Full design + troubleshooting: `docs/DEVELOPMENT.md`.
+Don't start the backend/frontend manually with hardcoded `:8080`/`:3000` outside of the
+primary `main` worktree — use `scripts/up.sh` (or `/run-local`) so ports/database are derived
+correctly for whichever worktree you're in.
 
 ## Local SQL Server Port
 This machine already runs another project's SQL Server container (`inttime-sqlserver`) on
 the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434** instead
 (`-p 1434:1433`). `application-local.yml` points at `localhost:1434` accordingly — don't
-"fix" this back to 1433.
+"fix" this back to 1433. **All worktrees share this one container** — see "Isolated
+Per-Worktree Local Stacks" above; isolation between worktrees comes from each using its own
+*database* on it, not from separate containers.
 
 ## Code Standards
 - Java: 4-space indentation, follow Spring Boot conventions
@@ -574,17 +583,16 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 
 ### Concurrent Sessions
 - **Assume more than one Claude Code session may be working in this repo at the same time**,
-  each in its own worktree under `.claude/worktrees/`. Sessions have stepped on each other
-  before (shared local dev ports, shared log files, confusion over "missing" uncommitted
-  work) — check for a sibling session before taking an action that assumes you're the only
-  one here:
-  - Before running `/run-local` or anything else that binds ports 3000/8080: run
-    `git worktree list` to see whether other worktrees exist, and check whether something is
-    already listening on those ports before assuming it's safe to kill it — it may be another
-    session's live dev server, not stale state.
-  - Local dev log files under `/c/tmp` are shared/global, not per-worktree — treat their
-    presence or a recent mtime as a signal another session may be active, not as free to
-    overwrite.
+  each in its own worktree under `.claude/worktrees/`. Local dev is now designed for this (see
+  "Isolated Per-Worktree Local Stacks" above / `docs/DEVELOPMENT.md`): `/run-local` and
+  `/stop-local` derive per-worktree ports and a per-worktree database automatically, and dev
+  logs live in each worktree's own `.dev-logs/`, not a shared location — so ordinary
+  `/run-local` use across parallel worktrees should no longer collide the way it used to.
+  Still worth checking for a sibling session before an action that isn't itself
+  worktree-scoped:
+  - Before deleting/reusing a worktree directory, or stopping the *shared*
+    `worktrac-sqlserver` container: run `git worktree list` to see whether other worktrees
+    exist and might depend on what you're about to touch.
   - Before concluding "my uncommitted changes are missing" or "someone deleted my work,"
     check `git reflog` and `git worktree list` — a sibling session may have already
     committed and merged what looks missing.
@@ -605,11 +613,30 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
 - Frontend: Vitest + React Testing Library
 - E2E: Playwright (run against deployed lower environment)
 - Minimum: write tests for any new endpoint or user-facing feature
-- `backend/src/test/resources/junit-platform.properties` is deliberately pinned to
-  `parallelism=1` — this dev machine also runs `inttime-sqlserver` continuously alongside
-  `worktrac-sqlserver`, and concurrent Testcontainers-backed test classes crash on
-  `fs.aio-max-nr` before parallelizing gets any faster. Don't re-enable it as a perf win
-  without re-checking host resource headroom.
+- Every backend integration test (Spring context + database) extends
+  `backend/src/test/java/com/worktrac/backend/support/AbstractIntegrationTest.java`, which
+  starts ONE singleton `MSSQLServerContainer` for the whole JVM instead of each class starting
+  its own (24 classes used to mean 24 containers — the multi-container approach is what
+  originally crashed on `fs.aio-max-nr` and forced `parallelism=1`; see git history on
+  `junit-platform.properties`). Each class still gets its own isolated database on that one
+  container (via a `@DynamicPropertySource` method calling `registerDatasource`), so per-class
+  data isolation is unchanged. Class-level parallelism (`junit-platform.properties`) is back on
+  now that only one container is ever in play. `bash scripts/test-backend.sh unit` runs just
+  the ~10 non-container unit test classes (no DB, no Spring context, seconds not minutes) via
+  Surefire's `-DexcludedGroups=integration`; `bash scripts/test-backend.sh` (or plain `mvn
+  verify`) runs everything.
+- **A test that captures real Logback output (`LogCaptor`, e.g. `AuthControllerRateLimitTest`)
+  must be `@Isolated` (`org.junit.jupiter.api.parallel.Isolated`) under class parallelism.**
+  Logback's `LoggerContext` is a JVM-wide singleton, not scoped per Spring context — Spring
+  Boot's `LogbackLoggingSystem` calls `LoggerContext.reset()` when ANY Spring context boots
+  (not just this test's own), which detaches every manually-attached appender, including
+  `LogCaptor`'s, for the rest of the run. Confirmed via a debug build capturing whether the
+  appender was still attached at assertion time: intermittently, it genuinely was not, and a
+  reset-resistant `LoggerContextListener` re-attach hook did NOT reliably fix it either (more
+  than one wipe can land in sequence). `@Isolated` removes the interference at its source —
+  nothing else executes while that class runs — rather than trying to survive it. If a future
+  test needs `LogCaptor`, either mark it `@Isolated` too or don't rely on cross-request log
+  ordering/content under parallelism.
 - **Connectivity-mode e2e helpers** (`e2e/tests/support/`): `offline.ts` (banner/outbox
   locators, `goHardOffline`/`goOnline`) and `faults.ts` (`failNetwork` — a rejected fetch, the
   only thing that drives lie-fi detection — vs. `failWithStatus` — a fulfilled 4xx/5xx, which
@@ -623,6 +650,16 @@ the standard host port 1433. `worktrac-sqlserver` is mapped to host port **1434*
   registration is now no-op'd instead. `registerHousehold` (`auth.ts`) takes an optional
   `emailOverride` for this reason; every other call site should keep using its default-generated
   `huddle+e2e-...` address, not pass one in.
+- **`bash scripts/e2e.sh` runs the suite against THIS worktree's own stack** (bringing it up
+  first via `scripts/up.sh` if isolated per-worktree stacks are wired up; otherwise falls back
+  to assuming the historical fixed-port stack is already running). A **global teardown**
+  (`e2e/tests/support/globalTeardown.ts`, wired into `playwright.config.ts`) calls the existing
+  `DELETE /api/admin/test-data` after every LOCAL run so repeated runs don't accumulate
+  `huddle+e2e-...` accounts — it bootstraps (or logs into) the default admin account itself and
+  is deliberately a no-op against any non-`localhost` `baseURL` (a real address on the team's
+  domain, `nate+huddleadmin@starner.co` by default, would otherwise be registered/logged into
+  for real against a deployed target). Never fails the run itself — any error is logged and
+  swallowed, since cleanup is a hygiene nicety, not a correctness gate.
 
 ## Important Notes
 - Spring profiles: `local` for development, `lower` for lower env, `production` for prod

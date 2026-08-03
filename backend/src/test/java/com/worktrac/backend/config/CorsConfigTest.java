@@ -1,17 +1,14 @@
 package com.worktrac.backend.config;
 
+import com.worktrac.backend.support.AbstractIntegrationTest;
 import com.worktrac.backend.email.EmailService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.MSSQLServerContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -22,16 +19,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // Access-Control-Allow-Origin and the fetch failed as a network error in every deployed
 // environment -- even though /actuator/health itself is permitAll() and answers fine.
 // Local dev never reproduced this because Vite's proxy makes the request same-origin.
-@SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("local")
-@Testcontainers
-class CorsConfigTest {
+class CorsConfigTest extends AbstractIntegrationTest {
 
-    @Container
-    @ServiceConnection
-    static MSSQLServerContainer<?> sqlServer = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-latest")
-            .acceptLicense();
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registerDatasource(registry, CorsConfigTest.class);
+    }
 
     @Autowired
     private MockMvc mockMvc;
