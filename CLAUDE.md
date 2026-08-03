@@ -620,23 +620,33 @@ Per-Worktree Local Stacks" above; isolation between worktrees comes from each us
   originally crashed on `fs.aio-max-nr` and forced `parallelism=1`; see git history on
   `junit-platform.properties`). Each class still gets its own isolated database on that one
   container (via a `@DynamicPropertySource` method calling `registerDatasource`), so per-class
-  data isolation is unchanged. Class-level parallelism (`junit-platform.properties`) is back on
-  now that only one container is ever in play. `bash scripts/test-backend.sh unit` runs just
-  the ~10 non-container unit test classes (no DB, no Spring context, seconds not minutes) via
-  Surefire's `-DexcludedGroups=integration`; `bash scripts/test-backend.sh` (or plain `mvn
-  verify`) runs everything.
-- **A test that captures real Logback output (`LogCaptor`, e.g. `AuthControllerRateLimitTest`)
-  must be `@Isolated` (`org.junit.jupiter.api.parallel.Isolated`) under class parallelism.**
-  Logback's `LoggerContext` is a JVM-wide singleton, not scoped per Spring context — Spring
-  Boot's `LogbackLoggingSystem` calls `LoggerContext.reset()` when ANY Spring context boots
-  (not just this test's own), which detaches every manually-attached appender, including
-  `LogCaptor`'s, for the rest of the run. Confirmed via a debug build capturing whether the
-  appender was still attached at assertion time: intermittently, it genuinely was not, and a
-  reset-resistant `LoggerContextListener` re-attach hook did NOT reliably fix it either (more
-  than one wipe can land in sequence). `@Isolated` removes the interference at its source —
-  nothing else executes while that class runs — rather than trying to survive it. If a future
-  test needs `LogCaptor`, either mark it `@Isolated` too or don't rely on cross-request log
-  ordering/content under parallelism.
+  data isolation is unchanged. This alone is the bulk of the real speedup (one container start
+  instead of 24) and holds regardless of the parallelism setting below. `bash
+  scripts/test-backend.sh unit` runs just the ~10 non-container unit test classes (no DB, no
+  Spring context, seconds not minutes) via Surefire's `-DexcludedGroups=integration`; `bash
+  scripts/test-backend.sh` (or plain `mvn verify`) runs everything.
+- **Class-level parallelism (`junit-platform.properties`) is deliberately back at 1**, not the 4
+  it briefly was, after TWO independent, real concurrency bugs surfaced empirically:
+  1. Spring Boot's `LogbackLoggingSystem` resets the JVM-shared Logback `LoggerContext` on
+     every new Spring context's startup, silently detaching a manually-attached test log
+     appender (`LogCaptor`, used by `AuthControllerRateLimitTest`) if another class's context
+     boots concurrently. Confirmed via a debug build capturing attachment state at assertion
+     time. A reset-resistant `LoggerContextListener` re-attach hook did NOT reliably fix it
+     (more than one wipe can land in sequence) — fixed instead by marking that one class
+     `@Isolated` (`org.junit.jupiter.api.parallel.Isolated`), so nothing else executes
+     concurrently with it. If a future test needs `LogCaptor`, mark it `@Isolated` too rather
+     than relying on cross-request log ordering/content under parallelism.
+  2. A SECOND, independent Mockito `UnfinishedStubbing` failure surfaced in
+     `PasswordResetControllerTest` on the real CI runner — never once across 8+ consecutive
+     local runs, suggesting it's sensitive to CI's specific core count/scheduling rather than
+     reliably reproducible for a local fix-and-verify cycle. Root cause not yet confirmed
+     (plausibly Mockito's inline-mock-maker bytecode instrumentation — a JVM-wide, not
+     per-thread, mechanism — racing across multiple classes' `@MockitoBean` setup during
+     concurrent context refresh).
+  Re-enabling parallelism again needs: (a) root-causing the Mockito failure with certainty
+  (reproducible outside CI), (b) auditing the other 23 classes for the same two failure
+  classes, not just this pair, (c) several green **CI** runs (not just local) at the target
+  parallelism before trusting it as a required check.
 - **Connectivity-mode e2e helpers** (`e2e/tests/support/`): `offline.ts` (banner/outbox
   locators, `goHardOffline`/`goOnline`) and `faults.ts` (`failNetwork` — a rejected fetch, the
   only thing that drives lie-fi detection — vs. `failWithStatus` — a fulfilled 4xx/5xx, which
