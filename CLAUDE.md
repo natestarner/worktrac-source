@@ -625,6 +625,18 @@ Per-Worktree Local Stacks" above; isolation between worktrees comes from each us
   the ~10 non-container unit test classes (no DB, no Spring context, seconds not minutes) via
   Surefire's `-DexcludedGroups=integration`; `bash scripts/test-backend.sh` (or plain `mvn
   verify`) runs everything.
+- **A test that captures real Logback output (`LogCaptor`, e.g. `AuthControllerRateLimitTest`)
+  must be `@Isolated` (`org.junit.jupiter.api.parallel.Isolated`) under class parallelism.**
+  Logback's `LoggerContext` is a JVM-wide singleton, not scoped per Spring context — Spring
+  Boot's `LogbackLoggingSystem` calls `LoggerContext.reset()` when ANY Spring context boots
+  (not just this test's own), which detaches every manually-attached appender, including
+  `LogCaptor`'s, for the rest of the run. Confirmed via a debug build capturing whether the
+  appender was still attached at assertion time: intermittently, it genuinely was not, and a
+  reset-resistant `LoggerContextListener` re-attach hook did NOT reliably fix it either (more
+  than one wipe can land in sequence). `@Isolated` removes the interference at its source —
+  nothing else executes while that class runs — rather than trying to survive it. If a future
+  test needs `LogCaptor`, either mark it `@Isolated` too or don't rely on cross-request log
+  ordering/content under parallelism.
 - **Connectivity-mode e2e helpers** (`e2e/tests/support/`): `offline.ts` (banner/outbox
   locators, `goHardOffline`/`goOnline`) and `faults.ts` (`failNetwork` — a rejected fetch, the
   only thing that drives lie-fi detection — vs. `failWithStatus` — a fulfilled 4xx/5xx, which

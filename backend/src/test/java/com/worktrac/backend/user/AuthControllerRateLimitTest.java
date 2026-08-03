@@ -9,6 +9,7 @@ import com.worktrac.backend.security.AuthRequestLoggingFilter;
 import com.worktrac.backend.support.AbstractIntegrationTest;
 import com.worktrac.backend.support.LogCaptor;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Isolated;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -31,11 +32,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // this class can drive the per-IP bucket to rejection deterministically in a couple of requests
 // without also tripping the unrelated global bucket, and without the low production-sane default
 // (10/hour) making unrelated test classes in the shared suite flaky.
+//
+// @Isolated: this is the one class in the suite using LogCaptor (see its own header comment) to
+// assert against real Logback output. Under class parallelism, another test class's Spring
+// context booting concurrently can silently detach LogCaptor's appender mid-test (confirmed via
+// a debug build: Spring Boot's LogbackLoggingSystem resets the JVM-shared LoggerContext on every
+// new context's startup) -- and that survived even a reset-resistant re-attach listener, implying
+// more than one wipe can land in sequence. @Isolated makes JUnit run this class with nothing else
+// executing at the same time, which removes the interference at its source rather than fighting
+// it after the fact.
 @SpringBootTest(properties = {
         "app.rate-limit.per-ip-per-hour=1",
         "app.rate-limit.global-email-sends-per-hour=1000"
 })
 @AutoConfigureMockMvc
+@Isolated
 class AuthControllerRateLimitTest extends AbstractIntegrationTest {
 
     @DynamicPropertySource
