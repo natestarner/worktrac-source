@@ -23,7 +23,7 @@ else
   FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 fi
 
-: "${E2E_TEST_SUPPORT_KEY:?E2E_TEST_SUPPORT_KEY must be set (see application-local.yml's test-support-key)}"
+: "${E2E_TEST_SUPPORT_KEY:?E2E_TEST_SUPPORT_KEY must be set (see application-local.yml test-support-key)}"
 
 cd "$REPO_ROOT/e2e"
 [ -d node_modules ] || npm install

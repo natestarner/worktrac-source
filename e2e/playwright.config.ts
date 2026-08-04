@@ -15,11 +15,14 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,      // Fail if test.only is left in CI
   retries: process.env.CI ? 2 : 0,   // Retry flaky tests in CI only
-  // 2 workers in CI: all specs already isolate via per-test random accounts (see
-  // admin.spec.ts etc.), so data collisions aren't the concern -- the lower-env DB is
-  // Azure SQL free tier with limited concurrency headroom, so we go modest rather than
-  // fully parallel.
-  workers: process.env.CI ? 2 : undefined,
+  // 2 workers everywhere: all specs already isolate via per-test random accounts (see
+  // admin.spec.ts etc.), so data collisions aren't the concern -- it's concurrency headroom.
+  // CI/lower's Azure SQL free tier has limited headroom; a local run is just as constrained
+  // in practice -- one backend process, one bounded HikariCP pool, one SQL Server container --
+  // so leaving local on Playwright's default (auto-detected CPU core count, often 8-16) let a
+  // full local suite run overwhelm the pool with concurrent registrations and cascade into
+  // HikariPool timeouts across nearly every spec (see git history on this comment).
+  workers: 2,
   reporter: [
     ['html', { open: 'never' }],
     ['list'],
