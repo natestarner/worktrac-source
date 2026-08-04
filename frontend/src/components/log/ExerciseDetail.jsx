@@ -27,6 +27,7 @@ import EditSetModal from '../shared/EditSetModal';
 import ExerciseNoteModal from '../shared/ExerciseNoteModal';
 import Button from '../shared/Button';
 import Skeleton from '../shared/Skeleton';
+import SetPillRow from '../shared/SetPillRow';
 
 export default function ExerciseDetail({
   exercise,
@@ -483,9 +484,6 @@ export default function ExerciseDetail({
   }
 
   const lastLabel = summary?.lastSession ? formatDateLabel(toLocalDateStr(summary.lastSession.startedAt)) : '';
-  const lastSetsText = summary?.lastSession
-    ? summary.lastSession.sets.map((s) => `${s.weight}${s.unit || 'lb'}×${s.reps}`).join('  ')
-    : 'No sets yet';
   const bestText = summary?.best ? `${summary.best.est1rm} ${summary.best.unit}  (${summary.best.weight}${summary.best.unit}×${summary.best.reps})` : 'No PR yet';
 
   const bestComparableLb = summary?.best
@@ -585,7 +583,11 @@ export default function ExerciseDetail({
             <div className="summary-cards-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
               <div className="summary-card" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16 }}>
                 <div style={cardLabelStyle}>Last time &middot; {lastLabel}</div>
-                <div className="summary-card-value" style={{ fontWeight: 700 }}>{lastSetsText}</div>
+                {summary?.lastSession ? (
+                  <SetPillRow sets={summary.lastSession.sets} style={{ marginTop: 2 }} />
+                ) : (
+                  <div className="summary-card-value" style={{ fontWeight: 700 }}>No sets yet</div>
+                )}
                 {summary?.lastSession?.note && (
                   <div style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--color-muted)', marginTop: 4 }}>
                     <span style={{ marginRight: 4 }}>📝</span>

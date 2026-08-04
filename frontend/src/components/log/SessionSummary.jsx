@@ -5,6 +5,7 @@ import { queryKeys } from '../../api/queryKeys';
 import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
 import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import SetPillRow from '../shared/SetPillRow';
 
 export default function SessionSummary({ entries, loading, sessionId, onSelectExercise, onChanged }) {
   const { openConfirm } = useUI();
@@ -78,9 +79,7 @@ export default function SessionSummary({ entries, loading, sessionId, onSelectEx
           >
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: 'var(--color-text)' }}>{entry.exerciseName}</div>
-              <div style={{ fontSize: 14, color: 'var(--color-muted)' }}>
-                {entry.sets.map((s) => `${s.weight}${s.unit || 'lb'}×${s.reps}`).join('   ')}
-              </div>
+              <SetPillRow sets={entry.sets} />
             </div>
             <div style={{ display: 'flex', gap: 14, flexShrink: 0 }}>
               <button onClick={() => onSelectExercise(entry.exerciseId)} style={editLinkStyle}>

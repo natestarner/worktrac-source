@@ -11,6 +11,7 @@ import Skeleton from '../shared/Skeleton';
 import RefreshingPill from '../shared/RefreshingPill';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import SetPillRow from '../shared/SetPillRow';
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
@@ -110,9 +111,7 @@ export default function HistoryTab() {
                     </div>
                   )}
                 </div>
-                <div style={{ fontSize: 14, color: 'var(--color-muted)' }}>
-                  {entry.sets.map((s) => `${s.weight}${s.unit || 'lb'}×${s.reps}`).join('   ')}
-                </div>
+                <SetPillRow sets={entry.sets} />
               </div>
             ))}
           </div>
