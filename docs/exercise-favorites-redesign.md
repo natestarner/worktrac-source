@@ -253,3 +253,38 @@ Changes:
   sections. Used by both the Log picker and the routine builder's exercise search.
 - Frontend Vitest (incl. new `exerciseSearch.test.js`) and Playwright e2e (incl. a new
   reordered-query case) green.
+
+## Update — 2026-08-06: search/tags UX on History and PRs, plus a picker-membership bug fix
+
+Added tag display + search/tag filtering to the History and PRs tabs, PR-at-the-time markers
+in History, click-to-filter from a History row or PR row, a "View full history" deep link from
+the exercise detail screen into filtered History, and per-tab ephemeral filter state that
+clears on navigate-away/person-switch. All client-side/frontend — no schema or API changes for
+this part. New: `frontend/src/components/shared/ExerciseFilterBar.jsx`,
+`frontend/src/hooks/useExerciseFilter.js` + `useExerciseTagMap.js`,
+`frontend/src/utils/exerciseFilter.js` + `historyPrFlags.js`.
+
+While testing that feature, found and fixed a real bug in **this decision log's own core
+mechanism**: the "picker = favorites ∪ previously-logged" model above was quietly out of date
+even before this PR — it had already grown two more union terms (noted, per the 2026-07
+persistent-note work) that were never reflected here, and this PR's testing surfaced that
+**tags and custom setup fields never got the same treatment when they shipped**, so
+`PersonExerciseService.listForPerson` was still only checking favorite/note/logged.
+Practical effect: tagging (or adding a custom field to) an exercise you'd never
+favorited/logged/noted applied successfully server-side but could never be displayed anywhere,
+permanently — not a refresh-timing issue, the exercise genuinely never entered the one list
+that carries tags to the frontend. Fixed by adding `!pe.getTags().isEmpty()` and
+`!pe.getCustomFields().isEmpty()` to that union. Full root-cause narrative and the general
+"any future personalization field needs this too" rule: CLAUDE.md's 2026-08-05 Resolved
+Incident entry.
+
+**Corrected statement of the rule** (supersedes "favorites ∪ previously-logged" above and the
+2026-07 note-only update that partially corrected it): a person's Log picker =
+**favorited ∪ noted ∪ tagged ∪ has-a-custom-field ∪ previously-logged**. Any new per-person
+personalization field added to `PersonExercise` in the future must join this union too, or it
+will reproduce this exact bug.
+
+Backend `mvn verify` (186 tests, incl. 4 new picker-membership cases in
+`ExerciseFavoritesTest`), frontend Vitest (558 tests, 61 new/changed), and Playwright e2e (67
+specs, incl. a new `history-filter.spec.ts` and a regression case that deliberately tags
+before ever logging) all green.

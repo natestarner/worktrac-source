@@ -43,13 +43,14 @@ public class PersonExerciseService {
         this.personService = personService;
     }
 
-    // The person's Log picker: every exercise they've favorited, logged a set for, or left
-    // a standing note on, carrying their personalization. Anything else in the catalog is
-    // reachable only via search. A note has to count here the same way favoriting does --
-    // otherwise a note set on an exercise the person hasn't favorited/logged yet is
-    // unreachable through the picker afterward (personExercises.find() would miss it and
-    // fall back to the note-less catalog DTO), making the note effectively invisible right
-    // after saving it.
+    // The person's Log picker: every exercise they've favorited, logged a set for, left a
+    // standing note on, tagged, or added a custom setup field to -- carrying their
+    // personalization. Anything else in the catalog is reachable only via search. Each of
+    // note/tags/customFields has to count here the same way favoriting does -- otherwise that
+    // personalization is set on an exercise the person hasn't favorited/logged yet, and it
+    // becomes unreachable through the picker afterward (personExercises.find() would miss it
+    // and fall back to the personalization-less catalog DTO), making it effectively invisible
+    // right after saving it. See PersonExercise's class comment for the same invariant.
     @Transactional(readOnly = true)
     public List<PersonExerciseDto> listForPerson(Long accountId, Long personId) {
         Person person = personService.requireOwnedPerson(personId, accountId);
@@ -59,7 +60,11 @@ public class PersonExerciseService {
         for (PersonExercise pe : personExerciseRepository.findByPerson_Id(person.getId())) {
             Long exId = pe.getExercise().getId();
             byExerciseId.put(exId, pe);
-            if (pe.isFavorite() || (pe.getNote() != null && !pe.getNote().isBlank())) {
+            boolean personalized = pe.isFavorite()
+                    || (pe.getNote() != null && !pe.getNote().isBlank())
+                    || !pe.getTags().isEmpty()
+                    || !pe.getCustomFields().isEmpty();
+            if (personalized) {
                 pickerIds.add(exId);
             }
         }

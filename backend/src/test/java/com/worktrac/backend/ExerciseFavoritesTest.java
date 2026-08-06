@@ -188,6 +188,44 @@ class ExerciseFavoritesTest extends AbstractIntegrationTest {
     // --- Personalization overlay: custom fields are per-person and don't touch base data ---
 
     @Test
+    void addingACustomFieldAddsToThePickerEvenWithoutFavoritingOrLogging() throws Exception {
+        // Never favorited, never logged, never noted -- only a custom field. Without picker
+        // inclusion, the frontend's personExercises.find() would miss it and fall back to the
+        // catalog DTO for the REST of the screen (e.g. any tags applied alongside it), even
+        // though the custom field's own value is still independently fetchable.
+        assertFalse(contains(pickerList(tokenA, personA1), "Barbell Bench Press"));
+
+        String fieldBody = objectMapper.writeValueAsString(Map.of("name", "Spotter pin"));
+        mockMvc.perform(post("/api/people/" + personA1 + "/exercises/" + benchPressId + "/custom-fields")
+                        .header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(fieldBody))
+                .andExpect(status().isOk());
+
+        JsonNode entry = findByName(pickerList(tokenA, personA1), "Barbell Bench Press");
+        assertFalse(entry.get("isFavorite").asBoolean(), "it shows because it has a custom field, not because it's favorited");
+    }
+
+    @Test
+    void removingTheOnlyCustomFieldRemovesFromPickerWhenThatWasTheOnlyReason() throws Exception {
+        String fieldBody = objectMapper.writeValueAsString(Map.of("name", "Spotter pin"));
+        long fieldId = objectMapper.readTree(mockMvc.perform(post("/api/people/" + personA1 + "/exercises/" + benchPressId + "/custom-fields")
+                        .header("Authorization", "Bearer " + tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(fieldBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        assertTrue(contains(pickerList(tokenA, personA1), "Barbell Bench Press"));
+
+        mockMvc.perform(delete("/api/people/" + personA1 + "/exercises/" + benchPressId + "/custom-fields/" + fieldId)
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isNoContent());
+
+        assertFalse(contains(pickerList(tokenA, personA1), "Barbell Bench Press"),
+                "with the only custom field removed and never favorited/logged/noted/tagged, it drops back out of the picker");
+    }
+
+    @Test
     void customFieldsArePerPersonAndDoNotAffectOtherAccounts() throws Exception {
         favorite(tokenA, personA1, benchPressId);
         String fieldBody = objectMapper.writeValueAsString(Map.of("name", "Spotter pin"));
@@ -231,6 +269,34 @@ class ExerciseFavoritesTest extends AbstractIntegrationTest {
         // The DTO sorts tags case-insensitively by name.
         assertEquals("Chest", tags.get(0).get("name").asText());
         assertEquals("Push", tags.get(1).get("name").asText());
+    }
+
+    @Test
+    void taggingAddsToThePickerEvenWithoutFavoritingOrLogging() throws Exception {
+        // Never favorited, never logged, never noted -- only a tag. This was a real bug (found
+        // 2026-08-05): the picker membership check omitted tags, so a tag applied here saved
+        // fine server-side but could never be displayed anywhere -- personExercises.find()
+        // would keep missing this exercise and fall back to the tag-less catalog DTO, forever
+        // (not just until the next refetch -- there is no refetch that fixes it, since the
+        // exercise never enters the list this reads from).
+        assertFalse(contains(pickerList(tokenA, personA1), "Barbell Bench Press"));
+
+        setTags(tokenA, personA1, benchPressId, List.of("Push"));
+
+        JsonNode entry = findByName(pickerList(tokenA, personA1), "Barbell Bench Press");
+        assertEquals(1, entry.get("tags").size());
+        assertFalse(entry.get("isFavorite").asBoolean(), "it shows because it's tagged, not because it's favorited");
+    }
+
+    @Test
+    void clearingAllTagsRemovesFromPickerWhenThatWasTheOnlyReason() throws Exception {
+        setTags(tokenA, personA1, benchPressId, List.of("Push"));
+        assertTrue(contains(pickerList(tokenA, personA1), "Barbell Bench Press"));
+
+        setTags(tokenA, personA1, benchPressId, List.of());
+
+        assertFalse(contains(pickerList(tokenA, personA1), "Barbell Bench Press"),
+                "with tags cleared and never favorited/logged/noted, it drops back out of the picker");
     }
 
     @Test
