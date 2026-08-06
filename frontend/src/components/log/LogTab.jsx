@@ -390,6 +390,13 @@ export default function LogTab() {
           liveSession={liveSession}
           refetchLiveSession={refetchLiveSession}
           onBack={backToPicker}
+          // Deep-links into History pre-filtered to this exercise. fromLog:true is what tells
+          // HistoryTab's filter bar to show a "Back to {exercise}" link -- selectedExerciseId is
+          // untouched by this navigation, so returning via that link (or the Log tab itself)
+          // lands back on this exact exercise screen.
+          onViewAllHistory={(exerciseId, exerciseName) =>
+            navigate('/app/history', { state: { historyExerciseFilter: { exerciseId, exerciseName, fromLog: true } } })
+          }
         />
       )}
 
