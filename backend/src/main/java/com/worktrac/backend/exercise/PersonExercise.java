@@ -27,10 +27,11 @@ import java.util.List;
 import java.util.Set;
 
 // One person's personalization of a shared exercise, layered on top without ever mutating the
-// exercise row. Holds whether it's favorited (shows in their picker), which of the household's
-// shared tags they've applied to it, any custom setup fields they added, and a standing note
-// (also shows in their picker -- see PersonExerciseService.listForPerson). A person's picker
-// list = these favorites UNION noted exercises UNION every exercise they have a logged set for.
+// exercise row. Holds whether it's favorited, which of the household's shared tags they've
+// applied to it, any custom setup fields they added, and a standing note -- every one of these
+// shows the exercise in their picker (see PersonExerciseService.listForPerson): a person's
+// picker list = favorited UNION noted UNION tagged UNION has-a-custom-field UNION every
+// exercise they have a logged set for.
 @Entity
 @Table(name = "person_exercise")
 public class PersonExercise {

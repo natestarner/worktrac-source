@@ -22,4 +22,27 @@ describe('SetPillRow', () => {
     expect(screen.getByText('145lb×5')).toBeInTheDocument();
     expect(screen.getByText('155lb×3')).toBeInTheDocument();
   });
+
+  it('renders a plain pill for every set when prFlags is omitted (no regression)', () => {
+    render(<SetPillRow sets={[{ id: 1, weight: 135, reps: 5, unit: 'lb' }]} />);
+    expect(screen.queryByTitle('Personal record')).not.toBeInTheDocument();
+  });
+
+  it('marks only the sets flagged in prFlags as a PR, index-aligned to sets', () => {
+    render(
+      <SetPillRow
+        sets={[
+          { id: 1, weight: 135, reps: 5, unit: 'lb' },
+          { id: 2, weight: 155, reps: 5, unit: 'lb' },
+        ]}
+        prFlags={[false, true]}
+      />,
+    );
+    expect(screen.queryByTitle('Personal record')).toBeInTheDocument();
+    const prPill = screen.getByTitle('Personal record');
+    expect(prPill.textContent).toContain('155lb×5');
+    expect(prPill).toHaveAccessibleName('155lb×5, personal record');
+    // The non-PR pill has no title/aria-label of its own.
+    expect(screen.getByText('135lb×5')).not.toHaveAttribute('title');
+  });
 });

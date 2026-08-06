@@ -28,6 +28,7 @@ import ExerciseNoteModal from '../shared/ExerciseNoteModal';
 import Button from '../shared/Button';
 import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
+import { tagChipStyle } from '../shared/tagChipStyle';
 
 export default function ExerciseDetail({
   exercise,
@@ -38,6 +39,11 @@ export default function ExerciseDetail({
   liveSession,
   refetchLiveSession,
   onBack,
+  // Optional: when provided, renders a "View full history" link that hands off to History
+  // filtered to this exercise (see LogTab.jsx / HistoryTab.jsx's deep-link seed). Deliberately a
+  // prop, not a direct useNavigate() call here -- ExerciseDetail takes onBack as a prop rather
+  // than navigating itself, and its test file renders with no MemoryRouter at all.
+  onViewAllHistory,
 }) {
   const { account, people } = useAuth();
   const activePersonName = people.length >= 2 ? people.find((p) => p.id === personId)?.name : null;
@@ -602,6 +608,16 @@ export default function ExerciseDetail({
             </div>
           )}
 
+          {onViewAllHistory && (
+            <button
+              onClick={() => onViewAllHistory(exercise.id, exercise.name)}
+              aria-label={`View full history for ${exercise.name}`}
+              style={viewHistoryLinkStyle}
+            >
+              View full history &rarr;
+            </button>
+          )}
+
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 20, marginBottom: 16 }}>
             <div className="stepper-pair">
               <WeightRepsStepper
@@ -822,14 +838,17 @@ const iconButtonStyle = {
   flexShrink: 0,
 };
 
-const tagChipStyle = {
-  display: 'inline-block',
-  padding: '4px 10px',
-  borderRadius: 999,
-  background: 'var(--color-subtle-bg)',
-  color: 'var(--color-muted)',
-  fontSize: 12,
-  fontWeight: 700,
+const viewHistoryLinkStyle = {
+  display: 'block',
+  width: '100%',
+  textAlign: 'right',
+  background: 'none',
+  border: 'none',
+  color: 'var(--color-accent)',
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: 'pointer',
+  padding: '0 0 12px 0',
 };
 
 // A standing per-person note (persists across every session for this exercise) -- neutral

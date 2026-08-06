@@ -14,6 +14,15 @@ function rank(name, rawTerm, tokens) {
   return null;
 }
 
+// Boolean form of the same ranking used by searchExercises -- for callers (History/PRs' filter
+// bar) that only need "does this name match", not a ranked/sorted list. A blank term matches
+// everything, so a caller can call this unconditionally without special-casing "no filter typed".
+export function matchesSearch(name, term) {
+  const rawTerm = (term || '').trim().toLowerCase();
+  if (!rawTerm) return true;
+  return rank(name, rawTerm, tokensOf(term)) !== null;
+}
+
 // Returns exercises from `catalog` whose name matches every whitespace-separated token in
 // `term` (in any order), ranked best-first: exact-prefix, then contiguous substring, then
 // scattered tokens. Ties break alphabetically. Never caps the result count.
