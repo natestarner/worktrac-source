@@ -54,7 +54,16 @@ failures — subject to the guardrails.
 Ensure the change is summarized where it belongs before shipping:
 - Update the decision log `docs/exercise-favorites-redesign.md` if this change alters a
   recorded decision (append a new dated entry; don't rewrite history).
-- Update `CLAUDE.md` notes if the data model, API contract, or a documented invariant changed.
+- **Document to the narrowest place that fits** — see "Where new documentation goes" in
+  `CLAUDE.md`:
+  - A new/changed **invariant** a future change must not break → the matching
+    `.claude/rules/*.md` (it auto-loads when Claude touches those files).
+  - **Narrative / rationale / design discussion** → `docs/architecture/`.
+  - A **post-mortem** for a bug that was hard to find → a new
+    `docs/incidents/YYYY-MM-DD-slug.md` plus a row in `docs/incidents/README.md`.
+  - Only touch `CLAUDE.md` itself if the change affects a rule that applies to **every** task.
+    **Never paste subsystem detail back into it** — it loads on every request, and it reached
+    84 KB exactly this way.
 - Draft the PR body now (what changed + why + how verified) — reuse it in step 9.
 
 ### 2. Add / update tests (including e2e)
