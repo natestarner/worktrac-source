@@ -79,17 +79,25 @@ Then set in `~/.claude/settings.json` (user scope, so it applies inside every wo
 
 ## Reading container app logs
 
-Logs land in Log Analytics, not on the container app. Get the workspace GUID once:
+Logs land in Log Analytics, not on the container app. The workspace is `worktrac-logs` in
+`worktrac-rg`; its query GUID (`customerId`, which is *not* the resource ID) is:
+
+```
+ed5b43a9-96fa-4194-9fb4-0d4b7932a86a
+```
+
+Re-derive it if the workspace is ever recreated:
 
 ```bash
 az monitor log-analytics workspace show \
-  --resource-group <rg> --workspace-name <workspace> --query customerId -o tsv
+  --resource-group worktrac-rg --workspace-name worktrac-logs --query customerId -o tsv
 ```
 
-Then query with KQL:
+Query with KQL:
 
 ```bash
-az monitor log-analytics query --workspace <customerId> --analytics-query \
+az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a \
+  --analytics-query \
   "ContainerAppConsoleLogs_CL
    | where ContainerAppName_s == 'worktrac-backend-lower'
    | where TimeGenerated > ago(1h)
@@ -101,4 +109,25 @@ az monitor log-analytics query --workspace <customerId> --analytics-query \
 `ContainerAppSystemLogs_CL` holds platform events (revision starts, probe failures, scaling)
 and is the table to check when the app never came up at all.
 
-`az monitor log-analytics query` may need `az extension add --name log-analytics` first.
+Because lower runs `min-replicas=0`, a quiet period shows a `GracefulShutdown` line followed by
+a cold start on the next request — that pattern is normal, not a crash.
+
+### The extension
+
+`az monitor log-analytics query` lives in an extension. Without it the command tries to
+dynamically install and prompts `Do you want to install it now? (Y/n)`, which fails with
+`EOF when reading a line` in a non-interactive shell. Install it explicitly first:
+
+```bash
+az extension add --name log-analytics
+```
+
+It installs into the `AZURE_CONFIG_DIR` above, so it's per-profile — installing it in the
+default profile does not make it available to Claude's, or vice versa.
+
+## Scope note
+
+`Reader` is assigned at **subscription** scope, so it also sees the unrelated
+`interactive-timeline-rg` resources in this subscription. If that ever matters, reassign the
+three roles at `/subscriptions/<sub>/resourceGroups/worktrac-rg` instead — nothing here depends
+on subscription-wide visibility.
