@@ -1,11 +1,37 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { pickExercise } from './support/exercises';
-import { goHardOffline, goOnline, offlineSavedLocallyBanner } from './support/offline';
+import { goHardOffline, goOnline, offlineSavedLocallyBanner, waitForOutboxDrain } from './support/offline';
 import { failNetwork } from './support/faults';
 
 function personPill(page, name: string) {
   return page.locator('.person-pill-bar').getByRole('button', { name: new RegExp(name) });
+}
+
+// Steps the weight to an exact value. Deliberately convergent rather than "click + twice":
+// ExerciseDetail's computePrefillDraft effect re-seeds the draft when the summary/session-sets
+// queries settle, which can land AFTER a fixed burst of clicks and silently stomp them. Re-reading
+// the displayed value each pass makes this immune to that race. '−' is U+2212 (&minus;), not a
+// hyphen, and the stepper's +/- carry no accessible name of their own, so scope by the row label.
+async function setWeight(page, target: number) {
+  const row = page.locator('.stepper-row').filter({ hasText: 'Weight' });
+  const value = row.locator('.stepper-value');
+  await expect
+    .poll(
+      async () => {
+        const current = Number(await value.textContent());
+        if (current === target) return current;
+        await row.getByRole('button', { name: current < target ? '+' : '−', exact: true }).click();
+        return Number(await value.textContent());
+      },
+      { timeout: 15000 },
+    )
+    .toBe(target);
+}
+
+// The flex container holding "Set N", the weight×reps text, and the PR pill.
+function setRow(page, text: string) {
+  return page.getByText(text, { exact: true }).locator('..');
 }
 
 // Mode 3 reads: search, History, and switching the active person all read from the warmed
@@ -176,5 +202,48 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
     // exact: true -- "45lb×8" is also a substring of the Best card's "57 lb  (45lb×8)".
     await expect(page.getByText('45lb×8', { exact: true })).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(/57 lb/)).toBeVisible();
+  });
+
+  // `history` is only ever INVALIDATED after a write, never optimistically written, and
+  // invalidation is a no-op while paused -- so a best derived from it alone freezes for the whole
+  // offline stretch while the set rows keep coming. Since the pill asks "does this TIE the
+  // all-time best", that stale best doesn't merely drop the badge, it moves it onto a later,
+  // lighter set that happens to tie the pre-offline best. Covered as a unit in
+  // frontend/src/utils/exerciseSummaryFromHistory.test.js; this proves the wiring end-to-end.
+  test('a PR logged offline is badged, and a later set that only ties the pre-offline best is not', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Rowan');
+    await logSetAndEndWorkout(page, 'Rowan'); // 45x8 -> comparable 57, the pre-offline best
+
+    await goHardOffline(page);
+    await expect(offlineSavedLocallyBanner(page)).toBeVisible();
+
+    await pickExercise(page, 'Barbell Bench Press');
+    await expect(page.getByText(/57 lb/)).toBeVisible();
+
+    // 55x8 -> comparable 69.7, comfortably past the 57 pre-offline best.
+    await setWeight(page, 55);
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByText('55 lb × 8')).toBeVisible();
+
+    // The offline set is the real PR: badged, and the Best card moves with it even though the
+    // write is still sitting in the outbox.
+    await expect(page.getByTitle('Personal record')).toHaveCount(1);
+    await expect(setRow(page, '55 lb × 8').getByTitle('Personal record')).toBeVisible();
+    await expect(page.getByText(/69.7 lb/)).toBeVisible();
+
+    // Back down to 45x8 -- ties the PRE-offline best (57) but not the real one (69.7), so it must
+    // stay unbadged. Before the fix this row is what got the badge instead.
+    await setWeight(page, 45);
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByText('45 lb × 8')).toBeVisible();
+
+    await expect(page.getByTitle('Personal record')).toHaveCount(1);
+    await expect(setRow(page, '55 lb × 8').getByTitle('Personal record')).toBeVisible();
+
+    // Draining the outbox reconciles to server truth -- the badge must stay put, not flip.
+    await goOnline(page);
+    await waitForOutboxDrain(page);
+    await expect(page.getByTitle('Personal record')).toHaveCount(1);
+    await expect(setRow(page, '55 lb × 8').getByTitle('Personal record')).toBeVisible();
   });
 });
