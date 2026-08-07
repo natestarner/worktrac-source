@@ -14,6 +14,7 @@ import { getSessionExerciseNote } from '../../api/notes';
 import {
   DELETE_SET_MUTATION_KEY,
   FAVORITE_MUTATION_KEY,
+  isUnsyncedWrite,
 } from '../../lib/queryClient';
 import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
 import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
@@ -393,9 +394,7 @@ export default function ExerciseDetail({
       unit: mutation.state.variables?.unit,
       clientLoggedAt: mutation.state.variables?.clientLoggedAt,
     }),
-  }).filter(
-    (m) => m.tempId && m.status !== 'success' && !(m.status === 'error' && m.errorStatus >= 400 && m.errorStatus < 500),
-  );
+  }).filter((m) => m.tempId && isUnsyncedWrite(m));
 
   // "Saving..." is reserved for a write's very first attempt while it's genuinely in flight.
   // Once it's paused (offline), already failed at least once and is retrying, or sitting in a
