@@ -101,6 +101,11 @@ not worktree-scoped:
 - Lower and production SQL Databases are on the Basic tier (switched 2026-07-18 from serverless
   auto-pause, which added cold-start delays). Production Container Apps run `min-replicas=1`
   (always warm); lower still scales to 0, so cold starts are possible there.
+- **Azure is readable, not writable.** A Reader/Monitoring Reader/Log Analytics Reader service
+  principal lets `az` inspect container app status, revisions, and metrics for lower and prod.
+  Container logs come from KQL against the `worktrac-logs` workspace, *not*
+  `az containerapp logs show`. Setup, queries, and what's deliberately out of reach (SQL data,
+  Key Vault secrets): `docs/azure-read-only-access.md`.
 
 ## Pipeline & Setup History
 The full SDLC/DevOps setup guide — the reasoning behind CI/CD design, custom domains, branch
