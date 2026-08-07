@@ -17,7 +17,7 @@ import {
 } from '../../lib/queryClient';
 import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
 import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
-import { deriveExerciseSummaryFromHistory } from '../../utils/exerciseSummaryFromHistory';
+import { deriveExerciseSummaryFromHistory, mergeBestWithLocalSets } from '../../utils/exerciseSummaryFromHistory';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import WeightRepsStepper from './WeightRepsStepper';
 import NumericKeypad from '../shared/NumericKeypad';
@@ -435,6 +435,22 @@ export default function ExerciseDetail({
   // whenever they're non-empty, and [...displaySets].reverse() below shows most-recent-first.
   const displaySets = [...pendingBeforeSession, ...sessionSets];
 
+  // The best that the rows below are actually measured against. `summary.best` -- server or
+  // derived-from-history -- cannot see a set that hasn't synced, so on its own it freezes for a
+  // person's entire offline/lie-fi stretch while displaySets keeps growing, putting the PR pill on
+  // the wrong row (see mergeBestWithLocalSets). displaySets, not sessionSets: while offline
+  // onMutate writes no optimistic sessionSets row at all (that branch needs a real
+  // contextSessionId, which stays null the whole time), so pendingBeforeSession is the only source
+  // for those rows.
+  //
+  // Applied in every connectivity mode rather than gated on isPaused/isError: folding is a max, so
+  // online -- where summary.best already includes every synced set -- it's a no-op except in the
+  // brief window before the post-write refetch lands, where it just makes the badge correct sooner
+  // instead of flickering onto a tying row and back off.
+  // Not memoized on purpose: displaySets is rebuilt every render, so a useMemo keyed on it would
+  // never hit. The fold is O(sets logged for this exercise this session) -- a handful of rows.
+  const effectiveBest = mergeBestWithLocalSets(summary?.best ?? null, displaySets);
+
   function handleLogSet() {
     // Rest timer starts immediately for the "instant" feel; it's a live-only concept.
     if (!editingSessionId) startRestTimer(personId, 90);
@@ -490,10 +506,12 @@ export default function ExerciseDetail({
   }
 
   const lastLabel = summary?.lastSession ? formatDateLabel(toLocalDateStr(summary.lastSession.startedAt)) : '';
-  const bestText = summary?.best ? `${summary.best.est1rm} ${summary.best.unit}  (${summary.best.weight}${summary.best.unit}×${summary.best.reps})` : 'No PR yet';
+  // Both read effectiveBest, not summary.best -- the card and the pills must agree with each other
+  // and with the rows on screen, in every connectivity mode.
+  const bestText = effectiveBest ? `${effectiveBest.est1rm} ${effectiveBest.unit}  (${effectiveBest.weight}${effectiveBest.unit}×${effectiveBest.reps})` : 'No PR yet';
 
-  const bestComparableLb = summary?.best
-    ? comparableLb(summary.best.weight, summary.best.reps, summary.best.unit)
+  const bestComparableLb = effectiveBest
+    ? comparableLb(effectiveBest.weight, effectiveBest.reps, effectiveBest.unit)
     : null;
 
   return (
@@ -693,7 +711,11 @@ export default function ExerciseDetail({
                           {set.weight} {set.unit || 'lb'} &times; {set.reps}
                         </div>
                         {isPR && (
+                          // title/aria-label mirror SetPillRow's PR pill -- "PR" alone is
+                          // ambiguous to a screen reader, and colour alone isn't accessible.
                           <span
+                            title="Personal record"
+                            aria-label="Personal record"
                             style={{
                               background: 'var(--color-success-bg)',
                               color: 'var(--color-success)',

@@ -39,12 +39,37 @@ Three fallbacks close that gap:
    `useMutationState`.
 2. **`derivedSummary`** — the "Last time"/"Best est. 1RM" card, derived from the already-warmed
    `history` cache (`utils/exerciseSummaryFromHistory.js`). Because `history` is unpaginated this
-   is the *same* answer the backend would give, not an approximation.
+   is the *same* answer the backend would give **for everything already synced** — see the next
+   section for the part it cannot see.
 3. **`pendingLiveNote`** — a session note saved before/without a synced session, read from the
    pending `SAVE_NOTE` mutation's variables the same way.
 
 `pendingLiveNote`'s "pick the newest" comparison keys off **`enqueueSeq`, not `submittedAt`** —
 see `.claude/rules/offline-internals.md`.
+
+## Anything derived from `history` must also fold in the unsynced sets on screen
+
+`history` and `exerciseSummary` are only ever **invalidated** after a write, never optimistically
+written (`queryClient.js`) — and invalidation is a no-op while a query is paused or its refetch is
+failing. So a value derived from `history` alone freezes at the moment connectivity dropped, while
+`displaySets` keeps growing for the rest of the offline/lie-fi stretch.
+
+That gap put the PR pill on the **wrong row**, not merely missing: `isPrSet` asks "does this *tie*
+the all-time best", so against a frozen best a genuine offline PR went unbadged while a later,
+lighter set that happened to tie the *pre-offline* best got badged instead. `effectiveBest`
+(`mergeBestWithLocalSets`) closes it, and both the pill and the Best card read it.
+
+- Fold **`displaySets`**, not `sessionSets` — while offline `onMutate` writes no optimistic
+  `sessionSets` row at all (that branch needs a real `contextSessionId`), so `pendingBeforeSession`
+  is the only source for those rows.
+- Applied in **every** connectivity mode, not gated on `isPaused`/`isError`. Folding is a `max`, so
+  online it's a no-op except in the window before the post-write refetch lands.
+- **Known gap:** because it's a `max` it can only ever *raise* the best. An offline **delete** or
+  downward edit of an already-synced set that was the all-time best leaves the best stale-high
+  until the outbox drains. Symptom is a *suppressed* badge, not a misplaced one.
+
+**When adding any other value derived from `history`, ask:** would it be wrong for a person who has
+logged sets that haven't synced yet?
 
 ## Editable temp rows
 

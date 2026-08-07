@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { deriveExerciseSummaryFromHistory } from './exerciseSummaryFromHistory';
+import { deriveExerciseSummaryFromHistory, mergeBestWithLocalSets } from './exerciseSummaryFromHistory';
+import { comparableLb } from './formulas';
 
 const SQUAT = 1;
 const BENCH = 2;
@@ -101,5 +102,91 @@ describe('deriveExerciseSummaryFromHistory', () => {
     const { best } = deriveExerciseSummaryFromHistory(history, SQUAT, null);
 
     expect(best.weight).toBe(135);
+  });
+});
+
+// `history` (and the server summary) only ever get INVALIDATED after a write, never optimistically
+// written -- and invalidation is a no-op while paused/unreachable. So during an offline or lie-fi
+// stretch the derived best freezes while the Log screen keeps showing newly logged sets. These
+// cover the fold that reconciles the two; ExerciseDetail.test.jsx covers it end-to-end.
+describe('mergeBestWithLocalSets', () => {
+  const bestOf = (weight, reps, unit = 'lb') => ({ weight, reps, unit, est1rm: 171, sessionStartedAt: '2026-07-01T12:00:00Z' });
+
+  it('returns the server best untouched when there are no local sets', () => {
+    const best = bestOf(135, 8);
+
+    expect(mergeBestWithLocalSets(best, [])).toBe(best);
+    expect(mergeBestWithLocalSets(best, undefined)).toBe(best);
+  });
+
+  it('replaces the best when a local set beats it', () => {
+    const merged = mergeBestWithLocalSets(bestOf(135, 8), [{ weight: 185, reps: 8, unit: 'lb' }]);
+
+    expect(merged).toEqual({ weight: 185, reps: 8, unit: 'lb', est1rm: 234.3 });
+  });
+
+  it('keeps the server best when the local set is below it', () => {
+    const best = bestOf(225, 8);
+
+    expect(mergeBestWithLocalSets(best, [{ weight: 185, reps: 8, unit: 'lb' }])).toBe(best);
+  });
+
+  it('keeps the server best when a local set exactly ties it (strict >, so the recorded one stands)', () => {
+    const best = bestOf(135, 8);
+
+    expect(mergeBestWithLocalSets(best, [{ weight: 135, reps: 8, unit: 'lb' }])).toBe(best);
+  });
+
+  it('derives a best from local sets alone when the server has none yet', () => {
+    // The first-ever set for an exercise, logged offline -- otherwise the card reads "No PR yet"
+    // for the whole offline stretch.
+    const merged = mergeBestWithLocalSets(null, [{ weight: 100, reps: 5, unit: 'lb' }]);
+
+    expect(merged).toEqual({ weight: 100, reps: 5, unit: 'lb', est1rm: 116.7 });
+  });
+
+  it('picks the strongest of several local sets, not the last one', () => {
+    const merged = mergeBestWithLocalSets(null, [
+      { weight: 135, reps: 8, unit: 'lb' },
+      { weight: 185, reps: 8, unit: 'lb' },
+      { weight: 95, reps: 8, unit: 'lb' },
+    ]);
+
+    expect(merged.weight).toBe(185);
+  });
+
+  it('compares a local kg set against an lb server best on the same comparable scale', () => {
+    // The comparison has to go through comparableLb, never raw weight: 100kg x 5 beats 135lb x 5
+    // comfortably, but a naive 100 < 135 would decide it the wrong way.
+    expect(comparableLb(100, 5, 'kg')).toBeGreaterThan(comparableLb(135, 5, 'lb'));
+
+    const merged = mergeBestWithLocalSets(bestOf(135, 5), [{ weight: 100, reps: 5, unit: 'kg' }]);
+
+    expect(merged).toEqual({ weight: 100, reps: 5, unit: 'kg', est1rm: 116.7 });
+  });
+
+  it('ranks bodyweight sets on reps, not the collapsed Epley estimate', () => {
+    // comparableLb returns reps when weight is 0; without that guard every bodyweight set would
+    // tie every other one at est1rm 0.
+    const merged = mergeBestWithLocalSets({ weight: 0, reps: 10, unit: 'lb', est1rm: 0 }, [{ weight: 0, reps: 12, unit: 'lb' }]);
+
+    expect(merged).toEqual({ weight: 0, reps: 12, unit: 'lb', est1rm: 0 });
+  });
+
+  it('does not let a bodyweight local set displace a loaded server best', () => {
+    const best = bestOf(135, 8); // comparable 171, vs 12 reps bodyweight -> 12
+    expect(mergeBestWithLocalSets(best, [{ weight: 0, reps: 12, unit: 'lb' }])).toBe(best);
+  });
+
+  it('skips malformed local rows rather than throwing or ranking them', () => {
+    const best = bestOf(135, 8);
+
+    expect(mergeBestWithLocalSets(best, [null, undefined, {}, { weight: 185 }, { reps: 8 }])).toBe(best);
+  });
+
+  it('defaults a unitless local set to lb rather than emitting undefined into the card', () => {
+    const merged = mergeBestWithLocalSets(null, [{ weight: 185, reps: 8 }]);
+
+    expect(merged.unit).toBe('lb');
   });
 });
