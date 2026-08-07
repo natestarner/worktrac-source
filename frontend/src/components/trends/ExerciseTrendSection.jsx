@@ -1,9 +1,13 @@
 import { useEffect } from 'react';
 import { usePrs } from '../../hooks/usePrs';
 import { useExerciseTrend } from '../../hooks/useExerciseTrend';
+import { useExerciseRecords } from '../../hooks/useExerciseRecords';
 import { formatDateLabel } from '../../utils/datetime';
 import { convertWeight } from '../../utils/formulas';
 import ExerciseTrendChart from './ExerciseTrendChart';
+import ExerciseRecordsTable from './ExerciseRecordsTable';
+import SegmentedToggle from '../shared/SegmentedToggle';
+import { EXERCISE_METRIC_OPTIONS, metricSpec } from './exerciseMetrics';
 import Skeleton from '../shared/Skeleton';
 
 // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
@@ -17,10 +21,18 @@ const selectStyle = {
   fontWeight: 600,
   background: 'var(--color-surface)',
   color: 'var(--color-text)',
-  marginBottom: 16,
+  marginBottom: 12,
 };
 
-export default function ExerciseTrendSection({ personId, exerciseId, onSelectExercise, weeks, defaultUnit }) {
+export default function ExerciseTrendSection({
+  personId,
+  exerciseId,
+  onSelectExercise,
+  weeks,
+  metric,
+  onMetricChange,
+  defaultUnit,
+}) {
   // Same cached PR list the PR board reads (queryKeys.prs), so the dropdown can't diverge from it.
   const { prs: loggedExercises } = usePrs(personId);
 
@@ -33,14 +45,20 @@ export default function ExerciseTrendSection({ personId, exerciseId, onSelectExe
   }, [loggedExercises, exerciseId]);
 
   const { points, loading } = useExerciseTrend(personId, exerciseId, weeks);
+  // Range-free, so flipping 4wk/12wk/All above doesn't refetch this.
+  const { records, loading: recordsLoading } = useExerciseRecords(personId, exerciseId);
 
   if (loggedExercises.length === 0) {
     return null;
   }
 
+  const spec = metricSpec(metric);
+
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', marginBottom: 12 }}>Exercise progress &middot; est. 1RM</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', marginBottom: 12 }}>
+        Exercise progress &middot; {spec.title}
+      </div>
 
       <select value={exerciseId || ''} onChange={(e) => onSelectExercise(Number(e.target.value))} style={selectStyle}>
         {loggedExercises.map((pr) => (
@@ -50,8 +68,19 @@ export default function ExerciseTrendSection({ personId, exerciseId, onSelectExe
         ))}
       </select>
 
+      {/* `fill` because five pills at intrinsic width overflow a 390px phone -- see SegmentedToggle. */}
+      <div style={{ marginBottom: 12 }}>
+        <SegmentedToggle
+          options={EXERCISE_METRIC_OPTIONS}
+          value={metric}
+          onChange={onMetricChange}
+          ariaLabel="Exercise metric"
+          fill
+        />
+      </div>
+
       {loading && <Skeleton width="100%" height={200} radius={8} />}
-      {!loading && <ExerciseTrendChart points={points} defaultUnit={defaultUnit} />}
+      {!loading && <ExerciseTrendChart points={points} metric={metric} defaultUnit={defaultUnit} />}
 
       {points.length > 0 && (
         <div style={{ marginTop: 12 }}>
@@ -93,6 +122,8 @@ export default function ExerciseTrendSection({ personId, exerciseId, onSelectExe
             ))}
         </div>
       )}
+
+      <ExerciseRecordsTable records={records} loading={recordsLoading} defaultUnit={defaultUnit} />
     </div>
   );
 }

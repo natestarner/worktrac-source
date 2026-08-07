@@ -33,6 +33,17 @@
   --chart-cat-7: #e87ba4;
   --chart-cat-8: #eb6834;
 
+  /* Sequential ramp for the Trends consistency heatmap -- magnitude, not identity, so it's ONE
+     hue (the accent's ~42deg terracotta) stepping light->dark, never the categorical slots above.
+     Validated with the dataviz skill's validateOrdinal: lightness monotone, adjacent dL >= 0.06,
+     and the pale end clears 2:1 against the card surface so an empty day still reads as empty.
+     Dark-mode steps below are re-derived against the dark surface, not flipped. */
+  --chart-heat-0: #eae6df; /* no workout that day */
+  --chart-heat-1: #e2a892;
+  --chart-heat-2: #da8564;
+  --chart-heat-3: #cc6438;
+  --chart-heat-4: #aa4515;
+
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -78,6 +89,12 @@
     --chart-cat-6: #e66767;
     --chart-cat-7: #d55181;
     --chart-cat-8: #d95926;
+
+    --chart-heat-0: #302c26;
+    --chart-heat-1: #784633;
+    --chart-heat-2: #a05435;
+    --chart-heat-3: #c76239;
+    --chart-heat-4: #e27b51;
   }
 }
 

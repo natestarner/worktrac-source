@@ -106,6 +106,21 @@ function requireResolvedSetId(id) {
   return resolved;
 }
 
+// Trends is derived entirely from logged sets, so any set write makes every cached range and every
+// cached per-exercise curve wrong. It was previously left out of these handlers alongside `prs` and
+// `history`, and with staleTime at 60s that meant logging your very first set and opening Trends
+// still showed "No workouts logged yet" for a minute.
+//
+// This is invalidation, not prefetching -- deliberately unlike offlineCacheWarm.js, which skips
+// trends because *warming* them is a high-cost fan-out across every household member. Marking them
+// stale costs nothing: Trends isn't mounted while you're logging, so no refetch fires until the tab
+// is actually opened.
+function invalidateTrends(client, personId) {
+  client.invalidateQueries({ queryKey: queryKeys.trendsForPerson(personId) });
+  client.invalidateQueries({ queryKey: queryKeys.exerciseTrendsForPerson(personId) });
+  client.invalidateQueries({ queryKey: queryKeys.exerciseRecordsForPerson(personId) });
+}
+
 export function registerOfflineMutationDefaults(client, { retry } = {}) {
   client.setMutationDefaults(LOG_SET_MUTATION_KEY, {
     // One shared scope => queued writes replay STRICTLY SERIALLY in enqueue order (hardening #2), so
@@ -151,6 +166,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       }
       client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
       client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+      invalidateTrends(client, vars.personId);
     },
   });
 
@@ -191,6 +207,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, vars.sessionId) });
     client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
     client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+    invalidateTrends(client, vars.personId);
   };
 
   // Edit a set's weight/reps. Also reachable against a set that hasn't synced yet -- correcting a

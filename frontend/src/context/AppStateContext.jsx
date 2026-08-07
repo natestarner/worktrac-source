@@ -25,6 +25,10 @@ const PERSON_DEFAULTS = {
   lastTab: '/app/log', // kept in sync by AppShell as the route changes.
   trendsRangeWeeks: 12,
   trendsExerciseId: null,
+  // Which series the two Trends metric switchers are plotting. Per person like everything else
+  // here: one person drilling into total reps must not retarget someone else's chart.
+  trendsWeeklyMetric: 'volume', // 'volume' | 'sets' | 'reps'
+  trendsExerciseMetric: 'est1rm', // see EXERCISE_METRICS in components/trends/exerciseMetrics.js
 };
 
 const initialState = {
@@ -93,6 +97,10 @@ export function reducer(state, action) {
       return updateActive(state, { trendsRangeWeeks: action.weeks });
     case 'SELECT_TRENDS_EXERCISE':
       return updateActive(state, { trendsExerciseId: action.exerciseId });
+    case 'SET_TRENDS_WEEKLY_METRIC':
+      return updateActive(state, { trendsWeeklyMetric: action.metric });
+    case 'SET_TRENDS_EXERCISE_METRIC':
+      return updateActive(state, { trendsExerciseMetric: action.metric });
     case 'SET_WEIGHT_DRAFT':
       return updateActive(state, { weightDraft: action.value });
     case 'SET_REPS_DRAFT':
@@ -218,6 +226,8 @@ export function AppStateProvider({ children }) {
       setLastTab: (path) => dispatch({ type: 'SET_LAST_TAB', path }),
       setTrendsRange: (weeks) => dispatch({ type: 'SET_TRENDS_RANGE', weeks }),
       selectTrendsExercise: (exerciseId) => dispatch({ type: 'SELECT_TRENDS_EXERCISE', exerciseId }),
+      setTrendsWeeklyMetric: (metric) => dispatch({ type: 'SET_TRENDS_WEEKLY_METRIC', metric }),
+      setTrendsExerciseMetric: (metric) => dispatch({ type: 'SET_TRENDS_EXERCISE_METRIC', metric }),
       setWeightDraft: (value) => dispatch({ type: 'SET_WEIGHT_DRAFT', value }),
       setRepsDraft: (value) => dispatch({ type: 'SET_REPS_DRAFT', value }),
       startRoutine: (routineId, exerciseIds) => dispatch({ type: 'START_ROUTINE', routineId, exerciseIds }),
