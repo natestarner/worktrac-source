@@ -9,10 +9,28 @@ Full narrative: `docs/architecture/testing.md`.
 
 ## Running
 
-- `bash scripts/e2e.sh` runs the suite against **this worktree's own stack**, bringing it up via
-  `scripts/up.sh` first.
+- `bash scripts/e2e.sh` runs the suite against **this worktree's own stack**. It **reuses** that
+  stack when it's already serving, and otherwise brings it up via `scripts/up.sh` — which is
+  **readiness-gated**, so it doesn't return until both ports actually answer (and exits non-zero,
+  dumping the relevant `.dev-logs/` tail, if they don't).
+- **The backend does not hot-reload.** A reused stack still serves the code it booted with, so pass
+  `--restart` (or `E2E_RESTART=1`) after changing backend code. Vite hot-reloads, so frontend edits
+  need nothing.
 - Locally, Playwright auto-detects ~11 workers vs CI's fixed 2, which overwhelms a single local
-  backend. Rerun a failure with `--workers=2` before treating it as real.
+  backend. Rerun a failure with `--workers=2` before treating it as real — and if it still fails,
+  try `--workers=1` before believing it, since a couple of specs are contention-sensitive.
+- **Scattered failures across unrelated specs — especially if `smoke.spec.ts` is among them — mean
+  the stack, not the code.** Check `.dev-logs/frontend.log` for
+  `http proxy error … ECONNREFUSED` (backend wasn't up) and confirm both ports answer before
+  reading anything into the results. `up.sh` used to return before the stack was listening, which
+  produced exactly this signature; the readiness gate above is what closed it.
+- **A dev server that dies mid-run is almost certainly a sibling worktree, not a crash.**
+  `up.sh`/`down.sh` act by port, so two worktrees sharing ports kill each other's stacks — which
+  reads as the Vite dev server silently vanishing with nothing in its log. `worktree-env.sh` now
+  refuses to allocate a port another worktree's `.env.worktree` has claimed and warns on a
+  pre-existing overlap, but **heed that warning** rather than working around it: delete the
+  offending `.env.worktree` and re-run to move onto free ports. `git worktree list` plus a quick
+  scan of each `.env.worktree` shows who owns what.
 - Service-worker-dependent specs (cold boot, reload-while-offline) live in
   `offline-durability.spec.ts` and run **only** via `cd e2e && npm run test:pwa`
   (`playwright.pwa.config.ts`, which builds + previews on port 3000 — needed for local CORS, since
