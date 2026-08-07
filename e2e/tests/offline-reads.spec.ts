@@ -29,9 +29,26 @@ async function setWeight(page, target: number) {
     .toBe(target);
 }
 
-// The flex container holding "Set N", the weight×reps text, and the PR pill.
-function setRow(page, text: string) {
-  return page.getByText(text, { exact: true }).locator('..');
+// Everything below is scoped to the "This session" column and addressed relatively, never by
+// looking a row up from its weight text: the same "45 lb × 8" can legitimately appear on more
+// than one row, which is a strict-mode violation waiting to happen.
+function sessionList(page) {
+  return page.locator('.log-sets-col');
+}
+
+// One per rendered set row -- the count is the stable way to wait for a newly logged set.
+function setRowLabels(page) {
+  return sessionList(page).getByText(/^Set \d+$/);
+}
+
+function prBadges(page) {
+  return sessionList(page).getByTitle('Personal record');
+}
+
+// The flex container holding "Set N", the weight×reps text, and the PR pill -- reached from the
+// badge outward, so "which row is badged" is read off the badge itself.
+function badgeRow(page) {
+  return prBadges(page).locator('..');
 }
 
 // Mode 3 reads: search, History, and switching the active person all read from the warmed
@@ -220,30 +237,40 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
     await pickExercise(page, 'Barbell Bench Press');
     await expect(page.getByText(/57 lb/)).toBeVisible();
 
+    const rows = setRowLabels(page);
+    const badges = prBadges(page);
+    // Deliberately NOT asserted to be 0 here: "This session" can legitimately already carry the
+    // pre-offline 45x8 row (the just-ended session's liveSession snapshot can still be the cached
+    // one when the screen is opened offline). Every assertion below is relative to what's already
+    // there, so the test doesn't care either way.
+    const before = await rows.count();
+
     // 55x8 -> comparable 69.7, comfortably past the 57 pre-offline best.
     await setWeight(page, 55);
     await page.getByRole('button', { name: /Log set/ }).click();
-    await expect(page.getByText('55 lb × 8')).toBeVisible();
+    await expect(rows).toHaveCount(before + 1);
 
     // The offline set is the real PR: badged, and the Best card moves with it even though the
-    // write is still sitting in the outbox.
-    await expect(page.getByTitle('Personal record')).toHaveCount(1);
-    await expect(setRow(page, '55 lb × 8').getByTitle('Personal record')).toBeVisible();
+    // write is still sitting in the outbox. Asserted via the badge's own row rather than by
+    // looking up a row by its weight text -- a 45x8 row can appear more than once on this screen,
+    // and "exactly one badge, on the 55 row" is the property that actually matters.
+    await expect(badges).toHaveCount(1);
+    await expect(badgeRow(page)).toContainText('55 lb × 8');
     await expect(page.getByText(/69.7 lb/)).toBeVisible();
 
     // Back down to 45x8 -- ties the PRE-offline best (57) but not the real one (69.7), so it must
     // stay unbadged. Before the fix this row is what got the badge instead.
     await setWeight(page, 45);
     await page.getByRole('button', { name: /Log set/ }).click();
-    await expect(page.getByText('45 lb × 8')).toBeVisible();
+    await expect(rows).toHaveCount(before + 2);
 
-    await expect(page.getByTitle('Personal record')).toHaveCount(1);
-    await expect(setRow(page, '55 lb × 8').getByTitle('Personal record')).toBeVisible();
+    await expect(badges).toHaveCount(1);
+    await expect(badgeRow(page)).toContainText('55 lb × 8');
 
     // Draining the outbox reconciles to server truth -- the badge must stay put, not flip.
     await goOnline(page);
     await waitForOutboxDrain(page);
-    await expect(page.getByTitle('Personal record')).toHaveCount(1);
-    await expect(setRow(page, '55 lb × 8').getByTitle('Personal record')).toBeVisible();
+    await expect(badges).toHaveCount(1);
+    await expect(badgeRow(page)).toContainText('55 lb × 8');
   });
 });
