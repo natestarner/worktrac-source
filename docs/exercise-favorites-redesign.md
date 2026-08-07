@@ -288,3 +288,30 @@ Backend `mvn verify` (186 tests, incl. 4 new picker-membership cases in
 `ExerciseFavoritesTest`), frontend Vitest (558 tests, 61 new/changed), and Playwright e2e (67
 specs, incl. a new `history-filter.spec.ts` and a regression case that deliberately tags
 before ever logging) all green.
+
+## Update — 2026-08-07: Trends expanded; the category-balance chart stays gone
+
+Trends grew from 3 stat tiles + 2 bar charts + 1 est.-1RM line into rep-max records, a
+per-exercise metric switcher (Est. 1RM / Top weight / Volume / Best set / Reps), a weekly
+Volume/Sets/Reps switcher, a consistency heatmap, and a recent-PRs card. No schema change —
+everything is derived from sets already stored. Full narrative: `docs/architecture/trends.md`;
+invariants: `.claude/rules/trends.md`.
+
+**This does NOT revisit the 2026-07 decision above to remove the "category balance" chart.** That
+chart was dropped because it keyed off the legacy `categories` taxonomy, and because a set can now
+carry multiple tags, which breaks a 100%-stacked framing. Nothing here reinstates it, and the
+`--chart-cat-*` categorical palette in `index.css` remains unused. Its natural successor is a
+muscle-group breakdown (the biggest remaining gap versus Hevy/Boostcamp), which was **deliberately
+scoped out** on 2026-08-07: it needs a `muscle_group` column on `exercises`, and it would
+re-introduce a structured taxonomy that `V33` deliberately dropped in favour of free-text tags.
+That's a decision to revisit on its merits, not a migration to write casually. The other scoped-out
+items — body-weight tracking, workout duration, RPE, and a cross-person household view (which would
+breach per-person isolation) — are recorded with their reasoning in `docs/architecture/trends.md`.
+
+Two pre-existing bugs were fixed along the way: logging a set never invalidated the trends query
+caches (only `prs`/`history`), so with `staleTime` at 60s a first-ever set left Trends reading "No
+workouts logged yet"; and the range-empty state showed onboarding copy to anyone whose *selected
+range* was empty, telling a lapsed user with years of history they had never trained.
+
+Backend `mvn verify` (205 tests), frontend Vitest (615 tests), and Playwright e2e (72 specs, incl.
+a new `trends.spec.ts`) all green.
