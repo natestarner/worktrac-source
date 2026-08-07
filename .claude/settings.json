@@ -15,7 +15,12 @@
     ],
     "deny": [
       "Edit(.github/workflows/codeql.yml)",
-      "Bash(az*)",
+      "Bash(az login*)",
+      "Bash(az logout*)",
+      "Bash(az account set*)",
+      "Bash(az ad *)",
+      "Bash(az role *)",
+      "Bash(az keyvault secret*)",
       "Bash(gh secret*)"
     ]
   }
