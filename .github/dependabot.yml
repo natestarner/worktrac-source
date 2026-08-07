@@ -1,44 +1,100 @@
 version: 2
+
+# Grouping keeps routine bumps to a handful of PRs a week instead of one per package. Major
+# bumps are deliberately left OUT of every group so each lands as its own reviewable PR --
+# except github-actions, where a bad bump fails CI loudly and immediately.
+#
+# Limits are set well above the expected steady-state PR count on purpose. Every ecosystem
+# previously sat AT its limit, which silently blocks Dependabot from opening anything new --
+# including a genuine security advisory.
 updates:
   - package-ecosystem: "maven"
     directory: "/backend"
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     labels:
       - "dependencies"
       - "security"
+    groups:
+      backend-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     labels:
       - "dependencies"
       - "security"
+    groups:
+      # Split so a bump that can reach real users is never bundled with test-only tooling.
+      frontend-runtime:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      frontend-tooling:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "npm"
     directory: "/e2e"
     schedule:
       interval: "monthly"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      e2e-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 5
     labels:
       - "ci"
+    groups:
+      # Majors included: a broken action bumps fails CI immediately and visibly, so there is
+      # nothing gained by reviewing them one at a time.
+      github-actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: "docker"
     directory: "/backend"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 5
     labels:
       - "docker"
+    # backend/Dockerfile pins BOTH the build image (maven:3.9-eclipse-temurin-25) and the
+    # runtime image (eclipse-temurin:25-jre-alpine) to the JDK declared in backend/pom.xml
+    # (<java.version>25</java.version>). Letting Dependabot move either to 26 on its own puts
+    # the toolchain ahead of the project's target -- that is what PR #1 did.
+    #
+    # A Java upgrade is a deliberate, coordinated change: bump pom.xml and both FROM lines
+    # together, in one PR, with the full backend suite run against it.
+    ignore:
+      - dependency-name: "maven"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "eclipse-temurin"
+        update-types:
+          - "version-update:semver-major"
+    groups:
+      docker-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
