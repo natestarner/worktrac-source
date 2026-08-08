@@ -64,9 +64,9 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
 
   const w = (lb) => convertWeight(lb, 'lb', defaultUnit);
 
-  // Every weight-based record is 0 for an exercise never loaded (pull-ups, push-ups) -- a rep-max
-  // table there is a column of zeros pretending to be information. Reps are the real record, so
-  // that's all we show. Mirrors ExerciseRecordsDto.bodyweightOnly / StatsService#comparableLb.
+  // Every weight-based record is 0 for an exercise never loaded (pull-ups, push-ups) -- and an
+  // est. 1RM there is a rep count wearing a costume. Reps are the real record, so that's all we
+  // show. Mirrors ExerciseRecordsDto.bodyweightOnly / StatsService#comparableLb.
   if (records.bodyweightOnly) {
     return (
       <div style={{ marginTop: 8 }}>
@@ -84,18 +84,19 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
 
   return (
     <div style={{ marginTop: 8 }}>
-      <SectionLabel>Rep maxes</SectionLabel>
-      {records.repMaxes.map((rm) => (
-        <Row
-          key={rm.repTarget}
-          label={`${rm.repTarget}+ reps`}
-          value={rm.weightLb === null ? 'Not yet' : `${w(rm.weightLb)} ${defaultUnit} × ${rm.reps}`}
-          date={rm.weightLb === null ? null : rm.date}
-          empty={rm.weightLb === null}
-        />
-      ))}
-
       <SectionLabel>All-time bests</SectionLabel>
+      {/* Epley-estimated, so this legitimately disagrees with "Heaviest weight" below it: a
+          185 lb x 8 estimates to ~234 lb and outranks a 225 lb x 1 single. That disagreement is
+          the reason both rows exist -- the qualifier names the set the estimate came from, so a
+          number that beats your best actual lift doesn't read as a bug. Guarded because the
+          backend sends null when every set is bodyweight. */}
+      {records.bestEst1rm && (
+        <Row
+          label="Best est. 1RM"
+          value={`${w(records.bestEst1rm.valueLb)} ${defaultUnit} (${w(records.bestEst1rm.weightLb)} ${defaultUnit} × ${records.bestEst1rm.reps})`}
+          date={records.bestEst1rm.date}
+        />
+      )}
       <Row
         label="Heaviest weight"
         value={`${w(records.heaviestWeight.valueLb)} ${defaultUnit} × ${records.heaviestWeight.reps}`}

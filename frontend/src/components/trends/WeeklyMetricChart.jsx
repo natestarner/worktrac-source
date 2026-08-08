@@ -18,10 +18,21 @@ export const WEEKLY_METRICS = {
 
 const METRIC_OPTIONS = Object.entries(WEEKLY_METRICS).map(([value, m]) => ({ label: m.label, value }));
 
-function ChartTooltip({ active, payload, metric, defaultUnit }) {
+// Mirrors exerciseMetrics.js's metricSpec. Every read of WEEKLY_METRICS goes through this: an
+// unrecognized metric used to fall back in the chart body but NOT in the tooltip, so a person
+// whose persisted UI state predated this switcher rendered the chart fine and then blanked the
+// whole page the moment they hovered it. See docs/incidents/2026-08-08-trends-hover-blank-page.md.
+export function weeklyMetricSpec(metric) {
+  return WEEKLY_METRICS[metric] || WEEKLY_METRICS.volume;
+}
+
+// Exported for tests only. The chart body around it can't be asserted in jsdom (recharts'
+// ResponsiveContainer has no layout there -- see .claude/rules/trends.md), but the tooltip is
+// plain DOM, and it's where the crash was.
+export function ChartTooltip({ active, payload, metric, defaultUnit }) {
   if (!active || !payload || payload.length === 0) return null;
   const point = payload[0].payload;
-  const spec = WEEKLY_METRICS[metric];
+  const spec = weeklyMetricSpec(metric);
   const value = Math.round(point.metricValue);
   return (
     <div
@@ -43,7 +54,7 @@ function ChartTooltip({ active, payload, metric, defaultUnit }) {
 }
 
 export default function WeeklyMetricChart({ weeks, metric, onMetricChange, defaultUnit }) {
-  const spec = WEEKLY_METRICS[metric] || WEEKLY_METRICS.volume;
+  const spec = weeklyMetricSpec(metric);
   // Only the weight metric converts -- sets and reps are counts, and running them through
   // convertWeight would silently scale them by 2.2 for a kg household.
   const data = weeks.map((w) => ({

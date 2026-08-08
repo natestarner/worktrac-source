@@ -18,7 +18,6 @@ vi.mock('../../hooks/useTrendsOverview', () => ({ useTrendsOverview: vi.fn() }))
 vi.mock('./WeeklyFrequencyChart', () => ({ default: () => <div>weekly-frequency-chart</div> }));
 vi.mock('./WeeklyMetricChart', () => ({ default: () => <div>weekly-metric-chart</div> }));
 vi.mock('./ConsistencyHeatmap', () => ({ default: () => <div>consistency-heatmap</div> }));
-vi.mock('./RecentPrsCard', () => ({ default: () => <div>recent-prs-card</div> }));
 vi.mock('./ExerciseTrendSection', () => ({ default: () => <div>exercise-trend-section</div> }));
 
 const overviewWithActivity = {
@@ -32,7 +31,6 @@ const overviewWithActivity = {
   volumeThisMonthLb: 3000,
   volumeLastMonthLb: 1500,
   workoutDays: [{ date: '2026-06-29', sessionCount: 1, setCount: 9 }],
-  recentPrs: [],
   hasAnyHistory: true,
 };
 
@@ -123,7 +121,6 @@ describe('TrendsTab', () => {
     expect(screen.getByText('consistency-heatmap')).toBeInTheDocument();
     expect(screen.getByText('weekly-frequency-chart')).toBeInTheDocument();
     expect(screen.getByText('weekly-metric-chart')).toBeInTheDocument();
-    expect(screen.getByText('recent-prs-card')).toBeInTheDocument();
     expect(screen.getByText('exercise-trend-section')).toBeInTheDocument();
   });
 

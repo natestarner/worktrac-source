@@ -36,6 +36,19 @@ yes, it needs one of the three above — not a plain `useState` in a shared prov
 Exceptions that are genuinely global one-shot notifications: toasts, the destructive-action
 confirm dialog, the PR celebration overlay.
 
+### Adding a field to `PERSON_DEFAULTS` is a persisted-schema change
+
+`HYDRATE` underlays `PERSON_DEFAULTS` beneath every restored slice
+(`{ ...PERSON_DEFAULTS, ...slice }`) so a field added *after* a slice was persisted hydrates as its
+default rather than `undefined`. **Keep that merge.** Without it, every new field ships an
+`undefined` to every existing user until they happen to touch the control that sets it — which is
+how the Trends weekly-metric switcher blanked the page on hover for anyone who used the app before
+it shipped (`docs/incidents/2026-08-08-trends-hover-blank-page.md`).
+
+The merge does not cover changing what an *existing* field's values mean — that still needs a
+`SCHEMA_VERSION` bump in `appStatePersistence.js`. And test the **upgrade** path (a slice missing
+the new key), not just a fresh profile: a brand-new person never reproduces this class of bug.
+
 ### `lastTab` is the one exception to "always restore where they left off"
 
 A mid-session reload must resume the persisted tab, but an actual login/registration must land

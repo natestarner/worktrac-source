@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { pickExercise, setStepper } from './support/exercises';
 
 // Tags an exercise via its Customize modal, one tag at a time. Submits via the "New tag"
 // input's own Enter handler rather than its "Add" button -- ConfigureExerciseModal has a SECOND
@@ -139,5 +139,88 @@ test.describe('History and PRs: tags, PR markers, and click-to-filter', () => {
     await tagExercise(page, 'Push');
 
     await expect(page.getByText('Push')).toBeVisible();
+  });
+});
+
+// The PRs board absorbed "what got better lately" when the Trends Recent PRs card was removed as
+// redundant, so ordering is now a first-class control here rather than a fixed A-Z list.
+test.describe('PRs board sorting', () => {
+  const boardOrder = async (page) =>
+    page.locator('button').filter({ hasText: /^Barbell / }).allTextContents();
+
+  // Each PR has to land in its OWN session. A PR row is dated by its session's startedAt, so three
+  // exercises logged in one workout share a timestamp exactly and fall through to the name
+  // tiebreak -- which silently turns "most recent" into "A-Z" and makes the test unable to tell
+  // the two sorts apart. Retroactive sessions are the only way to get genuinely distinct dates.
+  async function logPastPr(page, date: string, exercise: string, weight: number, reps: number) {
+    await page.getByRole('link', { name: 'History' }).click();
+    await page.getByRole('button', { name: '+ Log a past workout' }).click();
+
+    const modal = page.getByRole('dialog');
+    await modal.locator('input[type="date"]').fill(date);
+    await modal.locator('input[type="time"]').fill('09:00');
+    await modal.getByRole('button', { name: 'Start adding sets' }).click();
+    await expect(page.getByText('Editing past session')).toBeVisible();
+
+    await pickExercise(page, exercise);
+    await setStepper(page, 'Weight', weight);
+    await setStepper(page, 'Reps', reps);
+    await page.getByRole('button', { name: 'Log set' }).click();
+
+    // Every set here is its exercise's first ever, so the celebration fires even for a
+    // retroactive session (it keys off the server's isPR, not off live-vs-past).
+    const celebration = page.getByText('New PR!');
+    await expect(celebration).toBeVisible();
+    await celebration.click({ force: true });
+    await expect(celebration).toBeHidden();
+
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect(page).toHaveURL(/\/app\/history/);
+  }
+
+  // Dates, names and weights are chosen so all three sorts give DIFFERENT orders -- with the
+  // obvious data two of them coincide and the test would pass while the sort key was ignored.
+  //   dates    Jan 10 / Jan 20 / Feb 01  =>  recent:  Bench, Deadlift, Squat
+  //   names                              =>  A-Z:     Squat("Back"), Bench, Deadlift
+  //   est 1RM  247.5 / 336 / 234.3       =>  1RM:     Deadlift, Squat, Bench
+  test('orders by most recent PR, name, or estimated 1RM', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+
+    await logPastPr(page, '2026-01-10', 'Barbell Back Squat', 225, 3); // 225 * (1 + 3/30) = 247.5
+    await logPastPr(page, '2026-01-20', 'Barbell Deadlift', 315, 2); //   315 * (1 + 2/30) = 336
+    await logPastPr(page, '2026-02-01', 'Barbell Bench Press', 185, 8); // 185 * (1 + 8/30) = 234.3
+
+    await page.getByRole('link', { name: 'PRs' }).click();
+    await expect(page.getByText('Barbell Deadlift')).toBeVisible();
+
+    // Default: newest PR first, which is what the removed Trends card was for.
+    await expect.poll(async () => await boardOrder(page)).toEqual([
+      expect.stringContaining('Barbell Bench Press'),
+      expect.stringContaining('Barbell Deadlift'),
+      expect.stringContaining('Barbell Back Squat'),
+    ]);
+
+    await page.getByLabel('Sort').selectOption('name');
+    await expect.poll(async () => await boardOrder(page)).toEqual([
+      expect.stringContaining('Barbell Back Squat'),
+      expect.stringContaining('Barbell Bench Press'),
+      expect.stringContaining('Barbell Deadlift'),
+    ]);
+
+    // Epley, not raw weight: the 315x2 deadlift leads, and the 185x8 bench places last despite
+    // the squat being the lighter bar.
+    await page.getByLabel('Sort').selectOption('est1rm');
+    await expect.poll(async () => await boardOrder(page)).toEqual([
+      expect.stringContaining('Barbell Deadlift'),
+      expect.stringContaining('Barbell Back Squat'),
+      expect.stringContaining('Barbell Bench Press'),
+    ]);
+
+    // The choice is per-person state, so it has to survive leaving the tab and coming back --
+    // unlike the search/tag filter beside it, which deliberately clears.
+    await page.getByRole('link', { name: 'Log' }).click();
+    await expect(page).toHaveURL(/\/app\/log/);
+    await page.getByRole('link', { name: 'PRs' }).click();
+    await expect(page.getByLabel('Sort')).toHaveValue('est1rm');
   });
 });
