@@ -171,6 +171,53 @@ describe('useSessionEntries', () => {
   });
 });
 
+// Lie-fi: navigator.onLine stays true, so nothing pauses -- the write is really attempted, really
+// fails, and once its retries settle it sits in 'error'. It is still queued, still durable, and
+// flushOutbox restarts it on reconnect, so the Log tab must keep listing it. It used to disappear
+// here (this hook filtered on status === 'pending') while ExerciseDetail still showed the row and
+// the outbox badge still counted it -- three views of one write, disagreeing.
+describe('useSessionEntries keeps writes whose retries have settled', () => {
+  it('still lists an exercise whose set failed against an unreachable server', async () => {
+    const client = newClient();
+    logLiveSet.mockRejectedValue(Object.assign(new Error('network down'), { status: undefined }));
+
+    dispatch(client, LOG_SET_MUTATION_KEY, {
+      mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
+      idempotencyKey: 'liefi-1', clientLoggedAt: 't', tempId: 'temp-liefi-1',
+    });
+
+    const { result } = renderWithClient(client, { personId: 7, serverEntries: [], exercises });
+    await vi.waitFor(() => {
+      const mutation = client.getMutationCache().getAll()[0];
+      expect(mutation.state.status).toBe('error');
+    });
+
+    await vi.waitFor(() => expect(result.current).toHaveLength(1));
+    expect(result.current[0]).toMatchObject({ exerciseId: 1, exerciseName: 'Bench Press' });
+    expect(result.current[0].sets[0]).toMatchObject({ id: 'temp-liefi-1', weight: 135, reps: 5 });
+  });
+
+  it('drops an exercise whose set the server definitively rejected', async () => {
+    // A real 4xx is the server's answer and ExerciseDetail's onError has already rolled the
+    // optimistic row back -- keeping it here would resurrect a set that will never exist.
+    const client = newClient();
+    logLiveSet.mockRejectedValue(Object.assign(new Error('Weight required'), { status: 400 }));
+
+    dispatch(client, LOG_SET_MUTATION_KEY, {
+      mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
+      idempotencyKey: 'rejected-1', clientLoggedAt: 't', tempId: 'temp-rejected-1',
+    });
+
+    const { result } = renderWithClient(client, { personId: 7, serverEntries: [], exercises });
+    await vi.waitFor(() => {
+      const mutation = client.getMutationCache().getAll()[0];
+      expect(mutation.state.status).toBe('error');
+    });
+
+    await vi.waitFor(() => expect(result.current).toEqual([]));
+  });
+});
+
 // The MutationCache emits synchronously from inside notifyManager.batch. A descendant of the
 // component holding this hook can cause an emit during ITS OWN render (mounting a durable-write
 // observer), which lands mid-render for the parent -- so calling useSyncExternalStore's onChange

@@ -1,11 +1,14 @@
 import { useRef, useSyncExternalStore } from 'react';
 import { notifyManager, useQueryClient } from '@tanstack/react-query';
 import { isTempExerciseId } from '../lib/exerciseIdMap';
+import { isUnsyncedWrite } from '../lib/queryClient';
 
-// Every pending (in-flight or paused-offline) logSet/createExercise mutation, for ANY person --
-// the only place an offline-logged set exists before it syncs (see offlineSetEdits.js). `pending`
-// (not just `isPaused`) also covers the brief online in-flight window, so a set never vanishes
-// from the list for the split second between dispatch and the confirmed refetch landing.
+// Every not-yet-synced logSet/createExercise mutation, for ANY person -- the only place an
+// offline-logged set exists before it syncs (see offlineSetEdits.js). Covers the brief online
+// in-flight window too, so a set never vanishes from the list for the split second between
+// dispatch and the confirmed refetch landing. Membership is isUnsyncedWrite (shared with
+// ExerciseDetail), so a write that is paused, retrying, OR sitting in a transient error all count
+// the same -- see the predicate's own comment in lib/queryClient.js.
 //
 // Deliberately NOT filtered by personId here -- this is the useSyncExternalStore snapshot, which
 // is only recomputed when the mutation cache actually changes (see the dirty-flag cache below), not
@@ -20,7 +23,11 @@ function readPendingMutations(queryClient) {
     .getAll()
     .filter((m) => {
       const kind = m.options.mutationKey?.[0];
-      return (kind === 'logSet' || kind === 'createExercise') && m.state.status === 'pending';
+      if (kind !== 'logSet' && kind !== 'createExercise') return false;
+      // isUnsyncedWrite, not `status === 'pending'` -- under lie-fi a write's retries settle into
+      // 'error' while it stays queued and durable, and this list used to silently drop it there
+      // even though ExerciseDetail still showed the row and the outbox badge still counted it.
+      return isUnsyncedWrite({ status: m.state.status, errorStatus: m.state.error?.status });
     });
 }
 

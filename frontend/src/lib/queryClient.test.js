@@ -11,6 +11,7 @@ import {
   registerOfflineMutationDefaults,
   resetQueryCache,
   shouldDehydrateQuery,
+  isUnsyncedWrite,
   shouldRetryWrite,
 } from './queryClient';
 import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './exerciseIdMap';
@@ -481,5 +482,39 @@ describe('flushOutbox / clearOutboxMutations / resetQueryCache (singleton client
       await flushOutbox();
       expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ idempotencyKey: 'token-returns' }));
     });
+  });
+});
+
+// The display counterpart to shouldRetryWrite: which not-yet-synced writes a screen must keep
+// showing. Shared by ExerciseDetail's row list and useSessionEntries' "Session exercises" list so
+// the two can't drift -- they did, and a lie-fi write that exhausted its retries vanished from one
+// while still showing on the other and still counting in the outbox badge.
+describe('isUnsyncedWrite', () => {
+  it('keeps a write paused offline', () => {
+    expect(isUnsyncedWrite({ status: 'pending' })).toBe(true);
+  });
+
+  it('keeps a write whose retries have settled into a transient error', () => {
+    // The lie-fi case: unreachable server, retries exhausted for now, but flushOutbox will restart
+    // it on reconnect and shouldRetryWrite never gives up on a 5xx/statusless failure.
+    expect(isUnsyncedWrite({ status: 'error', errorStatus: 503 })).toBe(true);
+    expect(isUnsyncedWrite({ status: 'error', errorStatus: undefined })).toBe(true);
+  });
+
+  it('drops a write that landed', () => {
+    expect(isUnsyncedWrite({ status: 'success' })).toBe(false);
+  });
+
+  it('drops a write the server definitively rejected', () => {
+    // A real 4xx is the server's answer; onError has already rolled the optimistic row back.
+    expect(isUnsyncedWrite({ status: 'error', errorStatus: 400 })).toBe(false);
+    expect(isUnsyncedWrite({ status: 'error', errorStatus: 422 })).toBe(false);
+  });
+
+  it('agrees with shouldRetryWrite on where the 4xx boundary sits', () => {
+    for (const status of [399, 400, 499, 500]) {
+      const stillRetrying = shouldRetryWrite(1, { status });
+      expect(isUnsyncedWrite({ status: 'error', errorStatus: status })).toBe(stillRetrying);
+    }
   });
 });
