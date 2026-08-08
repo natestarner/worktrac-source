@@ -112,6 +112,29 @@ silent forced reload made cached sections boot data-less. See
 `docs/incidents/2026-07-28-liefi-cached-sections-blank.md`. The cache is cleared on every auth
 change (`resetQueryCache`).
 
+## The persisted cache can resurrect an ended workout
+
+The persister's write is **throttled** (persistQueryClient's 1s default; `persistOptions` sets no
+`throttleTime`), and `swUpdate.js`'s `tryForceUpdate` silently reloads on ordinary navigation
+whenever a new SW build is available — **always true just after a deploy**. A reload landing inside
+that window boots from a snapshot taken *before* the most recent cache change.
+
+For `liveSession` that is not merely stale. Its id feeds `ExerciseDetail`'s `contextSessionId`,
+which gates `sessionSets` — and a restored session carries a **real** id, unlike the deliberate
+`{ id: null }` offline placeholder `contextSessionId` is built to ignore. So a finished workout is
+treated as live and its still-cached sets render under "This session". Online the 10s `staleTime`
+corrects it on the next refetch; **offline nothing can**, so it stands for the whole stretch.
+
+`endedSessions.js` closes this with a **synchronous localStorage marker** written before the cache
+clear (`EndWorkoutConfirmModal`), which `useLiveSession` consults. localStorage specifically
+because the write cannot be beaten by a reload — the same reasoning as `offlineMode.js`'s manual
+pin and `outboxPersistence.js`'s account pointer. The marker is never cleared and needs no
+clearing: it suppresses exactly one id, and session ids are never reused.
+
+**Any other cache entry whose staleness would be actively wrong rather than merely old needs the
+same treatment** — a throttled persist plus a reload you can't predict means the query cache alone
+can't be trusted to carry "this thing is over".
+
 ## Cache warming
 
 `offlineCacheWarm.js` prefetches **every** household member's logging essentials, not just the
