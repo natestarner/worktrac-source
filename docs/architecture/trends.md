@@ -32,6 +32,8 @@ What shipped:
 | Consistency heatmap | "am I showing up?" |
 | Recent PRs | "what got better lately?" |
 
+Two of those five were walked back on 2026-08-08 — see below.
+
 ### Why a switcher instead of more charts
 
 The obvious implementation is one chart per metric. Trends is used on a phone between sets, and
@@ -46,11 +48,53 @@ three lookalike controls that could drift apart was the alternative.)
 
 ### Why "at least N reps" for rep maxes
 
+*(Removed 2026-08-08 — kept here because the reasoning explains what replaced it.)*
+
 The two readings of "5RM" are *best weight at exactly 5 reps* and *best weight at 5 or more*. Exact
 matching leaves most rows blank for anyone who doesn't happen to train at those precise rep counts,
 and it discards real information: a 6-rep set at 185 genuinely proves you can do 5 at 185. Rows
 therefore report the set that actually set the record, so "5+ reps" can legitimately read
 "185 lb × 8" — which looks like a bug until you know the rule, hence the label.
+
+## The 2026-08-08 trim
+
+Two of the 2026-08-07 additions turned out to be duplicating other surfaces rather than adding to
+them.
+
+### Recent PRs was the PRs board, rendered twice
+
+The card's rows and the PRs board's rows carried the same exercise name, the same weight × reps and
+the same date — necessarily, because a PR set in the last 30 days *is* that lift's all-time best.
+The card's genuinely distinct information (the *delta* versus the previous best, and the
+working-up case where one lift PRs several times in a session) was the one thing it never
+rendered.
+
+Two ways out: teach the card to show deltas, or move the question to the board. The board won —
+"what got better lately" is an *ordering* of the PRs you already have, not a second list of them.
+It's now the `recent` option in `utils/prSort.js`, and the default, so the tab opens on exactly
+what the card was for. `buildRecentPrs`, `RecentPrDto` and `TrendsOverviewDto.recentPrs` are gone
+with it.
+
+The general rule this leaves: Trends aggregates over time. If a proposed addition is PR- or
+session-shaped, it probably belongs on PRs or History.
+
+### The "1RM" rep max was not a 1RM
+
+The intent was to drop the 3/5/8/10/12 rep-max rows and keep the 1RM. Reading the code first
+showed the 1-rep row wasn't computing what its label implied: `buildRepMaxes(1)` ranked by **raw
+weight** with `isBetter(weight, reps, …)`, over a candidate pool the `reps >= 1` filter never
+narrowed — the identical comparator and identical pool as `heaviestWeight`. It was an exact
+duplicate of a row two lines below it. Epley appeared nowhere in that table.
+
+So the table was replaced with a single `bestEst1rm` row that *is* Epley-estimated, and therefore
+genuinely disagrees with `heaviestWeight`: 185 × 8 estimates to ~234 lb and outranks a 225 × 1
+single. Both rows now earn their place — one is the most you have lifted, the other the most the
+model thinks you could.
+
+Two constraints it inherits from the weight-0 rule: bodyweight sets are **skipped** rather than
+routed through `comparableLb` (a rep count would outrank pounds on any lightly loaded lift), and
+the row always names the set behind the estimate — a number bigger than anything you actually
+lifted reads as a bug without it.
 
 ### Why the heatmap ignores the range toggle
 

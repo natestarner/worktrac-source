@@ -124,54 +124,57 @@ class ExerciseRecordsControllerTest extends AbstractIntegrationTest {
         return objectMapper.readTree(response);
     }
 
-    private JsonNode repMaxFor(JsonNode records, int target) {
-        for (JsonNode repMax : records.get("repMaxes")) {
-            if (repMax.get("repTarget").asInt() == target) {
-                return repMax;
-            }
-        }
-        throw new AssertionError("no rep max row for target " + target);
-    }
-
     @Test
-    void repMaxesMeanAtLeastNRepsNotExactlyNReps() throws Exception {
+    void bestEst1rmIsEpleyEstimatedSoItDisagreesWithHeaviestWeight() throws Exception {
         long session = createPastSession("2026-01-05T09:00:00Z");
-        logSet(session, 150, 3);
-        logSet(session, 100, 10);
+        logSet(session, 225, 1);  // heaviest on the bar; Epley leaves a single alone -> 225
+        logSet(session, 185, 8);  // 185 * (1 + 8/30) = 234.3
 
         JsonNode records = getRecords();
 
-        // 150x3 is the heaviest set that reached 1 and 3 reps.
-        assertEquals(150.0, repMaxFor(records, 1).get("weightLb").asDouble());
-        assertEquals(150.0, repMaxFor(records, 3).get("weightLb").asDouble());
-        assertEquals(3, repMaxFor(records, 3).get("reps").asInt());
-        // At 5+ reps the 150 set no longer qualifies, so the 100x10 set takes over. Under an
-        // exactly-N reading this row would be empty, which is the whole point of the >= rule.
-        assertEquals(100.0, repMaxFor(records, 5).get("weightLb").asDouble());
-        assertEquals(10, repMaxFor(records, 5).get("reps").asInt(),
-                "the row reports the set that actually set it, so 5+ can read 'x10'");
-        assertEquals(100.0, repMaxFor(records, 10).get("weightLb").asDouble());
+        // This is the entire reason both rows exist. A rep-max style row ranked on raw weight
+        // would just repeat heaviestWeight -- which is exactly what the old "1+ reps" row did.
+        assertEquals(234.3, records.get("bestEst1rm").get("valueLb").asDouble(), 0.05);
+        assertEquals(185.0, records.get("bestEst1rm").get("weightLb").asDouble(), 0.05,
+                "the estimate has to name the set behind it");
+        assertEquals(8, records.get("bestEst1rm").get("reps").asInt());
+        assertEquals(225.0, records.get("heaviestWeight").get("valueLb").asDouble(), 0.05);
     }
 
     @Test
-    void repMaxTargetNoSetEverReachedIsNull() throws Exception {
-        logSet(createPastSession("2026-01-05T09:00:00Z"), 100, 10);
-
-        JsonNode twelve = repMaxFor(getRecords(), 12);
-        assertTrue(twelve.get("weightLb").isNull(), "nothing has ever been done for 12+ reps");
-        assertTrue(twelve.get("reps").isNull());
-        assertTrue(twelve.get("date").isNull());
-    }
-
-    @Test
-    void repMaxBreaksWeightTiesOnTheHigherRepCount() throws Exception {
+    void bestEst1rmBreaksTiesOnTheHeavierActualLoad() throws Exception {
         long session = createPastSession("2026-01-05T09:00:00Z");
-        logSet(session, 185, 5);
-        logSet(session, 185, 8);
+        // Both estimate to 220: 200*(1+3/30) = 220, and 220x1 is left alone at 220.
+        logSet(session, 200, 3);
+        logSet(session, 220, 1);
 
-        JsonNode fiveRepMax = repMaxFor(getRecords(), 5);
-        assertEquals(185.0, fiveRepMax.get("weightLb").asDouble());
-        assertEquals(8, fiveRepMax.get("reps").asInt(), "same weight, more reps is the better record");
+        JsonNode best = getRecords().get("bestEst1rm");
+        assertEquals(220.0, best.get("valueLb").asDouble(), 0.05);
+        assertEquals(220.0, best.get("weightLb").asDouble(), 0.05,
+                "Epley extrapolates further the more reps you feed it, so the heavier real lift wins a tie");
+        assertEquals(1, best.get("reps").asInt());
+    }
+
+    @Test
+    void bestEst1rmIsNullForABodyweightOnlyLift() throws Exception {
+        logSet(createPastSession("2026-01-05T09:00:00Z"), 0, 15);
+
+        JsonNode records = getRecords();
+        assertTrue(records.get("bestEst1rm").isNull(),
+                "Epley collapses to 0 at weight 0 -- a 0 lb estimate is worse than no row");
+        assertTrue(records.get("bodyweightOnly").asBoolean());
+    }
+
+    @Test
+    void bestEst1rmIgnoresBodyweightSetsOnAMixedLift() throws Exception {
+        long session = createPastSession("2026-01-05T09:00:00Z");
+        logSet(session, 0, 30);   // unweighted, must not be considered
+        logSet(session, 45, 5);   // 45 * (1 + 5/30) = 52.5
+
+        JsonNode records = getRecords();
+        assertEquals(52.5, records.get("bestEst1rm").get("valueLb").asDouble(), 0.05);
+        assertEquals(45.0, records.get("bestEst1rm").get("weightLb").asDouble(), 0.05);
+        assertFalse(records.get("bodyweightOnly").asBoolean());
     }
 
     @Test
@@ -185,7 +188,8 @@ class ExerciseRecordsControllerTest extends AbstractIntegrationTest {
         assertEquals(110.2, records.get("heaviestWeight").get("valueLb").asDouble(), 0.05,
                 "the kg set is genuinely heavier once normalized");
         assertEquals("2026-01-05", records.get("heaviestWeight").get("date").asText());
-        assertEquals(110.2, repMaxFor(records, 5).get("weightLb").asDouble(), 0.05);
+        // 50 kg x 5 -> 58.3 kg estimated -> 128.6 lb, still ahead of the 100 lb x 5 set's 116.7.
+        assertEquals(128.6, records.get("bestEst1rm").get("valueLb").asDouble(), 0.1);
     }
 
     @Test
@@ -248,7 +252,7 @@ class ExerciseRecordsControllerTest extends AbstractIntegrationTest {
     void anExerciseWithNoSetsReturnsAnEmptyShellRatherThanFailing() throws Exception {
         JsonNode records = getRecords();
 
-        assertEquals(0, records.get("repMaxes").size());
+        assertTrue(records.get("bestEst1rm").isNull());
         assertTrue(records.get("heaviestWeight").isNull());
         assertTrue(records.get("bestSessionVolume").isNull());
         assertEquals(0, records.get("totalSets").asInt());

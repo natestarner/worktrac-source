@@ -18,7 +18,22 @@ Full narrative: `docs/architecture/trends.md`.
   weight, and don't make it the only available view — that's why `EXERCISE_METRICS` exists.
 - **Whole weight-based readouts must disappear, not render zeros.** `ExerciseRecordsDto`'s
   `bodyweightOnly` (every set at weight 0) switches the records table to a rep-focused view;
-  a rep-max column of `0 lb` is worse than no column. `RecentPrsCard` does the same per row.
+  a column of `0 lb` is worse than no column. `bestEst1rm` is `null` for the same reason, and
+  `sortPrRows` groups bodyweight rows last under the est.-1RM sort rather than letting them all
+  tie at 0.
+
+## `bestEst1rm` and `heaviestWeight` are different records — keep both
+
+Epley rewards reps, so `185 x 8` (~234 lb) outranks a `225 x 1` single. `heaviestWeight` ranks on
+**raw weight**; `bestEst1rm` ranks on the **Epley estimate**, skipping weight-0 sets entirely
+rather than routing them through `comparableLb` (a rep count would beat pounds on any lightly
+loaded lift). The est.-1RM row must always name the set behind it — a number larger than anything
+you actually lifted reads as a bug otherwise.
+
+This replaced the old `repMaxes` table (targets 1/3/5/8/10/12). Note the trap that removal exposed:
+the `1+ reps` row was **not** a 1RM at all — `buildRepMaxes(1)` used the same
+`isBetter(weight, reps, …)` comparator and identical candidate pool as `heaviestWeight`, so it was
+an exact duplicate of it. Don't reintroduce a "1RM" row that ranks on raw weight.
 
 ## Ranges: what follows the toggle and what deliberately doesn't
 
@@ -26,7 +41,6 @@ Full narrative: `docs/architecture/trends.md`.
 |---|---|---|
 | `weeks[]`, exercise trend points | the `weeks` param | what the toggle is for |
 | `workoutDays` (heatmap) | fixed trailing `HEATMAP_DAYS` (182) | 4 columns reads as broken, 260 is unusable on a phone |
-| `recentPrs` | fixed trailing `RECENT_PR_DAYS` (30) | "what got better lately" isn't relative to a viewing window |
 | `hasAnyHistory` | all time | separates a new person from a lapsed one — see below |
 | `/exercises/{id}/records` | all time, **no `weeks` param** | a record isn't relative to the range; keeping it out of the URL *and* the query key is what stops the toggle refetching it |
 
@@ -42,21 +56,35 @@ option is 5 years, not 12 weeks).
 ## PR chronology follows session `startedAt`, never set `created_at`
 
 `findByPerson_IdOrderByCreatedAtAsc` orders by *insert* time, so a workout entered through "Log a
-past workout" sorts as today. `buildRecentPrs` and `getExerciseTrend` both re-sort by the
-session's `startedAt` first. This deliberately can disagree with the PR celebration that fired at
-log time (`WorkoutSetService` compares against the best known at insert time) — don't "fix" that
-into agreement.
+past workout" sorts as today. `getExerciseTrend` re-sorts by the session's `startedAt` first, and
+the PRs board's "Most recent" sort ranks on `best.sessionStartedAt` for the same reason. This
+deliberately can disagree with the PR celebration that fired at log time (`WorkoutSetService`
+compares against the best known at insert time) — don't "fix" that into agreement.
+
+## Trends does not re-render what another tab already owns
+
+Trends' job is **aggregation over time**. A "Recent PRs" card lived here until 2026-08-08 and was
+removed as redundant: every row repeated a PRs-board row — same exercise, same weight × reps, same
+date — because a PR set in the last 30 days *is* that lift's all-time best. The board absorbed the
+question instead, via its "Most recent" sort. Before adding anything PR- or session-shaped here,
+check it isn't already a row on PRs or History.
 
 ## No new full-history loads
 
 `StatsService` already loads every set a person has ever logged on four separate paths, with zero
-SQL-side aggregation. Weekly sets/reps, `workoutDays`, `recentPrs` and `hasAnyHistory` are all
-computed inside `getOverview`'s existing single pass; the per-session metrics inside
-`getExerciseTrend`'s. **A new metric folds into one of those passes or gets a projection/`@Query`
-aggregate — it does not add a fifth `findByPerson_Id...` call.**
+SQL-side aggregation. Weekly sets/reps, `workoutDays` and `hasAnyHistory` are all computed inside
+`getOverview`'s existing single pass; the per-session metrics inside `getExerciseTrend`'s;
+`bestEst1rm` and the other all-time bests inside `getExerciseRecords`'s. **A new metric folds into
+one of those passes or gets a projection/`@Query` aggregate — it does not add a fifth
+`findByPerson_Id...` call.**
 
 ## Charts
 
+- **Never index a metric table directly — always go through its fallback helper**
+  (`metricSpec`, `weeklyMetricSpec`). This includes tooltips and any other lazily-mounted
+  subcomponent: `WeeklyMetricChart`'s tooltip read `WEEKLY_METRICS[metric]` raw while the chart
+  body fell back, so an unrecognized metric rendered fine and then blanked the entire page on
+  hover. See `docs/incidents/2026-08-08-trends-hover-blank-page.md`.
 - **Recharts is mocked out in jsdom** (`ResponsiveContainer` has no layout), so chart components
   are stubbed in `TrendsTab.test.jsx`. `ConsistencyHeatmap` is deliberately **plain DOM** for
   exactly this reason and has real tests — keep it that way, and keep its grid maths in

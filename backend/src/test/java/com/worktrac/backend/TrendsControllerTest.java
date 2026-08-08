@@ -293,54 +293,6 @@ class TrendsControllerTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void recentPrsListsOnlyNewBestsInsideTheThirtyDayWindowNewestFirst() throws Exception {
-        // Well outside the 30-day window: sets the bar, must not be reported.
-        logSet(createPastSession("2025-06-02T09:00:00Z"), 100, 5); // est1rm ~116.7
-        // Inside the window but weaker -- not a PR at all.
-        logSet(createPastSession("2025-12-22T09:00:00Z"), 90, 5); // est1rm ~105
-        // Inside the window and a genuine new best.
-        logSet(createPastSession("2025-12-29T09:00:00Z"), 110, 5); // est1rm ~128.3
-        logSet(createPastSession("2026-01-05T09:00:00Z"), 120, 5); // est1rm ~140
-
-        JsonNode prs = getOverview(12).get("recentPrs");
-        assertEquals(2, prs.size(), "only the two in-window new bests");
-        assertEquals("2026-01-05", prs.get(0).get("date").asText(), "newest first");
-        assertEquals("2025-12-29", prs.get(1).get("date").asText());
-        assertEquals(120.0, prs.get(0).get("weightLb").asDouble());
-        assertEquals(5, prs.get(0).get("reps").asInt());
-        assertEquals(140.0, prs.get(0).get("est1rmLb").asDouble());
-    }
-
-    @Test
-    void recentPrsRankByTrainingDateNotInsertOrder() throws Exception {
-        // Logged FIRST but happened LAST, exactly what "Log a past workout" produces in reverse:
-        // the heavier set is inserted before the lighter one, yet trained after it. Ordering by
-        // created_at would let the light set look like the later PR.
-        logSet(createPastSession("2026-01-05T09:00:00Z"), 150, 5); // est1rm ~175, trained most recently
-        logSet(createPastSession("2025-12-29T09:00:00Z"), 100, 5); // est1rm ~116.7, trained earlier
-
-        JsonNode prs = getOverview(12).get("recentPrs");
-        assertEquals(2, prs.size());
-        assertEquals("2026-01-05", prs.get(0).get("date").asText(), "newest training date first");
-        assertEquals("2025-12-29", prs.get(1).get("date").asText(),
-                "the earlier-trained lighter set is still its exercise's first-ever PR");
-    }
-
-    @Test
-    void recentPrsTrackEachExerciseIndependently() throws Exception {
-        String exercisesResponse = mockMvc.perform(get("/api/exercises").header("Authorization", "Bearer " + token))
-                .andReturn().getResponse().getContentAsString();
-        long otherExerciseId = objectMapper.readTree(exercisesResponse).get(1).get("id").asLong();
-
-        long session = createPastSession("2026-01-05T09:00:00Z");
-        logSet(session, exerciseId, 100, 5);
-        logSet(session, otherExerciseId, 50, 5); // lighter, but a first-ever best for ITS exercise
-
-        JsonNode prs = getOverview(12).get("recentPrs");
-        assertEquals(2, prs.size(), "a lighter lift is still a PR for its own exercise");
-    }
-
-    @Test
     void hasAnyHistorySeparatesANewPersonFromALapsedOne() throws Exception {
         assertFalse(getOverview(4).get("hasAnyHistory").asBoolean(), "nothing logged yet");
 

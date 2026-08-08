@@ -1,15 +1,14 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { pickExercise, logSetAt as logSet } from './support/exercises';
 
 // Covers the Trends analytics expansion: the consistency heatmap, the weekly metric switcher
-// (volume/sets/reps), the per-exercise metric switcher, the all-time records table, and the
-// recent-PRs card.
+// (volume/sets/reps), the per-exercise metric switcher, and the all-time records table.
 //
 // Two locator hazards on this screen, both hit while writing this file:
 //   1. An exercise name now appears in the Log picker, History, the PRs board, the Trends
-//      dropdown, the recent-PRs card AND the exercise section header. Everything here goes
-//      through a role + name or a scoped container, never a bare name lookup.
+//      dropdown AND the exercise section header. Everything here goes through a role + name or
+//      a scoped container, never a bare name lookup.
 //   2. getByText is case-insensitive substring matching, so the records row "Total reps" also
 //      matches the section header "Exercise progress · total reps" once that metric is selected
 //      (same for "Heaviest weight" / "· heaviest weight"). Every records-row lookup passes
@@ -25,50 +24,8 @@ function recordRow(page, label: string) {
   return page.getByText(label, { exact: true }).locator('..');
 }
 
-// Weight/reps are steppers, not inputs. Tapping the value opens NumericKeypad, which is the only
-// practical way to reach an exact number (135 lb is 18 stepper clicks). Wrapped in expect.poll
-// because ExerciseDetail's computePrefillDraft effect re-seeds the draft when the summary /
-// session-sets queries settle, which can land after the keypad closes and stomp the value --
-// the same race offline-reads.spec.ts's setWeight documents.
-async function setStepper(page, label: 'Weight' | 'Reps', target: number) {
-  const row = page.locator('.stepper-row').filter({ hasText: label });
-  const value = row.locator('.stepper-value');
-
-  await expect
-    .poll(
-      async () => {
-        if (Number(await value.textContent()) === target) return target;
-        await value.click();
-        const keypad = page.getByRole('dialog');
-        for (let i = 0; i < 8; i += 1) {
-          await keypad.getByRole('button', { name: '⌫', exact: true }).click();
-        }
-        for (const digit of String(target)) {
-          await keypad.getByRole('button', { name: digit, exact: true }).click();
-        }
-        await keypad.getByRole('button', { name: 'Done', exact: true }).click();
-        return Number(await value.textContent());
-      },
-      { timeout: 20000 },
-    )
-    .toBe(target);
-}
-
-async function logSet(page, weight: number, reps: number) {
-  await setStepper(page, 'Weight', weight);
-  await setStepper(page, 'Reps', reps);
-  await page.getByRole('button', { name: 'Log set' }).click();
-
-  // Each set below is a new best, so the celebration overlay fires every time and must be
-  // dismissed before the next one can be logged.
-  const celebration = page.getByText('New PR!');
-  await expect(celebration).toBeVisible();
-  await celebration.click({ force: true });
-  await expect(celebration).toBeHidden();
-}
-
 test.describe('Trends analytics', () => {
-  test('heatmap, metric switchers, records table and recent PRs all render real data', async ({ page, request }) => {
+  test('heatmap, metric switchers and records table all render real data', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
 
     // 225x1 is the top weight but 185x8 is the better estimated 1RM and the better set volume.
@@ -103,22 +60,21 @@ test.describe('Trends analytics', () => {
     await weeklyMetric.getByRole('button', { name: 'Reps', exact: true }).click();
     await expect(page.getByText('Reps per week', { exact: true })).toBeVisible();
 
-    // --- Recent PRs card ---
-    // All three sets beat the running best, so all three are PRs on the same lift -- which is why
-    // each row's accessible name carries its achievement rather than just the exercise name.
-    await expect(page.getByText('3 PRs')).toBeVisible();
-    await expect(page.getByRole('button', { name: /Barbell Bench Press PR: 225 lb for 1 reps/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Barbell Bench Press PR: 185 lb for 8 reps/ })).toBeVisible();
+    // Hovering this chart used to throw inside the tooltip and unmount the whole app -- the
+    // symptom was the entire page going white, not a broken chart. The unit test in
+    // WeeklyMetricChart.test.jsx covers the actual undefined-metric cause (which needs a
+    // persisted UI slice a fresh registration can't have); this just proves the chart survives
+    // being hovered at all, which nothing covered before.
+    // See docs/incidents/2026-08-08-trends-hover-blank-page.md.
+    await page.locator('.recharts-wrapper').first().hover();
+    await expect(page.getByText('Reps per week', { exact: true })).toBeVisible();
 
     // --- All-time records (asserted before the exercise metric switches, see the header note) ---
-    await expect(page.getByText('Rep maxes')).toBeVisible();
-    // 225x1 sets the 1+ record; at 5+ reps it no longer qualifies and 185x8 takes over. That is
-    // the "at least N reps" rule the whole table hangs on.
-    await expect(recordRow(page, '1+ reps')).toContainText('225 lb × 1');
-    await expect(recordRow(page, '5+ reps')).toContainText('185 lb × 8');
-    await expect(recordRow(page, '12+ reps')).toContainText('Not yet');
-
     await expect(page.getByText('All-time bests')).toBeVisible();
+    // The whole point of keeping an Epley-based row next to the raw one: 185x8 estimates to
+    // ~234 lb and beats the 225x1 single, so these two rows genuinely disagree.
+    await expect(recordRow(page, 'Best est. 1RM')).toContainText('234.3 lb');
+    await expect(recordRow(page, 'Best est. 1RM')).toContainText('185 lb × 8');
     await expect(recordRow(page, 'Heaviest weight')).toContainText('225 lb × 1');
     // 185 x 8 = 1480 beats 135 x 10 = 1350 and 225 x 1 = 225.
     await expect(recordRow(page, 'Best set volume')).toContainText('1480 lb');
@@ -148,16 +104,12 @@ test.describe('Trends analytics', () => {
     await expect(recordRow(page, 'Most reps in a set')).toContainText('12 reps');
     await expect(recordRow(page, 'Total reps')).toContainText('12 reps');
 
-    // The weight-based table is suppressed entirely -- see StatsService#comparableLb for why
-    // every weight record is meaningless at weight 0.
-    await expect(page.getByText('Rep maxes')).toBeHidden();
+    // The weight-based rows are suppressed entirely -- see StatsService#comparableLb for why
+    // every weight record is meaningless at weight 0. That includes the est. 1RM, which Epley
+    // collapses to 0 whatever the rep count.
+    await expect(page.getByText('All-time bests')).toBeHidden();
+    await expect(page.getByText('Best est. 1RM', { exact: true })).toBeHidden();
     await expect(page.getByText('Heaviest weight', { exact: true })).toBeHidden();
-
-    // The PR card reports it in reps, not as a 0 lb lift. (The per-session list further down the
-    // exercise card still renders "0 lb × 12" -- that's the pre-existing shared row format, not
-    // part of this card.)
-    await expect(page.getByText('1 PR')).toBeVisible();
-    await expect(page.getByRole('button', { name: /Chin-up PR: 12 reps/ })).toBeVisible();
   });
 
   test('a lapsed person is told the range is empty, not that they have never trained', async ({ page, request }) => {

@@ -22,6 +22,7 @@ need the "why" or the debugging story.
 | 2026-08-01 | [A verification email vanished with zero trace, and the test-data delete timed out](2026-08-01-email-blind-spots-and-delete-timeout.md) | Registration / async |
 | 2026-08-05 | [Tagging a never-favorited/logged/noted exercise never showed on screen](2026-08-05-exercise-personalization-picker-gap.md) | Data model |
 | 2026-08-08 | [An ended workout came back to life on lower](2026-08-08-ended-workout-resurrected-by-persisted-cache.md) — a silent SW reload beat the throttled persist of the end | Offline / persistence |
+| 2026-08-08 | [Hovering the Trends weekly chart blanked the page](2026-08-08-trends-hover-blank-page.md) — a persisted UI slice predating a new field hydrated as `undefined` | Frontend state / trends |
 
 ## Adding a new incident
 

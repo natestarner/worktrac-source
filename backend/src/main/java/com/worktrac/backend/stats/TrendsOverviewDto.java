@@ -7,8 +7,8 @@ import java.util.List;
 // The weekly points alone can't tell the difference between a brand-new person and one who simply
 // hasn't trained in the last 4 weeks, and those need different empty states.
 //
-// workoutDays and recentPrs both cover their own fixed trailing windows rather than the requested
-// range -- see StatsService#getOverview.
+// workoutDays covers its own fixed trailing window rather than the requested range -- see
+// StatsService#getOverview.
 public record TrendsOverviewDto(
         List<WeeklyPointDto> weeks,
         int currentStreakWeeks,
@@ -17,6 +17,5 @@ public record TrendsOverviewDto(
         BigDecimal volumeThisMonthLb,
         BigDecimal volumeLastMonthLb,
         List<WorkoutDayDto> workoutDays,
-        List<RecentPrDto> recentPrs,
         boolean hasAnyHistory) {
 }

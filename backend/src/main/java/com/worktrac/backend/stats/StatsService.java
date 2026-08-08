@@ -20,7 +20,6 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,14 +38,6 @@ public class StatsService {
     // be 260 columns (unusable on a phone). Six months is 26 columns of 7 day-squares, which fits
     // an iPhone without scrolling.
     private static final int HEATMAP_DAYS = 182;
-
-    // "Recent" PRs, and how many to send. The cap is a transport guard, not a display choice --
-    // someone starting out sets a first-ever PR on every exercise they touch.
-    private static final int RECENT_PR_DAYS = 30;
-    private static final int MAX_RECENT_PRS = 20;
-
-    // Rep targets for the records table, interpreted as "at least this many reps" -- see RepMaxDto.
-    private static final List<Integer> REP_MAX_TARGETS = List.of(1, 3, 5, 8, 10, 12);
 
     private final WorkoutSetRepository workoutSetRepository;
     private final SessionExerciseNoteRepository sessionExerciseNoteRepository;
@@ -274,7 +265,6 @@ public class StatsService {
                 volumeThisMonthLb.setScale(1, RoundingMode.HALF_UP),
                 volumeLastMonthLb.setScale(1, RoundingMode.HALF_UP),
                 buildWorkoutDays(sessionDate, sessionSetCount, today),
-                buildRecentPrs(all, sessionDate, today),
                 !all.isEmpty());
     }
 
@@ -297,46 +287,6 @@ public class StatsService {
         return byDay.entrySet().stream()
                 .map(e -> new WorkoutDayDto(e.getKey(), e.getValue()[0], e.getValue()[1]))
                 .toList();
-    }
-
-    // Replays every set in training-date order, per exercise, and keeps the ones that beat the
-    // running best -- the same rule getExerciseTrend uses, just across all exercises at once.
-    //
-    // Ordering is by the session's startedAt, NOT the set's createdAt, because a workout logged
-    // retroactively through "Log a past workout" is inserted today but happened weeks ago; sorting
-    // by insert order would let it overwrite the running best out of sequence and wrongly demote
-    // the PRs that came after it. One consequence worth knowing: this can disagree with the PR
-    // celebration that fired at log time (WorkoutSetService compares against the best known at
-    // INSERT time), and that is deliberate -- the trend chart already has the same semantics.
-    private List<RecentPrDto> buildRecentPrs(List<WorkoutSet> all, Map<Long, LocalDate> sessionDate, LocalDate today) {
-        LocalDate windowStart = today.minusDays(RECENT_PR_DAYS - 1L);
-        List<WorkoutSet> chronological = all.stream()
-                .sorted(Comparator.comparing((WorkoutSet s) -> s.getSession().getStartedAt())
-                        .thenComparing(WorkoutSet::getCreatedAt))
-                .toList();
-
-        Map<Long, BigDecimal> runningBestByExercise = new HashMap<>();
-        List<RecentPrDto> prs = new ArrayList<>();
-        for (WorkoutSet s : chronological) {
-            Long exerciseId = s.getExercise().getId();
-            BigDecimal comparable = comparableLb(s.getWeight(), s.getReps(), s.getUnit());
-            if (comparable.compareTo(runningBestByExercise.getOrDefault(exerciseId, BigDecimal.ZERO)) <= 0) {
-                continue;
-            }
-            runningBestByExercise.put(exerciseId, comparable);
-
-            // Older PRs still have to advance the running best above, they just aren't reported.
-            LocalDate date = sessionDate.get(s.getSession().getId());
-            if (date.isBefore(windowStart) || date.isAfter(today)) {
-                continue;
-            }
-            BigDecimal est1rmLb = unitConverter.toLb(epleyCalculator.estimate1RM(s.getWeight(), s.getReps()), s.getUnit());
-            prs.add(new RecentPrDto(date, exerciseId, s.getExercise().getName(),
-                    unitConverter.toLb(s.getWeight(), s.getUnit()).setScale(1, RoundingMode.HALF_UP),
-                    s.getReps(),
-                    est1rmLb.setScale(1, RoundingMode.HALF_UP)));
-        }
-        return prs.reversed().stream().limit(MAX_RECENT_PRS).toList();
     }
 
     @Transactional(readOnly = true)
@@ -427,11 +377,13 @@ public class StatsService {
         ZoneId zoneId = resolveZone(zone);
         List<WorkoutSet> all = workoutSetRepository.findByPerson_IdAndExercise_Id(person.getId(), exerciseId);
         if (all.isEmpty()) {
-            return new ExerciseRecordsDto(List.of(), null, null, null, null, 0, 0,
+            return new ExerciseRecordsDto(null, null, null, null, null, 0, 0,
                     BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP), false);
         }
 
         WorkoutSet heaviest = null;
+        WorkoutSet bestEst1rm = null;
+        BigDecimal bestEst1rmLb = null;
         WorkoutSet bestSetVolume = null;
         WorkoutSet mostReps = null;
         int totalReps = 0;
@@ -447,6 +399,19 @@ public class StatsService {
             // Heaviest weight, more reps as the tiebreak.
             if (heaviest == null || isBetter(weightLb, reps(s), lbWeight(heaviest), reps(heaviest))) {
                 heaviest = s;
+            }
+            // Deliberately NOT the same thing as `heaviest`: Epley rewards reps, so 185x8 (~234)
+            // outranks a 225x1 single. Bodyweight sets are skipped rather than run through
+            // comparableLb -- a rep count competing against pounds would win on any set past ~1
+            // rep for a lightly-loaded lift. Ties go to the heavier actual load, since Epley
+            // extrapolates further (and less reliably) the more reps you feed it.
+            if (s.getWeight().compareTo(BigDecimal.ZERO) != 0) {
+                BigDecimal est1rmLb = unitConverter.toLb(
+                        epleyCalculator.estimate1RM(s.getWeight(), s.getReps()), s.getUnit());
+                if (bestEst1rm == null || isBetter(est1rmLb, weightLb, bestEst1rmLb, lbWeight(bestEst1rm))) {
+                    bestEst1rm = s;
+                    bestEst1rmLb = est1rmLb;
+                }
             }
             if (bestSetVolume == null || setVolumeLb.compareTo(setVolumeLb(bestSetVolume)) > 0) {
                 bestSetVolume = s;
@@ -470,7 +435,7 @@ public class StatsService {
                 .orElseThrow();
 
         return new ExerciseRecordsDto(
-                buildRepMaxes(all, zoneId),
+                bestEst1rm == null ? null : toRecordEntry(bestEst1rmLb, bestEst1rm, zoneId),
                 toRecordEntry(lbWeight(heaviest), heaviest, zoneId),
                 toRecordEntry(setVolumeLb(bestSetVolume), bestSetVolume, zoneId),
                 new RecordEntryDto(bestSession.getValue().setScale(1, RoundingMode.HALF_UP), null, null,
@@ -480,28 +445,6 @@ public class StatsService {
                 totalReps,
                 totalVolumeLb.setScale(1, RoundingMode.HALF_UP),
                 bodyweightOnly);
-    }
-
-    // For each target, the heaviest weight ever lifted for AT LEAST that many reps. Ties on weight
-    // go to the higher rep count, so "185 x 8" wins over "185 x 5" under the 5+ target.
-    private List<RepMaxDto> buildRepMaxes(List<WorkoutSet> all, ZoneId zoneId) {
-        List<RepMaxDto> repMaxes = new ArrayList<>();
-        for (int target : REP_MAX_TARGETS) {
-            WorkoutSet best = null;
-            for (WorkoutSet s : all) {
-                if (s.getReps() < target) {
-                    continue;
-                }
-                if (best == null || isBetter(lbWeight(s), reps(s), lbWeight(best), reps(best))) {
-                    best = s;
-                }
-            }
-            repMaxes.add(best == null
-                    ? new RepMaxDto(target, null, null, null)
-                    : new RepMaxDto(target, lbWeight(best).setScale(1, RoundingMode.HALF_UP),
-                            best.getReps(), sessionDate(best, zoneId)));
-        }
-        return repMaxes;
     }
 
     // "Is (value, tiebreak) a better record than the incumbent?" -- strictly greater on value, or

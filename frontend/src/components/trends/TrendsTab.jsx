@@ -6,7 +6,6 @@ import SummaryCards from './SummaryCards';
 import WeeklyFrequencyChart from './WeeklyFrequencyChart';
 import WeeklyMetricChart from './WeeklyMetricChart';
 import ConsistencyHeatmap from './ConsistencyHeatmap';
-import RecentPrsCard from './RecentPrsCard';
 import ExerciseTrendSection from './ExerciseTrendSection';
 import Skeleton from '../shared/Skeleton';
 import RefreshingPill from '../shared/RefreshingPill';
@@ -130,11 +129,6 @@ export default function TrendsTab() {
           metric={trendsWeeklyMetric}
           onMetricChange={setTrendsWeeklyMetric}
           defaultUnit={defaultUnit}
-        />
-        <RecentPrsCard
-          recentPrs={overview.recentPrs}
-          defaultUnit={defaultUnit}
-          onSelectExercise={selectTrendsExercise}
         />
       </div>
 

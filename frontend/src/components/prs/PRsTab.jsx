@@ -7,6 +7,7 @@ import { useExerciseTagMap } from '../../hooks/useExerciseTagMap';
 import { useExerciseFilter } from '../../hooks/useExerciseFilter';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import { collectTagVocabulary, filterPrRows } from '../../utils/exerciseFilter';
+import { PR_SORT_OPTIONS, sortPrRows } from '../../utils/prSort';
 import Skeleton from '../shared/Skeleton';
 import RefreshingPill from '../shared/RefreshingPill';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
@@ -23,7 +24,7 @@ export default function PRsTab() {
 
 function PRsTabContent() {
   const navigate = useNavigate();
-  const { activePersonId } = useAppState();
+  const { activePersonId, prsSort, setPrsSort } = useAppState();
   const { people } = useAuth();
   const { prs, loading, isFetching, updatedAt } = usePrs(activePersonId);
   const { tagsByExerciseId } = useExerciseTagMap(activePersonId);
@@ -35,14 +36,19 @@ function PRsTabContent() {
     () => collectTagVocabulary(tagsByExerciseId, allExerciseIds),
     [tagsByExerciseId, allExerciseIds],
   );
+  // Sort after filtering, not before: the sort is over whatever survived the filter, and sorting
+  // the full list first would be thrown away on every keystroke.
   const filteredPrs = useMemo(
     () =>
-      filterPrRows(
-        prs,
-        { text: filter.text, selectedTagIds: filter.selectedTagIds, exerciseFilter: filter.exerciseFilter },
-        tagsByExerciseId,
+      sortPrRows(
+        filterPrRows(
+          prs,
+          { text: filter.text, selectedTagIds: filter.selectedTagIds, exerciseFilter: filter.exerciseFilter },
+          tagsByExerciseId,
+        ),
+        prsSort,
       ),
-    [prs, filter.text, filter.selectedTagIds, filter.exerciseFilter, tagsByExerciseId],
+    [prs, filter.text, filter.selectedTagIds, filter.exerciseFilter, tagsByExerciseId, prsSort],
   );
 
   // Jumping to History pre-filtered to this exercise reuses the same deep-link machinery as
@@ -58,19 +64,42 @@ function PRsTabContent() {
       <OfflineDataNotice updatedAt={updatedAt} />
 
       {!loading && prs.length > 0 && (
-        <ExerciseFilterBar
-          text={filter.text}
-          onTextChange={filter.setText}
-          tagVocabulary={tagVocabulary}
-          selectedTagIds={filter.selectedTagIds}
-          onToggleTag={filter.toggleTag}
-          exerciseFilter={filter.exerciseFilter}
-          onClearExercise={() => filter.setExerciseFilter(null)}
-          onClearAll={filter.clearAll}
-          isActive={filter.isActive}
-          matchCount={filteredPrs.length}
-          totalCount={prs.length}
-        />
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label htmlFor="prs-sort" style={{ fontSize: 13, color: 'var(--color-muted)', fontWeight: 600 }}>
+              Sort
+            </label>
+            {/* A native select rather than the SegmentedToggle the Trends switchers use: three
+                labels this long don't fit a phone-width segmented control, and sort is a
+                set-and-forget preference rather than something you flick between mid-workout. */}
+            <select
+              id="prs-sort"
+              value={prsSort}
+              onChange={(e) => setPrsSort(e.target.value)}
+              style={sortSelectStyle}
+            >
+              {PR_SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <ExerciseFilterBar
+            text={filter.text}
+            onTextChange={filter.setText}
+            tagVocabulary={tagVocabulary}
+            selectedTagIds={filter.selectedTagIds}
+            onToggleTag={filter.toggleTag}
+            exerciseFilter={filter.exerciseFilter}
+            onClearExercise={() => filter.setExerciseFilter(null)}
+            onClearAll={filter.clearAll}
+            isActive={filter.isActive}
+            matchCount={filteredPrs.length}
+            totalCount={prs.length}
+          />
+        </>
       )}
 
       {loading &&
@@ -152,6 +181,17 @@ function PRsTabContent() {
 }
 
 const emptyStyle = { textAlign: 'center', padding: '60px 20px', color: 'var(--color-faint)', fontSize: 15 };
+
+// 16px avoids iOS Safari's zoom-on-focus, same reason as ExerciseFilterBar's search input.
+const sortSelectStyle = {
+  padding: '8px 10px',
+  border: '1px solid var(--color-border)',
+  borderRadius: 12,
+  background: 'var(--color-surface)',
+  color: 'var(--color-text)',
+  fontSize: 16,
+  fontWeight: 600,
+};
 
 const rowButtonStyle = {
   width: '100%',
