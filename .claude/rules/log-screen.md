@@ -71,6 +71,19 @@ lighter set that happened to tie the *pre-offline* best got badged instead. `eff
 **When adding any other value derived from `history`, ask:** would it be wrong for a person who has
 logged sets that haven't synced yet?
 
+## Three "is this a PR" predicates coexist on purpose — don't unify them
+
+| Predicate | Where | Question it answers |
+|---|---|---|
+| strict `>` vs previous best | `WorkoutSetService#insertSetAndDetectPr` | "did this set beat my best" → the celebration |
+| strict `>` running best | `historyPrFlags.js`, `StatsService#getExerciseTrend` | "was this a PR *when recorded*" → History ★, trend dots |
+| `\|Δ\| < 0.5` tie with best | `formulas.js#isPrSet` | "is this my best" → the Log screen pill |
+
+The Log pill is the odd one out **deliberately**: it marks *"this is your best"*, so a repeat of an
+identical best stays flagged. The visible consequence is that hitting your best three times stars
+one row on History but pills all three on Log. That is intended — **don't "fix" one into another.**
+`historyPrFlags.js`'s header explains why a backend fold was rejected for History's markers.
+
 ## Editable temp rows
 
 `editableTempIds` is what gives a paused/retrying/errored row its Edit and Delete controls

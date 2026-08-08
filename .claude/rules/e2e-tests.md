@@ -24,13 +24,19 @@ Full narrative: `docs/architecture/testing.md`.
   `http proxy error … ECONNREFUSED` (backend wasn't up) and confirm both ports answer before
   reading anything into the results. `up.sh` used to return before the stack was listening, which
   produced exactly this signature; the readiness gate above is what closed it.
-- **A dev server that dies mid-run is almost certainly a sibling worktree, not a crash.**
-  `up.sh`/`down.sh` act by port, so two worktrees sharing ports kill each other's stacks — which
-  reads as the Vite dev server silently vanishing with nothing in its log. `worktree-env.sh` now
-  refuses to allocate a port another worktree's `.env.worktree` has claimed and warns on a
-  pre-existing overlap, but **heed that warning** rather than working around it: delete the
-  offending `.env.worktree` and re-run to move onto free ports. `git worktree list` plus a quick
-  scan of each `.env.worktree` shows who owns what.
+- **A dev server that dies mid-run has two known causes, one fixed and one not.**
+  1. *Fixed:* a sibling worktree. `up.sh`/`down.sh` act by port, so two worktrees sharing ports
+     kill each other's stacks. `worktree-env.sh` now refuses to allocate a port another
+     worktree's `.env.worktree` has claimed and warns on a pre-existing overlap — **heed that
+     warning**: delete the offending `.env.worktree` and re-run to move onto free ports.
+  2. ⚠️ *Unresolved:* even on exclusive ports, Vite still dies partway through a long e2e run
+     started from the same shell invocation as `up.sh` — silently, nothing in its log, backend
+     unaffected. Ruled out: OOM, the dev proxy, a spec killing processes, and sibling worktrees.
+     **Workaround: start the stack and run the tests in separate invocations** (`bash
+     scripts/up.sh`, then `npx playwright test` — not `e2e.sh` in one go), which has been reliable.
+     `setsid` would be the mitigation but is **absent from stock Git-for-Windows bash**, so
+     `up.sh` warns and falls back. A PowerShell `Start-Process` launcher was tried and reverted —
+     it couldn't be shown to start the backend reliably.
 - Service-worker-dependent specs (cold boot, reload-while-offline) live in
   `offline-durability.spec.ts` and run **only** via `cd e2e && npm run test:pwa`
   (`playwright.pwa.config.ts`, which builds + previews on port 3000 — needed for local CORS, since
