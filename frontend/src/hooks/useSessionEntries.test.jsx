@@ -1,5 +1,5 @@
 import { MutationObserver, QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
-import { renderHook } from '@testing-library/react';
+import { render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSessionEntries } from './useSessionEntries';
 import { CREATE_EXERCISE_MUTATION_KEY, LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from '../lib/queryClient';
@@ -168,5 +168,72 @@ describe('useSessionEntries', () => {
     onlineManager.setOnline(true);
     await client.resumePausedMutations();
     await vi.waitFor(() => expect(result.current).toEqual([]));
+  });
+});
+
+// The MutationCache emits synchronously from inside notifyManager.batch. A descendant of the
+// component holding this hook can cause an emit during ITS OWN render (mounting a durable-write
+// observer), which lands mid-render for the parent -- so calling useSyncExternalStore's onChange
+// inline schedules a React update on the parent while a child is rendering. React logs
+// "Cannot update a component (LogTab) while rendering a different component" and recovers with an
+// extra pass, but the same machinery already caused an infinite-render bug once (see the
+// referential-stability comments above and in useOutboxItems.js). notifyManager.schedule is what
+// TanStack's own useMutationState uses to avoid exactly this.
+describe('useSessionEntries mutation-cache notification scheduling', () => {
+  const SETSTATE_IN_RENDER = /while rendering a different component/;
+
+  it('never schedules a parent update from inside a child render', async () => {
+    const client = newClient();
+    logLiveSet.mockImplementation(() => new Promise(() => {})); // stays pending; never settles
+    const seen = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args) => {
+      seen.push(args.map((a) => (typeof a === 'string' ? a : '')).join(' '));
+    });
+
+    try {
+      let dispatched = false;
+      function Child() {
+        // Stand-in for ExerciseDetail/AddEditExerciseModal mounting a durable-write observer during
+        // render: the cache notifies synchronously, inside this child's render pass. Guarded so it
+        // happens exactly once rather than looping.
+        if (!dispatched) {
+          dispatched = true;
+          dispatch(client, LOG_SET_MUTATION_KEY, {
+            mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
+            idempotencyKey: 'notify-1', clientLoggedAt: 't', tempId: 'temp-notify-1',
+          });
+        }
+        return null;
+      }
+      // The child must mount AFTER the parent's useSyncExternalStore subscription is live -- on a
+      // first render nothing is subscribed yet, so no update can be scheduled and the bug can't
+      // show. This mirrors the real shape: LogTab is long-mounted, then selecting an exercise
+      // renders ExerciseDetail beneath it.
+      function Parent({ showChild }) {
+        useSessionEntries({ personId: 7, serverEntries: [], exercises });
+        return showChild ? <Child /> : null;
+      }
+
+      const { rerender } = render(
+        <QueryClientProvider client={client}>
+          <Parent showChild={false} />
+        </QueryClientProvider>,
+      );
+
+      rerender(
+        <QueryClientProvider client={client}>
+          <Parent showChild />
+        </QueryClientProvider>,
+      );
+
+      await vi.waitFor(() => expect(dispatched).toBe(true));
+      // Let the deferred notification flush, so a fix that merely delays the warning rather than
+      // avoiding it would still be caught.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(seen.filter((line) => SETSTATE_IN_RENDER.test(line))).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

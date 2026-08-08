@@ -1,5 +1,5 @@
 import { useRef, useSyncExternalStore } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { notifyManager, useQueryClient } from '@tanstack/react-query';
 import { isTempExerciseId } from '../lib/exerciseIdMap';
 
 // Every pending (in-flight or paused-offline) logSet/createExercise mutation, for ANY person --
@@ -49,7 +49,15 @@ export function useSessionEntries({ personId, serverEntries, exercises }) {
     (onChange) =>
       queryClient.getMutationCache().subscribe(() => {
         cacheRef.current.dirty = true;
-        onChange();
+        // Deferred, never called inline -- the MutationCache emits synchronously from inside
+        // notifyManager.batch, and a descendant of this hook's component mounting a mutation
+        // observer during ITS render makes that emit land mid-render, so calling onChange()
+        // directly schedules a React update on this component while a child is rendering
+        // ("Cannot update a component (LogTab) while rendering a different component").
+        // notifyManager.schedule is exactly what TanStack's own useMutationState does for the
+        // same job -- see @tanstack/react-query's useMutationState.js -- so batching and
+        // test-mode flushing (notifyManager.setScheduler) stay consistent with the library.
+        notifyManager.schedule(onChange);
       }),
     () => {
       if (cacheRef.current.dirty) {
