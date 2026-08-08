@@ -15,6 +15,12 @@ failures — subject to the guardrails.
   **stop and report** with the error, the run/PR links, and what you tried. Never loop forever.
 - **Never force-push. Never bypass branch protection.** Every path to `main` — including any
   automated fix after merge — goes through a PR with `backend-ci` + `frontend-ci` green.
+- **Never run a destructive git command on a dirty tree.** `git reset --hard`, `git checkout -- .`
+  and `git clean -fd` all destroy uncommitted work **permanently** — `git reflog` recovers
+  commits, not edits that were never committed. Run `git status --short` first; if it is not
+  empty, `git commit` or `git stash` before doing anything that moves the branch. This bit a real
+  run on 2026-08-08: three finished fix edits were wiped by a `git reset --hard origin/main` used
+  to re-point the worktree after a squash merge — see step 12's recipe for what to do instead.
 - **Code failures → auto-fix. Infra/secret/config failures → stop and report** (e.g. Azure
   auth, missing GitHub secret, container-app not found, GHCR pull creds). You cannot fix those.
 - Operate on the **current branch only**. Confirm you are in the intended worktree/branch and
@@ -187,6 +193,28 @@ writing any fix:
    an earlier merge is not yours to fix here — if it's still red after that earlier merge's own
    fix should have landed, report it rather than fixing it yourself under this invocation.
 
+   **Starting that fix branch — the exact sequence, because the obvious move is wrong.** Your
+   worktree is still on the branch that was just *squash*-merged, so its commits are not
+   ancestors of `main` even though their content is. `git log origin/main..HEAD` therefore looks
+   like unmerged work, and `git status` may be dirty if you started editing before re-branching.
+   Do this:
+
+   ```bash
+   git status --short                        # MUST be empty -- commit or `git stash` first
+   git fetch origin main
+   git checkout -b <fix-branch> origin/main  # safe: no-op on the tree when content already matches
+   ```
+
+   **Do not use `git reset --hard origin/main` for this.** It is the move that suggests itself
+   (the branch "looks behind"), it is not needed — `checkout -b` from a clean tree does the whole
+   job — and it silently and permanently destroys uncommitted edits. Sequence matters: re-branch
+   **first**, then write the fix. If you already wrote the fix, commit or stash it before
+   re-branching, then `git cherry-pick`/`git stash pop` onto the new branch.
+
+   Verifying a squash-merged branch really is merged (before deleting it or removing the
+   worktree): `git diff origin/main --stat` being empty is the check that works — `git log
+   origin/main..HEAD` and `git branch -d` both report false positives after a squash merge.
+
 If the failure is infra/secret/config rather than code, stop and report regardless of
 attribution — you can't fix those either way.
 
@@ -202,3 +230,13 @@ attribution — you can't fix those either way.
   from step 3.4 is still holding a file handle open in the worktree — find the orphaned
   `java`/`node` process rooted at the worktree's path (e.g. inspect running processes'
   command lines) and kill it before retrying the removal.
+- **`ExitWorktree`/`git worktree remove` routinely half-succeeds on Windows**: it unregisters the
+  worktree (so `git worktree list` looks clean and a retry says *"is not a working tree"*) while
+  leaving the directory — and its ~180 MB of `node_modules` — on disk. Always confirm with
+  `ls .claude/worktrees/`, and `rm -rf` the leftover directory if it's still there.
+- `ExitWorktree` may also refuse with *"has N commits"* and name the branch by its **original**
+  name if you renamed it in step 6. That count is the squash-merge false positive above — verify
+  with `git diff origin/main --stat` (empty = merged), then pass `discard_changes: true`.
+- Local branches from this run won't delete with `git branch -d` after a squash merge for the same
+  reason; use `git branch -D` once the diff check confirms they're merged. Leave any branch you
+  did not create alone — a sibling session may be mid-task on it.
