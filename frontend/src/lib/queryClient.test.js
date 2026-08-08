@@ -97,6 +97,31 @@ describe('shouldDehydrateQuery (lie-fi persisted-cache gap)', () => {
 
     expect(freshClientAfterReload.getQueryData(key)).toEqual(['workout-A', 'workout-B']);
   });
+
+  // Why offlineCacheWarm needs `refreshAfterRestore` (issue #146). Restoring preserves
+  // dataUpdatedAt, so a rehydrated entry can be simultaneously WRONG (the persister's 1s throttle
+  // never wrote the last change) and FRESH (its timestamp is seconds old). Freshness then
+  // suppresses the very refetch that would repair it. This is a characterization test: it still
+  // passes after the fix, because the fix is in the warm rather than in staleness itself.
+  it('a restored entry is treated as fresh, so staleness alone will not repair a snapshot the persister missed', async () => {
+    const key = queryKeys.routines(7);
+    const appDefaults = { defaultOptions: queryClient.getDefaultOptions() };
+
+    // offlineCacheWarm at login, before any routine exists.
+    const client = new QueryClient(appDefaults);
+    await client.fetchQuery({ queryKey: key, queryFn: () => Promise.resolve([]) });
+
+    // The persister's throttled tick captures the empty list...
+    const persistedBeforeCreate = dehydrate(client, persistOptions.dehydrateOptions);
+    // ...then a routine is created, and a reload lands before the next tick.
+    const afterReload = new QueryClient(appDefaults);
+    hydrate(afterReload, persistedBeforeCreate);
+
+    expect(afterReload.getQueryData(key)).toEqual([]);
+    const restored = afterReload.getQueryCache().find({ queryKey: key });
+    expect(restored.isStaleByTime(60 * 1000)).toBe(false); // fresh -> nothing refetches it
+    expect(restored.isStaleByTime(0)).toBe(true); // control: the window really is time-bounded
+  });
 });
 
 describe('registerOfflineMutationDefaults dispatches to the right endpoint', () => {

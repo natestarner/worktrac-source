@@ -23,6 +23,7 @@ need the "why" or the debugging story.
 | 2026-08-05 | [Tagging a never-favorited/logged/noted exercise never showed on screen](2026-08-05-exercise-personalization-picker-gap.md) | Data model |
 | 2026-08-08 | [An ended workout came back to life on lower](2026-08-08-ended-workout-resurrected-by-persisted-cache.md) — a silent SW reload beat the throttled persist of the end | Offline / persistence |
 | 2026-08-08 | [Hovering the Trends weekly chart blanked the page](2026-08-08-trends-hover-blank-page.md) — a persisted UI slice predating a new field hydrated as `undefined` | Frontend state / trends |
+| 2026-08-08 | [A restored cache entry looked "freshly checked", so nothing refetched it](2026-08-08-restored-cache-looks-fresh.md) — a routine created just before a reload stayed missing for minutes | Offline / persistence |
 
 ## Adding a new incident
 
