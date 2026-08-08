@@ -55,4 +55,30 @@ fi
 cd "$REPO_ROOT/e2e"
 [ -d node_modules ] || npm install
 
-E2E_BASE_URL="http://localhost:${FRONTEND_PORT}" npx playwright test "$@"
+# `|| rc=$?` so a normal test failure doesn't skip the stack check below -- that check is most
+# valuable precisely when the run failed.
+rc=0
+E2E_BASE_URL="http://localhost:${FRONTEND_PORT}" npx playwright test "$@" || rc=$?
+
+# Did the stack outlive the run? A dev server dying mid-suite shows up as scattered failures across
+# unrelated specs -- `smoke.spec.ts` among them -- which reads exactly like a code regression and
+# has cost real time being chased as one. Say it plainly instead, and point at the exit line up.sh
+# records so the next question ("did it exit or was it killed?") is already answered.
+if [ -n "${BACKEND_PORT:-}" ]; then
+  for pair in "backend:$BACKEND_PORT:/actuator/health" "frontend:$FRONTEND_PORT:/"; do
+    name="${pair%%:*}"; rest="${pair#*:}"; port="${rest%%:*}"; path="${rest#*:}"
+    if ! curl -sf -o /dev/null --max-time 5 "http://localhost:${port}${path}"; then
+      echo "" >&2
+      echo "⚠️  The $name died during this run (:$port no longer answers)." >&2
+      echo "   Test results above are NOT trustworthy -- specs after it went down failed for that" >&2
+      echo "   reason, not because of your change. Check $REPO_ROOT/.dev-logs/$name.log:" >&2
+      echo "     an '[[$name exited rc=...]]' line means it exited on its own (rc says why);" >&2
+      echo "     no such line means something killed it (a sibling worktree's down.sh is the" >&2
+      echo "     usual suspect -- see .claude/rules/e2e-tests.md)." >&2
+      grep -a "\[\[$name exited" "$REPO_ROOT/.dev-logs/$name.log" 2>/dev/null >&2 || true
+      rc=1
+    fi
+  done
+fi
+
+exit "$rc"
