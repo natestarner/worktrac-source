@@ -315,3 +315,46 @@ range* was empty, telling a lapsed user with years of history they had never tra
 
 Backend `mvn verify` (205 tests), frontend Vitest (615 tests), and Playwright e2e (72 specs, incl.
 a new `trends.spec.ts`) all green.
+
+## Update — 2026-08-08: two of yesterday's Trends additions walked back; PRs board gets a sort
+
+The 2026-08-07 entry above added five things to Trends. Two of them turned out to be duplicating
+surfaces that already existed, and are now removed. That entry stands as written — this is what
+changed since, not a correction of it.
+
+**Recent PRs is gone.** Its rows repeated the PRs board row-for-row: same exercise, same
+weight × reps, same date. That wasn't a rendering accident — a PR set in the last 30 days *is*
+that lift's all-time best, so the two lists are the same rows by construction. The card's one
+genuinely distinct piece of information, the delta versus the previous best, was never displayed.
+Rather than teach it to show deltas, the question moved to the board as an ordering: "what got
+better lately" is a *sort* of the PRs you already have, not a second list of them. `buildRecentPrs`,
+`RecentPrDto` and `TrendsOverviewDto.recentPrs` went with it.
+
+**The rep-max table is gone, replaced by one Epley-based "Best est. 1RM" row.** The intent was to
+keep just the 1RM and drop 3/5/8/10/12. Reading the code first showed the "1+ reps" row wasn't a
+1RM at all: `buildRepMaxes(1)` ranked on **raw weight** using the same `isBetter(weight, reps, …)`
+comparator over a candidate pool its `reps >= 1` filter never narrowed — byte-for-byte the same
+record as `heaviestWeight` two rows below it. Epley appeared nowhere in that table. The replacement
+row genuinely disagrees with `heaviestWeight` (185 × 8 → ~234 lb beats a 225 × 1 single), skips
+weight-0 sets rather than routing them through `comparableLb`, and always names the set behind the
+estimate so a number above your best actual lift doesn't read as a bug.
+
+**The PRs board is now sortable** — Most recent (default), Name A–Z, Best est. 1RM — stored per
+person in `AppStateContext` alongside the Trends metric switchers, so it survives a person switch.
+That is deliberately different from the *filter* beside it (`useExerciseFilter`), which is local
+state and clears on navigate-away by design: a sort is a standing preference, a filter is not.
+Sorting by est. 1RM normalizes to lb before ranking (raw `est1rm` arrives in each set's own unit, so
+a mixed-unit history would compare 100 kg against 200 lb numerically) and groups bodyweight lifts
+last instead of letting them all tie at 0.
+
+One behaviour worth knowing: "Most recent" orders by the PR's **session** `startedAt`, so several
+PRs set in the same workout tie exactly and fall through to a name tiebreak. That matches how the
+row itself is dated and keeps the order deterministic; it is not a bug.
+
+Also fixed here: hovering the weekly volume chart blanked the entire page for anyone whose persisted
+UI state predated the 2026-08-07 metric switcher. Full post-mortem in
+`docs/incidents/2026-08-08-trends-hover-blank-page.md` — the general fix (`HYDRATE` now underlays
+`PERSON_DEFAULTS`) matters more than the chart fix, because without it every future field added to
+`PERSON_DEFAULTS` carries the same latent crash for existing users.
+
+Backend `mvn verify` (203 tests), frontend Vitest (641 tests), and Playwright e2e (74 specs) green.
