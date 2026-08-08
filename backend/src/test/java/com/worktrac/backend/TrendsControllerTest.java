@@ -101,7 +101,11 @@ class TrendsControllerTest extends AbstractIntegrationTest {
     }
 
     private void logSet(long sessionId, double weight, int reps) throws Exception {
-        String body = objectMapper.writeValueAsString(Map.of("exerciseId", exerciseId, "weight", weight, "reps", reps));
+        logSet(sessionId, exerciseId, weight, reps);
+    }
+
+    private void logSet(long sessionId, long targetExerciseId, double weight, int reps) throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of("exerciseId", targetExerciseId, "weight", weight, "reps", reps));
         mockMvc.perform(post("/api/sessions/" + sessionId + "/sets")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -235,5 +239,160 @@ class TrendsControllerTest extends AbstractIntegrationTest {
         assertEquals("2026-01-05", weeks.get(weeks.size() - 1).get("weekStart").asText(),
                 "the week containing the session's local calendar day");
         assertEquals(1, overview.get("workoutsThisWeek").asInt());
+    }
+
+    @Test
+    void overviewCountsSetsAndRepsPerWeek() throws Exception {
+        long thisWeek = createPastSession("2026-01-05T09:00:00Z");
+        logSet(thisWeek, 100, 10);
+        logSet(thisWeek, 100, 8);
+        logSet(thisWeek, 90, 6);
+        logSet(createPastSession("2025-12-29T09:00:00Z"), 100, 5); // previous week
+
+        JsonNode weeks = getOverview(4).get("weeks");
+        JsonNode currentWeek = weeks.get(weeks.size() - 1);
+        JsonNode previousWeek = weeks.get(weeks.size() - 2);
+
+        assertEquals(3, currentWeek.get("totalSets").asInt());
+        assertEquals(24, currentWeek.get("totalReps").asInt());
+        assertEquals(1, previousWeek.get("totalSets").asInt());
+        assertEquals(5, previousWeek.get("totalReps").asInt());
+    }
+
+    @Test
+    void workoutDaysCoverTheFixedHeatmapWindowRegardlessOfTheRequestedRange() throws Exception {
+        long today = createPastSession("2026-01-05T09:00:00Z");
+        logSet(today, 100, 5);
+        logSet(today, 100, 5);
+        // ~3 months back: outside a 4-week range, but inside the fixed 182-day heatmap window.
+        logSet(createPastSession("2025-10-06T09:00:00Z"), 100, 5);
+        // ~11 months back: outside the heatmap window entirely.
+        logSet(createPastSession("2025-02-03T09:00:00Z"), 100, 5);
+
+        JsonNode days = getOverview(4).get("workoutDays");
+        assertEquals(2, days.size(), "the heatmap window is independent of the weeks param");
+        assertEquals("2025-10-06", days.get(0).get("date").asText(), "ascending by date");
+        assertEquals("2026-01-05", days.get(1).get("date").asText());
+        assertEquals(1, days.get(1).get("sessionCount").asInt());
+        assertEquals(2, days.get(1).get("setCount").asInt(), "setCount drives the square's intensity");
+    }
+
+    @Test
+    void workoutDaysBucketByTheRequestedZoneNotServerUtc() throws Exception {
+        logSet(createPastSession("2026-01-06T04:30:00Z"), 100, 5); // 2026-01-05 23:30 in New York
+
+        String response = mockMvc.perform(get("/api/people/" + personId
+                        + "/trends/overview?weeks=4&zone=America/New_York")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode days = objectMapper.readTree(response).get("workoutDays");
+
+        assertEquals(1, days.size());
+        assertEquals("2026-01-05", days.get(0).get("date").asText());
+    }
+
+    @Test
+    void recentPrsListsOnlyNewBestsInsideTheThirtyDayWindowNewestFirst() throws Exception {
+        // Well outside the 30-day window: sets the bar, must not be reported.
+        logSet(createPastSession("2025-06-02T09:00:00Z"), 100, 5); // est1rm ~116.7
+        // Inside the window but weaker -- not a PR at all.
+        logSet(createPastSession("2025-12-22T09:00:00Z"), 90, 5); // est1rm ~105
+        // Inside the window and a genuine new best.
+        logSet(createPastSession("2025-12-29T09:00:00Z"), 110, 5); // est1rm ~128.3
+        logSet(createPastSession("2026-01-05T09:00:00Z"), 120, 5); // est1rm ~140
+
+        JsonNode prs = getOverview(12).get("recentPrs");
+        assertEquals(2, prs.size(), "only the two in-window new bests");
+        assertEquals("2026-01-05", prs.get(0).get("date").asText(), "newest first");
+        assertEquals("2025-12-29", prs.get(1).get("date").asText());
+        assertEquals(120.0, prs.get(0).get("weightLb").asDouble());
+        assertEquals(5, prs.get(0).get("reps").asInt());
+        assertEquals(140.0, prs.get(0).get("est1rmLb").asDouble());
+    }
+
+    @Test
+    void recentPrsRankByTrainingDateNotInsertOrder() throws Exception {
+        // Logged FIRST but happened LAST, exactly what "Log a past workout" produces in reverse:
+        // the heavier set is inserted before the lighter one, yet trained after it. Ordering by
+        // created_at would let the light set look like the later PR.
+        logSet(createPastSession("2026-01-05T09:00:00Z"), 150, 5); // est1rm ~175, trained most recently
+        logSet(createPastSession("2025-12-29T09:00:00Z"), 100, 5); // est1rm ~116.7, trained earlier
+
+        JsonNode prs = getOverview(12).get("recentPrs");
+        assertEquals(2, prs.size());
+        assertEquals("2026-01-05", prs.get(0).get("date").asText(), "newest training date first");
+        assertEquals("2025-12-29", prs.get(1).get("date").asText(),
+                "the earlier-trained lighter set is still its exercise's first-ever PR");
+    }
+
+    @Test
+    void recentPrsTrackEachExerciseIndependently() throws Exception {
+        String exercisesResponse = mockMvc.perform(get("/api/exercises").header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        long otherExerciseId = objectMapper.readTree(exercisesResponse).get(1).get("id").asLong();
+
+        long session = createPastSession("2026-01-05T09:00:00Z");
+        logSet(session, exerciseId, 100, 5);
+        logSet(session, otherExerciseId, 50, 5); // lighter, but a first-ever best for ITS exercise
+
+        JsonNode prs = getOverview(12).get("recentPrs");
+        assertEquals(2, prs.size(), "a lighter lift is still a PR for its own exercise");
+    }
+
+    @Test
+    void hasAnyHistorySeparatesANewPersonFromALapsedOne() throws Exception {
+        assertFalse(getOverview(4).get("hasAnyHistory").asBoolean(), "nothing logged yet");
+
+        // Trained, but months ago -- a 4-week range is empty while history plainly exists.
+        logSet(createPastSession("2025-09-01T09:00:00Z"), 100, 5);
+
+        JsonNode overview = getOverview(4);
+        assertTrue(overview.get("hasAnyHistory").asBoolean());
+        JsonNode weeks = overview.get("weeks");
+        for (JsonNode week : weeks) {
+            assertEquals(0, week.get("workoutCount").asInt(), "the requested range really is empty");
+        }
+    }
+
+    @Test
+    void exerciseTrendCarriesEveryPerSessionMetricForTheChartSwitcher() throws Exception {
+        long session = createPastSession("2026-01-05T09:00:00Z");
+        logSet(session, 225, 1); // heaviest on the bar; est1rm 225; volume 225
+        logSet(session, 185, 8); // best est1rm (~234.3) and best set volume (1480)
+
+        String response = mockMvc.perform(get("/api/people/" + personId + "/trends/exercises/" + exerciseId + "?weeks=4")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode point = objectMapper.readTree(response).get(0);
+
+        assertEquals(185.0, point.get("weightLb").asDouble(), "weightLb stays the best set BY EST 1RM");
+        assertEquals(8, point.get("reps").asInt());
+        assertEquals(225.0, point.get("heaviestWeightLb").asDouble(), "heaviest on the bar is a different set");
+        assertEquals(1, point.get("heaviestWeightReps").asInt());
+        assertEquals(1480.0, point.get("bestSetVolumeLb").asDouble());
+        assertEquals(1705.0, point.get("sessionVolumeLb").asDouble());
+        assertEquals(9, point.get("totalReps").asInt());
+        assertEquals(2, point.get("setCount").asInt());
+    }
+
+    @Test
+    void exerciseTrendHeaviestWeightBreaksTiesOnRepsSoBodyweightSessionsArentArbitrary() throws Exception {
+        long session = createPastSession("2026-01-05T09:00:00Z");
+        logSet(session, 0, 8);
+        logSet(session, 0, 12);
+        logSet(session, 0, 6);
+
+        String response = mockMvc.perform(get("/api/people/" + personId + "/trends/exercises/" + exerciseId + "?weeks=4")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode point = objectMapper.readTree(response).get(0);
+
+        assertEquals(0.0, point.get("heaviestWeightLb").asDouble());
+        assertEquals(12, point.get("heaviestWeightReps").asInt(),
+                "with every set at weight 0 the best rep set should win the tie, not the first one");
+        assertEquals(26, point.get("totalReps").asInt());
     }
 }

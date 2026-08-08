@@ -1,10 +1,15 @@
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatDateLabel } from '../../utils/datetime';
 import { convertWeight } from '../../utils/formulas';
+import { metricSpec } from './exerciseMetrics';
 
 // PR points reuse the app's existing success-green "PR" status color (see the PR badge in
 // ExerciseDetail.jsx) rather than a categorical hue -- this is a state distinction (new
 // best-ever vs. not), not an identity one.
+//
+// PR marking always tracks est. 1RM, whatever metric is being plotted: `isPr` is a fact about the
+// session, not about the current view, and dropping the dots on the other metrics would hide the
+// only milestone the chart has.
 function TrendDot({ cx, cy, payload }) {
   const isPr = payload.isPr;
   return (
@@ -19,9 +24,10 @@ function TrendDot({ cx, cy, payload }) {
   );
 }
 
-function ChartTooltip({ active, payload, defaultUnit }) {
+function ChartTooltip({ active, payload, metric, defaultUnit }) {
   if (!active || !payload || payload.length === 0) return null;
   const point = payload[0].payload;
+  const spec = metricSpec(metric);
   return (
     <div
       style={{
@@ -35,14 +41,17 @@ function ChartTooltip({ active, payload, defaultUnit }) {
     >
       <div style={{ fontWeight: 700, marginBottom: 2 }}>{formatDateLabel(point.date)}</div>
       <div style={{ color: 'var(--color-muted)' }}>
-        {point.weightDisplay} {defaultUnit} &times; {point.reps} &middot; est. {point.est1rmDisplay} {defaultUnit}
+        {spec.title} {Math.round(point.metricValue * 10) / 10} {spec.isWeight ? defaultUnit : 'reps'}
+      </div>
+      <div style={{ color: 'var(--color-faint)', fontSize: 12, marginTop: 2 }}>
+        {point.setCount} set{point.setCount === 1 ? '' : 's'} &middot; best {point.weightDisplay} {defaultUnit} &times; {point.reps}
       </div>
       {point.isPr && <div style={{ color: 'var(--color-success)', fontWeight: 700, marginTop: 2 }}>New PR</div>}
     </div>
   );
 }
 
-export default function ExerciseTrendChart({ points, defaultUnit }) {
+export default function ExerciseTrendChart({ points, metric, defaultUnit }) {
   if (points.length === 0) {
     return (
       <div style={{ fontSize: 14, color: 'var(--color-faint)', padding: '20px 0', textAlign: 'center' }}>
@@ -51,10 +60,11 @@ export default function ExerciseTrendChart({ points, defaultUnit }) {
     );
   }
 
+  const spec = metricSpec(metric);
   const data = points.map((p) => ({
     ...p,
     weightDisplay: convertWeight(p.weightLb, 'lb', defaultUnit),
-    est1rmDisplay: convertWeight(p.est1rmLb, 'lb', defaultUnit),
+    metricValue: spec.isWeight ? convertWeight(p[spec.dataKey], 'lb', defaultUnit) : p[spec.dataKey],
   }));
 
   return (
@@ -69,16 +79,25 @@ export default function ExerciseTrendChart({ points, defaultUnit }) {
           interval="preserveStartEnd"
         />
         <YAxis
-          domain={['dataMin', 'dataMax']}
+          // Est. 1RM and top weight are read as "am I moving up", where a zero baseline flattens
+          // every real change into noise. Volume and rep counts are magnitudes, so they keep the
+          // honest zero baseline the weekly bar charts use.
+          domain={spec.isWeight && spec.dataKey !== 'sessionVolumeLb' && spec.dataKey !== 'bestSetVolumeLb'
+            ? ['dataMin', 'dataMax']
+            : [0, 'dataMax']}
+          allowDecimals={spec.isWeight}
           tick={{ fontSize: 11, fill: 'var(--color-muted)' }}
           axisLine={false}
           tickLine={false}
-          width={36}
+          width={44}
         />
-        <Tooltip content={<ChartTooltip defaultUnit={defaultUnit} />} cursor={{ stroke: 'var(--color-border)' }} />
+        <Tooltip
+          content={<ChartTooltip metric={metric} defaultUnit={defaultUnit} />}
+          cursor={{ stroke: 'var(--color-border)' }}
+        />
         <Line
           type="monotone"
-          dataKey="est1rmDisplay"
+          dataKey="metricValue"
           stroke="var(--color-accent)"
           strokeWidth={2}
           dot={<TrendDot />}
