@@ -84,6 +84,52 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
   // race, so the assertions below hold regardless of exactly when the create's own retry loop
   // happens to flip to paused -- the invariant that matters is "never permanently stuck", not the
   // precise interleaving.
+  // Ending a workout clears the liveSession cache entry, but the persister's write is throttled
+  // (1s default), so a reload landing inside that window boots from a snapshot taken BEFORE the
+  // end. The restored session carries a REAL id -- unlike the `{ id: null }` offline placeholder
+  // contextSessionId is built to ignore -- so the finished session gets treated as live and its
+  // still-cached sets render under "This session". See
+  // docs/incidents/2026-08-08-ended-workout-resurrected-by-persisted-cache.md.
+  //
+  // NOTE this does NOT deterministically reproduce that race -- whether the reload beats the
+  // throttled persist is a matter of timing, and locally the persist usually wins, so this spec
+  // passes with or without the endedSessions guard. It is kept for the end-to-end property it does
+  // pin ("an ended workout stays ended across a reload, through the real service worker"). The
+  // guard itself is covered deterministically in frontend/src/hooks/useLiveSession.test.jsx, which
+  // forces the pre-end snapshot via a dehydrate/hydrate round trip and genuinely fails without it.
+  test('an ended workout stays ended across a reload, instead of resurfacing as "This session"', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Quinn');
+    await pickExercise(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+
+    await page.reload();
+    await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, { timeout: 20000 });
+
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+
+    // Reload IMMEDIATELY -- inside the persister's throttle window, which is exactly what a silent
+    // tryForceUpdate does after a deploy. Deliberately no wait: waiting is what hid this.
+    await page.reload();
+
+    // Offline, so nothing can refetch liveSession and quietly paper over a stale restore.
+    await page.context().setOffline(true);
+
+    // Assert the two liveSession-driven signals directly rather than navigating to the exercise
+    // screen: reaching it needs the exercise catalog, which an immediate reload hasn't re-warmed,
+    // and that would make this spec fail for a reason unrelated to what it's testing. If
+    // liveSession is suppressed here, contextSessionId is null and the ended session's cached
+    // sets cannot reach "This session" -- that leak is downstream of exactly this value.
+    await expect(page.getByText(/Session in progress/)).toBeHidden();
+    // The person pill's live-session dot is the other consumer of the same query (a second span
+    // appears only while a session is live -- same signal offline-reads.spec.ts uses).
+    await expect(page.locator('.person-pill-bar').getByRole('button', { name: /Quinn/ }).locator('span')).toHaveCount(1);
+
+    await page.context().setOffline(false);
+  });
+
   test('create-then-log-set survives a reload mid-lie-fi without the outbox permanently deadlocking', async ({ page, request }) => {
     await registerHousehold(page, request, 'Reload Lie-fi');
     await expect(page).toHaveURL(/\/app\/log/);
