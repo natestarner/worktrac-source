@@ -144,6 +144,34 @@ session-scoped queries (can't be enumerated without a session id). `exerciseSumm
 derived client-side from the warmed `history` cache (`utils/exerciseSummaryFromHistory.js`), and
 once stuck is preferred **over** `summaryQuery.data`, not just used when data is absent.
 
+### A restored entry is "fresh" without being correct — the boot warm must override that
+
+A rehydrated entry keeps the `dataUpdatedAt` it had when persisted, so it satisfies both the warm's
+30s staleness check and the queries' own 60s `staleTime`. But the persister is **throttled at 1s**,
+so anything changed in the last second before a reload was never written — and nothing then
+refetches it until the **5-minute** warm tick. A routine created seconds before a reload therefore
+vanished from the Routines tab for minutes (issue #146, seen as a lower e2e failure in
+`reload-persistence.spec.ts`).
+
+The boot warm — the one `useOfflineCacheWarming` fires once `isRestoring` clears — passes
+`{ afterRestore: true }`, which drops `staleTime` to 0 **for keys marked `refreshAfterRestore`**.
+Later warms (online transition, visibility, interval) deliberately don't: by then the cache is
+what this page session fetched, and ordinary staleness is right.
+
+**`refreshAfterRestore` is opt-in per key, and must stay that way.** It is only safe for
+collections the server wholly owns:
+
+| Key | Forced? | Why |
+|---|---|---|
+| `routines` | ✅ | routine CRUD is online-gated, so the cache can't hold an unsent routine |
+| `history`, `prs` | ✅ | no optimistic writer; invalidation-driven only |
+| `exercises`, `personExercises` | ❌ | `insertOptimisticExercise` holds a **temp exercise** here while its create is still queued — refetching deletes it from the picker mid-flight |
+| `liveSession` | ❌ | `EndWorkoutConfirmModal` optimistically nulls it on end-workout |
+
+**Before marking any new key, ask: can this key ever hold state that hasn't reached the server?**
+If yes, forcing a refetch destroys it. That trade is the whole reason this is a per-key list and
+not a blanket "invalidate everything after hydrate".
+
 ## Cold boot offline
 
 `AuthContext` boots authenticated-but-`offline:true` from a saved identity snapshot when `/me`
