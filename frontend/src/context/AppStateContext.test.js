@@ -129,6 +129,20 @@ describe('AppStateContext reducer', () => {
     expect(active(state).trendsExerciseId).toBe(42);
   });
 
+  it('keeps each person their own Trends metric selections', () => {
+    let state = withPerson(1);
+    state = reducer(state, { type: 'SET_TRENDS_WEEKLY_METRIC', metric: 'sets' });
+    state = reducer(state, { type: 'SET_TRENDS_EXERCISE_METRIC', metric: 'totalReps' });
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
+    expect(active(state).trendsWeeklyMetric).toBe('volume');
+    expect(active(state).trendsExerciseMetric).toBe('est1rm');
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
+    expect(active(state).trendsWeeklyMetric).toBe('sets');
+    expect(active(state).trendsExerciseMetric).toBe('totalReps');
+  });
+
   it('ending the routine clears routine progress but leaves the selected exercise alone', () => {
     let state = reducer(withPerson(1), { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20, 30] });
     state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20, 30] });
