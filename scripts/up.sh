@@ -23,14 +23,29 @@ LOG_DIR="$REPO_ROOT/.dev-logs"
 mkdir -p "$LOG_DIR"
 
 # Launch detached in their own session/process group where possible, rather than only immune to
-# SIGHUP. This is defensive hygiene, NOT the fix for anything observed: the dev servers that kept
-# dying mid-e2e-run were being killed by a SIBLING worktree's down.sh, which acts by port -- see
-# the port-collision note in worktree-env.sh. setsid just removes one more way a detached server
-# can be caught by a signal aimed at the shell that started it. Absent on some minimal
-# Git-for-Windows installs, so fall back to plain nohup.
+# SIGHUP -- `nohup ... & disown` blocks SIGHUP but leaves the server in the launching shell's
+# process group, so anything signalling that group takes it down.
+#
+# ⚠️ KNOWN UNRESOLVED: the Vite dev server still dies partway through a long e2e run launched from
+# this script -- silently, nothing in its log, backend unaffected. Ruled out: OOM (7+ GB free
+# throughout a monitored run), the dev proxy (survived 25 forced ECONNREFUSEDs), a spec killing
+# processes (none shell out), and -- since worktree-env.sh started deconflicting ports -- a sibling
+# worktree's down.sh, which was the previous (wrong) explanation given here. The surviving
+# correlation is that it dies when up.sh and the long test run share one shell invocation, and
+# survives when they are separated. setsid is the mitigation for that, but see the warning below.
+#
+# A PowerShell Start-Process launcher was tried as a setsid substitute and REVERTED: it could not
+# be shown to start the backend reliably, and trading a working start for an unverified fix to an
+# intermittent death is the wrong bet. Separate `up.sh` from the test run if you need a long run to
+# survive: `bash scripts/up.sh` in one shell, `npx playwright test` in another.
 if command -v setsid > /dev/null 2>&1; then
   _detach() { setsid nohup "$@"; }
 else
+  # Loudly, because this silently did nothing for a while and the servers kept dying: setsid is
+  # absent from the stock Git-for-Windows bash this project is developed on.
+  echo "up.sh: NOTE -- setsid not available; servers stay in this shell's process group and may be" >&2
+  echo "  killed if a long-running command in the same shell is torn down. Start the stack from a" >&2
+  echo "  separate invocation than your test run if that bites." >&2
   _detach() { nohup "$@"; }
 fi
 
