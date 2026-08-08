@@ -96,6 +96,13 @@ Each of the three has a regression test that reproduces the warning by mounting 
 the subscription is live (on a first render nothing is subscribed yet, so the bug cannot show —
 a test that mounts parent and child together passes either way and guards nothing).
 
+There is a **fourth** MutationCache subscriber: `LogTab.jsx`'s effect that migrates the selected
+exercise from a temp id to the real one once a `createExercise` write syncs. It calls
+`selectExercise` (a state setter) straight from the notification. It has not been observed causing
+the warning — a create-success notification comes from a network response, not from a render — so
+it was deliberately left alone rather than changed speculatively. **If the warning ever names
+`LogTab` again after the three hooks above were fixed, this is where to look.**
+
 ## Query cache persistence
 
 `shouldDehydrateQuery` (`queryClient.js`) persists a query whenever it holds usable `data`,
