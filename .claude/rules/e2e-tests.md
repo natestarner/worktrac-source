@@ -86,6 +86,24 @@ so every e2e registration bounced and counted against the sending domain's ACS r
 - `registerHousehold`'s optional `emailOverride` exists for that spec only — **every other call
   site keeps the default-generated address**.
 
+## Never drive the weight/reps steppers by hand — use `logSetAt`
+
+`computePrefillDraft` re-seeds the weight/reps draft whenever the summary / session-sets queries
+settle, which can land **after** `setStepper` has verified the value it typed but **before** the
+"Log set" click. The set is then logged at the 45 lb prefill default instead of the target.
+
+Locally those queries return in milliseconds and the race is almost never lost, so this passes a
+full local suite and goes red only against a deployed backend — it took lower red exactly that way
+on 2026-08-08, having been green across several local runs first. It also surfaces **somewhere
+other than where it went wrong**: a 315×2 deadlift logged as 45×2 is no longer a PR, so what you
+see is a missing "New PR!" celebration, or a records/sort assertion reading a number nobody typed.
+
+`support/exercises.ts`'s **`logSetAt`** is the only sanctioned way to log a set at a specific
+weight/reps. It re-verifies both steppers together before submitting (a re-seed stomps both, so a
+drifted reps value also catches a drifted weight) and waits for the new `Set N` row afterwards, so
+the re-seed that write triggers has fired before the next call types anything. **Don't call
+`setStepper` directly to log a set**, and don't reintroduce a spec-local copy of this helper.
+
 ## Locator gotchas
 
 - **Use `exact: true` with `getByText`.** Toast and confirm-dialog text embeds item names, so

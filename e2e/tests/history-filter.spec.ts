@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise, setStepper } from './support/exercises';
+import { pickExercise, logSetAt } from './support/exercises';
 
 // Tags an exercise via its Customize modal, one tag at a time. Submits via the "New tag"
 // input's own Enter handler rather than its "Add" button -- ConfigureExerciseModal has a SECOND
@@ -163,16 +163,12 @@ test.describe('PRs board sorting', () => {
     await expect(page.getByText('Editing past session')).toBeVisible();
 
     await pickExercise(page, exercise);
-    await setStepper(page, 'Weight', weight);
-    await setStepper(page, 'Reps', reps);
-    await page.getByRole('button', { name: 'Log set' }).click();
-
-    // Every set here is its exercise's first ever, so the celebration fires even for a
-    // retroactive session (it keys off the server's isPR, not off live-vs-past).
-    const celebration = page.getByText('New PR!');
-    await expect(celebration).toBeVisible();
-    await celebration.click({ force: true });
-    await expect(celebration).toBeHidden();
+    // logSetAt rather than a bare setStepper pair: the draft is re-seeded when the summary queries
+    // settle and will otherwise stomp the weight between typing it and submitting, logging the set
+    // at the 45 lb default (see its comment). Every set here is its exercise's first ever, so the
+    // celebration fires even for a retroactive session -- it keys off the server's isPR, not
+    // live-vs-past.
+    await logSetAt(page, weight, reps);
 
     await page.getByRole('button', { name: 'Done' }).click();
     await expect(page).toHaveURL(/\/app\/history/);
