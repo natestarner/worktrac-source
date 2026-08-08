@@ -49,20 +49,31 @@ else
   _detach() { nohup "$@"; }
 fi
 
+# Each server's command is wrapped so its exit is RECORDED in its own log. A dev server that
+# vanishes mid-run is otherwise indistinguishable from one that was hard-killed: both leave a log
+# that simply stops. With this, the next occurrence answers its own first question --
+#   "[[backend exited rc=N ...]]" present -> it exited on its own; rc and the lines above say why
+#   line absent, process gone            -> something killed it (SIGKILL leaves no trace)
+# which is exactly the fork that went unanswered while this was being chased.
+_record_exit() {
+  printf '%s; echo "[[%s exited rc=$? at $(date +%%T)]]"' "$1" "$2"
+}
+
 echo "Starting backend..."
 cd "$REPO_ROOT/backend"
 SPRING_DATASOURCE_URL="$SPRING_DATASOURCE_URL" \
 SERVER_PORT="$BACKEND_PORT" \
 CORS_ALLOWED_ORIGINS="$CORS_ALLOWED_ORIGINS" \
 APP_EMAIL_APP_URL="$APP_EMAIL_APP_URL" \
-  _detach mvn spring-boot:run -Dspring-boot.run.profiles=local > "$LOG_DIR/backend.log" 2>&1 &
+  _detach bash -c "$(_record_exit 'mvn spring-boot:run -Dspring-boot.run.profiles=local' 'backend')" \
+  > "$LOG_DIR/backend.log" 2>&1 &
 disown
 
 echo "Starting frontend..."
 cd "$REPO_ROOT/frontend"
 [ -d node_modules ] || npm install
 FRONTEND_PORT="$FRONTEND_PORT" VITE_BACKEND_ORIGIN="$VITE_BACKEND_ORIGIN" \
-  _detach npm run dev > "$LOG_DIR/frontend.log" 2>&1 &
+  _detach bash -c "$(_record_exit 'npm run dev' 'frontend')" > "$LOG_DIR/frontend.log" 2>&1 &
 disown
 
 echo ""

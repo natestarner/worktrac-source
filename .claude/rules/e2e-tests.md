@@ -29,14 +29,23 @@ Full narrative: `docs/architecture/testing.md`.
      kill each other's stacks. `worktree-env.sh` now refuses to allocate a port another
      worktree's `.env.worktree` has claimed and warns on a pre-existing overlap — **heed that
      warning**: delete the offending `.env.worktree` and re-run to move onto free ports.
-  2. ⚠️ *Unresolved:* even on exclusive ports, Vite still dies partway through a long e2e run
-     started from the same shell invocation as `up.sh` — silently, nothing in its log, backend
-     unaffected. Ruled out: OOM, the dev proxy, a spec killing processes, and sibling worktrees.
-     **Workaround: start the stack and run the tests in separate invocations** (`bash
-     scripts/up.sh`, then `npx playwright test` — not `e2e.sh` in one go), which has been reliable.
-     `setsid` would be the mitigation but is **absent from stock Git-for-Windows bash**, so
-     `up.sh` warns and falls back. A PowerShell `Start-Process` launcher was tried and reverted —
-     it couldn't be shown to start the backend reliably.
+  2. *Not reproduced since:* Vite was dying partway through long runs, silently, with nothing in
+     its log. Ruled out at the time: OOM, the dev proxy, a spec killing processes. It has **not
+     recurred** across repeated full runs since the port deconfliction landed *and* the concurrent
+     session that had been running its own stack throughout finished — consistent with cause 1,
+     though never proven for those specific deaths. `setsid` is **absent from stock
+     Git-for-Windows bash**, so `up.sh` warns and falls back to `nohup`; a PowerShell
+     `Start-Process` launcher was tried as a substitute and reverted (couldn't be shown to start
+     the backend reliably).
+
+     **You will not have to guess if it happens again.** `up.sh` wraps each server so its exit is
+     recorded in its own log, and `e2e.sh` checks both ports *after* the run:
+     - `[[frontend exited rc=N ...]]` present → it exited on its own; `rc` and the lines above say why.
+     - Line absent and the process is gone → something killed it (SIGKILL leaves no trace); suspect
+       another worktree or an external `taskkill`.
+
+     `e2e.sh` fails the run with a loud message in that case, so a mid-run death can never again be
+     mistaken for a batch of code regressions.
 - Service-worker-dependent specs (cold boot, reload-while-offline) live in
   `offline-durability.spec.ts` and run **only** via `cd e2e && npm run test:pwa`
   (`playwright.pwa.config.ts`, which builds + previews on port 3000 — needed for local CORS, since
