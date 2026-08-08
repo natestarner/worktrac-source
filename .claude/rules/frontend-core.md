@@ -48,6 +48,22 @@ Both `AuthContext` effects that call `apiMe()` in the background discard their r
 current auth token no longer matches the one active when the call was made — a general "is this
 response still relevant" guard. See `docs/incidents/2026-07-31-stale-me-clobbers-freshlogin.md`.
 
+## A set write invalidates every view derived from sets
+
+`queryClient.js`'s `LOG_SET` `onSettled` and `reconcileSetChange` must invalidate **all** of
+`sessionSets`, `exerciseSummary`, `prs`, `history`, and — via `invalidateTrends` — the three
+trends prefixes. Trends was missing from that list for a long time, and with `staleTime` at 60s
+that meant logging your first-ever set and opening Trends still said *"No workouts logged yet"*.
+
+**When adding any new read that derives from logged sets, add it to those two handlers.** Ask:
+"if someone logs a set and opens this view five seconds later, is it right?" A prefix key
+(`trendsForPerson`, not `trendsOverview(personId, weeks)`) is needed whenever the full key carries
+something the writer can't know — the trends keys carry a `weeks` and an `exerciseId`.
+
+Note this is the opposite call from `offlineCacheWarm.js`, which deliberately *excludes* trends:
+warming them is a costly prefetch fan-out across every person, whereas invalidating them is free
+(nothing refetches until the tab is actually mounted).
+
 ## Writes: durable vs online-gated
 
 | Feature | Offline? |

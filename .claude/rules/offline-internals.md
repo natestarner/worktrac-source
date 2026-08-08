@@ -74,6 +74,35 @@ revert-then-correct flicker; PR celebration reflecting the pre-edit value) are d
 documented in `docs/incidents/2026-07-30-editing-queued-offline-set.md` — don't "fix" them into
 connectivity-mode special-casing.
 
+## Subscribing to the MutationCache: always `notifyManager.schedule`
+
+Three hooks read queued writes straight off the MutationCache via `useSyncExternalStore` —
+`useSessionEntries`, `useOutboxItems`, `useOutboxCount`. **Their `subscribe` callback must hand
+`onChange` to `notifyManager.schedule(...)`, never call it inline.**
+
+The cache emits *synchronously* from inside `notifyManager.batch`. A descendant of the subscribing
+component can cause an emit during **its own** render (mounting a durable-write observer), which
+lands mid-render for the subscriber — so an inline `onChange()` schedules a React update on a
+component while a child is rendering, and React logs `Cannot update a component (LogTab) while
+rendering a different component`. It recovers with an extra pass, but this is the same machinery
+that produced an infinite-render loop before (hence the `dirty`-flag referential-stability guards
+in `useSessionEntries`/`useOutboxItems` — keep those too).
+
+`notifyManager.schedule` is exactly what TanStack's own `useMutationState` does for this job, so
+batching and test-mode flushing (`notifyManager.setScheduler`) stay consistent with the library —
+don't substitute a bare `queueMicrotask`/`setTimeout` or a `useEffect` hop.
+
+Each of the three has a regression test that reproduces the warning by mounting a child **after**
+the subscription is live (on a first render nothing is subscribed yet, so the bug cannot show —
+a test that mounts parent and child together passes either way and guards nothing).
+
+There is a **fourth** MutationCache subscriber: `LogTab.jsx`'s effect that migrates the selected
+exercise from a temp id to the real one once a `createExercise` write syncs. It calls
+`selectExercise` (a state setter) straight from the notification. It has not been observed causing
+the warning — a create-success notification comes from a network response, not from a render — so
+it was deliberately left alone rather than changed speculatively. **If the warning ever names
+`LogTab` again after the three hooks above were fixed, this is where to look.**
+
 ## Query cache persistence
 
 `shouldDehydrateQuery` (`queryClient.js`) persists a query whenever it holds usable `data`,

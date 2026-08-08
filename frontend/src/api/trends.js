@@ -14,3 +14,12 @@ export function getExerciseTrend(personId, exerciseId, weeks) {
     `/api/people/${personId}/trends/exercises/${exerciseId}?weeks=${weeks}&zone=${encodeURIComponent(timeZone)}`,
   );
 }
+
+// All-time, so deliberately no `weeks` -- a record isn't relative to the range you're viewing, and
+// keeping it out of the URL (and the query key) means flipping the range toggle doesn't refetch it.
+// `zone` is still needed to date each record in the viewer's local calendar.
+export function getExerciseRecords(personId, exerciseId) {
+  return apiClient.get(
+    `/api/people/${personId}/exercises/${exerciseId}/records?zone=${encodeURIComponent(timeZone)}`,
+  );
+}

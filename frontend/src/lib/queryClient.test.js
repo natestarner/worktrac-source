@@ -17,6 +17,7 @@ import {
 import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './exerciseIdMap';
 import { _getMappingForTest, clearSetIdMap, setSetIdMapping } from './setIdMap';
 import { editSet, logLiveSet, logSetIntoSession } from '../api/sets';
+import { queryKeys } from '../api/queryKeys';
 import { setAuthToken } from '../api/client';
 
 vi.mock('../api/sets', () => ({
@@ -126,6 +127,33 @@ describe('registerOfflineMutationDefaults dispatches to the right endpoint', () 
     await dispatch({ mode: 'session', sessionId: 42, personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k2', clientLoggedAt: 't' });
     expect(logSetIntoSession).toHaveBeenCalledWith(42, expect.objectContaining({ exerciseId: 3, idempotencyKey: 'k2' }));
     expect(logLiveSet).not.toHaveBeenCalled();
+  });
+
+  // Trends is derived entirely from logged sets, but was left out of this handler's invalidations
+  // (which covered only prs/history). With staleTime at 60s that meant logging your first-ever set
+  // and opening Trends still showed "No workouts logged yet" for a minute. Asserted against the
+  // real cache rather than by spying on invalidateQueries, so it also proves the PREFIX keys match
+  // the full ones -- a trends key carries a `weeks` the writer can't know.
+  it('marks every cached trends range and exercise stale after a set is logged', async () => {
+    const overview4 = queryKeys.trendsOverview(7, 4);
+    const overview12 = queryKeys.trendsOverview(7, 12);
+    const trendFor3 = queryKeys.exerciseTrend(7, 3, 12);
+    const recordsFor3 = queryKeys.exerciseRecords(7, 3);
+    const otherPerson = queryKeys.trendsOverview(99, 12);
+
+    for (const key of [overview4, overview12, trendFor3, recordsFor3, otherPerson]) {
+      client.setQueryData(key, { stub: true });
+    }
+    const isStale = (key) => client.getQueryState(key).isInvalidated;
+
+    await dispatch({ mode: 'live', personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k3', clientLoggedAt: 't' });
+
+    expect(isStale(overview4)).toBe(true);
+    expect(isStale(overview12)).toBe(true);
+    expect(isStale(trendFor3)).toBe(true);
+    expect(isStale(recordsFor3)).toBe(true);
+    // Person scoping still holds -- one person's set must not invalidate another's trends.
+    expect(isStale(otherPerson)).toBe(false);
   });
 });
 
