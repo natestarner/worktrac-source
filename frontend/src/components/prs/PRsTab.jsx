@@ -52,7 +52,7 @@ function PRsTabContent() {
   );
 
   // Jumping to History pre-filtered to this exercise reuses the same deep-link machinery as
-  // ExerciseDetail's "View full history" link (see HistoryTab.jsx) -- just without fromLog, since
+  // ExerciseDetail's "View full exercise history" link (see HistoryTab.jsx) -- just without fromLog, since
   // there's no exercise-logging screen to offer a "Back to" link for on this path.
   function handleRowTap(pr) {
     navigate('/app/history', { state: { historyExerciseFilter: { exerciseId: pr.exerciseId, exerciseName: pr.exerciseName } } });
@@ -180,7 +180,9 @@ function PRsTabContent() {
   );
 }
 
-const emptyStyle = { textAlign: 'center', padding: '60px 20px', color: 'var(--color-faint)', fontSize: 15 };
+// Was --color-faint (2.07:1 -- effectively unreadable). Empty-state copy is body text
+// and belongs on --color-muted; see the token comments in index.css.
+const emptyStyle = { textAlign: 'center', padding: 'var(--space-10) var(--space-5)', color: 'var(--color-muted)', fontSize: 'var(--text-base)' };
 
 // 16px avoids iOS Safari's zoom-on-focus, same reason as ExerciseFilterBar's search input.
 const sortSelectStyle = {

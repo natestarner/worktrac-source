@@ -89,7 +89,9 @@ describe('AddEditExerciseModal', () => {
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Cable Row' } });
       fireEvent.click(lastAddButton());
 
-      await waitFor(() => expect(showToast).toHaveBeenCalledWith("Couldn't create -- check your connection and try again."));
+      await waitFor(() =>
+        expect(showToast).toHaveBeenCalledWith("Couldn't create -- check your connection and try again.", { tone: 'error' }),
+      );
       expect(onSaved).not.toHaveBeenCalled();
       // The button's accessible name reverts to "Add" once `saving` clears (it shows a spinner with
       // the label hidden while saving) -- wait for that rather than asserting synchronously right
@@ -108,7 +110,7 @@ describe('AddEditExerciseModal', () => {
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Cable Row' } });
       fireEvent.click(lastAddButton());
 
-      expect(showToast).toHaveBeenCalledWith('You need a connection to do that.');
+      expect(showToast).toHaveBeenCalledWith('You need a connection to do that.', { tone: 'info' });
       expect(addExercise).not.toHaveBeenCalled();
       expect(onSaved).not.toHaveBeenCalled();
     });

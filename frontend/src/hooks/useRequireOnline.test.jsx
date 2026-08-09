@@ -40,6 +40,8 @@ describe('useRequireOnline', () => {
     expect(screen.getByTestId('online').textContent).toBe('false');
     fireEvent.click(screen.getByText('go'));
     expect(action).not.toHaveBeenCalled();
-    expect(showToast).toHaveBeenCalledWith('Needs a connection');
+    // Tone matters as much as the message: this is a calm "you can't do that right now",
+    // not a failure, and it must not render in the success or the danger colour.
+    expect(showToast).toHaveBeenCalledWith('Needs a connection', { tone: 'info' });
   });
 });

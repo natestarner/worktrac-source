@@ -354,7 +354,7 @@ describe('ExerciseDetail write-failure handling', () => {
 
     fireEvent.click(await screen.findByText('Log set'));
 
-    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required'));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required', { tone: 'error' }));
   });
 });
 
@@ -415,18 +415,18 @@ describe('ExerciseDetail in-flight visual feedback', () => {
       expect(logLiveSet).not.toHaveBeenCalled();
       // A paused-offline set is just as editable/deletable as a synced one now (see
       // offlineSetEdits.js) -- no more opaque "Will sync..." placeholder.
-      expect(await screen.findByText('Edit')).toBeInTheDocument();
-      expect(screen.getByText('Delete')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
       expect(screen.queryByText(/Saving/)).not.toBeInTheDocument();
 
       onlineManager.setOnline(true);
       await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
       expect(await screen.findByText(/Saving/)).toBeInTheDocument();
-      expect(screen.queryByText('Edit')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
 
       listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
       resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
-      await waitFor(() => expect(screen.getByText('Edit')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument());
     } finally {
       // Restore the real default -- onlineManager's #online starts at `true` with no
       // navigator.onLine fallback in this TanStack version, so setOnline(undefined) would
@@ -460,13 +460,13 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     fireEvent.click(await screen.findByText('Log set'));
 
     expect(await screen.findByText(/Saving/)).toBeInTheDocument();
-    expect(screen.queryByText('Edit')).not.toBeInTheDocument();
-    expect(screen.queryByText('Delete')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
 
     listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
     resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
 
-    await waitFor(() => expect(screen.getByText('Edit')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument());
     expect(screen.queryByText(/Saving/)).not.toBeInTheDocument();
   });
 
@@ -513,7 +513,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
     resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
 
-    await waitFor(() => expect(screen.getByText('Edit')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument());
   });
 
   it('does not leak a pending placeholder into a different exercise after a mid-flight switch', async () => {
@@ -572,7 +572,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     expect(await screen.findByText('This session')).toBeInTheDocument();
 
     rejectLog(clientError);
-    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required'));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required', { tone: 'error' }));
     // No manual cleanup code runs here -- the mutation leaving 'pending' status on its own
     // is what drops it from pendingBeforeSession.
     await waitFor(() => expect(screen.queryByText('This session')).not.toBeInTheDocument());
@@ -591,8 +591,8 @@ describe('ExerciseDetail in-flight visual feedback', () => {
       fireEvent.click(await screen.findByText('Log set'));
 
       expect(await screen.findByText('135 lb × 8')).toBeInTheDocument();
-      expect(screen.getByText('Edit')).toBeInTheDocument();
-      expect(screen.getByText('Delete')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
       expect(logLiveSet).not.toHaveBeenCalled();
     } finally {
       onlineManager.setOnline(true);
@@ -613,9 +613,9 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     onlineManager.setOnline(false);
     try {
       fireEvent.click(await screen.findByText('Log set'));
-      expect(await screen.findByText('Delete')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Delete' })).toBeInTheDocument();
 
-      fireEvent.click(screen.getByText('Delete'));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
       await waitFor(() => expect(screen.queryByText('135 lb × 8')).not.toBeInTheDocument());
       // Cancelled outright -- not left queued as a delete against a set id that doesn't exist.
@@ -644,7 +644,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
       expect(await screen.findByText('135 lb × 8')).toBeInTheDocument();
       const createBefore = queryClient.getMutationCache().getAll().find((m) => m.options.mutationKey[0] === 'logSet');
 
-      fireEvent.click(screen.getByText('Edit'));
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
       // Scoped to the modal dialog -- ExerciseDetail's own "log a new set" weight/reps steppers
       // stay mounted in the background behind the overlay and have their own "+"/"−" buttons too.
       const dialog = screen.getByRole('dialog');
@@ -804,8 +804,8 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     fireEvent.click(await screen.findByText('Log set'));
 
     await waitFor(() => expect(screen.getByText('135 lb × 8')).toBeInTheDocument());
-    expect(await screen.findByText('Edit')).toBeInTheDocument();
-    expect(screen.getByText('Delete')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
     expect(screen.queryByText(/Saving/)).not.toBeInTheDocument();
   });
 

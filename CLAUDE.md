@@ -128,6 +128,7 @@ touch matching files — you don't need to open them manually. Full narratives a
 | Admin portal | `admin-portal.md` | `docs/architecture/admin-portal.md` |
 | Flyway migrations | `flyway-tsql.md` | — |
 | Frontend state (per-person isolation, query cache) | `frontend-core.md` | `docs/architecture/frontend-state.md` |
+| Design system (tokens, primitives, contrast, motion) | `frontend-core.md` | `docs/architecture/design-system.md` |
 | Offline mode & the durable outbox | `offline-internals.md` | `docs/architecture/offline-mode.md` |
 | Log screen (`ExerciseDetail.jsx`) | `log-screen.md` | — |
 | Trends & stats (bodyweight lifts, ranges, chart rules) | `trends.md` | `docs/architecture/trends.md` |
