@@ -59,13 +59,22 @@ export default function Modal({ width = 320, onScrim, children, align = 'center'
     }
 
     dialog.addEventListener('keydown', onKeyDown);
-    // The page behind a modal must not scroll under it.
+
+    // The page behind a modal must not scroll under it -- but hiding the overflow also removes
+    // the scrollbar, and on a platform with classic (space-taking) scrollbars that widens the
+    // viewport by ~15px. Everything behind the scrim then jumps sideways as the modal opens and
+    // jumps back as it closes; it's most obvious on right-aligned chrome like the header's
+    // account menu. Replacing the scrollbar's width with padding keeps the layout still.
     const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
     document.body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
 
     return () => {
       dialog.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
       // Return focus to whatever opened the modal, so keyboard position isn't lost.
       if (restoreFocusRef.current instanceof HTMLElement) restoreFocusRef.current.focus({ preventScroll: true });
     };
