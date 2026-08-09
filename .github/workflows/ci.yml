@@ -111,7 +111,10 @@ jobs:
         if: env.RUN_REAL == 'true'
         uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          # jsdom 30 (a frontend devDependency) requires Node ^22.22.2 || ^24.15.0 || >=26.0.0
+          # via its undici dependency (engines: >=22.19.0) -- Node 20 (already past its own
+          # EOL as of 2026-04) can't run the test suite. Bumped to the current Active LTS.
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
