@@ -22,7 +22,7 @@
     <properties>
         <java.version>25</java.version>
         <testcontainers.version>1.21.4</testcontainers.version>
-        <jjwt.version>0.12.6</jjwt.version>
+        <jjwt.version>0.13.0</jjwt.version>
         <!-- CVE-2026-10532 (logback-core, fixed in 1.5.35): override Spring Boot's
              managed version until the parent BOM picks up the patched release itself. -->
         <logback.version>1.5.35</logback.version>
@@ -35,7 +35,7 @@
              is on Java 25); do not use the bucket4j_jdk8-core artifact. -->
         <bucket4j.version>8.19.0</bucket4j.version>
         <caffeine.version>3.2.4</caffeine.version>
-        <azure-communication-email.version>1.0.22</azure-communication-email.version>
+        <azure-communication-email.version>1.1.4</azure-communication-email.version>
     </properties>
 
     <dependencies>
@@ -173,7 +173,7 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
-                <version>2.21.5</version>
+                <version>2.22.1</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
