@@ -35,10 +35,10 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - name: Checkout source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Detect changed paths
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -61,7 +61,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up JDK 25
         if: env.RUN_REAL == 'true'
@@ -81,7 +81,7 @@ jobs:
 
       - name: Upload JAR artifact
         if: env.RUN_REAL == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: backend-jar
           path: backend/target/*.jar
@@ -105,11 +105,11 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
         if: env.RUN_REAL == 'true'
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -133,7 +133,7 @@ jobs:
 
       - name: Upload build artifact
         if: env.RUN_REAL == 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-build
           path: frontend/dist/
@@ -161,7 +161,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set short SHA
         id: vars
@@ -228,7 +228,7 @@ jobs:
 
     steps:
       - name: Checkout deploy repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.DEPLOY_REPO }}
           ref: lower
@@ -236,7 +236,7 @@ jobs:
           path: deploy
 
       - name: Download frontend build
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: frontend-build
           path: deploy/frontend-build
