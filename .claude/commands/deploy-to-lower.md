@@ -78,29 +78,58 @@ Ensure the change is summarized where it belongs before shipping:
   for user-visible flows; update specs whose assertions the change breaks.
 
 ### 3. Run all tests locally
-- `cd backend && mvn verify`
-- `cd frontend && npm test`
-- **e2e** (the only pre-merge e2e gate):
-  1. Ensure local SQL Server is up: `docker start worktrac-sqlserver` (host port **1434**).
-  2. Start backend `local` profile and frontend dev server — the frontend **must be on port
-     3000** (local CORS only allows 3000; a stray 3000 server bumps Vite to 3001+ and causes
-     silent 403s).
-  3. `cd e2e && E2E_BASE_URL=http://localhost:3000 E2E_TEST_SUPPORT_KEY=<value from
-     backend/src/main/resources/application-local.yml's app.email.test-support-key>
-     npx playwright test`.
-     - Registration in the local flow calls the real Azure Communication Services email
-       API even though the e2e helper reads the confirmation code back via the
-       test-support endpoint rather than an inbox — so `ACS_EMAIL_CONNECTION_STRING` and
-       `ACS_EMAIL_SENDER_ADDRESS` must already be set in your shell environment (a
-       free-tier ACS resource is fine), or every e2e test that registers a household
-       fails at registration.
-  4. Tear the local app back down: killing the launching shell command is **not
-     enough** — `mvn spring-boot:run` forks a separate `java` process and `npm run dev`
-     forks a separate `node`/vite process that both survive their parent being killed.
-     Kill whatever is actually listening on 8080 and 3000 (e.g. find the PID via
-     `netstat`/`lsof` and `taskkill`/`kill` it), not just the wrapper command. Leftover
-     processes here don't just waste resources — they hold file locks on the worktree
-     that will block its removal in step 13.
+
+`cd backend && mvn verify` and `cd frontend && npm test` first — both are cheap and catch most
+things before you spend minutes on a stack.
+
+#### e2e — the only pre-merge e2e gate. Follow this exactly.
+
+**Never run `npx playwright test` directly. Always go through `scripts/e2e.sh`.** This is not a
+style preference — it is the difference between a five-minute gate and an hour of chasing
+phantom regressions, which has happened. Raw playwright:
+- defaults to `http://localhost:3000`, which for **any worktree other than the primary `main`
+  checkout** is either nothing or *a sibling session's stack* — you silently test the wrong app;
+- has no idea the dev server died mid-run, so you get ~60 red specs across unrelated files
+  (`smoke.spec.ts` among them) that read exactly like a code regression.
+
+`scripts/e2e.sh` resolves this worktree's own ports, starts-or-reuses a readiness-gated stack,
+and **after the run tells you if the stack didn't outlive it**.
+
+**Use two separate tool calls.** The Vite dev server has a known, still-unresolved habit of dying
+partway through a long suite, and the one surviving correlation is `up.sh` sharing a shell
+invocation with the run (see the `KNOWN UNRESOLVED` block in `scripts/up.sh`):
+
+```bash
+bash scripts/up.sh      # call 1: starts this worktree's stack, waits until both answer
+bash scripts/e2e.sh     # call 2: reuses that healthy stack and runs the suite
+```
+
+Pass extra args after `--`, e.g. `bash scripts/e2e.sh -- --grep "@smoke"`. Use
+`bash scripts/e2e.sh --restart` after **backend** changes — `mvn spring-boot:run` has no
+hot-reload, so a reused backend still serves the code it booted with. Vite does hot-reload, so
+frontend edits are picked up by a reused stack.
+
+Prerequisites:
+- Local SQL Server up: `docker start worktrac-sqlserver` (host port **1434**, not 1433).
+- `E2E_TEST_SUPPORT_KEY` exported (value is `app.email.test-support-key` in
+  `backend/src/main/resources/application-local.yml`). `e2e.sh` fails fast if it's missing.
+- `ACS_EMAIL_CONNECTION_STRING` / `ACS_EMAIL_SENDER_ADDRESS` set — local registration calls the
+  real ACS email API even though the helper reads the code back via the test-support endpoint,
+  so without them **every** spec that registers a household fails at registration.
+
+**Reading the result — do this before believing any failure:**
+1. If `e2e.sh` printed the "⚠️ The frontend/backend died during this run" banner, the failures
+   above it are **not** yours. Re-run from a fresh `bash scripts/up.sh` in a separate call.
+2. Many unrelated specs failing at once — especially if `smoke.spec.ts` is among them — is that
+   same symptom even without the banner. Check `curl localhost:<FRONTEND_PORT>` before debugging.
+3. A **single** spec failing, or a small set that **changes between runs**, is this repo's known
+   local worker-contention flake (`offline-reads`, `multi-person`, `intermittent-errors` are the
+   usual names). Confirm by re-running that spec alone before treating it as a regression.
+
+**Leave the stack running** — step 12 may need it, and `/stop-local` is the teardown. If you do
+tear down, use `bash scripts/down.sh`: killing the launching shell command is not enough, since
+`mvn spring-boot:run` and `npm run dev` both fork processes that outlive their parent, and
+leftovers hold file locks that block worktree removal in step 13.
 
 ### 4. Resolve issues
 Fix any failures from step 3; re-run until green (bounded retries). If a failure is
@@ -154,9 +183,32 @@ workflow started:
 `gh run list -R $OWNER/worktrac-deploy --workflow=deploy-lower.yml --limit 1`.
 
 ### 12. Ensure lower deploy + smoke/e2e pass
-Watch that `worktrac-deploy` run to completion:
-`gh run watch -R $OWNER/worktrac-deploy <run-id> --exit-status`. Confirm all four jobs green:
-`deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`, `e2e-tests`.
+
+**Fast path — one call to watch, one call to triage.** `gh run watch` streams a lot of output for
+little signal; prefer polling the job rollup, which is what you actually need:
+
+```bash
+# Watch to completion, then print just the four job verdicts.
+gh run watch -R $OWNER/worktrac-deploy <run-id> > /dev/null 2>&1
+gh run view -R $OWNER/worktrac-deploy <run-id> \
+  --json status,conclusion,jobs \
+  -q '{status, conclusion, jobs: [.jobs[] | {name, conclusion}]}'
+```
+
+All four must be green: `deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`,
+`e2e-tests`.
+
+If `e2e-tests` is red, get the failing spec names in **one** call before doing anything else —
+that list is what the attribution protocol below operates on:
+
+```bash
+gh run view -R $OWNER/worktrac-deploy <run-id> --log-failed 2>/dev/null \
+  | grep -oE '›[^›]+\.spec\.ts:[0-9]+:[0-9]+ › .*' | sort -u
+```
+
+Lower e2e runs against the **deployed** app, not a dev server, so the local dev-server death in
+step 3 has no analogue here — a red `e2e-tests` is either a real regression or someone else's
+(see attribution below). Do not port local-flake reasoning to it.
 
 **On an `e2e-tests` failure, don't assume it's yours — another worktree's deploy may have
 queued behind this one (or just ahead of it) and surfaced the same red first.** Because lower

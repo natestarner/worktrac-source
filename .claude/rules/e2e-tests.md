@@ -9,10 +9,23 @@ Full narrative: `docs/architecture/testing.md`.
 
 ## Running
 
+- **Never run `npx playwright test` directly — always `bash scripts/e2e.sh`.** Raw Playwright
+  defaults to `http://localhost:3000`, which for any worktree other than the primary `main`
+  checkout is either nothing or **a sibling session's stack**, and it has no idea when the dev
+  server dies mid-run. Both failure modes present as a screenful of unrelated red specs that read
+  like a code regression; chasing one of them as such cost about an hour on 2026-08-09.
+- Prefer **two separate shell invocations** for a full suite — `bash scripts/up.sh`, then
+  `bash scripts/e2e.sh`. The Vite dev server has a known habit of dying partway through a long
+  run, and the one surviving correlation is up.sh sharing an invocation with the run (see the
+  `KNOWN UNRESOLVED` block in `scripts/up.sh`). e2e.sh warns when it had to start the stack itself.
 - `bash scripts/e2e.sh` runs the suite against **this worktree's own stack**. It **reuses** that
   stack when it's already serving, and otherwise brings it up via `scripts/up.sh` — which is
   **readiness-gated**, so it doesn't return until both ports actually answer (and exits non-zero,
   dumping the relevant `.dev-logs/` tail, if they don't).
+- **Before believing any failure**, check whether e2e.sh printed its "⚠️ The frontend/backend died
+  during this run" banner. If it did, the results above it are meaningless. The `[[<name> exited
+  rc=...]]` line it points at answers the next question: present = the server exited on its own
+  (rc says why); absent = something killed it.
 - **The backend does not hot-reload.** A reused stack still serves the code it booted with, so pass
   `--restart` (or `E2E_RESTART=1`) after changing backend code. Vite hot-reloads, so frontend edits
   need nothing.
