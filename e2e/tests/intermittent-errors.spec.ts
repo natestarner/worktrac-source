@@ -147,6 +147,44 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     faults.stop();
   });
 
+  // A lie-fi write is really attempted and really fails, then retries forever with backoff
+  // (shouldRetryWrite never gives up on a statusless/5xx failure). Throughout, the Log tab must
+  // keep listing its exercise even though the server has no record of the set at all.
+  //
+  // NOTE this does NOT exercise the terminal-'error' branch of isUnsyncedWrite: because retries
+  // are unbounded, a lie-fi write stays 'pending' between backoffs and this spec passes with the
+  // old status === 'pending' filter too. Keeping it anyway -- it pins the behaviour that matters
+  // to the user. The 'error' branch is covered in useSessionEntries.test.jsx, where the test
+  // client uses retry: false.
+  test("the Log tab keeps listing an exercise whose set is stuck retrying against a dead backend", async ({ page, request }) => {
+    await registerHousehold(page, request, 'Sasha');
+    await pickExercise(page, 'Barbell Bench Press');
+
+    // Cut the backend BEFORE logging, so this set never reaches the server at all.
+    const faults = await failNetwork(page, API_ONLY);
+    await page.getByRole('button', { name: /Log set/ }).click();
+
+    // The row is durable on the exercise screen (Edit/Delete, not an endless spinner) once the
+    // write is paused/retrying/errored -- that part already worked.
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+
+    // Wait for the retry loop to genuinely exhaust itself rather than asserting mid-flight: the
+    // banner counts it as queued, which is the signal that it is no longer a fresh first attempt.
+    await expect(outboxCountText(page, 1)).toBeVisible();
+
+    // The set exists ONLY as a queued mutation -- nothing about it is on the server. The session
+    // list must still show its exercise. Scoped to .session-exercises: the same name also appears
+    // in the picker and in search results on this screen.
+    await page.getByRole('button', { name: /All exercises/ }).click();
+    const sessionList = page.locator('.session-exercises');
+    await expect(sessionList.getByText('Barbell Bench Press', { exact: true })).toBeVisible();
+
+    // And once it finally syncs it stays listed, now from server truth rather than the outbox.
+    faults.stop();
+    await waitForOutboxDrain(page);
+    await expect(sessionList.getByText('Barbell Bench Press', { exact: true })).toBeVisible();
+  });
+
   test('the outbox list still shows the real exercise name after a reload while lie-fi, not a generic fallback', async ({ page, request }) => {
     await registerHousehold(page, request, 'Skyler');
     await pickExercise(page, 'Barbell Bench Press');

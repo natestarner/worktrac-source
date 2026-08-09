@@ -15,6 +15,12 @@ failures — subject to the guardrails.
   **stop and report** with the error, the run/PR links, and what you tried. Never loop forever.
 - **Never force-push. Never bypass branch protection.** Every path to `main` — including any
   automated fix after merge — goes through a PR with `backend-ci` + `frontend-ci` green.
+- **Never run a destructive git command on a dirty tree.** `git reset --hard`, `git checkout -- .`
+  and `git clean -fd` all destroy uncommitted work **permanently** — `git reflog` recovers
+  commits, not edits that were never committed. Run `git status --short` first; if it is not
+  empty, `git commit` or `git stash` before doing anything that moves the branch. This bit a real
+  run on 2026-08-08: three finished fix edits were wiped by a `git reset --hard origin/main` used
+  to re-point the worktree after a squash merge — see step 12's recipe for what to do instead.
 - **Code failures → auto-fix. Infra/secret/config failures → stop and report** (e.g. Azure
   auth, missing GitHub secret, container-app not found, GHCR pull creds). You cannot fix those.
 - Operate on the **current branch only**. Confirm you are in the intended worktree/branch and
@@ -72,29 +78,58 @@ Ensure the change is summarized where it belongs before shipping:
   for user-visible flows; update specs whose assertions the change breaks.
 
 ### 3. Run all tests locally
-- `cd backend && mvn verify`
-- `cd frontend && npm test`
-- **e2e** (the only pre-merge e2e gate):
-  1. Ensure local SQL Server is up: `docker start worktrac-sqlserver` (host port **1434**).
-  2. Start backend `local` profile and frontend dev server — the frontend **must be on port
-     3000** (local CORS only allows 3000; a stray 3000 server bumps Vite to 3001+ and causes
-     silent 403s).
-  3. `cd e2e && E2E_BASE_URL=http://localhost:3000 E2E_TEST_SUPPORT_KEY=<value from
-     backend/src/main/resources/application-local.yml's app.email.test-support-key>
-     npx playwright test`.
-     - Registration in the local flow calls the real Azure Communication Services email
-       API even though the e2e helper reads the confirmation code back via the
-       test-support endpoint rather than an inbox — so `ACS_EMAIL_CONNECTION_STRING` and
-       `ACS_EMAIL_SENDER_ADDRESS` must already be set in your shell environment (a
-       free-tier ACS resource is fine), or every e2e test that registers a household
-       fails at registration.
-  4. Tear the local app back down: killing the launching shell command is **not
-     enough** — `mvn spring-boot:run` forks a separate `java` process and `npm run dev`
-     forks a separate `node`/vite process that both survive their parent being killed.
-     Kill whatever is actually listening on 8080 and 3000 (e.g. find the PID via
-     `netstat`/`lsof` and `taskkill`/`kill` it), not just the wrapper command. Leftover
-     processes here don't just waste resources — they hold file locks on the worktree
-     that will block its removal in step 13.
+
+`cd backend && mvn verify` and `cd frontend && npm test` first — both are cheap and catch most
+things before you spend minutes on a stack.
+
+#### e2e — the only pre-merge e2e gate. Follow this exactly.
+
+**Never run `npx playwright test` directly. Always go through `scripts/e2e.sh`.** This is not a
+style preference — it is the difference between a five-minute gate and an hour of chasing
+phantom regressions, which has happened. Raw playwright:
+- defaults to `http://localhost:3000`, which for **any worktree other than the primary `main`
+  checkout** is either nothing or *a sibling session's stack* — you silently test the wrong app;
+- has no idea the dev server died mid-run, so you get ~60 red specs across unrelated files
+  (`smoke.spec.ts` among them) that read exactly like a code regression.
+
+`scripts/e2e.sh` resolves this worktree's own ports, starts-or-reuses a readiness-gated stack,
+and **after the run tells you if the stack didn't outlive it**.
+
+**Use two separate tool calls.** The Vite dev server has a known, still-unresolved habit of dying
+partway through a long suite, and the one surviving correlation is `up.sh` sharing a shell
+invocation with the run (see the `KNOWN UNRESOLVED` block in `scripts/up.sh`):
+
+```bash
+bash scripts/up.sh      # call 1: starts this worktree's stack, waits until both answer
+bash scripts/e2e.sh     # call 2: reuses that healthy stack and runs the suite
+```
+
+Pass extra args after `--`, e.g. `bash scripts/e2e.sh -- --grep "@smoke"`. Use
+`bash scripts/e2e.sh --restart` after **backend** changes — `mvn spring-boot:run` has no
+hot-reload, so a reused backend still serves the code it booted with. Vite does hot-reload, so
+frontend edits are picked up by a reused stack.
+
+Prerequisites:
+- Local SQL Server up: `docker start worktrac-sqlserver` (host port **1434**, not 1433).
+- `E2E_TEST_SUPPORT_KEY` exported (value is `app.email.test-support-key` in
+  `backend/src/main/resources/application-local.yml`). `e2e.sh` fails fast if it's missing.
+- `ACS_EMAIL_CONNECTION_STRING` / `ACS_EMAIL_SENDER_ADDRESS` set — local registration calls the
+  real ACS email API even though the helper reads the code back via the test-support endpoint,
+  so without them **every** spec that registers a household fails at registration.
+
+**Reading the result — do this before believing any failure:**
+1. If `e2e.sh` printed the "⚠️ The frontend/backend died during this run" banner, the failures
+   above it are **not** yours. Re-run from a fresh `bash scripts/up.sh` in a separate call.
+2. Many unrelated specs failing at once — especially if `smoke.spec.ts` is among them — is that
+   same symptom even without the banner. Check `curl localhost:<FRONTEND_PORT>` before debugging.
+3. A **single** spec failing, or a small set that **changes between runs**, is this repo's known
+   local worker-contention flake (`offline-reads`, `multi-person`, `intermittent-errors` are the
+   usual names). Confirm by re-running that spec alone before treating it as a regression.
+
+**Leave the stack running** — step 12 may need it, and `/stop-local` is the teardown. If you do
+tear down, use `bash scripts/down.sh`: killing the launching shell command is not enough, since
+`mvn spring-boot:run` and `npm run dev` both fork processes that outlive their parent, and
+leftovers hold file locks that block worktree removal in step 13.
 
 ### 4. Resolve issues
 Fix any failures from step 3; re-run until green (bounded retries). If a failure is
@@ -148,9 +183,32 @@ workflow started:
 `gh run list -R $OWNER/worktrac-deploy --workflow=deploy-lower.yml --limit 1`.
 
 ### 12. Ensure lower deploy + smoke/e2e pass
-Watch that `worktrac-deploy` run to completion:
-`gh run watch -R $OWNER/worktrac-deploy <run-id> --exit-status`. Confirm all four jobs green:
-`deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`, `e2e-tests`.
+
+**Fast path — one call to watch, one call to triage.** `gh run watch` streams a lot of output for
+little signal; prefer polling the job rollup, which is what you actually need:
+
+```bash
+# Watch to completion, then print just the four job verdicts.
+gh run watch -R $OWNER/worktrac-deploy <run-id> > /dev/null 2>&1
+gh run view -R $OWNER/worktrac-deploy <run-id> \
+  --json status,conclusion,jobs \
+  -q '{status, conclusion, jobs: [.jobs[] | {name, conclusion}]}'
+```
+
+All four must be green: `deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`,
+`e2e-tests`.
+
+If `e2e-tests` is red, get the failing spec names in **one** call before doing anything else —
+that list is what the attribution protocol below operates on:
+
+```bash
+gh run view -R $OWNER/worktrac-deploy <run-id> --log-failed 2>/dev/null \
+  | grep -oE '›[^›]+\.spec\.ts:[0-9]+:[0-9]+ › .*' | sort -u
+```
+
+Lower e2e runs against the **deployed** app, not a dev server, so the local dev-server death in
+step 3 has no analogue here — a red `e2e-tests` is either a real regression or someone else's
+(see attribution below). Do not port local-flake reasoning to it.
 
 **On an `e2e-tests` failure, don't assume it's yours — another worktree's deploy may have
 queued behind this one (or just ahead of it) and surfaced the same red first.** Because lower
@@ -187,6 +245,28 @@ writing any fix:
    an earlier merge is not yours to fix here — if it's still red after that earlier merge's own
    fix should have landed, report it rather than fixing it yourself under this invocation.
 
+   **Starting that fix branch — the exact sequence, because the obvious move is wrong.** Your
+   worktree is still on the branch that was just *squash*-merged, so its commits are not
+   ancestors of `main` even though their content is. `git log origin/main..HEAD` therefore looks
+   like unmerged work, and `git status` may be dirty if you started editing before re-branching.
+   Do this:
+
+   ```bash
+   git status --short                        # MUST be empty -- commit or `git stash` first
+   git fetch origin main
+   git checkout -b <fix-branch> origin/main  # safe: no-op on the tree when content already matches
+   ```
+
+   **Do not use `git reset --hard origin/main` for this.** It is the move that suggests itself
+   (the branch "looks behind"), it is not needed — `checkout -b` from a clean tree does the whole
+   job — and it silently and permanently destroys uncommitted edits. Sequence matters: re-branch
+   **first**, then write the fix. If you already wrote the fix, commit or stash it before
+   re-branching, then `git cherry-pick`/`git stash pop` onto the new branch.
+
+   Verifying a squash-merged branch really is merged (before deleting it or removing the
+   worktree): `git diff origin/main --stat` being empty is the check that works — `git log
+   origin/main..HEAD` and `git branch -d` both report false positives after a squash merge.
+
 If the failure is infra/secret/config rather than code, stop and report regardless of
 attribution — you can't fix those either way.
 
@@ -202,3 +282,13 @@ attribution — you can't fix those either way.
   from step 3.4 is still holding a file handle open in the worktree — find the orphaned
   `java`/`node` process rooted at the worktree's path (e.g. inspect running processes'
   command lines) and kill it before retrying the removal.
+- **`ExitWorktree`/`git worktree remove` routinely half-succeeds on Windows**: it unregisters the
+  worktree (so `git worktree list` looks clean and a retry says *"is not a working tree"*) while
+  leaving the directory — and its ~180 MB of `node_modules` — on disk. Always confirm with
+  `ls .claude/worktrees/`, and `rm -rf` the leftover directory if it's still there.
+- `ExitWorktree` may also refuse with *"has N commits"* and name the branch by its **original**
+  name if you renamed it in step 6. That count is the squash-merge false positive above — verify
+  with `git diff origin/main --stat` (empty = merged), then pass `discard_changes: true`.
+- Local branches from this run won't delete with `git branch -d` after a squash merge for the same
+  reason; use `git branch -D` once the diff check confirms they're merged. Leave any branch you
+  did not create alone — a sibling session may be mid-task on it.

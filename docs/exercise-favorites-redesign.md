@@ -288,3 +288,106 @@ Backend `mvn verify` (186 tests, incl. 4 new picker-membership cases in
 `ExerciseFavoritesTest`), frontend Vitest (558 tests, 61 new/changed), and Playwright e2e (67
 specs, incl. a new `history-filter.spec.ts` and a regression case that deliberately tags
 before ever logging) all green.
+
+## Update — 2026-08-07: Trends expanded; the category-balance chart stays gone
+
+Trends grew from 3 stat tiles + 2 bar charts + 1 est.-1RM line into rep-max records, a
+per-exercise metric switcher (Est. 1RM / Top weight / Volume / Best set / Reps), a weekly
+Volume/Sets/Reps switcher, a consistency heatmap, and a recent-PRs card. No schema change —
+everything is derived from sets already stored. Full narrative: `docs/architecture/trends.md`;
+invariants: `.claude/rules/trends.md`.
+
+**This does NOT revisit the 2026-07 decision above to remove the "category balance" chart.** That
+chart was dropped because it keyed off the legacy `categories` taxonomy, and because a set can now
+carry multiple tags, which breaks a 100%-stacked framing. Nothing here reinstates it, and the
+`--chart-cat-*` categorical palette in `index.css` remains unused. Its natural successor is a
+muscle-group breakdown (the biggest remaining gap versus Hevy/Boostcamp), which was **deliberately
+scoped out** on 2026-08-07: it needs a `muscle_group` column on `exercises`, and it would
+re-introduce a structured taxonomy that `V33` deliberately dropped in favour of free-text tags.
+That's a decision to revisit on its merits, not a migration to write casually. The other scoped-out
+items — body-weight tracking, workout duration, RPE, and a cross-person household view (which would
+breach per-person isolation) — are recorded with their reasoning in `docs/architecture/trends.md`.
+
+Two pre-existing bugs were fixed along the way: logging a set never invalidated the trends query
+caches (only `prs`/`history`), so with `staleTime` at 60s a first-ever set left Trends reading "No
+workouts logged yet"; and the range-empty state showed onboarding copy to anyone whose *selected
+range* was empty, telling a lapsed user with years of history they had never trained.
+
+Backend `mvn verify` (205 tests), frontend Vitest (615 tests), and Playwright e2e (72 specs, incl.
+a new `trends.spec.ts`) all green.
+
+## Update — 2026-08-08: two of yesterday's Trends additions walked back; PRs board gets a sort
+
+The 2026-08-07 entry above added five things to Trends. Two of them turned out to be duplicating
+surfaces that already existed, and are now removed. That entry stands as written — this is what
+changed since, not a correction of it.
+
+**Recent PRs is gone.** Its rows repeated the PRs board row-for-row: same exercise, same
+weight × reps, same date. That wasn't a rendering accident — a PR set in the last 30 days *is*
+that lift's all-time best, so the two lists are the same rows by construction. The card's one
+genuinely distinct piece of information, the delta versus the previous best, was never displayed.
+Rather than teach it to show deltas, the question moved to the board as an ordering: "what got
+better lately" is a *sort* of the PRs you already have, not a second list of them. `buildRecentPrs`,
+`RecentPrDto` and `TrendsOverviewDto.recentPrs` went with it.
+
+**The rep-max table is gone, replaced by one Epley-based "Best est. 1RM" row.** The intent was to
+keep just the 1RM and drop 3/5/8/10/12. Reading the code first showed the "1+ reps" row wasn't a
+1RM at all: `buildRepMaxes(1)` ranked on **raw weight** using the same `isBetter(weight, reps, …)`
+comparator over a candidate pool its `reps >= 1` filter never narrowed — byte-for-byte the same
+record as `heaviestWeight` two rows below it. Epley appeared nowhere in that table. The replacement
+row genuinely disagrees with `heaviestWeight` (185 × 8 → ~234 lb beats a 225 × 1 single), skips
+weight-0 sets rather than routing them through `comparableLb`, and always names the set behind the
+estimate so a number above your best actual lift doesn't read as a bug.
+
+**The PRs board is now sortable** — Most recent (default), Name A–Z, Best est. 1RM — stored per
+person in `AppStateContext` alongside the Trends metric switchers, so it survives a person switch.
+That is deliberately different from the *filter* beside it (`useExerciseFilter`), which is local
+state and clears on navigate-away by design: a sort is a standing preference, a filter is not.
+Sorting by est. 1RM normalizes to lb before ranking (raw `est1rm` arrives in each set's own unit, so
+a mixed-unit history would compare 100 kg against 200 lb numerically) and groups bodyweight lifts
+last instead of letting them all tie at 0.
+
+One behaviour worth knowing: "Most recent" orders by the PR's **session** `startedAt`, so several
+PRs set in the same workout tie exactly and fall through to a name tiebreak. That matches how the
+row itself is dated and keeps the order deterministic; it is not a bug.
+
+Also fixed here: hovering the weekly volume chart blanked the entire page for anyone whose persisted
+UI state predated the 2026-08-07 metric switcher. Full post-mortem in
+`docs/incidents/2026-08-08-trends-hover-blank-page.md` — the general fix (`HYDRATE` now underlays
+`PERSON_DEFAULTS`) matters more than the chart fix, because without it every future field added to
+`PERSON_DEFAULTS` carries the same latent crash for existing users.
+
+Backend `mvn verify` (203 tests), frontend Vitest (641 tests), and Playwright e2e (74 specs) green.
+
+## 2026-08-09 — Design system pass
+
+The frontend was ~95% inline `style={{}}` objects with a colour-only token layer. Type, space,
+shadow and motion were hardcoded at every call site, which is how 17 font sizes, 13 border radii,
+8 one-off shadows and ~40 padding pairs accumulated — and `fontWeight: 700` appeared 132 times
+against `400` three times, so nothing on screen had emphasis because everything did.
+
+More consequentially, **inline styles cannot express `:hover`, `:active` or `:focus-visible`**, so
+the app had no transitions, no press feedback, and no keyboard focus indicator anywhere. That was
+an architectural dead end, not an oversight. This pass adds the missing token families plus a CSS
+component layer (`.btn-*`, `.card`, `.input`, `.seg`, `.icon-btn`) and a small set of React
+primitives, and migrates everything except the admin portal and the Recharts internals.
+
+Five measured contrast failures fixed: `--color-muted` (4.42:1), `--color-faint` (2.07:1, and it
+was carrying empty-state body copy), and dark-mode `--color-success`/`--color-danger`, which were
+never re-derived for the dark theme and sat at ~3.3:1. The accent split into three tokens because
+`#d4673e` is 3.44:1 as small text — the hero "Log set" CTA keeps the brand orange only because it
+is large enough to qualify as AA Large. Full reasoning in `docs/architecture/design-system.md`.
+
+**Decision worth recording: not every glyph became an icon.** Emoji did (they ignore the theme and
+the accent colour, and render as different art per OS), but the `+` in "+ Add person", the
+stepper's `+`/`−`, the keypad's `⌫` and the back arrow stayed as text — they render identically
+everywhere, inherit colour and weight, and were never the problem. They are also part of those
+controls' accessible names, which ~30 e2e assertions select by. Similarly, dimming the unit in
+`135 lb × 8` was tried and reverted: it requires splitting the string into spans, and RTL's
+`getByText` concatenates only direct text-node children, so ~20 assertions covering offline set
+handling and PR-badge correctness would have broken for a subtle typographic gain.
+
+**Toasts are neutral, not green.** The saturated success green was the one hue in the palette with
+nothing else to talk to. A confirmation doesn't need colour to carry its meaning; errors do, so
+they keep a hue — with their own bg/text pair, because dark-mode `--color-danger` is a light salmon
+tuned to be read *as text* on a dark ground and white on it is only 2.95:1.

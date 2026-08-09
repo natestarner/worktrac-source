@@ -31,7 +31,11 @@ export function useOfflineCacheWarming(people) {
       warmOfflineCache(queryClient, people);
     }
 
-    warm();
+    // The first warm after `isRestoring` clears is the only one running against a cache that came
+    // off disk rather than off the network, so it's the only one that passes afterRestore -- see
+    // warmOfflineCache. The later triggers (online transition, visibility, interval) are looking
+    // at a cache this page session already fetched, where the ordinary staleness check is right.
+    warmOfflineCache(queryClient, people, { afterRestore: true });
 
     const unsubscribeOnline = onlineManager.subscribe((online) => {
       if (online) warm();

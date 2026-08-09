@@ -60,7 +60,10 @@ export default function SessionSummary({ entries, loading, sessionId, onSelectEx
   }
 
   return (
-    <div style={{ marginBottom: 16 }}>
+    // Named class (like .log-sets-col / .person-pill-bar elsewhere) purely so tests can scope to
+    // this list -- an exercise name legitimately appears here AND in the picker below AND in
+    // search results, so a bare getByText for it is a strict-mode violation waiting to happen.
+    <div className="session-exercises" style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
         Session exercises
       </div>
@@ -105,5 +108,5 @@ export default function SessionSummary({ entries, loading, sessionId, onSelectEx
   );
 }
 
-const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent-text)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const removeLinkStyle = { background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };

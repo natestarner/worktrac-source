@@ -110,7 +110,7 @@ const backLinkStyle = {
   display: 'block',
   background: 'none',
   border: 'none',
-  color: 'var(--color-accent)',
+  color: 'var(--color-accent-text)',
   fontSize: 14,
   fontWeight: 600,
   cursor: 'pointer',
@@ -176,7 +176,7 @@ const removePillButtonStyle = {
 const clearAllLinkStyle = {
   background: 'none',
   border: 'none',
-  color: 'var(--color-accent)',
+  color: 'var(--color-accent-text)',
   fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',

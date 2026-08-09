@@ -16,34 +16,38 @@ function PersonPill({ person, active, onSelect }) {
   return (
     <button
       onClick={onSelect}
+      aria-pressed={active}
+      className="pressable"
       style={{
         flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
-        padding: '8px 16px 8px 8px',
-        borderRadius: 999,
-        border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
-        background: active ? 'var(--color-accent)' : 'var(--color-surface)',
+        gap: 'var(--space-2)',
+        minHeight: 44,
+        padding: 'var(--space-2) var(--space-4) var(--space-2) var(--space-2)',
+        borderRadius: 'var(--radius-full)',
+        border: `1px solid ${active ? 'var(--color-accent-strong)' : 'var(--color-border)'}`,
+        background: active ? 'var(--color-accent-strong)' : 'var(--color-surface)',
         color: active ? 'var(--color-accent-contrast)' : 'var(--color-text)',
-        fontSize: 15,
-        fontWeight: 700,
+        fontSize: 'var(--text-base)',
+        fontWeight: 'var(--weight-semibold)',
         cursor: 'pointer',
         whiteSpace: 'nowrap',
       }}
     >
       <span
+        aria-hidden="true"
         style={{
           width: 26,
           height: 26,
-          borderRadius: '50%',
+          borderRadius: 'var(--radius-full)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 12,
-          fontWeight: 800,
+          fontSize: 'var(--text-xs)',
+          fontWeight: 'var(--weight-bold)',
           background: active ? 'rgba(255,255,255,0.25)' : 'var(--color-subtle-bg)',
-          color: active ? '#fff' : 'var(--color-muted)',
+          color: active ? 'var(--color-accent-contrast)' : 'var(--color-muted)',
         }}
       >
         {initials(person.name)}
@@ -51,11 +55,14 @@ function PersonPill({ person, active, onSelect }) {
       {person.name}
       {isLive && (
         <span
+          title="Workout in progress"
+          aria-label="Workout in progress"
+          role="img"
           style={{
             width: 8,
             height: 8,
-            borderRadius: '50%',
-            background: active ? '#fff' : 'var(--color-success)',
+            borderRadius: 'var(--radius-full)',
+            background: active ? 'var(--color-accent-contrast)' : 'var(--color-success)',
             display: 'inline-block',
           }}
         />
@@ -76,28 +83,34 @@ export default function PersonPillBar() {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          gap: 'var(--space-2)',
           overflowX: 'auto',
           background: 'var(--color-surface)',
           borderBottom: '1px solid var(--color-border)',
-          ...(people.length >= 2 ? { position: 'sticky', top: 0, zIndex: 5 } : null),
         }}
       >
         {people.map((p) => (
           <PersonPill key={p.id} person={p} active={p.id === activePersonId} onSelect={() => selectPerson(p.id)} />
         ))}
         <OfflineDisabledWrap message="Adding a person needs a connection.">
+          {/* The literal "+ " stays. It was tempting to swap it for the IconPlus glyph
+              along with the emoji elsewhere, but a text plus is a standard button
+              convention that renders identically on every platform and inherits colour
+              and weight -- it was never part of the emoji problem. Swapping it would
+              also change this button's accessible name, which 17 e2e specs select by. */}
           <button
             onClick={() => setShowAddPerson(true)}
+            className="pressable pressable-subtle"
             style={{
               flexShrink: 0,
-              padding: '10px 16px',
-              borderRadius: 999,
+              minHeight: 44,
+              padding: 'var(--space-2) var(--space-4)',
+              borderRadius: 'var(--radius-full)',
               border: '1px dashed var(--color-faint)',
               background: 'none',
               color: 'var(--color-muted)',
-              fontSize: 14,
-              fontWeight: 600,
+              fontSize: 'var(--text-sm)',
+              fontWeight: 'var(--weight-semibold)',
               cursor: 'pointer',
               whiteSpace: 'nowrap',
             }}
@@ -106,9 +119,6 @@ export default function PersonPillBar() {
           </button>
         </OfflineDisabledWrap>
       </div>
-      {/* Rendered outside the sticky pill bar above: position:sticky + z-index there
-          creates a stacking context that would trap this fixed-position modal behind
-          later siblings (TabsNav, tab content) regardless of its own z-index. */}
       {showAddPerson && <AddPersonModal onClose={() => setShowAddPerson(false)} />}
     </>
   );

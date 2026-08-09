@@ -68,6 +68,28 @@ export function shouldRetryWrite(_failureCount, error) {
   return true;
 }
 
+// "Has this write NOT reached the server yet?" -- the display counterpart to shouldRetryWrite
+// above, and the single predicate every screen that renders unsynced writes must share.
+//
+// Deliberately NOT `status === 'pending'`: a write whose retries have settled against an
+// unreachable server sits in 'error', but it is still queued, still durable, and still guaranteed
+// to sync (shouldRetryWrite retries transient failures forever, and flushOutbox restarts stuck
+// ones on reconnect). Hiding it would tell the person their set is gone while the outbox badge
+// still counts it. Only two states mean "stop showing this": 'success' (it landed), and a
+// definitive 4xx (the server's real answer, which onError has already rolled back).
+//
+// Takes the flat { status, errorStatus } shape so it works both on a raw Mutation
+// (`{ status: m.state.status, errorStatus: m.state.error?.status }`) and on the projection
+// useMutationState's `select` already produces.
+//
+// Note this answers a DIFFERENT question from useOutboxCount's "is it queued or struggling",
+// which deliberately excludes a brand-new online first attempt so a fast successful write doesn't
+// flash the banner. Don't unify those two.
+export function isUnsyncedWrite({ status, errorStatus }) {
+  if (status === 'success') return false;
+  return !(status === 'error' && errorStatus >= 400 && errorStatus < 500);
+}
+
 // Thrown by a dependent write's mutationFn (log-set, note, favorite) when the exercise id it needs
 // is still an unresolved temp id -- i.e. the exercise-create it depends on hasn't synced yet. This
 // error carries no `.status`, so shouldRetryWrite treats it as transient and keeps retrying/requeuing
@@ -104,6 +126,21 @@ function requireResolvedSetId(id) {
   const resolved = resolveSetId(id);
   if (isTempSetId(resolved)) throw new UnresolvedSetIdError(resolved);
   return resolved;
+}
+
+// Trends is derived entirely from logged sets, so any set write makes every cached range and every
+// cached per-exercise curve wrong. It was previously left out of these handlers alongside `prs` and
+// `history`, and with staleTime at 60s that meant logging your very first set and opening Trends
+// still showed "No workouts logged yet" for a minute.
+//
+// This is invalidation, not prefetching -- deliberately unlike offlineCacheWarm.js, which skips
+// trends because *warming* them is a high-cost fan-out across every household member. Marking them
+// stale costs nothing: Trends isn't mounted while you're logging, so no refetch fires until the tab
+// is actually opened.
+function invalidateTrends(client, personId) {
+  client.invalidateQueries({ queryKey: queryKeys.trendsForPerson(personId) });
+  client.invalidateQueries({ queryKey: queryKeys.exerciseTrendsForPerson(personId) });
+  client.invalidateQueries({ queryKey: queryKeys.exerciseRecordsForPerson(personId) });
 }
 
 export function registerOfflineMutationDefaults(client, { retry } = {}) {
@@ -151,6 +188,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       }
       client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
       client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+      invalidateTrends(client, vars.personId);
     },
   });
 
@@ -191,6 +229,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, vars.sessionId) });
     client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
     client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+    invalidateTrends(client, vars.personId);
   };
 
   // Edit a set's weight/reps. Also reachable against a set that hasn't synced yet -- correcting a

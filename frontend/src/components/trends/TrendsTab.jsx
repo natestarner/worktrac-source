@@ -1,10 +1,11 @@
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTrendsOverview } from '../../hooks/useTrendsOverview';
-import RangeToggle from './RangeToggle';
+import RangeToggle, { rangeEmptyLabel } from './RangeToggle';
 import SummaryCards from './SummaryCards';
 import WeeklyFrequencyChart from './WeeklyFrequencyChart';
-import VolumeChart from './VolumeChart';
+import WeeklyMetricChart from './WeeklyMetricChart';
+import ConsistencyHeatmap from './ConsistencyHeatmap';
 import ExerciseTrendSection from './ExerciseTrendSection';
 import Skeleton from '../shared/Skeleton';
 import RefreshingPill from '../shared/RefreshingPill';
@@ -12,14 +13,24 @@ import OfflineDataNotice from '../shared/OfflineDataNotice';
 
 const cardStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 18px' };
 
-// One placeholder shape per real chart component below (WeeklyFrequencyChart,
-// VolumeChart, ExerciseTrendChart) -- each mirrors that component's own
+// One placeholder shape per real chart component below (ConsistencyHeatmap, WeeklyFrequencyChart,
+// WeeklyMetricChart, ExerciseTrendChart) -- each mirrors that component's own
 // padding/label/body dimensions so nothing resizes when real data replaces it.
 function BarChartSkeleton() {
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 12px 8px' }}>
       <Skeleton width={130} height={13} style={{ margin: '0 8px 8px' }} />
       <Skeleton width="100%" height={160} radius={8} />
+    </div>
+  );
+}
+
+function HeatmapSkeleton() {
+  return (
+    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
+      <Skeleton width={170} height={13} style={{ marginBottom: 12 }} />
+      {/* 7 rows of 10px cells + 3px gaps + the month-label strip = 107px. */}
+      <Skeleton width="100%" height={107} radius={8} />
     </div>
   );
 }
@@ -46,12 +57,14 @@ function TrendsSkeleton() {
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
+        <HeatmapSkeleton />
         <BarChartSkeleton />
         <BarChartSkeleton />
       </div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
         <Skeleton width={140} height={13} style={{ marginBottom: 12 }} />
-        <Skeleton width="100%" height={42} radius={12} style={{ marginBottom: 16 }} />
+        <Skeleton width="100%" height={42} radius={12} style={{ marginBottom: 12 }} />
+        <Skeleton width={260} height={34} radius={10} style={{ marginBottom: 12 }} />
         <Skeleton width="100%" height={200} radius={8} />
       </div>
     </div>
@@ -59,7 +72,17 @@ function TrendsSkeleton() {
 }
 
 export default function TrendsTab() {
-  const { activePersonId, trendsRangeWeeks, setTrendsRange, trendsExerciseId, selectTrendsExercise } = useAppState();
+  const {
+    activePersonId,
+    trendsRangeWeeks,
+    setTrendsRange,
+    trendsExerciseId,
+    selectTrendsExercise,
+    trendsWeeklyMetric,
+    setTrendsWeeklyMetric,
+    trendsExerciseMetric,
+    setTrendsExerciseMetric,
+  } = useAppState();
   const { account } = useAuth();
   const defaultUnit = account?.defaultUnit || 'lb';
 
@@ -69,11 +92,21 @@ export default function TrendsTab() {
     return <TrendsSkeleton />;
   }
 
-  const hasAnyActivity = overview.weeks.some((w) => w.workoutCount > 0);
-  if (!hasAnyActivity) {
+  // Two genuinely different empty states. `weeks` only describes the SELECTED range, so keying the
+  // onboarding copy off it told someone with years of history that they'd never logged a workout
+  // the moment they clicked 4wk. hasAnyHistory is range-independent and separates the two.
+  const hasActivityInRange = overview.weeks.some((w) => w.workoutCount > 0);
+  if (!hasActivityInRange) {
     return (
-      <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--color-faint)', fontSize: 15 }}>
-        No workouts logged yet &mdash; trends will show up here once a few sessions are in the books.
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+          <RangeToggle weeks={trendsRangeWeeks} onChange={setTrendsRange} />
+        </div>
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--color-faint)', fontSize: 15 }}>
+          {overview.hasAnyHistory
+            ? `No workouts in the ${rangeEmptyLabel(trendsRangeWeeks)} — try a wider range.`
+            : 'No workouts logged yet — trends will show up here once a few sessions are in the books.'}
+        </div>
       </div>
     );
   }
@@ -89,8 +122,14 @@ export default function TrendsTab() {
       <SummaryCards overview={overview} defaultUnit={defaultUnit} />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
+        <ConsistencyHeatmap workoutDays={overview.workoutDays} />
         <WeeklyFrequencyChart weeks={overview.weeks} />
-        <VolumeChart weeks={overview.weeks} defaultUnit={defaultUnit} />
+        <WeeklyMetricChart
+          weeks={overview.weeks}
+          metric={trendsWeeklyMetric}
+          onMetricChange={setTrendsWeeklyMetric}
+          defaultUnit={defaultUnit}
+        />
       </div>
 
       <ExerciseTrendSection
@@ -98,6 +137,8 @@ export default function TrendsTab() {
         exerciseId={trendsExerciseId}
         onSelectExercise={selectTrendsExercise}
         weeks={trendsRangeWeeks}
+        metric={trendsExerciseMetric}
+        onMetricChange={setTrendsExerciseMetric}
         defaultUnit={defaultUnit}
       />
     </div>

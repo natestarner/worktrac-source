@@ -1,11 +1,54 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { pickExercise } from './support/exercises';
-import { goHardOffline, goOnline, offlineSavedLocallyBanner } from './support/offline';
+import { goHardOffline, goOnline, offlineSavedLocallyBanner, waitForOutboxDrain } from './support/offline';
 import { failNetwork } from './support/faults';
 
 function personPill(page, name: string) {
   return page.locator('.person-pill-bar').getByRole('button', { name: new RegExp(name) });
+}
+
+// Steps the weight to an exact value. Deliberately convergent rather than "click + twice":
+// ExerciseDetail's computePrefillDraft effect re-seeds the draft when the summary/session-sets
+// queries settle, which can land AFTER a fixed burst of clicks and silently stomp them. Re-reading
+// the displayed value each pass makes this immune to that race. '−' is U+2212 (&minus;), not a
+// hyphen, and the stepper's +/- carry no accessible name of their own, so scope by the row label.
+async function setWeight(page, target: number) {
+  const row = page.locator('.stepper-row').filter({ hasText: 'Weight' });
+  const value = row.locator('.stepper-value');
+  await expect
+    .poll(
+      async () => {
+        const current = Number(await value.textContent());
+        if (current === target) return current;
+        await row.getByRole('button', { name: current < target ? '+' : '−', exact: true }).click();
+        return Number(await value.textContent());
+      },
+      { timeout: 15000 },
+    )
+    .toBe(target);
+}
+
+// Everything below is scoped to the "This session" column and addressed relatively, never by
+// looking a row up from its weight text: the same "45 lb × 8" can legitimately appear on more
+// than one row, which is a strict-mode violation waiting to happen.
+function sessionList(page) {
+  return page.locator('.log-sets-col');
+}
+
+// One per rendered set row -- the count is the stable way to wait for a newly logged set.
+function setRowLabels(page) {
+  return sessionList(page).getByText(/^Set \d+$/);
+}
+
+function prBadges(page) {
+  return sessionList(page).getByTitle('Personal record');
+}
+
+// The flex container holding "Set N", the weight×reps text, and the PR pill -- reached from the
+// badge outward, so "which row is badged" is read off the badge itself.
+function badgeRow(page) {
+  return prBadges(page).locator('..');
 }
 
 // Mode 3 reads: search, History, and switching the active person all read from the warmed
@@ -176,5 +219,58 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
     // exact: true -- "45lb×8" is also a substring of the Best card's "57 lb  (45lb×8)".
     await expect(page.getByText('45lb×8', { exact: true })).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(/57 lb/)).toBeVisible();
+  });
+
+  // `history` is only ever INVALIDATED after a write, never optimistically written, and
+  // invalidation is a no-op while paused -- so a best derived from it alone freezes for the whole
+  // offline stretch while the set rows keep coming. Since the pill asks "does this TIE the
+  // all-time best", that stale best doesn't merely drop the badge, it moves it onto a later,
+  // lighter set that happens to tie the pre-offline best. Covered as a unit in
+  // frontend/src/utils/exerciseSummaryFromHistory.test.js; this proves the wiring end-to-end.
+  test('a PR logged offline is badged, and a later set that only ties the pre-offline best is not', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Rowan');
+    await logSetAndEndWorkout(page, 'Rowan'); // 45x8 -> comparable 57, the pre-offline best
+
+    await goHardOffline(page);
+    await expect(offlineSavedLocallyBanner(page)).toBeVisible();
+
+    await pickExercise(page, 'Barbell Bench Press');
+    await expect(page.getByText(/57 lb/)).toBeVisible();
+
+    const rows = setRowLabels(page);
+    const badges = prBadges(page);
+    // Deliberately NOT asserted to be 0 here: "This session" can legitimately already carry the
+    // pre-offline 45x8 row (the just-ended session's liveSession snapshot can still be the cached
+    // one when the screen is opened offline). Every assertion below is relative to what's already
+    // there, so the test doesn't care either way.
+    const before = await rows.count();
+
+    // 55x8 -> comparable 69.7, comfortably past the 57 pre-offline best.
+    await setWeight(page, 55);
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(rows).toHaveCount(before + 1);
+
+    // The offline set is the real PR: badged, and the Best card moves with it even though the
+    // write is still sitting in the outbox. Asserted via the badge's own row rather than by
+    // looking up a row by its weight text -- a 45x8 row can appear more than once on this screen,
+    // and "exactly one badge, on the 55 row" is the property that actually matters.
+    await expect(badges).toHaveCount(1);
+    await expect(badgeRow(page)).toContainText('55 lb × 8');
+    await expect(page.getByText(/69.7 lb/)).toBeVisible();
+
+    // Back down to 45x8 -- ties the PRE-offline best (57) but not the real one (69.7), so it must
+    // stay unbadged. Before the fix this row is what got the badge instead.
+    await setWeight(page, 45);
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(rows).toHaveCount(before + 2);
+
+    await expect(badges).toHaveCount(1);
+    await expect(badgeRow(page)).toContainText('55 lb × 8');
+
+    // Draining the outbox reconciles to server truth -- the badge must stay put, not flip.
+    await goOnline(page);
+    await waitForOutboxDrain(page);
+    await expect(badges).toHaveCount(1);
+    await expect(badgeRow(page)).toContainText('55 lb × 8');
   });
 });

@@ -25,6 +25,15 @@ const PERSON_DEFAULTS = {
   lastTab: '/app/log', // kept in sync by AppShell as the route changes.
   trendsRangeWeeks: 12,
   trendsExerciseId: null,
+  // Which series the two Trends metric switchers are plotting. Per person like everything else
+  // here: one person drilling into total reps must not retarget someone else's chart.
+  trendsWeeklyMetric: 'volume', // 'volume' | 'sets' | 'reps'
+  trendsExerciseMetric: 'est1rm', // see EXERCISE_METRICS in components/trends/exerciseMetrics.js
+  // How the PRs board is ordered. Per person like the metric switchers above -- one person
+  // ranking by est. 1RM must not reorder someone else's board. Unlike the PRs *filter* (local
+  // state, deliberately cleared on a person switch -- see useExerciseFilter), a sort is a
+  // standing preference, so it persists and survives switching away and back.
+  prsSort: 'recent', // see PR_SORTS in utils/prSort.js
 };
 
 const initialState = {
@@ -52,11 +61,18 @@ export function reducer(state, action) {
       // On a fresh login (action.resetTab), every person starts back on Log rather than resuming
       // wherever they were last -- that "resume last screen" behavior is only correct for a
       // mid-session reload, which never sets resetTab.
-      const finalByPerson = action.resetTab
-        ? Object.fromEntries(
-            Object.entries(byPerson).map(([id, slice]) => [id, { ...slice, lastTab: '/app/log' }]),
-          )
-        : byPerson;
+      //
+      // PERSON_DEFAULTS underlays every restored slice so a field added to it AFTER a slice was
+      // persisted hydrates as its default instead of `undefined`. Without this, adding a field
+      // here silently ships an undefined to every existing user until they touch the control that
+      // sets it -- which is how the Trends weekly-metric switcher blanked the page on hover.
+      // See docs/incidents/2026-08-08-trends-hover-blank-page.md.
+      const finalByPerson = Object.fromEntries(
+        Object.entries(byPerson).map(([id, slice]) => [
+          id,
+          { ...PERSON_DEFAULTS, ...slice, ...(action.resetTab ? { lastTab: '/app/log' } : {}) },
+        ]),
+      );
       return { activePersonId: action.activePersonId ?? null, byPerson: finalByPerson };
     }
     case 'RECONCILE_PEOPLE': {
@@ -93,6 +109,12 @@ export function reducer(state, action) {
       return updateActive(state, { trendsRangeWeeks: action.weeks });
     case 'SELECT_TRENDS_EXERCISE':
       return updateActive(state, { trendsExerciseId: action.exerciseId });
+    case 'SET_TRENDS_WEEKLY_METRIC':
+      return updateActive(state, { trendsWeeklyMetric: action.metric });
+    case 'SET_TRENDS_EXERCISE_METRIC':
+      return updateActive(state, { trendsExerciseMetric: action.metric });
+    case 'SET_PRS_SORT':
+      return updateActive(state, { prsSort: action.sort });
     case 'SET_WEIGHT_DRAFT':
       return updateActive(state, { weightDraft: action.value });
     case 'SET_REPS_DRAFT':
@@ -218,6 +240,9 @@ export function AppStateProvider({ children }) {
       setLastTab: (path) => dispatch({ type: 'SET_LAST_TAB', path }),
       setTrendsRange: (weeks) => dispatch({ type: 'SET_TRENDS_RANGE', weeks }),
       selectTrendsExercise: (exerciseId) => dispatch({ type: 'SELECT_TRENDS_EXERCISE', exerciseId }),
+      setTrendsWeeklyMetric: (metric) => dispatch({ type: 'SET_TRENDS_WEEKLY_METRIC', metric }),
+      setTrendsExerciseMetric: (metric) => dispatch({ type: 'SET_TRENDS_EXERCISE_METRIC', metric }),
+      setPrsSort: (sort) => dispatch({ type: 'SET_PRS_SORT', sort }),
       setWeightDraft: (value) => dispatch({ type: 'SET_WEIGHT_DRAFT', value }),
       setRepsDraft: (value) => dispatch({ type: 'SET_REPS_DRAFT', value }),
       startRoutine: (routineId, exerciseIds) => dispatch({ type: 'START_ROUTINE', routineId, exerciseIds }),

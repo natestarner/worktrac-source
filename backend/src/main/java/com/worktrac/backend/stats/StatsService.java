@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 @Service
 public class StatsService {
@@ -31,6 +32,12 @@ public class StatsService {
     // Caps how far back "all time" trend ranges reach, so a household with years of
     // history never sends an unbounded number of weekly chart points to the client.
     private static final int MAX_WEEKS = 260;
+
+    // The consistency heatmap always renders a fixed trailing window rather than following the
+    // range toggle: at 4wk it would be four columns wide (reads as broken) and at "All" it would
+    // be 260 columns (unusable on a phone). Six months is 26 columns of 7 day-squares, which fits
+    // an iPhone without scrolling.
+    private static final int HEATMAP_DAYS = 182;
 
     private final WorkoutSetRepository workoutSetRepository;
     private final SessionExerciseNoteRepository sessionExerciseNoteRepository;
@@ -184,19 +191,27 @@ public class StatsService {
         // counts once toward workoutCount, while still summing every set's volume.
         Map<Long, LocalDate> sessionDate = new LinkedHashMap<>();
         Map<Long, BigDecimal> sessionVolumeLb = new LinkedHashMap<>();
+        Map<Long, Integer> sessionSetCount = new LinkedHashMap<>();
+        Map<Long, Integer> sessionRepCount = new LinkedHashMap<>();
         for (WorkoutSet s : all) {
             Long sessionId = s.getSession().getId();
             LocalDate date = LocalDate.ofInstant(s.getSession().getStartedAt(), zoneId);
             sessionDate.putIfAbsent(sessionId, date);
             BigDecimal volumeLb = unitConverter.toLb(s.getWeight().multiply(BigDecimal.valueOf(s.getReps())), s.getUnit());
             sessionVolumeLb.merge(sessionId, volumeLb, BigDecimal::add);
+            sessionSetCount.merge(sessionId, 1, Integer::sum);
+            sessionRepCount.merge(sessionId, s.getReps(), Integer::sum);
         }
 
         Map<LocalDate, Integer> workoutCountByWeek = new LinkedHashMap<>();
         Map<LocalDate, BigDecimal> volumeByWeek = new LinkedHashMap<>();
+        Map<LocalDate, Integer> setsByWeek = new LinkedHashMap<>();
+        Map<LocalDate, Integer> repsByWeek = new LinkedHashMap<>();
         for (LocalDate w = rangeStart; !w.isAfter(currentWeekStart); w = w.plusWeeks(1)) {
             workoutCountByWeek.put(w, 0);
             volumeByWeek.put(w, BigDecimal.ZERO);
+            setsByWeek.put(w, 0);
+            repsByWeek.put(w, 0);
         }
         for (Map.Entry<Long, LocalDate> entry : sessionDate.entrySet()) {
             LocalDate weekStart = entry.getValue().with(DayOfWeek.MONDAY);
@@ -205,10 +220,14 @@ public class StatsService {
             }
             workoutCountByWeek.merge(weekStart, 1, Integer::sum);
             volumeByWeek.merge(weekStart, sessionVolumeLb.getOrDefault(entry.getKey(), BigDecimal.ZERO), BigDecimal::add);
+            setsByWeek.merge(weekStart, sessionSetCount.getOrDefault(entry.getKey(), 0), Integer::sum);
+            repsByWeek.merge(weekStart, sessionRepCount.getOrDefault(entry.getKey(), 0), Integer::sum);
         }
 
         List<WeeklyPointDto> weeklyPoints = workoutCountByWeek.entrySet().stream()
-                .map(e -> new WeeklyPointDto(e.getKey(), e.getValue(), volumeByWeek.get(e.getKey()).setScale(1, RoundingMode.HALF_UP)))
+                .map(e -> new WeeklyPointDto(e.getKey(), e.getValue(),
+                        volumeByWeek.get(e.getKey()).setScale(1, RoundingMode.HALF_UP),
+                        setsByWeek.get(e.getKey()), repsByWeek.get(e.getKey())))
                 .toList();
 
         // Current week doesn't break the streak just because it's still in progress --
@@ -244,7 +263,30 @@ public class StatsService {
                 workoutCountByWeek.getOrDefault(currentWeekStart, 0),
                 workoutCountByWeek.getOrDefault(currentWeekStart.minusWeeks(1), 0),
                 volumeThisMonthLb.setScale(1, RoundingMode.HALF_UP),
-                volumeLastMonthLb.setScale(1, RoundingMode.HALF_UP));
+                volumeLastMonthLb.setScale(1, RoundingMode.HALF_UP),
+                buildWorkoutDays(sessionDate, sessionSetCount, today),
+                !all.isEmpty());
+    }
+
+    // Days with at least one session in the fixed trailing heatmap window, ascending. Only active
+    // days are emitted -- the client draws the blank squares, so six months of 3x/week training is
+    // ~78 entries rather than 182.
+    private List<WorkoutDayDto> buildWorkoutDays(Map<Long, LocalDate> sessionDate,
+                                                  Map<Long, Integer> sessionSetCount, LocalDate today) {
+        LocalDate windowStart = today.minusDays(HEATMAP_DAYS - 1L);
+        Map<LocalDate, int[]> byDay = new TreeMap<>();
+        for (Map.Entry<Long, LocalDate> entry : sessionDate.entrySet()) {
+            LocalDate date = entry.getValue();
+            if (date.isBefore(windowStart) || date.isAfter(today)) {
+                continue;
+            }
+            int[] totals = byDay.computeIfAbsent(date, k -> new int[2]);
+            totals[0]++;
+            totals[1] += sessionSetCount.getOrDefault(entry.getKey(), 0);
+        }
+        return byDay.entrySet().stream()
+                .map(e -> new WorkoutDayDto(e.getKey(), e.getValue()[0], e.getValue()[1]))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -280,18 +322,157 @@ public class StatsService {
 
         List<ExerciseTrendPointDto> points = new ArrayList<>();
         for (Map.Entry<Long, List<WorkoutSet>> entry : orderedSessions) {
-            WorkoutSet best = bestSet(entry.getValue()).orElseThrow();
+            List<WorkoutSet> sessionSets = entry.getValue();
+            WorkoutSet best = bestSet(sessionSets).orElseThrow();
             BigDecimal weightLb = unitConverter.toLb(best.getWeight(), best.getUnit());
             BigDecimal est1rmLb = comparableLb(best.getWeight(), best.getReps(), best.getUnit());
             boolean isPr = est1rmLb.compareTo(runningBestLb) > 0;
             if (isPr) {
                 runningBestLb = est1rmLb;
             }
+
+            // The other four ways to read the same session, so the client's metric switcher plots
+            // all of them from this one response. Note heaviestWeight is genuinely a different set
+            // from `best` much of the time -- 225x1 tops the bar but loses to 185x8 on est. 1RM.
+            BigDecimal heaviestWeightLb = null;
+            int heaviestWeightReps = 0;
+            BigDecimal bestSetVolumeLb = BigDecimal.ZERO;
+            BigDecimal sessionVolumeLb = BigDecimal.ZERO;
+            int totalReps = 0;
+            for (WorkoutSet s : sessionSets) {
+                BigDecimal setWeightLb = unitConverter.toLb(s.getWeight(), s.getUnit());
+                // Ties broken by reps so an all-bodyweight session reports its best rep set rather
+                // than whichever 0-weight set happened to come first.
+                int weightComparison = heaviestWeightLb == null ? 1 : setWeightLb.compareTo(heaviestWeightLb);
+                if (weightComparison > 0 || (weightComparison == 0 && s.getReps() > heaviestWeightReps)) {
+                    heaviestWeightLb = setWeightLb;
+                    heaviestWeightReps = s.getReps();
+                }
+                BigDecimal setVolumeLb = setWeightLb.multiply(BigDecimal.valueOf(s.getReps()));
+                if (setVolumeLb.compareTo(bestSetVolumeLb) > 0) {
+                    bestSetVolumeLb = setVolumeLb;
+                }
+                sessionVolumeLb = sessionVolumeLb.add(setVolumeLb);
+                totalReps += s.getReps();
+            }
+
             LocalDate date = LocalDate.ofInstant(best.getSession().getStartedAt(), zoneId);
             points.add(new ExerciseTrendPointDto(date, best.getSession().getId(),
                     weightLb.setScale(1, RoundingMode.HALF_UP), best.getReps(),
-                    est1rmLb.setScale(1, RoundingMode.HALF_UP), isPr));
+                    est1rmLb.setScale(1, RoundingMode.HALF_UP), isPr,
+                    heaviestWeightLb.setScale(1, RoundingMode.HALF_UP), heaviestWeightReps,
+                    bestSetVolumeLb.setScale(1, RoundingMode.HALF_UP),
+                    sessionVolumeLb.setScale(1, RoundingMode.HALF_UP),
+                    totalReps, sessionSets.size()));
         }
         return points;
+    }
+
+    // All-time records for one exercise, deliberately not range-scoped -- see ExerciseRecordsDto.
+    // One pass over the same per-exercise query getBest/getExerciseTrend already use; no new
+    // repository method and no second full-history load.
+    @Transactional(readOnly = true)
+    public ExerciseRecordsDto getExerciseRecords(Long accountId, Long personId, Long exerciseId, String zone) {
+        Person person = personService.requireOwnedPerson(personId, accountId);
+        ZoneId zoneId = resolveZone(zone);
+        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdAndExercise_Id(person.getId(), exerciseId);
+        if (all.isEmpty()) {
+            return new ExerciseRecordsDto(null, null, null, null, null, 0, 0,
+                    BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP), false);
+        }
+
+        WorkoutSet heaviest = null;
+        WorkoutSet bestEst1rm = null;
+        BigDecimal bestEst1rmLb = null;
+        WorkoutSet bestSetVolume = null;
+        WorkoutSet mostReps = null;
+        int totalReps = 0;
+        BigDecimal totalVolumeLb = BigDecimal.ZERO;
+        boolean bodyweightOnly = true;
+        Map<Long, BigDecimal> volumeBySession = new LinkedHashMap<>();
+        Map<Long, WorkoutSet> anySetInSession = new LinkedHashMap<>();
+
+        for (WorkoutSet s : all) {
+            BigDecimal weightLb = unitConverter.toLb(s.getWeight(), s.getUnit());
+            BigDecimal setVolumeLb = weightLb.multiply(BigDecimal.valueOf(s.getReps()));
+
+            // Heaviest weight, more reps as the tiebreak.
+            if (heaviest == null || isBetter(weightLb, reps(s), lbWeight(heaviest), reps(heaviest))) {
+                heaviest = s;
+            }
+            // Deliberately NOT the same thing as `heaviest`: Epley rewards reps, so 185x8 (~234)
+            // outranks a 225x1 single. Bodyweight sets are skipped rather than run through
+            // comparableLb -- a rep count competing against pounds would win on any set past ~1
+            // rep for a lightly-loaded lift. Ties go to the heavier actual load, since Epley
+            // extrapolates further (and less reliably) the more reps you feed it.
+            if (s.getWeight().compareTo(BigDecimal.ZERO) != 0) {
+                BigDecimal est1rmLb = unitConverter.toLb(
+                        epleyCalculator.estimate1RM(s.getWeight(), s.getReps()), s.getUnit());
+                if (bestEst1rm == null || isBetter(est1rmLb, weightLb, bestEst1rmLb, lbWeight(bestEst1rm))) {
+                    bestEst1rm = s;
+                    bestEst1rmLb = est1rmLb;
+                }
+            }
+            if (bestSetVolume == null || setVolumeLb.compareTo(setVolumeLb(bestSetVolume)) > 0) {
+                bestSetVolume = s;
+            }
+            // The mirror of `heaviest`: most reps, heavier weight as the tiebreak.
+            if (mostReps == null || isBetter(reps(s), weightLb, reps(mostReps), lbWeight(mostReps))) {
+                mostReps = s;
+            }
+
+            totalReps += s.getReps();
+            totalVolumeLb = totalVolumeLb.add(setVolumeLb);
+            if (s.getWeight().compareTo(BigDecimal.ZERO) != 0) {
+                bodyweightOnly = false;
+            }
+            volumeBySession.merge(s.getSession().getId(), setVolumeLb, BigDecimal::add);
+            anySetInSession.putIfAbsent(s.getSession().getId(), s);
+        }
+
+        Map.Entry<Long, BigDecimal> bestSession = volumeBySession.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .orElseThrow();
+
+        return new ExerciseRecordsDto(
+                bestEst1rm == null ? null : toRecordEntry(bestEst1rmLb, bestEst1rm, zoneId),
+                toRecordEntry(lbWeight(heaviest), heaviest, zoneId),
+                toRecordEntry(setVolumeLb(bestSetVolume), bestSetVolume, zoneId),
+                new RecordEntryDto(bestSession.getValue().setScale(1, RoundingMode.HALF_UP), null, null,
+                        sessionDate(anySetInSession.get(bestSession.getKey()), zoneId)),
+                toRecordEntry(BigDecimal.valueOf(mostReps.getReps()), mostReps, zoneId),
+                all.size(),
+                totalReps,
+                totalVolumeLb.setScale(1, RoundingMode.HALF_UP),
+                bodyweightOnly);
+    }
+
+    // "Is (value, tiebreak) a better record than the incumbent?" -- strictly greater on value, or
+    // equal on value and strictly greater on the tiebreak. Both sides stay BigDecimal so a weight
+    // used as a tiebreak keeps its fraction (22.5 vs 22.7 must not both truncate to 22).
+    private boolean isBetter(BigDecimal value, BigDecimal tiebreak, BigDecimal bestValue, BigDecimal bestTiebreak) {
+        int comparison = value.compareTo(bestValue);
+        return comparison > 0 || (comparison == 0 && tiebreak.compareTo(bestTiebreak) > 0);
+    }
+
+    private BigDecimal reps(WorkoutSet set) {
+        return BigDecimal.valueOf(set.getReps());
+    }
+
+    private BigDecimal lbWeight(WorkoutSet set) {
+        return unitConverter.toLb(set.getWeight(), set.getUnit());
+    }
+
+    private BigDecimal setVolumeLb(WorkoutSet set) {
+        return lbWeight(set).multiply(BigDecimal.valueOf(set.getReps()));
+    }
+
+    private LocalDate sessionDate(WorkoutSet set, ZoneId zoneId) {
+        return LocalDate.ofInstant(set.getSession().getStartedAt(), zoneId);
+    }
+
+    private RecordEntryDto toRecordEntry(BigDecimal valueLb, WorkoutSet set, ZoneId zoneId) {
+        return new RecordEntryDto(valueLb.setScale(1, RoundingMode.HALF_UP),
+                lbWeight(set).setScale(1, RoundingMode.HALF_UP), set.getReps(), sessionDate(set, zoneId));
     }
 }

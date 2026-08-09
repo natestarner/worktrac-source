@@ -21,6 +21,16 @@ export const queryKeys = {
   prs: (personId) => ['prs', personId],
   trendsOverview: (personId, weeks) => ['trends-overview', personId, weeks],
   exerciseTrend: (personId, exerciseId, weeks) => ['exercise-trend', personId, exerciseId, weeks],
+  // No `weeks` on purpose -- records are all-time, so the range toggle must not invalidate them.
+  exerciseRecords: (personId, exerciseId) => ['exercise-records', personId, exerciseId],
+
+  // Prefix forms of the three above: every cached range and every cached exercise for one person.
+  // Logging or editing a set changes all of them at once, and the writer doing the invalidating
+  // knows neither which `weeks` the person last viewed nor which exercise they drilled into --
+  // so it can't name the full keys. TanStack matches these by prefix.
+  trendsForPerson: (personId) => ['trends-overview', personId],
+  exerciseTrendsForPerson: (personId) => ['exercise-trend', personId],
+  exerciseRecordsForPerson: (personId) => ['exercise-records', personId],
 
   // Per-person exercise detail. sessionId is normalized to null so "no live session yet" is a
   // single stable key rather than one keyed on undefined.

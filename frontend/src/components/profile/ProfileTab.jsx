@@ -115,11 +115,14 @@ function Field({ label, value, last }) {
 const backButtonStyle = {
   background: 'none',
   border: 'none',
-  color: 'var(--color-accent)',
-  fontSize: 15,
-  fontWeight: 600,
+  color: 'var(--color-accent-text)',
+  fontSize: 'var(--text-base)',
+  fontWeight: 'var(--weight-semibold)',
   cursor: 'pointer',
-  padding: '0 0 16px 0',
+  minHeight: 40,
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '0 0 var(--space-3) 0',
 };
 
 const sectionLabelStyle = {
@@ -148,5 +151,5 @@ const badgeStyle = {
   borderRadius: 999,
 };
 
-const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent-text)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const deleteLinkStyle = { background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
