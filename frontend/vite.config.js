@@ -48,14 +48,12 @@ const pwaPlugin = VitePWA({
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), ...(isTest ? [] : [pwaPlugin])],
-  // Vitest's transform pipeline falls back to esbuild's default (classic) JSX runtime
-  // for .jsx files that Babel doesn't already handle, which needs React in scope --
-  // unlike the app's own components, which rely on the automatic runtime everywhere and
-  // never import React. Pin esbuild to the same automatic runtime so component tests
-  // don't need a React import just to satisfy the test transform.
-  esbuild: {
-    jsx: 'automatic',
-  },
+  // No explicit JSX runtime config needed: @vitejs/plugin-react sets the automatic runtime
+  // itself (via its own internal oxc config) for dev, build, AND the Vitest transform alike --
+  // which is what lets the app's components (and its tests) never import React. An earlier
+  // esbuild.jsx:'automatic' override here predates plugin-react doing this and had gone
+  // redundant; it now just collides with plugin-react's oxc config and prints a
+  // "both esbuild and oxc options were set" warning on every run, so it's been dropped.
   server: {
     port: FRONTEND_PORT,
     proxy: devProxy
