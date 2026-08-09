@@ -3,7 +3,7 @@
 // under test read `typeof indexedDB`.
 import 'fake-indexeddb/auto';
 import { MutationObserver, QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
-import { renderHook } from '@testing-library/react';
+import { render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOutboxItems } from './useOutboxItems';
 import { CREATE_EXERCISE_MUTATION_KEY, LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from '../lib/queryClient';
@@ -188,5 +188,57 @@ describe('useOutboxItems', () => {
       await vi.waitFor(() => expect(result.current).toHaveLength(2));
       expect(result.current.map((item) => item.detail)).toEqual(['logged 135 lb × 5', 'logged 999 lb × 9']);
     });
+  });
+});
+
+// Same mechanism as useSessionEntries.test.jsx's scheduling case -- see the long comment there.
+// This hook backs the offline banner's expanded list, which sits above the whole Log tab, so a
+// child rendering beneath it must not be able to schedule an update on it mid-render.
+describe('useOutboxItems mutation-cache notification scheduling', () => {
+  it('never schedules a parent update from inside a child render', async () => {
+    const client = newClient();
+    onlineManager.setOnline(false);
+    const seen = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args) => {
+      seen.push(args.map((a) => (typeof a === 'string' ? a : '')).join(' '));
+    });
+
+    try {
+      let dispatched = false;
+      function Child() {
+        if (!dispatched) {
+          dispatched = true;
+          dispatch(client, LOG_SET_MUTATION_KEY, {
+            mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
+            idempotencyKey: 'notify-items', clientLoggedAt: 't', tempId: 'temp-notify-items',
+          });
+        }
+        return null;
+      }
+      // Child mounts only on the second render, once the parent's subscription is live -- on a
+      // first render nothing is subscribed yet and the bug cannot show.
+      function Parent({ showChild }) {
+        useOutboxItems();
+        return showChild ? <Child /> : null;
+      }
+
+      const { rerender } = render(
+        <QueryClientProvider client={client}>
+          <Parent showChild={false} />
+        </QueryClientProvider>,
+      );
+      rerender(
+        <QueryClientProvider client={client}>
+          <Parent showChild />
+        </QueryClientProvider>,
+      );
+
+      await vi.waitFor(() => expect(dispatched).toBe(true));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(seen.filter((line) => /while rendering a different component/.test(line))).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

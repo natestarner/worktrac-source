@@ -51,7 +51,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
     // starting -- either way Save must never leave the button stuck and the modal never closing.
     if (isEditing) {
       if (!online) {
-        showToast('You need a connection to do that.');
+        showToast('You need a connection to do that.', { tone: 'info' });
         return;
       }
       setSaving(true);
@@ -59,7 +59,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
         const updated = await updateExercise(exercise.id, { name: trimmed });
         onSaved(updated);
       } catch {
-        showToast("Couldn't save -- check your connection and try again.");
+        showToast("Couldn't save -- check your connection and try again.", { tone: 'error' });
       } finally {
         setSaving(false);
       }
@@ -73,7 +73,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
     // backend toasts immediately/on failure instead of hanging Save forever.
     if (requireSyncedExercise) {
       if (!online) {
-        showToast('You need a connection to do that.');
+        showToast('You need a connection to do that.', { tone: 'info' });
         return;
       }
       setSaving(true);
@@ -82,7 +82,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
         if (personId) await favoriteExercise(personId, created.id);
         onSaved(created);
       } catch {
-        showToast("Couldn't create -- check your connection and try again.");
+        showToast("Couldn't create -- check your connection and try again.", { tone: 'error' });
       } finally {
         setSaving(false);
       }

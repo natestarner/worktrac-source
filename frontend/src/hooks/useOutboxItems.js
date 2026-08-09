@@ -1,5 +1,5 @@
 import { useRef, useSyncExternalStore } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { notifyManager, useQueryClient } from '@tanstack/react-query';
 import { OUTBOX_SCOPE_ID } from '../lib/outboxPersistence';
 import { byEnqueueOrder } from '../lib/outboxSequence';
 import { describeOutboxMutation } from '../lib/outboxDescribe';
@@ -40,7 +40,9 @@ export function useOutboxItems() {
     (onChange) =>
       queryClient.getMutationCache().subscribe(() => {
         cacheRef.current.dirty = true;
-        onChange();
+        // Deferred, not inline -- see useSessionEntries.js for why calling onChange() directly
+        // schedules a React update while a child component is mid-render.
+        notifyManager.schedule(onChange);
       }),
     () => {
       if (cacheRef.current.dirty) {

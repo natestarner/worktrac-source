@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { notifyManager, useQueryClient } from '@tanstack/react-query';
 import { OUTBOX_SCOPE_ID } from '../lib/outboxPersistence';
 
 // How many writes are currently queued/struggling in the durable outbox. Drives the "N changes
@@ -24,7 +24,8 @@ function countQueuedWrites(queryClient) {
 export function useOutboxCount() {
   const queryClient = useQueryClient();
   return useSyncExternalStore(
-    (onChange) => queryClient.getMutationCache().subscribe(onChange),
+    // notifyManager.schedule, not onChange directly -- see useSessionEntries.js for why.
+    (onChange) => queryClient.getMutationCache().subscribe(() => notifyManager.schedule(onChange)),
     () => countQueuedWrites(queryClient),
     () => 0,
   );

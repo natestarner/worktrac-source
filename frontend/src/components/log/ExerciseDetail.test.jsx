@@ -354,7 +354,7 @@ describe('ExerciseDetail write-failure handling', () => {
 
     fireEvent.click(await screen.findByText('Log set'));
 
-    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required'));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required', { tone: 'error' }));
   });
 });
 
@@ -415,18 +415,18 @@ describe('ExerciseDetail in-flight visual feedback', () => {
       expect(logLiveSet).not.toHaveBeenCalled();
       // A paused-offline set is just as editable/deletable as a synced one now (see
       // offlineSetEdits.js) -- no more opaque "Will sync..." placeholder.
-      expect(await screen.findByText('Edit')).toBeInTheDocument();
-      expect(screen.getByText('Delete')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
       expect(screen.queryByText(/Saving/)).not.toBeInTheDocument();
 
       onlineManager.setOnline(true);
       await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
       expect(await screen.findByText(/Saving/)).toBeInTheDocument();
-      expect(screen.queryByText('Edit')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
 
       listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
       resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
-      await waitFor(() => expect(screen.getByText('Edit')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument());
     } finally {
       // Restore the real default -- onlineManager's #online starts at `true` with no
       // navigator.onLine fallback in this TanStack version, so setOnline(undefined) would
@@ -460,13 +460,13 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     fireEvent.click(await screen.findByText('Log set'));
 
     expect(await screen.findByText(/Saving/)).toBeInTheDocument();
-    expect(screen.queryByText('Edit')).not.toBeInTheDocument();
-    expect(screen.queryByText('Delete')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
 
     listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
     resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
 
-    await waitFor(() => expect(screen.getByText('Edit')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument());
     expect(screen.queryByText(/Saving/)).not.toBeInTheDocument();
   });
 
@@ -513,7 +513,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     listSessionSets.mockResolvedValue([{ id: 201, weight: 135, reps: 8, unit: 'lb' }]);
     resolveLog({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
 
-    await waitFor(() => expect(screen.getByText('Edit')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument());
   });
 
   it('does not leak a pending placeholder into a different exercise after a mid-flight switch', async () => {
@@ -572,7 +572,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     expect(await screen.findByText('This session')).toBeInTheDocument();
 
     rejectLog(clientError);
-    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required'));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required', { tone: 'error' }));
     // No manual cleanup code runs here -- the mutation leaving 'pending' status on its own
     // is what drops it from pendingBeforeSession.
     await waitFor(() => expect(screen.queryByText('This session')).not.toBeInTheDocument());
@@ -591,8 +591,8 @@ describe('ExerciseDetail in-flight visual feedback', () => {
       fireEvent.click(await screen.findByText('Log set'));
 
       expect(await screen.findByText('135 lb × 8')).toBeInTheDocument();
-      expect(screen.getByText('Edit')).toBeInTheDocument();
-      expect(screen.getByText('Delete')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
       expect(logLiveSet).not.toHaveBeenCalled();
     } finally {
       onlineManager.setOnline(true);
@@ -613,9 +613,9 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     onlineManager.setOnline(false);
     try {
       fireEvent.click(await screen.findByText('Log set'));
-      expect(await screen.findByText('Delete')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Delete' })).toBeInTheDocument();
 
-      fireEvent.click(screen.getByText('Delete'));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
       await waitFor(() => expect(screen.queryByText('135 lb × 8')).not.toBeInTheDocument());
       // Cancelled outright -- not left queued as a delete against a set id that doesn't exist.
@@ -644,7 +644,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
       expect(await screen.findByText('135 lb × 8')).toBeInTheDocument();
       const createBefore = queryClient.getMutationCache().getAll().find((m) => m.options.mutationKey[0] === 'logSet');
 
-      fireEvent.click(screen.getByText('Edit'));
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
       // Scoped to the modal dialog -- ExerciseDetail's own "log a new set" weight/reps steppers
       // stay mounted in the background behind the overlay and have their own "+"/"−" buttons too.
       const dialog = screen.getByRole('dialog');
@@ -804,8 +804,8 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     fireEvent.click(await screen.findByText('Log set'));
 
     await waitFor(() => expect(screen.getByText('135 lb × 8')).toBeInTheDocument());
-    expect(await screen.findByText('Edit')).toBeInTheDocument();
-    expect(screen.getByText('Delete')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
     expect(screen.queryByText(/Saving/)).not.toBeInTheDocument();
   });
 
@@ -970,5 +970,180 @@ describe('ExerciseDetail summary fallback to warmed history (offline + lie-fi)',
 
     await waitFor(() => expect(screen.queryByText(/Last time/)).not.toBeInTheDocument());
     expect(screen.queryByText('135lb×8')).not.toBeInTheDocument();
+  });
+});
+
+// `history` is server data that is only ever INVALIDATED after a write, never optimistically
+// written (queryClient.js) -- and invalidation is a no-op while paused/unreachable. So a best
+// derived from it alone freezes at the moment connectivity dropped, while displaySets keeps
+// showing the sets logged since. Because isPrSet asks "does this TIE the all-time best" (a
+// tolerance match, not a strict improvement), that stale best doesn't merely omit a badge -- it
+// moves it onto the wrong row: a genuine offline PR goes unbadged while a later, lighter set that
+// happens to tie the PRE-offline best gets badged instead.
+describe('ExerciseDetail PR badge folds in sets that have not synced yet', () => {
+  // Bench Press 135x8 -> comparableLb 171. An offline 185x8 -> 234.3, a genuine PR.
+  const historyWithBenchPress = [
+    {
+      id: 55,
+      startedAt: '2026-07-01T12:00:00Z',
+      endedAt: '2026-07-01T13:00:00Z',
+      manual: false,
+      entries: [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ weight: 135, reps: 8, unit: 'lb' }], note: null }],
+    },
+  ];
+
+  let draftWeight;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    draftWeight = 185;
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    // mockImplementation (not mockReturnValue) so the draft can change between the two logged
+    // sets below -- the component reads it fresh on every render.
+    useAppState.mockImplementation(() => ({
+      weightDraft: draftWeight,
+      repsDraft: 8,
+      setWeightDraft: vi.fn(),
+      setRepsDraft: vi.fn(),
+    }));
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+  });
+
+  // ExerciseDetail is deliberately NOT remounted between the two sets (LogTab keys it on personId
+  // only), so the force button just gives the component a render in which to pick up the new
+  // draft -- exactly what tapping the weight stepper would do in the real app.
+  function Harness() {
+    const [, force] = useState(0);
+    return (
+      <div>
+        <button onClick={() => force((n) => n + 1)}>force render</button>
+        <ExerciseDetail
+          exercise={exercise}
+          personId={7}
+          editingSessionId={null}
+          liveSession={null}
+          refetchLiveSession={vi.fn().mockResolvedValue()}
+          onBack={vi.fn()}
+        />
+      </div>
+    );
+  }
+
+  function rowFor(text) {
+    return screen.getByText(text).parentElement;
+  }
+
+  function logSetButton() {
+    return screen.getByText('Log set').closest('button');
+  }
+
+  it('badges a genuine PR logged while hard offline, and does not badge a later set that only ties the pre-offline best', async () => {
+    getExerciseSummary.mockImplementation(() => new Promise(() => {})); // paused offline -- never invoked
+
+    // Seeded rather than fetched: going offline before render would equally pause history's own
+    // first fetch. This models "history was warmed while online", which offlineCacheWarm.js
+    // guarantees in the real app -- same rationale as the fallback suite above.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
+    registerOfflineMutationDefaults(queryClient, { retry: false });
+    queryClient.setQueryData(queryKeys.history(7), historyWithBenchPress);
+
+    onlineManager.setOnline(false);
+    try {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <Harness />
+        </QueryClientProvider>,
+      );
+
+      // Baseline: the warmed-history best, before anything is logged this session.
+      expect(await screen.findByText(/171 lb\s*\(135lb×8\)/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('Log set'));
+      expect(await screen.findByText('185 lb × 8')).toBeInTheDocument();
+
+      // The offline set beats the warmed best, so it is the PR -- and the Best card must move
+      // with it, even though `history` cannot know about it until the outbox drains.
+      expect(within(rowFor('185 lb × 8')).getByTitle('Personal record')).toBeInTheDocument();
+      expect(screen.getByText(/234.3 lb\s*\(185lb×8\)/)).toBeInTheDocument();
+
+      draftWeight = 135;
+      fireEvent.click(screen.getByText('force render'));
+      // Button keeps itself disabled for MIN_PENDING_MS (400ms) after a click, so a second click
+      // fired immediately would be silently swallowed.
+      await waitFor(() => expect(logSetButton()).not.toBeDisabled());
+      fireEvent.click(screen.getByText('Log set'));
+      expect(await screen.findByText('135 lb × 8')).toBeInTheDocument();
+
+      // The lighter set ties the PRE-offline best (171) but not the real one (234.3). Exactly one
+      // badge, and it is still on the 185 row.
+      expect(screen.getAllByTitle('Personal record')).toHaveLength(1);
+      expect(within(rowFor('185 lb × 8')).getByTitle('Personal record')).toBeInTheDocument();
+      expect(within(rowFor('135 lb × 8')).queryByTitle('Personal record')).not.toBeInTheDocument();
+      expect(logLiveSet).not.toHaveBeenCalled();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it('badges a genuine PR logged during lie-fi (summary fetch attempted but failing)', async () => {
+    getHistory.mockResolvedValue(historyWithBenchPress);
+    // Online per onlineManager, but the backend is unreachable -- the fetch IS attempted and
+    // settles into isError, which is the state isPaused alone would miss.
+    getExerciseSummary.mockRejectedValue(new Error('network error'));
+    logLiveSet.mockImplementation(() => new Promise(() => {})); // hangs -- write stays queued
+
+    renderWithQuery(<Harness />);
+
+    expect(await screen.findByText(/171 lb\s*\(135lb×8\)/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Log set'));
+    expect(await screen.findByText('185 lb × 8')).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByText(/234.3 lb\s*\(185lb×8\)/)).toBeInTheDocument());
+    expect(within(rowFor('185 lb × 8')).getByTitle('Personal record')).toBeInTheDocument();
+  });
+
+  // The fold is a max over what is on screen, so it can only ever RAISE the best -- it must never
+  // pull a genuinely higher server best down to a lesser set logged this session.
+  it('keeps the server best when the set logged offline does not beat it', async () => {
+    getExerciseSummary.mockImplementation(() => new Promise(() => {}));
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
+    registerOfflineMutationDefaults(queryClient, { retry: false });
+    queryClient.setQueryData(queryKeys.history(7), [
+      {
+        id: 55,
+        startedAt: '2026-07-01T12:00:00Z',
+        endedAt: '2026-07-01T13:00:00Z',
+        manual: false,
+        entries: [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ weight: 225, reps: 8, unit: 'lb' }], note: null }],
+      },
+    ]);
+
+    onlineManager.setOnline(false);
+    try {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <Harness />
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText(/285 lb\s*\(225lb×8\)/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('Log set')); // 185x8 -> 234.3, below the 285 best
+      expect(await screen.findByText('185 lb × 8')).toBeInTheDocument();
+
+      expect(screen.getByText(/285 lb\s*\(225lb×8\)/)).toBeInTheDocument();
+      expect(screen.queryByTitle('Personal record')).not.toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 });

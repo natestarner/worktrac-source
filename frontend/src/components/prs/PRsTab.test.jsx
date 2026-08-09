@@ -32,7 +32,7 @@ describe('PRsTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     onlineManager.setOnline(true);
-    useAppState.mockReturnValue({ activePersonId: 7 });
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn() });
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
     listPersonExercises.mockResolvedValue([]);
   });
@@ -86,7 +86,7 @@ describe('PRsTab tags, filtering, and row navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     onlineManager.setOnline(true);
-    useAppState.mockReturnValue({ activePersonId: 7 });
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn() });
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
     listPersonExercises.mockResolvedValue([
       { id: 1, name: 'Bench Press', tags: [{ id: 10, name: 'Push' }] },
@@ -148,5 +148,75 @@ describe('PRsTab tags, filtering, and row navigation', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/app/history', {
       state: { historyExerciseFilter: { exerciseId: 1, exerciseName: 'Bench Press' } },
     });
+  });
+});
+
+describe('PRsTab sorting', () => {
+  // Deliberately arranged so every sort produces a DIFFERENT order -- otherwise a test can pass
+  // while the sort key is being ignored entirely.
+  const rows = [
+    { exerciseId: 1, exerciseName: 'Bench Press', best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208, sessionStartedAt: '2026-07-01T00:00:00Z' } },
+    { exerciseId: 2, exerciseName: 'Arnold Press', best: { weight: 95, reps: 8, unit: 'lb', est1rm: 120, sessionStartedAt: '2026-08-05T00:00:00Z' } },
+    { exerciseId: 3, exerciseName: 'Squat', best: { weight: 275, reps: 5, unit: 'lb', est1rm: 310, sessionStartedAt: '2026-06-02T00:00:00Z' } },
+  ];
+
+  // Row order as rendered: each row's name is the first bold line inside its button.
+  const renderedNames = () =>
+    screen.getAllByRole('button').map((b) => b.textContent).filter((t) => rows.some((r) => t.startsWith(r.exerciseName)));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
+    listPersonExercises.mockResolvedValue([]);
+    getPrs.mockResolvedValue(rows);
+  });
+  afterEach(() => onlineManager.setOnline(true));
+
+  it('defaults to most-recent order, absorbing the job the Trends Recent PRs card used to do', async () => {
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn() });
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('Squat')).toBeInTheDocument());
+    expect(renderedNames()[0]).toMatch(/^Arnold Press/);
+    expect(renderedNames()[2]).toMatch(/^Squat/);
+  });
+
+  it('orders by name when the person has chosen that sort', async () => {
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'name', setPrsSort: vi.fn() });
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('Squat')).toBeInTheDocument());
+    expect(renderedNames()[0]).toMatch(/^Arnold Press/);
+    expect(renderedNames()[1]).toMatch(/^Bench Press/);
+    expect(renderedNames()[2]).toMatch(/^Squat/);
+  });
+
+  it('orders by estimated 1RM, heaviest first', async () => {
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'est1rm', setPrsSort: vi.fn() });
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('Squat')).toBeInTheDocument());
+    expect(renderedNames()[0]).toMatch(/^Squat/);
+    expect(renderedNames()[2]).toMatch(/^Arnold Press/);
+  });
+
+  it('persists the choice through the per-person store rather than local state', async () => {
+    const setPrsSort = vi.fn();
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort });
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('Squat')).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'est1rm' } });
+    expect(setPrsSort).toHaveBeenCalledWith('est1rm');
+  });
+
+  it('hides the sort control when there is nothing to sort', async () => {
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn() });
+    getPrs.mockResolvedValue([]);
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText(/log a set to start the board/)).toBeInTheDocument());
+    expect(screen.queryByLabelText('Sort')).not.toBeInTheDocument();
   });
 });

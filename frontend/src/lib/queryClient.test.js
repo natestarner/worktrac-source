@@ -11,11 +11,13 @@ import {
   registerOfflineMutationDefaults,
   resetQueryCache,
   shouldDehydrateQuery,
+  isUnsyncedWrite,
   shouldRetryWrite,
 } from './queryClient';
 import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './exerciseIdMap';
 import { _getMappingForTest, clearSetIdMap, setSetIdMapping } from './setIdMap';
 import { editSet, logLiveSet, logSetIntoSession } from '../api/sets';
+import { queryKeys } from '../api/queryKeys';
 import { setAuthToken } from '../api/client';
 
 vi.mock('../api/sets', () => ({
@@ -95,6 +97,31 @@ describe('shouldDehydrateQuery (lie-fi persisted-cache gap)', () => {
 
     expect(freshClientAfterReload.getQueryData(key)).toEqual(['workout-A', 'workout-B']);
   });
+
+  // Why offlineCacheWarm needs `refreshAfterRestore` (issue #146). Restoring preserves
+  // dataUpdatedAt, so a rehydrated entry can be simultaneously WRONG (the persister's 1s throttle
+  // never wrote the last change) and FRESH (its timestamp is seconds old). Freshness then
+  // suppresses the very refetch that would repair it. This is a characterization test: it still
+  // passes after the fix, because the fix is in the warm rather than in staleness itself.
+  it('a restored entry is treated as fresh, so staleness alone will not repair a snapshot the persister missed', async () => {
+    const key = queryKeys.routines(7);
+    const appDefaults = { defaultOptions: queryClient.getDefaultOptions() };
+
+    // offlineCacheWarm at login, before any routine exists.
+    const client = new QueryClient(appDefaults);
+    await client.fetchQuery({ queryKey: key, queryFn: () => Promise.resolve([]) });
+
+    // The persister's throttled tick captures the empty list...
+    const persistedBeforeCreate = dehydrate(client, persistOptions.dehydrateOptions);
+    // ...then a routine is created, and a reload lands before the next tick.
+    const afterReload = new QueryClient(appDefaults);
+    hydrate(afterReload, persistedBeforeCreate);
+
+    expect(afterReload.getQueryData(key)).toEqual([]);
+    const restored = afterReload.getQueryCache().find({ queryKey: key });
+    expect(restored.isStaleByTime(60 * 1000)).toBe(false); // fresh -> nothing refetches it
+    expect(restored.isStaleByTime(0)).toBe(true); // control: the window really is time-bounded
+  });
 });
 
 describe('registerOfflineMutationDefaults dispatches to the right endpoint', () => {
@@ -125,6 +152,33 @@ describe('registerOfflineMutationDefaults dispatches to the right endpoint', () 
     await dispatch({ mode: 'session', sessionId: 42, personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k2', clientLoggedAt: 't' });
     expect(logSetIntoSession).toHaveBeenCalledWith(42, expect.objectContaining({ exerciseId: 3, idempotencyKey: 'k2' }));
     expect(logLiveSet).not.toHaveBeenCalled();
+  });
+
+  // Trends is derived entirely from logged sets, but was left out of this handler's invalidations
+  // (which covered only prs/history). With staleTime at 60s that meant logging your first-ever set
+  // and opening Trends still showed "No workouts logged yet" for a minute. Asserted against the
+  // real cache rather than by spying on invalidateQueries, so it also proves the PREFIX keys match
+  // the full ones -- a trends key carries a `weeks` the writer can't know.
+  it('marks every cached trends range and exercise stale after a set is logged', async () => {
+    const overview4 = queryKeys.trendsOverview(7, 4);
+    const overview12 = queryKeys.trendsOverview(7, 12);
+    const trendFor3 = queryKeys.exerciseTrend(7, 3, 12);
+    const recordsFor3 = queryKeys.exerciseRecords(7, 3);
+    const otherPerson = queryKeys.trendsOverview(99, 12);
+
+    for (const key of [overview4, overview12, trendFor3, recordsFor3, otherPerson]) {
+      client.setQueryData(key, { stub: true });
+    }
+    const isStale = (key) => client.getQueryState(key).isInvalidated;
+
+    await dispatch({ mode: 'live', personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k3', clientLoggedAt: 't' });
+
+    expect(isStale(overview4)).toBe(true);
+    expect(isStale(overview12)).toBe(true);
+    expect(isStale(trendFor3)).toBe(true);
+    expect(isStale(recordsFor3)).toBe(true);
+    // Person scoping still holds -- one person's set must not invalidate another's trends.
+    expect(isStale(otherPerson)).toBe(false);
   });
 });
 
@@ -453,5 +507,39 @@ describe('flushOutbox / clearOutboxMutations / resetQueryCache (singleton client
       await flushOutbox();
       expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ idempotencyKey: 'token-returns' }));
     });
+  });
+});
+
+// The display counterpart to shouldRetryWrite: which not-yet-synced writes a screen must keep
+// showing. Shared by ExerciseDetail's row list and useSessionEntries' "Session exercises" list so
+// the two can't drift -- they did, and a lie-fi write that exhausted its retries vanished from one
+// while still showing on the other and still counting in the outbox badge.
+describe('isUnsyncedWrite', () => {
+  it('keeps a write paused offline', () => {
+    expect(isUnsyncedWrite({ status: 'pending' })).toBe(true);
+  });
+
+  it('keeps a write whose retries have settled into a transient error', () => {
+    // The lie-fi case: unreachable server, retries exhausted for now, but flushOutbox will restart
+    // it on reconnect and shouldRetryWrite never gives up on a 5xx/statusless failure.
+    expect(isUnsyncedWrite({ status: 'error', errorStatus: 503 })).toBe(true);
+    expect(isUnsyncedWrite({ status: 'error', errorStatus: undefined })).toBe(true);
+  });
+
+  it('drops a write that landed', () => {
+    expect(isUnsyncedWrite({ status: 'success' })).toBe(false);
+  });
+
+  it('drops a write the server definitively rejected', () => {
+    // A real 4xx is the server's answer; onError has already rolled the optimistic row back.
+    expect(isUnsyncedWrite({ status: 'error', errorStatus: 400 })).toBe(false);
+    expect(isUnsyncedWrite({ status: 'error', errorStatus: 422 })).toBe(false);
+  });
+
+  it('agrees with shouldRetryWrite on where the 4xx boundary sits', () => {
+    for (const status of [399, 400, 499, 500]) {
+      const stillRetrying = shouldRetryWrite(1, { status });
+      expect(isUnsyncedWrite({ status: 'error', errorStatus: status })).toBe(stillRetrying);
+    }
   });
 });

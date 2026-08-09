@@ -129,6 +129,20 @@ describe('AppStateContext reducer', () => {
     expect(active(state).trendsExerciseId).toBe(42);
   });
 
+  it('keeps each person their own Trends metric selections', () => {
+    let state = withPerson(1);
+    state = reducer(state, { type: 'SET_TRENDS_WEEKLY_METRIC', metric: 'sets' });
+    state = reducer(state, { type: 'SET_TRENDS_EXERCISE_METRIC', metric: 'totalReps' });
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
+    expect(active(state).trendsWeeklyMetric).toBe('volume');
+    expect(active(state).trendsExerciseMetric).toBe('est1rm');
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
+    expect(active(state).trendsWeeklyMetric).toBe('sets');
+    expect(active(state).trendsExerciseMetric).toBe('totalReps');
+  });
+
   it('ending the routine clears routine progress but leaves the selected exercise alone', () => {
     let state = reducer(withPerson(1), { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20, 30] });
     state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20, 30] });
@@ -210,5 +224,46 @@ describe('AppStateContext reducer', () => {
       byPerson: { 1: { ...PERSON_DEFAULTS, lastTab: '/app/trends' } },
     });
     expect(restored.byPerson[1].lastTab).toBe('/app/trends');
+  });
+
+  // A slice written before a field was added to PERSON_DEFAULTS must not hydrate that field as
+  // undefined -- that shipped a crash-on-hover to every existing user once, and every future
+  // field added here would repeat it. See docs/incidents/2026-08-08-trends-hover-blank-page.md.
+  it('HYDRATE backfills defaults for fields a persisted slice predates', () => {
+    const slicePersistedBeforeTheseFieldsExisted = { selectedExerciseId: 7, weightDraft: 225 };
+    const restored = reducer(initialState, {
+      type: 'HYDRATE',
+      activePersonId: 1,
+      byPerson: { 1: slicePersistedBeforeTheseFieldsExisted },
+    });
+
+    expect(restored.byPerson[1].trendsWeeklyMetric).toBe('volume');
+    expect(restored.byPerson[1].prsSort).toBe('recent');
+    // Backfilling must not clobber what WAS persisted.
+    expect(restored.byPerson[1].selectedExerciseId).toBe(7);
+    expect(restored.byPerson[1].weightDraft).toBe(225);
+  });
+
+  it('HYDRATE backfills defaults on the resetTab path too', () => {
+    const restored = reducer(initialState, {
+      type: 'HYDRATE',
+      activePersonId: 1,
+      byPerson: { 1: { weightDraft: 225, lastTab: '/app/trends' } },
+      resetTab: true,
+    });
+    expect(restored.byPerson[1].trendsWeeklyMetric).toBe('volume');
+    expect(restored.byPerson[1].lastTab).toBe('/app/log');
+  });
+
+  it('SET_PRS_SORT is per person -- one board\'s order never reorders another\'s', () => {
+    let state = withPerson(1);
+    state = reducer(state, { type: 'SET_PRS_SORT', sort: 'est1rm' });
+    expect(active(state).prsSort).toBe('est1rm');
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
+    expect(active(state).prsSort).toBe('recent');
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
+    expect(active(state).prsSort).toBe('est1rm');
   });
 });

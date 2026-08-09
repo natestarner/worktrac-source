@@ -30,6 +30,14 @@ public class StatsController {
         return statsService.getPrList(currentUser.accountId(), personId);
     }
 
+    // All-time, so no `weeks` param -- a record isn't relative to the range you're viewing. `zone`
+    // is still needed to date each record in the viewer's local calendar.
+    @GetMapping("/api/people/{personId}/exercises/{exerciseId}/records")
+    public ExerciseRecordsDto exerciseRecords(@PathVariable Long personId, @PathVariable Long exerciseId,
+                                               @RequestParam(defaultValue = "UTC") String zone) {
+        return statsService.getExerciseRecords(currentUser.accountId(), personId, exerciseId, zone);
+    }
+
     @GetMapping("/api/people/{personId}/trends/overview")
     public TrendsOverviewDto trendsOverview(@PathVariable Long personId,
                                              @RequestParam(defaultValue = "12") int weeks,

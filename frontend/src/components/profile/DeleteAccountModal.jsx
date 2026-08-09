@@ -115,7 +115,7 @@ const cardStyle = {
 const downloadLinkStyle = {
   background: 'none',
   border: 'none',
-  color: 'var(--color-accent)',
+  color: 'var(--color-accent-text)',
   fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',

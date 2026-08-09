@@ -20,13 +20,33 @@ const WARM_STALE_TIME = 30 * 1000;
 // a different reason: it's derived client-side from the already-warmed history cache when the
 // live query has no answer yet (offline or lie-fi) -- see deriveExerciseSummaryFromHistory.js
 // and ExerciseDetail.jsx -- rather than fanning out a prefetch per exercise.
+// `refreshAfterRestore` marks the entries a boot warm must refetch even when they still look
+// fresh. A restored entry's dataUpdatedAt describes the PREVIOUS page session, and the query
+// persister is throttled (1s), so anything that changed in that last second was never written --
+// yet the timestamp still says "fresh", and both this warm's staleTime and the queries' own 60s
+// staleTime then decline to refetch it. Nothing else corrects it until the 5-minute warm tick.
+// That is issue #146: a routine created seconds before a reload vanished from the Routines tab.
+//
+// It is opt-IN per key rather than blanket, because forcing is only safe for collections the
+// server wholly owns. These three qualify:
+//   - routines       -- routine CRUD is online-gated (OfflineDisabledWrap), so the cache can
+//                       never hold a routine that hasn't reached the server.
+//   - history, prs   -- no optimistic writer anywhere; they are invalidation-driven only, so an
+//                       unsynced set is simply absent from them (see "a durable write is not the
+//                       same as a visible value" in .claude/rules/frontend-core.md).
+//
+// The others are deliberately excluded because they CAN hold unsynced local state, and refetching
+// would delete it mid-flight:
+//   - exercises, personExercises -- insertOptimisticExercise (AddEditExerciseModal) puts a temp
+//                       exercise in both while its create is still queued in the outbox.
+//   - liveSession    -- EndWorkoutConfirmModal optimistically nulls it on end-workout.
 function personWarmTargets(personId) {
   return [
     { queryKey: queryKeys.liveSession(personId), queryFn: () => getLiveSession(personId) },
     { queryKey: queryKeys.personExercises(personId), queryFn: () => listPersonExercises(personId) },
-    { queryKey: queryKeys.routines(personId), queryFn: () => listRoutines(personId) },
-    { queryKey: queryKeys.history(personId), queryFn: () => getHistory(personId) },
-    { queryKey: queryKeys.prs(personId), queryFn: () => getPrs(personId) },
+    { queryKey: queryKeys.routines(personId), queryFn: () => listRoutines(personId), refreshAfterRestore: true },
+    { queryKey: queryKeys.history(personId), queryFn: () => getHistory(personId), refreshAfterRestore: true },
+    { queryKey: queryKeys.prs(personId), queryFn: () => getPrs(personId), refreshAfterRestore: true },
   ];
 }
 
@@ -35,7 +55,10 @@ function personWarmTargets(personId) {
 // something to render if connectivity drops before that person's own screens are ever visited.
 // Fire-and-forget: never awaited by any render path, never throws into the UI -- a failed warm
 // just leaves that entry unwarmed for the next trigger to retry.
-export async function warmOfflineCache(queryClient, people) {
+// `afterRestore` is set only by the boot warm (see useOfflineCacheWarming), which runs once the
+// persisted cache has finished hydrating. It downgrades staleTime to 0 for the
+// refreshAfterRestore keys above, so they refetch rather than being skipped as still-fresh.
+export async function warmOfflineCache(queryClient, people, { afterRestore = false } = {}) {
   if (!onlineManager.isOnline() || !people || people.length === 0) return;
 
   const targets = [
@@ -45,6 +68,11 @@ export async function warmOfflineCache(queryClient, people) {
   ];
 
   await Promise.allSettled(
-    targets.map((target) => queryClient.prefetchQuery({ ...target, staleTime: WARM_STALE_TIME })),
+    targets.map(({ refreshAfterRestore, ...target }) =>
+      queryClient.prefetchQuery({
+        ...target,
+        staleTime: afterRestore && refreshAfterRestore ? 0 : WARM_STALE_TIME,
+      }),
+    ),
   );
 }

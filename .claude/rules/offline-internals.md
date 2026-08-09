@@ -74,6 +74,35 @@ revert-then-correct flicker; PR celebration reflecting the pre-edit value) are d
 documented in `docs/incidents/2026-07-30-editing-queued-offline-set.md` — don't "fix" them into
 connectivity-mode special-casing.
 
+## Subscribing to the MutationCache: always `notifyManager.schedule`
+
+Three hooks read queued writes straight off the MutationCache via `useSyncExternalStore` —
+`useSessionEntries`, `useOutboxItems`, `useOutboxCount`. **Their `subscribe` callback must hand
+`onChange` to `notifyManager.schedule(...)`, never call it inline.**
+
+The cache emits *synchronously* from inside `notifyManager.batch`. A descendant of the subscribing
+component can cause an emit during **its own** render (mounting a durable-write observer), which
+lands mid-render for the subscriber — so an inline `onChange()` schedules a React update on a
+component while a child is rendering, and React logs `Cannot update a component (LogTab) while
+rendering a different component`. It recovers with an extra pass, but this is the same machinery
+that produced an infinite-render loop before (hence the `dirty`-flag referential-stability guards
+in `useSessionEntries`/`useOutboxItems` — keep those too).
+
+`notifyManager.schedule` is exactly what TanStack's own `useMutationState` does for this job, so
+batching and test-mode flushing (`notifyManager.setScheduler`) stay consistent with the library —
+don't substitute a bare `queueMicrotask`/`setTimeout` or a `useEffect` hop.
+
+Each of the three has a regression test that reproduces the warning by mounting a child **after**
+the subscription is live (on a first render nothing is subscribed yet, so the bug cannot show —
+a test that mounts parent and child together passes either way and guards nothing).
+
+There is a **fourth** MutationCache subscriber: `LogTab.jsx`'s effect that migrates the selected
+exercise from a temp id to the real one once a `createExercise` write syncs. It calls
+`selectExercise` (a state setter) straight from the notification. It has not been observed causing
+the warning — a create-success notification comes from a network response, not from a render — so
+it was deliberately left alone rather than changed speculatively. **If the warning ever names
+`LogTab` again after the three hooks above were fixed, this is where to look.**
+
 ## Query cache persistence
 
 `shouldDehydrateQuery` (`queryClient.js`) persists a query whenever it holds usable `data`,
@@ -83,6 +112,29 @@ silent forced reload made cached sections boot data-less. See
 `docs/incidents/2026-07-28-liefi-cached-sections-blank.md`. The cache is cleared on every auth
 change (`resetQueryCache`).
 
+## The persisted cache can resurrect an ended workout
+
+The persister's write is **throttled** (persistQueryClient's 1s default; `persistOptions` sets no
+`throttleTime`), and `swUpdate.js`'s `tryForceUpdate` silently reloads on ordinary navigation
+whenever a new SW build is available — **always true just after a deploy**. A reload landing inside
+that window boots from a snapshot taken *before* the most recent cache change.
+
+For `liveSession` that is not merely stale. Its id feeds `ExerciseDetail`'s `contextSessionId`,
+which gates `sessionSets` — and a restored session carries a **real** id, unlike the deliberate
+`{ id: null }` offline placeholder `contextSessionId` is built to ignore. So a finished workout is
+treated as live and its still-cached sets render under "This session". Online the 10s `staleTime`
+corrects it on the next refetch; **offline nothing can**, so it stands for the whole stretch.
+
+`endedSessions.js` closes this with a **synchronous localStorage marker** written before the cache
+clear (`EndWorkoutConfirmModal`), which `useLiveSession` consults. localStorage specifically
+because the write cannot be beaten by a reload — the same reasoning as `offlineMode.js`'s manual
+pin and `outboxPersistence.js`'s account pointer. The marker is never cleared and needs no
+clearing: it suppresses exactly one id, and session ids are never reused.
+
+**Any other cache entry whose staleness would be actively wrong rather than merely old needs the
+same treatment** — a throttled persist plus a reload you can't predict means the query cache alone
+can't be trusted to carry "this thing is over".
+
 ## Cache warming
 
 `offlineCacheWarm.js` prefetches **every** household member's logging essentials, not just the
@@ -91,6 +143,34 @@ active person — a device hand-off mid-outage must still render. Deliberately e
 session-scoped queries (can't be enumerated without a session id). `exerciseSummary` is instead
 derived client-side from the warmed `history` cache (`utils/exerciseSummaryFromHistory.js`), and
 once stuck is preferred **over** `summaryQuery.data`, not just used when data is absent.
+
+### A restored entry is "fresh" without being correct — the boot warm must override that
+
+A rehydrated entry keeps the `dataUpdatedAt` it had when persisted, so it satisfies both the warm's
+30s staleness check and the queries' own 60s `staleTime`. But the persister is **throttled at 1s**,
+so anything changed in the last second before a reload was never written — and nothing then
+refetches it until the **5-minute** warm tick. A routine created seconds before a reload therefore
+vanished from the Routines tab for minutes (issue #146, seen as a lower e2e failure in
+`reload-persistence.spec.ts`).
+
+The boot warm — the one `useOfflineCacheWarming` fires once `isRestoring` clears — passes
+`{ afterRestore: true }`, which drops `staleTime` to 0 **for keys marked `refreshAfterRestore`**.
+Later warms (online transition, visibility, interval) deliberately don't: by then the cache is
+what this page session fetched, and ordinary staleness is right.
+
+**`refreshAfterRestore` is opt-in per key, and must stay that way.** It is only safe for
+collections the server wholly owns:
+
+| Key | Forced? | Why |
+|---|---|---|
+| `routines` | ✅ | routine CRUD is online-gated, so the cache can't hold an unsent routine |
+| `history`, `prs` | ✅ | no optimistic writer; invalidation-driven only |
+| `exercises`, `personExercises` | ❌ | `insertOptimisticExercise` holds a **temp exercise** here while its create is still queued — refetching deletes it from the picker mid-flight |
+| `liveSession` | ❌ | `EndWorkoutConfirmModal` optimistically nulls it on end-workout |
+
+**Before marking any new key, ask: can this key ever hold state that hasn't reached the server?**
+If yes, forcing a refetch destroys it. That trade is the whole reason this is a per-key list and
+not a blanket "invalidate everything after hydrate".
 
 ## Cold boot offline
 
