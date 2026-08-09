@@ -27,6 +27,8 @@ import ConfigureExerciseModal from '../shared/ConfigureExerciseModal';
 import EditSetModal from '../shared/EditSetModal';
 import ExerciseNoteModal from '../shared/ExerciseNoteModal';
 import Button from '../shared/Button';
+import IconButton from '../shared/IconButton';
+import { IconMore, IconNote, IconPencil, IconPin, IconStar, IconStarFilled, IconTrash } from '../shared/icons';
 import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
 import { tagChipStyle } from '../shared/tagChipStyle';
@@ -40,7 +42,7 @@ export default function ExerciseDetail({
   liveSession,
   refetchLiveSession,
   onBack,
-  // Optional: when provided, renders a "View full history" link that hands off to History
+  // Optional: when provided, renders a "View full exercise history" link that hands off to History
   // filtered to this exercise (see LogTab.jsx / HistoryTab.jsx's deep-link seed). Deliberately a
   // prop, not a direct useNavigate() call here -- ExerciseDetail takes onBack as a prop rather
   // than navigating itself, and its test file renders with no MemoryRouter at all.
@@ -346,7 +348,7 @@ export default function ExerciseDetail({
       if (context?.key && context?.previous !== undefined) {
         queryClient.setQueryData(context.key, context.previous);
       }
-      showToast(error.message || "Couldn't save that set");
+      showToast(error.message || "Couldn't save that set", { tone: 'error' });
     },
     onSuccess: (result, variables) => {
       setJustAddedSetId(result.set.id);
@@ -517,40 +519,44 @@ export default function ExerciseDetail({
     <div>
       <div className="exercise-detail-grid">
         <div>
-          <button onClick={onBack} style={backButtonStyle}>
+          {/* The arrow stays a text entity, like the stepper's +/- and the keypad's
+              backspace. It renders identically everywhere and inherits colour and weight,
+              so it was never the emoji problem -- and it is part of this button's
+              accessible name, which three e2e specs select by. */}
+          <button onClick={onBack} className="pressable" style={backButtonStyle}>
             &larr; All exercises
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: exercise.tags?.length ? 6 : 18 }}>
-            <div style={{ minWidth: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em' }}>{exercise.name}</div>
-            <button
-              onClick={handleToggleFavorite}
-              aria-label={exercise.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginBottom: exercise.tags?.length ? 'var(--space-2)' : 'var(--space-5)' }}>
+            <div
               style={{
-                ...iconButtonStyle,
-                fontSize: 20,
-                color: exercise.isFavorite ? 'var(--color-accent)' : 'var(--color-faint)',
-                cursor: 'pointer',
+                minWidth: 0,
+                flex: 1,
+                fontSize: 'var(--text-2xl)',
+                fontWeight: 'var(--weight-bold)',
+                letterSpacing: 'var(--tracking-tight)',
+                lineHeight: 'var(--leading-tight)',
               }}
             >
-              {exercise.isFavorite ? '★' : '☆'}
-            </button>
-            <button
+              {exercise.name}
+            </div>
+            {/* These three were a text glyph and two emoji at three different font sizes,
+                each with a ~20px hit area. As IconButtons they share one 40px target and
+                one stroke weight. The aria-labels are unchanged -- e2e selects the note
+                button by "Edit note for this session". */}
+            <IconButton
+              onClick={handleToggleFavorite}
+              label={exercise.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              icon={exercise.isFavorite ? IconStarFilled : IconStar}
+              tone={exercise.isFavorite ? 'accent' : 'default'}
+            />
+            <IconButton
               onClick={() => setShowSessionNoteModal(true)}
-              aria-label={sessionNote ? 'Edit note for this session' : 'Add a note for this session'}
-              title={sessionNote ? 'Edit note for this session' : 'Add a note for this session'}
-              style={{ ...iconButtonStyle, fontSize: 19, color: sessionNote ? 'var(--color-accent)' : 'var(--color-faint)' }}
-            >
-              📝
-            </button>
-            <button
-              onClick={() => setShowConfigureModal(true)}
-              aria-label="Customize this exercise"
-              title="Customize this exercise"
-              style={{ ...iconButtonStyle, fontSize: 22, fontWeight: 700, color: 'var(--color-muted)' }}
-            >
-              &#8942;
-            </button>
+              label={sessionNote ? 'Edit note for this session' : 'Add a note for this session'}
+              icon={IconNote}
+              tone={sessionNote ? 'accent' : 'default'}
+            />
+            <IconButton onClick={() => setShowConfigureModal(true)} label="Customize this exercise" icon={IconMore} />
           </div>
           {exercise.tags?.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
@@ -563,16 +569,16 @@ export default function ExerciseDetail({
           )}
 
           {exercise.note && (
-            <button onClick={() => setShowConfigureModal(true)} style={pinnedNoteStyle}>
-              <span style={{ marginRight: 6 }}>📌</span>
-              {exercise.note}
+            <button onClick={() => setShowConfigureModal(true)} className="pressable" style={pinnedNoteStyle}>
+              <IconPin size={14} style={{ marginTop: 2, color: 'var(--color-faint)' }} />
+              <span>{exercise.note}</span>
             </button>
           )}
 
           {sessionNote && (
-            <button onClick={() => setShowSessionNoteModal(true)} style={sessionNoteStyle}>
-              <span style={{ marginRight: 6 }}>📝</span>
-              {sessionNote}
+            <button onClick={() => setShowSessionNoteModal(true)} className="pressable" style={sessionNoteStyle}>
+              <IconNote size={14} style={{ marginTop: 2, color: 'var(--color-accent)' }} />
+              <span>{sessionNote}</span>
             </button>
           )}
 
@@ -591,11 +597,11 @@ export default function ExerciseDetail({
 
           {!ready && (
             <div className="summary-cards-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-              <div className="summary-card" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16 }}>
+              <div className="summary-card" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)' }}>
                 <Skeleton width={90} height={11} style={{ marginBottom: 8 }} />
                 <Skeleton width={110} height={20} />
               </div>
-              <div className="summary-card" style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 16 }}>
+              <div className="summary-card" style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 'var(--radius-lg)' }}>
                 <Skeleton width={100} height={11} style={{ marginBottom: 8 }} />
                 <Skeleton width={130} height={20} />
               </div>
@@ -604,21 +610,31 @@ export default function ExerciseDetail({
 
           {ready && (
             <div className="summary-cards-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-              <div className="summary-card" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16 }}>
+              <div className="summary-card" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)' }}>
                 <div style={cardLabelStyle}>Last time &middot; {lastLabel}</div>
                 {summary?.lastSession ? (
                   <SetPillRow sets={summary.lastSession.sets} style={{ marginTop: 2 }} />
                 ) : (
-                  <div className="summary-card-value" style={{ fontWeight: 700 }}>No sets yet</div>
+                  <div className="summary-card-value" style={{ fontWeight: 'var(--weight-bold)' }}>No sets yet</div>
                 )}
                 {summary?.lastSession?.note && (
-                  <div style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--color-muted)', marginTop: 4 }}>
-                    <span style={{ marginRight: 4 }}>📝</span>
-                    {summary.lastSession.note}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 'var(--space-1)',
+                      fontSize: 'var(--text-xs)',
+                      fontStyle: 'italic',
+                      color: 'var(--color-muted)',
+                      marginTop: 'var(--space-1)',
+                    }}
+                  >
+                    <IconNote size={12} style={{ marginTop: 2 }} />
+                    <span>{summary.lastSession.note}</span>
                   </div>
                 )}
               </div>
-              <div className="summary-card" style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 16 }}>
+              <div className="summary-card" style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 'var(--radius-lg)' }}>
                 <div style={{ ...cardLabelStyle, color: 'var(--color-pr-text)' }}>Best &middot; Est. 1RM</div>
                 <div className="summary-card-value" style={{ fontWeight: 700, color: 'var(--color-pr-text)' }}>{bestText}</div>
               </div>
@@ -626,16 +642,27 @@ export default function ExerciseDetail({
           )}
 
           {onViewAllHistory && (
-            <button
-              onClick={() => onViewAllHistory(exercise.id, exercise.name)}
-              aria-label={`View full history for ${exercise.name}`}
-              style={viewHistoryLinkStyle}
-            >
-              View full history &rarr;
-            </button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => onViewAllHistory(exercise.id, exercise.name)}
+                aria-label={`View full exercise history for ${exercise.name}`}
+                className="pressable"
+                style={viewHistoryLinkStyle}
+              >
+                View full exercise history &rarr;
+              </button>
+            </div>
           )}
 
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 20, marginBottom: 16 }}>
+          <div
+            style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 'var(--space-5)',
+              marginBottom: 'var(--space-4)',
+            }}
+          >
             <div className="stepper-pair">
               <WeightRepsStepper
                 label={`Weight (${defaultUnit})`}
@@ -646,20 +673,13 @@ export default function ExerciseDetail({
               />
               <WeightRepsStepper label="Reps" value={repsDraft} onDec={decReps} onInc={incReps} onValueTap={() => setKeypadField('reps')} />
             </div>
-            <Button
-              onClick={handleLogSet}
-              style={{
-                width: '100%',
-                padding: 16,
-                background: 'var(--color-accent)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 12,
-                fontSize: 16,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
+            {/* The screen's one primary action, and the only place size="lg" is used on
+                this screen. That isn't just emphasis: at --text-xl/700 the white label
+                clears the AA Large threshold, which is what lets this button keep the
+                brand accent rather than the darker --color-accent-strong the smaller
+                filled buttons need. It's also the easiest thing on the page to hit
+                mid-set, which is the whole point. */}
+            <Button onClick={handleLogSet} variant="primary" size="lg" fullWidth>
               <span
                 style={{
                   display: 'block',
@@ -682,7 +702,14 @@ export default function ExerciseDetail({
           {displaySets.length > 0 && (
             <>
               <div className="log-sets-heading">This session</div>
-              <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '8px 20px' }}>
+              <div
+                style={{
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: '0 var(--space-5)',
+                }}
+              >
                 {[...displaySets].reverse().map((set, i) => {
                   // displaySets is oldest-first (confirmed sets from the API, oldest first,
                   // with any pre-session placeholder(s) prepended since they're chronologically
@@ -699,14 +726,24 @@ export default function ExerciseDetail({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '14px 0',
-                        borderRadius: 10,
-                        borderBottom: i < displaySets.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
+                        minHeight: 56,
+                        padding: 'var(--space-2) 0',
+                        borderRadius: 'var(--radius-md)',
+                        borderBottom: i < displaySets.length - 1 ? '1px solid var(--color-border)' : 'none',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ fontSize: 13, color: 'var(--color-muted)', fontWeight: 600, width: 44 }}>Set {setNumber}</div>
-                        <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', fontWeight: 'var(--weight-normal)', width: 44 }}>
+                          Set {setNumber}
+                        </div>
+                        {/* Deliberately one text node. Styling the unit and the "x" down to
+                            --color-muted would read better typographically, but it requires
+                            splitting this into spans, and ~20 assertions in this component's
+                            test file look the row up with getByText('135 lb x 8') -- which
+                            concatenates only DIRECT text-node children -- and then navigate
+                            to the row via .parentElement. Not worth destabilising the offline
+                            set-handling and PR-badge coverage for a subtle refinement. */}
+                        <div style={{ fontSize: 'var(--text-lg)', fontWeight: 'var(--weight-bold)', color: 'var(--color-text)' }}>
                           {set.weight} {set.unit || 'lb'} &times; {set.reps}
                         </div>
                         {isPR && (
@@ -718,11 +755,11 @@ export default function ExerciseDetail({
                             style={{
                               background: 'var(--color-success-bg)',
                               color: 'var(--color-success)',
-                              fontSize: 11,
-                              fontWeight: 800,
-                              padding: '3px 8px',
-                              borderRadius: 999,
-                              letterSpacing: '0.03em',
+                              fontSize: 'var(--text-2xs)',
+                              fontWeight: 'var(--weight-bold)',
+                              padding: 'var(--space-1) var(--space-2)',
+                              borderRadius: 'var(--radius-full)',
+                              letterSpacing: 'var(--tracking-label)',
                             }}
                           >
                             PR
@@ -730,7 +767,16 @@ export default function ExerciseDetail({
                         )}
                       </div>
                       {set.optimistic && !editableTempIds.includes(set.id) ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--color-muted)' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 'var(--space-2)',
+                            fontSize: 'var(--text-sm)',
+                            fontWeight: 'var(--weight-normal)',
+                            color: 'var(--color-muted)',
+                          }}
+                        >
                           <span className="saving-dot" />
                           Saving&hellip;
                         </div>
@@ -739,13 +785,21 @@ export default function ExerciseDetail({
                         // in the outbox, no server row yet -- is just as editable/deletable as a
                         // synced one -- see offlineSetEdits.js. Delete cancels the pending create
                         // outright rather than queuing a delete against a set id that doesn't exist yet.
-                        <div style={{ display: 'flex', gap: 14 }}>
-                          <button onClick={() => setEditingSet(set)} style={editLinkStyle}>
-                            Edit
-                          </button>
-                          <button onClick={() => openConfirm('Delete this set?', () => handleDeleteSet(set))} style={deleteLinkStyle}>
-                            Delete
-                          </button>
+                        //
+                        // Icon buttons, not text links. As 13px text with padding: 0 these
+                        // were ~16px tall and sat 14px apart -- Edit immediately beside a
+                        // destructive Delete, which is a mis-tap waiting to happen with
+                        // sweaty hands mid-set. Each now owns a 40px target.
+                        // The labels stay exactly "Edit" and "Delete": ~40 e2e assertions
+                        // select these by accessible name.
+                        <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+                          <IconButton onClick={() => setEditingSet(set)} label="Edit" icon={IconPencil} tone="accent" />
+                          <IconButton
+                            onClick={() => openConfirm('Delete this set?', () => handleDeleteSet(set))}
+                            label="Delete"
+                            icon={IconTrash}
+                            tone="danger"
+                          />
                         </div>
                       )}
                     </div>
@@ -828,67 +882,65 @@ export default function ExerciseDetail({
   );
 }
 
+// --color-accent-text, not --color-accent, on every one of these: they are all small
+// text, where the brand orange is 3.44:1 and fails AA. See the accent token comments
+// in index.css.
 const backButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 'var(--space-2)',
+  minHeight: 40,
   background: 'none',
   border: 'none',
-  color: 'var(--color-accent)',
-  fontSize: 15,
-  fontWeight: 600,
+  color: 'var(--color-accent-text)',
+  fontSize: 'var(--text-base)',
+  fontWeight: 'var(--weight-semibold)',
   cursor: 'pointer',
-  padding: '0 0 16px 0',
+  padding: '0 0 var(--space-3) 0',
 };
 
 const cardLabelStyle = {
-  fontSize: 11,
-  fontWeight: 700,
+  fontSize: 'var(--text-2xs)',
+  fontWeight: 'var(--weight-semibold)',
   color: 'var(--color-muted)',
   textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 4,
-};
-
-const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
-const deleteLinkStyle = { background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
-
-const iconButtonStyle = {
-  background: 'none',
-  border: 'none',
-  padding: 0,
-  lineHeight: 1,
-  cursor: 'pointer',
-  flexShrink: 0,
+  letterSpacing: 'var(--tracking-label)',
+  marginBottom: 'var(--space-1)',
 };
 
 const viewHistoryLinkStyle = {
-  display: 'block',
-  width: '100%',
-  textAlign: 'right',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 'var(--space-1)',
+  minHeight: 40,
   background: 'none',
   border: 'none',
-  color: 'var(--color-accent)',
-  fontSize: 13,
-  fontWeight: 600,
+  color: 'var(--color-accent-text)',
+  fontSize: 'var(--text-sm)',
+  fontWeight: 'var(--weight-semibold)',
   cursor: 'pointer',
-  padding: '0 0 12px 0',
+  padding: '0 0 var(--space-2) 0',
 };
 
 // A standing per-person note (persists across every session for this exercise) -- neutral
 // border so it reads as "always true", distinct from the session note's accent border
 // below ("true today").
 const pinnedNoteStyle = {
-  display: 'block',
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 'var(--space-2)',
   width: '100%',
   boxSizing: 'border-box',
   textAlign: 'left',
   background: 'var(--color-subtle-bg)',
   border: 'none',
   borderLeft: '3px solid var(--color-border)',
-  borderRadius: 8,
-  padding: '10px 14px',
-  fontSize: 13,
+  borderRadius: 'var(--radius-sm)',
+  padding: 'var(--space-3) var(--space-4)',
+  fontSize: 'var(--text-sm)',
   color: 'var(--color-muted)',
   cursor: 'pointer',
-  marginBottom: 10,
+  marginBottom: 'var(--space-2)',
 };
 
 // A note scoped to the current session -- accent border distinguishes it from the
@@ -902,13 +954,14 @@ const sessionNoteStyle = {
 function setupPillStyle(value) {
   return {
     flexShrink: 0,
-    padding: '5px 12px',
-    borderRadius: 999,
+    minHeight: 32,
+    padding: 'var(--space-1) var(--space-3)',
+    borderRadius: 'var(--radius-full)',
     border: `1px solid ${value ? 'var(--color-border)' : 'var(--color-pr-border)'}`,
     background: value ? 'var(--color-bg)' : 'var(--color-pr-bg)',
     color: value ? 'var(--color-text)' : 'var(--color-pr-text)',
-    fontSize: 12,
-    fontWeight: 700,
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-semibold)',
     cursor: 'pointer',
     whiteSpace: 'nowrap',
   };

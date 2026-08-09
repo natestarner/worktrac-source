@@ -18,6 +18,8 @@ import ExerciseDetail from './ExerciseDetail';
 import SessionSummary from './SessionSummary';
 import EndWorkoutConfirmModal from '../shared/EndWorkoutConfirmModal';
 import AddEditExerciseModal from '../settings/AddEditExerciseModal';
+import IconButton from '../shared/IconButton';
+import { IconClose } from '../shared/icons';
 
 function routineBannerDismissKey(personId) {
   return `workout-tracker-routine-banner-dismissed-${personId}`;
@@ -200,32 +202,38 @@ export default function LogTab() {
           style={{
             background: 'var(--color-surface)',
             border: '1px solid var(--color-border)',
-            borderRadius: 16,
-            padding: '14px 20px',
-            marginBottom: 16,
+            borderRadius: 'var(--radius-lg)',
+            padding: 'var(--space-3) var(--space-5)',
+            marginBottom: 'var(--space-4)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 12,
+            gap: 'var(--space-3)',
           }}
         >
-          <div style={{ fontSize: 14 }}>
+          <div style={{ fontSize: 'var(--text-sm)' }}>
             For faster exercise logging,{' '}
-            <span
+            {/* Was a bare <span onClick>: not focusable, not keyboard-operable and
+                announced as plain text. A real button with the link styling instead. */}
+            <button
               onClick={() => navigate('/app/routines')}
-              style={{ color: 'var(--color-accent)', fontWeight: 700, cursor: 'pointer' }}
+              className="pressable"
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                font: 'inherit',
+                color: 'var(--color-accent-text)',
+                fontWeight: 'var(--weight-semibold)',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+              }}
             >
               create a routine
-            </span>
+            </button>
             .
           </div>
-          <button
-            onClick={dismissRoutineBanner}
-            aria-label="Dismiss"
-            style={{ background: 'none', border: 'none', color: 'var(--color-muted)', fontSize: 18, lineHeight: 1, cursor: 'pointer' }}
-          >
-            &times;
-          </button>
+          <IconButton onClick={dismissRoutineBanner} label="Dismiss" icon={IconClose} size={16} />
         </div>
       )}
 
@@ -299,7 +307,7 @@ export default function LogTab() {
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               {activeRoutine.name}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent-text)' }}>
               {Math.min(routineIndex + 1, activeRoutine.exercises.length)} of {activeRoutine.exercises.length}
             </div>
           </div>

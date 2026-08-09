@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { inputStyle, primaryButtonStyle } from './LoginPage';
+import { errorBannerStyle, inputStyle, primaryButtonStyle } from './LoginPage';
 import Spinner from '../components/shared/Spinner';
 
 export default function ForgotPasswordPage() {
@@ -38,7 +38,7 @@ export default function ForgotPasswordPage() {
         alignItems: 'center',
         justifyContent: 'center',
         background: 'var(--color-bg)',
-        padding: 24,
+        padding: 'var(--space-6)',
       }}
     >
       <form
@@ -46,29 +46,20 @@ export default function ForgotPasswordPage() {
         style={{
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
-          borderRadius: 20,
-          padding: '40px 36px',
+          borderRadius: 'var(--radius-xl)',
+          padding: 'var(--space-10) var(--space-8)',
           width: 380,
           maxWidth: '100%',
-          boxShadow: '0 8px 24px rgba(28,27,25,0.06)',
+          boxShadow: 'var(--shadow-2), var(--elevation-hairline)',
         }}
       >
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, textAlign: 'center' }}>Reset your password</div>
-        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 24, textAlign: 'center' }}>
+        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', marginBottom: 'var(--space-1)', textAlign: 'center' }}>Reset your password</div>
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
           Enter your email and we'll send you a code to reset your password.
         </div>
 
         {error && (
-          <div
-            style={{
-              background: 'var(--color-pr-bg)',
-              color: 'var(--color-danger)',
-              borderRadius: 10,
-              padding: '10px 14px',
-              fontSize: 13,
-              marginBottom: 16,
-            }}
-          >
+          <div role="alert" style={errorBannerStyle}>
             {error}
           </div>
         )}
@@ -80,20 +71,20 @@ export default function ForgotPasswordPage() {
           placeholder="you@example.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          style={inputStyle}
+          className="input" style={inputStyle}
         />
 
-        <button type="submit" disabled={submitting} style={{ ...primaryButtonStyle, position: 'relative' }}>
+        <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ ...primaryButtonStyle, position: 'relative' }}>
           <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Send reset code</span>
           {submitting && (
             <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Spinner color={primaryButtonStyle.color} />
+              <Spinner color="currentColor" />
             </span>
           )}
         </button>
 
-        <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 18, textAlign: 'center' }}>
-          <Link to="/login" style={{ color: 'var(--color-accent)', fontWeight: 600 }}>Back to login</Link>
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-5)', textAlign: 'center' }}>
+          <Link to="/login" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>Back to login</Link>
         </div>
       </form>
     </div>

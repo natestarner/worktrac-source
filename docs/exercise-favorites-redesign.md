@@ -358,3 +358,36 @@ UI state predated the 2026-08-07 metric switcher. Full post-mortem in
 `PERSON_DEFAULTS` carries the same latent crash for existing users.
 
 Backend `mvn verify` (203 tests), frontend Vitest (641 tests), and Playwright e2e (74 specs) green.
+
+## 2026-08-09 — Design system pass
+
+The frontend was ~95% inline `style={{}}` objects with a colour-only token layer. Type, space,
+shadow and motion were hardcoded at every call site, which is how 17 font sizes, 13 border radii,
+8 one-off shadows and ~40 padding pairs accumulated — and `fontWeight: 700` appeared 132 times
+against `400` three times, so nothing on screen had emphasis because everything did.
+
+More consequentially, **inline styles cannot express `:hover`, `:active` or `:focus-visible`**, so
+the app had no transitions, no press feedback, and no keyboard focus indicator anywhere. That was
+an architectural dead end, not an oversight. This pass adds the missing token families plus a CSS
+component layer (`.btn-*`, `.card`, `.input`, `.seg`, `.icon-btn`) and a small set of React
+primitives, and migrates everything except the admin portal and the Recharts internals.
+
+Five measured contrast failures fixed: `--color-muted` (4.42:1), `--color-faint` (2.07:1, and it
+was carrying empty-state body copy), and dark-mode `--color-success`/`--color-danger`, which were
+never re-derived for the dark theme and sat at ~3.3:1. The accent split into three tokens because
+`#d4673e` is 3.44:1 as small text — the hero "Log set" CTA keeps the brand orange only because it
+is large enough to qualify as AA Large. Full reasoning in `docs/architecture/design-system.md`.
+
+**Decision worth recording: not every glyph became an icon.** Emoji did (they ignore the theme and
+the accent colour, and render as different art per OS), but the `+` in "+ Add person", the
+stepper's `+`/`−`, the keypad's `⌫` and the back arrow stayed as text — they render identically
+everywhere, inherit colour and weight, and were never the problem. They are also part of those
+controls' accessible names, which ~30 e2e assertions select by. Similarly, dimming the unit in
+`135 lb × 8` was tried and reverted: it requires splitting the string into spans, and RTL's
+`getByText` concatenates only direct text-node children, so ~20 assertions covering offline set
+handling and PR-badge correctness would have broken for a subtle typographic gain.
+
+**Toasts are neutral, not green.** The saturated success green was the one hue in the palette with
+nothing else to talk to. A confirmation doesn't need colour to carry its meaning; errors do, so
+they keep a hue — with their own bg/text pair, because dark-mode `--color-danger` is a light salmon
+tuned to be read *as text* on a dark ground and white on it is only 2.95:1.

@@ -73,7 +73,7 @@ test.describe('History and PRs: tags, PR markers, and click-to-filter', () => {
 
     // --- Requirement 5: navigating away and back clears the filter ---
     // The currently-selected exercise (Squat) is still selected in AppStateContext, so the "Log"
-    // nav link lands directly on its detail screen (with its own "View full history" link, which
+    // nav link lands directly on its detail screen (with its own "View full exercise history" link, which
     // also contains "Barbell Back Squat" text) -- wait for each route to fully settle before
     // asserting so that screen's DOM can't still be present when History's is queried.
     await page.getByRole('link', { name: 'Log' }).click();
@@ -94,13 +94,13 @@ test.describe('History and PRs: tags, PR markers, and click-to-filter', () => {
     await expect(page.getByText('Barbell Bench Press')).toHaveCount(0);
   });
 
-  test('the exercise screen\'s "View full history" link deep-links into a filtered History with a way back, and the seed does not survive a reload', async ({ page, request }) => {
+  test('the exercise screen\'s "View full exercise history" link deep-links into a filtered History with a way back, and the seed does not survive a reload', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
 
     await pickExercise(page, 'Barbell Bench Press');
     await logSetAndDismissCelebration(page);
 
-    await page.getByRole('button', { name: /View full history for Barbell Bench Press/ }).click();
+    await page.getByRole('button', { name: /View full exercise history for Barbell Bench Press/ }).click();
 
     await expect(page).toHaveURL(/\/app\/history/);
     await expect(page.getByText(/Back to Barbell Bench Press/)).toBeVisible();
@@ -113,7 +113,7 @@ test.describe('History and PRs: tags, PR markers, and click-to-filter', () => {
 
     // Re-follow the deep link, then reload -- the seed is scrubbed from router state the moment
     // History mounts, so even a hard reload on this exact URL must NOT resurrect the filter.
-    await page.getByRole('button', { name: /View full history for Barbell Bench Press/ }).click();
+    await page.getByRole('button', { name: /View full exercise history for Barbell Bench Press/ }).click();
     await expect(page.getByRole('button', { name: 'Stop filtering to Barbell Bench Press' })).toBeVisible();
 
     await page.reload();

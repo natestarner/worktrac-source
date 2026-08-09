@@ -47,8 +47,16 @@ export function UIProvider({ children }) {
     return () => clearInterval(interval);
   }, []);
 
-  const showToast = useCallback((message, durationMs = 3200) => {
-    setToast(message);
+  // `tone` decides the toast's colour. It defaults to 'success' because most toasts here
+  // are confirmations, but the toast was hardcoded green before this -- so "Couldn't save
+  // that set" and "You need a connection to do that" both rendered in the success colour,
+  // which is the one thing a status colour must never do.
+  //
+  // Second argument accepts either a duration (the original signature) or an options
+  // object, so existing showToast(msg, 2400) call sites keep working.
+  const showToast = useCallback((message, options) => {
+    const { durationMs = 3200, tone = 'success' } = typeof options === 'number' ? { durationMs: options } : options || {};
+    setToast({ message, tone });
     clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(null), durationMs);
   }, []);

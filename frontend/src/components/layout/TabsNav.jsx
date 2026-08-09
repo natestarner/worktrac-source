@@ -8,32 +8,25 @@ const TABS = [
   { path: '/app/trends', label: 'Trends' },
 ];
 
+// Shares the .seg/.seg-item classes with SegmentedToggle. These were two separate
+// implementations of the same control (same track, same active pill, same shadow, but
+// mismatched radii), and this is the app's primary navigation -- at its old '9px 18px'
+// padding it computed to roughly 35px tall, under the 44px touch target on the iPad this
+// app is built around. The shared class carries a min-height that fixes that.
 export default function TabsNav() {
   return (
-    <div className="tabs-nav-bar" style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
-      <div style={{ display: 'flex', gap: 4, background: 'var(--color-subtle-bg)', borderRadius: 12, padding: 4 }}>
+    <div className="tabs-nav-bar" style={{ display: 'flex', overflowX: 'auto' }}>
+      <nav className="seg" aria-label="Sections">
         {TABS.map((tab) => (
           <NavLink
             key={tab.path}
             to={tab.path}
-            style={({ isActive }) => ({
-              padding: '9px 18px',
-              border: 'none',
-              borderRadius: 9,
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              textDecoration: 'none',
-              background: isActive ? 'var(--color-surface)' : 'transparent',
-              color: isActive ? 'var(--color-accent)' : 'var(--color-muted)',
-              boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-            })}
+            className={({ isActive }) => ['seg-item', isActive && 'is-active', 'pressable'].filter(Boolean).join(' ')}
           >
             {tab.label}
           </NavLink>
         ))}
-      </div>
+      </nav>
     </div>
   );
 }
