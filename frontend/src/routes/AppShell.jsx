@@ -110,10 +110,16 @@ export default function AppShell() {
       <OfflineBanner />
       <ConnectionTroubleBanner />
       <OfflineRecoveryPrompt />
-      <Header />
-      <PersonPillBar />
-      <TabsNav />
-      <div className="tab-panel" style={{ margin: '0 auto', padding: '0 24px' }}>
+      {/* Header, person bar and tabs travel together as one sticky unit. Previously the
+          header never stuck, the tab bar never stuck, and the person bar stuck only for a
+          household with two or more people -- so scrolling a sets list mid-workout took
+          every navigation affordance off the top of the screen. */}
+      <div className="app-chrome">
+        <Header />
+        <PersonPillBar />
+        <TabsNav />
+      </div>
+      <div className="tab-panel" style={{ margin: '0 auto', padding: '0 var(--space-6)' }}>
         <Outlet />
       </div>
 

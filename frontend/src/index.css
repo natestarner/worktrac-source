@@ -695,6 +695,48 @@ button {
   display: block;
 }
 
+/* Stepper geometry. Lives here rather than inline on WeightRepsStepper specifically so
+   the landscape block below can shrink it with ordinary cascade order -- it previously
+   needed three !important declarations to beat the component's own inline styles. */
+.stepper-circle-btn {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.stepper-circle-btn-sm {
+  width: 40px;
+  height: 40px;
+}
+
+.stepper-value {
+  min-width: 88px;
+  padding: 0;
+  text-align: center;
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  background: none;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.stepper-value-sm {
+  min-width: 64px;
+  font-size: var(--text-2xl);
+}
+
 /* "Last time" / "Best est. 1RM" summary cards -- compact in every layout, not just
    landscape; these were disproportionately bulky for how little information they
    carry. */
