@@ -40,6 +40,18 @@ if [ -f "$SCRIPT_DIR/worktree-env.sh" ]; then
     echo "NOTE: the backend does not hot-reload -- re-run with --restart after backend changes."
   else
     "$SCRIPT_DIR/up.sh"
+    # Starting the stack from inside this script means up.sh and the long test run share one
+    # shell invocation -- the single surviving correlation for the Vite dev server dying
+    # mid-suite (see the KNOWN UNRESOLVED block in up.sh). Reusing an already-running stack
+    # avoids it entirely, so say so rather than letting a full suite silently take the risky
+    # path. This is advice, not a hard failure: a one-shot run usually completes fine.
+    echo "" >&2
+    echo "NOTE: this run STARTED the stack, so up.sh and the suite share one shell invocation --" >&2
+    echo "  the condition under which the Vite dev server has been seen to die mid-suite. For a" >&2
+    echo "  full-suite run, prefer two separate invocations:" >&2
+    echo "     bash scripts/up.sh      # then, separately:" >&2
+    echo "     bash scripts/e2e.sh     # reuses the healthy stack" >&2
+    echo "" >&2
   fi
 else
   # Isolated per-worktree stacks aren't wired up yet in this checkout -- fall back to the
@@ -51,6 +63,12 @@ else
 fi
 
 : "${E2E_TEST_SUPPORT_KEY:?E2E_TEST_SUPPORT_KEY must be set (see application-local.yml test-support-key)}"
+
+# The documented usage is `e2e.sh [--restart] [-- <playwright args>]`, but the `--` separator was
+# being forwarded verbatim to `playwright test`, which treats it as a positional filter that
+# matches nothing -- so `e2e.sh -- tests/smoke.spec.ts` silently ran the ENTIRE suite instead of
+# the one file, and looked like it had simply ignored the argument. Drop the separator here.
+[ "${1:-}" = "--" ] && shift
 
 cd "$REPO_ROOT/e2e"
 [ -d node_modules ] || npm install
@@ -76,6 +94,8 @@ if [ -n "${BACKEND_PORT:-}" ]; then
       echo "     no such line means something killed it (a sibling worktree's down.sh is the" >&2
       echo "     usual suspect -- see .claude/rules/e2e-tests.md)." >&2
       grep -a "\[\[$name exited" "$REPO_ROOT/.dev-logs/$name.log" 2>/dev/null >&2 || true
+      echo "   Re-run after 'bash scripts/up.sh' in a SEPARATE invocation before believing any" >&2
+      echo "   of the failures above." >&2
       rc=1
     fi
   done

@@ -34,10 +34,29 @@ mkdir -p "$LOG_DIR"
 # correlation is that it dies when up.sh and the long test run share one shell invocation, and
 # survives when they are separated. setsid is the mitigation for that, but see the warning below.
 #
+# 2026-08-09 -- what the exit instrumentation below finally pinned down, and what it rules out:
+#   * A recorded `[[frontend exited rc=127 at ...]]` line was captured. That line is echoed by the
+#     `bash -c` WRAPPER, so the wrapper was still alive when npm returned -- i.e. the process GROUP
+#     was not signalled. This rules out "something SIGKILLed the group", which had been the leading
+#     theory, and rules in "npm returned on its own".
+#   * rc=127 is a shell "command not found", not a crash: no Vite/node stack trace, no error output,
+#     nothing in the log after the ready banner. A JS OOM would print a heap trace and exit 134;
+#     a signal would be 128+n. 127 points at the `npm` -> `npm.cmd` -> node shim chain losing its
+#     console/child under Git-for-Windows, not at Vite or the app.
+#   * It reproduces only under sustained parallel load (`--workers=2` full suite); a `--workers=1`
+#     full suite completed with the server still serving.
+# So: still unresolved as a root cause, but the failure is now known to be a self-exit in the npm
+# shim layer rather than an external kill or an application crash. Don't re-litigate the group-kill
+# theory without new evidence.
+#
 # A PowerShell Start-Process launcher was tried as a setsid substitute and REVERTED: it could not
 # be shown to start the backend reliably, and trading a working start for an unverified fix to an
-# intermittent death is the wrong bet. Separate `up.sh` from the test run if you need a long run to
-# survive: `bash scripts/up.sh` in one shell, `npx playwright test` in another.
+# intermittent death is the wrong bet. (Retried 2026-08-09 for the frontend alone; the dev server
+# still died mid-run, so it is not a workaround either.) Separate `up.sh` from the test run if you
+# need a long run to survive -- and run the suite through scripts/e2e.sh, which detects this exact
+# death and says so instead of leaving it to look like a code regression:
+#     bash scripts/up.sh      # one shell invocation
+#     bash scripts/e2e.sh     # a separate one; reuses the healthy stack
 if command -v setsid > /dev/null 2>&1; then
   _detach() { setsid nohup "$@"; }
 else
