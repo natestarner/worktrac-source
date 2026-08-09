@@ -28,7 +28,7 @@ import EditSetModal from '../shared/EditSetModal';
 import ExerciseNoteModal from '../shared/ExerciseNoteModal';
 import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
-import { IconArrowLeft, IconArrowRight, IconMore, IconNote, IconPencil, IconPin, IconStar, IconStarFilled, IconTrash } from '../shared/icons';
+import { IconMore, IconNote, IconPencil, IconPin, IconStar, IconStarFilled, IconTrash } from '../shared/icons';
 import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
 import { tagChipStyle } from '../shared/tagChipStyle';
@@ -519,9 +519,12 @@ export default function ExerciseDetail({
     <div>
       <div className="exercise-detail-grid">
         <div>
+          {/* The arrow stays a text entity, like the stepper's +/- and the keypad's
+              backspace. It renders identically everywhere and inherits colour and weight,
+              so it was never the emoji problem -- and it is part of this button's
+              accessible name, which three e2e specs select by. */}
           <button onClick={onBack} className="pressable" style={backButtonStyle}>
-            <IconArrowLeft size={16} />
-            All exercises
+            &larr; All exercises
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginBottom: exercise.tags?.length ? 'var(--space-2)' : 'var(--space-5)' }}>
@@ -646,8 +649,7 @@ export default function ExerciseDetail({
                 className="pressable"
                 style={viewHistoryLinkStyle}
               >
-                View full history
-                <IconArrowRight size={14} />
+                View full history &rarr;
               </button>
             </div>
           )}

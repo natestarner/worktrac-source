@@ -75,8 +75,10 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* This page had no labels at all, only placeholders -- which vanish the moment
-            you start typing, and leave a screen reader announcing an unlabelled field. */}
+        {/* This page had no labels at all, only placeholders -- which vanish the moment you
+            start typing, and leave a screen reader announcing an unlabelled field. The
+            placeholders stay alongside the new labels: RegisterPage already pairs the two,
+            and several e2e specs reach these fields by getByPlaceholder. */}
         <div style={{ textAlign: 'left', marginBottom: 'var(--space-3)' }}>
           <label htmlFor="email" style={fieldLabelStyle}>
             Email
@@ -87,6 +89,7 @@ export default function LoginPage() {
             name="email"
             autoComplete="username"
             required
+            placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="input"
@@ -102,6 +105,7 @@ export default function LoginPage() {
             name="password"
             autoComplete="current-password"
             required
+            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="input"
