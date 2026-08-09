@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { inputStyle, primaryButtonStyle } from './LoginPage';
+import { errorBannerStyle, inputStyle, primaryButtonStyle } from './LoginPage';
 import Spinner from '../components/shared/Spinner';
 
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -76,7 +76,7 @@ export default function ConfirmEmailPage() {
         alignItems: 'center',
         justifyContent: 'center',
         background: 'var(--color-bg)',
-        padding: 24,
+        padding: 'var(--space-6)',
       }}
     >
       <form
@@ -84,29 +84,20 @@ export default function ConfirmEmailPage() {
         style={{
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
-          borderRadius: 20,
-          padding: '40px 36px',
+          borderRadius: 'var(--radius-xl)',
+          padding: 'var(--space-10) var(--space-8)',
           width: 380,
           maxWidth: '100%',
-          boxShadow: '0 8px 24px rgba(28,27,25,0.06)',
+          boxShadow: 'var(--shadow-2), var(--elevation-hairline)',
         }}
       >
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, textAlign: 'center' }}>Check your email</div>
-        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 24, textAlign: 'center' }}>
+        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', marginBottom: 'var(--space-1)', textAlign: 'center' }}>Check your email</div>
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
           Enter the 6-digit code we sent to {email}.
         </div>
 
         {error && (
-          <div
-            style={{
-              background: 'var(--color-pr-bg)',
-              color: 'var(--color-danger)',
-              borderRadius: 10,
-              padding: '10px 14px',
-              fontSize: 13,
-              marginBottom: 16,
-            }}
-          >
+          <div role="alert" style={errorBannerStyle}>
             {error}
           </div>
         )}
@@ -125,21 +116,24 @@ export default function ConfirmEmailPage() {
             setCode(e.target.value.replace(/\D/g, ''));
             if (codeError) setCodeError(false);
           }}
+          className={`input ${codeError ? 'input-invalid' : ''}`}
           style={{
             ...inputStyle,
-            ...(codeError ? { border: '1px solid var(--color-danger)', marginBottom: 6 } : {}),
             textAlign: 'center',
+            // Deliberate one-off, outside the type scale: a 6-digit code read back off a
+            // phone is the whole job of this screen, and the tracking below only works at
+            // a display size. --text-2xl would overflow the 380px card at this tracking.
             fontSize: 24,
             letterSpacing: '0.3em',
           }}
         />
         {codeError && <div style={fieldErrorStyle}>Enter the 6-digit code.</div>}
 
-        <button type="submit" disabled={submitting} style={{ ...primaryButtonStyle, position: 'relative' }}>
+        <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ ...primaryButtonStyle, position: 'relative' }}>
           <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Confirm</span>
           {submitting && (
             <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Spinner color={primaryButtonStyle.color} />
+              <Spinner color="currentColor" />
             </span>
           )}
         </button>
@@ -151,13 +145,14 @@ export default function ConfirmEmailPage() {
           style={{
             position: 'relative',
             width: '100%',
-            padding: 12,
-            marginTop: 10,
+            minHeight: 44,
+            padding: 'var(--space-3)',
+            marginTop: 'var(--space-2)',
             background: 'transparent',
-            color: resending || cooldown > 0 ? 'var(--color-muted)' : 'var(--color-accent)',
+            color: resending || cooldown > 0 ? 'var(--color-muted)' : 'var(--color-accent-text)',
             border: 'none',
-            fontSize: 14,
-            fontWeight: 600,
+            fontSize: 'var(--text-sm)',
+            fontWeight: 'var(--weight-semibold)',
             cursor: resending || cooldown > 0 ? 'default' : 'pointer',
           }}
         >
@@ -171,7 +166,7 @@ export default function ConfirmEmailPage() {
           )}
         </button>
         {justSent && cooldown > 0 && (
-          <div style={{ fontSize: 12, color: 'var(--color-muted)', textAlign: 'center', marginTop: 6 }}>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', textAlign: 'center', marginTop: 'var(--space-2)' }}>
             New code sent.
           </div>
         )}
@@ -182,17 +177,17 @@ export default function ConfirmEmailPage() {
 
 const labelStyle = {
   display: 'block',
-  fontSize: 12,
-  fontWeight: 700,
+  fontSize: 'var(--text-xs)',
+  fontWeight: 'var(--weight-semibold)',
   color: 'var(--color-muted)',
   textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 6,
+  letterSpacing: 'var(--tracking-label)',
+  marginBottom: 'var(--space-1)',
 };
 
 const fieldErrorStyle = {
-  fontSize: 12,
-  fontWeight: 600,
+  fontSize: 'var(--text-xs)',
+  fontWeight: 'var(--weight-semibold)',
   color: 'var(--color-danger)',
-  marginBottom: 16,
+  marginBottom: 'var(--space-4)',
 };

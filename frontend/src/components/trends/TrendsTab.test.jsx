@@ -10,24 +10,35 @@ import { useTrendsOverview } from '../../hooks/useTrendsOverview';
 // wiring the overview into SummaryCards -- so the heavier chart subcomponents (which
 // render recharts, unreliable in jsdom without real layout) are mocked out here and
 // exercised for real in TrendsTab manually / via the backend integration tests instead.
+// ConsistencyHeatmap is deliberately NOT mocked-by-necessity: it's plain DOM and has its own
+// real test file, so it's stubbed here only to keep this file about orchestration.
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTrendsOverview', () => ({ useTrendsOverview: vi.fn() }));
 vi.mock('./WeeklyFrequencyChart', () => ({ default: () => <div>weekly-frequency-chart</div> }));
-vi.mock('./VolumeChart', () => ({ default: () => <div>volume-chart</div> }));
+vi.mock('./WeeklyMetricChart', () => ({ default: () => <div>weekly-metric-chart</div> }));
+vi.mock('./ConsistencyHeatmap', () => ({ default: () => <div>consistency-heatmap</div> }));
 vi.mock('./ExerciseTrendSection', () => ({ default: () => <div>exercise-trend-section</div> }));
 
 const overviewWithActivity = {
   weeks: [
-    { weekStart: '2026-06-22', workoutCount: 0, totalVolumeLb: 0 },
-    { weekStart: '2026-06-29', workoutCount: 2, totalVolumeLb: 3000 },
+    { weekStart: '2026-06-22', workoutCount: 0, totalVolumeLb: 0, totalSets: 0, totalReps: 0 },
+    { weekStart: '2026-06-29', workoutCount: 2, totalVolumeLb: 3000, totalSets: 18, totalReps: 140 },
   ],
   currentStreakWeeks: 1,
   workoutsThisWeek: 2,
   workoutsLastWeek: 0,
   volumeThisMonthLb: 3000,
   volumeLastMonthLb: 1500,
+  workoutDays: [{ date: '2026-06-29', sessionCount: 1, setCount: 9 }],
+  hasAnyHistory: true,
 };
+
+const emptyRange = (hasAnyHistory) => ({
+  ...overviewWithActivity,
+  weeks: [{ weekStart: '2026-06-29', workoutCount: 0, totalVolumeLb: 0, totalSets: 0, totalReps: 0 }],
+  hasAnyHistory,
+});
 
 describe('TrendsTab', () => {
   let setTrendsRange;
@@ -41,6 +52,10 @@ describe('TrendsTab', () => {
       setTrendsRange,
       trendsExerciseId: null,
       selectTrendsExercise: vi.fn(),
+      trendsWeeklyMetric: 'volume',
+      setTrendsWeeklyMetric: vi.fn(),
+      trendsExerciseMetric: 'est1rm',
+      setTrendsExerciseMetric: vi.fn(),
     });
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' } });
   });
@@ -55,22 +70,57 @@ describe('TrendsTab', () => {
     expect(screen.getByTestId('trends-skeleton')).toBeInTheDocument();
   });
 
-  it('shows an empty state when the person has no workouts in range', () => {
-    useTrendsOverview.mockReturnValue({
-      overview: { ...overviewWithActivity, weeks: [{ weekStart: '2026-06-29', workoutCount: 0, totalVolumeLb: 0 }] },
-      loading: false,
-    });
+  it('shows the onboarding empty state only for a person who has never logged anything', () => {
+    useTrendsOverview.mockReturnValue({ overview: emptyRange(false), loading: false });
     render(<TrendsTab />);
     expect(screen.getByText(/no workouts logged yet/i)).toBeInTheDocument();
   });
 
-  it('renders summary cards and charts once there is activity in range', () => {
+  it('tells a lapsed person the RANGE is empty, not that they have never trained', () => {
+    // The regression this guards: keying the onboarding copy off the selected range alone told
+    // someone with years of history "No workouts logged yet" the moment they clicked 4wk.
+    useTrendsOverview.mockReturnValue({ overview: emptyRange(true), loading: false });
+    render(<TrendsTab />);
+
+    expect(screen.getByText(/no workouts in the last 12 weeks/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no workouts logged yet/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps the range toggle usable on the empty-range state so the person can widen it', () => {
+    useTrendsOverview.mockReturnValue({ overview: emptyRange(true), loading: false });
+    render(<TrendsTab />);
+
+    fireEvent.click(screen.getByText('All'));
+    expect(setTrendsRange).toHaveBeenCalledWith(260);
+  });
+
+  it('names the actual selected range in the empty-range copy, including "All"', () => {
+    useAppState.mockReturnValue({
+      activePersonId: 7,
+      trendsRangeWeeks: 260,
+      setTrendsRange,
+      trendsExerciseId: null,
+      selectTrendsExercise: vi.fn(),
+      trendsWeeklyMetric: 'volume',
+      setTrendsWeeklyMetric: vi.fn(),
+      trendsExerciseMetric: 'est1rm',
+      setTrendsExerciseMetric: vi.fn(),
+    });
+    useTrendsOverview.mockReturnValue({ overview: emptyRange(true), loading: false });
+    render(<TrendsTab />);
+
+    // "All" is 5 years, not 12 weeks -- a hardcoded label got this wrong.
+    expect(screen.getByText(/no workouts in the last 5 years/i)).toBeInTheDocument();
+  });
+
+  it('renders summary cards and every chart section once there is activity in range', () => {
     useTrendsOverview.mockReturnValue({ overview: overviewWithActivity, loading: false });
     render(<TrendsTab />);
 
     expect(screen.getByText('1 week')).toBeInTheDocument();
+    expect(screen.getByText('consistency-heatmap')).toBeInTheDocument();
     expect(screen.getByText('weekly-frequency-chart')).toBeInTheDocument();
-    expect(screen.getByText('volume-chart')).toBeInTheDocument();
+    expect(screen.getByText('weekly-metric-chart')).toBeInTheDocument();
     expect(screen.getByText('exercise-trend-section')).toBeInTheDocument();
   });
 

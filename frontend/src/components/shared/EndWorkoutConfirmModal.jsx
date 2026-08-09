@@ -1,5 +1,6 @@
 import { queryClient, enqueueOutboxWrite, END_WORKOUT_MUTATION_KEY } from '../../lib/queryClient';
 import { queryKeys } from '../../api/queryKeys';
+import { markSessionEnded } from '../../lib/endedSessions';
 import { useUI } from '../../context/UIContext';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
@@ -9,6 +10,12 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
   const { skipRestTimer } = useUI();
 
   function handleEnd() {
+    // Record the ended id SYNCHRONOUSLY before touching the query cache. The cache clear below only
+    // reaches disk on the persister's next throttled tick, so a silent service-worker reload can
+    // restore this finished session and -- because it carries a real id -- have it treated as live.
+    // See endedSessions.js; useLiveSession consults this marker.
+    const endedId = queryClient.getQueryData(queryKeys.liveSession(personId))?.id;
+    markSessionEnded(personId, endedId);
     // Optimistically clear the live session so the green dot and "session in progress" banner clear
     // instantly -- offline included, where the durable end-workout write only settles on reconnect.
     queryClient.setQueryData(queryKeys.liveSession(personId), null);

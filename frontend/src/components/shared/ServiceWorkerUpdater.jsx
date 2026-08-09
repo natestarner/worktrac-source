@@ -21,34 +21,44 @@ export default function ServiceWorkerUpdater() {
       aria-label="Update available"
       style={{
         position: 'fixed',
-        left: 16,
-        right: 16,
-        bottom: 16,
+        left: 'var(--space-4)',
+        right: 'var(--space-4)',
+        // Clears the home indicator on a standalone-display PWA; resolves to plain
+        // --space-4 anywhere there's no inset.
+        bottom: 'calc(var(--space-4) + env(safe-area-inset-bottom))',
         margin: '0 auto',
         maxWidth: 420,
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
-        padding: '12px 16px',
-        borderRadius: 12,
-        background: 'var(--color-card-bg, #fff)',
+        gap: 'var(--space-3)',
+        padding: 'var(--space-3) var(--space-4)',
+        borderRadius: 'var(--radius-md)',
+        // Was var(--color-card-bg, #fff) -- that token has never existed, so this
+        // always fell through to hard white and rendered a white card with
+        // near-white text in dark mode.
+        background: 'var(--color-surface)',
         color: 'var(--color-text)',
-        boxShadow: '0 6px 24px rgba(0,0,0,0.18)',
-        border: '1px solid var(--color-faint)',
+        boxShadow: 'var(--shadow-3), var(--elevation-hairline)',
+        border: '1px solid var(--color-border)',
         zIndex: 1000,
+        animation: 'slideUpIn var(--dur-slow) var(--ease-out)',
       }}
     >
-      <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>A new version is available.</span>
+      <span style={{ flex: 1, fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)' }}>
+        A new version is available.
+      </span>
       <button
         type="button"
+        className="pressable"
         onClick={() => applyUpdate()}
         style={{
-          padding: '6px 14px',
-          borderRadius: 999,
+          padding: 'var(--space-2) var(--space-4)',
+          borderRadius: 'var(--radius-full)',
           border: 'none',
-          background: 'var(--color-accent, #d4673e)',
-          color: '#fff',
-          fontWeight: 700,
+          background: 'var(--color-accent-strong)',
+          color: 'var(--color-accent-contrast)',
+          fontSize: 'var(--text-sm)',
+          fontWeight: 'var(--weight-semibold)',
           cursor: 'pointer',
         }}
       >
@@ -56,14 +66,16 @@ export default function ServiceWorkerUpdater() {
       </button>
       <button
         type="button"
+        className="pressable pressable-subtle"
         onClick={() => setDismissed(true)}
         style={{
-          padding: '6px 10px',
-          borderRadius: 999,
-          border: '1px solid var(--color-faint)',
+          padding: 'var(--space-2) var(--space-3)',
+          borderRadius: 'var(--radius-full)',
+          border: '1px solid var(--color-border)',
           background: 'transparent',
           color: 'var(--color-muted)',
-          fontWeight: 700,
+          fontSize: 'var(--text-sm)',
+          fontWeight: 'var(--weight-semibold)',
           cursor: 'pointer',
         }}
       >

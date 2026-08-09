@@ -44,12 +44,12 @@ export default function LoginPage() {
         style={{
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
-          borderRadius: 20,
-          padding: '48px 40px',
+          borderRadius: 'var(--radius-xl)',
+          padding: 'var(--space-10) var(--space-8)',
           width: 560,
           maxWidth: '92vw',
           textAlign: 'center',
-          boxShadow: '0 8px 24px rgba(28,27,25,0.06)',
+          boxShadow: 'var(--shadow-2), var(--elevation-hairline)',
         }}
       >
         <picture>
@@ -62,102 +62,123 @@ export default function LoginPage() {
         </picture>
 
         {successMessage && (
-          <div
-            style={{
-              background: 'var(--color-pr-bg)',
-              color: 'var(--color-text)',
-              borderRadius: 10,
-              padding: '10px 14px',
-              fontSize: 13,
-              marginBottom: 16,
-              textAlign: 'left',
-            }}
-          >
+          <div role="status" style={successBannerStyle}>
             {successMessage}
           </div>
         )}
 
+        {/* Was rendering on --color-pr-bg -- the personal-record celebration peach. A
+            failure and an achievement must never share a colour. */}
         {error && (
-          <div
-            style={{
-              background: 'var(--color-pr-bg)',
-              color: 'var(--color-danger)',
-              borderRadius: 10,
-              padding: '10px 14px',
-              fontSize: 13,
-              marginBottom: 16,
-              textAlign: 'left',
-            }}
-          >
+          <div role="alert" style={errorBannerStyle}>
             {error}
           </div>
         )}
 
-        <input
-          type="email"
-          id="email"
-          name="email"
-          autoComplete="username"
-          required
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={inputStyle}
-        />
-        <input
-          type="password"
-          id="password"
-          name="password"
-          autoComplete="current-password"
-          required
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={inputStyle}
-        />
-
-        <div style={{ textAlign: 'right', marginTop: -6, marginBottom: 12 }}>
-          <Link to="/forgot-password" style={{ fontSize: 13, color: 'var(--color-muted)' }}>Forgot password?</Link>
+        {/* This page had no labels at all, only placeholders -- which vanish the moment you
+            start typing, and leave a screen reader announcing an unlabelled field. The
+            placeholders stay alongside the new labels: RegisterPage already pairs the two,
+            and several e2e specs reach these fields by getByPlaceholder. */}
+        <div style={{ textAlign: 'left', marginBottom: 'var(--space-3)' }}>
+          <label htmlFor="email" style={fieldLabelStyle}>
+            Email
+          </label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            autoComplete="username"
+            required
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="input"
+          />
+        </div>
+        <div style={{ textAlign: 'left', marginBottom: 'var(--space-2)' }}>
+          <label htmlFor="password" style={fieldLabelStyle}>
+            Password
+          </label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            autoComplete="current-password"
+            required
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="input"
+          />
         </div>
 
-        <button type="submit" disabled={submitting} style={{ ...primaryButtonStyle, position: 'relative' }}>
+        <div style={{ textAlign: 'right', marginBottom: 'var(--space-4)' }}>
+          <Link to="/forgot-password" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)' }}>
+            Forgot password?
+          </Link>
+        </div>
+
+        <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ position: 'relative' }}>
           <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Log in</span>
           {submitting && (
             <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Spinner color={primaryButtonStyle.color} />
+              <Spinner color="currentColor" />
             </span>
           )}
         </button>
 
-        <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 18 }}>
-          New household? <Link to="/register" style={{ color: 'var(--color-accent)', fontWeight: 600 }}>Register</Link>
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-5)' }}>
+          New household?{' '}
+          <Link to="/register" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>
+            Register
+          </Link>
         </div>
       </form>
     </div>
   );
 }
 
+// Shared by the other four auth pages. inputStyle is kept as a thin wrapper over the
+// .input class rather than deleted, because those pages compose it with per-field
+// overrides; the 16px font size lives in the class and must stay there or iOS Safari
+// zooms the viewport on focus.
 export const inputStyle = {
-  width: '100%',
-  boxSizing: 'border-box',
-  padding: 14,
-  border: '1px solid var(--color-border)',
-  borderRadius: 10,
-  fontSize: 16,
-  marginBottom: 12,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text)',
+  marginBottom: 'var(--space-3)',
 };
 
 export const primaryButtonStyle = {
-  width: '100%',
-  padding: 16,
-  background: 'var(--color-accent)',
-  color: 'var(--color-accent-contrast)',
-  border: 'none',
-  borderRadius: 12,
-  fontSize: 17,
-  fontWeight: 600,
-  cursor: 'pointer',
-  marginTop: 6,
+  marginTop: 'var(--space-2)',
+};
+
+export const fieldLabelStyle = {
+  display: 'block',
+  marginBottom: 'var(--space-1)',
+  fontSize: 'var(--text-xs)',
+  fontWeight: 'var(--weight-semibold)',
+  color: 'var(--color-muted)',
+  textTransform: 'uppercase',
+  letterSpacing: 'var(--tracking-label)',
+};
+
+const bannerBase = {
+  borderRadius: 'var(--radius-md)',
+  padding: 'var(--space-3) var(--space-4)',
+  fontSize: 'var(--text-sm)',
+  marginBottom: 'var(--space-4)',
+  textAlign: 'left',
+  border: '1px solid transparent',
+};
+
+export const successBannerStyle = {
+  ...bannerBase,
+  background: 'var(--color-success-bg)',
+  borderColor: 'var(--color-success)',
+  color: 'var(--color-text)',
+};
+
+export const errorBannerStyle = {
+  ...bannerBase,
+  background: 'var(--color-danger-bg)',
+  borderColor: 'var(--color-danger-border)',
+  color: 'var(--color-danger)',
 };

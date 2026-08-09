@@ -1,11 +1,14 @@
 import { useRef, useSyncExternalStore } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { notifyManager, useQueryClient } from '@tanstack/react-query';
 import { isTempExerciseId } from '../lib/exerciseIdMap';
+import { isUnsyncedWrite } from '../lib/queryClient';
 
-// Every pending (in-flight or paused-offline) logSet/createExercise mutation, for ANY person --
-// the only place an offline-logged set exists before it syncs (see offlineSetEdits.js). `pending`
-// (not just `isPaused`) also covers the brief online in-flight window, so a set never vanishes
-// from the list for the split second between dispatch and the confirmed refetch landing.
+// Every not-yet-synced logSet/createExercise mutation, for ANY person -- the only place an
+// offline-logged set exists before it syncs (see offlineSetEdits.js). Covers the brief online
+// in-flight window too, so a set never vanishes from the list for the split second between
+// dispatch and the confirmed refetch landing. Membership is isUnsyncedWrite (shared with
+// ExerciseDetail), so a write that is paused, retrying, OR sitting in a transient error all count
+// the same -- see the predicate's own comment in lib/queryClient.js.
 //
 // Deliberately NOT filtered by personId here -- this is the useSyncExternalStore snapshot, which
 // is only recomputed when the mutation cache actually changes (see the dirty-flag cache below), not
@@ -20,7 +23,11 @@ function readPendingMutations(queryClient) {
     .getAll()
     .filter((m) => {
       const kind = m.options.mutationKey?.[0];
-      return (kind === 'logSet' || kind === 'createExercise') && m.state.status === 'pending';
+      if (kind !== 'logSet' && kind !== 'createExercise') return false;
+      // isUnsyncedWrite, not `status === 'pending'` -- under lie-fi a write's retries settle into
+      // 'error' while it stays queued and durable, and this list used to silently drop it there
+      // even though ExerciseDetail still showed the row and the outbox badge still counted it.
+      return isUnsyncedWrite({ status: m.state.status, errorStatus: m.state.error?.status });
     });
 }
 
@@ -49,7 +56,15 @@ export function useSessionEntries({ personId, serverEntries, exercises }) {
     (onChange) =>
       queryClient.getMutationCache().subscribe(() => {
         cacheRef.current.dirty = true;
-        onChange();
+        // Deferred, never called inline -- the MutationCache emits synchronously from inside
+        // notifyManager.batch, and a descendant of this hook's component mounting a mutation
+        // observer during ITS render makes that emit land mid-render, so calling onChange()
+        // directly schedules a React update on this component while a child is rendering
+        // ("Cannot update a component (LogTab) while rendering a different component").
+        // notifyManager.schedule is exactly what TanStack's own useMutationState does for the
+        // same job -- see @tanstack/react-query's useMutationState.js -- so batching and
+        // test-mode flushing (notifyManager.setScheduler) stay consistent with the library.
+        notifyManager.schedule(onChange);
       }),
     () => {
       if (cacheRef.current.dirty) {

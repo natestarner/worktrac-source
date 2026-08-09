@@ -1,6 +1,7 @@
-import { MutationObserver, QueryClient, onlineManager } from '@tanstack/react-query';
+import { MutationObserver, QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getQueuedWriteCount } from './useOutboxCount';
+import { render } from '@testing-library/react';
+import { getQueuedWriteCount, useOutboxCount } from './useOutboxCount';
 import { LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from '../lib/queryClient';
 import { logLiveSet } from '../api/sets';
 
@@ -65,5 +66,53 @@ describe('getQueuedWriteCount', () => {
     dispatchLogSet(client);
     await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalled());
     expect(getQueuedWriteCount(client)).toBe(0);
+  });
+});
+
+// Same mechanism as useSessionEntries.test.jsx's scheduling case -- see the long comment there.
+// This hook drives the offline banner's "N changes waiting to sync" count and is mounted app-wide,
+// above every screen, so it is the most exposed of the three to a descendant's render.
+describe('useOutboxCount mutation-cache notification scheduling', () => {
+  it('never schedules a parent update from inside a child render', async () => {
+    const client = newClient();
+    onlineManager.setOnline(false);
+    const seen = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args) => {
+      seen.push(args.map((a) => (typeof a === 'string' ? a : '')).join(' '));
+    });
+
+    try {
+      let dispatched = false;
+      function Child() {
+        if (!dispatched) {
+          dispatched = true;
+          dispatchLogSet(client);
+        }
+        return null;
+      }
+      // Child mounts only on the second render, once the parent's subscription is live.
+      function Parent({ showChild }) {
+        useOutboxCount();
+        return showChild ? <Child /> : null;
+      }
+
+      const { rerender } = render(
+        <QueryClientProvider client={client}>
+          <Parent showChild={false} />
+        </QueryClientProvider>,
+      );
+      rerender(
+        <QueryClientProvider client={client}>
+          <Parent showChild />
+        </QueryClientProvider>,
+      );
+
+      await vi.waitFor(() => expect(dispatched).toBe(true));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(seen.filter((line) => /while rendering a different component/.test(line))).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

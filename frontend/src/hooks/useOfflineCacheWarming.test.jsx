@@ -46,13 +46,16 @@ describe('useOfflineCacheWarming', () => {
     setVisibility('visible');
   });
 
-  it('warms once on mount', () => {
+  // The mount warm is the only one running against a cache that came off disk, so it's the only
+  // one allowed to refetch entries that still look fresh -- see warmOfflineCache's
+  // refreshAfterRestore note and issue #146.
+  it('warms once on mount, flagged as the post-restore warm', () => {
     renderWithQuery(<Probe people={PEOPLE} />);
     expect(warmOfflineCache).toHaveBeenCalledTimes(1);
-    expect(warmOfflineCache).toHaveBeenCalledWith(expect.anything(), PEOPLE);
+    expect(warmOfflineCache).toHaveBeenCalledWith(expect.anything(), PEOPLE, { afterRestore: true });
   });
 
-  it('warms again on the online transition', () => {
+  it('warms again on the online transition, WITHOUT the post-restore flag', () => {
     renderWithQuery(<Probe people={PEOPLE} />);
     expect(warmOfflineCache).toHaveBeenCalledTimes(1);
 
@@ -61,6 +64,8 @@ describe('useOfflineCacheWarming', () => {
 
     onlineManager.setOnline(true);
     expect(warmOfflineCache).toHaveBeenCalledTimes(2);
+    // By now the cache is whatever this page session fetched, so ordinary staleness applies.
+    expect(warmOfflineCache).toHaveBeenLastCalledWith(expect.anything(), PEOPLE);
   });
 
   it('warms again when the tab regains visibility while online', () => {

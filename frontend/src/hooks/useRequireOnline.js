@@ -14,7 +14,7 @@ export function useRequireOnline() {
   function requireOnline(action, message = 'You need a connection to do that.') {
     return (...args) => {
       if (!online) {
-        showToast(message);
+        showToast(message, { tone: 'info' });
         return undefined;
       }
       return action(...args);

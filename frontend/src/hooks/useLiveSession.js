@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getLiveSession } from '../api/sessions';
 import { queryKeys } from '../api/queryKeys';
+import { isSessionEnded } from '../lib/endedSessions';
 
 // Backed by a single shared query keyed on personId, so EVERY consumer of a person's live
 // session -- the green dot on that person's pill AND the "Session in progress" banner in the Log
@@ -28,5 +29,19 @@ export function useLiveSession(personId) {
     [queryClient, personId],
   );
 
-  return { session: query.data ?? null, loading: query.isLoading, isFetching: query.isFetching, refetch };
+  // Suppress a session this device has already ended. The query entry can come back from the
+  // persisted cache after a silent service-worker reload that beat the throttled persist of the
+  // end (see endedSessions.js) -- and unlike the `{ id: null }` offline placeholder, a restored
+  // one carries a REAL id, so contextSessionId would treat that finished session as live and
+  // render its still-cached sets under "This session". Online this self-corrects on the next
+  // refetch; offline nothing can, so the guard is what closes it.
+  const session = query.data ?? null;
+  const suppressed = isSessionEnded(personId, session?.id);
+
+  return {
+    session: suppressed ? null : session,
+    loading: query.isLoading,
+    isFetching: query.isFetching,
+    refetch,
+  };
 }

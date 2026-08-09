@@ -9,10 +9,56 @@ Full narrative: `docs/architecture/testing.md`.
 
 ## Running
 
-- `bash scripts/e2e.sh` runs the suite against **this worktree's own stack**, bringing it up via
-  `scripts/up.sh` first.
+- **Never run `npx playwright test` directly — always `bash scripts/e2e.sh`.** Raw Playwright
+  defaults to `http://localhost:3000`, which for any worktree other than the primary `main`
+  checkout is either nothing or **a sibling session's stack**, and it has no idea when the dev
+  server dies mid-run. Both failure modes present as a screenful of unrelated red specs that read
+  like a code regression; chasing one of them as such cost about an hour on 2026-08-09.
+- Prefer **two separate shell invocations** for a full suite — `bash scripts/up.sh`, then
+  `bash scripts/e2e.sh`. The Vite dev server has a known habit of dying partway through a long
+  run, and the one surviving correlation is up.sh sharing an invocation with the run (see the
+  `KNOWN UNRESOLVED` block in `scripts/up.sh`). e2e.sh warns when it had to start the stack itself.
+- `bash scripts/e2e.sh` runs the suite against **this worktree's own stack**. It **reuses** that
+  stack when it's already serving, and otherwise brings it up via `scripts/up.sh` — which is
+  **readiness-gated**, so it doesn't return until both ports actually answer (and exits non-zero,
+  dumping the relevant `.dev-logs/` tail, if they don't).
+- **Before believing any failure**, check whether e2e.sh printed its "⚠️ The frontend/backend died
+  during this run" banner. If it did, the results above it are meaningless. The `[[<name> exited
+  rc=...]]` line it points at answers the next question: present = the server exited on its own
+  (rc says why); absent = something killed it.
+- **The backend does not hot-reload.** A reused stack still serves the code it booted with, so pass
+  `--restart` (or `E2E_RESTART=1`) after changing backend code. Vite hot-reloads, so frontend edits
+  need nothing.
 - Locally, Playwright auto-detects ~11 workers vs CI's fixed 2, which overwhelms a single local
-  backend. Rerun a failure with `--workers=2` before treating it as real.
+  backend. Rerun a failure with `--workers=2` before treating it as real — and if it still fails,
+  try `--workers=1` before believing it, since a couple of specs are contention-sensitive.
+- **Scattered failures across unrelated specs — especially if `smoke.spec.ts` is among them — mean
+  the stack, not the code.** Check `.dev-logs/frontend.log` for
+  `http proxy error … ECONNREFUSED` (backend wasn't up) and confirm both ports answer before
+  reading anything into the results. `up.sh` used to return before the stack was listening, which
+  produced exactly this signature; the readiness gate above is what closed it.
+- **A dev server that dies mid-run has two known causes, one fixed and one not.**
+  1. *Fixed:* a sibling worktree. `up.sh`/`down.sh` act by port, so two worktrees sharing ports
+     kill each other's stacks. `worktree-env.sh` now refuses to allocate a port another
+     worktree's `.env.worktree` has claimed and warns on a pre-existing overlap — **heed that
+     warning**: delete the offending `.env.worktree` and re-run to move onto free ports.
+  2. *Not reproduced since:* Vite was dying partway through long runs, silently, with nothing in
+     its log. Ruled out at the time: OOM, the dev proxy, a spec killing processes. It has **not
+     recurred** across repeated full runs since the port deconfliction landed *and* the concurrent
+     session that had been running its own stack throughout finished — consistent with cause 1,
+     though never proven for those specific deaths. `setsid` is **absent from stock
+     Git-for-Windows bash**, so `up.sh` warns and falls back to `nohup`; a PowerShell
+     `Start-Process` launcher was tried as a substitute and reverted (couldn't be shown to start
+     the backend reliably).
+
+     **You will not have to guess if it happens again.** `up.sh` wraps each server so its exit is
+     recorded in its own log, and `e2e.sh` checks both ports *after* the run:
+     - `[[frontend exited rc=N ...]]` present → it exited on its own; `rc` and the lines above say why.
+     - Line absent and the process is gone → something killed it (SIGKILL leaves no trace); suspect
+       another worktree or an external `taskkill`.
+
+     `e2e.sh` fails the run with a loud message in that case, so a mid-run death can never again be
+     mistaken for a batch of code regressions.
 - Service-worker-dependent specs (cold boot, reload-while-offline) live in
   `offline-durability.spec.ts` and run **only** via `cd e2e && npm run test:pwa`
   (`playwright.pwa.config.ts`, which builds + previews on port 3000 — needed for local CORS, since
@@ -52,6 +98,24 @@ so every e2e registration bounced and counted against the sending domain's ACS r
   `VERIFICATION_EMAIL_SENT`/`FAILED` event back.
 - `registerHousehold`'s optional `emailOverride` exists for that spec only — **every other call
   site keeps the default-generated address**.
+
+## Never drive the weight/reps steppers by hand — use `logSetAt`
+
+`computePrefillDraft` re-seeds the weight/reps draft whenever the summary / session-sets queries
+settle, which can land **after** `setStepper` has verified the value it typed but **before** the
+"Log set" click. The set is then logged at the 45 lb prefill default instead of the target.
+
+Locally those queries return in milliseconds and the race is almost never lost, so this passes a
+full local suite and goes red only against a deployed backend — it took lower red exactly that way
+on 2026-08-08, having been green across several local runs first. It also surfaces **somewhere
+other than where it went wrong**: a 315×2 deadlift logged as 45×2 is no longer a PR, so what you
+see is a missing "New PR!" celebration, or a records/sort assertion reading a number nobody typed.
+
+`support/exercises.ts`'s **`logSetAt`** is the only sanctioned way to log a set at a specific
+weight/reps. It re-verifies both steppers together before submitting (a re-seed stomps both, so a
+drifted reps value also catches a drifted weight) and waits for the new `Set N` row afterwards, so
+the re-seed that write triggers has fired before the next call types anything. **Don't call
+`setStepper` directly to log a set**, and don't reintroduce a spec-local copy of this helper.
 
 ## Locator gotchas
 
