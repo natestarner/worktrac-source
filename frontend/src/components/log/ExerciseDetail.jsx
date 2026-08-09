@@ -346,7 +346,7 @@ export default function ExerciseDetail({
       if (context?.key && context?.previous !== undefined) {
         queryClient.setQueryData(context.key, context.previous);
       }
-      showToast(error.message || "Couldn't save that set");
+      showToast(error.message || "Couldn't save that set", { tone: 'error' });
     },
     onSuccess: (result, variables) => {
       setJustAddedSetId(result.set.id);

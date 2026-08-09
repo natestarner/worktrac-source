@@ -354,7 +354,7 @@ describe('ExerciseDetail write-failure handling', () => {
 
     fireEvent.click(await screen.findByText('Log set'));
 
-    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required'));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required', { tone: 'error' }));
   });
 });
 
@@ -572,7 +572,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     expect(await screen.findByText('This session')).toBeInTheDocument();
 
     rejectLog(clientError);
-    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required'));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Weight required', { tone: 'error' }));
     // No manual cleanup code runs here -- the mutation leaving 'pending' status on its own
     // is what drops it from pendingBeforeSession.
     await waitFor(() => expect(screen.queryByText('This session')).not.toBeInTheDocument());

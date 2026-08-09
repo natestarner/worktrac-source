@@ -333,6 +333,292 @@ button {
 }
 
 /* ===========================================================================
+   Component layer.
+
+   The recipes that were being retyped at every call site: the card block
+   appeared ~25 times, the uppercase section label was redefined in 8 files at 3
+   different sizes, and the empty state existed at 5 different paddings. They
+   live here so a change lands everywhere at once, and so each one can carry the
+   pseudo-states an inline style object can't.
+
+   The React wrappers in components/shared just apply these classes.
+   =========================================================================== */
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.card-flush {
+  padding: 0;
+}
+
+/* Rows inside a card, separated by hairlines rather than by gaps between
+   separate cards. A list of per-row cards reads as a brick wall; one card with
+   divided rows is the calmer idiom and is what History/PRs/Routines converge on. */
+.card-row + .card-row {
+  border-top: 1px solid var(--color-border);
+}
+
+.section-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+  padding: var(--space-10) var(--space-5);
+  color: var(--color-muted);
+}
+
+.empty-state-icon {
+  color: var(--color-faint);
+}
+
+.empty-state-title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.empty-state-body {
+  font-size: var(--text-sm);
+  max-width: 34ch;
+}
+
+/* --- Buttons ---------------------------------------------------------
+   One vocabulary, four variants, three sizes -- replacing accent-filled
+   buttons that existed at four different padding/radius/size combinations,
+   and a History screen that gave two equal-weight actions two different
+   treatments. Rule: at most one .btn-primary visible per screen. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  position: relative;
+}
+
+/* Minimum heights are the iOS 44px target, which the primary navigation
+   (~35px) and the Trends switchers (~28px) both missed on a device this app
+   is explicitly built for. */
+.btn-sm {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  min-height: 40px;
+}
+
+.btn-md {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  min-height: 44px;
+}
+
+.btn-lg {
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  min-height: 52px;
+}
+
+.btn-full {
+  width: 100%;
+}
+
+/* --color-accent-strong, not --color-accent: white on the brand orange is
+   3.62:1, which is under AA for a label at these sizes. */
+.btn-primary {
+  background: var(--color-accent-strong);
+  color: var(--color-accent-contrast);
+}
+
+/* The one exception. At --text-xl/700 the label clears the AA Large threshold
+   (>=18.66px bold), where 3.62:1 passes -- so the hero CTA gets to keep the
+   brighter brand orange that the smaller buttons can't. */
+.btn-lg.btn-primary {
+  background: var(--color-accent);
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-accent-text);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--color-danger);
+}
+
+.btn-danger-solid {
+  background: var(--color-danger);
+  color: var(--color-accent-contrast);
+}
+
+.btn-dark {
+  background: var(--color-dark);
+  color: var(--color-accent-contrast);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+}
+
+/* Square-ish tap target for a control whose whole label is an icon. 40px so
+   the ~16px-tall text links it replaces (Edit sitting 14px from a destructive
+   Delete) stop being a mis-tap risk mid-workout. */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.icon-btn-accent {
+  color: var(--color-accent);
+}
+
+.icon-btn-danger {
+  color: var(--color-danger);
+}
+
+.icon-btn:disabled {
+  opacity: 0.5;
+}
+
+/* --- Inputs ---------------------------------------------------------- */
+
+.input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  /* 16px, and it must stay 16px: below this iOS Safari zooms the viewport on
+     focus. Two e2e specs assert this computed value. */
+  font-size: var(--text-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+
+.input::placeholder {
+  color: var(--color-muted);
+}
+
+.input:focus {
+  border-color: var(--color-accent);
+}
+
+.input-invalid {
+  border-color: var(--color-danger);
+}
+
+.field-error {
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+  margin-top: var(--space-1);
+}
+
+/* --- Segmented control -----------------------------------------------
+   One control, not two. TabsNav (outer radius 12 / pill 9) and SegmentedToggle
+   (outer 10 / pill 7) were visibly the same thing -- same track, same white
+   active pill, same shadow -- built twice with different geometry. */
+
+.seg {
+  display: inline-flex;
+  gap: var(--space-1);
+  background: var(--color-subtle-bg);
+  border-radius: var(--radius-md);
+  padding: var(--space-1);
+}
+
+.seg-fill {
+  display: flex;
+  width: 100%;
+}
+
+.seg-item {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.seg-fill .seg-item {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--space-2) var(--space-1);
+}
+
+/* --color-accent-text, not --color-accent: this label is 13px on a white pill,
+   where the brand orange is 3.62:1. */
+.seg-item.is-active {
+  background: var(--color-surface);
+  color: var(--color-accent-text);
+  box-shadow: var(--shadow-1);
+}
+
+/* --- Chips ------------------------------------------------------------ */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-subtle-bg);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+/* ===========================================================================
    App chrome + responsive layout.
 
    Chrome bars (Header, PersonPillBar, TabsNav) + AppShell's own bottom padding.
