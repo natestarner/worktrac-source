@@ -56,6 +56,6 @@ const rowStyle = {
   cursor: 'pointer',
 };
 
-const matchedStyle = { fontWeight: 800, color: 'var(--color-accent)' };
+const matchedStyle = { fontWeight: 800, color: 'var(--color-accent-text)' };
 
-const emptyStyle = { textAlign: 'center', padding: '30px 20px', color: 'var(--color-faint)', fontSize: 15 };
+const emptyStyle = { textAlign: 'center', padding: 'var(--space-8) var(--space-5)', color: 'var(--color-muted)', fontSize: 'var(--text-base)' };

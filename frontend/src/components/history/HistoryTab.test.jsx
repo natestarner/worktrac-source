@@ -79,7 +79,10 @@ describe('HistoryTab session notes', () => {
     renderHistoryTab();
 
     expect(await screen.findByText('140lb×8')).toBeInTheDocument();
-    expect(screen.queryByText(/📝/)).not.toBeInTheDocument();
+    // The note indicator is an icon now, not a literal emoji. Asserting on its
+    // accessible name keeps this meaningful -- a /📝/ text query would pass
+    // vacuously against an icon whether or not a note was rendered.
+    expect(screen.queryByLabelText('Note')).not.toBeInTheDocument();
   });
 });
 

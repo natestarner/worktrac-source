@@ -62,7 +62,7 @@ export default function ExercisePicker({
                 }}
               >
                 <span>{r.name}</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-accent)' }}>Start &rarr;</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-accent-text)' }}>Start &rarr;</span>
               </button>
             ))}
           </div>
@@ -184,7 +184,7 @@ const sectionLabelStyle = {
 
 const chipWrapStyle = { display: 'flex', flexWrap: 'wrap', gap: 10 };
 
-const emptyStyle = { textAlign: 'center', padding: '30px 20px', color: 'var(--color-faint)', fontSize: 15 };
+const emptyStyle = { textAlign: 'center', padding: 'var(--space-8) var(--space-5)', color: 'var(--color-muted)', fontSize: 'var(--text-base)' };
 
 const addOwnButtonStyle = {
   width: '100%',

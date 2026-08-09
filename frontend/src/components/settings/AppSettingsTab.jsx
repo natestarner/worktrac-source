@@ -86,7 +86,7 @@ export default function AppSettingsTab() {
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
           Default unit for new sets entered from now on. Sets already logged keep the unit they were recorded in &mdash; changing this never rewrites past numbers.
         </div>
-        <div style={{ display: 'flex', gap: 4, background: 'var(--color-subtle-bg)', borderRadius: 12, padding: 4, maxWidth: 220 }}>
+        <div style={{ display: 'flex', gap: 'var(--space-1)', background: 'var(--color-subtle-bg)', borderRadius: 'var(--radius-md)', padding: 'var(--space-1)', maxWidth: 220 }}>
           {['lb', 'kg'].map((unit) => {
             const active = account?.defaultUnit === unit;
             const loading = pendingUnit === unit;
@@ -99,16 +99,17 @@ export default function AppSettingsTab() {
                 title={online ? undefined : 'Changing units needs a connection.'}
                 style={{
                   flex: 1,
-                  padding: '10px 0',
+                  minHeight: 40,
+                  padding: 'var(--space-2) 0',
                   border: 'none',
-                  borderRadius: 9,
-                  fontSize: 14,
-                  fontWeight: 700,
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 'var(--weight-semibold)',
                   cursor: online ? 'pointer' : 'not-allowed',
                   background: active ? 'var(--color-surface)' : 'transparent',
                   color: textColor,
-                  boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                  opacity: online ? 1 : 0.6,
+                  boxShadow: active ? 'var(--shadow-1)' : 'none',
+                  opacity: online ? 1 : 0.5,
                   position: 'relative',
                 }}
               >
@@ -131,7 +132,7 @@ export default function AppSettingsTab() {
           the server &mdash; everything you log is saved on this device and syncs automatically once
           you turn it back off.
         </div>
-        <div style={{ display: 'flex', gap: 4, background: 'var(--color-subtle-bg)', borderRadius: 12, padding: 4, maxWidth: 220 }}>
+        <div style={{ display: 'flex', gap: 'var(--space-1)', background: 'var(--color-subtle-bg)', borderRadius: 'var(--radius-md)', padding: 'var(--space-1)', maxWidth: 220 }}>
           {[
             { value: false, label: 'Off' },
             { value: true, label: 'On' },
@@ -144,15 +145,16 @@ export default function AppSettingsTab() {
                 aria-label={`Offline mode ${label}`}
                 style={{
                   flex: 1,
-                  padding: '10px 0',
+                  minHeight: 40,
+                  padding: 'var(--space-2) 0',
                   border: 'none',
-                  borderRadius: 9,
-                  fontSize: 14,
-                  fontWeight: 700,
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 'var(--weight-semibold)',
                   cursor: 'pointer',
                   background: active ? 'var(--color-surface)' : 'transparent',
-                  color: active ? 'var(--color-accent)' : 'var(--color-muted)',
-                  boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                  color: active ? 'var(--color-accent-text)' : 'var(--color-muted)',
+                  boxShadow: active ? 'var(--shadow-1)' : 'none',
                 }}
               >
                 {label}
@@ -175,7 +177,7 @@ export default function AppSettingsTab() {
             return (
               <div key={person.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ fontSize: 15, fontWeight: 600 }}>{person.name}</div>
-                <div style={{ display: 'flex', gap: 4, background: 'var(--color-subtle-bg)', borderRadius: 12, padding: 4, width: 160 }}>
+                <div style={{ display: 'flex', gap: 'var(--space-1)', background: 'var(--color-subtle-bg)', borderRadius: 'var(--radius-md)', padding: 'var(--space-1)', width: 160 }}>
                   {[
                     { value: true, label: 'On' },
                     { value: false, label: 'Off' },
@@ -192,14 +194,14 @@ export default function AppSettingsTab() {
                           flex: 1,
                           padding: '9px 0',
                           border: 'none',
-                          borderRadius: 9,
-                          fontSize: 14,
-                          fontWeight: 700,
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: 'var(--text-sm)',
+                          fontWeight: 'var(--weight-semibold)',
                           cursor: busy || !online ? 'default' : 'pointer',
                           background: active ? 'var(--color-surface)' : 'transparent',
-                          color: active ? 'var(--color-accent)' : 'var(--color-muted)',
-                          boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                          opacity: online ? 1 : 0.6,
+                          color: active ? 'var(--color-accent-text)' : 'var(--color-muted)',
+                          boxShadow: active ? 'var(--shadow-1)' : 'none',
+                          opacity: online ? 1 : 0.5,
                         }}
                       >
                         {label}
@@ -283,11 +285,14 @@ export default function AppSettingsTab() {
 const backButtonStyle = {
   background: 'none',
   border: 'none',
-  color: 'var(--color-accent)',
-  fontSize: 15,
-  fontWeight: 600,
+  color: 'var(--color-accent-text)',
+  fontSize: 'var(--text-base)',
+  fontWeight: 'var(--weight-semibold)',
   cursor: 'pointer',
-  padding: '0 0 16px 0',
+  minHeight: 40,
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '0 0 var(--space-3) 0',
 };
 
 const sectionLabelStyle = {
@@ -308,5 +313,5 @@ const categoryChipStyle = {
   border: '1px solid var(--color-border)',
   borderRadius: 999,
   fontSize: 14,
-  fontWeight: 600,
+  fontWeight: 'var(--weight-semibold)',
 };

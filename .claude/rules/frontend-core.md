@@ -5,10 +5,50 @@ paths:
 
 # Frontend invariants
 
-Applies to all frontend source. Full narrative: `docs/architecture/frontend-state.md` and
-`docs/architecture/offline-mode.md`.
+Applies to all frontend source. Full narrative: `docs/architecture/frontend-state.md`,
+`docs/architecture/offline-mode.md` and `docs/architecture/design-system.md`.
 
 Style: JavaScript/React, **2-space** indentation, ESLint + Prettier.
+
+## Styling: use the tokens and the primitives
+
+Every value the UI draws with is a token in `frontend/src/index.css`. **A raw literal in a
+component is the bug** — that's how 17 font sizes, 13 radii and 8 one-off shadows accumulated.
+Full reasoning: `docs/architecture/design-system.md`.
+
+- **Reach for a primitive before writing a style object.** `Button` (with `variant`/`size`), `Card`,
+  `Input`, `IconButton`, `SectionLabel`, `EmptyState` in `components/shared/`. At most **one**
+  `variant="primary"` visible per screen.
+- **Anything interactive needs `className="pressable"`** so it gets the press/hover transition, and
+  it must reach the 44px touch target (`sm` variants at 40px for dense rows). This app is used on an
+  iPad mid-workout.
+- **Pick the right accent token.** `--color-accent` is 3.44:1 as small text and **fails AA** — use
+  `--color-accent-text` for text, `--color-accent-strong` for small filled buttons, and
+  `--color-accent` only for fills behind large bold text, borders, icons and the focus ring.
+- **`--color-faint` is not a text colour.** Dividers, inactive glyphs and dashed borders only; body
+  copy and empty states use `--color-muted`.
+- **Inputs must stay at `--text-md` (16px)** or iOS Safari zooms the viewport on focus. Two e2e
+  specs assert the computed value.
+- **Pair shadows with the hairline**: `box-shadow: var(--shadow-3), var(--elevation-hairline)`. A
+  black shadow alone is invisible on a dark surface.
+- **Guard `:hover` with `@media (hover: hover)`** — without it iOS sticks the hover state after a tap.
+- **New `position: fixed` chrome needs `env(safe-area-inset-*)`**, or it sits under the home
+  indicator in the installed PWA.
+
+### Changing a control's visible text or label can break tests elsewhere
+
+Both test layers select by accessible name, with **different matching rules**: Playwright's `name`
+is a case-insensitive **substring** by default; RTL's is a **full string**. So adding a control
+whose label contains an existing one on the same screen (`"Edit note…"` beside `"Edit"`) breaks
+`toHaveCount` assertions elsewhere. Keep labels on one screen mutually non-containing.
+
+When converting a text button to an icon button, the icon is `aria-hidden` and the **button keeps
+the former text as its `aria-label`, verbatim** — ~40 e2e assertions select set-row controls by
+`"Edit"` / `"Delete"`.
+
+Also: **RTL's `getByText` concatenates only DIRECT text-node children.** Splitting a string into
+spans to style part of it silently breaks every `getByText` on it. Don't do it to a string a test
+looks rows up by.
 
 ## Every person has their own independent client-side state
 

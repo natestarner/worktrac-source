@@ -18,6 +18,7 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import SetPillRow from '../shared/SetPillRow';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
 import { tagChipStyle } from '../shared/tagChipStyle';
+import { IconNote } from '../shared/icons';
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
@@ -118,14 +119,14 @@ function HistoryTabContent({ initialExerciseFilter }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
+      <div style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
         <OfflineDisabledWrap message="Logging a past workout needs a connection.">
-          <button onClick={() => setShowPastSessionModal(true)} style={secondaryButtonStyle}>
+          <button onClick={() => setShowPastSessionModal(true)} className="btn btn-secondary btn-md pressable" style={secondaryButtonStyle}>
             + Log a past workout
           </button>
         </OfflineDisabledWrap>
         <OfflineDisabledWrap message="Exporting needs a connection.">
-          <Button onClick={() => downloadPersonCsv(activePersonId)} style={outlineButtonStyle}>
+          <Button onClick={() => downloadPersonCsv(activePersonId)} variant="secondary" style={outlineButtonStyle}>
             Export data
           </Button>
         </OfflineDisabledWrap>
@@ -221,10 +222,19 @@ function HistoryTabContent({ initialExerciseFilter }) {
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                             textAlign: 'right',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: 'var(--space-1)',
                           }}
                         >
-                          <span style={{ marginRight: 4 }}>📝</span>
-                          {entry.note}
+                          {/* Labelled rather than aria-hidden like most icons here: it's
+                              the only thing marking this line as a note, and it's what
+                              the "no note, no indicator" test asserts on. */}
+                          <span role="img" aria-label="Note" style={{ display: 'flex', flexShrink: 0 }}>
+                            <IconNote size={12} />
+                          </span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.note}</span>
                         </div>
                       )}
                     </div>
@@ -250,36 +260,22 @@ function HistoryTabContent({ initialExerciseFilter }) {
   );
 }
 
-const emptyStyle = { textAlign: 'center', padding: '60px 20px', color: 'var(--color-faint)', fontSize: 15 };
+// Was --color-faint (2.07:1 -- effectively unreadable). Empty-state copy is body text
+// and belongs on --color-muted; see the token comments in index.css.
+const emptyStyle = { textAlign: 'center', padding: 'var(--space-10) var(--space-5)', color: 'var(--color-muted)', fontSize: 'var(--text-base)' };
 
-const secondaryButtonStyle = {
-  flex: 1,
-  padding: 14,
-  background: 'var(--color-subtle-bg)',
-  color: 'var(--color-text)',
-  border: 'none',
-  borderRadius: 12,
-  fontSize: 14,
-  fontWeight: 700,
-  cursor: 'pointer',
-};
+// "Log a past workout" and "Export data" sit side by side and carry equal weight, but
+// used to be given two different treatments -- one filled on --color-subtle-bg, the other
+// outlined on --color-surface -- with no rule saying what the difference meant. Both are
+// secondary; they now look it. Neither is this screen's primary action.
+const secondaryButtonStyle = { flex: 1 };
 
-const outlineButtonStyle = {
-  flex: 1,
-  padding: 14,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 12,
-  fontSize: 14,
-  fontWeight: 700,
-  cursor: 'pointer',
-};
+const outlineButtonStyle = { flex: 1 };
 
 const editLinkStyle = {
   background: 'none',
   border: 'none',
-  color: 'var(--color-accent)',
+  color: 'var(--color-accent-text)',
   fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',
@@ -295,7 +291,7 @@ const exerciseNameLinkStyle = {
   padding: 0,
   margin: 0,
   textAlign: 'left',
-  color: 'var(--color-accent)',
+  color: 'var(--color-accent-text)',
   fontSize: 15,
   fontWeight: 700,
   flexShrink: 0,

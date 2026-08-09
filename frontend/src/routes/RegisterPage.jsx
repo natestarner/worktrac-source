@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { inputStyle, primaryButtonStyle } from './LoginPage';
+import { errorBannerStyle, inputStyle, primaryButtonStyle } from './LoginPage';
 import Spinner from '../components/shared/Spinner';
 import logoLight from '../assets/huddle-lockup-barlow-light.svg';
 import logoDark from '../assets/huddle-lockup-barlow-dark.svg';
@@ -59,7 +59,7 @@ export default function RegisterPage() {
         alignItems: 'center',
         justifyContent: 'center',
         background: 'var(--color-bg)',
-        padding: 24,
+        padding: 'var(--space-6)',
       }}
     >
       <form
@@ -67,11 +67,11 @@ export default function RegisterPage() {
         style={{
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
-          borderRadius: 20,
-          padding: '40px 36px',
+          borderRadius: 'var(--radius-xl)',
+          padding: 'var(--space-10) var(--space-8)',
           width: 560,
           maxWidth: '100%',
-          boxShadow: '0 8px 24px rgba(28,27,25,0.06)',
+          boxShadow: 'var(--shadow-2), var(--elevation-hairline)',
         }}
       >
         <picture>
@@ -83,22 +83,13 @@ export default function RegisterPage() {
           />
         </picture>
 
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, textAlign: 'center' }}>Create your household</div>
-        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 24, textAlign: 'center' }}>
+        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', marginBottom: 'var(--space-1)', textAlign: 'center' }}>Create your household</div>
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
           You'll be the primary login -- kids and training partners get added inside the app, no login needed.
         </div>
 
         {error && (
-          <div
-            style={{
-              background: 'var(--color-pr-bg)',
-              color: 'var(--color-danger)',
-              borderRadius: 10,
-              padding: '10px 14px',
-              fontSize: 13,
-              marginBottom: 16,
-            }}
-          >
+          <div role="alert" style={errorBannerStyle}>
             {error}
           </div>
         )}
@@ -111,7 +102,7 @@ export default function RegisterPage() {
             setPersonName(e.target.value);
             if (personNameError) setPersonNameError(false);
           }}
-          style={{ ...inputStyle, ...(personNameError ? errorInputStyle : {}) }}
+          className={`input ${personNameError ? 'input-invalid' : ''}`} style={inputStyle}
         />
         {personNameError && <div style={fieldErrorStyle}>Enter your name.</div>}
 
@@ -120,7 +111,7 @@ export default function RegisterPage() {
           placeholder="Defaults to “{name}'s Household”"
           value={accountName}
           onChange={(e) => setAccountName(e.target.value)}
-          style={inputStyle}
+          className="input" style={inputStyle}
         />
 
         <label style={labelStyle}>Email</label>
@@ -135,7 +126,7 @@ export default function RegisterPage() {
             setEmail(e.target.value);
             if (emailError) setEmailError(false);
           }}
-          style={{ ...inputStyle, ...(emailError ? errorInputStyle : {}) }}
+          className={`input ${emailError ? 'input-invalid' : ''}`} style={inputStyle}
         />
         {emailError && <div style={fieldErrorStyle}>Enter your email address.</div>}
 
@@ -151,21 +142,21 @@ export default function RegisterPage() {
             setPassword(e.target.value);
             if (passwordError) setPasswordError(false);
           }}
-          style={{ ...inputStyle, ...(passwordError ? errorInputStyle : {}) }}
+          className={`input ${passwordError ? 'input-invalid' : ''}`} style={inputStyle}
         />
         {passwordError && <div style={fieldErrorStyle}>Password must be at least 8 characters.</div>}
 
-        <button type="submit" disabled={submitting} style={{ ...primaryButtonStyle, position: 'relative' }}>
+        <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ ...primaryButtonStyle, position: 'relative' }}>
           <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Create household</span>
           {submitting && (
             <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Spinner color={primaryButtonStyle.color} />
+              <Spinner color="currentColor" />
             </span>
           )}
         </button>
 
-        <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 18, textAlign: 'center' }}>
-          Already have an account? <Link to="/login" style={{ color: 'var(--color-accent)', fontWeight: 600 }}>Log in</Link>
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-5)', textAlign: 'center' }}>
+          Already have an account? <Link to="/login" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>Log in</Link>
         </div>
       </form>
     </div>
@@ -174,22 +165,17 @@ export default function RegisterPage() {
 
 const labelStyle = {
   display: 'block',
-  fontSize: 12,
-  fontWeight: 700,
+  fontSize: 'var(--text-xs)',
+  fontWeight: 'var(--weight-semibold)',
   color: 'var(--color-muted)',
   textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 6,
-};
-
-const errorInputStyle = {
-  border: '1px solid var(--color-danger)',
-  marginBottom: 6,
+  letterSpacing: 'var(--tracking-label)',
+  marginBottom: 'var(--space-1)',
 };
 
 const fieldErrorStyle = {
-  fontSize: 12,
-  fontWeight: 600,
+  fontSize: 'var(--text-xs)',
+  fontWeight: 'var(--weight-semibold)',
   color: 'var(--color-danger)',
-  marginBottom: 16,
+  marginBottom: 'var(--space-4)',
 };

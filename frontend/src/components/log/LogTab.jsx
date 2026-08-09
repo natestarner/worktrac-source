@@ -307,7 +307,7 @@ export default function LogTab() {
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               {activeRoutine.name}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent-text)' }}>
               {Math.min(routineIndex + 1, activeRoutine.exercises.length)} of {activeRoutine.exercises.length}
             </div>
           </div>
