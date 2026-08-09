@@ -119,7 +119,9 @@ export default function AppShell() {
         <PersonPillBar />
         <TabsNav />
       </div>
-      <div className="tab-panel" style={{ margin: '0 auto', padding: '0 var(--space-6)' }}>
+      {/* Padding lives on .tab-panel in index.css, not here -- an inline `padding`
+          shorthand would override the class's top value. */}
+      <div className="tab-panel" style={{ margin: '0 auto' }}>
         <Outlet />
       </div>
 

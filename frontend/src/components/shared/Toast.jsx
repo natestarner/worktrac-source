@@ -1,11 +1,18 @@
 import { useUI } from '../../context/UIContext';
 
-// Tone -> colour. Previously this component was hardcoded to --color-success, so a
-// failure ("Couldn't save that set") announced itself in the success colour.
+// Tone -> colour.
+//
+// Success and info are both the neutral toast surface, not green. The saturated success
+// green was the one hue in the palette with nothing else to talk to, and next to the
+// terracotta it read as borrowed from another app -- and a confirmation doesn't need a
+// colour to carry its meaning, the message does. Errors are the exception: there, colour
+// is doing real work, so they keep --color-danger.
 const TONES = {
-  success: { background: 'var(--color-success)', color: 'var(--color-accent-contrast)' },
-  error: { background: 'var(--color-danger)', color: 'var(--color-accent-contrast)' },
-  info: { background: 'var(--color-dark)', color: 'var(--color-accent-contrast)' },
+  success: { background: 'var(--color-toast-bg)', color: 'var(--color-toast-text)' },
+  info: { background: 'var(--color-toast-bg)', color: 'var(--color-toast-text)' },
+  // Not --color-danger + white: in dark mode that token is a light salmon tuned for text on a
+  // dark ground, so white on it lands at 2.95:1. The error tokens flip the label per theme.
+  error: { background: 'var(--color-toast-error-bg)', color: 'var(--color-toast-error-text)' },
 };
 
 export default function Toast() {

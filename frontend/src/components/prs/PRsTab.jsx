@@ -52,7 +52,7 @@ function PRsTabContent() {
   );
 
   // Jumping to History pre-filtered to this exercise reuses the same deep-link machinery as
-  // ExerciseDetail's "View full history" link (see HistoryTab.jsx) -- just without fromLog, since
+  // ExerciseDetail's "View full exercise history" link (see HistoryTab.jsx) -- just without fromLog, since
   // there's no exercise-logging screen to offer a "Back to" link for on this path.
   function handleRowTap(pr) {
     navigate('/app/history', { state: { historyExerciseFilter: { exerciseId: pr.exerciseId, exerciseName: pr.exerciseName } } });

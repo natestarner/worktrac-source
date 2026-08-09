@@ -42,7 +42,7 @@ export default function ExerciseDetail({
   liveSession,
   refetchLiveSession,
   onBack,
-  // Optional: when provided, renders a "View full history" link that hands off to History
+  // Optional: when provided, renders a "View full exercise history" link that hands off to History
   // filtered to this exercise (see LogTab.jsx / HistoryTab.jsx's deep-link seed). Deliberately a
   // prop, not a direct useNavigate() call here -- ExerciseDetail takes onBack as a prop rather
   // than navigating itself, and its test file renders with no MemoryRouter at all.
@@ -645,11 +645,11 @@ export default function ExerciseDetail({
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 onClick={() => onViewAllHistory(exercise.id, exercise.name)}
-                aria-label={`View full history for ${exercise.name}`}
+                aria-label={`View full exercise history for ${exercise.name}`}
                 className="pressable"
                 style={viewHistoryLinkStyle}
               >
-                View full history &rarr;
+                View full exercise history &rarr;
               </button>
             </div>
           )}

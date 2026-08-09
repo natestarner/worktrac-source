@@ -72,6 +72,15 @@
 
   --color-dark: #1c1b19;
 
+  /* Toasts are neutral, not green. A saturated success green is the one hue in the palette
+     that has nothing else to talk to -- next to the terracotta it read as borrowed from
+     another app. Confirmations are the overwhelming majority of toasts here and they don't
+     need a colour to carry their meaning; the message does. Only errors get a hue. */
+  --color-toast-bg: #1c1b19;
+  --color-toast-text: #faf9f7; /* 16.36:1 */
+  --color-toast-error-bg: #b34228;
+  --color-toast-error-text: #ffffff; /* 5.64:1 */
+
   --skeleton-base: #ece7de;
   --skeleton-highlight: #f8f6f2;
 
@@ -211,6 +220,16 @@
        colors above -- i.e. invisible, not just low-contrast. Given a lighter, still-dark tone
        here so those chips stay visually distinct from the page in dark mode too. */
     --color-dark: #5c5548;
+
+    /* Lifted well clear of --color-bg/--color-surface: a near-black toast on a near-black
+       page reads as a hole rather than as something floating above it. */
+    --color-toast-bg: #4a443b;
+    --color-toast-text: #faf9f7; /* 9.15:1 */
+    /* Dark --color-danger is a light salmon, tuned to be readable AS TEXT on a dark ground.
+       Used as a toast FILL it inverts the relationship: white on it is only 2.95:1. The fill
+       stays, the label goes near-black. */
+    --color-toast-error-bg: #e07a5f;
+    --color-toast-error-text: #171614; /* 6.10:1 */
 
     --skeleton-base: #2c2822;
     --skeleton-highlight: #3c372f;
@@ -537,6 +556,19 @@ button {
   color: var(--color-muted);
 }
 
+/* type="search" makes WebKit draw its own clear button, which sat right next to the app's
+   own styled clear control -- two X's in every search field. The native one can't be
+   restyled or repositioned, and the app's version is the one wired to the filter state, so
+   the native one goes. */
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-decoration,
+input[type='search']::-webkit-search-results-button,
+input[type='search']::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
 .input:focus {
   border-color: var(--color-accent);
 }
@@ -604,6 +636,17 @@ button {
 
 /* --- Chips ------------------------------------------------------------ */
 
+/* A name that is also a control (History's exercise names filter to that exercise). It reads
+   as ordinary text so it matches the same name elsewhere in the app, and only reveals its
+   affordance on hover -- which is desktop-only by design, since on touch there's no hover
+   state to reveal and the aria-label carries the meaning instead. */
+@media (hover: hover) {
+  .name-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -654,9 +697,15 @@ button {
 
 /* Shared width cap for every tab's content (Log, History, PRs, Routines, Trends,
    App Settings, Profile) -- widened in landscape below so the two-column Log layout has
-   room, and so Trends' existing auto-fit grids pick up extra columns for free. */
+   room, and so Trends' existing auto-fit grids pick up extra columns for free.
+
+   The top padding matters more than it looks: the chrome above is sticky now, so without
+   it every tab's first card butts straight up against the tab bar with no breathing room.
+   Horizontal padding lives here too rather than inline on AppShell, so this rule can own
+   all four sides and the landscape block below can compact the top. */
 .tab-panel {
   max-width: 840px;
+  padding: var(--space-5) var(--space-6) 0;
 }
 
 /* Header + tabs travel together as one sticky unit. Previously the header never
@@ -783,6 +832,7 @@ button {
 
   .tab-panel {
     max-width: 1120px;
+    padding-top: var(--space-3);
   }
 
   .exercise-detail-grid {

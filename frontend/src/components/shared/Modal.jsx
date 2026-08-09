@@ -17,6 +17,13 @@ const FOCUSABLE =
 export default function Modal({ width = 320, onScrim, children, align = 'center', labelledBy }) {
   const dialogRef = useRef(null);
   const restoreFocusRef = useRef(null);
+  // onScrim is read through a ref, NOT listed as an effect dependency. Callers pass an inline
+  // arrow, so its identity changes on every render of the parent -- and with it in the dep array
+  // the whole effect tore down and re-ran on each keystroke, re-running the initial autofocus and
+  // yanking the caret out of whatever field you were typing in. That's what made the Customize
+  // Exercise modal's focus jump from the note box to the tag input and back.
+  const onScrimRef = useRef(onScrim);
+  onScrimRef.current = onScrim;
 
   useEffect(() => {
     restoreFocusRef.current = document.activeElement;
@@ -25,13 +32,14 @@ export default function Modal({ width = 320, onScrim, children, align = 'center'
 
     // Move focus into the dialog on open, preferring its first real control so a keyboard
     // or screen-reader user lands somewhere useful rather than at the top of the page.
+    // Runs exactly once, on open -- see the ref note above.
     const first = dialog.querySelector(FOCUSABLE);
     (first || dialog).focus({ preventScroll: true });
 
     function onKeyDown(event) {
-      if (event.key === 'Escape' && onScrim) {
+      if (event.key === 'Escape' && onScrimRef.current) {
         event.stopPropagation();
-        onScrim();
+        onScrimRef.current();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -61,7 +69,9 @@ export default function Modal({ width = 320, onScrim, children, align = 'center'
       // Return focus to whatever opened the modal, so keyboard position isn't lost.
       if (restoreFocusRef.current instanceof HTMLElement) restoreFocusRef.current.focus({ preventScroll: true });
     };
-  }, [onScrim]);
+    // Mount/unmount only. Adding onScrim here is the bug described above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isSheet = align === 'bottom';
 

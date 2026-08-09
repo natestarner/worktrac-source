@@ -26,7 +26,7 @@ function timeLabelFor(session) {
   return formatTime(session.startedAt);
 }
 
-// Thin wrapper: owns the deep-link filter seed (from ExerciseDetail's "View full history" link,
+// Thin wrapper: owns the deep-link filter seed (from ExerciseDetail's "View full exercise history" link,
 // or a PR row tap -- see LogTab.jsx / PRsTab.jsx) and the key={activePersonId} remount that
 // isolates HistoryTabContent's local filter/modal state per person, mirroring the identical
 // pattern at LogTab.jsx's <ExerciseDetail key={activePersonId} />.
@@ -206,6 +206,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
                       <button
                         onClick={() => handleFilterToExercise(entry.exerciseId, entry.exerciseName, session.id)}
                         aria-label={`Show only ${entry.exerciseName} in history`}
+                        className="name-link"
                         style={exerciseNameLinkStyle}
                       >
                         {entry.exerciseName}
@@ -283,17 +284,21 @@ const editLinkStyle = {
 
 // Only the exercise NAME is the tap target for "filter to this exercise", not the whole row -- a
 // scroll gesture that terminates on a large row would otherwise fire a tap, and the row can also
-// contain a title-bearing note the user may want to read/select. Rendering it as a link-styled
-// button also solves discoverability for free.
+// contain a title-bearing note the user may want to read/select.
+//
+// Text colour, not accent: an exercise name is the same thing here as on the Log screen, and
+// colouring it only on this one tab made the app look like it disagreed with itself -- most
+// visibly in dark mode, where these turned orange while Log's stayed white. Discoverability
+// comes from the hover underline (.name-link) and the aria-label rather than from hue.
 const exerciseNameLinkStyle = {
   background: 'none',
   border: 'none',
   padding: 0,
   margin: 0,
   textAlign: 'left',
-  color: 'var(--color-accent-text)',
-  fontSize: 15,
-  fontWeight: 700,
+  color: 'var(--color-text)',
+  fontSize: 'var(--text-base)',
+  fontWeight: 'var(--weight-semibold)',
   flexShrink: 0,
   cursor: 'pointer',
 };
