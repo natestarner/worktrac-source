@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { updateCustomField } from '../../api/exercises';
-import { useRequireOnline } from '../../hooks/useRequireOnline';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import Modal from './Modal';
 import OfflineNotice from './OfflineNotice';
 import { cancelButtonStyle } from './ConfirmDialog';
@@ -11,14 +11,14 @@ import Button from './Button';
 // exercise's shared base fields.
 export default function CustomFieldEditorModal({ personId, exerciseId, field, onClose, onSaved }) {
   const [value, setValue] = useState(field.value || '');
-  const { online, requireOnline } = useRequireOnline();
+  const { online, run } = useGatedMutation();
 
   async function handleSave() {
     await updateCustomField(personId, exerciseId, field.id, { value: value.trim() });
     onSaved();
   }
 
-  const guardedSave = requireOnline(handleSave, 'Editing needs a connection.');
+  const guardedSave = run(handleSave, { offlineMessage: 'Editing needs a connection.' });
 
   return (
     <Modal width={300} onScrim={onClose}>

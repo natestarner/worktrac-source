@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { addPerson } from '../../api/people';
 import { useAuth } from '../../context/AuthContext';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useAppState } from '../../context/AppStateContext';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
@@ -11,18 +12,27 @@ export default function AddPersonModal({ onClose }) {
   const { selectPerson } = useAppState();
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState(false);
+  const { run } = useGatedMutation();
 
-  async function handleAdd() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setNameError(true);
-      return;
-    }
-    const person = await addPerson(trimmed);
-    await refreshPeople();
-    selectPerson(person.id);
-    onClose();
-  }
+  // Tier-3: adding a person is not idempotent, so it is gated rather than queued -- a replay would
+  // create duplicate people. Previously it had neither the gate nor an error path.
+  const handleAdd = run(
+    async () => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        setNameError(true);
+        return;
+      }
+      const person = await addPerson(trimmed);
+      await refreshPeople();
+      selectPerson(person.id);
+      onClose();
+    },
+    {
+      offlineMessage: 'Adding a person needs a connection.',
+      errorMessage: "Couldn't add that person.",
+    },
+  );
 
   return (
     <Modal width={320} onScrim={onClose}>

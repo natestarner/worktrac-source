@@ -35,6 +35,25 @@ describe('shouldRetryWrite (failure taxonomy, hardening #8)', () => {
     expect(shouldRetryWrite(0, { status: 409 })).toBe(false);
   });
 
+  // 408 and 429 sit inside the 4xx range but explicitly mean "try again" -- an intermediary that
+  // gave up waiting on a cold-starting backend, and a rate limit that by definition expires.
+  // Treating them as definitive drops a durable write forever, which is the exact failure the
+  // "a connectivity problem can never lose a write" invariant exists to prevent.
+  it('DOES retry the two retryable 4xx codes (408 timeout, 429 rate limit)', () => {
+    expect(shouldRetryWrite(0, { status: 408 })).toBe(true);
+    expect(shouldRetryWrite(0, { status: 429 })).toBe(true);
+    expect(shouldRetryWrite(50, { status: 429 })).toBe(true);
+  });
+
+  // Guards the boundary: widening the carve-out to all of 4xx would head-of-line-block the shared
+  // serial outbox scope forever on a write that can never succeed.
+  it('still treats the 4xx codes either side of them as definitive', () => {
+    expect(shouldRetryWrite(0, { status: 407 })).toBe(false);
+    expect(shouldRetryWrite(0, { status: 409 })).toBe(false);
+    expect(shouldRetryWrite(0, { status: 428 })).toBe(false);
+    expect(shouldRetryWrite(0, { status: 430 })).toBe(false);
+  });
+
   it('retries a 5xx / gateway error / cold-start 503 (server unreachable)', () => {
     expect(shouldRetryWrite(0, { status: 500 })).toBe(true);
     expect(shouldRetryWrite(0, { status: 503 })).toBe(true);

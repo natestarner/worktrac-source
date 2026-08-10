@@ -10,6 +10,10 @@ const TOKEN_STORAGE_KEY = 'workout-tracker-token';
 // reasonable window.
 const REQUEST_TIMEOUT_MS = 15000;
 
+// Exports stream a whole history as CSV/ZIP and are legitimately slower than any API call, so they
+// get their own, longer bound rather than either sharing the 15s one or (as before) having none.
+const EXPORT_TIMEOUT_MS = 60000;
+
 let token = localStorage.getItem(TOKEN_STORAGE_KEY) || null;
 let onUnauthorized = null;
 
@@ -110,10 +114,33 @@ export const apiClient = {
   put: (path, body) => request(path, { method: 'PUT', body }),
   patch: (path, body) => request(path, { method: 'PATCH', body }),
   delete: (path, body, options) => request(path, { method: 'DELETE', body, ...options }),
+  // Returns the raw Response (CSV/ZIP export), so it can't go through `request` -- that one always
+  // parses the body. Everything else about it must still match, and used not to: it had no timeout
+  // and never reported to reachabilityMonitor, so an export against a dead backend hung forever
+  // and, worse, was invisible to lie-fi detection -- requests that fail here could never
+  // contribute to the consecutive-failure count that raises the connection-trouble banner.
+  //
+  // A longer timeout than REQUEST_TIMEOUT_MS on purpose: a full-history export is legitimately slow
+  // in a way an ordinary API call is not, and aborting a working download would be worse than
+  // waiting. Bounded is the point, not the exact number.
   getRaw: async (path) => {
     const headers = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const response = await fetch(getApiUrl(path), { headers });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), EXPORT_TIMEOUT_MS);
+
+    let response;
+    try {
+      response = await fetch(getApiUrl(path), { headers, signal: controller.signal });
+    } catch (error) {
+      reachabilityMonitor.recordFailure();
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    reachabilityMonitor.recordSuccess();
+
     if (response.status === 401) {
       setAuthToken(null);
       if (onUnauthorized) onUnauthorized();

@@ -32,6 +32,30 @@ export async function pinOfflineViaBanner(page: Page) {
   await goOfflineButton(page).click();
 }
 
+// The OTHER way into the manual pin: the App Settings toggle, which calls pinOffline()/
+// unpinOffline() directly. Unlike the banner path it needs no lie-fi to appear first and no
+// reachability probe to leave, so it is the deterministic way for a harness to arrange the pinned
+// state -- pinOfflineViaBanner above stays the way to test the banner's own path.
+//
+// Note the asymmetry this exposes, and don't "fix" it: the banner's "Go back online" gates on
+// probeReachability() while this toggle does not. That gap is exactly what hid
+// docs/incidents/2026-07-28-offline-banner-go-back-online.md for so long -- the Settings toggle
+// always worked, so the bug only ever showed on one of the two paths.
+async function openAppSettings(page: Page) {
+  await page.locator('.header-bar').getByRole('button').click();
+  await page.getByRole('menuitem', { name: 'App Settings' }).click();
+}
+
+export async function pinOfflineViaSettings(page: Page) {
+  await openAppSettings(page);
+  await page.getByRole('button', { name: 'Offline mode On' }).click();
+}
+
+export async function unpinOfflineViaSettings(page: Page) {
+  await openAppSettings(page);
+  await page.getByRole('button', { name: 'Offline mode Off' }).click();
+}
+
 export function goBackOnlineButton(page: Page) {
   return page.getByRole('button', { name: 'Go back online' });
 }

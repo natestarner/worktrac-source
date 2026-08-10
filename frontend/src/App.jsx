@@ -22,6 +22,7 @@ import ProtectedRoute from './routes/ProtectedRoute';
 import AdminRoute from './routes/AdminRoute';
 import AppShell from './routes/AppShell';
 import ServiceWorkerUpdater from './components/shared/ServiceWorkerUpdater';
+import ErrorBoundary from './components/shared/ErrorBoundary';
 import LogTab from './components/log/LogTab';
 import HistoryTab from './components/history/HistoryTab';
 import PRsTab from './components/prs/PRsTab';
@@ -42,16 +43,15 @@ export default function App() {
     // returns. (Boot-time restore+flush happens in the persist provider's onSuccess below, after
     // the query cache -- and thus the optimistic rows -- has been rehydrated.)
     const detach = attachOutboxPersistence(queryClient);
-    const unsubscribeOnline = onlineManager.subscribe((online) => {
-      if (online) flushOutbox();
-    });
+    // No `if (online)` here -- flushOutbox self-gates on connectivity (and on the auth token).
+    const unsubscribeOnline = onlineManager.subscribe(() => flushOutbox());
     // A write stuck in a terminal error (exhausted retries, or a stale-session 4xx) has nothing left
     // to resume on its own -- it only gets re-dispatched by flushOutbox, which normally fires on the
     // next online transition. Regaining tab visibility while already online (background -> resume,
     // no offline/online edge to trigger the subscription above) is a second natural moment to retry,
     // so a write doesn't sit silently stuck until the next explicit reconnect or login.
     function onVisible() {
-      if (document.visibilityState === 'visible' && onlineManager.isOnline()) flushOutbox();
+      if (document.visibilityState === 'visible') flushOutbox();
     }
     document.addEventListener('visibilitychange', onVisible);
     return () => {
@@ -75,13 +75,17 @@ export default function App() {
         // set logged against an offline-created exercise, or an edit queued against a not-yet-synced
         // set, can resolve on replay.
         await Promise.all([loadExerciseIdMap(), loadSetIdMap(), restoreOutbox(queryClient)]);
-        if (onlineManager.isOnline()) flushOutbox();
+        flushOutbox();
       }}
     >
       <AuthProvider>
         <AppStateProvider>
           <UIProvider>
             <ServiceWorkerUpdater />
+            {/* Last-resort boundary. AppShell has a tighter one around the tab panel that keeps
+                navigation alive; this one only catches a throw outside any tab -- the shell
+                itself, or an unauthenticated route. */}
+            <ErrorBoundary>
             <Routes>
             <Route path="/" element={<Navigate to="/app/log" replace />} />
             <Route path="/login" element={<LoginPage />} />
@@ -112,6 +116,7 @@ export default function App() {
             </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </ErrorBoundary>
           </UIProvider>
         </AppStateProvider>
       </AuthProvider>

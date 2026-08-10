@@ -126,9 +126,16 @@ warming them is a costly prefetch fan-out across every person, whereas invalidat
 
 - Offline-capable writes go through `useDurableMutation`. Tier-3 writes are gated because some
   (e.g. `createPastSession`) are **not idempotent** and would duplicate on replay.
-- Gate with `useRequireOnline` (wraps a handler, calm toast + disabled control) or
-  `OfflineDisabledWrap` (greys out an entry-point button). Both read `useOnlineStatus` only, so
-  they deliberately do **not** react to lie-fi.
+- **Tier-3 writes go through `useGatedMutation`** — the Tier-3 counterpart to
+  `useDurableMutation`. It composes `useRequireOnline` with a pending flag and, crucially, an
+  error path. Before it existed every Tier-3 handler open-coded this, and most had
+  `try { … } finally { setBusy(false) }` with **no catch**, so a failed write rejected into
+  nothing and the person saw the spinner stop and nothing happen. A gated write has no outbox and
+  no retry behind it — if it fails, saying so is the only option left.
+- `useRequireOnline` (wraps a handler, calm toast) and `OfflineDisabledWrap` (greys out an
+  entry-point button) are still the gate itself, and `OfflineDisabledWrap` is still how you
+  disable the control up front. Both read `useOnlineStatus` only, so they deliberately do **not**
+  react to lie-fi.
 
 ## A durable write is not the same as a visible value
 

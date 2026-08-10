@@ -48,6 +48,22 @@ jobs:
               - 'frontend/**'
 
   # ──────────────────────────────────────────────
+  # Job 0b: The degraded-conditions contract (.claude/rules/resilience.md) -- the app must behave
+  # the same online, on lie-fi, offline, and against a cold/DB-less/overloaded backend, which stays
+  # true only if there is exactly ONE way to do each job. Deliberately UNGATED by the `changes`
+  # filter: it also enforces repo-wide policy (every rule file path-scoped, CLAUDE.md under its own
+  # line ceiling) that a docs-only PR can break just as easily as a frontend one. Takes ~3s.
+  # ──────────────────────────────────────────────
+  resilience-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Check resilience invariants
+        run: bash scripts/check-resilience-invariants.sh
+
+  # ──────────────────────────────────────────────
   # Job 1: Build and test the backend
   # ──────────────────────────────────────────────
   backend-ci:
@@ -128,6 +144,14 @@ jobs:
       - name: Install dependencies
         if: env.RUN_REAL == 'true'
         run: npm ci
+
+      # `lint` has been defined in package.json all along but no workflow ever called it, so
+      # oxlint only ever ran when someone remembered to run it by hand. Placed before the tests
+      # because it is seconds, not minutes, and rules-of-hooks violations make test failures much
+      # harder to read.
+      - name: Lint
+        if: env.RUN_REAL == 'true'
+        run: npm run lint
 
       - name: Run tests
         if: env.RUN_REAL == 'true'

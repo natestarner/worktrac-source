@@ -16,6 +16,7 @@ import RestTimerBar from '../components/shared/RestTimerBar';
 import OfflineBanner from '../components/shared/OfflineBanner';
 import ConnectionTroubleBanner from '../components/shared/ConnectionTroubleBanner';
 import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
+import ErrorBoundary from '../components/shared/ErrorBoundary';
 
 export default function AppShell() {
   const { people, refreshPeople } = useAuth();
@@ -122,7 +123,13 @@ export default function AppShell() {
       {/* Padding lives on .tab-panel in index.css, not here -- an inline `padding`
           shorthand would override the class's top value. */}
       <div className="tab-panel" style={{ margin: '0 auto' }}>
-        <Outlet />
+        {/* Scoped to the tab panel, not the whole shell, so a crashing tab leaves the header,
+            person pills and tab nav usable -- the person can switch away and keep working
+            instead of losing the app. `resetKey` (not `key`) clears a previous tab's error on
+            navigation without remounting the subtree every time -- see ErrorBoundary.jsx. */}
+        <ErrorBoundary resetKey={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </div>
 
       <RestTimerBar />

@@ -51,6 +51,31 @@ cd frontend && npm test            # frontend tests
 - Never set `spring.jpa.hibernate.ddl-auto` to anything other than `validate`.
 - Every query must filter by the active person — see "Deeper context" below.
 
+## The app must work the same in every condition
+
+Online, lie-fi, hard offline, user-pinned offline, backend cold-starting, DB down, pool exhausted,
+mid-deploy reload, restored-from-stale-state. **Degradation is the default case, not an edge
+case.** This applies to every approach, fix, and new feature — not just ones that look
+"offline-related".
+
+- **One code path for all conditions.** Branching on connectivity is the exception: it needs an
+  inline comment saying why *and* an entry in the register in `.claude/rules/resilience.md`.
+  A branch that isn't on that register is a bug until it's added with a reason — and nothing on
+  the register may be "simplified" away.
+- **Reuse the existing mechanism; don't invent a second one.** Durable write →
+  `useDurableMutation`. Online-only write → `useGatedMutation`. "Am I online?" → `useOnlineStatus`.
+  Ordering → `enqueueSeq`. The full table is in the rule file. A second way to do an existing job
+  is the bug.
+- **Failure degrades to *queue and retry* or *show what's cached*** — never to signed-out, blank,
+  silently-lost, or a spinner over a request that will never succeed.
+- **Prove it, don't argue it.** User-visible flows get a parity test
+  (`e2e/tests/support/parity.ts`) that runs one assertion body across modes. Claiming a flow
+  "behaves identically in every connectivity mode" in a comment is what we did before; it was
+  wrong twice.
+
+Checklist + register: `.claude/rules/resilience.md` (auto-loads). Reasoning:
+`docs/architecture/resilience.md`. Enforced by `scripts/check-resilience-invariants.sh`.
+
 ## Flyway Migration Rules
 - **NEVER edit or rename a migration that has already been applied** — create a new one.
 - One logical change per migration file. Version numbers must be sequential — never skip or reuse.
@@ -122,6 +147,7 @@ touch matching files — you don't need to open them manually. Full narratives a
 
 | Topic | Auto-loading rule | Full narrative |
 |---|---|---|
+| **Degraded-conditions contract (all code)** | `resilience.md` | `docs/architecture/resilience.md` |
 | Backend-wide (person scoping, `Clock`, error handling) | `backend-core.md` | — |
 | Workout data model (`rest_seconds`, idempotency, notes, picker) | `workout-data-model.md` | `docs/architecture/data-model.md` |
 | Registration, auth & the async email pipeline | `registration-and-email.md` | `docs/architecture/admin-portal.md` |

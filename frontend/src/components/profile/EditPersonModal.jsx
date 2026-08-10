@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { updatePerson } from '../../api/people';
 import { useAuth } from '../../context/AuthContext';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
@@ -9,17 +10,24 @@ export default function EditPersonModal({ person, onClose }) {
   const { refreshPeople } = useAuth();
   const [name, setName] = useState(person.name);
   const [nameError, setNameError] = useState(false);
+  const { run } = useGatedMutation();
 
-  async function handleSave() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setNameError(true);
-      return;
-    }
-    await updatePerson(person.id, trimmed);
-    await refreshPeople();
-    onClose();
-  }
+  const handleSave = run(
+    async () => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        setNameError(true);
+        return;
+      }
+      await updatePerson(person.id, trimmed);
+      await refreshPeople();
+      onClose();
+    },
+    {
+      offlineMessage: 'Renaming a person needs a connection.',
+      errorMessage: "Couldn't save that name.",
+    },
+  );
 
   return (
     <Modal width={320} onScrim={onClose}>

@@ -6,6 +6,7 @@ import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
 import { usePersonExercises } from '../../hooks/usePersonExercises';
 import { useRoutines } from '../../hooks/useRoutines';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { removeRoutine } from '../../api/routines';
 import RoutineFormModal from './RoutineFormModal';
 import CopyRoutineModal from './CopyRoutineModal';
@@ -25,16 +26,25 @@ export default function RoutinesTab() {
   const [modalRoutine, setModalRoutine] = useState(undefined); // undefined = closed, null = create, object = edit
   const [copyRoutine, setCopyRoutine] = useState(null); // null = closed, object = routine being copied
   const hasOtherPeople = people.some((p) => p.id !== activePersonId);
+  const { run } = useGatedMutation();
 
   function handleStart(routine) {
     startRoutine(routine.id, routine.exercises.map((e) => e.exerciseId));
     navigate('/app/log');
   }
 
-  async function handleDelete(routine) {
-    await removeRoutine(activePersonId, routine.id);
-    refetch();
-  }
+  // Had no try/catch at all: a failed delete rejected into nothing, the row stayed on screen, and
+  // the person had no idea it hadn't happened.
+  const handleDelete = run(
+    async (routine) => {
+      await removeRoutine(activePersonId, routine.id);
+      refetch();
+    },
+    {
+      offlineMessage: 'Deleting a routine needs a connection.',
+      errorMessage: "Couldn't delete that routine.",
+    },
+  );
 
   return (
     <div>

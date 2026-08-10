@@ -6,6 +6,12 @@ import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
 
 vi.mock('../../api/people', () => ({ addPerson: vi.fn() }));
+
+// Adding a person is a Tier-3 write and now routes through useGatedMutation, which composes useUI
+// (failure toast) and useOnlineStatus (offline gate). Mocked rather than wrapped in real
+// providers, matching the convention every other component test here uses.
+vi.mock('../../context/UIContext', () => ({ useUI: () => ({ showToast: vi.fn() }) }));
+vi.mock('../../hooks/useOnlineStatus', () => ({ useOnlineStatus: () => true }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 

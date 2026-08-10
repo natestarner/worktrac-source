@@ -117,6 +117,44 @@ Prerequisites:
   real ACS email API even though the helper reads the code back via the test-support endpoint,
   so without them **every** spec that registers a household fails at registration.
 
+#### Then the service-worker suite — `offline-durability.spec.ts`
+
+This one needs the **backend up but the frontend port free**, which no single script does — so
+stop only the frontend, by PID:
+
+```bash
+bash scripts/up.sh                                       # both up; note the ports it prints
+netstat -ano | grep ":<FRONTEND_PORT>" | grep LISTENING  # find the vite dev PID
+powershell.exe -NoProfile -Command "Stop-Process -Id <pid> -Force"
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:<BACKEND_PORT>/actuator/health   # expect 200
+
+cd e2e && FRONTEND_PORT=<FRONTEND_PORT> VITE_BACKEND_ORIGIN=http://localhost:<BACKEND_PORT> \
+  npm run test:pwa
+```
+
+**Do not use `down.sh` here** — it stops the backend too, and these specs need it. And the preview
+must take *that same* frontend port, not a free one: `worktree-env.sh` sets
+`CORS_ALLOWED_ORIGINS` to exactly one origin, and `vite preview`'s proxy forwards the browser's
+real `Origin`, so any other port is refused. `playwright.pwa.config.ts` starts its own
+`vite preview` with `reuseExistingServer: false`, which is why the dev server has to be out of the
+way first.
+
+**Known: 1 of the 4 currently fails** — *"cold-loads from cache and boots the saved session while
+fully offline"*. Verified pre-existing (it fails identically on an untouched tree). It rotted
+precisely because these specs ran nowhere for so long; running them again is what surfaced it.
+Treat any *other* failure here as yours.
+
+Four specs that **cannot** run in the default project: they need the production service worker to
+precache the app shell, which `vite dev` does not provide, so `playwright.config.ts` excludes them
+and `playwright.pwa.config.ts` builds + previews instead. They are the regression tests for two of
+the most expensive incidents in `docs/incidents/` — an ended workout coming back to life, and a
+create-then-log-set deadlocking the outbox across a reload mid-lie-fi.
+
+Until 2026-08-09 nothing ran them: not the default local gate, not branch CI (which has no
+Playwright at all), and not this runbook. **Run them whenever the change touches
+`frontend/src/lib/**`, `frontend/src/hooks/**`, the service worker, or anything persisted.**
+They take a couple of minutes because of the production build.
+
 **Reading the result — do this before believing any failure:**
 1. If `e2e.sh` printed the "⚠️ The frontend/backend died during this run" banner, the failures
    above it are **not** yours. Re-run from a fresh `bash scripts/up.sh` in a separate call.

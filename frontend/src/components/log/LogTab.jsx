@@ -367,6 +367,11 @@ export default function LogTab() {
           entries={sessionEntries}
           loading={activeSessionId ? historyLoading : false}
           sessionId={activeSessionId}
+          // Load-bearing: the durable DELETE_SET write's reconcileSetChange invalidates
+          // history/prs/summary/trends by personId. Without it those invalidations target
+          // `undefined`, nothing refetches, and a removed exercise stays on screen forever even
+          // though its sets were really deleted server-side.
+          personId={activePersonId}
           onSelectExercise={selectExercise}
           onChanged={refetchHistory}
         />

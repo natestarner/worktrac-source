@@ -8,7 +8,7 @@ import { setRestTimerPreference } from '../../api/people';
 import { createTag, deleteTag } from '../../api/tags';
 import { downloadAllPeopleZip } from '../../api/export';
 import { useOfflinePin } from '../../hooks/useOfflinePin';
-import { useRequireOnline } from '../../hooks/useRequireOnline';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { pinOffline, unpinOffline } from '../../lib/offlineMode';
 import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
@@ -24,7 +24,9 @@ export default function AppSettingsTab() {
   const { account, people, refreshPeople } = useAuth();
   const { openConfirm } = useUI();
   const offlinePinned = useOfflinePin();
-  const { online, requireOnline } = useRequireOnline();
+  // Settings writes are Tier-3. They had the online gate but no error path -- a failed unit change
+  // or tag delete left the old value on screen with no indication anything went wrong.
+  const { online, run } = useGatedMutation();
 
   const { tags, loading: tagsLoading, refetch: refetchTags } = useTags();
 
@@ -70,10 +72,10 @@ export default function AppSettingsTab() {
     await refetchTags();
   }
 
-  const guardedUnitSelect = requireOnline(handleUnitSelect, 'Changing units needs a connection.');
-  const guardedRestTimerToggle = requireOnline(handleRestTimerToggle, 'Changing this needs a connection.');
-  const guardedAddTag = requireOnline(handleAddTag, 'Adding a tag needs a connection.');
-  const guardedDeleteTag = requireOnline(handleDeleteTag, 'Deleting a tag needs a connection.');
+  const guardedUnitSelect = run(handleUnitSelect, { offlineMessage: 'Changing units needs a connection.' });
+  const guardedRestTimerToggle = run(handleRestTimerToggle, { offlineMessage: 'Changing this needs a connection.' });
+  const guardedAddTag = run(handleAddTag, { offlineMessage: 'Adding a tag needs a connection.' });
+  const guardedDeleteTag = run(handleDeleteTag, { offlineMessage: 'Deleting a tag needs a connection.' });
 
   return (
     <div>

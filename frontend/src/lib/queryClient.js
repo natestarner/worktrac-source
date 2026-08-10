@@ -1,4 +1,4 @@
-import { QueryClient, MutationObserver } from '@tanstack/react-query';
+import { QueryClient, MutationObserver, onlineManager } from '@tanstack/react-query';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { get, set, del } from 'idb-keyval';
 import { queryKeys } from '../api/queryKeys';
@@ -63,8 +63,21 @@ export const FAVORITE_MUTATION_KEY = ['favorite'];
 // a connectivity problem can never be the reason a write is lost or silently stops trying; only a
 // definitive rejection from the server can end retries. (Fully offline never reaches here --
 // networkMode pauses the mutation before it errors.)
+// Two 4xx codes are NOT the server's definitive answer -- they explicitly mean "try again":
+//   408 Request Timeout -- an intermediary gave up waiting, typically because the backend was
+//       cold-starting or its connection pool was saturated. Nothing about the write is wrong.
+//   429 Too Many Requests -- a rate limit, which by definition expires.
+// Treating either as definitive silently drops a durable write forever, which is precisely the
+// thing "a connectivity problem can never be the reason a write is lost" exists to prevent.
+// Latent rather than live today (bucket4j rate-limits only registration and password reset, never
+// workout writes), but Azure ingress can emit both of its own accord, and any future rate limit on
+// a write endpoint would make it live without touching this file. See
+// docs/architecture/resilience.md, axis B.
+const RETRYABLE_4XX = new Set([408, 429]);
+
 export function shouldRetryWrite(_failureCount, error) {
-  if (error?.status >= 400 && error?.status < 500) return false;
+  const status = error?.status;
+  if (status >= 400 && status < 500) return RETRYABLE_4XX.has(status);
   return true;
 }
 
@@ -361,8 +374,14 @@ export function enqueueOutboxWrite(mutationKey, variables) {
 // dispatches with no Authorization header. Without a token that request would 401, and a 401 can
 // itself tear a session back down (see api/client.js's unauthorized handler) -- exactly the
 // mechanism that turned a handful of queued offline writes into a login loop.
+// It also self-gates on connectivity, for the same reason it self-gates on the token. Five call
+// sites each wrote their own `if (onlineManager.isOnline()) flushOutbox()`, so every new trigger
+// was a sixth copy of a precondition that belongs to the function, and any copy getting the check
+// subtly wrong (or omitting it) would dispatch straight into a dead network. Flushing while
+// offline is not merely wasteful: resumePausedMutations() un-pauses writes that networkMode
+// deliberately parked, which is how a queued write can burn its retries against nothing.
 export function flushOutbox() {
-  if (!getAuthToken()) return [];
+  if (!getAuthToken() || !onlineManager.isOnline()) return [];
   const resumed = queryClient.resumePausedMutations();
   const cache = queryClient.getMutationCache();
   const stuck = cache

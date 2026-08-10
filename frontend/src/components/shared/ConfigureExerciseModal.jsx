@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { addCustomField, updateCustomField, removeCustomField, setExerciseTags, updateExercise } from '../../api/exercises';
 import { setPersistentNote } from '../../api/notes';
-import { useRequireOnline } from '../../hooks/useRequireOnline';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import Modal from './Modal';
 import OfflineNotice from './OfflineNotice';
 import { cancelButtonStyle } from './ConfirmDialog';
@@ -30,7 +30,11 @@ export default function ConfigureExerciseModal({
   const [newFieldName, setNewFieldName] = useState('');
   const [newTagName, setNewTagName] = useState('');
   const [busy, setBusy] = useState(false);
-  const { online, requireOnline } = useRequireOnline();
+  // `busy` stays the source of truth for `locked` because it also covers the non-write work these
+  // handlers do (onExerciseChanged/onTagsChanged refetches). useGatedMutation adds the error path
+  // every one of these handlers was missing -- each had try/finally with no catch, so a failed
+  // rename or tag change just stopped, silently, looking exactly like a successful one.
+  const { online, run } = useGatedMutation({ errorMessage: "That didn't save. Try again." });
   const locked = busy || !online;
 
   async function saveName() {
@@ -114,14 +118,14 @@ export default function ConfigureExerciseModal({
     await onFieldsChanged();
   }
 
-  const guardedSaveName = requireOnline(saveName, 'Editing needs a connection.');
-  const guardedSaveNote = requireOnline(saveNote, 'Editing needs a connection.');
-  const guardedToggleTag = requireOnline(toggleTag, 'Editing needs a connection.');
-  const guardedAddTag = requireOnline(addTag, 'Editing needs a connection.');
-  const guardedAddField = requireOnline(addField, 'Editing needs a connection.');
-  const guardedRenameField = requireOnline(renameField, 'Editing needs a connection.');
-  const guardedRemoveField = requireOnline(removeField, 'Editing needs a connection.');
-  const guardedRequestDelete = requireOnline(onRequestDelete, 'Deleting needs a connection.');
+  const guardedSaveName = run(saveName, { offlineMessage: 'Editing needs a connection.' });
+  const guardedSaveNote = run(saveNote, { offlineMessage: 'Editing needs a connection.' });
+  const guardedToggleTag = run(toggleTag, { offlineMessage: 'Editing needs a connection.' });
+  const guardedAddTag = run(addTag, { offlineMessage: 'Editing needs a connection.' });
+  const guardedAddField = run(addField, { offlineMessage: 'Editing needs a connection.' });
+  const guardedRenameField = run(renameField, { offlineMessage: 'Editing needs a connection.' });
+  const guardedRemoveField = run(removeField, { offlineMessage: 'Editing needs a connection.' });
+  const guardedRequestDelete = run(onRequestDelete, { offlineMessage: 'Deleting needs a connection.' });
 
   return (
     <Modal width={360} onScrim={onClose}>

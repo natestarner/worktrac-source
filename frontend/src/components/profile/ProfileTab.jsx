@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useUI } from '../../context/UIContext';
 import { removePerson } from '../../api/people';
 import EditPersonModal from './EditPersonModal';
@@ -14,11 +15,21 @@ export default function ProfileTab() {
   const primary = people.find((p) => p.isPrimary);
   const [editingPerson, setEditingPerson] = useState(null);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const { run } = useGatedMutation();
 
-  async function handleRemovePerson(person) {
-    await removePerson(person.id);
-    refreshPeople();
-  }
+  // Removing a person deletes their whole training history -- the one Tier-3 write where a silent
+  // failure is most alarming, since the row simply staying put reads as "it didn't take" rather
+  // than "it errored". Now gated and reported like every other one.
+  const handleRemovePerson = run(
+    async (person) => {
+      await removePerson(person.id);
+      refreshPeople();
+    },
+    {
+      offlineMessage: 'Removing a person needs a connection.',
+      errorMessage: "Couldn't remove that person.",
+    },
+  );
 
   return (
     <div>
