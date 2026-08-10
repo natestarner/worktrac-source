@@ -117,6 +117,32 @@ Prerequisites:
   real ACS email API even though the helper reads the code back via the test-support endpoint,
   so without them **every** spec that registers a household fails at registration.
 
+#### Then the service-worker suite — `offline-durability.spec.ts`
+
+```bash
+bash scripts/down.sh                              # frees this worktree's frontend port
+source scripts/worktree-env.sh && cd e2e && npm run test:pwa
+bash scripts/up.sh                                # bring the dev stack back for anything after
+```
+
+**`down.sh` first is not optional.** `playwright.pwa.config.ts` starts its own `vite preview` on
+`FRONTEND_PORT` with `reuseExistingServer: false`, and that is the same port `up.sh`'s dev server
+is already holding. It must be that port, not a free one — `vite preview`'s proxy forwards the
+browser's real `Origin`, so the port has to be covered by the backend's `CORS_ALLOWED_ORIGINS`.
+Sourcing `worktree-env.sh` is what points it at this worktree's ports instead of the primary
+checkout's `3000`/`8080`.
+
+Four specs that **cannot** run in the default project: they need the production service worker to
+precache the app shell, which `vite dev` does not provide, so `playwright.config.ts` excludes them
+and `playwright.pwa.config.ts` builds + previews instead. They are the regression tests for two of
+the most expensive incidents in `docs/incidents/` — an ended workout coming back to life, and a
+create-then-log-set deadlocking the outbox across a reload mid-lie-fi.
+
+Until 2026-08-09 nothing ran them: not the default local gate, not branch CI (which has no
+Playwright at all), and not this runbook. **Run them whenever the change touches
+`frontend/src/lib/**`, `frontend/src/hooks/**`, the service worker, or anything persisted.**
+They take a couple of minutes because of the production build.
+
 **Reading the result — do this before believing any failure:**
 1. If `e2e.sh` printed the "⚠️ The frontend/backend died during this run" banner, the failures
    above it are **not** yours. Re-run from a fresh `bash scripts/up.sh` in a separate call.

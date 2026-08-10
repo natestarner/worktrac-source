@@ -38,6 +38,16 @@
   (reproducible outside CI), (b) auditing the other 23 classes for the same two failure
   classes, not just this pair, (c) several green **CI** runs (not just local) at the target
   parallelism before trusting it as a required check.
+- **Parity specs** (`e2e/tests/support/parity.ts`): `forEachConnectivityMode` emits one test per
+  connectivity mode (online / lie-fi / hard-offline / pinned-offline) from a single assertion
+  body. Added 2026-08-09 to close the largest gap in the suite: 12 of 27 specs exercised offline
+  and **none** asserted that a flow produces the *same* user-visible result online and offline —
+  even though `docs/incidents/2026-07-30-editing-queued-offline-set.md` explicitly claims editing
+  a queued set behaves "identically in every connectivity mode". Phases run online (`setup`) then
+  in-mode (`navigate`, `act`, `assert`), with `afterReconnect` running once the outbox has
+  drained. The `assert` body must not branch on the mode — a needed branch is a real divergence
+  and belongs on the register in `.claude/rules/resilience.md`. See that rule and
+  `docs/architecture/resilience.md` for the contract these enforce.
 - **Connectivity-mode e2e helpers** (`e2e/tests/support/`): `offline.ts` (banner/outbox
   locators, `goHardOffline`/`goOnline`) and `faults.ts` (`failNetwork` — a rejected fetch, the
   only thing that drives lie-fi detection — vs. `failWithStatus` — a fulfilled 4xx/5xx, which

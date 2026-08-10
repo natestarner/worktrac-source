@@ -76,6 +76,33 @@ Full narrative: `docs/architecture/testing.md`.
 
 `context.setOffline()` cannot drive lie-fi at all — it needs request-level fault injection.
 
+## Parity specs: one assertion body, every connectivity mode
+
+`tests/support/parity.ts`'s **`forEachConnectivityMode`** emits one test per mode (online,
+lie-fi, hard-offline, pinned-offline) from a single spec, so "this behaves the same regardless of
+connectivity" is a test result rather than a comment. Use it for any user-visible flow.
+
+Phases, in order — `setup` runs **online**, everything after runs **in the mode**:
+
+| Phase | Runs | For |
+|---|---|---|
+| `setup(page, request)` | online | `registerHousehold`, server-side seeding. Returns state passed to every later phase |
+| `navigate(page, state, ctx)` | in-mode | Screen navigation. **Not `setup`** — entering pinned-offline routes through App Settings, so `setup`'s screen is gone |
+| `act` / `assert` | in-mode | The action, then the parity claim |
+| `afterReconnect` | after restore + outbox drain | That the write actually reached the server |
+
+- **`assert` must not branch on `ctx.mode`.** If it needs to, that is a real divergence and belongs
+  on the register in `.claude/rules/resilience.md`, not in an `if`.
+- **Assert the *result*, not the sync chrome.** The outbox badge, "Saving…" and the offline banner
+  legitimately differ by mode — those belong in `offline-outbox` / `offline-mode` /
+  `intermittent-errors`, not a parity spec.
+- **`pinned-offline` is arranged via the App Settings toggle** (`pinOfflineViaSettings`), not the
+  trouble banner, because the banner needs three consecutive request failures to appear — i.e. a
+  write, the very thing under test. The banner's own path stays covered by `intermittent-errors`
+  and `connectivity-transitions`.
+- **A parity test that could pass vacuously guards nothing.** Verify a new one fails when you break
+  a single mode, before trusting it.
+
 ## ⚠️ Cross-file coupling: the test email pattern
 
 `tests/support/auth.ts`'s `registerHousehold` generates
