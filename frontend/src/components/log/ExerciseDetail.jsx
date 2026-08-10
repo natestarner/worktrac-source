@@ -243,17 +243,6 @@ export default function ExerciseDetail({
     );
   }
 
-  // Prefill weight/reps from the same set-index in the most recent prior session,
-  // recomputed whenever the exercise, its summary, or how many sets are already logged
-  // in this session changes -- matches the prototype's refreshDraft exactly.
-  useEffect(() => {
-    if (!summary) return;
-    const draft = computePrefillDraft(summary.lastSession, sessionSets.length, defaultUnit);
-    setWeightDraft(draft.weight);
-    setRepsDraft(draft.reps);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [summary, sessionSets.length]);
-
   // Clears the just-added highlight once its animation has had time to finish, so it
   // plays once per set logged rather than lingering or replaying on unrelated re-renders.
   useEffect(() => {
@@ -263,12 +252,16 @@ export default function ExerciseDetail({
   }, [justAddedSetId]);
 
   const weightStep = defaultUnit === 'kg' ? 2.5 : 5;
+  // `weightDraft` is null until there's any history to prefill from (see computePrefillDraft).
+  // Everything that has to produce a NUMBER -- stepping, and the logged value itself -- reads
+  // this; only the on-screen value keeps the null so it can render as an em dash.
+  const weightValue = weightDraft ?? 0;
 
   function decWeight() {
-    setWeightDraft(Math.max(0, Math.round((weightDraft - weightStep) * 2) / 2));
+    setWeightDraft(Math.max(0, Math.round((weightValue - weightStep) * 2) / 2));
   }
   function incWeight() {
-    setWeightDraft(Math.round((weightDraft + weightStep) * 2) / 2);
+    setWeightDraft(Math.round((weightValue + weightStep) * 2) / 2);
   }
   function decReps() {
     setRepsDraft(Math.max(0, repsDraft - 1));
@@ -452,6 +445,23 @@ export default function ExerciseDetail({
   // never hit. The fold is O(sets logged for this exercise this session) -- a handful of rows.
   const effectiveBest = mergeBestWithLocalSets(summary?.best ?? null, displaySets);
 
+  // Prefill weight/reps: the same set-index in the most recent prior session, else the last set
+  // logged today, else blank. Re-runs whenever the summary or today's sets change.
+  //
+  // Declared HERE, below displaySets, rather than up with the other effects, because it has to
+  // read `displaySets` and not `sessionSets` -- the same reason effectiveBest does. Offline,
+  // `contextSessionId` stays null for the person's entire outage, so the sessionSets query never
+  // runs and its data stays `[]` however many sets they log; `pendingBeforeSession` is the only
+  // source for those rows. Reading sessionSets here would freeze the set-index walk at set 1 and
+  // make the carry-forward invisible for exactly as long as the outage lasts.
+  useEffect(() => {
+    if (!summary) return;
+    const draft = computePrefillDraft(summary.lastSession, displaySets, defaultUnit);
+    setWeightDraft(draft.weight);
+    setRepsDraft(draft.reps);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary, displaySets.length]);
+
   function handleLogSet() {
     // Rest timer starts immediately for the "instant" feel; it's a live-only concept.
     if (!editingSessionId) startRestTimer(personId, 90);
@@ -473,7 +483,10 @@ export default function ExerciseDetail({
       exerciseId: exercise.id,
       exerciseName: exercise.name,
       unit: defaultUnit,
-      weight: weightDraft,
+      // A blank draft logs as 0 rather than blocking the tap: 0 is exactly right for a
+      // first-ever bodyweight exercise, and refusing the tap would punish that case to protect
+      // a weighted one where the em dash is already visibly not a number.
+      weight: weightValue,
       reps: repsDraft,
       tempId,
       idempotencyKey: newId(),
@@ -666,7 +679,9 @@ export default function ExerciseDetail({
             <div className="stepper-pair">
               <WeightRepsStepper
                 label={`Weight (${defaultUnit})`}
-                value={weightDraft}
+                // An em dash, not 0: "we have no history for this exercise" and "you are
+                // lifting zero" are different claims, and only one of them is ours to make.
+                value={weightDraft ?? '—'}
                 onDec={decWeight}
                 onInc={incWeight}
                 onValueTap={() => setKeypadField('weight')}

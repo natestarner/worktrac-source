@@ -128,15 +128,21 @@ so every e2e registration bounced and counted against the sending domain's ACS r
 
 ## Never drive the weight/reps steppers by hand — use `logSetAt`
 
-`computePrefillDraft` re-seeds the weight/reps draft whenever the summary / session-sets queries
-settle, which can land **after** `setStepper` has verified the value it typed but **before** the
-"Log set" click. The set is then logged at the 45 lb prefill default instead of the target.
+`computePrefillDraft` re-seeds the weight/reps draft whenever the summary / today's sets change,
+which can land **after** `setStepper` has verified the value it typed but **before** the "Log set"
+click. The set is then logged at whatever the prefill offered instead of the target — today that
+is a blank weight (i.e. 0) on a first-ever exercise, or the previous session's set at that index.
 
 Locally those queries return in milliseconds and the race is almost never lost, so this passes a
 full local suite and goes red only against a deployed backend — it took lower red exactly that way
 on 2026-08-08, having been green across several local runs first. It also surfaces **somewhere
-other than where it went wrong**: a 315×2 deadlift logged as 45×2 is no longer a PR, so what you
+other than where it went wrong**: a 315×2 deadlift logged as 0×2 is no longer a PR, so what you
 see is a missing "New PR!" celebration, or a records/sort assertion reading a number nobody typed.
+
+**A spec that logs at the prefill without setting a weight is logging a *bodyweight* set** (weight
+0), because `comparableLb` switches to comparing reps at zero. That is fine where the number is
+incidental (`parity-active-loop`) and wrong where it isn't — `offline-reads` sets 45 explicitly for
+exactly this reason. Decide which you are before leaning on the default.
 
 `support/exercises.ts`'s **`logSetAt`** is the only sanctioned way to log a set at a specific
 weight/reps. It re-verifies both steppers together before submitting (a re-seed stomps both, so a

@@ -28,8 +28,7 @@ export default function DeleteAccountModal({ onClose }) {
   }
 
   return (
-    <Modal width={380} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Delete your account?</div>
+    <Modal width={380} onClose={onClose} title="Delete your account?">
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 16 }}>
         This permanently deletes all data for everyone on this account -- every exercise, set, session, routine, and
         setup value. This cannot be undone, and this email will look brand new if you ever register again.

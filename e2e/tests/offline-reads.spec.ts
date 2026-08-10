@@ -72,6 +72,11 @@ test.describe('Offline mode — reads over the warmed cache', () => {
   test('History with real logged data resolves offline', async ({ page, request }) => {
     await registerHousehold(page, request, 'Indigo');
     await pickExercise(page, 'Barbell Bench Press');
+    // Set explicitly rather than riding the prefill: a brand-new exercise has no prefill at all
+    // now (computePrefillDraft returns null and a blank logs as 0), and 0 is a BODYWEIGHT set to
+    // this app -- comparableLb switches to comparing reps, which would quietly change what the
+    // assertions below are measuring.
+    await setWeight(page, 45);
     await page.getByRole('button', { name: /Log set/ }).click();
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
@@ -92,6 +97,7 @@ test.describe('Offline mode — reads over the warmed cache', () => {
   test('switching the active person offline serves each one their own warmed data with no leak', async ({ page, request }) => {
     await registerHousehold(page, request, 'Jules');
     await pickExercise(page, 'Barbell Bench Press');
+    await setWeight(page, 45);
     await page.getByRole('button', { name: /Log set/ }).click();
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
@@ -128,13 +134,25 @@ test.describe('Offline mode — PRs reads over the warmed cache', () => {
     await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
 
     await page.getByRole('link', { name: 'PRs' }).click();
+    // toHaveURL as well as the name: "Barbell Bench Press" is ALSO the Log screen's own title, so
+    // the name alone passes while this click is still in flight.
+    await expect(page).toHaveURL(/\/app\/prs/);
     await expect(page.getByText('Barbell Bench Press')).toBeVisible();
+    // ...and then wait for the network to go quiet before cutting it. The boot-time cache warm
+    // (offlineCacheWarm.js) prefetches this same `prs` key; a warm request issued before the set
+    // existed can still be in flight here, and writes its EMPTY result over the row we just
+    // asserted. Offline there is then nothing left to refetch and the board reads "No PRs yet".
+    // That race is the app's documented warm-vs-fresh behaviour, not this screen misbehaving --
+    // it just needs the test to stop measuring it.
+    await page.waitForLoadState('networkidle');
 
     await goHardOffline(page);
     // Navigate away and back (client-side, no full reload) to force the PRs query to remount
     // and prove it resolves from the warmed cache with no network.
     await page.getByRole('link', { name: 'History' }).click();
+    await expect(page).toHaveURL(/\/app\/history/);
     await page.getByRole('link', { name: 'PRs' }).click();
+    await expect(page).toHaveURL(/\/app\/prs/);
 
     await expect(page.getByText('Barbell Bench Press')).toBeVisible();
     await goOnline(page);
@@ -148,14 +166,19 @@ test.describe('Offline mode — PRs reads over the warmed cache', () => {
     await page.getByText('New PR!').click({ force: true });
 
     await page.getByRole('link', { name: 'PRs' }).click();
+    // toHaveURL + networkidle for the same two reasons as the hard-offline test above.
+    await expect(page).toHaveURL(/\/app\/prs/);
     await expect(page.getByText('Barbell Bench Press')).toBeVisible();
+    await page.waitForLoadState('networkidle');
 
     // Stays online per navigator.onLine, but the request itself fails -- TanStack keeps the
     // last-good warmed data on screen instead of clearing it just because a background
     // refetch (triggered by this remount) fails.
     await failNetwork(page, /\/api\/people\/\d+\/prs$/);
     await page.getByRole('link', { name: 'History' }).click();
+    await expect(page).toHaveURL(/\/app\/history/);
     await page.getByRole('link', { name: 'PRs' }).click();
+    await expect(page).toHaveURL(/\/app\/prs/);
 
     await expect(page.getByText('Barbell Bench Press')).toBeVisible();
   });
@@ -170,6 +193,8 @@ test.describe('Offline mode — PRs reads over the warmed cache', () => {
 test.describe('Offline mode — Exercise Detail summary derived from warmed history', () => {
   async function logSetAndEndWorkout(page, personName) {
     await pickExercise(page, 'Barbell Bench Press');
+    // Explicit, not the prefill -- see the note on the 'Indigo' test above.
+    await setWeight(page, 45);
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('New PR!')).toBeVisible();
     await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)

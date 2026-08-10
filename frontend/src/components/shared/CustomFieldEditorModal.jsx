@@ -21,7 +21,7 @@ export default function CustomFieldEditorModal({ personId, exerciseId, field, on
   const guardedSave = run(handleSave, { offlineMessage: 'Editing needs a connection.' });
 
   return (
-    <Modal width={300} onScrim={onClose}>
+    <Modal width={300} onClose={onClose}>
       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
         {field.name}
       </div>

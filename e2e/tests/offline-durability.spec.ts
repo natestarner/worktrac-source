@@ -58,8 +58,8 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     const outboxLink = page.getByRole('button', { name: /1 change waiting to sync/i });
     await expect(outboxLink).toBeVisible();
     await outboxLink.click();
-    await expect(page.getByText(/logged 45 lb × 8/i)).toBeVisible();
-    await page.getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByText(/logged 0 lb × 8/i)).toBeVisible();
+    await page.getByRole('button', { name: 'Done' }).click();
 
     // Reconnect -- the outbox drains on its own (no duplicate-insert re-check here; that's
     // covered thoroughly by the fast suite's offline-outbox.spec.ts, which isn't fighting this

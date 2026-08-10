@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { createRoutine, updateRoutine } from '../../api/routines';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import AddEditExerciseModal from '../settings/AddEditExerciseModal';
@@ -12,10 +12,24 @@ import { searchExercises } from '../../utils/exerciseSearch';
 // routine" pool defaults to the person's own list (personExercises); typing a search reveals
 // the whole catalog. Adding to a routine auto-favorites on the backend, so it also shows in
 // the picker.
+//
+// The same exercise may appear in a routine more than once -- a routine is meant to walk you
+// through a whole workout, and plenty of workouts cycle back (bench, row, bench). That is why
+// the routine's contents are a list of OCCURRENCES ({ key, exerciseId }) rather than a set of
+// exercise ids: every operation below (remove, reorder, React keys) has to address one
+// position, not "every row for this exercise". Nothing on the backend ever restricted this --
+// routine_exercises has no unique index on (routine_id, exercise_id) and sort_order is assigned
+// by list position -- the whole restriction was the picker filter this used to apply.
 export default function RoutineFormModal({ personId, routine, personExercises, catalog, onClose, onSaved, onExerciseCreated }) {
   const isEditing = !!routine;
   const [name, setName] = useState(routine?.name || '');
-  const [selectedIds, setSelectedIds] = useState(routine ? routine.exercises.map((e) => e.exerciseId) : []);
+  // Monotonic, modal-local, and never reused: a row's key has to survive reordering and stay
+  // distinct from the other copies of the same exercise, so it can't be derived from the
+  // exercise id or the index.
+  const nextRowKey = useRef(0);
+  const [rows, setRows] = useState(() =>
+    routine ? routine.exercises.map((e) => ({ key: (nextRowKey.current += 1), exerciseId: e.exerciseId })) : [],
+  );
   const [exerciseFilter, setExerciseFilter] = useState('');
   const [addingExercise, setAddingExercise] = useState(false);
   const [locallyCreated, setLocallyCreated] = useState([]);
@@ -28,28 +42,29 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   const exerciseById = new Map([...catalog, ...locallyCreated].map((e) => [e.id, e]));
   const term = exerciseFilter.trim().toLowerCase();
   const searching = term.length > 0;
-  const unselected = (e) => !selectedIds.includes(e.id);
 
   // Mirrors the Log picker: default view is the person's list split into "Favorites" and
-  // "Other Previously Logged"; typing a search reveals the whole catalog, ranked.
-  const searchResults = searching ? searchExercises(catalog.filter(unselected), exerciseFilter) : [];
-  const favorites = personExercises.filter((e) => e.isFavorite && unselected(e));
-  const otherLogged = personExercises.filter((e) => !e.isFavorite && unselected(e));
+  // "Other Previously Logged"; typing a search reveals the whole catalog, ranked. Already-added
+  // exercises deliberately STAY in these lists -- tapping one again adds a second occurrence.
+  const searchResults = searching ? searchExercises(catalog, exerciseFilter) : [];
+  const favorites = personExercises.filter((e) => e.isFavorite);
+  const otherLogged = personExercises.filter((e) => !e.isFavorite);
   const groups = [];
   if (favorites.length > 0) groups.push({ id: 'favorites', name: 'Favorites', items: favorites });
   if (otherLogged.length > 0) groups.push({ id: 'other', name: 'Other Previously Logged', items: otherLogged });
 
   function addExercise(id) {
-    setSelectedIds((ids) => [...ids, id]);
+    setRows((list) => [...list, { key: (nextRowKey.current += 1), exerciseId: id }]);
     setExercisesError(false);
     setExerciseFilter('');
   }
-  function removeExercise(id) {
-    setSelectedIds((ids) => ids.filter((x) => x !== id));
+  // By row key, not exercise id -- filtering on the id would drop every copy at once.
+  function removeExercise(key) {
+    setRows((list) => list.filter((row) => row.key !== key));
   }
   function moveExercise(index, dir) {
-    setSelectedIds((ids) => {
-      const arr = [...ids];
+    setRows((list) => {
+      const arr = [...list];
       const j = index + dir;
       if (j < 0 || j >= arr.length) return arr;
       [arr[index], arr[j]] = [arr[j], arr[index]];
@@ -59,9 +74,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
 
   async function handleExerciseCreated(created) {
     setLocallyCreated((list) => [...list, created]);
-    setSelectedIds((ids) => (ids.includes(created.id) ? ids : [...ids, created.id]));
-    setExercisesError(false);
-    setExerciseFilter('');
+    addExercise(created.id);
     setAddingExercise(false);
     if (onExerciseCreated) await onExerciseCreated();
   }
@@ -72,16 +85,19 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   const handleSave = run(
     async () => {
       const trimmed = name.trim();
-      const hasExercises = selectedIds.length > 0;
+      const hasExercises = rows.length > 0;
       if (!trimmed || !hasExercises) {
         setNameError(!trimmed);
         setExercisesError(!hasExercises);
         return;
       }
+      // Duplicates are preserved in order -- the backend stores one routine_exercises row per
+      // position, numbered by sort_order.
+      const exerciseIds = rows.map((row) => row.exerciseId);
       if (isEditing) {
-        await updateRoutine(personId, routine.id, { name: trimmed, exerciseIds: selectedIds });
+        await updateRoutine(personId, routine.id, { name: trimmed, exerciseIds });
       } else {
-        await createRoutine(personId, { name: trimmed, exerciseIds: selectedIds });
+        await createRoutine(personId, { name: trimmed, exerciseIds });
       }
       onSaved();
     },
@@ -92,8 +108,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   );
 
   return (
-    <Modal width={420} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{isEditing ? 'Edit routine' : 'New routine'}</div>
+    <Modal width={420} onClose={onClose} title={isEditing ? 'Edit routine' : 'New routine'}>
       <input
         value={name}
         onChange={(e) => {
@@ -113,40 +128,51 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
       />
       {nameError && <div style={errorTextStyle}>Give this routine a name.</div>}
 
-      {selectedIds.length === 0 && exercisesError && <div style={{ ...errorTextStyle, marginBottom: 18 }}>Add at least one exercise.</div>}
+      {rows.length === 0 && exercisesError && <div style={{ ...errorTextStyle, marginBottom: 18 }}>Add at least one exercise.</div>}
 
-      {selectedIds.length > 0 && (
+      {rows.length > 0 && (
         <>
           <div style={sectionLabelStyle}>In this routine</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
-            {selectedIds.map((id, idx) => (
-              <div
-                key={id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 8,
-                  padding: '10px 12px',
-                  borderRadius: 10,
-                  border: '1px solid var(--color-border)',
-                  background: 'var(--color-pr-bg)',
-                }}
-              >
-                <span style={{ fontSize: 14, fontWeight: 600 }}>{exerciseById.get(id)?.name}</span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button onClick={() => moveExercise(idx, -1)} style={miniButtonStyle}>
-                    &uarr;
-                  </button>
-                  <button onClick={() => moveExercise(idx, 1)} style={miniButtonStyle}>
-                    &darr;
-                  </button>
-                  <button onClick={() => removeExercise(id)} style={{ ...miniButtonStyle, color: 'var(--color-danger)' }}>
-                    &times;
-                  </button>
+            {rows.map((row, idx) => {
+              const exerciseName = exerciseById.get(row.exerciseId)?.name;
+              // Two rows for the same exercise are otherwise indistinguishable to a screen
+              // reader -- these three controls had no accessible name at all before (their
+              // labels are the glyphs), so the position is the only thing that separates them.
+              const position = `${exerciseName} (${idx + 1} of ${rows.length})`;
+              return (
+                <div
+                  key={row.key}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-pr-bg)',
+                  }}
+                >
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>{exerciseName}</span>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button onClick={() => moveExercise(idx, -1)} aria-label={`Move up: ${position}`} style={miniButtonStyle}>
+                      &uarr;
+                    </button>
+                    <button onClick={() => moveExercise(idx, 1)} aria-label={`Move down: ${position}`} style={miniButtonStyle}>
+                      &darr;
+                    </button>
+                    <button
+                      onClick={() => removeExercise(row.key)}
+                      aria-label={`Remove: ${position}`}
+                      style={{ ...miniButtonStyle, color: 'var(--color-danger)' }}
+                    >
+                      &times;
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}

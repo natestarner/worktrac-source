@@ -93,7 +93,7 @@ describe('OfflineBanner', () => {
     expect(screen.getByText('logged 135 lb × 5')).toBeInTheDocument();
   });
 
-  it('closes the outbox detail modal from its Close button', async () => {
+  it('closes the outbox detail modal from its Done button', async () => {
     onlineManager.setOnline(false);
     const { queryClient } = renderWithQuery(<OfflineBanner />);
     act(() => {
@@ -106,7 +106,7 @@ describe('OfflineBanner', () => {
     fireEvent.click(await screen.findByRole('button', { name: '1 change waiting to sync' }));
     expect(await screen.findByText(/Waiting to sync/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     expect(screen.queryByText(/Waiting to sync/)).not.toBeInTheDocument();
   });
 });

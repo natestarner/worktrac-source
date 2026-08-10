@@ -97,8 +97,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   }
 
   return (
-    <Modal width={340} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{isEditing ? 'Edit exercise' : 'Add exercise'}</div>
+    <Modal width={340} onClose={onClose} title={isEditing ? 'Edit exercise' : 'Add exercise'}>
       <input
         value={name}
         onChange={(e) => {

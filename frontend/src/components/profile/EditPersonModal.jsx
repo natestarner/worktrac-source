@@ -30,8 +30,7 @@ export default function EditPersonModal({ person, onClose }) {
   );
 
   return (
-    <Modal width={320} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Edit {person.name}</div>
+    <Modal width={320} onClose={onClose} title={`Edit ${person.name}`}>
       <input
         autoFocus
         value={name}

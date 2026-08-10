@@ -40,8 +40,7 @@ export default function PastSessionModal({ onClose }) {
   });
 
   return (
-    <Modal width={340} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Log a past workout</div>
+    <Modal width={340} onClose={onClose} title="Log a past workout">
       <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 18 }}>When did {activePersonName} work out?</div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
         <input

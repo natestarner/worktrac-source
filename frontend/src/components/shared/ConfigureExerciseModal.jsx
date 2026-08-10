@@ -128,8 +128,7 @@ export default function ConfigureExerciseModal({
   const guardedRequestDelete = run(onRequestDelete, { offlineMessage: 'Deleting needs a connection.' });
 
   return (
-    <Modal width={360} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Customize this exercise</div>
+    <Modal width={360} onClose={onClose} title="Customize this exercise">
       <div style={{ marginBottom: 18 }}>
         <span style={isOwn ? ownBadgeStyle : preloadedBadgeStyle}>{isOwn ? 'Created by you' : 'Preloaded exercise'}</span>
       </div>

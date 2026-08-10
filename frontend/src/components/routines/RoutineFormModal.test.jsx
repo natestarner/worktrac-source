@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RoutineFormModal from './RoutineFormModal';
-import { createRoutine } from '../../api/routines';
+import { createRoutine, updateRoutine } from '../../api/routines';
 
 vi.mock('../../api/routines', () => ({ createRoutine: vi.fn(), updateRoutine: vi.fn() }));
 
@@ -62,13 +62,49 @@ describe('RoutineFormModal exercise selection', () => {
     expect(screen.getByText('No exercises match "zzz".')).toBeInTheDocument();
   });
 
-  it('excludes exercises already added to the routine', () => {
+  it('keeps an already-added exercise in the picker so it can be added again', () => {
+    // This used to assert the opposite: the chip disappeared once added, which is what made a
+    // cycling routine (bench, row, bench) unbuildable. A routine is a list of occurrences now.
     renderModal();
 
     fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
 
-    expect(screen.queryByRole('button', { name: '+ Bench Press' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Bench Press' })).toBeInTheDocument();
     expect(screen.getByText('Bench Press')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    expect(screen.getAllByText('Bench Press')).toHaveLength(2);
+  });
+
+  it('removes only the copy whose × was tapped', () => {
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Squat' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    expect(screen.getAllByText('Bench Press')).toHaveLength(2);
+
+    // Position 1 of 3 -- the FIRST Bench Press. Removing by exercise id (the old behaviour)
+    // would have taken both copies with it.
+    fireEvent.click(screen.getByRole('button', { name: 'Remove: Bench Press (1 of 3)' }));
+
+    expect(screen.getAllByText('Bench Press')).toHaveLength(1);
+    expect(screen.getByText('Squat')).toBeInTheDocument();
+  });
+
+  it('reorders one occurrence without disturbing its twin', () => {
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Squat' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+
+    // Bench, Squat, Bench -> move the last Bench up -> Bench, Bench, Squat.
+    fireEvent.click(screen.getByRole('button', { name: 'Move up: Bench Press (3 of 3)' }));
+
+    expect(screen.getByRole('button', { name: 'Remove: Bench Press (1 of 3)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove: Bench Press (2 of 3)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove: Squat (3 of 3)' })).toBeInTheDocument();
   });
 
   it('clears the search box after adding an exercise from search results', () => {
@@ -86,6 +122,7 @@ describe('RoutineFormModal validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     createRoutine.mockResolvedValue({ id: 1 });
+    updateRoutine.mockResolvedValue({ id: 7 });
   });
 
   it('shows an error and does not save when the name is blank', async () => {
@@ -127,5 +164,29 @@ describe('RoutineFormModal validation', () => {
 
     await waitFor(() => expect(createRoutine).toHaveBeenCalledWith(1, { name: 'Push Day', exerciseIds: [1] }));
     expect(onSaved).toHaveBeenCalled();
+  });
+
+  it('saves a repeated exercise once per occurrence, in order', async () => {
+    renderModal();
+
+    fireEvent.change(screen.getByPlaceholderText('Routine name (e.g. Push Day)'), { target: { value: 'Cycle' } });
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Bent-Over Row' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save routine' }));
+
+    // The backend stores one routine_exercises row per position (sort_order 0/1/2) -- there is
+    // no unique index on (routine_id, exercise_id), so the duplicate survives the round trip.
+    await waitFor(() => expect(createRoutine).toHaveBeenCalledWith(1, { name: 'Cycle', exerciseIds: [1, 3, 1] }));
+  });
+
+  it('seeds the form from an existing routine that already repeats an exercise', async () => {
+    const routine = { id: 7, name: 'Cycle', exercises: [{ exerciseId: 1 }, { exerciseId: 3 }, { exerciseId: 1 }] };
+    renderModal({ routine });
+
+    expect(screen.getAllByText('Bench Press')).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(updateRoutine).toHaveBeenCalledWith(1, 7, { name: 'Cycle', exerciseIds: [1, 3, 1] }));
   });
 });

@@ -311,7 +311,9 @@ export default function LogTab() {
               {Math.min(routineIndex + 1, activeRoutine.exercises.length)} of {activeRoutine.exercises.length}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>
+          {/* .hscroll, not an inline overflowX: this strip gets a deliberately thick, always-
+              visible scrollbar so it can be scrubbed mid-workout. See index.css. */}
+          <div className="hscroll" style={{ display: 'flex', gap: 'var(--space-2)' }}>
             {activeRoutine.exercises.map((rc, idx) => {
               const isCurrent = idx === routineIndex;
               const isDone = idx < routineIndex;

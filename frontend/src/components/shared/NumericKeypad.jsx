@@ -5,13 +5,20 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
 
 export default function NumericKeypad({ label, initialValue, onCancel, onDone }) {
   const [buffer, setBuffer] = useState(String(initialValue ?? ''));
+  // The keypad opens showing the current value, but that value is unconfirmed until the first
+  // keypress, which REPLACES it rather than appending to it. You tap 135 because you want to
+  // type a different number -- appending made "tap 135, type 225" produce 135225, so every
+  // exact entry started with backspacing the prefill out. Backspace while fresh clears it in
+  // one press; after that, both keys behave normally.
+  const [fresh, setFresh] = useState(true);
 
   function press(key) {
     setBuffer((buf) => {
-      if (key === '⌫') return buf.slice(0, -1);
-      if (key === '.') return buf.includes('.') ? buf : buf + '.';
-      return buf === '0' ? key : buf + key;
+      if (key === '⌫') return fresh ? '' : buf.slice(0, -1);
+      if (key === '.') return fresh ? '0.' : buf.includes('.') ? buf : buf + '.';
+      return fresh ? key : buf + key;
     });
+    setFresh(false);
   }
 
   function done() {
@@ -19,7 +26,7 @@ export default function NumericKeypad({ label, initialValue, onCancel, onDone })
   }
 
   return (
-    <Modal width={420} align="bottom">
+    <Modal width={420} align="bottom" onClose={onCancel}>
       <div
         style={{
           textAlign: 'center',
@@ -33,7 +40,11 @@ export default function NumericKeypad({ label, initialValue, onCancel, onDone })
       >
         {label}
       </div>
-      <div style={{ textAlign: 'center', fontSize: 40, fontWeight: 800, marginBottom: 18 }}>{buffer || '0'}</div>
+      {/* role="status" so the running value announces as it's typed -- and so it can be
+          addressed at all: its text is a bare number, which collides with the key buttons. */}
+      <div role="status" style={{ textAlign: 'center', fontSize: 40, fontWeight: 800, marginBottom: 18 }}>
+        {buffer || '0'}
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
         {KEYS.map((k) => (
           <button

@@ -1,9 +1,21 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import IconButton from './IconButton';
+import { IconClose } from './icons';
 
 // Generic overlay shell reused by every modal (Add Person, Add/Edit Exercise, Routine
-// form, Past Session, Edit Set, Setup Field Editor, End Workout Confirm). `onScrim`
-// closes on backdrop tap; pass null to make the modal non-dismissable that way.
+// form, Past Session, Edit Set, Setup Field Editor, End Workout Confirm).
+//
+// A modal NEVER closes on a backdrop tap. The exits are the header's X, the footer's
+// Cancel/submit, and Escape -- all of them deliberate. This app is used one-handed on an
+// iPad mid-set, where a stray thumb on the scrim used to discard a half-built routine or an
+// unsaved note with no confirmation and no undo.
+//
+// `onClose` is the single dismissal callback and drives BOTH the header X and Escape. Every
+// modal must pass it (or a footer button that closes it), or it cannot be closed at all.
+//
+// Escape is deliberately kept even though the backdrop is gone: this dialog installs a focus
+// trap, so without Escape a keyboard user has no way out at all.
 //
 // Rendered through a portal onto document.body. Without that, a modal is subject to the
 // stacking context of whatever it happens to be declared inside -- and .app-chrome is
@@ -13,17 +25,23 @@ import { createPortal } from 'react-dom';
 // to render AddPersonModal outside its own sticky wrapper.
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+// Same set minus the header's X -- see the autofocus note below for why it is excluded there
+// but not from the Tab cycle.
+const FOCUSABLE_NOT_CLOSE = FOCUSABLE.split(', ')
+  .map((selector) => `${selector}:not([data-modal-close])`)
+  .join(', ');
 
-export default function Modal({ width = 320, onScrim, children, align = 'center', labelledBy }) {
+export default function Modal({ width = 320, onClose, title, children, align = 'center', labelledBy }) {
   const dialogRef = useRef(null);
   const restoreFocusRef = useRef(null);
-  // onScrim is read through a ref, NOT listed as an effect dependency. Callers pass an inline
+  const titleId = useId();
+  // onClose is read through a ref, NOT listed as an effect dependency. Callers pass an inline
   // arrow, so its identity changes on every render of the parent -- and with it in the dep array
   // the whole effect tore down and re-ran on each keystroke, re-running the initial autofocus and
   // yanking the caret out of whatever field you were typing in. That's what made the Customize
   // Exercise modal's focus jump from the note box to the tag input and back.
-  const onScrimRef = useRef(onScrim);
-  onScrimRef.current = onScrim;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     restoreFocusRef.current = document.activeElement;
@@ -32,14 +50,17 @@ export default function Modal({ width = 320, onScrim, children, align = 'center'
 
     // Move focus into the dialog on open, preferring its first real control so a keyboard
     // or screen-reader user lands somewhere useful rather than at the top of the page.
+    // The header's X is skipped here -- it is first in DOM order, so without the exclusion
+    // it would steal the focus that belongs to the name field / note box / first stepper.
+    // It stays in the Tab cycle below; it just isn't where focus lands on open.
     // Runs exactly once, on open -- see the ref note above.
-    const first = dialog.querySelector(FOCUSABLE);
+    const first = dialog.querySelector(FOCUSABLE_NOT_CLOSE);
     (first || dialog).focus({ preventScroll: true });
 
     function onKeyDown(event) {
-      if (event.key === 'Escape' && onScrimRef.current) {
+      if (event.key === 'Escape' && onCloseRef.current) {
         event.stopPropagation();
-        onScrimRef.current();
+        onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -78,7 +99,7 @@ export default function Modal({ width = 320, onScrim, children, align = 'center'
       // Return focus to whatever opened the modal, so keyboard position isn't lost.
       if (restoreFocusRef.current instanceof HTMLElement) restoreFocusRef.current.focus({ preventScroll: true });
     };
-    // Mount/unmount only. Adding onScrim here is the bug described above.
+    // Mount/unmount only. Adding onClose here is the bug described above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -86,7 +107,7 @@ export default function Modal({ width = 320, onScrim, children, align = 'center'
 
   return createPortal(
     <div
-      onClick={onScrim}
+      // No onClick: the backdrop is inert on purpose. See the header comment.
       style={{
         position: 'fixed',
         inset: 0,
@@ -102,10 +123,9 @@ export default function Modal({ width = 320, onScrim, children, align = 'center'
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby={labelledBy}
+        aria-labelledby={labelledBy || (title ? titleId : undefined)}
         tabIndex={-1}
         ref={dialogRef}
-        onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--color-surface)',
           // In light mode the dimmed scrim is far lighter than --color-surface, so the modal
@@ -129,6 +149,43 @@ export default function Modal({ width = 320, onScrim, children, align = 'center'
           animation: `${isSheet ? 'modalSheetIn' : 'modalDialogIn'} var(--dur-slow) var(--ease-out)`,
         }}
       >
+        {(title || onClose) && (
+          // Sticky, not static: the panel is maxHeight 80vh with its own scrollbar, and the
+          // routine form is genuinely taller than that. A close button that scrolls out of
+          // reach is what would make "the backdrop no longer closes this" feel like a trap.
+          // The negative margins cancel the panel's own padding so the background spans the
+          // full width and content scrolls underneath rather than beside it.
+          <div
+            style={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 1,
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: title ? 'space-between' : 'flex-end',
+              gap: 'var(--space-3)',
+              background: 'var(--color-surface)',
+              margin: 'calc(var(--space-6) * -1) calc(var(--space-6) * -1) var(--space-4)',
+              padding: 'var(--space-6) var(--space-6) var(--space-3)',
+            }}
+          >
+            {title && (
+              <h2
+                id={titleId}
+                style={{
+                  margin: 0,
+                  fontSize: 'var(--text-xl)',
+                  fontWeight: 'var(--weight-bold)',
+                  color: 'var(--color-text)',
+                  minWidth: 0,
+                }}
+              >
+                {title}
+              </h2>
+            )}
+            {onClose && <IconButton icon={IconClose} label="Close" onClick={onClose} data-modal-close="" style={{ marginTop: -4, marginRight: -8 }} />}
+          </div>
+        )}
         {children}
       </div>
     </div>,

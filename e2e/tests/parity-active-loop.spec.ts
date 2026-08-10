@@ -33,7 +33,14 @@ const editButtons = (page: Page) => page.getByRole('button', { name: 'Edit', exa
 const deleteButtons = (page: Page) => page.getByRole('button', { name: 'Delete', exact: true });
 
 // The logged-set row renders as "<weight> lb × <reps>". Exact again -- the Est. 1RM readout on the
-// same screen renders "Est. 1RM · 45 lb × 8". PERSON_DEFAULTS starts a person at 45 lb x 8.
+// same screen renders it inside a longer string.
+//
+// The weight here is 0 because these specs deliberately log at whatever the prefill offers, and a
+// brand-new exercise now has no prefill at all (computePrefillDraft returns null -- see
+// utils/formulas.js). A blank weight logs as 0, i.e. a bodyweight set, which is exactly the path a
+// person hits on their first-ever pull-up. What is under test here is that the ROW is identical in
+// every connectivity mode; the number itself is incidental, and the specs that do care about the
+// number (offline-reads, offline-active-loop) set it explicitly.
 const setRow = (page: Page, weight: number, reps = 8) =>
   page.getByText(`${weight} lb × ${reps}`, { exact: true });
 
@@ -68,11 +75,55 @@ forEachConnectivityMode<void>('logging a set produces the same row', {
     await expect(page.getByText('Set 1', { exact: true })).toHaveCount(1);
     await expect(editButtons(page)).toHaveCount(1);
     await expect(deleteButtons(page)).toHaveCount(1);
-    await expect(setRow(page, 45)).toBeVisible();
+    await expect(setRow(page, 0)).toBeVisible();
   },
   afterReconnect: async (page) => {
     await expect(editButtons(page)).toHaveCount(1);
-    await expect(setRow(page, 45)).toBeVisible();
+    await expect(setRow(page, 0)).toBeVisible();
+  },
+});
+
+// The carry-forward: on an exercise with no prior session, the weight for set N+1 comes from set N
+// of TODAY, not back to the empty default. That rule reads ExerciseDetail's `displaySets`, and
+// reading `sessionSets` instead would make it work online and silently do nothing in every
+// degraded mode -- `contextSessionId` stays null for the whole outage, so the sessionSets query
+// never runs and its data stays `[]` however many sets are logged. Exactly the class of divergence
+// this harness exists to catch, so it is asserted across all four modes rather than asserted once
+// and assumed.
+forEachConnectivityMode<void>("the weight carries forward from today's previous set", {
+  setup: async (page, request) => {
+    await registerHousehold(page, request, 'Winslow');
+    await warmCatalog(page);
+  },
+  navigate: async (page) => {
+    await pickExercise(page, EXERCISE);
+  },
+  act: async (page) => {
+    // Set 1 logs at the blank default (0). Step it up before set 2 so the carried value is
+    // distinguishable from the default it would otherwise fall back to.
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByText('Set 1', { exact: true })).toHaveCount(1);
+
+    const weightRow = page.locator('.stepper-row').filter({ hasText: 'Weight' });
+    await expect
+      .poll(async () => {
+        const current = Number(await weightRow.locator('.stepper-value').textContent());
+        if (current === 25) return current;
+        await weightRow.getByRole('button', { name: current < 25 ? '+' : '−', exact: true }).click();
+        return Number(await weightRow.locator('.stepper-value').textContent());
+      }, { timeout: 15000 })
+      .toBe(25);
+
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByText('Set 2', { exact: true })).toHaveCount(1);
+  },
+  assert: async (page) => {
+    // The draft did NOT snap back to blank after set 2 was logged.
+    await expect(page.getByRole('button', { name: /^Weight \(lb\): 25\./ })).toBeVisible();
+    await expect(setRow(page, 25)).toBeVisible();
+  },
+  afterReconnect: async (page) => {
+    await expect(setRow(page, 25)).toBeVisible();
   },
 });
 
@@ -89,14 +140,14 @@ forEachConnectivityMode<void>('a set is still listed under This session after a 
   },
   act: async (page) => {
     await page.getByRole('button', { name: /Log set/ }).click();
-    await expect(setRow(page, 45)).toBeVisible();
+    await expect(setRow(page, 0)).toBeVisible();
   },
   assert: async (page) => {
-    await expect(setRow(page, 45)).toBeVisible();
+    await expect(setRow(page, 0)).toBeVisible();
   },
   afterReconnect: async (page) => {
     await page.reload();
-    await expect(setRow(page, 45)).toBeVisible();
+    await expect(setRow(page, 0)).toBeVisible();
   },
 });
 
@@ -118,19 +169,19 @@ forEachConnectivityMode<void>('correcting a just-logged set applies immediately'
 
     await editButtons(page).click();
     const dialog = page.getByRole('dialog');
-    // +5 lb per click on the weight stepper (PERSON_DEFAULTS starts at 45).
+    // +5 lb per click on the weight stepper, starting from the logged 0.
     await dialog.locator('.stepper-row').first().getByRole('button', { name: '+' }).click();
     await dialog.locator('.stepper-row').first().getByRole('button', { name: '+' }).click();
     await dialog.getByRole('button', { name: 'Save' }).click();
   },
   assert: async (page) => {
-    await expect(setRow(page, 55)).toBeVisible();
+    await expect(setRow(page, 10)).toBeVisible();
     await expect(editButtons(page)).toHaveCount(1);
   },
   afterReconnect: async (page) => {
     // If the edit had been swallowed by idempotency dedup on the create's key -- the 2026-07-30
-    // bug -- the corrected value would have reverted to 45 lb once the outbox drained.
-    await expect(setRow(page, 55)).toBeVisible();
+    // bug -- the corrected value would have reverted to the logged 0 once the outbox drained.
+    await expect(setRow(page, 10)).toBeVisible();
     await expect(editButtons(page)).toHaveCount(1);
   },
 });
@@ -169,7 +220,7 @@ forEachConnectivityMode<void>('favoriting and adding a session note both show im
 //
 // Log a set during lie-fi or while pinned offline, reconnect, let the outbox drain, then reload:
 // the set is GONE from "This session", even though it reached the server. The page snapshot proves
-// the write landed -- the summary reads "Last time · Today 45lb×8" and the Est. 1RM updated -- so
+// the write landed -- the summary reads "Last time · Today 0lb×8" and the Est. 1RM updated -- so
 // nothing is lost. What is missing is the current session's own set list. Online and hard-offline
 // both repopulate it correctly; only the two modes where the session never had a server-issued id
 // during the write fail. Reproducible at --workers=1, so it is not the known worker contention.

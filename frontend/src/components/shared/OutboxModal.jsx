@@ -5,8 +5,7 @@ import Modal from './Modal';
 // they logged was lost before they reconnect, rather than trusting OfflineBanner's bare count.
 export default function OutboxModal({ items, onClose }) {
   return (
-    <Modal width={360} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Waiting to sync ({items.length})</div>
+    <Modal width={360} onClose={onClose} title={`Waiting to sync (${items.length})`}>
       <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 18 }}>
         These will send automatically once you&rsquo;re back online.
       </div>
@@ -32,6 +31,9 @@ export default function OutboxModal({ items, onClose }) {
           </div>
         ))}
       </div>
+      {/* "Done", not "Close": the header's X is labelled "Close", and Playwright matches an
+          accessible name as a substring, so two controls named "Close" in one dialog is a
+          strict-mode violation. Keep labels on one screen mutually non-containing. */}
       <button
         onClick={onClose}
         style={{
@@ -47,7 +49,7 @@ export default function OutboxModal({ items, onClose }) {
           cursor: 'pointer',
         }}
       >
-        Close
+        Done
       </button>
     </Modal>
   );

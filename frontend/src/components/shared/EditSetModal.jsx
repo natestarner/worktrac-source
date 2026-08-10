@@ -47,8 +47,7 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
   }
 
   return (
-    <Modal width={320} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 18 }}>Edit set</div>
+    <Modal width={320} onClose={onClose} title="Edit set">
       <WeightRepsStepper
         label={`Weight (${set.unit || 'lb'})`}
         value={weight}

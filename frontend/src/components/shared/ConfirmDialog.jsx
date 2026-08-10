@@ -18,7 +18,7 @@ export default function ConfirmDialog() {
   }
 
   return (
-    <Modal width={320} labelledBy="confirm-dialog-message">
+    <Modal width={320} labelledBy="confirm-dialog-message" onClose={closeConfirm}>
       <div id="confirm-dialog-message" style={{ fontSize: 'var(--text-md)', fontWeight: 'var(--weight-semibold)', marginBottom: 'var(--space-6)' }}>
         {confirmDialog.message}
       </div>

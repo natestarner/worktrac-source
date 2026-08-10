@@ -46,6 +46,56 @@ test.describe('Routines', () => {
     await expect(page.getByText('Routine complete!')).toBeVisible();
   });
 
+  // A routine is meant to walk you through a whole workout, and plenty of workouts cycle back to
+  // the same lift (bench, row, bench). The builder used to remove an exercise from the picker the
+  // moment it was added, which made that unbuildable. Nothing in the schema ever forbade it --
+  // routine_exercises has no unique index on (routine_id, exercise_id) -- and the in-workout
+  // stepper was already index-based, so this covers the whole path end to end.
+  test('build a routine that repeats an exercise and step through every position', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Quinn');
+
+    await page.getByRole('link', { name: 'Routines' }).click();
+    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Cycle');
+
+    await addExerciseToRoutine(page, 'Barbell Bench Press');
+    await addExerciseToRoutine(page, 'Dumbbell Overhead Press');
+    // The same exercise a second time -- the chip/search row is still there to tap.
+    await addExerciseToRoutine(page, 'Barbell Bench Press');
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', { name: 'Remove: Barbell Bench Press (1 of 3)' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Remove: Barbell Bench Press (3 of 3)' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Save routine' }).click();
+
+    // Order survives the round trip, duplicate included.
+    await expect(page.getByText('Barbell Bench Press, Dumbbell Overhead Press, Barbell Bench Press')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Start routine' }).click();
+    await expect(page).toHaveURL(/\/app\/log/);
+    await expect(page.getByText('1 of 3')).toBeVisible();
+
+    // Log at position 1, walk to position 3 (the same exercise again), and log there too. Both
+    // sets belong to one exercise in one session, so the second position resumes the first's list
+    // rather than starting a fresh one -- that is the point of cycling back.
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await expect(page.getByText('Set 1', { exact: true })).toBeVisible();
+    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+
+    await page.getByRole('button', { name: 'Next exercise' }).click();
+    await expect(page.getByText('2 of 3')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Next exercise' }).click();
+    await expect(page.getByText('3 of 3')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await expect(page.getByText('Set 2', { exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Finish routine' }).click();
+    await expect(page.getByText('Routine complete!')).toBeVisible();
+  });
+
   test('copy a routine to another person and it appears independently in their routine list', async ({ page, request }) => {
     await registerHousehold(page, request, 'Jordan');
 

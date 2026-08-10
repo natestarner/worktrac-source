@@ -45,8 +45,7 @@ export default function CopyRoutineModal({ routine, personId, onClose }) {
   });
 
   return (
-    <Modal width={320} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Copy &quot;{routine.name}&quot; to&hellip;</div>
+    <Modal width={320} onClose={onClose} title={`Copy "${routine.name}" to…`}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: error ? 6 : 16 }}>
         {otherPeople.map((p) => (
           <label

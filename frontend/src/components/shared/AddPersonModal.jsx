@@ -35,8 +35,7 @@ export default function AddPersonModal({ onClose }) {
   );
 
   return (
-    <Modal width={320} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Add a person</div>
+    <Modal width={320} onClose={onClose} title="Add a person">
       <input
         autoFocus
         value={name}

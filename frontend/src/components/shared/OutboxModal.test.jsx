@@ -35,7 +35,18 @@ describe('OutboxModal', () => {
     expect(screen.getByText('Sam')).toBeInTheDocument();
   });
 
-  it('calls onClose from the Close button', () => {
+  // "Done", not "Close" -- the shared Modal header's X owns the name "Close" now, and two
+  // controls with the same accessible name in one dialog is a strict-mode violation.
+  it('calls onClose from the Done button', () => {
+    const onClose = vi.fn();
+    render(<OutboxModal items={items} onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('calls onClose from the header X', () => {
     const onClose = vi.fn();
     render(<OutboxModal items={items} onClose={onClose} />);
 
