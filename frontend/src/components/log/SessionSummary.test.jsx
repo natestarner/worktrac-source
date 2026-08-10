@@ -53,18 +53,46 @@ describe('SessionSummary', () => {
     expect(screen.getByText('135lb×5')).toBeInTheDocument();
   });
 
-  it('removing a fully-synced entry deletes each of its sets via the network (unchanged pre-existing behavior)', async () => {
+  it('removing a fully-synced entry deletes each of its sets, via the durable DELETE_SET write', async () => {
     listSessionSets.mockResolvedValue([{ id: 55 }, { id: 56 }]);
     const entries = [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 55, weight: 135, reps: 5, unit: 'lb' }] }];
     renderWithQuery(
-      <SessionSummary entries={entries} loading={false} sessionId={101} onSelectExercise={onSelectExercise} onChanged={onChanged} />,
+      <SessionSummary entries={entries} loading={false} sessionId={101} personId={7} onSelectExercise={onSelectExercise} onChanged={onChanged} />,
+    );
+
+    fireEvent.click(screen.getByText('Remove'));
+
+    // Still reaches the same api call -- it just routes through the outbox now, so a connection
+    // drop mid-remove retries instead of losing the delete.
+    await waitFor(() => expect(deleteSet).toHaveBeenCalledWith(55));
+    expect(deleteSet).toHaveBeenCalledWith(56);
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  // Regression: SessionSummary was first wired up WITHOUT LogTab passing personId. The deletes
+  // still fired, so every assertion above stayed green -- but DELETE_SET's onSettled
+  // (reconcileSetChange) invalidates history/prs/summary/trends BY personId, so it invalidated
+  // `undefined`, nothing refetched, and the removed exercise sat on screen forever looking like
+  // the delete had failed. A silently-undefined prop that breaks only the invalidation is exactly
+  // the kind of thing the network assertions above cannot see.
+  it('carries the personId on each delete so the reconcile invalidates the right caches', async () => {
+    listSessionSets.mockResolvedValue([{ id: 55 }]);
+    const entries = [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 55, weight: 135, reps: 5, unit: 'lb' }] }];
+    const { queryClient } = renderWithQuery(
+      <SessionSummary entries={entries} loading={false} sessionId={101} personId={7} onSelectExercise={onSelectExercise} onChanged={onChanged} />,
     );
 
     fireEvent.click(screen.getByText('Remove'));
 
     await waitFor(() => expect(deleteSet).toHaveBeenCalledWith(55));
-    expect(deleteSet).toHaveBeenCalledWith(56);
-    expect(onChanged).toHaveBeenCalled();
+    const deleteVars = queryClient
+      .getMutationCache()
+      .getAll()
+      .filter((m) => m.options.mutationKey?.[0] === 'deleteSet')
+      .map((m) => m.state.variables);
+
+    expect(deleteVars).toHaveLength(1);
+    expect(deleteVars[0]).toMatchObject({ setId: 55, personId: 7, exerciseId: 1, sessionId: 101 });
   });
 
   it('removing an entry that is only offline-logged (not yet synced) cancels its pending create, with no network calls', async () => {

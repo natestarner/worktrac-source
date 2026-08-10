@@ -58,6 +58,35 @@ test.describe('Log workout', () => {
     await page.screenshot({ path: 'test-results/profile-tab.png' });
   });
 
+  // Removing a synced exercise from the session summary had NO e2e coverage at all, which mattered
+  // once its already-synced deletes moved from a direct awaited `deleteSet` onto the durable
+  // DELETE_SET write: the dispatch no longer blocks, so `onChanged()`'s refetch now races the
+  // server delete. If that race is lost the row comes back -- so this asserts it stays gone,
+  // including across a reload (i.e. the delete really reached the server, not just the cache).
+  test('removing a synced exercise from the session summary keeps it gone', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Quinn');
+    await pickExercise(page, 'Barbell Bench Press');
+
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(1);
+
+    await page.getByRole('button', { name: '← All exercises' }).click();
+    const sessionList = page.locator('.session-exercises');
+    await expect(sessionList.getByText('Barbell Bench Press')).toBeVisible();
+
+    await sessionList.getByRole('button', { name: 'Remove' }).click();
+    // ConfirmDialog's confirm button is always labelled "Delete", whatever the action.
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+
+    await expect(sessionList.getByText('Barbell Bench Press')).toBeHidden();
+    // The refetch that races the delete would resurrect the row here if the write hadn't landed.
+    await page.waitForTimeout(1500);
+    await expect(sessionList.getByText('Barbell Bench Press')).toBeHidden();
+
+    await page.reload();
+    await expect(page.locator('.session-exercises').getByText('Barbell Bench Press')).toBeHidden();
+  });
+
   test('search is forgiving of word order', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
 
