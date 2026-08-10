@@ -24,6 +24,7 @@ need the "why" or the debugging story.
 | 2026-08-08 | [An ended workout came back to life on lower](2026-08-08-ended-workout-resurrected-by-persisted-cache.md) — a silent SW reload beat the throttled persist of the end | Offline / persistence |
 | 2026-08-08 | [Hovering the Trends weekly chart blanked the page](2026-08-08-trends-hover-blank-page.md) — a persisted UI slice predating a new field hydrated as `undefined` | Frontend state / trends |
 | 2026-08-08 | [A restored cache entry looked "freshly checked", so nothing refetched it](2026-08-08-restored-cache-looks-fresh.md) — a routine created just before a reload stayed missing for minutes | Offline / persistence |
+| 2026-08-09 | [Dependabot misclassified a JDK bump as minor/patch](2026-08-09-dependabot-jdk-tag-misclassification.md) — a compound Docker tag hid a major JDK jump from the existing `ignore:` rule | CI / Docker |
 
 ## Adding a new incident
 
