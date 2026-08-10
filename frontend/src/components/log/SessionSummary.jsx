@@ -1,13 +1,14 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useUI } from '../../context/UIContext';
-import { listSessionSets, deleteSet } from '../../api/sets';
+import { listSessionSets } from '../../api/sets';
 import { queryKeys } from '../../api/queryKeys';
 import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
+import { dispatchDurableWrite, DELETE_SET_MUTATION_KEY } from '../../lib/queryClient';
 import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import SetPillRow from '../shared/SetPillRow';
 
-export default function SessionSummary({ entries, loading, sessionId, onSelectExercise, onChanged }) {
+export default function SessionSummary({ entries, loading, sessionId, personId, onSelectExercise, onChanged }) {
   const { openConfirm } = useUI();
   const queryClient = useQueryClient();
 
@@ -24,12 +25,23 @@ export default function SessionSummary({ entries, loading, sessionId, onSelectEx
       }
     });
 
-    // Already-synced sets in this entry still go through this direct (online-only) removal --
-    // pre-existing behavior, unchanged here; making it durable/offline-safe is a separate gap
-    // from the one this fixes (a not-yet-synced entry being removable at all).
+    // Already-synced sets go through the SAME durable DELETE_SET write every other delete in the
+    // app uses (the set row's own Delete button, EditSetModal), instead of calling the api layer
+    // directly. This was the last write bypassing the outbox: it meant removing an exercise from
+    // the session summary was the one delete that could not survive a connection drop, and the one
+    // whose replay-404 was not already treated as success. The OfflineDisabledWrap around the
+    // entry point stays for now -- see the register in .claude/rules/resilience.md -- because the
+    // listSessionSets read this needs to enumerate the rows is itself an online-only fetch.
     if (optimisticIds.length < entry.sets.length) {
       const sets = await listSessionSets(sessionId, entry.exerciseId);
-      await Promise.all(sets.map((s) => deleteSet(s.id)));
+      sets.forEach((s) =>
+        dispatchDurableWrite(queryClient, DELETE_SET_MUTATION_KEY, {
+          setId: s.id,
+          personId,
+          exerciseId: entry.exerciseId,
+          sessionId,
+        }),
+      );
     }
     onChanged();
   }
@@ -88,10 +100,10 @@ export default function SessionSummary({ entries, loading, sessionId, onSelectEx
               <button onClick={() => onSelectExercise(entry.exerciseId)} style={editLinkStyle}>
                 Edit
               </button>
-              {/* Removing an entry that has any already-synced set still needs a connection (see
-                  handleRemove's direct listSessionSets+deleteSet branch above) -- an entry that's
-                  only offline-logged so far can still be removed offline (cancels the pending
-                  create locally, no network call). */}
+              {/* Removing an entry with any already-synced set still needs a connection: the deletes
+                  themselves are durable now, but enumerating which rows to delete needs a live
+                  listSessionSets read. An entry that is only offline-logged so far can still be
+                  removed offline -- that path just cancels the pending creates locally. */}
               <OfflineDisabledWrap
                 message="Removing this needs a connection."
                 when={entry.sets.some((s) => !s.optimistic)}

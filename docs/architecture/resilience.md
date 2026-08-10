@@ -152,13 +152,30 @@ Recorded here rather than fixed silently, so they are visible to the next person
   into branch CI is a shared-infra decision with its own cost profile.
 - **Storage-unavailable is largely untested.** The swallow-and-degrade paths exist and are
   commented, but almost nothing exercises them.
-- **`shouldRetryWrite` treats every 4xx as definitive.** `408` and `429` are retryable in
-  practice. Currently latent — `bucket4j` rate-limits only registration and password reset, never
-  workout writes — but it becomes live the moment a write endpoint gains a rate limit or Azure
-  ingress returns a 429 of its own.
-- **The Azure Container Apps liveness probe target is unverified from this repo.** If it points at
-  `/actuator/health`, a DB outage fails liveness on every replica at once and Container Apps
-  restarts them all — turning a recoverable degraded state into a crash-loop, since restarting
-  never fixes a DB outage. Spring Boot's `management.endpoint.health.probes.enabled` splits
-  liveness from readiness for exactly this. Probe configuration lives in `worktrac-deploy`/Azure,
-  not here.
+- **A set logged during lie-fi or while pinned offline disappears from "This session" after a
+  reload**, even though it reached the server (the summary and Est. 1RM both show it). Online and
+  hard-offline repopulate correctly; only the two modes where the session never had a server id
+  fail. Found by the parity harness on its first run and reproducible at `--workers=1`; recorded
+  as a `fixmeModes` entry in `e2e/tests/parity-active-loop.spec.ts` with the full reproduction.
+  Consistent with two documented mechanisms compounding — `contextSessionId` staying null for the
+  whole degraded stretch, and a rehydrated cache entry keeping its old `dataUpdatedAt` while
+  `sessionSets` is session-scoped and therefore neither cache-warmed nor on the
+  `refreshAfterRestore` list. Deliberately not fixed blind: it sits in the
+  ExerciseDetail/queryClient logic that produced most of `docs/incidents/`.
+
+### Checked and closed
+
+- **The Azure Container Apps liveness probe is NOT a hazard.** The concern was that pointing a
+  liveness probe at `/actuator/health` would make a DB outage fail liveness on every replica at
+  once, so Container Apps would restart them all — turning a recoverable degraded state into a
+  crash-loop, since restarting never fixes a DB outage. Verified 2026-08-10 via the read-only
+  service principal: `az containerapp show --query "properties.template.containers[].probes"`
+  returns `[]` for **both** `worktrac-backend-lower` and `worktrac-backend-prod`. No probes are
+  configured, so Container Apps falls back to its default TCP check, which is unaffected by DB
+  state. **If a probe is ever added, do not point liveness at `/actuator/health`** — use Spring
+  Boot's `management.endpoint.health.probes.enabled` and the `/actuator/health/liveness` group.
+- **`shouldRetryWrite` treating every 4xx as definitive** — fixed. `408 Request Timeout` and
+  `429 Too Many Requests` are now retryable, since both explicitly mean "try again" and dropping a
+  durable write on either violates the core invariant. The boundary is tested on both sides so the
+  carve-out cannot widen into "retry all 4xx", which would head-of-line-block the serial outbox
+  scope forever.

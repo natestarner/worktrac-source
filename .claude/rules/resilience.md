@@ -59,7 +59,8 @@ There is already exactly one way to do each of these. **Adding a second is the b
 | Need | Use | Not |
 |---|---|---|
 | Offline-capable write | `useDurableMutation` (component) / `dispatchDurableWrite`, `enqueueOutboxWrite` (non-component) | A bare `useMutation`, or calling `api/*` directly |
-| Online-only (Tier-3) write | `useGatedMutation` — or `useRequireOnline` / `OfflineDisabledWrap` for the gate alone | An ad-hoc `try/catch` + toast per call site |
+| Online-only (Tier-3) write | `useGatedMutation` (the **only** caller of `useRequireOnline`) | Calling `api/*` directly; an ad-hoc `try/catch` + toast per call site; `useRequireOnline` on its own |
+| Disabling a Tier-3 entry point up front | `OfflineDisabledWrap` | Hand-rolled `disabled={!online}` |
 | "Am I online?" | `useOnlineStatus` (never reflects lie-fi — deliberate) | `navigator.onLine`, a second connectivity flag |
 | "Is the backend struggling?" | `useConnectionTrouble` | Inspecting query error state by hand |
 | Ordering queued writes | `byEnqueueOrder` / `enqueueSeq` | TanStack's `submittedAt` — re-stamped on every re-execute |
@@ -90,6 +91,9 @@ is added here with a reason** — and none of these may be "simplified" away.
 | `2026-07-30`'s two accepted UX costs | Revert-then-correct flicker; PR celebration reflects the pre-edit value | "Fixing" them reintroduces connectivity-mode special-casing, which is what the redesign exists to remove |
 | `LogTab.jsx`'s MutationCache subscriber | Calls a state setter inline, unlike the three hooks | Deliberately left alone; see `offline-internals.md` |
 | DB-down, backend-up | A *pinned* user can't unpin (health 503); an *unpinned* user stays "online" (a 503 is a fulfilled response, so lie-fi never trips) | Both degrade correctly by different routes. Do **not** "fix" one to match the other |
+| `AddEditExerciseModal` | Three save paths: rename → gated, `requireSyncedExercise` → gated, everything else → durable outbox | Routines sends the new exercise's id straight into a non-idempotent `createRoutine`, which cannot replay against a temp id. All three now share **one** gate/error mechanism; only the branch itself is local |
+| `SessionSummary` remove | The deletes are durable, but the entry point stays `OfflineDisabledWrap`ped | Enumerating which rows to delete needs a live `listSessionSets` read. The *write* is no longer the limitation — the *read* is |
+| `getRaw` (export) | 60s timeout vs `request`'s 15s | A full-history export is legitimately slow; aborting a working download would be worse. Bounded is the point, not the number |
 
 ## Prove it, don't argue it
 

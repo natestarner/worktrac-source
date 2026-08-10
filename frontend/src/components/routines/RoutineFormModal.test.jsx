@@ -5,6 +5,13 @@ import { createRoutine } from '../../api/routines';
 
 vi.mock('../../api/routines', () => ({ createRoutine: vi.fn(), updateRoutine: vi.fn() }));
 
+// Saving is a Tier-3 write and now goes through useGatedMutation, which composes useRequireOnline
+// (for the offline gate) and useUI (for the failure toast). Mocked rather than wrapped in a real
+// UIProvider, matching how every other component test here handles UIContext -- ConfirmDialog's is
+// the deliberate exception because it drives a real openConfirm cycle.
+vi.mock('../../context/UIContext', () => ({ useUI: () => ({ showToast: vi.fn() }) }));
+vi.mock('../../hooks/useOnlineStatus', () => ({ useOnlineStatus: () => true }));
+
 // The "Add exercise" pool defaults to the person's favorites/logged list; typing a search
 // reveals the whole catalog. There are no category pills anymore -- categories are per-person.
 const personExercises = [

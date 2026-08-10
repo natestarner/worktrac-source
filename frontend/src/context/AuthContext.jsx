@@ -188,7 +188,7 @@ export function AuthProvider({ children }) {
     // Only restore when the account actually changed -- the same account's queued writes never left
     // the live mutation cache across a mere 401, and restoring again would duplicate them.
     if (switchedAccount) await restoreOutbox(queryClient);
-    if (onlineManager.isOnline()) flushOutbox();
+    flushOutbox();
     requestPersistentStorage();
     // freshLogin distinguishes this explicit, credentials-based sign-in from a silent boot/reconnect
     // reconciliation -- AppStateContext reads it to reset every person's last-open tab back to Log,
@@ -214,7 +214,7 @@ export function AuthProvider({ children }) {
     // still be sitting in memory on this shared device -- same protection as login() above.
     const switchedAccount = adoptOutboxAccount(data.account?.id);
     if (switchedAccount) await restoreOutbox(queryClient);
-    if (onlineManager.isOnline()) flushOutbox();
+    flushOutbox();
     requestPersistentStorage();
     // See login()'s comment on freshLogin -- a brand-new confirmed registration is equally a "start
     // fresh on Log" moment, not a resume.

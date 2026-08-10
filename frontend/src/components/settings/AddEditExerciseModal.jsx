@@ -5,9 +5,8 @@ import { queryKeys } from '../../api/queryKeys';
 import { CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
 import { newTempExerciseId } from '../../lib/exerciseIdMap';
 import { newId } from '../../utils/id';
-import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { useDurableMutation } from '../../hooks/useDurableMutation';
-import { useUI } from '../../context/UIContext';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
@@ -30,14 +29,42 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   const isEditing = !!exercise;
   const [name, setName] = useState(exercise?.name || initialName || '');
   const [nameError, setNameError] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const online = useOnlineStatus();
-  const { showToast } = useUI();
+  const { run, pending: saving } = useGatedMutation();
   const queryClient = useQueryClient();
   // Durable create (create + auto-favorite, both idempotent) so an offline create replays safely and
   // records its temp->real id mapping on sync. See queryClient.js.
   const createExerciseMutation = useDurableMutation({ mutationKey: CREATE_EXERCISE_MUTATION_KEY });
 
+  // Renaming an existing exercise stays online-only (a Customize-screen action, Tier 3).
+  // Gated up front so a dead-but-reachable backend (lie-fi) toasts immediately instead of hanging
+  // for the request timeout, and caught, since the request can still fail after starting -- Save
+  // must never leave the button stuck with the modal open. Both halves now come from
+  // useGatedMutation instead of being open-coded here.
+  const saveRename = run(
+    async (trimmed) => {
+      const updated = await updateExercise(exercise.id, { name: trimmed });
+      onSaved(updated);
+    },
+    { errorMessage: "Couldn't save -- check your connection and try again." },
+  );
+
+  // A caller that needs a real, already-synced exercise id (the Routines form sends the created
+  // exercise's id straight into its own non-durable, non-idempotent createRoutine/updateRoutine
+  // call, which can't be replayed against a temp id) opts into the online-only path via
+  // requireSyncedExercise.
+  const saveSynced = run(
+    async (trimmed) => {
+      const created = await addExercise({ name: trimmed });
+      if (personId) await favoriteExercise(personId, created.id);
+      onSaved(created);
+    },
+    { errorMessage: "Couldn't create -- check your connection and try again." },
+  );
+
+  // Three paths, and all three are deliberate -- see the register in .claude/rules/resilience.md.
+  // What is NOT deliberate is having three DIFFERENT implementations of "gate on online, show a
+  // toast, track a busy flag, catch the failure": the two gated paths now share one mechanism with
+  // every other Tier-3 write in the app, leaving only the branch itself here.
   async function handleSave() {
     const trimmed = name.trim();
     if (!trimmed) {
@@ -45,49 +72,8 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       return;
     }
 
-    // Renaming an existing exercise stays online-only (it's a Customize-screen action, Tier 3).
-    // Gated up front so a dead-but-reachable backend (lie-fi) shows a toast right away instead of
-    // hanging for the request timeout; caught too, since the request can still fail/timeout after
-    // starting -- either way Save must never leave the button stuck and the modal never closing.
-    if (isEditing) {
-      if (!online) {
-        showToast('You need a connection to do that.', { tone: 'info' });
-        return;
-      }
-      setSaving(true);
-      try {
-        const updated = await updateExercise(exercise.id, { name: trimmed });
-        onSaved(updated);
-      } catch {
-        showToast("Couldn't save -- check your connection and try again.", { tone: 'error' });
-      } finally {
-        setSaving(false);
-      }
-      return;
-    }
-
-    // A caller that needs a real, already-synced exercise id (the Routines form sends the created
-    // exercise's id straight into its own non-durable, non-idempotent createRoutine/updateRoutine
-    // call, which can't be replayed against a temp id) opts into the online-only path via
-    // requireSyncedExercise. Same lie-fi guard as the rename path above: a dead-but-reachable
-    // backend toasts immediately/on failure instead of hanging Save forever.
-    if (requireSyncedExercise) {
-      if (!online) {
-        showToast('You need a connection to do that.', { tone: 'info' });
-        return;
-      }
-      setSaving(true);
-      try {
-        const created = await addExercise({ name: trimmed });
-        if (personId) await favoriteExercise(personId, created.id);
-        onSaved(created);
-      } catch {
-        showToast("Couldn't create -- check your connection and try again.", { tone: 'error' });
-      } finally {
-        setSaving(false);
-      }
-      return;
-    }
+    if (isEditing) return saveRename(trimmed);
+    if (requireSyncedExercise) return saveSynced(trimmed);
 
     // Every other caller (the Log tab): always take the optimistic outbox path, even while
     // genuinely online -- Save closes instantly and can never hang against a dead-but-reachable

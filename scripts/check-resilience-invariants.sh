@@ -134,6 +134,24 @@ if [ "$(count_in 'navigator\.onLine' "$SRC/lib/offlineMode.js")" -eq 0 ]; then
 fi
 
 # ---------------------------------------------------------------------------------------------
+# 3b. Tier-3 (online-only) writes go through useGatedMutation, which is the only thing that should
+#     reach for useRequireOnline directly. Every component that used to call it open-coded its own
+#     error handling on top -- and most open-coded nothing, so a failed write vanished (Button
+#     swallows a rejected onClick by design). OfflineDisabledWrap is unaffected: it greys out an
+#     entry point, it does not perform the write.
+# ---------------------------------------------------------------------------------------------
+OUT=$(violations '\buseRequireOnline\b' "$SRC/hooks/useGatedMutation.js" "$SRC/hooks/useRequireOnline.js")
+if [ -n "$OUT" ]; then
+  fail "useRequireOnline used outside hooks/useGatedMutation.js"
+  echo "$OUT" >&2
+  echo "  -> Use useGatedMutation for a Tier-3 write: it composes the same gate and adds the" >&2
+  echo "     pending flag and the error toast that every open-coded copy was missing." >&2
+fi
+if [ "$(count_in '\buseRequireOnline\b' "$SRC/hooks/useGatedMutation.js")" -eq 0 ]; then
+  fail "useGatedMutation.js no longer uses useRequireOnline -- this check's assumption has rotted."
+fi
+
+# ---------------------------------------------------------------------------------------------
 # 4. Ordering keys off the immutable enqueueSeq, never TanStack's submittedAt, which is re-stamped
 #    to "now" on every re-execute. outboxSequence.js keeps one reference to it as a legacy
 #    tie-break for entries queued before enqueueSeq existed. See 2026-08-01-outbox-reorder.
@@ -151,14 +169,19 @@ fi
 #    stops them GROWING while the refactor lands. Lower the number when you remove one; a count
 #    below the pin is also an error, so the pin can never silently drift out of date.
 # ---------------------------------------------------------------------------------------------
-EXPECTED_FLUSH_CALLERS=5   # App.jsx x3, AuthContext.jsx x2 -- each re-deriving "should I flush?"
+# Five legitimately-distinct triggers: online transition, tab visibility, and boot restore
+# (App.jsx), plus login and confirmEmail (AuthContext.jsx). Each used to re-derive its own
+# `if (onlineManager.isOnline())` gate; that precondition now lives inside flushOutbox alongside
+# the auth-token one, so these are bare calls. The pin remains because a SIXTH trigger is a design
+# decision -- when should a queued write be retried? -- and deserves to be noticed, not slipped in.
+EXPECTED_FLUSH_CALLERS=5
 ACTUAL_FLUSH_CALLERS=$(count_where '\bflushOutbox\(' outside "$SRC/lib/")
 if [ "$ACTUAL_FLUSH_CALLERS" -ne "$EXPECTED_FLUSH_CALLERS" ]; then
   fail "flushOutbox() call-site count is $ACTUAL_FLUSH_CALLERS, pinned at $EXPECTED_FLUSH_CALLERS"
   violations '\bflushOutbox\(' >&2
-  echo "  -> Every caller re-derives the same 'am I online?' gate. Let flushOutbox() self-gate" >&2
-  echo "     (it already self-gates on the auth token) rather than adding another copy." >&2
-  echo "     If you REMOVED one, lower EXPECTED_FLUSH_CALLERS in this script." >&2
+  echo "  -> flushOutbox already self-gates on connectivity AND the auth token -- do not wrap a" >&2
+  echo "     call site in its own precondition. If this is a genuinely new retry trigger, raise" >&2
+  echo "     EXPECTED_FLUSH_CALLERS with a comment saying what it is; if you removed one, lower it." >&2
 fi
 
 # A swallowed rejection in the outbox machinery is invisible by construction -- 2026-08-01 named

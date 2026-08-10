@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createRoutine, updateRoutine } from '../../api/routines';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import AddEditExerciseModal from '../settings/AddEditExerciseModal';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
@@ -20,6 +21,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   const [locallyCreated, setLocallyCreated] = useState([]);
   const [nameError, setNameError] = useState(false);
   const [exercisesError, setExercisesError] = useState(false);
+  const { run } = useGatedMutation();
 
   // Names resolve against the full catalog (plus anything just created in this modal) so a
   // selected exercise always renders, whatever list it came from.
@@ -64,21 +66,30 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
     if (onExerciseCreated) await onExerciseCreated();
   }
 
-  async function handleSave() {
-    const trimmed = name.trim();
-    const hasExercises = selectedIds.length > 0;
-    if (!trimmed || !hasExercises) {
-      setNameError(!trimmed);
-      setExercisesError(!hasExercises);
-      return;
-    }
-    if (isEditing) {
-      await updateRoutine(personId, routine.id, { name: trimmed, exerciseIds: selectedIds });
-    } else {
-      await createRoutine(personId, { name: trimmed, exerciseIds: selectedIds });
-    }
-    onSaved();
-  }
+  // Routine CRUD is Tier-3 (online-gated): createRoutine/updateRoutine are not idempotent, so they
+  // must never be queued for replay. Previously this had no error path at all -- Button swallows a
+  // rejected onClick by design, so a failed save just stopped with the modal open and no message.
+  const handleSave = run(
+    async () => {
+      const trimmed = name.trim();
+      const hasExercises = selectedIds.length > 0;
+      if (!trimmed || !hasExercises) {
+        setNameError(!trimmed);
+        setExercisesError(!hasExercises);
+        return;
+      }
+      if (isEditing) {
+        await updateRoutine(personId, routine.id, { name: trimmed, exerciseIds: selectedIds });
+      } else {
+        await createRoutine(personId, { name: trimmed, exerciseIds: selectedIds });
+      }
+      onSaved();
+    },
+    {
+      offlineMessage: 'Saving a routine needs a connection.',
+      errorMessage: "Couldn't save that routine.",
+    },
+  );
 
   return (
     <Modal width={420} onScrim={onClose}>

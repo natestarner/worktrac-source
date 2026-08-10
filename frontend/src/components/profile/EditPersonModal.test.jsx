@@ -5,6 +5,12 @@ import { updatePerson } from '../../api/people';
 import { useAuth } from '../../context/AuthContext';
 
 vi.mock('../../api/people', () => ({ updatePerson: vi.fn() }));
+
+// Renaming is a Tier-3 write and now routes through useGatedMutation, which composes useUI
+// (failure toast) and useOnlineStatus (offline gate). Mocked rather than wrapped in real
+// providers, matching the convention every other component test here uses.
+vi.mock('../../context/UIContext', () => ({ useUI: () => ({ showToast: vi.fn() }) }));
+vi.mock('../../hooks/useOnlineStatus', () => ({ useOnlineStatus: () => true }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 
 describe('EditPersonModal validation', () => {

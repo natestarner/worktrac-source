@@ -5,7 +5,7 @@ import { createPastSession } from '../../api/sessions';
 import { queryKeys } from '../../api/queryKeys';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
-import { useRequireOnline } from '../../hooks/useRequireOnline';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { localDateTimeToIso, toLocalDateStr, toLocalTimeStr } from '../../utils/datetime';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
@@ -16,7 +16,7 @@ export default function PastSessionModal({ onClose }) {
   const queryClient = useQueryClient();
   const { activePersonId, startEditingSession } = useAppState();
   const { people } = useAuth();
-  const { online, requireOnline } = useRequireOnline();
+  const { online, run } = useGatedMutation();
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
 
   const now = new Date().toISOString();
@@ -26,7 +26,7 @@ export default function PastSessionModal({ onClose }) {
   // Online-only (Tier 3): createPastSession has no idempotency key, so a queued offline replay would
   // duplicate the session -- gate it rather than let it queue. Retroactive entry is a sit-at-home
   // action anyway, never done mid-workout with no signal.
-  const handleStart = requireOnline(async () => {
+  const handleStart = run(async () => {
     const iso = localDateTimeToIso(date, time);
     const session = await createPastSession(activePersonId, iso);
     // The new (empty) session belongs in this person's History immediately.
@@ -34,7 +34,10 @@ export default function PastSessionModal({ onClose }) {
     startEditingSession(session);
     onClose();
     navigate('/app/log');
-  }, 'You need a connection to log a past workout.');
+  }, {
+    offlineMessage: 'You need a connection to log a past workout.',
+    errorMessage: "Couldn't start that past workout.",
+  });
 
   return (
     <Modal width={340} onScrim={onClose}>

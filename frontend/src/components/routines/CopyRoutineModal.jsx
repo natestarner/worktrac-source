@@ -4,6 +4,7 @@ import { copyRoutine } from '../../api/routines';
 import { queryKeys } from '../../api/queryKeys';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
@@ -14,6 +15,7 @@ export default function CopyRoutineModal({ routine, personId, onClose }) {
   const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState([]);
   const [error, setError] = useState(false);
+  const { run } = useGatedMutation();
 
   const otherPeople = people.filter((p) => p.id !== personId);
 
@@ -22,7 +24,10 @@ export default function CopyRoutineModal({ routine, personId, onClose }) {
     setError(false);
   }
 
-  async function handleCopy() {
+  // Tier-3 and NOT idempotent -- a replayed copy would duplicate the routine on every recipient,
+  // which is why this is gated rather than durable. Had no error path: a failed copy showed the
+  // success toast's absence and nothing else.
+  const handleCopy = run(async () => {
     if (selectedIds.length === 0) {
       setError(true);
       return;
@@ -34,7 +39,10 @@ export default function CopyRoutineModal({ routine, personId, onClose }) {
     const names = otherPeople.filter((p) => selectedIds.includes(p.id)).map((p) => p.name);
     showToast(`Copied "${routine.name}" to ${names.join(', ')}`);
     onClose();
-  }
+  }, {
+    offlineMessage: 'Copying a routine needs a connection.',
+    errorMessage: "Couldn't copy that routine.",
+  });
 
   return (
     <Modal width={320} onScrim={onClose}>
