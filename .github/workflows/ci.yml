@@ -63,6 +63,13 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v7
 
+      # Runs before anything else, and doesn't need JDK/Maven set up first: pure text-file
+      # check, so a mismatch fails fast instead of after a full mvn verify.
+      - name: Check JDK alignment (pom.xml vs Dockerfile)
+        if: env.RUN_REAL == 'true'
+        working-directory: .
+        run: bash scripts/check-jdk-alignment.sh
+
       - name: Set up JDK 25
         if: env.RUN_REAL == 'true'
         uses: actions/setup-java@v5

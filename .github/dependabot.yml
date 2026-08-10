@@ -98,3 +98,16 @@ updates:
         update-types:
           - "minor"
           - "patch"
+        # PR #149 (2026-08-09) slipped a JDK 25->26 bump past the ignore rule above: Dependabot
+        # classified "maven:3.9-eclipse-temurin-25" -> "maven:3-eclipse-temurin-26" as a
+        # minor/patch update because it only read the leading "3.9"->"3" segment of the compound
+        # tag, never recognizing the trailing "-eclipse-temurin-26" as the semver-major JDK jump
+        # the ignore rule above is meant to block. Excluding both images from this group means a
+        # maven/eclipse-temurin bump -- misclassified or not -- always lands as its own solo,
+        # reviewable PR instead of hiding inside a multi-package bundle. The ignore rule above
+        # still stands as a second layer for whichever bumps DO land solo; scripts/check-jdk-
+        # alignment.sh (run in backend-ci) is the backstop that catches a mismatch regardless of
+        # how it was introduced.
+        exclude-patterns:
+          - "maven"
+          - "eclipse-temurin"
