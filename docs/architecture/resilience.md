@@ -163,6 +163,15 @@ Recorded here rather than fixed silently, so they are visible to the next person
   `refreshAfterRestore` list. Deliberately not fixed blind: it sits in the
   ExerciseDetail/queryClient logic that produced most of `docs/incidents/`.
 
+- **Two specs fail locally on an untouched tree**, verified 2026-08-10 by re-running each against
+  a pre-change checkout. Neither is a regression; both are recorded here so the next person
+  doesn't spend an hour attributing them to their own diff:
+  - `offline-durability.spec.ts` → *"cold-loads from cache and boots the saved session while fully
+    offline"*. This is the direct cost of those specs having run **nowhere** — not the default
+    project, not branch CI, not the deploy runbook. Un-gating them is what surfaced it.
+  - `rest-timer-setting.spec.ts` → *"…shown together on one screen"*. Intermittent: fails on some
+    runs and passes on others, with and without changes.
+
 ### Checked and closed
 
 - **The Azure Container Apps liveness probe is NOT a hazard.** The concern was that pointing a

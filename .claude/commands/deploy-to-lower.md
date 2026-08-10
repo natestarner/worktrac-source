@@ -119,18 +119,30 @@ Prerequisites:
 
 #### Then the service-worker suite — `offline-durability.spec.ts`
 
+This one needs the **backend up but the frontend port free**, which no single script does — so
+stop only the frontend, by PID:
+
 ```bash
-bash scripts/down.sh                              # frees this worktree's frontend port
-source scripts/worktree-env.sh && cd e2e && npm run test:pwa
-bash scripts/up.sh                                # bring the dev stack back for anything after
+bash scripts/up.sh                                       # both up; note the ports it prints
+netstat -ano | grep ":<FRONTEND_PORT>" | grep LISTENING  # find the vite dev PID
+powershell.exe -NoProfile -Command "Stop-Process -Id <pid> -Force"
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:<BACKEND_PORT>/actuator/health   # expect 200
+
+cd e2e && FRONTEND_PORT=<FRONTEND_PORT> VITE_BACKEND_ORIGIN=http://localhost:<BACKEND_PORT> \
+  npm run test:pwa
 ```
 
-**`down.sh` first is not optional.** `playwright.pwa.config.ts` starts its own `vite preview` on
-`FRONTEND_PORT` with `reuseExistingServer: false`, and that is the same port `up.sh`'s dev server
-is already holding. It must be that port, not a free one — `vite preview`'s proxy forwards the
-browser's real `Origin`, so the port has to be covered by the backend's `CORS_ALLOWED_ORIGINS`.
-Sourcing `worktree-env.sh` is what points it at this worktree's ports instead of the primary
-checkout's `3000`/`8080`.
+**Do not use `down.sh` here** — it stops the backend too, and these specs need it. And the preview
+must take *that same* frontend port, not a free one: `worktree-env.sh` sets
+`CORS_ALLOWED_ORIGINS` to exactly one origin, and `vite preview`'s proxy forwards the browser's
+real `Origin`, so any other port is refused. `playwright.pwa.config.ts` starts its own
+`vite preview` with `reuseExistingServer: false`, which is why the dev server has to be out of the
+way first.
+
+**Known: 1 of the 4 currently fails** — *"cold-loads from cache and boots the saved session while
+fully offline"*. Verified pre-existing (it fails identically on an untouched tree). It rotted
+precisely because these specs ran nowhere for so long; running them again is what surfaced it.
+Treat any *other* failure here as yours.
 
 Four specs that **cannot** run in the default project: they need the production service worker to
 precache the app shell, which `vite dev` does not provide, so `playwright.config.ts` excludes them
