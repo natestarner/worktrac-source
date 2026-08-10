@@ -23,5 +23,19 @@
       "Bash(az keyvault secret*)",
       "Bash(gh secret*)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/resilience-stop-hook.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   }
 }
