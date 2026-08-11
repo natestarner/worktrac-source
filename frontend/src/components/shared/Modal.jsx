@@ -134,10 +134,8 @@ export default function Modal({ width = 320, onClose, title, children, align = '
           // border every card elsewhere already uses fixes it in both themes at once.
           border: '1px solid var(--color-border)',
           borderRadius: isSheet ? 'var(--radius-xl) var(--radius-xl) 0 0' : 'var(--radius-xl)',
-          padding: 'var(--space-6)',
-          // A sheet reaches the bottom edge of the screen, so its own padding has to clear
-          // the home indicator or the last control sits under it.
-          paddingBottom: isSheet ? 'calc(var(--space-6) + env(safe-area-inset-bottom))' : 'var(--space-6)',
+          // No padding here -- the header and the content wrapper below each own their own
+          // padding instead. See the comment on the header for why that split matters.
           boxShadow: 'var(--shadow-4), var(--elevation-hairline)',
           width: isSheet ? '100%' : width,
           maxWidth: '100%',
@@ -153,8 +151,26 @@ export default function Modal({ width = 320, onClose, title, children, align = '
           // Sticky, not static: the panel is maxHeight 80vh with its own scrollbar, and the
           // routine form is genuinely taller than that. A close button that scrolls out of
           // reach is what would make "the backdrop no longer closes this" feel like a trap.
-          // The negative margins cancel the panel's own padding so the background spans the
-          // full width and content scrolls underneath rather than beside it.
+          //
+          // The header owns its own padding rather than bleeding under the panel's via negative
+          // margins (the previous approach). A sticky element's "stuck" offset is resolved from
+          // its MARGIN box against the scroll container's padding edge -- once stuck (which here
+          // is immediately, since the header's resting position already satisfies `top: 0`), that
+          // discards a negative top margin's bleed for painting, while the space reserved for the
+          // next sibling is still based on the original, bled static position. The mismatch
+          // (space-6 minus space-4 = 8px) silently clipped the top border of the first field in
+          // every modal that had one -- the panel having zero padding of its own removes the
+          // negative margin, and the conflict, entirely.
+          //
+          // Its own bottom padding is deliberately small (space-3, just internal breathing room)
+          // rather than the full visual gap to the first field. `position: sticky` + a z-index
+          // gives this header an elevated stacking context that paints ABOVE ordinary flow
+          // content regardless of DOM order -- so if the header's box and the next field's box
+          // shared an exact boundary (0px gap), any sub-pixel rounding in a real, GPU-rasterized
+          // browser (invisible in a downscaled screenshot, very visible zoomed in on a real
+          // screen) could paint a hairline of the header over the field's top border. The rest of
+          // the gap lives on the plain, non-positioned wrapper below instead, which the header
+          // can never paint over no matter how that rounds.
           <div
             style={{
               position: 'sticky',
@@ -165,7 +181,6 @@ export default function Modal({ width = 320, onClose, title, children, align = '
               justifyContent: title ? 'space-between' : 'flex-end',
               gap: 'var(--space-3)',
               background: 'var(--color-surface)',
-              margin: 'calc(var(--space-6) * -1) calc(var(--space-6) * -1) var(--space-4)',
               padding: 'var(--space-6) var(--space-6) var(--space-3)',
             }}
           >
@@ -186,7 +201,16 @@ export default function Modal({ width = 320, onClose, title, children, align = '
             {onClose && <IconButton icon={IconClose} label="Close" onClick={onClose} data-modal-close="" style={{ marginTop: -4, marginRight: -8 }} />}
           </div>
         )}
-        {children}
+        <div
+          style={{
+            // Top padding is always space-6 -- whether or not there's a header above, this is
+            // plain flow content, un-elevated, so it's immune to the stacking-context paintover
+            // described above.
+            padding: `var(--space-6) var(--space-6) ${isSheet ? 'calc(var(--space-6) + env(safe-area-inset-bottom))' : 'var(--space-6)'}`,
+          }}
+        >
+          {children}
+        </div>
       </div>
     </div>,
     document.body,
