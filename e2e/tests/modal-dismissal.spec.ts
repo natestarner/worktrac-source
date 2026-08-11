@@ -59,4 +59,31 @@ test.describe('Modal dismissal', () => {
     await page.getByRole('button', { name: 'Save routine' }).click();
     await expect(page.getByText('Leg Day', { exact: true })).toBeVisible();
   });
+
+  // Regression test for docs/incidents/2026-08-10-sticky-modal-header-clips-first-field.md: the
+  // header is position:sticky with a z-index, which paints above ordinary flow content regardless
+  // of DOM order. An exact (0px) touching boundary between the header and the first field below it
+  // let a real browser's sub-pixel rasterization clip the field's top border -- invisible in a
+  // getBoundingClientRect check (the boxes were merely adjacent, not overlapping) and invisible in
+  // a headless-browser screenshot review, which is exactly how it survived one already-"verified"
+  // fix. This can't assert on the rasterization artifact itself, only on the thing that prevents
+  // it: a real, non-zero gap. Regressing that gap back toward 0 is the bug shape to catch here.
+  test('the sticky header never touches the first field below it', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Harlow');
+
+    await page.getByRole('button', { name: '+ Add person' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+
+    const gap = await dialog.evaluate((dialogEl) => {
+      const header = dialogEl.firstElementChild as HTMLElement;
+      const field = dialogEl.querySelector('input, textarea') as HTMLElement;
+      return field.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
+    });
+
+    // Not an exact pixel assertion (the token values are a design choice, not an invariant) --
+    // just a floor comfortably above 0 so a future edit can't silently collapse the gap this bug
+    // exploited.
+    expect(gap).toBeGreaterThanOrEqual(8);
+  });
 });
