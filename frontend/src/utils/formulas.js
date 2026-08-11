@@ -20,16 +20,36 @@ export function convertWeight(weight, fromUnit, toUnit) {
   return weight;
 }
 
-// Prefill weight/reps from the same set-index in the most recent prior session: e.g. if
-// you're about to log your 2nd set today, this picks the 2nd set from last session (not
-// just the last set overall), clamping to the last available set if today's session has
-// already gone further than last time did. Converts to today's default unit if the prior
-// set was recorded in a different one.
-export function computePrefillDraft(lastSession, sessionSetsCount, defaultUnit) {
+// Prefill weight/reps, in this order of preference:
+//
+// 1. The same set-index in the most recent prior session -- e.g. if you're about to log your
+//    2nd set today, this picks the 2nd set from last session (not just the last set overall),
+//    clamping to the last available set if today's session has already gone further than last
+//    time did. Converted to today's default unit if the prior set was recorded in another.
+// 2. The last set already logged TODAY for this exercise. Only reachable on an exercise with
+//    no prior session at all, and it is what stops a brand-new exercise re-seeding to the
+//    empty default before every single set of its first-ever workout.
+// 3. Nothing to go on: `weight: null`, meaning "no history yet".
+//
+// `null` is a display state, not a validation gate -- ExerciseDetail renders it as an em dash
+// and logs it as 0. That deliberately makes a first-ever bodyweight exercise (pull-up, plank)
+// correct with no interaction: 0 already means "bodyweight" everywhere downstream
+// (comparableLb, prSort.isBodyweight, the backend's bodyweightOnly). The previous 45 lb default
+// was wrong for those, wrong for dumbbells and machines, and only right for a barbell.
+//
+// `todaysSets` must be the MERGED set list (ExerciseDetail's displaySets), never the raw
+// sessionSets query -- see the call site.
+export function computePrefillDraft(lastSession, todaysSets, defaultUnit) {
+  const todays = todaysSets || [];
   if (!lastSession || lastSession.sets.length === 0) {
-    return { weight: 45, reps: 8 };
+    const carry = todays[todays.length - 1];
+    if (!carry) return { weight: null, reps: 8 };
+    return {
+      weight: convertWeight(carry.weight, carry.unit || 'lb', defaultUnit),
+      reps: carry.reps,
+    };
   }
-  const idx = Math.min(sessionSetsCount, lastSession.sets.length - 1);
+  const idx = Math.min(todays.length, lastSession.sets.length - 1);
   const refSet = lastSession.sets[idx];
   return {
     weight: convertWeight(refSet.weight, refSet.unit || 'lb', defaultUnit),

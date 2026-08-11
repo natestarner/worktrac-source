@@ -19,7 +19,11 @@ const PERSON_DEFAULTS = {
   editingSession: null, // { id, startedAt, endedAt } -- the caller already has the full session
   // object in hand when entering edit mode (History's Edit button / the Past Session modal); kept
   // per person so switching away mid-edit and back resumes it.
-  weightDraft: 45,
+  // null, not a number: "no history yet". Rendered as an em dash and logged as 0 -- see
+  // utils/formulas.js#computePrefillDraft for why the old 45 lb default was wrong for every
+  // exercise that isn't a barbell lift. The prefill effect overwrites this as soon as the
+  // exercise summary resolves, so this value is only ever seen before that first read lands.
+  weightDraft: null,
   repsDraft: 8,
   exerciseSearch: '',
   lastTab: '/app/log', // kept in sync by AppShell as the route changes.

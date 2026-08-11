@@ -84,6 +84,41 @@ identical best stays flagged. The visible consequence is that hitting your best 
 one row on History but pills all three on Log. That is intended — **don't "fix" one into another.**
 `historyPrFlags.js`'s header explains why a backend fold was rejected for History's markers.
 
+## Weight prefill: blank, then today, then last session
+
+`utils/formulas.js#computePrefillDraft` resolves in one fixed order — the prior session's set at
+the same index, else **the last set logged today**, else `weight: null`. Three things must hold:
+
+- **`null` is a display state, not a validation gate.** `ExerciseDetail` renders it as an em dash
+  and `handleLogSet` sends `weightValue` (`weightDraft ?? 0`). Blank must never disable "Log set":
+  0 is exactly right for a first-ever pull-up or plank, and 0 already means "bodyweight"
+  everywhere downstream (`comparableLb`, `prSort.isBodyweight`, the backend's `bodyweightOnly`).
+  The old 45 lb default was right only for a barbell.
+- **The effect reads `displaySets`, never `sessionSets`** — and is declared below `displaySets`
+  for that reason. Offline, `contextSessionId` stays null for the person's whole outage, so the
+  `sessionSets` query never runs and its data stays `[]` however many sets they log. Reading it
+  would freeze the set-index walk at set 1 *and* silently disable the carry-forward, online-only.
+  `parity-active-loop.spec.ts` asserts the carry-forward across all four modes.
+- **The carry-forward is the no-prior-session fallback only.** It must never override the
+  set-index walk, which is the more informative answer whenever a prior session exists.
+
+`NumericKeypad`'s first keypress **replaces** the buffer rather than appending. Without it, tapping
+a prefilled 135 and typing 225 produced 135225, so every exact entry began by backspacing the
+prefill out. `setStepper`'s eight leading `⌫` presses still work — the first clears, the rest are
+no-ops on an empty string.
+
+## Routine stepping is index-based, and that is load-bearing
+
+A routine may list the same exercise more than once (bench, row, bench). `AppStateContext`'s
+`routineIndex`, `JUMP_TO_ROUTINE_INDEX`, `NEXT_EXERCISE_IN_ROUTINE` and `LogTab`'s pill strip
+(`key={`${exerciseId}-${idx}`}`) are all keyed on **position**, never on exercise id. Resolving the
+current step by exercise id would collapse the duplicates back together.
+
+Two consequences that are correct, not bugs: with *adjacent* duplicates "Next exercise" leaves
+`selectedExerciseId` unchanged, so only the pill and the "n of m" counter move; and both positions
+write into the same exercise's single set list for the session, which is the whole point of
+cycling back.
+
 ## Editable temp rows
 
 `editableTempIds` is what gives a paused/retrying/errored row its Edit and Delete controls

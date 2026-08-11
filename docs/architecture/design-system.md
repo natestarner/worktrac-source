@@ -104,6 +104,39 @@ Two things are easy to get wrong:
 - **`prefers-reduced-motion` reduces animations to one instantaneous frame rather than removing
   them**, so anything depending on an `animationend` event still fires.
 
+## Modals
+
+One primitive, `components/shared/Modal.jsx`, behind every dialog in the app. It owns the portal
+(the `.app-chrome` stacking-context trap is why), the focus trap and restore, the body scroll lock
+with scrollbar-width compensation, the `center` / `bottom`-sheet variants, and — since the
+dismissal rework — the header row.
+
+**It does not close on a backdrop tap, and that is the deliberate part.** The app is used
+one-handed on an iPad mid-set. A stray thumb on the scrim discarded a half-built routine or an
+unsaved note, with no confirmation, no undo, and no way to tell it had happened until you looked
+back at the list. The three remaining exits are all deliberate acts: the header X, a footer
+button, and Escape.
+
+Escape survives the removal on purpose. `Modal` installs a focus trap, so without it a keyboard
+user has no exit at all — and unlike a mis-tap on a scrim, pressing Escape is never accidental.
+It is also moot on the iPad, which is where the mis-taps happened.
+
+The header is `position: sticky` with negative margins cancelling the panel's own padding. The
+panel is `maxHeight: 80vh` with its own scrollbar and the routine builder is genuinely taller than
+that, so a static X would scroll out of reach — which is precisely what would make "the backdrop
+no longer closes this" feel like a trap rather than a safeguard.
+
+Two smaller consequences worth knowing:
+
+- Passing `title` also wires `aria-labelledby`. Before this, only `ConfirmDialog` labelled its
+  dialog at all; the other fourteen announced as an unnamed dialog.
+- The X is skipped by the open-focus query (`[data-modal-close]`) but stays in the Tab cycle. It is
+  first in DOM order, so without the exclusion it would take the focus that belongs to the name
+  field, note box or first stepper.
+
+`PRCelebration` is deliberately not a `Modal` — it is a transient celebration overlay, not a form,
+and click-anywhere is the right gesture for it.
+
 ## Icons
 
 `components/shared/icons.jsx` vendors ~16 Lucide paths (ISC, attributed in the file) rather than

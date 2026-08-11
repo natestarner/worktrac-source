@@ -1147,3 +1147,80 @@ describe('ExerciseDetail PR badge folds in sets that have not synced yet', () =>
     }
   });
 });
+
+describe('ExerciseDetail weight prefill', () => {
+  // A stateful useAppState: the prefill effect writes through setWeightDraft, so a fixed
+  // mockReturnValue would show what the test seeded rather than what the component computed.
+  function Harness({ liveSession = null }) {
+    const [weightDraft, setWeightDraft] = useState(null);
+    const [repsDraft, setRepsDraft] = useState(8);
+    useAppState.mockImplementation(() => ({ weightDraft, repsDraft, setWeightDraft, setRepsDraft }));
+    return (
+      <ExerciseDetail
+        exercise={exercise}
+        personId={7}
+        editingSessionId={null}
+        liveSession={liveSession}
+        refetchLiveSession={vi.fn().mockResolvedValue()}
+        onBack={vi.fn()}
+      />
+    );
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getSessionExerciseNote.mockResolvedValue(null);
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows an em dash rather than a number when the exercise has no history', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness />);
+
+    expect(await screen.findByLabelText(/^Weight \(lb\): —\./)).toBeInTheDocument();
+  });
+
+  it('logs a blank weight as 0 instead of refusing the tap', async () => {
+    // The bodyweight case: a first-ever pull-up is correct with no interaction at all, and
+    // blocking the button would punish it to protect a weighted lift where the em dash is
+    // already visibly not a number.
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+
+    renderWithQuery(<Harness />);
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ weight: 0, reps: 8 })));
+  });
+
+  it("carries today's last set forward when there is no prior session", async () => {
+    // Without this the draft snapped back to the empty default before every set of a brand-new
+    // exercise's first-ever workout, because prefill only ever read the PREVIOUS session.
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    listSessionSets.mockResolvedValue([{ id: 1, weight: 135, reps: 5, unit: 'lb' }]);
+
+    renderWithQuery(<Harness liveSession={{ id: 101 }} />);
+
+    expect(await screen.findByLabelText(/^Weight \(lb\): 135\./)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Reps: 5\./)).toBeInTheDocument();
+  });
+
+  it('still prefers the prior session over the sets logged today', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: { sets: [{ weight: 225, reps: 3, unit: 'lb' }] },
+      best: null,
+    });
+    listSessionSets.mockResolvedValue([{ id: 1, weight: 135, reps: 5, unit: 'lb' }]);
+
+    renderWithQuery(<Harness liveSession={{ id: 101 }} />);
+
+    expect(await screen.findByLabelText(/^Weight \(lb\): 225\./)).toBeInTheDocument();
+  });
+});

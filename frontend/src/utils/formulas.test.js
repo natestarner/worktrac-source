@@ -37,36 +37,55 @@ describe('convertWeight', () => {
 });
 
 describe('computePrefillDraft', () => {
-  it('defaults to 45/8 when there is no prior session', () => {
-    expect(computePrefillDraft(null, 0, 'lb')).toEqual({ weight: 45, reps: 8 });
+  const set = (weight, reps, unit = 'lb') => ({ weight, reps, unit });
+
+  it('leaves the weight blank when there is no history at all', () => {
+    // null, not 0: the app has nothing to go on, and "no history" is a different claim from
+    // "you are lifting zero". ExerciseDetail renders it as an em dash and logs it as 0.
+    expect(computePrefillDraft(null, [], 'lb')).toEqual({ weight: null, reps: 8 });
   });
 
-  it('defaults to 45/8 when the prior session has zero sets', () => {
-    expect(computePrefillDraft({ sets: [] }, 0, 'lb')).toEqual({ weight: 45, reps: 8 });
+  it('leaves the weight blank when the prior session has zero sets', () => {
+    expect(computePrefillDraft({ sets: [] }, [], 'lb')).toEqual({ weight: null, reps: 8 });
+  });
+
+  it('carries today\'s last set forward when there is no prior session', () => {
+    // The first-ever workout on an exercise. Without this the draft snapped back to blank
+    // before every single set of it, which is worse than the old 45 lb default was.
+    expect(computePrefillDraft(null, [set(135, 8)], 'lb')).toEqual({ weight: 135, reps: 8 });
+    expect(computePrefillDraft(null, [set(135, 8), set(155, 5)], 'lb')).toEqual({ weight: 155, reps: 5 });
+  });
+
+  it('converts a carried-forward set into today\'s default unit when they differ', () => {
+    const draft = computePrefillDraft(null, [set(100, 5, 'kg')], 'lb');
+    expect(draft.weight).toBeCloseTo(220.5, 1);
+    expect(draft.reps).toBe(5);
   });
 
   it('picks the same set-index from last session, not just the last set overall', () => {
-    const lastSession = {
-      sets: [
-        { weight: 135, reps: 8, unit: 'lb' },
-        { weight: 145, reps: 6, unit: 'lb' },
-        { weight: 155, reps: 4, unit: 'lb' },
-      ],
-    };
+    const lastSession = { sets: [set(135, 8), set(145, 6), set(155, 4)] };
     // Zero sets logged today so far -> same as last time's set #1 (index 0).
-    expect(computePrefillDraft(lastSession, 0, 'lb')).toEqual({ weight: 135, reps: 8 });
+    expect(computePrefillDraft(lastSession, [], 'lb')).toEqual({ weight: 135, reps: 8 });
     // One set already logged today -> pick up at last time's set #2 (index 1).
-    expect(computePrefillDraft(lastSession, 1, 'lb')).toEqual({ weight: 145, reps: 6 });
+    expect(computePrefillDraft(lastSession, [set(135, 8)], 'lb')).toEqual({ weight: 145, reps: 6 });
+  });
+
+  it('prefers the prior session over today\'s sets', () => {
+    // The carry-forward is the no-prior-session fallback only -- it must never override the
+    // set-index walk, which is the more informative answer whenever it's available.
+    const lastSession = { sets: [set(135, 8), set(145, 6)] };
+    expect(computePrefillDraft(lastSession, [set(95, 12)], 'lb')).toEqual({ weight: 145, reps: 6 });
   });
 
   it('clamps to the last available set once today goes further than last time did', () => {
-    const lastSession = { sets: [{ weight: 135, reps: 8, unit: 'lb' }] };
-    expect(computePrefillDraft(lastSession, 5, 'lb')).toEqual({ weight: 135, reps: 8 });
+    const lastSession = { sets: [set(135, 8)] };
+    const today = [set(135, 8), set(135, 8), set(135, 8), set(135, 8), set(135, 8)];
+    expect(computePrefillDraft(lastSession, today, 'lb')).toEqual({ weight: 135, reps: 8 });
   });
 
   it('converts the prior set into today\'s default unit when they differ', () => {
-    const lastSession = { sets: [{ weight: 100, reps: 5, unit: 'kg' }] };
-    const draft = computePrefillDraft(lastSession, 0, 'lb');
+    const lastSession = { sets: [set(100, 5, 'kg')] };
+    const draft = computePrefillDraft(lastSession, [], 'lb');
     expect(draft.weight).toBeCloseTo(220.5, 1);
     expect(draft.reps).toBe(5);
   });

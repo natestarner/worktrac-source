@@ -691,6 +691,60 @@ input[type='search']::-webkit-search-results-decoration {
   padding-right: max(var(--space-6), env(safe-area-inset-right));
 }
 
+/* A horizontally-scrolling strip with a scrollbar you can actually see and drag.
+
+   Applied to the routine exercise strip on the Log tab, which is the one strip people scrub
+   through mid-workout with a thumb and a barbell in the other hand. Everywhere else keeps the
+   platform default on purpose -- the point here is discoverability, not a house scrollbar style.
+
+   Note the trade-off: styling ::-webkit-scrollbar at all switches iOS/iPadOS Safari from an
+   overlay scrollbar (which fades out and is invisible until you already know to swipe) to a
+   persistent one. That IS the fix -- the bar has to be visible when you haven't touched it yet --
+   but it means the strip permanently gives up those few pixels, hence the padding-bottom. */
+.hscroll {
+  overflow-x: auto;
+  /* Space between the pills and the bar, so the bar reads as chrome rather than as an underline
+     on the last row of content. */
+  padding-bottom: var(--space-2);
+}
+
+/* ⚠️ Do NOT add `scrollbar-width` here. The standard property WINS over these pseudo-elements in
+   Chrome -- setting it silently reverts this whole block to the platform default (measured: 15px
+   with `scrollbar-width: auto` present, 16px without it), which is the bug this rule started life
+   with. `scrollbar-width` also only accepts auto/thin/none, so it cannot express a custom size at
+   all. The standard properties therefore live in the @supports fallback below, scoped to engines
+   that do not implement ::-webkit-scrollbar (i.e. Firefox), where they are the only option. */
+.hscroll::-webkit-scrollbar {
+  height: 16px;
+}
+
+.hscroll::-webkit-scrollbar-track {
+  background: var(--color-subtle-bg);
+  border-radius: var(--radius-full);
+}
+
+.hscroll::-webkit-scrollbar-thumb {
+  background: var(--color-faint);
+  border-radius: var(--radius-full);
+  /* An inset border keeps the thumb visually slimmer than the 16px track while leaving the full
+     16px as the drag target -- the touch area is the point, not the ink. */
+  border: 4px solid var(--color-subtle-bg);
+  min-width: 48px;
+}
+
+@media (hover: hover) {
+  .hscroll::-webkit-scrollbar-thumb:hover {
+    background: var(--color-muted);
+  }
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .hscroll {
+    scrollbar-width: auto;
+    scrollbar-color: var(--color-faint) var(--color-subtle-bg);
+  }
+}
+
 .app-shell {
   padding-bottom: calc(var(--space-10) + env(safe-area-inset-bottom));
 }

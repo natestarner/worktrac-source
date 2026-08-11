@@ -165,7 +165,7 @@ test.describe('PRs board sorting', () => {
     await pickExercise(page, exercise);
     // logSetAt rather than a bare setStepper pair: the draft is re-seeded when the summary queries
     // settle and will otherwise stomp the weight between typing it and submitting, logging the set
-    // at the 45 lb default (see its comment). Every set here is its exercise's first ever, so the
+    // at whatever the prefill offered (see its comment). Every set here is its exercise's first ever, so the
     // celebration fires even for a retroactive session -- it keys off the server's isPR, not
     // live-vs-past.
     await logSetAt(page, weight, reps);

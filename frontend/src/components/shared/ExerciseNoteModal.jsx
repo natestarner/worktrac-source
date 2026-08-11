@@ -26,8 +26,7 @@ export default function ExerciseNoteModal({ title, subtitle, initialNote, onClos
   }
 
   return (
-    <Modal width={420} onScrim={onClose}>
-      <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{title}</div>
+    <Modal width={420} onClose={onClose} title={title}>
       <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 14 }}>{subtitle}</div>
       <textarea
         autoFocus

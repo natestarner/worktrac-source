@@ -35,6 +35,27 @@ Full reasoning: `docs/architecture/design-system.md`.
 - **New `position: fixed` chrome needs `env(safe-area-inset-*)`**, or it sits under the home
   indicator in the installed PWA.
 
+### Modals: `Modal` never closes on a backdrop tap
+
+Every dialog goes through `components/shared/Modal.jsx`. The only exits are the header's X, a
+footer button, and Escape — all deliberate. This app is used one-handed on an iPad mid-set, where a
+stray thumb on the scrim discarded a half-built routine or an unsaved note with no confirmation and
+no undo.
+
+- **Do not reinstate an `onClick` on the scrim**, in the primitive or at a call site.
+- **`onClose` is the single dismissal callback** and drives both the X and Escape. Pass `title` too
+  and the header renders it and wires `aria-labelledby`; don't hand-roll a title `<div>`.
+- **Escape stays.** `Modal` installs a focus trap, so it is the only keyboard exit.
+- **Every modal must be closable** — an `onClose` or a footer button. Nothing enforces this
+  mechanically.
+- The header is `position: sticky` because the panel is `maxHeight: 80vh` with its own scrollbar;
+  a static X scrolls out of reach on the taller modals.
+- The X's accessible name is **"Close"**, so no other control in the same dialog may contain that
+  string (`OutboxModal`'s footer button is "Done" for this reason).
+
+`PRCelebration` is deliberately **not** a `Modal` — it is a transient celebration overlay, and
+eight e2e specs dismiss it with a scrim click.
+
 ### Changing a control's visible text or label can break tests elsewhere
 
 Both test layers select by accessible name, with **different matching rules**: Playwright's `name`

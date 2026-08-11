@@ -102,6 +102,54 @@ class RoutineControllerTest extends AbstractIntegrationTest {
         assertEquals(0, objectMapper.readTree(listResponse).size());
     }
 
+    // A routine may walk you through the same exercise more than once (bench, row, bench) --
+    // nothing in the schema or the service ever forbade it, but nothing tested it either, so
+    // "there happens to be no unique index on (routine_id, exercise_id)" was an accident waiting
+    // to be tidied away. sort_order is assigned by list position in RoutineService#attachExercises,
+    // so each occupied position is its own row.
+    @Test
+    void routineKeepsTheSameExerciseAtEveryPositionItAppearsIn() throws Exception {
+        List<Long> cycling = List.of(exerciseIds.get(0), exerciseIds.get(1), exerciseIds.get(0));
+
+        String createBody = objectMapper.writeValueAsString(Map.of("name", "Cycle", "exerciseIds", cycling));
+        String createResponse = mockMvc.perform(post("/api/people/" + personId + "/routines")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode created = objectMapper.readTree(createResponse);
+        long routineId = created.get("id").asLong();
+
+        assertEquals(3, created.get("exercises").size());
+        assertEquals(exerciseIds.get(0), created.get("exercises").get(0).get("exerciseId").asLong());
+        assertEquals(exerciseIds.get(1), created.get("exercises").get(1).get("exerciseId").asLong());
+        assertEquals(exerciseIds.get(0), created.get("exercises").get(2).get("exerciseId").asLong());
+
+        // Re-read rather than trusting the create response: @OrderBy("sortOrder ASC") is what has
+        // to hold, and only a fresh load actually exercises it.
+        String listResponse = mockMvc.perform(get("/api/people/" + personId + "/routines")
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString();
+        JsonNode reloaded = objectMapper.readTree(listResponse).get(0).get("exercises");
+        assertEquals(3, reloaded.size());
+        assertEquals(exerciseIds.get(0), reloaded.get(0).get("exerciseId").asLong());
+        assertEquals(exerciseIds.get(1), reloaded.get(1).get("exerciseId").asLong());
+        assertEquals(exerciseIds.get(0), reloaded.get(2).get("exerciseId").asLong());
+
+        // update() clears and re-applies, so dropping one copy must leave the other -- and the
+        // repeated auto-favorite (RoutineService#favorite runs per occurrence) must stay a no-op.
+        String updateBody = objectMapper.writeValueAsString(
+                Map.of("name", "Cycle", "exerciseIds", List.of(exerciseIds.get(0), exerciseIds.get(1))));
+        String updateResponse = mockMvc.perform(put("/api/people/" + personId + "/routines/" + routineId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertEquals(2, objectMapper.readTree(updateResponse).get("exercises").size());
+    }
+
     private long addPerson(String name) throws Exception {
         String body = objectMapper.writeValueAsString(Map.of("name", name));
         String response = mockMvc.perform(post("/api/people")

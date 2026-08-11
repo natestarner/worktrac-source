@@ -391,3 +391,69 @@ handling and PR-badge correctness would have broken for a subtle typographic gai
 nothing else to talk to. A confirmation doesn't need colour to carry its meaning; errors do, so
 they keep a hue — with their own bg/text pair, because dark-mode `--color-danger` is a light salmon
 tuned to be read *as text* on a dark ground and white on it is only 2.95:1.
+
+## Update — 2026-08-10: routines may repeat an exercise; modals stop closing on a stray tap; the 45 lb default retired
+
+Four unrelated papercuts, batched because they were reported together.
+
+**A routine may list the same exercise more than once.** Routines are meant to walk you through a
+whole workout, and plenty of workouts cycle back — bench, row, bench. That was unbuildable, and the
+reason was a single predicate in `RoutineFormModal.jsx` (`unselected`) that filtered an exercise out
+of the picker the moment it was added. Nothing else forbade it: `routine_exercises` has no unique
+index on `(routine_id, exercise_id)`, `RoutineService#attachExercises` numbers `sort_order` straight
+from list position with no dedupe, and the in-workout stepper (`routineIndex`,
+`JUMP_TO_ROUTINE_INDEX`, the pill strip's `key`) was already index-based throughout.
+
+Decision worth recording: **the builder's contents are now a list of occurrences
+(`{ key, exerciseId }`), not a set of exercise ids.** Remove, reorder and React keys each have to
+address one *position* — keying on the exercise id made "remove" delete every copy at once. The
+backend was left alone, but now has a test asserting `[1, 1, 2]` round-trips as three ordered rows,
+so "there happens to be no unique index" is a guarantee rather than an accident someone tidies away
+later.
+
+**Modals never close on a backdrop tap.** The app is used one-handed on an iPad mid-set, where a
+stray thumb on the scrim discarded a half-built routine or an unsaved note with no confirmation and
+no undo. `Modal` now owns a sticky header carrying the title and an X, and one `onClose` prop drives
+both that and Escape. Three things this settled:
+
+- **Escape stays.** Backdrop and Escape were the same handler, so removing outside-click would have
+  removed Escape with it — and `Modal` installs a focus trap, making Escape the only keyboard exit.
+  Unlike a mis-tap, it is never accidental, and it is moot on the iPad where the problem lives.
+- **The header had to be sticky.** The panel is `max-height: 80vh` with its own scrollbar and the
+  routine builder is taller than that; an X that scrolls out of reach is what would make this feel
+  like a trap rather than a safeguard.
+- `PRCelebration` is deliberately **not** a `Modal` and keeps click-anywhere — it is a transient
+  celebration, not a form, and eight e2e specs dismiss it that way.
+
+Passing `title` also wires `aria-labelledby`; before this only `ConfirmDialog` labelled its dialog at
+all. `OutboxModal`'s footer button became "Done" because the X's accessible name is "Close" and two
+same-named controls in one dialog is a strict-mode violation.
+
+**The 45 lb prefill is gone.** An exercise with no history now prefills *blank* (an em dash), not a
+number. 45 was right only for a barbell and wrong for every machine, dumbbell and bodyweight lift — a
+first-ever pull-up made you dial it down to 0 every time.
+
+Decision: **blank is a display state, not a validation gate.** Tapping "Log set" with it untouched
+logs 0, which is exactly right for a pull-up or plank, and 0 already means "bodyweight" everywhere
+downstream (`comparableLb`, `prSort.isBodyweight`, the backend's `bodyweightOnly`). Requiring an
+explicit entry was considered and rejected: it punishes the bodyweight case to protect a weighted one
+where the em dash is already visibly not a number. A name-parsing "Barbell … → 45" heuristic was also
+rejected — it leans on a naming convention custom exercises are under no obligation to follow.
+
+Two consequences fell out of it:
+
+- **Prefill now carries today's last set forward** when there is no prior session. Without that, a
+  brand-new exercise re-seeded to blank before *every* set of its first workout — worse than the 45
+  it replaced. It reads `displaySets`, not `sessionSets`, or it would work online and silently do
+  nothing for a person's entire offline stretch; `parity-active-loop.spec.ts` asserts it across all
+  four connectivity modes.
+- **The keypad's first keypress replaces the value** instead of appending. Tapping a prefilled 135
+  and typing 225 used to give you 135225, so every exact entry began by backspacing the prefill out.
+
+**The routine strip's scrollbar is thick and always visible.** Worth recording the trap: setting
+`scrollbar-width` **disables** `::-webkit-scrollbar` in Chrome, which silently reverted the whole rule
+to the platform default — and the first attempt asked for 10px, *thinner* than Chrome's 15px default.
+The standard properties now live in an `@supports not selector(::-webkit-scrollbar)` block for
+engines that lack the pseudo-elements. Styling it at all also switches iOS/iPadOS Safari from an
+overlay scrollbar to a persistent one, which is the actual fix: an overlay bar is invisible until you
+already know to swipe.

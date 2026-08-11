@@ -16,7 +16,9 @@ describe('AppStateContext reducer', () => {
   it('selecting a person for the first time seeds the default draft', () => {
     const next = withPerson(1);
     expect(next.activePersonId).toBe(1);
-    expect(active(next).weightDraft).toBe(45);
+    // null == "no history yet", not a weight. The prefill effect replaces it as soon as the
+    // exercise summary resolves -- see utils/formulas.js#computePrefillDraft.
+    expect(active(next).weightDraft).toBeNull();
     expect(active(next).repsDraft).toBe(8);
   });
 
@@ -28,7 +30,7 @@ describe('AppStateContext reducer', () => {
     // Switch to person 2 -- their own (fresh) slice, unaffected by person 1.
     state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
     expect(active(state).selectedExerciseId).toBeNull();
-    expect(active(state).weightDraft).toBe(45);
+    expect(active(state).weightDraft).toBeNull();
 
     // Switch back to person 1 -- exactly where they left off.
     state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
