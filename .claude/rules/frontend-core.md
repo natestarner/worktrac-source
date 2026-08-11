@@ -48,8 +48,19 @@ no undo.
 - **Escape stays.** `Modal` installs a focus trap, so it is the only keyboard exit.
 - **Every modal must be closable** — an `onClose` or a footer button. Nothing enforces this
   mechanically.
-- The header is `position: sticky` because the panel is `maxHeight: 80vh` with its own scrollbar;
-  a static X scrolls out of reach on the taller modals.
+- The header is `position: sticky` (with a `z-index`) because the panel is `maxHeight: 80vh` with
+  its own scrollbar; a static X scrolls out of reach on the taller modals.
+- **The panel itself carries no padding.** The sticky header and the content wrapper around
+  `{children}` each own their own padding instead. Don't put padding back on the panel or bleed
+  the header to the edges with a negative margin to "simplify" this — a negative top margin
+  conflicts with the header's sticky "stuck" offset math and silently clips the first field below
+  it (`docs/incidents/2026-08-10-sticky-modal-header-clips-first-field.md`).
+- **Never let the visual gap between the header and the first field depend on an exact (0px)
+  touching boundary.** A `position: sticky` + `z-index` element paints above ordinary flow content
+  regardless of DOM order, so a real browser's sub-pixel rasterization can paint a hairline of the
+  header over content it's merely adjacent to — invisible in a headless-browser screenshot, very
+  visible on a real screen. Keep the gap on the plain, non-positioned wrapper below the header,
+  not the header's own bottom padding.
 - The X's accessible name is **"Close"**, so no other control in the same dialog may contain that
   string (`OutboxModal`'s footer button is "Done" for this reason).
 
