@@ -146,10 +146,12 @@ short, and the barrel import makes Vite pre-bundle ~1500 modules on a cold dev s
 These replaced emoji (📝, 📌), which render as full-colour platform-specific art — they ignore the
 theme, ignore the accent colour, and look different on every OS.
 
-**Not everything glyph-shaped should become an icon.** The `+` in "+ Add person", the stepper's
-`+`/`−` and the keypad's `⌫` stayed as text: they render identically everywhere, inherit colour and
-weight, and were never the problem. They are also what 17, 10 and 3 test call sites respectively
-select by. See the testing note below.
+**Not everything glyph-shaped should become an icon.** The `+` in "+ Add person" and the stepper's
+`+`/`−` stayed as text: they render identically everywhere, inherit colour and weight, and were
+never the problem. They are also what 17 and 10 test call sites respectively select by. See the
+testing note below. (A third such glyph, the on-screen numeric keypad's `⌫`, no longer applies —
+the keypad itself was removed in favour of a native input; see `exercise-favorites-redesign.md`'s
+2026-08-10 entry.)
 
 ## Testing constraint worth knowing before you change any label
 

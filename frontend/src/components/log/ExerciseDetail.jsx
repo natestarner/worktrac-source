@@ -21,7 +21,6 @@ import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas
 import { deriveExerciseSummaryFromHistory, mergeBestWithLocalSets } from '../../utils/exerciseSummaryFromHistory';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import WeightRepsStepper from './WeightRepsStepper';
-import NumericKeypad from '../shared/NumericKeypad';
 import CustomFieldEditorModal from '../shared/CustomFieldEditorModal';
 import ConfigureExerciseModal from '../shared/ConfigureExerciseModal';
 import EditSetModal from '../shared/EditSetModal';
@@ -57,7 +56,6 @@ export default function ExerciseDetail({
 
   const contextSessionId = editingSessionId || liveSession?.id || null;
 
-  const [keypadField, setKeypadField] = useState(null);
   const [editingCustomField, setEditingCustomField] = useState(null);
   const [showConfigureModal, setShowConfigureModal] = useState(false);
   const [editingSet, setEditingSet] = useState(null);
@@ -532,10 +530,10 @@ export default function ExerciseDetail({
     <div>
       <div className="exercise-detail-grid">
         <div>
-          {/* The arrow stays a text entity, like the stepper's +/- and the keypad's
-              backspace. It renders identically everywhere and inherits colour and weight,
-              so it was never the emoji problem -- and it is part of this button's
-              accessible name, which three e2e specs select by. */}
+          {/* The arrow stays a text entity, like the stepper's +/-. It renders identically
+              everywhere and inherits colour and weight, so it was never the emoji problem
+              -- and it is part of this button's accessible name, which three e2e specs
+              select by. */}
           <button onClick={onBack} className="pressable" style={backButtonStyle}>
             &larr; All exercises
           </button>
@@ -679,14 +677,15 @@ export default function ExerciseDetail({
             <div className="stepper-pair">
               <WeightRepsStepper
                 label={`Weight (${defaultUnit})`}
-                // An em dash, not 0: "we have no history for this exercise" and "you are
-                // lifting zero" are different claims, and only one of them is ours to make.
-                value={weightDraft ?? '—'}
+                // Null, not 0: "we have no history for this exercise" and "you are lifting
+                // zero" are different claims, and only one of them is ours to make.
+                // WeightRepsStepper renders a null value as an em dash.
+                value={weightDraft}
                 onDec={decWeight}
                 onInc={incWeight}
-                onValueTap={() => setKeypadField('weight')}
+                onChange={setWeightDraft}
               />
-              <WeightRepsStepper label="Reps" value={repsDraft} onDec={decReps} onInc={incReps} onValueTap={() => setKeypadField('reps')} />
+              <WeightRepsStepper label="Reps" value={repsDraft} onDec={decReps} onInc={incReps} onChange={setRepsDraft} />
             </div>
             {/* The screen's one primary action, and the only place size="lg" is used on
                 this screen. That isn't just emphasis: at --text-xl/700 the white label
@@ -825,19 +824,6 @@ export default function ExerciseDetail({
           )}
         </div>
       </div>
-
-      {keypadField && (
-        <NumericKeypad
-          label={keypadField === 'weight' ? `Weight (${defaultUnit})` : 'Reps'}
-          initialValue={keypadField === 'weight' ? weightDraft : repsDraft}
-          onCancel={() => setKeypadField(null)}
-          onDone={(value) => {
-            if (keypadField === 'weight') setWeightDraft(value);
-            else setRepsDraft(value);
-            setKeypadField(null);
-          }}
-        />
-      )}
 
       {editingCustomField && (
         <CustomFieldEditorModal

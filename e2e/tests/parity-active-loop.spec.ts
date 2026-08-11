@@ -107,10 +107,10 @@ forEachConnectivityMode<void>("the weight carries forward from today's previous 
     const weightRow = page.locator('.stepper-row').filter({ hasText: 'Weight' });
     await expect
       .poll(async () => {
-        const current = Number(await weightRow.locator('.stepper-value').textContent());
+        const current = Number(await weightRow.locator('.stepper-value').inputValue());
         if (current === 25) return current;
         await weightRow.getByRole('button', { name: current < 25 ? '+' : '−', exact: true }).click();
-        return Number(await weightRow.locator('.stepper-value').textContent());
+        return Number(await weightRow.locator('.stepper-value').inputValue());
       }, { timeout: 15000 })
       .toBe(25);
 
@@ -119,7 +119,7 @@ forEachConnectivityMode<void>("the weight carries forward from today's previous 
   },
   assert: async (page) => {
     // The draft did NOT snap back to blank after set 2 was logged.
-    await expect(page.getByRole('button', { name: /^Weight \(lb\): 25\./ })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Weight (lb)' })).toHaveValue('25');
     await expect(setRow(page, 25)).toBeVisible();
   },
   afterReconnect: async (page) => {

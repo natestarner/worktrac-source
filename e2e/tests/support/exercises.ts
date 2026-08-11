@@ -27,11 +27,13 @@ export async function addOwnExercise(page: Page, name: string) {
   await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).last().click();
 }
 
-// Weight/reps are steppers, not inputs. Tapping the value opens NumericKeypad, which is the only
-// practical way to reach an exact number (135 lb is 18 stepper clicks). Wrapped in expect.poll
-// because ExerciseDetail's computePrefillDraft effect re-seeds the draft when the summary /
-// session-sets queries settle, which can land after the keypad closes and stomp the value --
-// the same race offline-reads.spec.ts's setWeight documents.
+// Weight/reps are steppers with a real <input> for the value (it selects its text on focus, so
+// typing replaces the prefill instead of appending to it -- see WeightRepsStepper.jsx). `fill`
+// overwrites the whole value directly regardless of that, so it's just fill + commit; the input
+// commits on blur/Enter, not on every keystroke, hence the trailing `press('Enter')`. Wrapped in
+// expect.poll because ExerciseDetail's computePrefillDraft effect re-seeds the draft when the
+// summary / session-sets queries settle, which can land after this and stomp the value -- the
+// same race offline-reads.spec.ts's setWeight documents.
 export async function setStepper(page: Page, label: 'Weight' | 'Reps', target: number) {
   const row = page.locator('.stepper-row').filter({ hasText: label });
   const value = row.locator('.stepper-value');
@@ -39,17 +41,10 @@ export async function setStepper(page: Page, label: 'Weight' | 'Reps', target: n
   await expect
     .poll(
       async () => {
-        if (Number(await value.textContent()) === target) return target;
-        await value.click();
-        const keypad = page.getByRole('dialog');
-        for (let i = 0; i < 8; i += 1) {
-          await keypad.getByRole('button', { name: '⌫', exact: true }).click();
-        }
-        for (const digit of String(target)) {
-          await keypad.getByRole('button', { name: digit, exact: true }).click();
-        }
-        await keypad.getByRole('button', { name: 'Done', exact: true }).click();
-        return Number(await value.textContent());
+        if (Number(await value.inputValue()) === target) return target;
+        await value.fill(String(target));
+        await value.press('Enter');
+        return Number(await value.inputValue());
       },
       { timeout: 20000 },
     )
@@ -74,14 +69,14 @@ async function setStepperPair(page: Page, weight: number, reps: number) {
   await expect
     .poll(
       async () => {
-        if (Number(await stepperValue(page, 'Weight').textContent()) !== weight) {
+        if (Number(await stepperValue(page, 'Weight').inputValue()) !== weight) {
           await setStepper(page, 'Weight', weight);
         }
-        if (Number(await stepperValue(page, 'Reps').textContent()) !== reps) {
+        if (Number(await stepperValue(page, 'Reps').inputValue()) !== reps) {
           await setStepper(page, 'Reps', reps);
         }
-        const w = await stepperValue(page, 'Weight').textContent();
-        const r = await stepperValue(page, 'Reps').textContent();
+        const w = await stepperValue(page, 'Weight').inputValue();
+        const r = await stepperValue(page, 'Reps').inputValue();
         return `${Number(w)}x${Number(r)}`;
       },
       { timeout: 30000 },

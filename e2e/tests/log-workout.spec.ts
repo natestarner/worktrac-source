@@ -124,10 +124,12 @@ test.describe('Log workout', () => {
     await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
 
     // No dialling down any more, and that IS the assertion: an exercise with no history has no
-    // prefilled weight at all (an em dash, not a number), and a blank weight logs as 0. A
-    // first-ever Pull-up is therefore correct with zero interaction. This used to open the keypad
-    // and backspace the prefilled "45" out first.
-    await expect(page.getByRole('button', { name: /^Weight \(lb\): —\./ })).toBeVisible();
+    // prefilled weight at all (an em dash placeholder, not a number), and a blank weight logs as
+    // 0. A first-ever Pull-up is therefore correct with zero interaction. This used to require
+    // opening the keypad and backspacing the prefilled "45" out first.
+    const weightInput = page.getByRole('textbox', { name: 'Weight (lb)' });
+    await expect(weightInput).toHaveValue('');
+    await expect(weightInput).toHaveAttribute('placeholder', '—');
 
     await page.getByRole('button', { name: 'Log set' }).click();
 

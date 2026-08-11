@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 // Reused by the live logging flow (large) and EditSetModal (slightly smaller).
 //
 // Geometry lives on the .stepper-* classes in index.css rather than inline. That isn't
@@ -11,11 +13,32 @@
 // these buttons by that text ('-' is U+2212, not a hyphen). Adding an aria-label here
 // would replace the accessible name and break them; `title` leaves it alone, because text
 // content outranks title in accessible-name computation.
-export default function WeightRepsStepper({ label, value, onDec, onInc, onValueTap, size = 'lg' }) {
+//
+// The value itself is a real <input>, not a styled button that used to open a modal
+// keypad. A custom on-screen keypad made sense for one reason only: computePrefillDraft
+// seeds this field with a carried-forward value, and a plain input puts the caret at the
+// end of it, so typing a replacement APPENDED ("tap 135, type 225" produced 135225)
+// instead of replacing it. Selecting the text on focus solves the same problem the
+// platform's own way -- the first keystroke replaces a selection exactly like it does in
+// any other text field -- so mobile keeps its native numeric keyboard and desktop never
+// sees an unrequested overlay.
+export default function WeightRepsStepper({ label, value, onDec, onInc, onChange, size = 'lg' }) {
   const isLarge = size === 'lg';
   // Base class always present -- the landscape rules and the e2e helpers both key off it.
   const btnClass = `stepper-circle-btn${isLarge ? '' : ' stepper-circle-btn-sm'} pressable`;
   const valueClass = `stepper-value${isLarge ? '' : ' stepper-value-sm'}`;
+
+  // Uncontrolled while focused (`draft`), controlled by `value` otherwise. A plain
+  // controlled input re-renders on every keystroke with the PARSED value, which strips a
+  // trailing "." the instant it's typed ("12." -> parseFloat -> 12 -> rendered back as
+  // "12") and makes a decimal impossible to enter digit by digit. Committing only on
+  // blur/Enter keeps typing free-form and mirrors the old keypad's explicit "Done".
+  const [draft, setDraft] = useState(null);
+
+  function commit(raw) {
+    setDraft(null);
+    onChange(parseFloat(raw) || 0);
+  }
 
   return (
     <div
@@ -34,15 +57,29 @@ export default function WeightRepsStepper({ label, value, onDec, onInc, onValueT
         <button type="button" onClick={onDec} title={`Decrease ${label}`} className={btnClass}>
           &minus;
         </button>
-        {onValueTap ? (
-          <button
-            type="button"
-            onClick={onValueTap}
-            aria-label={`${label}: ${value}. Tap to enter an exact value`}
-            className={`${valueClass} pressable`}
-          >
-            {value}
-          </button>
+        {onChange ? (
+          <input
+            type="text"
+            inputMode="decimal"
+            className={valueClass}
+            value={draft ?? value ?? ''}
+            placeholder="—"
+            aria-label={label}
+            // Select-all on focus is the whole trick -- see the header comment. The first
+            // keystroke replaces the selection, which is exactly the "replace, don't
+            // append" behaviour the keypad used to fake with a manual "fresh buffer" flag.
+            onFocus={(e) => {
+              setDraft(String(value ?? ''));
+              e.target.select();
+            }}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={(e) => commit(e.target.value)}
+            onKeyDown={(e) => {
+              // Commits via the blur handler above; Enter shouldn't submit anything else
+              // on this screen (there's no surrounding <form>), just close the keyboard.
+              if (e.key === 'Enter') e.target.blur();
+            }}
+          />
         ) : (
           <div className={valueClass}>{value}</div>
         )}

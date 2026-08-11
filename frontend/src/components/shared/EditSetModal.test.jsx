@@ -54,6 +54,24 @@ describe('EditSetModal', () => {
     expect(onSaved).toHaveBeenCalled();
   });
 
+  // Before WeightRepsStepper's value became a real input, this modal never wired up its
+  // tap-to-edit affordance at all -- correcting a set here meant mashing "+"/"-" one click per
+  // unit, with no way to type an exact number. Both fields now get it for free from the shared
+  // component.
+  it('editing the weight by typing an exact value (not just +/-)', async () => {
+    const set = { id: 55, weight: 135, reps: 5, unit: 'lb' };
+    renderWithQuery(<EditSetModal set={set} personId={7} exerciseId={1} sessionId={101} onClose={onClose} onSaved={onSaved} />);
+
+    const weightInput = screen.getByLabelText('Weight (lb)');
+    fireEvent.focus(weightInput);
+    fireEvent.change(weightInput, { target: { value: '225' } });
+    fireEvent.blur(weightInput);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(editSet).toHaveBeenCalledWith(55, { weight: 225, reps: 5 }));
+    expect(onSaved).toHaveBeenCalled();
+  });
+
   // Editing a not-yet-synced set used to remove and re-dispatch its pending create -- which always
   // re-registered at the end of the shared outbox scope's array (reordering it out from under any
   // write already queued behind it) and, under lie-fi, risked the backend's idempotency dedup

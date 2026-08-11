@@ -1185,7 +1185,9 @@ describe('ExerciseDetail weight prefill', () => {
 
     renderWithQuery(<Harness />);
 
-    expect(await screen.findByLabelText(/^Weight \(lb\): —\./)).toBeInTheDocument();
+    const weightInput = await screen.findByLabelText('Weight (lb)');
+    expect(weightInput).toHaveValue('');
+    expect(weightInput).toHaveAttribute('placeholder', '—');
   });
 
   it('logs a blank weight as 0 instead of refusing the tap', async () => {
@@ -1208,8 +1210,11 @@ describe('ExerciseDetail weight prefill', () => {
 
     renderWithQuery(<Harness liveSession={{ id: 101 }} />);
 
-    expect(await screen.findByLabelText(/^Weight \(lb\): 135\./)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^Reps: 5\./)).toBeInTheDocument();
+    // Unlike the old button (whose aria-label embedded the value, so findByLabelText itself
+    // polled until it updated), the input's label is constant -- it exists from first render,
+    // before the prefill effect has applied. Wait for the VALUE, not just the element.
+    await waitFor(() => expect(screen.getByLabelText('Weight (lb)')).toHaveValue('135'));
+    expect(screen.getByLabelText('Reps')).toHaveValue('5');
   });
 
   it('still prefers the prior session over the sets logged today', async () => {
@@ -1221,6 +1226,6 @@ describe('ExerciseDetail weight prefill', () => {
 
     renderWithQuery(<Harness liveSession={{ id: 101 }} />);
 
-    expect(await screen.findByLabelText(/^Weight \(lb\): 225\./)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Weight (lb)')).toHaveValue('225'));
   });
 });

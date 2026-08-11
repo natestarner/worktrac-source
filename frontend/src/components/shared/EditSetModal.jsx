@@ -54,8 +54,16 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
         size="sm"
         onDec={() => setWeight(Math.max(0, Math.round((weight - step) * 2) / 2))}
         onInc={() => setWeight(Math.round((weight + step) * 2) / 2)}
+        onChange={setWeight}
       />
-      <WeightRepsStepper label="Reps" value={reps} size="sm" onDec={() => setReps(Math.max(0, reps - 1))} onInc={() => setReps(reps + 1)} />
+      <WeightRepsStepper
+        label="Reps"
+        value={reps}
+        size="sm"
+        onDec={() => setReps(Math.max(0, reps - 1))}
+        onInc={() => setReps(reps + 1)}
+        onChange={setReps}
+      />
       <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel

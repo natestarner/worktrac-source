@@ -143,15 +143,6 @@ export const IconTrash = (props) => (
   </Icon>
 );
 
-// Numeric keypad backspace.
-export const IconBackspace = (props) => (
-  <Icon {...props}>
-    <path d="M20 5H9l-6 7 6 7h11a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1Z" />
-    <path d="m17 9-5 6" />
-    <path d="m12 9 5 6" />
-  </Icon>
-);
-
 // Empty-state illustration marks. Larger and lighter-weight than the inline
 // icons above -- an empty state is the one place an icon carries real size.
 export const IconInbox = (props) => (

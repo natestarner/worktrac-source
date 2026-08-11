@@ -457,3 +457,37 @@ The standard properties now live in an `@supports not selector(::-webkit-scrollb
 engines that lack the pseudo-elements. Styling it at all also switches iOS/iPadOS Safari from an
 overlay scrollbar to a persistent one, which is the actual fix: an overlay bar is invisible until you
 already know to swipe.
+
+## Update — 2026-08-10 (later the same day): the custom on-screen keypad is gone
+
+Superseded the "keypad's first keypress replaces the value" bullet above. Tapping the weight or
+reps value opened `NumericKeypad`, a bespoke modal number pad — including on desktop, where
+clicking into a field and having an on-screen keypad slide up is not how any other input on the
+web behaves. It existed for exactly one reason, and that reason didn't actually require it.
+
+**The reason:** the field opens pre-seeded with a carried-forward value (see the prefill section
+above), and a plain `<input>` puts the caret at the *end* of existing text, so typing a
+replacement appends instead of replacing it — tap a prefilled 135, type 225, get 135225.
+`NumericKeypad` solved this with a manual "fresh buffer" flag: the first keypress replaced the
+buffer outright, every keypress after that behaved normally.
+
+**The fix that made the keypad unnecessary:** `WeightRepsStepper`'s value is now a real
+`input[inputMode=decimal]` that calls `.select()` on focus. Selecting the existing text means the
+first keystroke replaces it automatically — the same "replace, don't append" behaviour, supplied
+by the platform instead of hand-rolled. Mobile still gets a numeric keyboard (the OS's own, not a
+bespoke one); desktop gets an ordinary text field with its text highlighted, no overlay.
+
+The input commits on blur/Enter rather than on every keystroke, which is a smaller version of the
+same problem: a plain controlled input re-renders with the *parsed* value on every change, which
+strips a trailing "." the instant it's typed and makes a decimal impossible to enter digit by
+digit. `WeightRepsStepper` buffers the in-progress text in local state while focused and only
+calls back to the parent on blur — mirroring the old keypad's explicit "Done", minus the modal.
+
+Swept up in the same change: `EditSetModal` used the same stepper component for its weight/reps
+rows but never wired up the tap-to-edit affordance at all, so correcting a set there meant mashing
+`+`/`-` one click per unit with no way to type an exact number. It gets the same input for free,
+since both screens share the one component.
+
+`IconBackspace` (`icons.jsx`) and the whole `NumericKeypad.jsx`/`.test.jsx` pair are deleted
+outright rather than left unused — the icon was already dead code before this (the keypad's
+backspace key was the literal glyph `⌫`, not this icon), and nothing else ever referenced it.
