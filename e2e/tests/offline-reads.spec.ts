@@ -19,10 +19,10 @@ async function setWeight(page, target: number) {
   await expect
     .poll(
       async () => {
-        const current = Number(await value.textContent());
+        const current = Number(await value.inputValue());
         if (current === target) return current;
         await row.getByRole('button', { name: current < target ? '+' : '−', exact: true }).click();
-        return Number(await value.textContent());
+        return Number(await value.inputValue());
       },
       { timeout: 15000 },
     )

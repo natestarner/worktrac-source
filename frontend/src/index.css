@@ -822,7 +822,12 @@ input[type='search']::-webkit-search-results-decoration {
   height: 40px;
 }
 
+/* Now an <input>, not a button -- an unstyled text input defaults to a browser-chosen
+   width (~20 characters) that has nothing to do with its content, so `width` has to be
+   explicit here, not just `min-width`. Also drops `cursor: pointer`: a text cursor is the
+   correct affordance for something you type into. */
 .stepper-value {
+  width: 88px;
   min-width: 88px;
   padding: 0;
   text-align: center;
@@ -832,10 +837,14 @@ input[type='search']::-webkit-search-results-decoration {
   background: none;
   border: none;
   color: var(--color-text);
-  cursor: pointer;
+}
+
+.stepper-value::placeholder {
+  color: var(--color-muted);
 }
 
 .stepper-value-sm {
+  width: 64px;
   min-width: 64px;
   font-size: var(--text-2xl);
 }
@@ -921,6 +930,7 @@ input[type='search']::-webkit-search-results-decoration {
   }
 
   .stepper-pair .stepper-value {
+    width: 56px;
     min-width: 56px;
     font-size: var(--text-xl);
   }

@@ -102,10 +102,14 @@ the same index, else **the last set logged today**, else `weight: null`. Three t
 - **The carry-forward is the no-prior-session fallback only.** It must never override the
   set-index walk, which is the more informative answer whenever a prior session exists.
 
-`NumericKeypad`'s first keypress **replaces** the buffer rather than appending. Without it, tapping
-a prefilled 135 and typing 225 produced 135225, so every exact entry began by backspacing the
-prefill out. `setStepper`'s eight leading `⌫` presses still work — the first clears, the rest are
-no-ops on an empty string.
+`WeightRepsStepper`'s value is a real `<input>` that **selects its text on focus**, so the first
+keystroke replaces the prefilled value instead of appending to it. Without that, tapping a
+prefilled 135 and typing 225 produced 135225, so every exact entry began by backspacing the
+prefill out. (A custom on-screen `NumericKeypad` modal used to fake this with a manual "fresh
+buffer" flag; the native input gets the same behaviour from the platform, for free, and doesn't
+pop an unrequested keypad over a mouse-and-keyboard session.) It commits on blur/Enter, not on
+every keystroke — see the component's header comment for why a plain controlled input can't
+support typing a decimal digit by digit.
 
 ## Routine stepping is index-based, and that is load-bearing
 

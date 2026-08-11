@@ -6,9 +6,9 @@ import Button from './Button';
 // Shared editor for both exercise note types (see ExerciseDetail.jsx): the standing
 // per-person note and the per-session note. A blank save clears the note. Centered, like
 // every other content modal (EditSetModal, CustomFieldEditorModal, ConfigureExerciseModal)
-// -- align="bottom" is reserved for NumericKeypad, which replaces the stepper you just
-// tapped in place; a note editor has no such anchor and reads as stuck/broken pinned to
-// the bottom edge on a desktop-width screen.
+// -- Modal's align="bottom" sheet variant is for a control that replaces something you
+// just tapped in place; a note editor has no such anchor and reads as stuck/broken pinned
+// to the bottom edge on a desktop-width screen.
 export default function ExerciseNoteModal({ title, subtitle, initialNote, onClose, onSave }) {
   const [note, setNote] = useState(initialNote || '');
 
