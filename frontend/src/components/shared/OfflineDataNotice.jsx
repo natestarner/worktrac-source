@@ -1,4 +1,5 @@
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { useOutboxCount } from '../../hooks/useOutboxCount';
 import { formatDateTime } from '../../utils/datetime';
 
 // Shown on read-only tabs (History/PRs/Trends/Routines) while offline, so a cached view is
@@ -7,9 +8,25 @@ import { formatDateTime } from '../../utils/datetime';
 // needs online + a background fetch). `updatedAt` is a query's `dataUpdatedAt` (ms epoch);
 // `formatDateTime` accepts that directly, same as it does an ISO string, since `new Date(ms)`
 // and `new Date(isoString)` both work.
+//
+// The timestamp alone understates the problem when writes are queued: none of these four tabs has
+// an optimistic writer, and invalidation is a no-op while paused, so a set logged during the
+// outage is *missing* from what's on screen rather than merely old. The count comes from the same
+// useOutboxCount the banner reads, so the two can never disagree about how much is outstanding.
+// Its wording deliberately shares no phrase with the banner's "N changes waiting to sync": both
+// are on screen at once, and e2e/RTL each select the banner's count by its text.
 export default function OfflineDataNotice({ updatedAt }) {
   const online = useOnlineStatus();
+  const queued = useOutboxCount();
   if (online || !updatedAt) return null;
+
+  // Curly apostrophe to match the banner's own copy ("They'll sync when you reconnect").
+  const unsynced =
+    queued === 0
+      ? ''
+      : queued === 1
+        ? ' · 1 change hasn’t synced yet, so this is incomplete'
+        : ` · ${queued} changes haven’t synced yet, so this is incomplete`;
   return (
     <div
       role="status"
@@ -26,7 +43,10 @@ export default function OfflineDataNotice({ updatedAt }) {
         fontWeight: 700,
       }}
     >
+      {/* One flat run of text nodes on purpose -- RTL's getByText only concatenates DIRECT text
+          children, and four tab tests match this string with /Offline.*data as of/. */}
       Offline &mdash; data as of {formatDateTime(updatedAt)}
+      {unsynced}
     </div>
   );
 }

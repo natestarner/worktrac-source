@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { pickExercise } from './support/exercises';
-import { goHardOffline, goOnline, offlineSavedLocallyBanner, waitForOutboxDrain } from './support/offline';
+import { goHardOffline, goOnline, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain } from './support/offline';
 import { failNetwork } from './support/faults';
 
 function personPill(page, name: string) {
@@ -92,6 +92,42 @@ test.describe('Offline mode — reads over the warmed cache', () => {
 
     await expect(page.getByText('Barbell Bench Press')).toBeVisible();
     await expect(page.getByText('45lb×8')).toBeVisible();
+  });
+
+  // The "as of" timestamp on its own says the list is OLD. Once a write is queued the list is also
+  // MISSING something -- History has no optimistic writer and invalidation is a no-op while paused,
+  // so a set logged during the outage simply isn't there. This asserts the notice says so, and then
+  // that the claim is true: the offline set really is absent until it syncs.
+  test('the offline data notice names the unsynced changes missing from the cached list', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Wren');
+    await pickExercise(page, 'Barbell Bench Press');
+    await setWeight(page, 45);
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+
+    // Visit History online first, so its query holds a real fetch timestamp to report.
+    await page.getByRole('link', { name: 'History' }).click();
+    await expect(page.getByText('45lb×8')).toBeVisible();
+    await expect(page.getByText(/data as of/)).toBeHidden();
+
+    await page.getByRole('link', { name: 'Log' }).click();
+    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+
+    await goHardOffline(page);
+    await setWeight(page, 50);
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(2);
+    await expect(outboxCountText(page, 1)).toBeVisible();
+
+    await page.getByRole('link', { name: 'History' }).click();
+    await expect(page.getByText(/data as of.*1 change hasn.t synced yet, so this is incomplete/)).toBeVisible();
+    await expect(page.getByText('50lb×8')).toBeHidden();
+
+    // Reconnect: the queued set lands, so the notice has nothing left to warn about.
+    await goOnline(page);
+    await waitForOutboxDrain(page);
+    await expect(page.getByText('50lb×8')).toBeVisible();
+    await expect(page.getByText(/data as of/)).toBeHidden();
   });
 
   test('switching the active person offline serves each one their own warmed data with no leak', async ({ page, request }) => {

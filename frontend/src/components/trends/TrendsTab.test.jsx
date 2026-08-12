@@ -1,6 +1,9 @@
 import { onlineManager } from '@tanstack/react-query';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// This tab's data hooks are all mocked, but OfflineDataNotice reads the durable outbox count
+// straight off the mutation cache, so the tree still needs a real QueryClient around it.
+import { renderWithQuery } from '../../test/queryWrapper';
 import TrendsTab from './TrendsTab';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
@@ -66,13 +69,13 @@ describe('TrendsTab', () => {
 
   it('shows a skeleton while the overview is being fetched', () => {
     useTrendsOverview.mockReturnValue({ overview: null, loading: true });
-    render(<TrendsTab />);
+    renderWithQuery(<TrendsTab />);
     expect(screen.getByTestId('trends-skeleton')).toBeInTheDocument();
   });
 
   it('shows the onboarding empty state only for a person who has never logged anything', () => {
     useTrendsOverview.mockReturnValue({ overview: emptyRange(false), loading: false });
-    render(<TrendsTab />);
+    renderWithQuery(<TrendsTab />);
     expect(screen.getByText(/no workouts logged yet/i)).toBeInTheDocument();
   });
 
@@ -80,7 +83,7 @@ describe('TrendsTab', () => {
     // The regression this guards: keying the onboarding copy off the selected range alone told
     // someone with years of history "No workouts logged yet" the moment they clicked 4wk.
     useTrendsOverview.mockReturnValue({ overview: emptyRange(true), loading: false });
-    render(<TrendsTab />);
+    renderWithQuery(<TrendsTab />);
 
     expect(screen.getByText(/no workouts in the last 12 weeks/i)).toBeInTheDocument();
     expect(screen.queryByText(/no workouts logged yet/i)).not.toBeInTheDocument();
@@ -88,7 +91,7 @@ describe('TrendsTab', () => {
 
   it('keeps the range toggle usable on the empty-range state so the person can widen it', () => {
     useTrendsOverview.mockReturnValue({ overview: emptyRange(true), loading: false });
-    render(<TrendsTab />);
+    renderWithQuery(<TrendsTab />);
 
     fireEvent.click(screen.getByText('All'));
     expect(setTrendsRange).toHaveBeenCalledWith(260);
@@ -107,7 +110,7 @@ describe('TrendsTab', () => {
       setTrendsExerciseMetric: vi.fn(),
     });
     useTrendsOverview.mockReturnValue({ overview: emptyRange(true), loading: false });
-    render(<TrendsTab />);
+    renderWithQuery(<TrendsTab />);
 
     // "All" is 5 years, not 12 weeks -- a hardcoded label got this wrong.
     expect(screen.getByText(/no workouts in the last 5 years/i)).toBeInTheDocument();
@@ -115,7 +118,7 @@ describe('TrendsTab', () => {
 
   it('renders summary cards and every chart section once there is activity in range', () => {
     useTrendsOverview.mockReturnValue({ overview: overviewWithActivity, loading: false });
-    render(<TrendsTab />);
+    renderWithQuery(<TrendsTab />);
 
     expect(screen.getByText('1 week')).toBeInTheDocument();
     expect(screen.getByText('consistency-heatmap')).toBeInTheDocument();
@@ -126,7 +129,7 @@ describe('TrendsTab', () => {
 
   it('lets the user change the range toggle', () => {
     useTrendsOverview.mockReturnValue({ overview: overviewWithActivity, loading: false });
-    render(<TrendsTab />);
+    renderWithQuery(<TrendsTab />);
 
     fireEvent.click(screen.getByText('4wk'));
     expect(setTrendsRange).toHaveBeenCalledWith(4);
@@ -139,7 +142,7 @@ describe('TrendsTab', () => {
       loading: false,
       updatedAt: new Date('2026-07-22T15:00:00').getTime(),
     });
-    render(<TrendsTab />);
+    renderWithQuery(<TrendsTab />);
     expect(screen.queryByText(/Offline/)).not.toBeInTheDocument();
 
     act(() => onlineManager.setOnline(false));

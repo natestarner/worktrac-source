@@ -194,3 +194,14 @@ outbox count is what signals "not yet synced", not the row.
 A cached view paints instantly; `RefreshingPill` (`isFetching && !isLoading`) announces any
 background refetch so an on-screen value never changes silently. Skeletons show only on genuine
 first load.
+
+`OfflineDataNotice` is the offline half of that slot, and it reports **both** halves of the truth:
+the `dataUpdatedAt` timestamp *and* `useOutboxCount`, because on these four tabs a queued write is
+not merely un-refreshed — none of them has an optimistic writer, and invalidation is a no-op while
+paused, so the queued set is **absent** from what's on screen. A timestamp alone reads as "slightly
+old" when the list is actually incomplete.
+
+- **Read the count from `useOutboxCount`**, the same hook `OfflineBanner` uses, so the two can
+  never disagree about how much is outstanding.
+- **Its wording must share no phrase with the banner's `"N changes waiting to sync"`.** Both are on
+  screen at once, and Playwright (substring) and RTL both select the banner's count by that text.
