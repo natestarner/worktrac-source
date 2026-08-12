@@ -1,7 +1,10 @@
 import { onlineManager } from '@tanstack/react-query';
-import { act, render, screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// This tab's data hooks are all mocked, but OfflineDataNotice reads the durable outbox count
+// straight off the mutation cache, so the tree still needs a real QueryClient around it.
+import { renderWithQuery } from '../../test/queryWrapper';
 import RoutinesTab from './RoutinesTab';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
@@ -44,7 +47,7 @@ describe('RoutinesTab offline', () => {
   afterEach(() => onlineManager.setOnline(true));
 
   it('leaves New/Edit/Copy/Delete enabled and hides the offline notice while online', () => {
-    render(<MemoryRouter><RoutinesTab /></MemoryRouter>);
+    renderWithQuery(<MemoryRouter><RoutinesTab /></MemoryRouter>);
 
     expect(screen.getByRole('button', { name: '+ New routine' })).not.toBeDisabled();
     expect(screen.getByRole('button', { name: 'Edit' })).not.toBeDisabled();
@@ -54,7 +57,7 @@ describe('RoutinesTab offline', () => {
   });
 
   it('disables New/Edit/Copy/Delete and shows the offline data notice while offline', () => {
-    render(<MemoryRouter><RoutinesTab /></MemoryRouter>);
+    renderWithQuery(<MemoryRouter><RoutinesTab /></MemoryRouter>);
 
     act(() => onlineManager.setOnline(false));
 
@@ -66,7 +69,7 @@ describe('RoutinesTab offline', () => {
   });
 
   it('still lets a routine be started while offline (purely local, no network)', () => {
-    render(<MemoryRouter><RoutinesTab /></MemoryRouter>);
+    renderWithQuery(<MemoryRouter><RoutinesTab /></MemoryRouter>);
 
     act(() => onlineManager.setOnline(false));
 
