@@ -127,10 +127,9 @@ forEachConnectivityMode<void>("the weight carries forward from today's previous 
   },
 });
 
-// A FOUND DIVERGENCE, recorded rather than quietly dropped. See the block comment at the bottom
-// of this file.
+// Regression coverage for docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md.
+// See the block comment at the bottom of this file for what this caught and how.
 forEachConnectivityMode<void>('a set is still listed under This session after a reload', {
-  fixmeModes: ['lie-fi', 'pinned-offline'],
   setup: async (page, request) => {
     await registerHousehold(page, request, 'Rafferty');
     await warmCatalog(page);
@@ -141,6 +140,15 @@ forEachConnectivityMode<void>('a set is still listed under This session after a 
   act: async (page) => {
     await page.getByRole('button', { name: /Log set/ }).click();
     await expect(setRow(page, 0)).toBeVisible();
+    // Load-bearing, and deliberately the OPPOSITE of offline-durability's "reload IMMEDIATELY".
+    // The bug needs the provisional { id: null } liveSession to have actually reached disk, and the
+    // query persister is throttled to one write per second (persistOptions in lib/queryClient.js).
+    // Reconnect inside that window and the reload restores a snapshot with no liveSession entry at
+    // all -- the query then fetches on mount and the bug cannot show. That is exactly why this
+    // originally looked like a lie-fi/pinned-offline divergence: those modes take seconds to drain,
+    // the other two took under one. Keep this above the persister's throttleTime; if that value
+    // ever changes, this must change with it.
+    await page.waitForTimeout(1200);
   },
   assert: async (page) => {
     await expect(setRow(page, 0)).toBeVisible();
@@ -292,27 +300,37 @@ forEachConnectivityMode<void>('switching exercises never shows the previous one\
 });
 
 // ---------------------------------------------------------------------------------------------
-// FOUND BY THIS HARNESS, on its first run -- the "still listed after a reload" spec above.
+// FOUND BY THIS HARNESS on its first run, recorded as a fixme with a reproduction rather than
+// blind-patched, and fixed on 2026-08-12 once that reproduction had been instrumented. Full
+// narrative: docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md.
 //
-// Log a set during lie-fi or while pinned offline, reconnect, let the outbox drain, then reload:
-// the set is GONE from "This session", even though it reached the server. The page snapshot proves
-// the write landed -- the summary reads "Last time · Today 0lb×8" and the Est. 1RM updated -- so
-// nothing is lost. What is missing is the current session's own set list. Online and hard-offline
-// both repopulate it correctly; only the two modes where the session never had a server-issued id
-// during the write fail. Reproducible at --workers=1, so it is not the known worker contention.
+// The bug: log a set while degraded, reconnect, let the outbox drain, reload -- and the set is GONE
+// from "This session" even though it reached the server. `logSetMutation.onMutate` seeds a
+// provisional `{ id: null }` liveSession, that entry gets persisted like any other, and after a
+// reload its `dataUpdatedAt` (the moment the CLIENT invented it) satisfies every freshness check
+// there is. Nothing refetches, so `contextSessionId` stays null, `sessionSets` never runs, and the
+// list is empty. Fixed in useLiveSession.js: a session with no server id can never be fresh.
 //
-// Consistent with two documented mechanisms compounding, which is this codebase's signature
-// failure shape:
-//   - `contextSessionId` stays null for the whole degraded stretch, so the `sessionSets` query
-//     keyed on it never runs (frontend-core.md, "A durable write is not the same as a visible
-//     value").
-//   - A rehydrated cache entry keeps its old `dataUpdatedAt`, so it "claims to be seconds old" and
-//     satisfies every staleness check on boot -- and `sessionSets` is session-scoped, so it is
-//     neither cache-warmed nor on the `refreshAfterRestore` opt-in list
-//     (docs/incidents/2026-08-08-restored-cache-looks-fresh.md).
+// Two things the original note got wrong, both worth keeping as cautionary tales:
 //
-// Deliberately NOT fixed here: it sits in ExerciseDetail/queryClient cache logic, the densest file
-// in the app for cross-cutting invariants and the origin of most of docs/incidents/. A speculative
-// fix is exactly the kind of change that has caused the seesawing this work exists to stop. It is
-// recorded as a fixme with a reproduction so the next person starts from evidence, not a guess.
+//   1. "Only lie-fi and pinned-offline fail" was wrong: ALL THREE degraded modes are exposed, and
+//      hard-offline was merely escaping on timing. The bug needs the placeholder to have reached
+//      disk, and the persister is throttled to 1s -- lie-fi's retry backoff makes its runs take
+//      seconds, while hard-offline finished in under one, so its reload restored a snapshot with no
+//      liveSession entry at all and the query simply fetched. The 1.2s in-mode wait in `act` above
+//      is what makes all three reproduce. Online is the only mode that is structurally safe: there
+//      the placeholder lives ~50ms before onSuccess's refetchLiveSession replaces it with the real
+//      session, so it is never what gets persisted. Verified by reverting the fix: 3 failed, 1
+//      passed.
+//
+//   2. Three of the four modes were passing this spec VACUOUSLY. `waitForOutboxDrain` returned
+//      while the write was still in flight (see its comment in support/offline.ts), so the reload
+//      landed with the write still in the outbox and the row after it came from restoreOutbox's
+//      replay rather than from the server. Only lie-fi -- whose write has failureCount > 0 and so
+//      stays counted -- was actually testing the thing. That gate is now honest, which is what let
+//      hard-offline reproduce at all.
+//
+// The moral for the next divergence this harness finds: a fixme with a reproduction is the right
+// call, but confirm the reproduction is measuring what it claims before trusting its shape. The
+// per-mode pattern here pointed at a mechanism that did not exist.
 // ---------------------------------------------------------------------------------------------

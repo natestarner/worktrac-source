@@ -63,6 +63,28 @@ export async function failWithStatus(page: Page, urlPattern: string | RegExp, st
   });
 }
 
+// Holds matching requests open for `delayMs` and then lets them through for real -- axis A's
+// "slow but alive" row, which neither failNetwork (a rejected fetch) nor failWithStatus (an
+// immediate error response) can produce. A merely-slow backend is indistinguishable from a dead one
+// to the client until api/client.js's REQUEST_TIMEOUT_MS fires, and the interesting window is
+// BEFORE that: the write is genuinely in flight, the outbox still holds it, and any reload lands
+// mid-write. That is the one condition a cold-starting lower backend produces routinely.
+//
+// `.stop()` lets the remaining requests through untouched, so a test can end the slow period
+// without waiting out an in-flight delay.
+export async function delayNetwork(page: Page, urlPattern: string | RegExp, delayMs: number) {
+  let delaying = true;
+  await page.route(urlPattern, async (route: Route) => {
+    if (delaying) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    await route.continue();
+  });
+  return {
+    stop: () => {
+      delaying = false;
+    },
+  };
+}
+
 export async function clearFaults(page: Page, urlPattern: string | RegExp) {
   await page.unroute(urlPattern);
 }

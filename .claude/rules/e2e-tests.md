@@ -32,6 +32,12 @@ Full narrative: `docs/architecture/testing.md`.
 - Locally, Playwright auto-detects ~11 workers vs CI's fixed 2, which overwhelms a single local
   backend. Rerun a failure with `--workers=2` before treating it as real — and if it still fails,
   try `--workers=1` before believing it, since a couple of specs are contention-sensitive.
+- **Invoke `scripts/e2e.sh` by RELATIVE path from the worktree you mean.** An absolute path to
+  another checkout's copy runs *that* tree's specs and `node_modules` against *this* worktree's
+  ports and database — `worktree-env.sh` answers "which repo" from `$PWD` while each script answers
+  from its own location. It presents as the stack-death signature below, so it disguises itself as
+  the very thing you're about to rule out. `worktree-env.sh` now refuses this, but only for trees
+  that already carry that guard.
 - **Scattered failures across unrelated specs — especially if `smoke.spec.ts` is among them — mean
   the stack, not the code.** Check `.dev-logs/frontend.log` for
   `http proxy error … ECONNREFUSED` (backend wasn't up) and confirm both ports answer before
@@ -112,6 +118,16 @@ Phases, in order — `setup` runs **online**, everything after runs **in the mod
   offline (where `derivedSummary` resolves synchronously from the warmed cache) and very visible
   online (where it lasts a round trip). Checking only the offline modes would have concluded there
   was no bug.
+- **`waitForOutboxDrain` is the only sanctioned "the write reached the server" gate, and the banner
+  count alone is not one.** `useOutboxCount` stops counting a write once it is a plain in-flight
+  first attempt, which also fires the instant a paused write resumes — so gating on the banner text
+  by hand lets a reload land with the write still in the outbox, and whatever renders next came from
+  `restoreOutbox`'s replay, not the server. That made three of four parity modes pass vacuously
+  (`docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md`).
+- **A `fixmeModes` entry is a hypothesis, not a diagnosis.** Recording a found divergence instead of
+  blind-patching is right, but confirm the reproduction measures what it claims before reasoning
+  from *which* modes it names — the 2026-08-12 entry's mode list was an artifact of how long each
+  mode's run happened to take relative to the persister's 1s throttle.
 
 ## ⚠️ Cross-file coupling: the test email pattern
 

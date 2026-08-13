@@ -78,13 +78,35 @@ export function outboxCountText(page: Page, n: number) {
   return page.getByText(n === 1 ? '1 change waiting to sync' : `${n} changes waiting to sync`);
 }
 
+// "Every queued write has actually reached the server" -- and the banner count alone is NOT that
+// gate.
+//
+// useOutboxCount deliberately stops counting a write the moment it becomes a plain in-flight first
+// attempt (pending, not paused, failureCount 0), so a fast online write doesn't flash the banner.
+// That also means the count drops the instant resumePausedMutations() un-pauses a queued write --
+// well before the request completes. A reload straight afterwards lands with the write still in the
+// durable outbox, so whatever renders next came from restoreOutbox's replay rather than from server
+// truth. Three of the four parity modes were passing that way, which is why
+// docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md showed up only in lie-fi
+// -- the one mode whose write has failureCount > 0 and so stays counted until it genuinely succeeds.
+//
+// The per-row "Saving..." state is exactly the first-in-flight-attempt signal the count omits, so
+// waiting out both closes the gap with no new plumbing. Do NOT "fix" useOutboxCount instead: its
+// exclusion is deliberate product behaviour (see that hook's header comment).
 export async function waitForOutboxDrain(page: Page, timeout = 15000) {
   await expect(page.getByText(/waiting to sync/i)).toBeHidden({ timeout });
+  await expect(savingRow(page)).toBeHidden({ timeout });
 }
 
 // The per-row state shown while a logged set is unsynced (paused, retrying, or mid-backoff) --
 // see ExerciseDetail.jsx. Covers BOTH the offline and intermittent-error cases; there is no
 // separate "will sync" wording anymore, only this.
+//
+// EXACT, not /Saving/. RoutineFormModal's offline toast reads "Saving a routine needs a
+// connection.", so the loose pattern matches two unrelated things -- and since waitForOutboxDrain
+// now uses this on behalf of every spec that drains, a substring match would turn any future
+// offline-routine test into a strict-mode violation in a helper it never knowingly called.
+// The row renders `Saving&hellip;`, i.e. a real ellipsis character.
 export function savingRow(page: Page) {
-  return page.getByText(/Saving/);
+  return page.getByText('Saving…', { exact: true });
 }

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { pickExercise, addOwnExercise } from './support/exercises';
-import { API_ONLY, failNetwork, failWithStatus } from './support/faults';
+import { API_ONLY, delayNetwork, failNetwork, failWithStatus } from './support/faults';
 import { troubleBanner, goOfflineButton, goBackOnlineButton, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 // Mode 2: the backend is unreachable or erroring, but the browser is still "online"
@@ -248,5 +248,50 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     await expect(page).toHaveURL(/\/app\//);
     await expect(page.getByText('Set 1')).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+  });
+
+  // "Slow but alive" (axis A) crossed with "a reload at the worst instant" (axis C) -- the one
+  // combination the parity harness cannot reach, because there the write always settles before the
+  // reload. A cold-starting lower backend produces it routinely, and nothing else covered it.
+  //
+  // ⚠️ READ THIS BEFORE TREATING IT AS REGRESSION COVERAGE FOR 2026-08-12: it is not. Verified
+  // vacuous for that fix -- it passes with the provisional-session staleTime predicate reverted.
+  // The reason is the point: with the write STILL QUEUED at reload time, the outbox replay's
+  // LOG_SET onSettled invalidates liveSession by itself, so contextSessionId resolves either way.
+  // That is exactly why the original bug needed an EMPTY outbox to bite -- once the write has
+  // landed there is no replay left to invalidate anything, and the restored provisional entry's
+  // fake freshness is the only thing left deciding. The guard for that lives in
+  // parity-active-loop.spec.ts (3 of 4 modes fail without the fix) and useLiveSession.test.jsx.
+  //
+  // What this DOES pin is the settled state of the fix's one residual risk: the revalidation can
+  // now race the replay, and if the GET wins the server answers null (no session yet) and briefly
+  // replaces the placeholder -- so the session banner may blink. It must come back, and the set
+  // must be listed under it. Deliberately ONLINE: offline and lie-fi cannot show this at all,
+  // since the revalidation pauses or fails and the placeholder is retained either way.
+  test('a set logged against a slow backend survives a reload taken mid-write', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Marlow');
+    await pickExercise(page, 'Barbell Bench Press');
+
+    // Slow enough that the write is unambiguously still in flight at reload time, but well under
+    // api/client.js's REQUEST_TIMEOUT_MS -- this is a slow backend, not a dead one.
+    const slow = await delayNetwork(page, /\/api\/people\/\d+\/live-sets/, 4000);
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByText('0 lb × 8', { exact: true })).toBeVisible();
+
+    // Outlast the query persister's 1s throttle so the PROVISIONAL session is what reaches disk --
+    // without this the reload restores a snapshot with no liveSession entry and the interesting
+    // path never runs (see parity-active-loop.spec.ts's matching wait).
+    await page.waitForTimeout(1200);
+    await page.reload();
+
+    // The write is replayed from the durable outbox on boot; let it land at normal speed.
+    slow.stop();
+    await waitForOutboxDrain(page, 30000);
+
+    // Settled state: the session is live again and the set is listed under it -- i.e. the
+    // revalidation resolved to the REAL session id rather than leaving contextSessionId null.
+    await expect(page.getByText(/Session in progress/)).toBeVisible();
+    await expect(page.getByText('0 lb × 8', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(1);
   });
 });
