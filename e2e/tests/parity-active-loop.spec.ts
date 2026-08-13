@@ -252,13 +252,42 @@ forEachConnectivityMode<void>('switching exercises never shows the previous one\
       .toBe(25);
 
     await page.getByRole('button', { name: '← All exercises' }).click();
+
+    // Record the weight field's value on every animation frame from here on. Installed on the
+    // PICKER, where ExerciseDetail is unmounted and no weight input exists, so every sample
+    // collected below necessarily belongs to the pull-up screen -- starting a frame earlier
+    // records the bench press's own legitimate 25 and fails against correct code.
+    //
+    // A retrying matcher cannot test this: the stale value corrects itself as soon as the new
+    // exercise's summary resolves, so `toHaveValue('')` simply waits the bug out and passes --
+    // verified, this spec did exactly that before this sampler existed. Sampling per frame pins
+    // the actual claim, which is about what gets PAINTED, and needs no per-mode timing knowledge:
+    // however long the window is in this mode, every frame of it is inspected.
+    await page.evaluate(() => {
+      const seen = new Set();
+      window.__weightSamples = seen;
+      const sample = () => {
+        const el = document.querySelector('input[aria-label^="Weight"]');
+        if (el) seen.add(el.value);
+        window.__weightSampler = requestAnimationFrame(sample);
+      };
+      sample();
+    });
+
     await pickExercise(page, 'Pull-up');
   },
   assert: async (page) => {
     // Pull-up has no history in any mode, so the em dash is the one correct answer everywhere.
-    // 25 appearing here would be the bench press's draft wearing the pull-up's name.
     await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Weight (lb)' })).toHaveValue('');
+
+    // ...and it must have been the answer for every frame, not just the one this assertion
+    // happened to land on. '25' here is the bench press's draft wearing the pull-up's name.
+    const painted = await page.evaluate(() => {
+      cancelAnimationFrame(window.__weightSampler);
+      return [...window.__weightSamples];
+    });
+    expect(painted).not.toContain('25');
   },
 });
 
