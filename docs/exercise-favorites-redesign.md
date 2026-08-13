@@ -491,3 +491,49 @@ since both screens share the one component.
 `IconBackspace` (`icons.jsx`) and the whole `NumericKeypad.jsx`/`.test.jsx` pair are deleted
 outright rather than left unused — the icon was already dead code before this (the keypad's
 backspace key was the literal glyph `⌫`, not this icon), and nothing else ever referenced it.
+
+## Update — 2026-08-13: the weight/reps draft is stamped with the exercise it belongs to
+
+Two bugs, one cause. The draft (`weightDraft`/`repsDraft`) is **per-person** state living in
+`AppStateContext` — mounted above the router — describing a **per-exercise** value the person may
+also have typed by hand. It carried no record of any of that, so nothing could tell a stale
+suggestion apart from what someone had just entered.
+
+**Switching exercises painted the previous exercise's numbers** until the new exercise's summary
+resolved: one frame when cached, a full round trip when not, the whole `retry: 2` window under
+lie-fi. Both navigation paths hit it — the picker unmounts `ExerciseDetail` (`LogTab` renders it
+under `selectedExercise &&`) and the routine strip swaps the prop without unmounting, but the draft
+outlives both. `key={exercise.id}` fixes neither and would break the routine path's index-based
+stepping.
+
+**A late re-seed could overwrite a weight the person had typed**, and the set was then logged at the
+prefill. The effect re-fired on any change to `summary` identity or `displaySets.length` — including
+the window-focus refetch that `summaryQuery`'s `staleTime: 0` guarantees, which mid-workout on an
+iPad is routine rather than exceptional. Known since 2026-08-08 and worked around in the e2e helpers
+instead of fixed; full post-mortem in
+`docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md`.
+
+Decision: **the draft carries a stamp** — `draftExerciseId`, `draftSetCount`, `draftSource`
+(`'prefill' | 'user'`) — and a single `SET_DRAFT` writes it together with both numbers. There is
+deliberately no way to set weight without reps: a partial write would stamp the new exercise while
+the other field still held the old one's value, which is the first bug one field at a time.
+
+What gets painted is now **derived during render**, not written back by an effect. An effect runs
+after paint at best and not at all until the summary lands, which is precisely how the stale value
+showed through; it remains only to *record* the seed. Re-seeding over `source: 'user'` requires
+either an exercise change or a set actually being **added** — `displaySets.length > draftSetCount`,
+strictly greater. `!==` was the obvious form and is wrong: the count is transiently 0 while
+`sessionSets` reloads after a remount, so `!==` reads a return-from-the-picker as "a set was logged"
+and destroys the typed value. That was caught by walking the remount path during design, and now has
+its own test.
+
+**Reps gains a blank state**, matching weight. During the window before an exercise's history loads,
+both fields show the em dash rather than a number belonging to something else; `repsValue` (`?? 8`)
+is what actually gets logged, mirroring `weightValue` (`?? 0`). Considered and rejected: keeping reps
+on its 8 default through that window — 8 is less obviously wrong than another exercise's rep count,
+which is exactly what makes it worse to show.
+
+Also rejected: sourcing the prefill from the warmed `history` cache to close the blank window
+entirely. It would usually put the right number on screen instantly, but it widens the
+`summaryQuery.isPaused || isError → derivedSummary` divergence on the resilience register beyond what
+that entry was reasoned about, for a cosmetic gain. An honest blank is the smaller claim.
