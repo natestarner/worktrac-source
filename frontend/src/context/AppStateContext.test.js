@@ -25,7 +25,7 @@ describe('AppStateContext reducer', () => {
   it('each person has an independent slice -- switching away and back resumes exactly where they left off', () => {
     let state = withPerson(1);
     state = reducer(state, { type: 'SELECT_EXERCISE', exerciseId: 99 });
-    state = reducer(state, { type: 'SET_WEIGHT_DRAFT', value: 185 });
+    state = reducer(state, { type: 'SET_DRAFT', exerciseId: 99, weight: 185, reps: 5, setCount: 0, source: 'user' });
 
     // Switch to person 2 -- their own (fresh) slice, unaffected by person 1.
     state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
@@ -36,6 +36,33 @@ describe('AppStateContext reducer', () => {
     state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
     expect(active(state).selectedExerciseId).toBe(99);
     expect(active(state).weightDraft).toBe(185);
+  });
+
+  // The stamp is what tells ExerciseDetail whether the numbers in this slice describe the exercise
+  // currently on screen and whether the person typed them. A partial write -- weight stamped to the
+  // new exercise while reps still holds the old one's -- is the same bug the stamp exists to
+  // prevent, so there is deliberately no way to set one without the other.
+  it('SET_DRAFT writes both numbers and the whole stamp together', () => {
+    let state = withPerson(1);
+    state = reducer(state, { type: 'SET_DRAFT', exerciseId: 42, weight: 315, reps: 2, setCount: 3, source: 'user' });
+
+    expect(active(state)).toMatchObject({
+      weightDraft: 315,
+      repsDraft: 2,
+      draftExerciseId: 42,
+      draftSetCount: 3,
+      draftSource: 'user',
+    });
+  });
+
+  it('SET_DRAFT carries a null weight through as "no history yet"', () => {
+    // null is a display state (em dash), not an absent value -- it must survive the round trip
+    // rather than being coerced to 0, which would claim the person is lifting zero.
+    let state = withPerson(1);
+    state = reducer(state, { type: 'SET_DRAFT', exerciseId: 42, weight: null, reps: 8, setCount: 0, source: 'prefill' });
+
+    expect(active(state).weightDraft).toBeNull();
+    expect(active(state).draftSource).toBe('prefill');
   });
 
   it('keeps each person on their own last tab', () => {
@@ -169,13 +196,20 @@ describe('AppStateContext reducer', () => {
   });
 
   it('draft/routine actions are a no-op when there is no active person', () => {
-    const state = reducer(initialState, { type: 'SET_WEIGHT_DRAFT', value: 999 });
+    const state = reducer(initialState, {
+      type: 'SET_DRAFT',
+      exerciseId: 1,
+      weight: 999,
+      reps: 8,
+      setCount: 0,
+      source: 'user',
+    });
     expect(state).toBe(initialState);
   });
 
   it('HYDRATE replaces the whole state (clearing any prior account\'s slices)', () => {
     let state = withPerson(1);
-    state = reducer(state, { type: 'SET_WEIGHT_DRAFT', value: 185 });
+    state = reducer(state, { type: 'SET_DRAFT', exerciseId: 1, weight: 185, reps: 5, setCount: 0, source: 'user' });
 
     const restored = reducer(state, {
       type: 'HYDRATE',
@@ -241,6 +275,12 @@ describe('AppStateContext reducer', () => {
 
     expect(restored.byPerson[1].trendsWeeklyMetric).toBe('volume');
     expect(restored.byPerson[1].prsSort).toBe('recent');
+    // The draft stamp is the newest such field. Hydrating draftExerciseId as null (rather than
+    // undefined) is what makes the restored weightDraft below read as "belongs to no exercise on
+    // screen" instead of being painted under whatever exercise the person lands on.
+    expect(restored.byPerson[1].draftExerciseId).toBeNull();
+    expect(restored.byPerson[1].draftSetCount).toBe(0);
+    expect(restored.byPerson[1].draftSource).toBe('prefill');
     // Backfilling must not clobber what WAS persisted.
     expect(restored.byPerson[1].selectedExerciseId).toBe(7);
     expect(restored.byPerson[1].weightDraft).toBe(225);

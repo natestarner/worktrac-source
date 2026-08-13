@@ -215,6 +215,82 @@ forEachConnectivityMode<void>('favoriting and adding a session note both show im
   },
 });
 
+// Switching exercises must never leave the previous exercise's weight/reps in the steppers. The
+// draft is per-PERSON state living above the router, so it survives both switch paths -- the
+// picker (which unmounts ExerciseDetail) and the routine strip (which does not) -- and only the
+// stamp on it says which exercise it describes.
+//
+// Asserted across all four modes because the window this shows in is bounded by how long the new
+// exercise's summary takes to resolve, and that is precisely what degrades: online it is a frame,
+// under lie-fi it is the whole retry budget before the derived-from-history fallback takes over.
+// A single online assertion would be the weakest possible version of this test.
+forEachConnectivityMode<void>('switching exercises never shows the previous one\'s weight', {
+  setup: async (page, request) => {
+    await registerHousehold(page, request, 'Thackeray');
+    await warmCatalog(page);
+    // Warm the second exercise too -- the picker filters client-side over one cached query, so an
+    // exercise never fetched while online is simply absent from the list in a degraded mode.
+    const search = page.getByPlaceholder('Search all exercises');
+    await search.fill('Pull-up');
+    await expect(page.getByRole('button', { name: 'Pull-up', exact: true })).toBeVisible();
+    await search.fill('');
+  },
+  navigate: async (page) => {
+    await pickExercise(page, EXERCISE);
+  },
+  act: async (page) => {
+    // Put a distinctive, unmistakably-not-a-default number in the draft, then leave for an
+    // exercise that has no history at all. 25 is reachable by stepping, which works in every mode.
+    const weightRow = page.locator('.stepper-row').filter({ hasText: 'Weight' });
+    await expect
+      .poll(async () => {
+        const current = Number(await weightRow.locator('.stepper-value').inputValue());
+        if (current === 25) return current;
+        await weightRow.getByRole('button', { name: current < 25 ? '+' : '−', exact: true }).click();
+        return Number(await weightRow.locator('.stepper-value').inputValue());
+      }, { timeout: 15000 })
+      .toBe(25);
+
+    await page.getByRole('button', { name: '← All exercises' }).click();
+
+    // Record the weight field's value on every animation frame from here on. Installed on the
+    // PICKER, where ExerciseDetail is unmounted and no weight input exists, so every sample
+    // collected below necessarily belongs to the pull-up screen -- starting a frame earlier
+    // records the bench press's own legitimate 25 and fails against correct code.
+    //
+    // A retrying matcher cannot test this: the stale value corrects itself as soon as the new
+    // exercise's summary resolves, so `toHaveValue('')` simply waits the bug out and passes --
+    // verified, this spec did exactly that before this sampler existed. Sampling per frame pins
+    // the actual claim, which is about what gets PAINTED, and needs no per-mode timing knowledge:
+    // however long the window is in this mode, every frame of it is inspected.
+    await page.evaluate(() => {
+      const seen = new Set();
+      window.__weightSamples = seen;
+      const sample = () => {
+        const el = document.querySelector('input[aria-label^="Weight"]');
+        if (el) seen.add(el.value);
+        window.__weightSampler = requestAnimationFrame(sample);
+      };
+      sample();
+    });
+
+    await pickExercise(page, 'Pull-up');
+  },
+  assert: async (page) => {
+    // Pull-up has no history in any mode, so the em dash is the one correct answer everywhere.
+    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Weight (lb)' })).toHaveValue('');
+
+    // ...and it must have been the answer for every frame, not just the one this assertion
+    // happened to land on. '25' here is the bench press's draft wearing the pull-up's name.
+    const painted = await page.evaluate(() => {
+      cancelAnimationFrame(window.__weightSampler);
+      return [...window.__weightSamples];
+    });
+    expect(painted).not.toContain('25');
+  },
+});
+
 // ---------------------------------------------------------------------------------------------
 // FOUND BY THIS HARNESS, on its first run -- the "still listed after a reload" spec above.
 //

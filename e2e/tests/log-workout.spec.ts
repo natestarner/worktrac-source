@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { Page, test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { logSetAt, pickExercise, setStepper } from './support/exercises';
 
 // Full golden-path smoke: register a new household, log the first-ever set (always a
 // PR), confirm the celebration fires, then check every tab renders without error.
@@ -144,5 +144,89 @@ test.describe('Log workout', () => {
     await expect(page.getByText('Pull-up')).toBeVisible();
     await expect(page.getByText('8 reps')).toBeVisible();
     await expect(page.getByText('Bodyweight')).toBeVisible();
+  });
+
+  // Holds every exercise-summary response open until released, so the window where the screen has
+  // no data for the exercise on it is wide and deterministic instead of a few milliseconds. Both
+  // bugs below only show inside that window, which is why they were invisible locally.
+  async function holdSummaryRequests(page: Page) {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/exercises/*/summary*', async (route) => {
+      await held;
+      await route.continue();
+    });
+    return { release: () => release() };
+  }
+
+  test('opening another exercise never shows the previous exercise\'s weight', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+    await pickExercise(page, 'Barbell Bench Press');
+    await logSetAt(page, 185, 5);
+
+    await page.getByRole('button', { name: '← All exercises' }).click();
+    const summary = await holdSummaryRequests(page);
+    await pickExercise(page, 'Pull-up');
+
+    const weightInput = page.getByRole('textbox', { name: 'Weight (lb)' });
+    const repsInput = page.getByRole('textbox', { name: 'Reps' });
+    await expect(weightInput).toBeVisible();
+
+    // Sampled continuously rather than with a retrying matcher: "eventually not 185" would pass
+    // even if 185 flashed first, and the flash IS the bug. Pull-up has no history, so the honest
+    // answer for this whole window is the em-dash placeholder -- never the bench press numbers
+    // still sitting in the per-person draft.
+    const deadline = Date.now() + 1000;
+    while (Date.now() < deadline) {
+      expect(await weightInput.inputValue()).toBe('');
+      expect(await repsInput.inputValue()).toBe('');
+      await page.waitForTimeout(50);
+    }
+
+    summary.release();
+    await expect(repsInput).toHaveValue('8');
+    await expect(weightInput).toHaveValue('');
+  });
+
+  test('a late summary refetch does not overwrite a weight the person just typed', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+    await pickExercise(page, 'Barbell Bench Press');
+    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+
+    // Hold every summary response from here on -- the initial one has already landed, so the next
+    // is the invalidation that logging a set triggers. Landing it AFTER the typing below is the
+    // exact ordering that took lower red on 2026-08-08; locally it returns in milliseconds and the
+    // race is almost never lost.
+    const summary = await holdSummaryRequests(page);
+    await logSetAt(page, 100, 5);
+
+    await setStepper(page, 'Weight', 315);
+    await setStepper(page, 'Reps', 2);
+
+    summary.release();
+    // Let the re-seed that response would trigger actually run before reading the field back --
+    // a retrying matcher would otherwise pass on the frame before the stomp.
+    await page.waitForTimeout(500);
+
+    await expect(page.getByRole('textbox', { name: 'Weight (lb)' })).toHaveValue('315');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await expect(page.getByText('315 lb × 2', { exact: true })).toBeVisible();
+  });
+
+  test('logs the weight typed immediately before the tap, with no blur first', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+    await pickExercise(page, 'Barbell Bench Press');
+
+    const weightInput = page.getByRole('textbox', { name: 'Weight (lb)' });
+    await weightInput.click();
+    await weightInput.fill('225');
+
+    // Deliberately no Enter: tapping the button is what blurs the field, and handleLogSet reads
+    // the value from its render closure. setStepper always presses Enter first, so nothing else
+    // in the suite covers this ordering.
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await expect(page.getByText('225 lb × 8', { exact: true })).toBeVisible();
   });
 });
