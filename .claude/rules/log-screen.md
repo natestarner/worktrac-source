@@ -102,6 +102,33 @@ the same index, else **the last set logged today**, else `weight: null`. Three t
 - **The carry-forward is the no-prior-session fallback only.** It must never override the
   set-index walk, which is the more informative answer whenever a prior session exists.
 
+### The draft is stamped, and the stamp is what decides
+
+`weightDraft`/`repsDraft` are **per-person** state (`AppStateContext`, mounted above the router)
+describing a **per-exercise** value the person may also have typed by hand. Three more fields say
+which: `draftExerciseId`, `draftSetCount`, `draftSource` (`'prefill' | 'user'`).
+
+- **Never paint the stored draft without checking the stamp.** `ExerciseDetail` derives
+  `shownWeight`/`shownReps` **during render** — stored draft only while `userOwnsDraft`, else the
+  freshly computed `prefill`, else `null` (em dash). An effect cannot do this job: it runs after
+  paint at best, and not at all until this exercise's summary lands, which is how the *previous*
+  exercise's numbers used to show through. The effect that remains only *records* the seed.
+- **`draftExerciseId` must be checked on both switch paths.** `LogTab` renders `ExerciseDetail`
+  under `selectedExercise &&`, so the picker path unmounts and remounts it while the routine strip
+  swaps the prop without unmounting — and the draft outlives both. `key={exercise.id}` fixes
+  neither and would break the routine path.
+- **Re-seed on `displaySets.length > draftSetCount`, never `!==`.** The count is transiently `0`
+  while `sessionSets` reloads after a remount; `!==` reads that as "a set was logged" and destroys
+  a value the person typed before stepping away.
+- **One `SET_DRAFT` writes both numbers and the whole stamp.** There is deliberately no way to set
+  weight without reps: a partial write stamps the new exercise while the other field still holds
+  the old one's value.
+- **Only an exercise change or a set actually being added may re-seed over `source: 'user'`.** Not
+  a background revalidation, not the window-focus refetch `staleTime: 0` guarantees, not a pending
+  row reconciling. `docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md`.
+- Reps has a `null`/em-dash state for the same reason weight does — an honest blank beats another
+  exercise's rep count. `repsValue` (`?? 8`) is what gets logged, mirroring `weightValue` (`?? 0`).
+
 `WeightRepsStepper`'s value is a real `<input>` that **selects its text on focus**, so the first
 keystroke replaces the prefilled value instead of appending to it. Without that, tapping a
 prefilled 135 and typing 225 produced 135225, so every exact entry began by backspacing the

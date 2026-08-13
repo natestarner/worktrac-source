@@ -102,6 +102,16 @@ Phases, in order — `setup` runs **online**, everything after runs **in the mod
   and `connectivity-transitions`.
 - **A parity test that could pass vacuously guards nothing.** Verify a new one fails when you break
   a single mode, before trusting it.
+- **A retrying matcher cannot assert "this was never shown".** `toHaveValue('')` and friends poll
+  until they pass, so a wrong value that self-corrects is simply waited out. The exercise-switch
+  parity spec passed against the unfixed code for exactly this reason; it now samples the field on
+  every animation frame and asserts the bad value was never among them. Reach for frame sampling
+  whenever the claim is about a transient rather than a settled state — it also needs no per-mode
+  timing knowledge, which a short fixed timeout would.
+- **Verify in every mode, not just the degraded ones.** A stale-paint bug can be invisible
+  offline (where `derivedSummary` resolves synchronously from the warmed cache) and very visible
+  online (where it lasts a round trip). Checking only the offline modes would have concluded there
+  was no bug.
 
 ## ⚠️ Cross-file coupling: the test email pattern
 
@@ -128,16 +138,27 @@ so every e2e registration bounced and counted against the sending domain's ACS r
 
 ## Never drive the weight/reps steppers by hand — use `logSetAt`
 
-`computePrefillDraft` re-seeds the weight/reps draft whenever the summary / today's sets change,
-which can land **after** `setStepper` has verified the value it typed but **before** the "Log set"
-click. The set is then logged at whatever the prefill offered instead of the target — today that
-is a blank weight (i.e. 0) on a first-ever exercise, or the previous session's set at that index.
+**The race this used to guard against is fixed in the app** (2026-08-12): the draft is stamped
+`source: 'user'` once typed, and only an exercise change or a set actually being added may re-seed
+over it, so a settling summary can no longer stomp a typed value between `setStepper` and the "Log
+set" click. `logSetAt`'s polling is now **defensive, not load-bearing**.
 
-Locally those queries return in milliseconds and the race is almost never lost, so this passes a
-full local suite and goes red only against a deployed backend — it took lower red exactly that way
-on 2026-08-08, having been green across several local runs first. It also surfaces **somewhere
-other than where it went wrong**: a 315×2 deadlift logged as 0×2 is no longer a PR, so what you
-see is a missing "New PR!" celebration, or a records/sort assertion reading a number nobody typed.
+It stays the sanctioned helper anyway — **don't hand-roll stepper driving and don't reintroduce a
+spec-local copy.** It still commits both fields together and waits for the new `Set N` row before
+returning, which keeps specs deterministic, and it is the single place to change if this ever
+regresses.
+
+The history is worth knowing, because it is how a product bug hid inside test infrastructure for
+four days: `computePrefillDraft` re-seeded whenever the summary / today's sets changed, which could
+land after `setStepper` verified its value and before the click, logging the set at the prefill
+instead of the target. Locally the queries return in milliseconds so the race was almost never
+lost — a full green local suite, red only against a deployed backend, which is how it took lower
+red on 2026-08-08. It surfaced **somewhere other than where it went wrong**: a 315×2 deadlift
+logged as 0×2 is no longer a PR, so what you saw was a missing "New PR!" celebration.
+
+**A helper that polls around a product behaviour is a bug report.** File it against the app rather
+than hardening the helper and moving on. See
+`docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md`.
 
 **A spec that logs at the prefill without setting a weight is logging a *bodyweight* set** (weight
 0), because `comparableLb` switches to comparing reps at zero. That is fine where the number is

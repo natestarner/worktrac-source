@@ -26,6 +26,7 @@ need the "why" or the debugging story.
 | 2026-08-08 | [A restored cache entry looked "freshly checked", so nothing refetched it](2026-08-08-restored-cache-looks-fresh.md) — a routine created just before a reload stayed missing for minutes | Offline / persistence |
 | 2026-08-09 | [Dependabot misclassified a JDK bump as minor/patch](2026-08-09-dependabot-jdk-tag-misclassification.md) — a compound Docker tag hid a major JDK jump from the existing `ignore:` rule | CI / Docker |
 | 2026-08-10 | [A sticky modal header clipped the first field's top border](2026-08-10-sticky-modal-header-clips-first-field.md) — a negative-margin/sticky conflict, then a stacking-context paintover that survived one verified fix | Frontend / design system |
+| 2026-08-12 | [The weight prefill overwrote a weight the person had typed](2026-08-12-prefill-overwrites-typed-weight.md) — known since 2026-08-08 and worked around in the e2e helpers rather than fixed; surfaced as a missing PR celebration | Log screen / frontend state |
 
 ## Adding a new incident
 
