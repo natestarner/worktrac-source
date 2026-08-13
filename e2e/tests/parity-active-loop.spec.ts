@@ -215,6 +215,53 @@ forEachConnectivityMode<void>('favoriting and adding a session note both show im
   },
 });
 
+// Switching exercises must never leave the previous exercise's weight/reps in the steppers. The
+// draft is per-PERSON state living above the router, so it survives both switch paths -- the
+// picker (which unmounts ExerciseDetail) and the routine strip (which does not) -- and only the
+// stamp on it says which exercise it describes.
+//
+// Asserted across all four modes because the window this shows in is bounded by how long the new
+// exercise's summary takes to resolve, and that is precisely what degrades: online it is a frame,
+// under lie-fi it is the whole retry budget before the derived-from-history fallback takes over.
+// A single online assertion would be the weakest possible version of this test.
+forEachConnectivityMode<void>('switching exercises never shows the previous one\'s weight', {
+  setup: async (page, request) => {
+    await registerHousehold(page, request, 'Thackeray');
+    await warmCatalog(page);
+    // Warm the second exercise too -- the picker filters client-side over one cached query, so an
+    // exercise never fetched while online is simply absent from the list in a degraded mode.
+    const search = page.getByPlaceholder('Search all exercises');
+    await search.fill('Pull-up');
+    await expect(page.getByRole('button', { name: 'Pull-up', exact: true })).toBeVisible();
+    await search.fill('');
+  },
+  navigate: async (page) => {
+    await pickExercise(page, EXERCISE);
+  },
+  act: async (page) => {
+    // Put a distinctive, unmistakably-not-a-default number in the draft, then leave for an
+    // exercise that has no history at all. 25 is reachable by stepping, which works in every mode.
+    const weightRow = page.locator('.stepper-row').filter({ hasText: 'Weight' });
+    await expect
+      .poll(async () => {
+        const current = Number(await weightRow.locator('.stepper-value').inputValue());
+        if (current === 25) return current;
+        await weightRow.getByRole('button', { name: current < 25 ? '+' : '−', exact: true }).click();
+        return Number(await weightRow.locator('.stepper-value').inputValue());
+      }, { timeout: 15000 })
+      .toBe(25);
+
+    await page.getByRole('button', { name: '← All exercises' }).click();
+    await pickExercise(page, 'Pull-up');
+  },
+  assert: async (page) => {
+    // Pull-up has no history in any mode, so the em dash is the one correct answer everywhere.
+    // 25 appearing here would be the bench press's draft wearing the pull-up's name.
+    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Weight (lb)' })).toHaveValue('');
+  },
+});
+
 // ---------------------------------------------------------------------------------------------
 // FOUND BY THIS HARNESS, on its first run -- the "still listed after a reload" spec above.
 //
