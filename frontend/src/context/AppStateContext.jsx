@@ -21,10 +21,21 @@ const PERSON_DEFAULTS = {
   // per person so switching away mid-edit and back resumes it.
   // null, not a number: "no history yet". Rendered as an em dash and logged as 0 -- see
   // utils/formulas.js#computePrefillDraft for why the old 45 lb default was wrong for every
-  // exercise that isn't a barbell lift. The prefill effect overwrites this as soon as the
-  // exercise summary resolves, so this value is only ever seen before that first read lands.
+  // exercise that isn't a barbell lift.
   weightDraft: null,
   repsDraft: 8,
+  // What the two drafts above belong to, and where they came from. All five fields are written
+  // together by SET_DRAFT and must be read together -- see ExerciseDetail's `userOwnsDraft`.
+  //
+  // These exist because the drafts are per-PERSON state describing a per-EXERCISE value that the
+  // person may also have typed by hand. This provider sits above the router (App.jsx), so the
+  // drafts outlive ExerciseDetail's unmount when you step back to the picker, and the routine
+  // strip swaps the exercise without unmounting it at all. Without a stamp, the previous
+  // exercise's numbers stay on screen until the new exercise's summary resolves, and a background
+  // refetch can overwrite a weight the person typed.
+  draftExerciseId: null, // which exercise these describe; a mismatch reads as "not known yet"
+  draftSetCount: 0, // displaySets.length when seeded; an INCREASE means a set was logged
+  draftSource: 'prefill', // 'prefill' = computed, free to replace | 'user' = typed, protected
   exerciseSearch: '',
   lastTab: '/app/log', // kept in sync by AppShell as the route changes.
   trendsRangeWeeks: 12,
@@ -119,10 +130,20 @@ export function reducer(state, action) {
       return updateActive(state, { trendsExerciseMetric: action.metric });
     case 'SET_PRS_SORT':
       return updateActive(state, { prsSort: action.sort });
-    case 'SET_WEIGHT_DRAFT':
-      return updateActive(state, { weightDraft: action.value });
-    case 'SET_REPS_DRAFT':
-      return updateActive(state, { repsDraft: action.value });
+    // One action for both numbers and the whole stamp, deliberately not two. Independent
+    // weight/reps writes let a partial update stamp the new exercise while the OTHER field still
+    // holds the previous exercise's value -- the same "this number isn't yours" bug this stamp
+    // exists to prevent, just one field at a time. Writing all five together makes that
+    // unrepresentable. Callers pass what is currently on screen for the field they aren't changing
+    // (see ExerciseDetail's commitDraft).
+    case 'SET_DRAFT':
+      return updateActive(state, {
+        weightDraft: action.weight,
+        repsDraft: action.reps,
+        draftExerciseId: action.exerciseId,
+        draftSetCount: action.setCount,
+        draftSource: action.source,
+      });
     case 'START_ROUTINE':
       return updateActive(state, {
         activeRoutineId: action.routineId,
@@ -247,8 +268,8 @@ export function AppStateProvider({ children }) {
       setTrendsWeeklyMetric: (metric) => dispatch({ type: 'SET_TRENDS_WEEKLY_METRIC', metric }),
       setTrendsExerciseMetric: (metric) => dispatch({ type: 'SET_TRENDS_EXERCISE_METRIC', metric }),
       setPrsSort: (sort) => dispatch({ type: 'SET_PRS_SORT', sort }),
-      setWeightDraft: (value) => dispatch({ type: 'SET_WEIGHT_DRAFT', value }),
-      setRepsDraft: (value) => dispatch({ type: 'SET_REPS_DRAFT', value }),
+      setDraft: ({ exerciseId, weight, reps, setCount, source }) =>
+        dispatch({ type: 'SET_DRAFT', exerciseId, weight, reps, setCount, source }),
       startRoutine: (routineId, exerciseIds) => dispatch({ type: 'START_ROUTINE', routineId, exerciseIds }),
       jumpToRoutineIndex: (index, exerciseIds) => dispatch({ type: 'JUMP_TO_ROUTINE_INDEX', index, exerciseIds }),
       nextExerciseInRoutine: (exerciseIds) => dispatch({ type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds }),

@@ -55,6 +55,26 @@ vi.mock('../../api/sessions', () => ({
 }));
 const exercise = { id: 1, name: 'Bench Press', tags: [], isFavorite: true, setupFields: [] };
 
+// "Typed more recently than anything currently on screen." ExerciseDetail only re-seeds the draft
+// once the set count has INCREASED past the stamp, so a count nothing can exceed keeps a seeded
+// draft owned for a whole test. That is exactly what these cases mean: the person typed this
+// weight, and it must survive the prefill re-seed rather than being replaced by last session's.
+const TYPED_AFTER_EVERYTHING = Number.MAX_SAFE_INTEGER;
+
+// The slice as it looks when the person has typed a weight/reps for this exercise. Most tests below
+// seed a fixed draft and expect the component to log exactly that; without the stamp saying who it
+// belongs to, ExerciseDetail correctly ignores it and derives the prefill instead.
+function typedDraft({ weight = 135, reps = 8, exerciseId = exercise.id } = {}) {
+  return {
+    weightDraft: weight,
+    repsDraft: reps,
+    draftExerciseId: exerciseId,
+    draftSetCount: TYPED_AFTER_EVERYTHING,
+    draftSource: 'user',
+    setDraft: vi.fn(),
+  };
+}
+
 function renderExerciseDetail(props = {}) {
   return renderWithQuery(
     <ExerciseDetail
@@ -76,7 +96,7 @@ describe('ExerciseDetail rest-timer live-vs-retroactive gating', () => {
     vi.clearAllMocks();
     startRestTimer = vi.fn();
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
-    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useAppState.mockReturnValue(typedDraft());
     useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer, openConfirm: vi.fn() });
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
     listSessionSets.mockResolvedValue([]);
@@ -120,7 +140,7 @@ describe('ExerciseDetail PR celebration payload', () => {
     vi.clearAllMocks();
     showCelebration = vi.fn();
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
-    useAppState.mockReturnValue({ weightDraft: 0, repsDraft: 12, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 12 }));
     useUI.mockReturnValue({ showCelebration, showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
     listSessionSets.mockResolvedValue([]);
@@ -148,7 +168,7 @@ describe('ExerciseDetail PR celebration payload', () => {
   });
 
   it('shows the normal weight/1RM calc for a weighted PR', async () => {
-    useAppState.mockReturnValue({ weightDraft: 185, repsDraft: 5, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useAppState.mockReturnValue(typedDraft({ weight: 185, reps: 5 }));
     logLiveSet.mockResolvedValue({
       isPR: true,
       best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208 },
@@ -173,7 +193,7 @@ describe('ExerciseDetail exercise notes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
-    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useAppState.mockReturnValue(typedDraft());
     useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
     listSessionSets.mockResolvedValue([]);
@@ -285,7 +305,7 @@ describe('ExerciseDetail per-person isolation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
-    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useAppState.mockReturnValue(typedDraft());
     useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
     listSessionSets.mockResolvedValue([]);
     getSessionExerciseNote.mockResolvedValue(null);
@@ -338,7 +358,7 @@ describe('ExerciseDetail write-failure handling', () => {
     vi.clearAllMocks();
     showToast = vi.fn();
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
-    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useAppState.mockReturnValue(typedDraft());
     useUI.mockReturnValue({ showCelebration: vi.fn(), showToast, startRestTimer: vi.fn(), openConfirm: vi.fn() });
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
     listSessionSets.mockResolvedValue([]);
@@ -366,7 +386,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
-    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useAppState.mockReturnValue(typedDraft());
     useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
     getSessionExerciseNote.mockResolvedValue(null);
@@ -849,7 +869,7 @@ describe('ExerciseDetail sets list independent of the summary/PR read', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
-    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useAppState.mockReturnValue(typedDraft());
     useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
     getSessionExerciseNote.mockResolvedValue(null);
   });
@@ -901,7 +921,7 @@ describe('ExerciseDetail summary fallback to warmed history (offline + lie-fi)',
   beforeEach(() => {
     vi.clearAllMocks();
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
-    useAppState.mockReturnValue({ weightDraft: 135, repsDraft: 8, setWeightDraft: vi.fn(), setRepsDraft: vi.fn() });
+    useAppState.mockReturnValue(typedDraft());
     useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
     listSessionSets.mockResolvedValue([]);
     getSessionExerciseNote.mockResolvedValue(null);
@@ -999,13 +1019,9 @@ describe('ExerciseDetail PR badge folds in sets that have not synced yet', () =>
     draftWeight = 185;
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
     // mockImplementation (not mockReturnValue) so the draft can change between the two logged
-    // sets below -- the component reads it fresh on every render.
-    useAppState.mockImplementation(() => ({
-      weightDraft: draftWeight,
-      repsDraft: 8,
-      setWeightDraft: vi.fn(),
-      setRepsDraft: vi.fn(),
-    }));
+    // sets below -- the component reads it fresh on every render. Mutating draftWeight models the
+    // person re-typing the weight after the previous set, hence typedDraft's ownership stamp.
+    useAppState.mockImplementation(() => typedDraft({ weight: draftWeight }));
     useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
     listSessionSets.mockResolvedValue([]);
     getSessionExerciseNote.mockResolvedValue(null);
@@ -1149,12 +1165,29 @@ describe('ExerciseDetail PR badge folds in sets that have not synced yet', () =>
 });
 
 describe('ExerciseDetail weight prefill', () => {
-  // A stateful useAppState: the prefill effect writes through setWeightDraft, so a fixed
-  // mockReturnValue would show what the test seeded rather than what the component computed.
+  // A stateful useAppState: the prefill effect writes through setDraft, so a fixed mockReturnValue
+  // would show what the test seeded rather than what the component computed. Mirrors the reducer's
+  // SET_DRAFT case exactly -- all five fields written together, starting unowned so the prefill is
+  // free to seed it.
   function Harness({ liveSession = null }) {
-    const [weightDraft, setWeightDraft] = useState(null);
-    const [repsDraft, setRepsDraft] = useState(8);
-    useAppState.mockImplementation(() => ({ weightDraft, repsDraft, setWeightDraft, setRepsDraft }));
+    const [slice, setSlice] = useState({
+      weightDraft: null,
+      repsDraft: 8,
+      draftExerciseId: null,
+      draftSetCount: 0,
+      draftSource: 'prefill',
+    });
+    useAppState.mockImplementation(() => ({
+      ...slice,
+      setDraft: ({ exerciseId, weight, reps, setCount, source }) =>
+        setSlice({
+          weightDraft: weight,
+          repsDraft: reps,
+          draftExerciseId: exerciseId,
+          draftSetCount: setCount,
+          draftSource: source,
+        }),
+    }));
     return (
       <ExerciseDetail
         exercise={exercise}
@@ -1227,5 +1260,151 @@ describe('ExerciseDetail weight prefill', () => {
     renderWithQuery(<Harness liveSession={{ id: 101 }} />);
 
     await waitFor(() => expect(screen.getByLabelText('Weight (lb)')).toHaveValue('225'));
+  });
+});
+
+// The draft is per-PERSON state living in AppStateProvider (above the router), while the value on
+// screen is per-EXERCISE and may have been typed by hand. Nothing used to reconcile those: the
+// draft carried no record of which exercise it described, what set count it was computed against,
+// or whether the person had since typed over it. Two separate bugs came out of that gap, and both
+// are pinned here.
+//
+// Every case mocks useAppState with an INERT setter, so a value that reads back correctly can only
+// have been derived during render -- never written by the prefill effect. That is the whole point:
+// the effect runs after paint at best, and not at all until this exercise's summary lands.
+describe('ExerciseDetail draft ownership', () => {
+  let setDraft;
+
+  // Seeds the whole slice, including the stamp fields. `overrides` is the interesting part of each
+  // case; everything else is a neutral default.
+  function mockDraft(overrides) {
+    setDraft = vi.fn();
+    useAppState.mockReturnValue({
+      weightDraft: null,
+      repsDraft: 8,
+      draftExerciseId: null,
+      draftSetCount: 0,
+      draftSource: 'prefill',
+      setDraft,
+      ...overrides,
+    });
+  }
+
+  // Nothing re-seeded the draft. setDraft is the only way to write one, so this is exhaustive.
+  function expectNoReseed() {
+    expect(setDraft).not.toHaveBeenCalled();
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getSessionExerciseNote.mockResolvedValue(null);
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('never paints a draft belonging to a different exercise', async () => {
+    // `exercise` is id 1; the slice still holds what was computed for id 999 a moment ago. Both
+    // navigation paths reach this state -- the routine strip switches the `exercise` prop without
+    // remounting, and the picker unmounts/remounts but the draft outlives it in AppStateProvider.
+    mockDraft({ weightDraft: 185, repsDraft: 5, draftExerciseId: 999, draftSource: 'user' });
+    getExerciseSummary.mockResolvedValue({
+      lastSession: { sets: [{ weight: 95, reps: 12, unit: 'lb' }] },
+      best: null,
+    });
+
+    renderExerciseDetail();
+
+    await waitFor(() => expect(screen.getByLabelText('Weight (lb)')).toHaveValue('95'));
+    expect(screen.getByLabelText('Reps')).toHaveValue('12');
+  });
+
+  it('shows the em dash, not the previous exercise, while this exercise has no summary yet', async () => {
+    // The long window: uncached summary, or lie-fi where retries must exhaust before the derived
+    // fallback takes over. "Not known yet" is honest; another exercise's number is not.
+    mockDraft({ weightDraft: 185, repsDraft: 5, draftExerciseId: 999, draftSource: 'user' });
+    getExerciseSummary.mockReturnValue(new Promise(() => {}));
+
+    renderExerciseDetail();
+
+    const weightInput = await screen.findByLabelText('Weight (lb)');
+    await waitFor(() => expect(weightInput).toHaveValue(''));
+    expect(weightInput).toHaveAttribute('placeholder', '—');
+    expect(screen.getByLabelText('Reps')).toHaveValue('');
+  });
+
+  it('does not let a settling summary overwrite a weight the person typed', async () => {
+    // The 2026-08-08 lower failure, at unit level: the person types 315, a late summary settles,
+    // the re-seed stomps it, and "Log set" then logs the prior session's weight instead. Locally
+    // the queries return in milliseconds so this almost never lost -- hence a full green local
+    // suite and a red deployed one.
+    mockDraft({ weightDraft: 315, repsDraft: 5, draftExerciseId: 1, draftSetCount: 0, draftSource: 'user' });
+    getExerciseSummary.mockResolvedValue({
+      lastSession: { sets: [{ weight: 225, reps: 3, unit: 'lb' }] },
+      best: null,
+    });
+
+    renderExerciseDetail();
+
+    // The "Last time" pill needs both the resolved summary and `ready`, so past this point a
+    // re-seed would already have fired.
+    await screen.findByText('225lb×3');
+
+    expect(screen.getByLabelText('Weight (lb)')).toHaveValue('315');
+    expect(screen.getByLabelText('Reps')).toHaveValue('5');
+    expectNoReseed();
+  });
+
+  it('keeps a typed value through the sessionSets reload that follows a remount', async () => {
+    // Leaving to the picker unmounts ExerciseDetail (LogTab renders it under `selectedExercise &&`)
+    // and reopening remounts it, so displaySets.length is transiently 0 while sessionSets reloads.
+    // A re-seed rule keyed on "the count CHANGED" reads that as "a set was logged" and destroys the
+    // typed value; only an INCREASE may re-seed.
+    mockDraft({ weightDraft: 315, repsDraft: 5, draftExerciseId: 1, draftSetCount: 2, draftSource: 'user' });
+    getExerciseSummary.mockResolvedValue({
+      lastSession: { sets: [{ weight: 225, reps: 3, unit: 'lb' }] },
+      best: null,
+    });
+    let resolveSets;
+    listSessionSets.mockReturnValue(new Promise((resolve) => {
+      resolveSets = resolve;
+    }));
+
+    renderExerciseDetail({ liveSession: { id: 101 } });
+
+    await screen.findByText('225lb×3');
+    expect(screen.getByLabelText('Weight (lb)')).toHaveValue('315');
+
+    await act(async () => {
+      resolveSets([
+        { id: 1, weight: 135, reps: 5, unit: 'lb' },
+        { id: 2, weight: 135, reps: 5, unit: 'lb' },
+      ]);
+    });
+
+    expect(screen.getByLabelText('Weight (lb)')).toHaveValue('315');
+    expectNoReseed();
+  });
+
+  it('still re-seeds the carry-forward once a set is actually logged', async () => {
+    // The counterpart to the case above -- ownership must not become a permanent lock, or the
+    // carry-forward (the thing that stops a brand-new exercise re-seeding to blank before every
+    // set of its first workout) silently dies.
+    mockDraft({ weightDraft: 315, repsDraft: 5, draftExerciseId: 1, draftSetCount: 0, draftSource: 'user' });
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    listSessionSets.mockResolvedValue([{ id: 1, weight: 135, reps: 8, unit: 'lb' }]);
+
+    renderExerciseDetail({ liveSession: { id: 101 } });
+
+    await waitFor(() =>
+      expect(setDraft).toHaveBeenCalledWith(
+        expect.objectContaining({ exerciseId: 1, weight: 135, reps: 8, source: 'prefill' }),
+      ),
+    );
   });
 });

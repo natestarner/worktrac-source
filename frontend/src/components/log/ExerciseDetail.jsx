@@ -50,7 +50,7 @@ export default function ExerciseDetail({
   const { account, people } = useAuth();
   const activePersonName = people.length >= 2 ? people.find((p) => p.id === personId)?.name : null;
   const activePersonFirstName = activePersonName?.split(' ')[0];
-  const { weightDraft, repsDraft, setWeightDraft, setRepsDraft } = useAppState();
+  const { weightDraft, repsDraft, draftExerciseId, draftSetCount, draftSource, setDraft } = useAppState();
   const { showCelebration, showToast, startRestTimer, openConfirm } = useUI();
   const queryClient = useQueryClient();
 
@@ -250,23 +250,6 @@ export default function ExerciseDetail({
   }, [justAddedSetId]);
 
   const weightStep = defaultUnit === 'kg' ? 2.5 : 5;
-  // `weightDraft` is null until there's any history to prefill from (see computePrefillDraft).
-  // Everything that has to produce a NUMBER -- stepping, and the logged value itself -- reads
-  // this; only the on-screen value keeps the null so it can render as an em dash.
-  const weightValue = weightDraft ?? 0;
-
-  function decWeight() {
-    setWeightDraft(Math.max(0, Math.round((weightValue - weightStep) * 2) / 2));
-  }
-  function incWeight() {
-    setWeightDraft(Math.round((weightValue + weightStep) * 2) / 2);
-  }
-  function decReps() {
-    setRepsDraft(Math.max(0, repsDraft - 1));
-  }
-  function incReps() {
-    setRepsDraft(repsDraft + 1);
-  }
 
   // Prefix-matches the registered defaults in queryClient.js (LOG_SET_MUTATION_KEY = ['logSet']),
   // so the mutationFn, retry policy, serial replay scope, and server-truth reconciliation (onSettled)
@@ -443,22 +426,98 @@ export default function ExerciseDetail({
   // never hit. The fold is O(sets logged for this exercise this session) -- a handful of rows.
   const effectiveBest = mergeBestWithLocalSets(summary?.best ?? null, displaySets);
 
-  // Prefill weight/reps: the same set-index in the most recent prior session, else the last set
-  // logged today, else blank. Re-runs whenever the summary or today's sets change.
+  // What the DATA says this exercise should prefill to: the same set-index in the most recent
+  // prior session, else the last set logged today, else blank. Computed during render, not in an
+  // effect, so it can never be a frame behind the exercise on screen -- an effect runs after paint
+  // at the earliest, which is what used to let the previous exercise's numbers show through.
   //
-  // Declared HERE, below displaySets, rather than up with the other effects, because it has to
-  // read `displaySets` and not `sessionSets` -- the same reason effectiveBest does. Offline,
-  // `contextSessionId` stays null for the person's entire outage, so the sessionSets query never
-  // runs and its data stays `[]` however many sets they log; `pendingBeforeSession` is the only
-  // source for those rows. Reading sessionSets here would freeze the set-index walk at set 1 and
-  // make the carry-forward invisible for exactly as long as the outage lasts.
+  // Reads `displaySets`, never `sessionSets`. Offline, `contextSessionId` stays null for the
+  // person's entire outage, so the sessionSets query never runs and its data stays `[]` however
+  // many sets they log; `pendingBeforeSession` is the only source for those rows. Reading
+  // sessionSets here would freeze the set-index walk at set 1 and make the carry-forward invisible
+  // for exactly as long as the outage lasts.
+  const prefill = summary ? computePrefillDraft(summary.lastSession, displaySets, defaultUnit) : null;
+
+  // A set was ADDED since the draft was seeded -- the carry-forward re-seed, and the only thing
+  // allowed to replace a value the person typed.
+  //
+  // Strictly `>`, never `!==`. displaySets.length is transiently 0 while sessionSets reloads,
+  // which happens on every remount -- and this component IS remounted whenever you step back to
+  // the picker and reopen the exercise (LogTab renders it under `selectedExercise &&`). Keyed on
+  // "the count changed", that transient reads as "a set was logged", hands ownership back to the
+  // prefill, and lets the effect below permanently destroy a weight the person had typed before
+  // stepping away. An increase can only mean a real addition. The cost is that deleting a set no
+  // longer re-seeds; the draft is a suggestion, so that is the right side to err on.
+  const setLoggedSinceSeed = displaySets.length > draftSetCount;
+
+  // The person owns the value once they have typed or stepped it, and keeps owning it until they
+  // log a set or leave for another exercise. Everything else that moves underneath -- a background
+  // revalidation, the window-focus refetch that summaryQuery's staleTime: 0 guarantees, a pending
+  // row reconciling into a real one -- must NOT re-seed over it.
+  //
+  // Without this, the re-seed could land after the person had typed a weight and before they tapped
+  // Log set, and the set was silently logged at the prefill instead. Locally those queries return
+  // in milliseconds so it almost never lost; against a deployed backend it did. See
+  // docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md.
+  const userOwnsDraft =
+    draftExerciseId === exercise.id && draftSource === 'user' && !setLoggedSinceSeed;
+
+  // Paint the stored draft only while the person owns it; otherwise the freshly computed prefill,
+  // and null (em dash) when even that isn't known yet. The draft lives in AppStateProvider ABOVE
+  // the router, so it survives this component's unmount and still holds the PREVIOUS exercise's
+  // numbers on a fresh mount -- painting those would assert "this is your history for this
+  // exercise", which is false. Reps gets a null state for the same reason weight has one: an
+  // honest blank beats another exercise's rep count.
+  const shownWeight = userOwnsDraft ? weightDraft : (prefill?.weight ?? null);
+  const shownReps = userOwnsDraft ? repsDraft : (prefill?.reps ?? null);
+
+  // Everything that has to produce a NUMBER -- stepping, and the logged value itself -- reads
+  // these; only the on-screen value keeps the null so it can render as an em dash. 8 is
+  // computePrefillDraft's own no-history default, so a blank reps logs as the default rather than
+  // blocking the tap, exactly as a blank weight logs as 0.
+  const weightValue = shownWeight ?? 0;
+  const repsValue = shownReps ?? 8;
+
+  // Every user edit carries the whole on-screen state and claims ownership. `...patch` sits before
+  // setCount/source so a caller can't accidentally override them.
+  const commitDraft = (patch) =>
+    setDraft({
+      exerciseId: exercise.id,
+      weight: shownWeight,
+      reps: shownReps,
+      ...patch,
+      setCount: displaySets.length,
+      source: 'user',
+    });
+
+  function decWeight() {
+    commitDraft({ weight: Math.max(0, Math.round((weightValue - weightStep) * 2) / 2) });
+  }
+  function incWeight() {
+    commitDraft({ weight: Math.round((weightValue + weightStep) * 2) / 2 });
+  }
+  function decReps() {
+    commitDraft({ reps: Math.max(0, repsValue - 1) });
+  }
+  function incReps() {
+    commitDraft({ reps: repsValue + 1 });
+  }
+
+  // Commits the computed prefill and claims the stamp for this exercise. Still needed alongside the
+  // render-time derivation above: this is what re-seeds the carry-forward after a set is logged,
+  // and what records that the value on screen is a prefill rather than the person's own.
   useEffect(() => {
-    if (!summary) return;
-    const draft = computePrefillDraft(summary.lastSession, displaySets, defaultUnit);
-    setWeightDraft(draft.weight);
-    setRepsDraft(draft.reps);
+    if (!prefill || userOwnsDraft) return;
+    setDraft({
+      exerciseId: exercise.id,
+      weight: prefill.weight,
+      reps: prefill.reps,
+      setCount: displaySets.length,
+      source: 'prefill',
+    });
+    // `prefill` is deliberately not a dep -- it's a fresh object every render, which would loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [summary, displaySets.length]);
+  }, [exercise.id, summary, displaySets.length, userOwnsDraft]);
 
   function handleLogSet() {
     // Rest timer starts immediately for the "instant" feel; it's a live-only concept.
@@ -485,7 +544,7 @@ export default function ExerciseDetail({
       // first-ever bodyweight exercise, and refusing the tap would punish that case to protect
       // a weighted one where the em dash is already visibly not a number.
       weight: weightValue,
-      reps: repsDraft,
+      reps: repsValue,
       tempId,
       idempotencyKey: newId(),
       clientLoggedAt: new Date().toISOString(),
@@ -680,12 +739,18 @@ export default function ExerciseDetail({
                 // Null, not 0: "we have no history for this exercise" and "you are lifting
                 // zero" are different claims, and only one of them is ours to make.
                 // WeightRepsStepper renders a null value as an em dash.
-                value={weightDraft}
+                value={shownWeight}
                 onDec={decWeight}
                 onInc={incWeight}
-                onChange={setWeightDraft}
+                onChange={(weight) => commitDraft({ weight })}
               />
-              <WeightRepsStepper label="Reps" value={repsDraft} onDec={decReps} onInc={incReps} onChange={setRepsDraft} />
+              <WeightRepsStepper
+                label="Reps"
+                value={shownReps}
+                onDec={decReps}
+                onInc={incReps}
+                onChange={(reps) => commitDraft({ reps })}
+              />
             </div>
             {/* The screen's one primary action, and the only place size="lg" is used on
                 this screen. That isn't just emphasis: at --text-xl/700 the white label
