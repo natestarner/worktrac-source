@@ -11,6 +11,47 @@
 set -euo pipefail
 
 _WTENV_REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# "Which repo am I?" must have ONE answer. This file asks the working directory (git rev-parse
+# above); every sourcing script independently asks its own location ($SCRIPT_DIR/..), and then acts
+# on that -- e2e.sh does `cd "$REPO_ROOT/e2e"`, up.sh launches from its own tree, down.sh reads its
+# own .dev-logs. Invoke another checkout's copy by absolute path and the two answers diverge: you
+# get THIS worktree's ports, database and CORS origin running THAT tree's specs and node_modules.
+#
+# It is silent, and it presents as ~100 unrelated red specs with smoke.spec.ts among them -- which
+# .claude/rules/e2e-tests.md correctly teaches you to read as "the stack, not the code", so the real
+# cause is actively disguised. It cost a full-suite run on 2026-08-12; the only tell was that the
+# other checkout happened to have no Playwright browser installed. Had both been installed it would
+# have returned a plausible green/red result for code that was never under test.
+#
+# Guarded here rather than in each script because this is the one file all seven already share.
+# BASH_SOURCE[1] is the sourcing script; unset when a human sources this directly, which is fine.
+#
+# LIMITATION: this protects the tree that CONTAINS it, since the wrong copy sources its own
+# worktree-env.sh. So it starts protecting the primary checkout only once this reaches main, and a
+# worktree branched from before that stays unguarded. It is a backstop, not a substitute for
+# invoking `bash scripts/<name>.sh` by RELATIVE path from the worktree you mean -- which is what
+# .claude/commands/deploy-to-lower.md already tells you to do.
+#
+# Both sides go through `cd ... && pwd` before comparing. On Git Bash these are the SAME directory
+# in two spellings -- `git rev-parse --show-toplevel` returns `C:/Users/...` while `cd && pwd`
+# returns `/c/Users/...` -- so comparing them raw makes the guard fire on every invocation of every
+# script. Only the comparison is normalized; _WTENV_REPO_ROOT keeps its native spelling, which the
+# docker/java/node call sites downstream depend on.
+if [ -n "${BASH_SOURCE[1]:-}" ]; then
+  _WTENV_CALLER_ROOT="$(cd "$(dirname "${BASH_SOURCE[1]}")/.." && pwd)"
+  _WTENV_CWD_ROOT="$(cd "$_WTENV_REPO_ROOT" && pwd)"
+  if [ "$_WTENV_CALLER_ROOT" != "$_WTENV_CWD_ROOT" ]; then
+    echo "ERROR: $(basename "${BASH_SOURCE[1]}") belongs to a different checkout than your shell." >&2
+    echo "  script : $_WTENV_CALLER_ROOT" >&2
+    echo "  cwd    : $_WTENV_CWD_ROOT" >&2
+    echo "" >&2
+    echo "  Running it would mix this worktree's ports/database with that tree's code." >&2
+    echo "  Run this worktree's own copy instead:" >&2
+    echo "    bash $_WTENV_REPO_ROOT/scripts/$(basename "${BASH_SOURCE[1]}")" >&2
+    exit 1
+  fi
+fi
 _WTENV_BRANCH="$(git -C "$_WTENV_REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 if [ -z "$_WTENV_BRANCH" ] || [ "$_WTENV_BRANCH" = "HEAD" ]; then
   # Detached HEAD (rare) -- fall back to the directory name so this is still stable/repeatable.

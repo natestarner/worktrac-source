@@ -19,7 +19,22 @@ export function useLiveSession(personId) {
     enabled: !!personId,
     // The dot has to reflect reality promptly; keep it fresher than the global default and lean on
     // window-focus refetch to catch a session started/ended on another device.
-    staleTime: 10 * 1000,
+    //
+    // ...EXCEPT for the provisional { id: null } session that ExerciseDetail's logSetMutation
+    // onMutate seeds while no session has synced yet. That entry was never fetched from anywhere --
+    // the client invented it -- so its dataUpdatedAt records the moment we made it up, not an answer
+    // from the server. It is persisted like any other entry, and across a reload that timestamp
+    // becomes a lie that satisfies every freshness check there is: this 10s staleTime, the global
+    // 60s default, and offlineCacheWarm's 30s. Nothing then asks the server for the real session, so
+    // contextSessionId stays null, the sessionSets query never runs (it's enabled on that id), and
+    // the person's own set list is simply gone from "This session" even though the sets synced fine.
+    // See docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md.
+    //
+    // Zero means "always revalidate": online it resolves to the real id on the next tick; offline
+    // the refetch just pauses and the placeholder keeps rendering, so the "Session in progress"
+    // banner and the person-pill dot are unaffected. Per-query, so only the person actually holding
+    // a provisional session refetches.
+    staleTime: (q) => (q.state.data && q.state.data.id == null ? 0 : 10 * 1000),
   });
 
   // Invalidates the shared key so all observers (every pill + the banner) refetch together, not

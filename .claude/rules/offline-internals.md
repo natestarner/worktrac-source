@@ -172,6 +172,29 @@ collections the server wholly owns:
 If yes, forcing a refetch destroys it. That trade is the whole reason this is a per-key list and
 not a blanket "invalidate everything after hydrate".
 
+### A value the CLIENT invented has no honest `dataUpdatedAt` at all
+
+Stronger than the case above, and it needs the opposite fix. `setQueryData` stamps
+`dataUpdatedAt = Date.now()` whether the value came from the server or from us — so an optimistic
+placeholder is persisted looking exactly like a fresh fetch, and after a reload it satisfies **every**
+staleness check in the app (the query's own, the global 60s, the warm's 30s). It is not stale; it was
+never true.
+
+`logSetMutation.onMutate`'s provisional `{ id: null }` liveSession is the live example. Restored, it
+kept `contextSessionId` null forever, so `sessionSets` never ran and a synced set was missing from
+"This session" (`docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md`).
+`useLiveSession` closes it with a **per-query** `staleTime` function — a session with no server id can
+never be fresh — so the entry still renders while offline (the refetch merely pauses) but is
+revalidated the moment there is a network.
+
+**Any new optimistic `setQueryData` that writes a value the server has never confirmed needs one of
+these three**, and which one depends on what a restored copy would be:
+| Restored copy is… | Treatment | Example |
+|---|---|---|
+| merely out of date | `refreshAfterRestore` | `routines` |
+| actively wrong | a synchronous localStorage marker beside the cache | `endedSessions.js` |
+| **never true at all** | never let it count as fresh (`staleTime` 0 for that shape) | the provisional liveSession |
+
 ## Cold boot offline
 
 `AuthContext` boots authenticated-but-`offline:true` from a saved identity snapshot when `/me`

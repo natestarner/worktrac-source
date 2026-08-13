@@ -47,6 +47,14 @@ Three fallbacks close that gap:
 `pendingLiveNote`'s "pick the newest" comparison keys off **`enqueueSeq`, not `submittedAt`** —
 see `.claude/rules/offline-internals.md`.
 
+**The provisional `{ id: null }` liveSession must never count as fresh.** `onMutate` seeds it with
+`setQueryData`, which stamps `dataUpdatedAt = Date.now()` on a value the client invented — so once it
+survives a reload it satisfies every staleness check and nothing ever fetches the real session id.
+`contextSessionId` then stays null *after* connectivity returns and the outbox has drained, and the
+person's synced sets are missing from "This session" entirely. `useLiveSession`'s `staleTime` is a
+function for exactly this reason — don't flatten it back to a number
+(`docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md`).
+
 ## Anything derived from `history` must also fold in the unsynced sets on screen
 
 `history` and `exerciseSummary` are only ever **invalidated** after a write, never optimistically
