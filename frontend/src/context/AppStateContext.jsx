@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useReducer, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { loadAppState, saveAppState } from '../lib/appStatePersistence';
 
@@ -223,38 +223,20 @@ export function AppStateProvider({ children }) {
   }, [people, status, hydrated]);
 
   // Persist on every change once hydrated, so we never clobber the stored copy with the empty
-  // initial state before hydration has run. Written IMMEDIATELY (no debounce): a reload can happen
-  // at any point after an action (a routine-position jump, a tab switch), and there is no reliable
-  // way to flush a delayed/debounced write before that -- `visibilitychange`/`pagehide` handlers
-  // cannot be counted on to complete an in-flight async IndexedDB write before the document tears
-  // down (confirmed empirically: a debounced write plus a best-effort unload flush still lost data
-  // under `page.reload()`). idb-keyval's `set()` is cheap and async; firing it on every dispatch
-  // rather than deferring it is what actually closes the race, at the cost of more (still small)
-  // writes on high-frequency changes like exercise-search keystrokes.
-  const pendingRef = useRef(null);
+  // initial state before hydration has run. Written IMMEDIATELY (no debounce) because a reload can
+  // arrive at any point after an action -- a routine-position jump, a tab switch -- including one
+  // the person never asked for (`swUpdate.js` force-reloads on navigation whenever a new build
+  // exists, i.e. always just after a deploy).
+  //
+  // `saveAppState` is SYNCHRONOUS (see appStatePersistence.js). That is what makes "written
+  // immediately" actually mean written: once this line returns, the snapshot is durable, so there
+  // is no in-flight write for a teardown to interrupt and nothing to flush on `pagehide` -- an
+  // unload handler cannot await, which is why the previous IndexedDB-backed version could not close
+  // this race no matter where the write was fired from.
   useEffect(() => {
     if (status !== 'authenticated' || !hydrated) return;
-    const snapshot = { activePersonId: state.activePersonId, byPerson: state.byPerson };
-    pendingRef.current = { accountId, snapshot };
-    saveAppState(accountId, snapshot);
+    saveAppState(accountId, { activePersonId: state.activePersonId, byPerson: state.byPerson });
   }, [state, accountId, status, hydrated]);
-
-  // Extra safety net for the rare case a write is still in flight right as the tab closes/hides --
-  // re-fires the same (idempotent) write so the latest snapshot is retried.
-  useEffect(() => {
-    function flush() {
-      if (pendingRef.current) saveAppState(pendingRef.current.accountId, pendingRef.current.snapshot);
-    }
-    function onVisibilityChange() {
-      if (document.visibilityState === 'hidden') flush();
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('pagehide', flush);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('pagehide', flush);
-    };
-  }, []);
 
   const actions = useMemo(
     () => ({
