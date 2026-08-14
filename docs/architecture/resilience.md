@@ -163,14 +163,18 @@ Recorded here rather than fixed silently, so they are visible to the next person
   `refreshAfterRestore` list. Deliberately not fixed blind: it sits in the
   ExerciseDetail/queryClient logic that produced most of `docs/incidents/`.
 
-- **Two specs fail locally on an untouched tree**, verified 2026-08-10 by re-running each against
-  a pre-change checkout. Neither is a regression; both are recorded here so the next person
-  doesn't spend an hour attributing them to their own diff:
-  - `offline-durability.spec.ts` → *"cold-loads from cache and boots the saved session while fully
-    offline"*. This is the direct cost of those specs having run **nowhere** — not the default
-    project, not branch CI, not the deploy runbook. Un-gating them is what surfaced it.
-  - `rest-timer-setting.spec.ts` → *"…shown together on one screen"*. Intermittent: fails on some
-    runs and passes on others, with and without changes.
+- **One spec fails intermittently on an untouched tree**: `rest-timer-setting.spec.ts` →
+  *"…shown together on one screen"*. Fails on some runs and passes on others, with and without
+  changes. Recorded here so the next person doesn't spend an hour attributing it to their own diff.
+
+  `offline-durability.spec.ts` → *"cold-loads from cache and boots the saved session while fully
+  offline"* **was** listed here alongside it as rot from those specs having run nowhere. That was
+  wrong twice over: it was a harness bug, not rot, and the app was behaving correctly the whole
+  time. `context.setOffline` does not survive into the document a reload creates, so the spec was
+  asserting the offline banner while measuring lie-fi. Fixed 2026-08-14 —
+  `docs/incidents/2026-08-14-cold-boot-offline-spec-measured-liefi.md`. **A known-failure note is a
+  liability**: this one made a real red look expected for four days, and the next diagnosis reasoned
+  only about product code because the note framed it as the app's fault.
 
 ### Checked and closed
 

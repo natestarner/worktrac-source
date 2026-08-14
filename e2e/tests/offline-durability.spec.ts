@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { addOwnExercise, pickExercise } from './support/exercises';
 import { API_ONLY, failNetwork } from './support/faults';
-import { offlineSavedLocallyBanner, outboxCountText } from './support/offline';
+import { keepHardOfflineAcrossReload, offlineSavedLocallyBanner, outboxCountText } from './support/offline';
 
 // Mode 3 durability: a cold app-shell load with no network at all, and a queued write surviving a
 // full page reload while still offline. Both depend on the production service worker precaching
@@ -22,6 +22,10 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     // Fully offline cold load: the SW serves index.html + assets from cache, /me fails, and the app
     // boots the saved session from the identity snapshot instead of bouncing to /login.
     await page.context().setOffline(true);
+    // setOffline alone does not survive into the document the reload creates -- see the helper.
+    // Without this the reload lands in lie-fi (browser claims online, nothing reachable) rather
+    // than the hard-offline cold boot this spec is about.
+    await keepHardOfflineAcrossReload(page);
     await page.reload();
 
     await expect(page).toHaveURL(/\/app\/log/);
