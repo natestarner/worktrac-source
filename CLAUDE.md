@@ -104,10 +104,21 @@ in its own worktree under `.claude/worktrees/`. `/run-local` and `/stop-local` d
 ports and databases automatically, and dev logs live in each worktree's own `.dev-logs/`, so
 ordinary local dev across parallel worktrees doesn't collide. Still check first before anything
 not worktree-scoped:
-- Before deleting/reusing a worktree directory, or stopping the *shared* `worktrac-sqlserver`
-  container: run `git worktree list`.
-- Before deleting/reusing a worktree directory, or force-pushing/rebasing a branch, check
-  `.claude/worktrees/` for sibling worktrees that may still be mid-task on a related branch.
+- **Retiring finished worktrees: use `bash scripts/worktree-cleanup.sh`** (dry run by default;
+  `--force` to act). Don't hand-roll it — both halves of the obvious approach are wrong here, and
+  each one has already cost a round trip:
+  - **"Is it merged?" cannot be answered by ancestry.** PRs are squash-merged, so a merged
+    branch's commits are never ancestors of `main` — `git log main..branch`, `git branch -d` and
+    `git merge-base --is-ancestor` all report a fully-merged branch as unmerged. The authority is
+    `gh pr view <n> --json headRefOid`: if the merged PR's head equals the branch tip, everything
+    reached `main`. Content-diffing against `main` doesn't answer it either — `main` moves on, so
+    a file this branch added and a later PR deleted looks exactly like work that never merged.
+  - **`git worktree remove` exits 0 when it fails.** On these deep `node_modules` paths it dies
+    with "Filename too long", unregisters the worktree, and leaves the directory behind. It always
+    needs an `rm -rf` + `git worktree prune` follow-up.
+- Before stopping the *shared* `worktrac-sqlserver` container: run `git worktree list`.
+- Before force-pushing/rebasing a branch, check `.claude/worktrees/` for sibling worktrees that may
+  still be mid-task on a related branch.
 - Before concluding "my uncommitted changes are missing": check `git reflog` and
   `git worktree list` — a sibling session may have already committed and merged it.
 
