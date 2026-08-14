@@ -191,7 +191,14 @@ fi
 # Matches the two deliberate-discard idioms: a binding-less `catch {` (not `catch (e) {`, which
 # keeps the error and can log it) and an empty `.catch(() => {})` handler.
 SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:space:]]*\}\)'
-EXPECTED_LIB_SWALLOWS=33
+# 2026-08-14: 33 -> 35. appStatePersistence.js moved from IndexedDB to localStorage so the write is
+# durable at document teardown, which split its two storage try/catches into four: parse (a
+# corrupt/truncated value), the localStorage read, the localStorage write, and the one-time legacy
+# IndexedDB migration read. Each is commented in place; all four mean the same recoverable thing --
+# "there is no restorable UI state", identical to a first-ever boot. None can hide a lost write:
+# the write path reports failure through saveAppState's return value, which the migration checks
+# before dropping the legacy copy.
+EXPECTED_LIB_SWALLOWS=35
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

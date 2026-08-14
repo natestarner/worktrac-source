@@ -121,6 +121,31 @@ The merge does not cover changing what an *existing* field's values mean — tha
 `SCHEMA_VERSION` bump in `appStatePersistence.js`. And test the **upgrade** path (a slice missing
 the new key), not just a fresh profile: a brand-new person never reproduces this class of bug.
 
+### State that must survive a teardown has to be written SYNCHRONOUSLY
+
+`AppStateContext`'s snapshot goes to **localStorage** (`appStatePersistence.js`), not IndexedDB,
+and that is a durability requirement rather than a size or speed preference. **Don't move it back.**
+
+The reload that matters is one nobody chose: `swUpdate.js` force-reloads on ordinary navigation
+whenever a new build exists — *always just after a deploy*. An async store cannot promise the write
+landed before the document died, and **no scheduling trick fixes it**: an unload handler cannot
+await, so a `pagehide`/`visibilitychange` flush cannot finish an in-flight IndexedDB transaction.
+Writing on every dispatch instead of debouncing narrows the window; it does not close it. That was
+the previous design, and its own comment claimed it "closes the race" — it lost that race in 38 of
+51 lower runs (`docs/incidents/2026-08-14-routine-position-lost-to-async-persist.md`).
+
+**Ask of any new persisted state: if the document died the instant after this changed, would the
+change still be there?**
+
+| State | Store |
+|---|---|
+| In-progress UI state, auth snapshot, token | **localStorage** — must survive an uncontrolled teardown; small and JSON-serializable |
+| Query cache, durable outbox | **IndexedDB** — large/structured-clone, and loss is already tolerated (the outbox replays, the cache refetches) |
+
+Changing the backing store is a **persisted-schema change**: keep a one-time migration that adopts
+the old location and only drops it once the new write is confirmed, or every existing install
+silently loses that state once on upgrade.
+
 ### `lastTab` is the one exception to "always restore where they left off"
 
 A mid-session reload must resume the persisted tab, but an actual login/registration must land
