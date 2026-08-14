@@ -139,10 +139,10 @@ real `Origin`, so any other port is refused. `playwright.pwa.config.ts` starts i
 `vite preview` with `reuseExistingServer: false`, which is why the dev server has to be out of the
 way first.
 
-**Known: 1 of the 4 currently fails** — *"cold-loads from cache and boots the saved session while
-fully offline"*. Verified pre-existing (it fails identically on an untouched tree). It rotted
-precisely because these specs ran nowhere for so long; running them again is what surfaced it.
-Treat any *other* failure here as yours.
+**All 4 should pass.** Treat any failure here as yours. (One of them was recorded as a known
+pre-existing failure from 2026-08-10 to 2026-08-14. It wasn't rot and it wasn't the app — the
+harness was measuring lie-fi, because `context.setOffline` does not survive into the document a
+reload creates. See `docs/incidents/2026-08-14-cold-boot-offline-spec-measured-liefi.md`.)
 
 Four specs that **cannot** run in the default project: they need the production service worker to
 precache the app shell, which `vite dev` does not provide, so `playwright.config.ts` excludes them
