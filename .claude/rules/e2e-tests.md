@@ -110,6 +110,30 @@ Full narrative: `docs/architecture/testing.md`.
   `vite preview`'s proxy forwards the browser's real `Origin`). They're excluded from the fast
   default project.
 
+## Flakiness — where the record lives
+
+- **E2E never runs in this repo's CI.** `ci.yml` is `backend-ci` + `frontend-ci` only. The suite
+  runs in GitHub in exactly one place: `worktrac-deploy`'s `deploy-lower.yml`, job `e2e-tests`,
+  on push to `lower`. Locally it runs via `scripts/e2e.sh`. There is nowhere else to look.
+- **A green lower run is not evidence the suite is stable.** CI sets `retries: 2`, so a test that
+  fails and then passes is recorded `flaky` while the run still reports success — the run-level
+  conclusion carries no flake signal at all. Measured 2026-08-14 across the 51 runs then retained:
+  **42 were green, and 38 of those 42 contained at least one flaky test.** Do not infer "the suite
+  is fine" from a row of green checks.
+- **Per-test outcomes come from the `e2e-results-json` artifact** (`results.json`, written by the
+  `json` reporter — see `playwright.config.ts`). Read `stats.flaky` for the run, and each test's
+  `status` / `retry` for which ones. `outcome: flaky` means "needed a retry", `unexpected` means
+  "failed all attempts".
+- **Don't scrape `playwright-report/index.html`.** The same data is in there, but only as a
+  base64'd zip in an internal format with no compatibility promise. That is what had to be done
+  before the `json` reporter existed; it is not the supported path.
+- **Artifacts expire.** Once they do, that history is unrecoverable — there is no other copy. If
+  you are investigating a flake, pull the artifacts you need *first*, before they age out.
+- **Attribute before fixing.** Lower is shared and deploys queue, so a failure in a given run may
+  belong to an earlier-queued merge — and the job checks out this repo's default branch unpinned,
+  so the specs that ran can be newer than the image they ran against. See the attribution protocol
+  in `.claude/commands/deploy-to-lower.md`.
+
 ## Connectivity helpers — use these, not ad hoc calls
 
 `tests/support/offline.ts` (banner/outbox locators, `goHardOffline`/`goOnline`) and

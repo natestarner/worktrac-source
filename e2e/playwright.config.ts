@@ -111,8 +111,25 @@ export default defineConfig({
   // that legitimately takes 12s alone has no room left at 19s under load, and fails on the clock
   // rather than on a defect. See resolveWorkerCount above.
   timeout: perTestTimeout,
+  // The `json` reporter is what makes flakiness measurable ACROSS runs rather than one run at a
+  // time. CI retries (above) mean a test that fails and then passes is recorded as `flaky` while
+  // the run still goes green -- so the run's own pass/fail conclusion carries no flake signal at
+  // all, and the only durable record is per-test. Measured 2026-08-14 over the 51 lower runs still
+  // retained: 42 were green, and 38 of those 42 contained at least one flaky test.
+  //
+  // The same per-test outcomes are technically inside the html report too, but only as a
+  // base64'd zip embedded in `index.html` -- an internal format with no compatibility promise,
+  // which had to be scraped to learn the above. This writes the same thing through a documented
+  // reporter instead.
+  //
+  // It must NOT be written into `playwright-report/`: the html reporter calls removeFolders() on
+  // its own output folder before generating (playwright/lib/runner/index.js), so anything another
+  // reporter puts there is deleted depending on which finishes first. `test-results/` is the
+  // configured outputDir -- cleared BEFORE the run, never after -- so an end-of-run write survives.
+  // Both directories are already gitignored.
   reporter: [
     ['html', { open: 'never' }],
+    ['json', { outputFile: 'test-results/results.json' }],
     ['list'],
   ],
   // A real deployed target (lower/production) has real network latency and shared,
