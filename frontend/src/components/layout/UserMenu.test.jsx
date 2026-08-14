@@ -96,4 +96,35 @@ describe('UserMenu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /Log out anyway/i }));
     expect(logout).toHaveBeenCalledOnce();
   });
+
+  // AppShellSkeleton renders a real Header so the boot paint matches the loaded one, but that
+  // whole tree is unmounted the moment ProtectedRoute swaps in AppShell -- taking `open` with it.
+  // A menu opened during boot therefore closed itself with no sign the tap was discarded (a 2.7s
+  // window under load; see docs/incidents/2026-08-13-e2e-parallel-flakiness.md). The trigger stays
+  // rendered so the layout doesn't shift -- it just isn't armed until the real Header mounts.
+  it('does not open a menu that boot is about to discard', () => {
+    useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false });
+    render(
+      <MemoryRouter>
+        <UserMenu booting />
+      </MemoryRouter>,
+    );
+
+    const trigger = screen.getByRole('button', { name: /Account/ });
+    expect(trigger).toBeVisible();
+    expect(trigger).toBeDisabled();
+
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Logout' })).not.toBeInTheDocument();
+  });
+
+  it('is armed once boot is done', () => {
+    useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false });
+    renderMenu();
+
+    expect(screen.getByRole('button', { name: /Account/ })).toBeEnabled();
+    openMenu();
+    expect(screen.getByRole('menuitem', { name: 'Logout' })).toBeInTheDocument();
+  });
 });
