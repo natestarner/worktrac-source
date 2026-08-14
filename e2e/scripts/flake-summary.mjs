@@ -46,8 +46,16 @@ function collectSpecs(suite, ancestors = []) {
 }
 
 // Pipe characters and newlines would break out of the markdown table cell they sit in.
+//
+// Backslashes MUST be escaped first. Escaping only the pipe turns an input `\|` into `\\|`, which
+// markdown renders as a literal backslash followed by an *unescaped* pipe -- i.e. the exact cell
+// break the escaping exists to prevent. Not hypothetical here: Playwright error text quotes
+// Windows paths, so backslashes reach this function routinely.
 function esc(s) {
-  return String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  return String(s ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\n/g, ' ');
 }
 
 function stripAnsi(s) {
