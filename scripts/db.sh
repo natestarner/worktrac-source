@@ -43,3 +43,34 @@ BEGIN
     EXEC('CREATE DATABASE [$DB_NAME]');
 END
 "
+
+# READ_COMMITTED_SNAPSHOT: local must match Azure SQL, not stock SQL Server.
+#
+# Azure SQL Database (what lower and production run) has RCSI ON by default; a SQL Server
+# container has it OFF. That is not a cosmetic difference -- it changes what READ COMMITTED
+# does. With RCSI off, plain reads take shared locks, so a transaction that reads and writes
+# the same table interleaves S and X locks and two concurrent ones can deadlock. logLiveSet
+# does exactly that: getBestComparableLb (SELECT over IX_workout_sets_person_id_exercise_id),
+# then the INSERT (X locks on the clustered index AND every non-clustered index), then
+# getBest (the same SELECT again) -- all in one transaction. Two people logging sets at the
+# same moment is the app's normal case, not an edge case.
+#
+# Observed, not theorised: a full e2e suite at 11 workers produced
+#   CannotAcquireLockException ... "Transaction (Process ID 94) was deadlocked on lock
+#   resources and has been chosen as the deadlock victim"
+# from StatsService.getBest <- WorkoutSetService.insertSetAndDetectPr. The write survives
+# (a 500 is transient to shouldRetryWrite, so the durable outbox retries it), but the retry
+# costs a round trip and the failure is invisible on lower/production, where RCSI is already
+# on -- i.e. local was LESS concurrency-safe than the environment it is meant to mirror, and
+# the local e2e suite paid for it in flakiness that no deployed run would ever reproduce.
+#
+# Guarded on the current setting so re-running this is a genuine no-op: ROLLBACK IMMEDIATE
+# would otherwise kick the connections of a backend already running against this database.
+echo "Ensuring READ_COMMITTED_SNAPSHOT is ON for [$DB_NAME] (matches Azure SQL)..."
+"${SQLCMD[@]}" -Q "
+IF EXISTS (SELECT 1 FROM sys.databases WHERE name = N'$DB_NAME' AND is_read_committed_snapshot_on = 0)
+BEGIN
+    PRINT 'Enabling READ_COMMITTED_SNAPSHOT on $DB_NAME';
+    EXEC('ALTER DATABASE [$DB_NAME] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE');
+END
+"

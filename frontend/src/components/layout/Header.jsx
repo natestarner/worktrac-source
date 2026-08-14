@@ -2,7 +2,9 @@ import UserMenu from './UserMenu';
 import logoLight from '../../assets/huddle-lockup-horizontal-light.svg';
 import logoDark from '../../assets/huddle-lockup-horizontal-dark.svg';
 
-export default function Header() {
+// `booting` is forwarded to UserMenu and set only by AppShellSkeleton -- see UserMenu's own
+// header comment for why the boot-time copy of this header must not offer an openable menu.
+export default function Header({ booting = false }) {
   return (
     <div
       className="header-bar"
@@ -18,7 +20,7 @@ export default function Header() {
         <source srcSet={logoDark} media="(prefers-color-scheme: dark)" />
         <img src={logoLight} alt="Huddle" style={{ height: 52, display: 'block' }} />
       </picture>
-      <UserMenu />
+      <UserMenu booting={booting} />
     </div>
   );
 }

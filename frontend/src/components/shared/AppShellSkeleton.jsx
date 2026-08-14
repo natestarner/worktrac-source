@@ -7,10 +7,16 @@ import Skeleton from './Skeleton';
 // they're rendered for real (guaranteed to match pixel-for-pixel); only the person-pill
 // row and the Log tab's default content -- both of which depend on data we don't have
 // yet -- are faked, sized to match PersonPillBar/ExercisePicker's real CSS.
+//
+// "Rendered for real" is about PIXELS, not behaviour. This whole tree is discarded the instant
+// ProtectedRoute flips to AppShell, so any state a person creates in it is lost -- hence
+// `booting` on the Header, which leaves the account control visible but unarmed rather than
+// letting someone open a menu that is about to be unmounted. If you add another interactive
+// control here, it needs the same treatment. See UserMenu.jsx.
 export default function AppShellSkeleton() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
-      <Header />
+      <Header booting />
 
       <div
         style={{

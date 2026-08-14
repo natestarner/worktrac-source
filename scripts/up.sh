@@ -78,6 +78,32 @@ _record_exit() {
   printf '%s; echo "[[%s exited rc=$? at $(date +%%T)]]"' "$1" "$2"
 }
 
+# ...but the marker above is only useful if it OUTLIVES the death it describes, and until
+# 2026-08-13 it never did. These logs were opened with `>`, which truncates. The sequence that
+# matters is: frontend dies mid-run -> e2e.sh finds the port dead -> e2e.sh calls up.sh ->
+# up.sh truncates frontend.log -> the marker explaining the death is gone before anyone reads it.
+# Since e2e.sh restarts a dead stack automatically, that erasure was GUARANTEED to happen on the
+# exact occasions the marker was written for. The diagnostic that exists to answer "did it exit or
+# was it killed?" had therefore never once been read -- which is a large part of why that question
+# stayed open (see docs/incidents/2026-08-13-e2e-parallel-flakiness.md).
+#
+# So: append, with a banner delimiting each start. Rotate at 20MB so this can't grow without bound
+# on a long-lived worktree; one full e2e run is ~1k lines now that show-sql defaults off.
+_open_log() {
+  local log="$LOG_DIR/$1"
+  if [ -f "$log" ] && [ "$(wc -c < "$log")" -gt 20971520 ]; then
+    mv -f "$log" "$log.1"
+  fi
+  {
+    echo ""
+    echo "=============================================================================="
+    echo "[[$1 started at $(date '+%Y-%m-%d %H:%M:%S') -- worktree '$WORKTREE_SLUG']]"
+    echo "=============================================================================="
+  } >> "$log"
+}
+_open_log backend.log
+_open_log frontend.log
+
 echo "Starting backend..."
 cd "$REPO_ROOT/backend"
 SPRING_DATASOURCE_URL="$SPRING_DATASOURCE_URL" \
@@ -85,14 +111,14 @@ SERVER_PORT="$BACKEND_PORT" \
 CORS_ALLOWED_ORIGINS="$CORS_ALLOWED_ORIGINS" \
 APP_EMAIL_APP_URL="$APP_EMAIL_APP_URL" \
   _detach bash -c "$(_record_exit 'mvn spring-boot:run -Dspring-boot.run.profiles=local' 'backend')" \
-  > "$LOG_DIR/backend.log" 2>&1 &
+  >> "$LOG_DIR/backend.log" 2>&1 &
 disown
 
 echo "Starting frontend..."
 cd "$REPO_ROOT/frontend"
 [ -d node_modules ] || npm install
 FRONTEND_PORT="$FRONTEND_PORT" VITE_BACKEND_ORIGIN="$VITE_BACKEND_ORIGIN" \
-  _detach bash -c "$(_record_exit 'npm run dev' 'frontend')" > "$LOG_DIR/frontend.log" 2>&1 &
+  _detach bash -c "$(_record_exit 'npm run dev' 'frontend')" >> "$LOG_DIR/frontend.log" 2>&1 &
 disown
 
 echo ""

@@ -4,7 +4,22 @@ import { useAuth } from '../../context/AuthContext';
 import { queryClient } from '../../lib/queryClient';
 import { getQueuedWriteCount } from '../../hooks/useOutboxCount';
 
-export default function UserMenu() {
+// `booting` is passed by AppShellSkeleton only. That skeleton renders a REAL Header so the
+// boot paint matches the loaded one pixel-for-pixel -- but the tree it renders is guaranteed to
+// be thrown away: ProtectedRoute swaps AppShellSkeleton for AppShell the moment auth resolves and
+// the persisted state rehydrates, which unmounts this component and takes `open` with it.
+//
+// So a menu opened during boot closes itself, silently, with no indication the tap was discarded.
+// Reload on a slow connection, tap your name, and the menu appears and then vanishes a beat later
+// -- a full 2.7s window was measured under load. Disabling the trigger while booting turns that
+// silently-dropped interaction into a well-defined wait: the control is visibly there (so the
+// layout doesn't shift) and simply isn't armed until the app it belongs to is.
+//
+// It also makes the same race impossible for anything DRIVING the app rather than watching it:
+// Playwright's actionability check waits for a disabled button, so a click issued mid-boot now
+// lands after the real Header mounts instead of opening a menu that is about to disappear.
+// See docs/incidents/2026-08-13-e2e-parallel-flakiness.md.
+export default function UserMenu({ booting = false }) {
   const { people, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -67,6 +82,7 @@ export default function UserMenu() {
     <div ref={containerRef} style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen((o) => !o)}
+        disabled={booting}
         aria-expanded={open}
         aria-haspopup="menu"
         style={{

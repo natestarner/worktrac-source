@@ -9,10 +9,38 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:sqlserver://localhost:1434;database=worktrac;encrypt=false;trustServerCertificate=true}
     username: sa
     password: LocalDev123!
+    hikari:
+      # One local backend serves the WHOLE Playwright suite, and every browser fires a burst
+      # of parallel reads on each page load -- so concurrent in-flight requests scale with the
+      # worker count, not with "one developer clicking around". Hikari's default of 10 was
+      # never sized for that.
+      #
+      # This matters beyond speed. A saturated pool makes requests queue until they exceed the
+      # frontend's REQUEST_TIMEOUT_MS (api/client.js, 15s), and an aborted fetch is a REJECTED
+      # fetch -- which is the one thing that trips reachabilityMonitor's lie-fi detection. An
+      # overloaded local backend therefore doesn't just make tests slow, it puts the app into a
+      # different connectivity state than the test arranged, and the spec fails claiming a
+      # resilience bug that does not exist. Sizing the pool above peak worker concurrency keeps
+      # "the machine is busy" from ever being reported as "the app went offline".
+      maximum-pool-size: ${DB_POOL_SIZE:40}
+      # minimum-idle MUST stay explicitly low. Hikari defaults it to maximum-pool-size and fills
+      # that many connections eagerly at startup -- and this profile is also what every
+      # @SpringBootTest activates (see AbstractIntegrationTest). Each of those test classes
+      # resolves its own datasource URL and so gets its OWN Spring context and its OWN pool, all
+      # alive at once in Spring's test-context cache. Left at the default, a backend test run
+      # would open ~40 connections per context against the single shared testcontainer -- the
+      # same "exhaust the host's I/O budget" failure that class-level test parallelism caused
+      # once already (see junit-platform.properties). Growing on demand costs the e2e suite
+      # nothing: the pool reaches its ceiling within the first seconds of load.
+      minimum-idle: 2
   jpa:
     hibernate:
       ddl-auto: validate    # Flyway manages schema
-    show-sql: true
+    # Off by default, opt in with SHOW_SQL=true. This echoes every statement through a
+    # synchronous appender: during a full e2e run it was 89% of all backend log output
+    # (7461 of 8414 lines), paid on the request path, for output nothing reads unless
+    # someone is actively debugging a query. lower/production already set it false.
+    show-sql: ${SHOW_SQL:false}
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -54,8 +82,25 @@ app:
     # through a file purely because earlier tests in the same class already consumed the
     # quota. The one test class that actually verifies rate-limiting behavior overrides these
     # back down via its own property source, which gives it an isolated Spring context.
-    per-ip-per-hour: 1000
-    global-email-sends-per-hour: 1000
+    #
+    # 1000 was not enough, and the way it ran out is why e2e flakiness LOOKED like a
+    # parallelism bug. Every e2e test registers its own household, so a full suite spends ~109
+    # tokens from each bucket, and every local run shares the same two buckets (one backend,
+    # one source IP). They refill greedily at capacity/hour, so what matters is how long a run
+    # takes:
+    #   - at 1 worker  a suite takes ~8 min and refills ~130 tokens while spending 109 -- it
+    #     roughly breaks even, and you can iterate all day
+    #   - at 11 workers the same suite takes ~1 min and refills ~17 while spending the same 109
+    # So the FASTER the suite runs, the sooner registrations start coming back 429. That is a
+    # real mechanism by which "it only passes at workers=1" is true while nothing is actually
+    # wrong with parallelism -- and it surfaces as registerHousehold failing in whichever
+    # arbitrary specs happened to run after the bucket emptied, i.e. a different set of tests
+    # every time, which reads exactly like a data-isolation problem and is not one.
+    #
+    # There is no abuse to defend against on localhost, so this is a ceiling no local suite can
+    # reach rather than one that merely looks generous.
+    per-ip-per-hour: 100000
+    global-email-sends-per-hour: 100000
   admin:
     emails: ${ADMIN_EMAILS:nate+huddleadmin@starner.co}
   email-delivery-webhook:

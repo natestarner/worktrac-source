@@ -93,7 +93,18 @@ if [ -n "${BACKEND_PORT:-}" ]; then
       echo "     an '[[$name exited rc=...]]' line means it exited on its own (rc says why);" >&2
       echo "     no such line means something killed it (a sibling worktree's down.sh is the" >&2
       echo "     usual suspect -- see .claude/rules/e2e-tests.md)." >&2
-      grep -a "\[\[$name exited" "$REPO_ROOT/.dev-logs/$name.log" 2>/dev/null >&2 || true
+      # Scoped to the CURRENT server session only. up.sh appends to these logs now (it used to
+      # truncate, which erased this very marker before anyone could read it -- see up.sh's
+      # _open_log), so an unscoped grep would also surface markers from previous starts and
+      # report a death that already happened days ago as if it were this run's.
+      # awk, not `sed -n '/started/,$p'`: that prints from the FIRST banner to the end, which with
+      # several starts in one file is the whole history again. Resetting a buffer at every banner
+      # leaves exactly the LAST session in it.
+      awk -v n="$name" '
+        $0 ~ ("\\[\\[" n " started at ") { buf = "" }
+        { buf = buf $0 ORS }
+        END { printf "%s", buf }
+      ' "$REPO_ROOT/.dev-logs/$name.log" 2>/dev/null | grep -a "\[\[$name exited" >&2 || true
       echo "   Re-run after 'bash scripts/up.sh' in a SEPARATE invocation before believing any" >&2
       echo "   of the failures above." >&2
       rc=1
