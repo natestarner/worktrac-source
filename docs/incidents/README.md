@@ -29,6 +29,7 @@ need the "why" or the debugging story.
 | 2026-08-12 | [The weight prefill overwrote a weight the person had typed](2026-08-12-prefill-overwrites-typed-weight.md) — known since 2026-08-08 and worked around in the e2e helpers rather than fixed; surfaced as a missing PR celebration | Log screen / frontend state |
 | 2026-08-12 | [A live session the client invented was restored as if the server had said it](2026-08-12-provisional-live-session-restored-as-fresh.md) — a synced set vanished from "This session" after a reload; also caught three parity modes passing vacuously | Offline / persistence |
 | 2026-08-13 | [The e2e suite only passed at `--workers=1`](2026-08-13-e2e-parallel-flakiness.md) — not a data-isolation bug: local SQL Server lacked Azure's `READ_COMMITTED_SNAPSHOT`, and a rate-limit bucket that punished *fast* runs | E2E / local env |
+| 2026-08-14 | [The cold-boot-offline spec was measuring lie-fi](2026-08-14-cold-boot-offline-spec-measured-liefi.md) — `setOffline` doesn't survive into the document a reload creates; written off as rot, then nearly "fixed" in the app | E2E harness / offline |
 
 ## Adding a new incident
 

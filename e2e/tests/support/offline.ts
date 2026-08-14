@@ -12,6 +12,41 @@ export async function goOnline(page: Page) {
   await page.context().setOffline(false);
 }
 
+// `setOffline` does NOT survive into a document created after it -- use this when a spec reloads
+// while offline.
+//
+// Measured on 2026-08-14 by probing both sides of one reload (Chromium 3.x, Playwright 1.5x):
+//
+//   live document, right after setOffline(true):  navigator.onLine === false, 'offline' event fired
+//   document created by the reload that follows:  navigator.onLine === true, NO event, forever
+//
+// CDP's Network.emulateNetworkConditions flips the renderer's network state and fires the
+// transition on documents that already exist. A document created afterwards starts life reading
+// `true`, and because nothing transitioned there is no event to correct it -- so the app boots
+// believing it is online while every request genuinely fails. That is lie-fi, not hard offline: a
+// real device that is genuinely offline reports `false` at document creation, which is what
+// offlineMode.js's applyPersistedPin() seeds onlineManager from.
+//
+// So this is compensating for a harness gap, NOT relaxing the assertion. `setOffline` still makes
+// the requests genuinely fail; this only restores the one fact the emulation drops, so the app's
+// real cold-boot path (applyPersistedPin -> onlineManager -> OfflineBanner) is what gets exercised.
+// Without it, offline-durability's cold-boot spec was asserting the offline banner while the app
+// was correctly rendering the lie-fi banner -- and it was misfiled for four days as a rotted test.
+// See docs/incidents/2026-08-14-cold-boot-offline-spec-measured-liefi.md.
+//
+// Applies to every LATER navigation on this page, so call it after the online setup phase. There is
+// no removing it once added, so a spec that reconnects and reloads AGAIN would keep reading
+// `false` -- which is why the other three specs in offline-durability.spec.ts deliberately do not
+// use it. Their reloads therefore land in lie-fi rather than hard offline; that is fine for what
+// they assert (durable-outbox survival, ended-workout suppression, no permanent deadlock), none of
+// which is a claim about the connectivity signal. Don't add it to them without re-checking their
+// reconnect halves.
+export async function keepHardOfflineAcrossReload(page: Page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'onLine', { get: () => false, configurable: true });
+  });
+}
+
 // OfflineBanner's no-queued-writes offline message (see OfflineBanner.jsx). Present whenever
 // `!online && queued === 0`.
 export function offlineSavedLocallyBanner(page: Page) {

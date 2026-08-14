@@ -121,6 +121,32 @@ Full narrative: `docs/architecture/testing.md`.
 
 `context.setOffline()` cannot drive lie-fi at all — it needs request-level fault injection.
 
+### `setOffline` does NOT survive into a document created after it
+
+Measured 2026-08-14, both sides of one reload:
+
+| Document | `navigator.onLine` | Event |
+|---|---|---|
+| Live, right after `setOffline(true)` | `false` | `offline` fired |
+| Created by the reload that follows | **`true`, forever** | none |
+
+CDP's `Network.emulateNetworkConditions` flips the renderer's network state and fires the
+transition on documents that **already exist**; a document created afterwards starts life reading
+`true`, and since nothing transitioned there is no event to correct it. Requests still genuinely
+fail — so **a spec that reloads while offline is testing lie-fi, not hard offline**, and the app
+correctly shows the connection-trouble banner rather than the offline one.
+
+**Reloading while offline? Use `keepHardOfflineAcrossReload(page)`** (`support/offline.ts`)
+alongside `setOffline(true)`. It pins `navigator.onLine` false for later documents, which is what a
+genuinely offline device reports and what `applyPersistedPin()` seeds `onlineManager` from. It
+**cannot be undone**, so don't use it in a spec that reconnects and reloads again.
+
+This cost four days: the cold-boot spec was recorded as a known pre-existing failure, then
+diagnosed a second time as a product bug in `offlineMode.js` — a coherent theory that fit every
+piece of static evidence and was refuted by twenty seconds of in-page measurement. **Probe the
+harness with `addInitScript` before concluding the app is wrong.** See
+`docs/incidents/2026-08-14-cold-boot-offline-spec-measured-liefi.md`.
+
 ## Parity specs: one assertion body, every connectivity mode
 
 `tests/support/parity.ts`'s **`forEachConnectivityMode`** emits one test per mode (online,
