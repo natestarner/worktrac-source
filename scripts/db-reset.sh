@@ -18,5 +18,8 @@ BEGIN
     DROP DATABASE [$DB_NAME];
 END
 CREATE DATABASE [$DB_NAME];
+-- Recreate it the way db.sh would, so a reset database is not quietly less
+-- concurrency-safe than one db.sh made. See db.sh for why this must match Azure SQL.
+ALTER DATABASE [$DB_NAME] SET READ_COMMITTED_SNAPSHOT ON;
 "
 echo "Done. [$DB_NAME] will be re-migrated by Flyway the next time the backend starts."
