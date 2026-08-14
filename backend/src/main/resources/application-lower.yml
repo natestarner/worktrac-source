@@ -28,12 +28,29 @@ app:
     e2e-noop-recipient-pattern: '^huddle\+e2e-.*@starner\.co$'
   rate-limit:
     # application.yml's production-sane defaults (10/hour per-IP, 30/hour global) are sized
-    # for real internet-facing abuse resistance, not for the e2e-tests CI job -- one run
-    # registers ~15 households, and Playwright's CI retry policy (2 retries per failing test)
-    # means a single early 429 cascades into every subsequent test also registering 2-3x,
-    # confirmed live 2026-07-13: the global cap was exhausted mid-run, failing 14 of 15 tests.
+    # for real internet-facing abuse resistance, not for the e2e-tests CI job, and Playwright's
+    # CI retry policy (2 retries per failing test) means a single early 429 cascades into every
+    # subsequent test also registering 2-3x -- confirmed live 2026-07-13, when the global cap was
+    # exhausted mid-run and failed 14 of 15 tests.
+    #
+    # WARNING: "one run registers ~15 households" was true when written and is NOT true now.
+    # The suite is 109 tests and the teardown reports 107 accounts per run, so ONE run exceeds the
+    # 100/hour per-IP cap below. Every registration consumes a token from both buckets:
+    # RegistrationService.register() calls checkSendAllowed() unconditionally, and the
+    # e2e-noop-recipient-pattern above only skips the ACS send inside EmailService -- it does not
+    # bypass the limiter. All of a CI run's registrations also share ONE bucket, because
+    # forward-headers-strategy resolves them to the single runner IP.
+    #
+    # KEEP THIS NUMBER AHEAD OF THE SUITE SIZE. A cap below the per-run registration count fails
+    # whichever arbitrary specs happen to run after the bucket empties -- a different set each
+    # time, which reads as CI-runner flakiness and gets "fixed" by re-running failed tests (which
+    # registers few enough to slip under the cap, hiding the cause). See
+    # docs/incidents/2026-08-13-e2e-parallel-flakiness.md for the same mechanism biting locally.
     # lower is internet-facing but has no real users (only e2e CI + manual testing), so it
     # gets headroom sized for CI bursts rather than local's effectively-unlimited 1000/1000 --
     # still meaningfully bounded, unlike local, since lower is a real deployed target.
-    per-ip-per-hour: 100
-    global-email-sends-per-hour: 200
+    # 500/1000 fits ~4 full runs per hour including CI retries, with headroom for the suite to keep
+    # growing -- while staying a real bound, unlike local's effectively-unlimited setting, because
+    # lower is genuinely internet-facing.
+    per-ip-per-hour: 500
+    global-email-sends-per-hour: 1000
