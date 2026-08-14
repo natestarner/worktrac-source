@@ -182,6 +182,25 @@ session-independent cache (`history`), or read it straight from the mutation's o
 `useMutationState` (filtered by `mutationKey` + the relevant ids, excluding `status === 'success'`
 and definitive-4xx failures). Cache invalidation alone is a no-op while paused offline.
 
+## Boot chrome renders for real, but must not be interactive
+
+`ProtectedRoute` shows `AppShellSkeleton` until auth resolves *and* the persisted state rehydrates,
+then swaps in `AppShell`. Both render `<Header/>`, in **different tree positions** — so that swap
+unmounts the skeleton's header and mounts a new one. Any local component state in the discarded
+tree is gone, and `UserMenu`'s `open` is plain `useState`.
+
+- **`AppShellSkeleton` renders real chrome for PIXELS, not for behaviour.** Its `<Header booting/>`
+  keeps the account control visible (no layout shift) with the trigger disabled, because a menu
+  opened during boot would close itself the moment boot finished — silently, with no sign the tap
+  was discarded. A 2.7s window was measured under load, and it is widest exactly when boot is
+  slowest: cold start, lie-fi, a poor connection.
+- **Any new interactive control added to that skeleton needs the same treatment.** If it can be
+  clicked, it must either survive the swap or be inert until it does.
+- This is also why driving the app mid-boot is safe now: a disabled button fails Playwright's
+  actionability check, so a click waits for the surviving header instead of opening a doomed menu.
+
+See `docs/incidents/2026-08-13-e2e-parallel-flakiness.md`.
+
 ## Per-row UI state
 
 "Saving…" is reserved for a write's **first in-flight attempt**. Once paused, retrying, or in a

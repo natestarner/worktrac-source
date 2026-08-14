@@ -29,9 +29,27 @@ Full narrative: `docs/architecture/testing.md`.
 - **The backend does not hot-reload.** A reused stack still serves the code it booted with, so pass
   `--restart` (or `E2E_RESTART=1`) after changing backend code. Vite hot-reloads, so frontend edits
   need nothing.
-- Locally, Playwright auto-detects ~11 workers vs CI's fixed 2, which overwhelms a single local
-  backend. Rerun a failure with `--workers=2` before treating it as real — and if it still fails,
-  try `--workers=1` before believing it, since a couple of specs are contention-sensitive.
+- **Do not "rerun it at `--workers=1`" to decide whether a failure is real.** That ritual used to
+  be the standing advice here and it was answering the wrong question — see
+  `docs/incidents/2026-08-13-e2e-parallel-flakiness.md`. Two of the four things making the suite
+  flaky scaled with *run duration* or *machine load*, not with test independence, so `--workers=1`
+  "fixing" a failure was never evidence of a parallelism bug. Every spec is independent by
+  construction (own household, own context, account-scoped schema). Read the failure instead.
+- **Scale parallelism with `E2E_WORKERS=<n>`, not `--workers`.** Both work — `playwright.config.ts`
+  reads the CLI flag too — but `E2E_WORKERS` is the documented knob, and the per-test/assertion
+  time budgets are derived from whichever one you use, so the budget always matches the contention.
+  The local default is `cores/4` (capped at 8), deliberately below Playwright's own `cores/2` so a
+  sibling worktree's suite still has room; a deployed target is pinned at 2 regardless.
+- **The local stack is configured to absorb that parallelism — don't undo it.** `scripts/db.sh`
+  sets `READ_COMMITTED_SNAPSHOT ON` (Azure SQL's default, a SQL Server container's non-default;
+  without it `logLiveSet` deadlocks against itself under concurrency), `application-local.yml`
+  sizes HikariCP at 40 and lifts the registration rate limits far above suite volume, and
+  `show-sql` is off by default (`SHOW_SQL=true` to opt back in).
+- **An overloaded local backend does not present as "slow" — it presents as "offline".** A
+  saturated pool queues requests past `api/client.js`'s 15s `REQUEST_TIMEOUT_MS`, and an aborted
+  fetch is a *rejected* fetch, which is the one thing that trips lie-fi detection. So a spec that
+  arranged "online" can fail asserting connectivity chrome it never asked for. If a connectivity
+  assertion fails in a spec that isn't about connectivity, suspect load before suspecting the app.
 - **Invoke `scripts/e2e.sh` by RELATIVE path from the worktree you mean.** An absolute path to
   another checkout's copy runs *that* tree's specs and `node_modules` against *this* worktree's
   ports and database — `worktree-env.sh` answers "which repo" from `$PWD` while each script answers
@@ -48,14 +66,35 @@ Full narrative: `docs/architecture/testing.md`.
      kill each other's stacks. `worktree-env.sh` now refuses to allocate a port another
      worktree's `.env.worktree` has claimed and warns on a pre-existing overlap — **heed that
      warning**: delete the offending `.env.worktree` and re-run to move onto free ports.
-  2. *Not reproduced since:* Vite was dying partway through long runs, silently, with nothing in
-     its log. Ruled out at the time: OOM, the dev proxy, a spec killing processes. It has **not
-     recurred** across repeated full runs since the port deconfliction landed *and* the concurrent
-     session that had been running its own stack throughout finished — consistent with cause 1,
-     though never proven for those specific deaths. `setsid` is **absent from stock
-     Git-for-Windows bash**, so `up.sh` warns and falls back to `nohup`; a PowerShell
-     `Start-Process` launcher was tried as a substitute and reverted (couldn't be shown to start
-     the backend reliably).
+  2. *Still open, but no longer a mystery about WHICH server:* Vite dies partway through long
+     runs, silently, with nothing in its log. Ruled out earlier: OOM, the dev proxy, a spec killing
+     processes. `setsid` is **absent from stock Git-for-Windows bash**, so `up.sh` warns and falls
+     back to `nohup`; a PowerShell `Start-Process` launcher was tried as a substitute and reverted
+     (couldn't be shown to start the backend reliably).
+
+     **2026-08-13 — it is ALWAYS the frontend, never the backend.** Across repeated full-suite
+     runs that failed this way, every single one ended `backend=UP frontend=DOWN` (probed live,
+     before and after each run). Don't spend time suspecting the backend.
+
+     **The exit marker below is now trustworthy; before 2026-08-13 it was not.** `up.sh` opened
+     these logs with `>`, so the restart that `e2e.sh` performs after a death truncated the very
+     marker written by that death — guaranteed, every time, because `e2e.sh` auto-restarts a dead
+     stack. The marker had never actually been read, and "no marker, so it was killed" was
+     concluded from a log written *after* the event. `up.sh` now appends with a per-start banner
+     and `e2e.sh` scopes its search to the last session, so **exit-vs-killed is an open question
+     the next occurrence will answer** — read it, don't assume it.
+
+     A hypothesis for the frontend/backend asymmetry, to be checked against that marker rather
+     than assumed: without `setsid` both servers stay in the invoking shell's process group, but
+     `mvn spring-boot:run` forks a separate JVM (a detached grandchild that outlives a
+     process-group teardown) while `npm run dev` leaves Vite a direct descendant. If the next
+     death carries an `rc`, this is wrong and the lines above it hold the answer.
+
+     It is **load-dependent, not deterministic**: the same stack survived several full runs and
+     then died three in a row, and the surviving runs were the fastest. Concurrent CPU load
+     (another suite, a lint, a vitest run) makes it markedly more likely — so **don't run
+     anything else while a full suite is going**, and re-run a death before reading anything
+     into the results.
 
      **You will not have to guess if it happens again.** `up.sh` wraps each server so its exit is
      recorded in its own log, and `e2e.sh` checks both ports *after* the run:

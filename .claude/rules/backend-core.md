@@ -36,6 +36,22 @@ Applies to all backend production code. Subsystem-specific rules load alongside 
   trusted so per-IP rate limits are actually per-user behind Azure Container Apps' ingress,
   not one shared bucket.
 
+## Concurrency — the local database must match Azure SQL
+
+- **`READ_COMMITTED_SNAPSHOT` is ON everywhere, and that is what makes a read-then-write
+  transaction safe.** Azure SQL Database (lower, production) enables it by default; a SQL Server
+  container does **not**, so `scripts/db.sh` sets it explicitly on every worktree database. Don't
+  drop that step and don't create a local database around it — without RCSI, plain reads take
+  shared locks, and a transaction that reads and writes the same table can deadlock against a
+  concurrent copy of itself. `WorkoutSetService.insertSetAndDetectPr` (SELECT → INSERT → SELECT on
+  `workout_sets`) did exactly that under a parallel e2e run. Different accounts don't save you:
+  page locks cover rows the query never touched. See
+  `docs/incidents/2026-08-13-e2e-parallel-flakiness.md`.
+- A deadlock surfaces as a 500, which `shouldRetryWrite` treats as transient, so the durable outbox
+  replays it and no write is lost. **That is the whole recovery story — don't add a retry at the
+  backend.** A second retry mechanism next to the outbox is precisely what `resilience.md`'s
+  "reuse the mechanism" table exists to prevent.
+
 ## Error handling
 
 - `GlobalExceptionHandler` (`common/`) must answer **every** failure mode with an honest
