@@ -92,7 +92,10 @@ public class CsvExportService {
         }
 
         List<List<String>> rows = new ArrayList<>();
-        rows.add(List.of("Date", "Time", "Exercise", "Tags", "Set #", "Weight", "Unit", "Reps", "Est. 1RM"));
+        // Duration (sec) is blank for a strength set and Est. 1RM is blank for a hold -- an empty
+        // cell is honest where the column doesn't apply, whereas a 0 reads as a real measurement.
+        rows.add(List.of("Date", "Time", "Exercise", "Tags", "Set #", "Weight", "Unit", "Reps",
+                "Duration (sec)", "Est. 1RM"));
 
         for (WorkoutSession session : sessionsAscending) {
             List<WorkoutSet> sets = setsBySession.get(session.getId());
@@ -102,6 +105,7 @@ public class CsvExportService {
             Map<Long, Integer> countsByExercise = new HashMap<>();
             for (WorkoutSet set : sets) {
                 int setNumber = countsByExercise.merge(set.getExercise().getId(), 1, Integer::sum);
+                boolean hold = set.getDurationSeconds() != null;
                 rows.add(List.of(
                         DATE_FMT.format(session.getStartedAt()),
                         TIME_FMT.format(session.getStartedAt()),
@@ -110,8 +114,9 @@ public class CsvExportService {
                         String.valueOf(setNumber),
                         set.getWeight().toPlainString(),
                         set.getUnit(),
-                        String.valueOf(set.getReps()),
-                        epleyCalculator.estimate1RM(set.getWeight(), set.getReps()).toPlainString()));
+                        hold ? "" : String.valueOf(set.getReps()),
+                        hold ? String.valueOf(set.getDurationSeconds()) : "",
+                        hold ? "" : epleyCalculator.estimate1RM(set.getWeight(), set.getReps()).toPlainString()));
             }
         }
 

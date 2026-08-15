@@ -24,7 +24,18 @@ const PERSON_DEFAULTS = {
   // exercise that isn't a barbell lift.
   weightDraft: null,
   repsDraft: 8,
-  // What the two drafts above belong to, and where they came from. All five fields are written
+  // The second measure for a duration-tracked exercise (a plank's seconds), sitting beside
+  // repsDraft rather than reusing it. An exercise only ever uses one of the two, so one field
+  // would have worked -- and would have left a field named `reps` holding seconds, which is how
+  // the "(sec)" exercise-name hack this feature replaces went wrong in the first place.
+  durationDraft: 30,
+  // A running hold timer's start, as an epoch millisecond timestamp, or null. It lives here rather
+  // than only in UIContext because this slice is persisted to localStorage SYNCHRONOUSLY -- so a
+  // max hold survives swUpdate.js's silent post-deploy reload instead of being destroyed at 1:55.
+  // Storing the START, not the elapsed count, is also what makes the timer immune to iOS
+  // suspending interval callbacks while the screen is locked. See UIContext's ticker.
+  holdStartedAt: null,
+  // What the drafts above belong to, and where they came from. All of them are written
   // together by SET_DRAFT and must be read together -- see ExerciseDetail's `userOwnsDraft`.
   //
   // These exist because the drafts are per-PERSON state describing a per-EXERCISE value that the
@@ -140,10 +151,16 @@ export function reducer(state, action) {
       return updateActive(state, {
         weightDraft: action.weight,
         repsDraft: action.reps,
+        durationDraft: action.durationSeconds,
         draftExerciseId: action.exerciseId,
         draftSetCount: action.setCount,
         draftSource: action.source,
       });
+    // Separate from SET_DRAFT on purpose: starting or stopping a hold says nothing about who owns
+    // the drafts, so it must not restamp draftSource/draftExerciseId. The value the timer produces
+    // is committed through SET_DRAFT like any other typed number.
+    case 'SET_HOLD_STARTED_AT':
+      return updateActive(state, { holdStartedAt: action.startedAt });
     case 'START_ROUTINE':
       return updateActive(state, {
         activeRoutineId: action.routineId,
@@ -250,8 +267,9 @@ export function AppStateProvider({ children }) {
       setTrendsWeeklyMetric: (metric) => dispatch({ type: 'SET_TRENDS_WEEKLY_METRIC', metric }),
       setTrendsExerciseMetric: (metric) => dispatch({ type: 'SET_TRENDS_EXERCISE_METRIC', metric }),
       setPrsSort: (sort) => dispatch({ type: 'SET_PRS_SORT', sort }),
-      setDraft: ({ exerciseId, weight, reps, setCount, source }) =>
-        dispatch({ type: 'SET_DRAFT', exerciseId, weight, reps, setCount, source }),
+      setDraft: ({ exerciseId, weight, reps, durationSeconds, setCount, source }) =>
+        dispatch({ type: 'SET_DRAFT', exerciseId, weight, reps, durationSeconds, setCount, source }),
+      setHoldStartedAt: (startedAt) => dispatch({ type: 'SET_HOLD_STARTED_AT', startedAt }),
       startRoutine: (routineId, exerciseIds) => dispatch({ type: 'START_ROUTINE', routineId, exerciseIds }),
       jumpToRoutineIndex: (index, exerciseIds) => dispatch({ type: 'JUMP_TO_ROUTINE_INDEX', index, exerciseIds }),
       nextExerciseInRoutine: (exerciseIds) => dispatch({ type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds }),

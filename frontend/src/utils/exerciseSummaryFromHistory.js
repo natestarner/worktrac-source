@@ -1,4 +1,4 @@
-import { comparableLb, epley } from './formulas';
+import { comparableValue, epley } from './formulas';
 
 // Client-side mirror of StatsService#getLastSession / #getBest
 // (backend/.../stats/StatsService.java), computed over the already-warmed `history` query
@@ -48,18 +48,29 @@ function deriveLastSession(history, exerciseId, excludeSessionId) {
 // Deliberately a max, so it can only ever RAISE the best. An offline DELETE (or downward edit) of
 // an already-synced set that was the all-time best therefore still leaves the best stale-high
 // until the outbox drains -- a known, accepted gap; see `.claude/rules/log-screen.md`.
+// Ranks through comparableValue, so a hold is folded on its DURATION. Routing a hold through
+// comparableLb instead would read its weight-0/reps-0 pair as a comparable of 0, the max would
+// silently become a no-op, and the PR pill would land on the wrong row for the entire outage --
+// the exact failure this function exists to prevent, just via a different measure.
 export function mergeBestWithLocalSets(best, sets) {
   let merged = best ?? null;
-  let mergedComparableLb = merged ? comparableLb(merged.weight, merged.reps, merged.unit) : null;
+  let mergedComparable = merged ? comparableValue(merged) : null;
   for (const set of sets || []) {
-    if (set?.weight == null || set?.reps == null) continue;
-    const candidateComparableLb = comparableLb(set.weight, set.reps, set.unit);
-    if (mergedComparableLb === null || candidateComparableLb > mergedComparableLb) {
-      mergedComparableLb = candidateComparableLb;
+    const isHold = set?.durationSeconds != null;
+    if (!isHold && (set?.weight == null || set?.reps == null)) continue;
+    if (isHold && set?.weight == null) continue;
+    const candidateComparable = comparableValue(set);
+    if (mergedComparable === null || candidateComparable > mergedComparable) {
+      mergedComparable = candidateComparable;
       // No sessionStartedAt -- a set that hasn't synced has no server session to date it by, and
       // the Log screen's Best card doesn't render one. The server best keeps its own fields
       // untouched whenever it wins, since it's returned as-is.
-      merged = { weight: set.weight, reps: set.reps, unit: set.unit || 'lb', est1rm: epley(set.weight, set.reps) };
+      //
+      // est1rm is null for a hold: Epley over 0 reps is meaningless, and labelling seconds as a
+      // weight is the mistake the weight-0 branch exists to avoid. Matches BestDto.
+      merged = isHold
+        ? { weight: set.weight, reps: 0, durationSeconds: set.durationSeconds, unit: set.unit || 'lb', est1rm: null }
+        : { weight: set.weight, reps: set.reps, unit: set.unit || 'lb', est1rm: epley(set.weight, set.reps) };
     }
   }
   return merged;
@@ -69,17 +80,25 @@ export function mergeBestWithLocalSets(best, sets) {
 // mirrors StatsService#getBest, which never excludes a session either.
 function deriveBest(history, exerciseId) {
   let best = null;
-  let bestComparableLb = null;
+  let bestComparable = null;
   for (const session of history || []) {
     const entry = findEntry(session, exerciseId);
     if (!entry) continue;
     for (const set of entry.sets) {
-      const candidateComparableLb = comparableLb(set.weight, set.reps, set.unit);
-      if (bestComparableLb === null || candidateComparableLb > bestComparableLb) {
-        bestComparableLb = candidateComparableLb;
-        best = { weight: set.weight, reps: set.reps, unit: set.unit, sessionStartedAt: session.startedAt };
+      const candidateComparable = comparableValue(set);
+      if (bestComparable === null || candidateComparable > bestComparable) {
+        bestComparable = candidateComparable;
+        best = {
+          weight: set.weight,
+          reps: set.reps,
+          durationSeconds: set.durationSeconds ?? null,
+          unit: set.unit,
+          sessionStartedAt: session.startedAt,
+        };
       }
     }
   }
-  return best ? { ...best, est1rm: epley(best.weight, best.reps) } : null;
+  if (!best) return null;
+  // Mirrors BestDto: a hold has no est. 1RM.
+  return { ...best, est1rm: best.durationSeconds != null ? null : epley(best.weight, best.reps) };
 }

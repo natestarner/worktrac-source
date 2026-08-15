@@ -22,6 +22,19 @@ Full narrative: `docs/architecture/trends.md`.
   `sortPrRows` groups bodyweight rows last under the est.-1RM sort rather than letting them all
   tie at 0.
 
+## A hold is the same call as bodyweight, one measure over
+
+`ExerciseRecordsDto.durationTracked` flips the records table to a time-focused view for exactly the
+reason `bodyweightOnly` flips it to a rep-focused one: a hold carries `reps = 0`, so every weight-
+and rep-derived record is `0`, and a column of zeros is worse than no column. `bestEst1rm` and
+`mostReps` are **null** whenever `durationTracked` is true; `longestHold` and `heaviestLoadHeld`
+carry the signal, and stay two records rather than one fused load-adjusted score.
+
+`WeeklyPointDto.totalHoldSeconds` exists because a hold contributes 0 to both volume and reps —
+without it a week of plank and wall-sit work reads as no work at all on every chart but set count.
+Both fold into the **existing** `getOverview` / `getExerciseTrend` / `getExerciseRecords` passes;
+neither adds a query.
+
 ## `bestEst1rm` and `heaviestWeight` are different records — keep both
 
 Epley rewards reps, so `185 x 8` (~234 lb) outranks a `225 x 1` single. `heaviestWeight` ranks on

@@ -27,6 +27,11 @@ export async function addOwnExercise(page: Page, name: string) {
   await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).last().click();
 }
 
+// 'Time' is the second stepper for a duration-tracked exercise (a plank), where it replaces
+// 'Reps'. It does not collide with the .stepper-row text filter below: no row's label contains
+// another's.
+export type StepperLabel = 'Weight' | 'Reps' | 'Time';
+
 // Weight/reps are steppers with a real <input> for the value (it selects its text on focus, so
 // typing replaces the prefill instead of appending to it -- see WeightRepsStepper.jsx). `fill`
 // overwrites the whole value directly regardless of that, so it's just fill + commit; the input
@@ -34,7 +39,7 @@ export async function addOwnExercise(page: Page, name: string) {
 // expect.poll because ExerciseDetail's computePrefillDraft effect re-seeds the draft when the
 // summary / session-sets queries settle, which can land after this and stomp the value -- the
 // same race offline-reads.spec.ts's setWeight documents.
-export async function setStepper(page: Page, label: 'Weight' | 'Reps', target: number) {
+export async function setStepper(page: Page, label: StepperLabel, target: number) {
   const row = page.locator('.stepper-row').filter({ hasText: label });
   const value = row.locator('.stepper-value');
 
@@ -51,7 +56,7 @@ export async function setStepper(page: Page, label: 'Weight' | 'Reps', target: n
     .toBe(target);
 }
 
-function stepperValue(page: Page, label: 'Weight' | 'Reps') {
+function stepperValue(page: Page, label: StepperLabel) {
   return page.locator('.stepper-row').filter({ hasText: label }).locator('.stepper-value');
 }
 
@@ -106,4 +111,61 @@ export async function logSetAt(page: Page, weight: number, reps: number) {
   // has already fired by the time the next call starts typing -- otherwise the race just moves to
   // the following set.
   await expect(setRows).toHaveCount(rowsBefore + 1);
+}
+
+
+// The Time stepper shows m:ss in both states, and its input accepts EITHER m:ss or a bare second
+// count (see utils/datetime.js#parseDuration). This fills raw seconds -- the shape a phone keypad
+// can produce -- and then verifies the formatted read-back, so the helper exercises both halves of
+// the format/parse pair rather than assuming they agree.
+function asClock(totalSeconds: number) {
+  const m = Math.floor(totalSeconds / 60);
+  const sec = totalSeconds % 60;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+export async function setHoldSeconds(page: Page, target: number) {
+  const value = page.locator('.stepper-row').filter({ hasText: 'Time' }).locator('.stepper-value');
+  const expected = asClock(target);
+
+  await expect
+    .poll(
+      async () => {
+        if ((await value.inputValue()) === expected) return expected;
+        await value.fill(String(target));
+        await value.press('Enter');
+        return value.inputValue();
+      },
+      { timeout: 20000 },
+    )
+    .toBe(expected);
+}
+
+// logSetAt's counterpart for a duration-tracked exercise: logs one hold at an exact number of
+// seconds. Kept separate rather than overloading logSetAt because the two take different measures
+// and the PR celebration copy differs -- a hold has no est. 1RM.
+export async function logHoldAt(page: Page, seconds: number, { expectPr = true }: { expectPr?: boolean } = {}) {
+  const setRows = page.getByText(/^Set \d+$/);
+  const rowsBefore = await setRows.count();
+
+  await setHoldSeconds(page, seconds);
+  await page.getByRole('button', { name: 'Log set' }).click();
+
+  if (expectPr) {
+    const celebration = page.getByText('New PR!');
+    await expect(celebration).toBeVisible();
+    await celebration.click({ force: true });
+    await expect(celebration).toBeHidden();
+  }
+
+  await expect(setRows).toHaveCount(rowsBefore + 1);
+}
+
+// Creates a household exercise measured in TIME rather than reps, via the same
+// "+ Add your own exercise" flow as addOwnExercise plus the Reps/Time toggle.
+export async function addOwnTimedExercise(page: Page, name: string) {
+  await page.getByRole('button', { name: '+ Add your own exercise' }).click();
+  await page.getByPlaceholder('Exercise name').fill(name);
+  await page.getByRole('dialog').getByRole('button', { name: 'Time', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).last().click();
 }

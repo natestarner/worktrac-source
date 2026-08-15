@@ -8,8 +8,11 @@ export function listExercises() {
 
 // idempotencyKey lets an offline-created exercise's create be replayed safely -- the server dedupes
 // on it (ExerciseService.add) and returns the same row instead of inserting a duplicate.
-export function addExercise({ name, idempotencyKey }) {
-  return apiClient.post('/api/exercises', { name, idempotencyKey });
+// trackingType is create-only ('strength' | 'duration') -- what a set of this exercise measures.
+// Absent => 'strength'. The backend has no setter for it after creation: flipping it would
+// reinterpret every set already logged against the exercise.
+export function addExercise({ name, idempotencyKey, trackingType }) {
+  return apiClient.post('/api/exercises', { name, idempotencyKey, trackingType });
 }
 
 export function updateExercise(exerciseId, { name }) {

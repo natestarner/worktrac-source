@@ -61,6 +61,20 @@ Applies to all backend production code. Subsystem-specific rules load alongside 
   A DB/backend outage must always degrade to "queue and retry", never to "you are signed out".
   See `docs/incidents/2026-07-27-db-outage-forced-logout.md`.
 
+## Validation strictness is a durability decision
+
+The frontend's `shouldRetryWrite` retries every failure **except** a 4xx outside `{408, 429}`. So a
+400 on an offline-capable write (log set, edit set, session note, favorite, create exercise) does
+not merely reject that request — it **permanently discards** a write that may have been queued in
+the durable outbox through an entire outage, with no retry and nothing to replay.
+
+**Reject only what is genuinely impossible.** Where a payload is merely *stale* — sent by a client
+whose cached state predates a change — prefer interpreting it over refusing it, and comment the
+branch with what makes the interpretation exact. `WorkoutSetService#resolveMeasure` is the worked
+example (`workout-data-model.md`).
+
+This does not apply to online-gated (Tier-3) writes, which have no outbox behind them.
+
 ## Style
 
 - Java: 4-space indentation, Spring Boot conventions.

@@ -57,10 +57,13 @@ export function cancelPendingLogSet(queryClient, tempId) {
 // (rather than going through TanStack's `#dispatch`, which isn't reachable from outside) so any
 // mounted `useMutationState` re-renders with the correction right away instead of waiting on some
 // unrelated cache event. Harmless no-op if the set already synced out from under the edit.
-export function patchPendingLogSetDisplay(queryClient, tempId, { weight, reps }) {
+export function patchPendingLogSetDisplay(queryClient, tempId, { weight, reps, durationSeconds }) {
   const mutation = findPendingLogSet(queryClient, tempId);
   if (!mutation) return;
-  mutation.state = { ...mutation.state, variables: { ...mutation.state.variables, weight, reps } };
+  mutation.state = {
+    ...mutation.state,
+    variables: { ...mutation.state.variables, weight, reps, durationSeconds },
+  };
   queryClient.getMutationCache().notify({
     mutation,
     type: 'updated',

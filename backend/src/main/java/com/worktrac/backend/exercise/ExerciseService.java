@@ -44,8 +44,14 @@ public class ExerciseService {
                 return ExerciseDto.from(existing.get());
             }
         }
+        // IllegalArgumentException is the app's existing route to an honest 400
+        // (GlobalExceptionHandler#handleIllegalArgument) -- no new exception type needed.
+        String trackingType = request.trackingTypeOrDefault();
+        if (!Exercise.isValidTrackingType(trackingType)) {
+            throw new IllegalArgumentException("Unknown tracking type: " + trackingType);
+        }
         Account account = accountRepository.getReferenceById(accountId);
-        Exercise exercise = new Exercise(account, request.name().trim(), deduped ? clientKey : null);
+        Exercise exercise = new Exercise(account, request.name().trim(), deduped ? clientKey : null, trackingType);
         return ExerciseDto.from(exerciseRepository.save(exercise));
     }
 

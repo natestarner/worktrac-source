@@ -175,7 +175,9 @@ public class WorkoutSessionService {
                 .map(sets -> new HistoryEntryDto(
                         sets.get(0).getExercise().getId(),
                         sets.get(0).getExercise().getName(),
-                        sets.stream().map(s -> new SetSummaryDto(s.getWeight(), s.getReps(), s.getUnit())).toList(),
+                        sets.stream()
+                                .map(s -> new SetSummaryDto(s.getWeight(), s.getReps(), s.getDurationSeconds(), s.getUnit()))
+                                .toList(),
                         notesByExercise.get(sets.get(0).getExercise().getId())))
                 .toList();
         return new HistorySessionDto(session.getId(), session.getStartedAt(), session.getEndedAt(), session.isManual(), entries);

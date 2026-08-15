@@ -84,3 +84,94 @@
     storing an empty string, so "has a note" can be tested by row presence alone — don't
     special-case empty strings anywhere downstream.
 
+## Endurance (time-based) exercises
+
+Added V46–V50. The problem: the app could only record a set as **weight × reps**, so time-based
+work was faked by encoding the unit in the exercise *name* — the seeded library literally shipped
+`Plank (sec)` and `Side Plank (sec)`, where the person typed seconds into the `reps` field.
+Nothing downstream knew those numbers were seconds, so a 60-second plank was stored, ranked,
+exported and charted as "60 reps at 0 lb".
+
+### The product shape
+
+**An exercise is measured either in reps or in time, and the screen tells you which.** That is the
+entire idea a person has to learn. The log screen keeps its two steppers, its one primary button
+and its set list; only the second stepper's meaning changes.
+
+The library therefore carries **one entry per movement with its natural measure** — Plank, Wall
+Sit, Dead Hang and Jump Rope are time; Burpee, Mountain Climber and Air Squat are reps. There are
+no `(Time)` suffixes and no duplicate rows: two entries whose difference the picker cannot explain
+is friction at exactly the wrong moment. Movements that genuinely go both ways are served by
+"+ Add your own exercise" (one tap from the picker's search box), which grew a Reps/Time toggle.
+
+Two rules decided every seeded row: **things you count are reps; things you sustain are time**, and
+**a hold is a different movement, not a mode** (`Glute Bridge` / `Glute Bridge Hold` is a
+legitimate pair; `Plank` / `Plank (Time)` would not be).
+
+### Why `reps = 0` rather than a nullable column
+
+The first design made `reps` nullable with an XOR constraint. That is more self-describing and it
+was not worth it: `int` → `Integer` across 31 backend and 38 frontend call sites, NPE risk at every
+`weight × reps`, seven DTOs changed, and a migration to rewrite every existing plank row.
+
+V50 retires the hack itself: `Plank (sec)` and `Side Plank (sec)` become `Plank` and `Side Plank`,
+typed as duration, with each logged set's `reps` moved into `duration_seconds`. Nothing is
+reinterpreted — those numbers were always seconds. Leaving them would have put two Planks in the
+picker with no visible explanation of the difference, which is the exact friction the
+one-entry-per-movement library exists to avoid.
+
+`reps = 0` on a hold is **not a sentinel standing in for "unknown"** — a hold genuinely has zero
+repetitions. That makes every weight-based aggregate fall out correctly for free: volume is
+`weight × 0 = 0`, `totalReps` adds 0, and the row still counts as a set. It also made the legacy
+conversion trivial, since `Plank (sec)`'s stored numbers already *were* the seconds.
+
+The cost is that `reps == 0` cannot be the "this is a hold" marker — it is also a legal strength
+value (a failed set). The marker is the exercise's `tracking_type` server-side and
+`durationSeconds != null` client-side, and that distinction is load-bearing.
+
+### The hold timer
+
+Manual entry alone would have been the wrong shape: mid-plank you cannot type, and you cannot watch
+a clock while looking at the floor, so the honest answer to "how long can you hold it?" would have
+been "go get your watch" — in an app whose stated purpose is being usable *during* a workout. Two
+ways to fill the field, matching how people actually plank: hold to the prefilled target and tap
+**Log set** (one tap, identical to logging a bench set), or **Start timer** → **Stop** → **Log
+set**. Stopping deliberately does not log.
+
+It reuses `UIContext`'s existing per-person ticker rather than adding a second mechanism, and both
+timers were converted to **wall-clock** (`endsAt` / `startedAt`) at the same time — see
+`.claude/rules/log-screen.md` for why counting interval fires is wrong on a device whose screen
+locks.
+
+### The deliberate limitation
+
+A hold is ranked on **seconds alone**; added load does not enter the comparison, so a 60s bodyweight
+plank ties a 60s 45-lb plank. A load-adjusted hold would need the person's bodyweight, which the app
+does not store, and inventing a formula produces a number larger than anything they actually did —
+the same trap `.claude/rules/trends.md` documents for est. 1RM. **"Heaviest load held" is a second
+record instead**, exactly as `heaviestWeight` sits beside `bestEst1rm` rather than being fused into
+it. Bodyweight tracking, if it is ever added, is what would retire this.
+
+### What was deliberately not reserved for
+
+Distance and pace (running, rowing, calories) is the one remaining modality, and it is **not**
+reserved for here. This codebase already ran that experiment: V6 shipped `tracking_type` with
+`CHECK IN ('strength','cardio')`, its comment stating the reservation existed so the addition
+"won't require a schema rework later". It sat unused for **45 migrations**, and when the feature
+became real `'cardio'` turned out to be the wrong shape — V46 rewrote the constraint and V47 added
+a column regardless. The reservation saved nothing it was meant to save.
+
+What matters instead is that the extension path stays additive, and it does: distance later is one
+CHECK-widening migration plus nullable columns plus a third arm on the same `isDuration` branch.
+
+RPE, tempo and per-side disambiguation are out of scope for a different reason — they are
+*annotations on a set*, not measures, so they never interact with `tracking_type` at all.
+
+### Two adjacent gaps found while building this (each its own change)
+
+- **Assisted lifts are ranked backwards.** `Assisted Pull-up Machine` and `Assisted Dip Machine`
+  are in the library, but `comparableLb` treats weight as more-is-stronger — so logging *more*
+  assistance registers as a bigger lift.
+- **Bodyweight tracking** would retire the hold-ranking limitation above and make bodyweight-lift
+  progression honest generally.
+

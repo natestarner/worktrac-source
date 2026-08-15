@@ -20,8 +20,19 @@ import java.time.Instant;
 @Table(name = "exercises")
 public class Exercise {
 
+    // What a set of this exercise measures. 'strength' is weight x reps; 'duration' is added load
+    // x seconds held (plank, wall sit, dead hang, a loaded carry). V46 replaced the never-used
+    // 'cardio' value with 'duration' -- see that migration for why.
+    //
+    // Deliberately has NO setter: sets already logged against this exercise were recorded under one
+    // reading of their numbers, and flipping the type would silently reinterpret every one of them.
+    // ExerciseService.update (rename) must never touch it.
     public static final String TRACKING_TYPE_STRENGTH = "strength";
-    public static final String TRACKING_TYPE_CARDIO = "cardio";
+    public static final String TRACKING_TYPE_DURATION = "duration";
+
+    public static boolean isValidTrackingType(String trackingType) {
+        return TRACKING_TYPE_STRENGTH.equals(trackingType) || TRACKING_TYPE_DURATION.equals(trackingType);
+    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -55,13 +66,18 @@ public class Exercise {
     }
 
     public Exercise(Account account, String name) {
-        this(account, name, null);
+        this(account, name, null, TRACKING_TYPE_STRENGTH);
     }
 
     public Exercise(Account account, String name, String clientKey) {
+        this(account, name, clientKey, TRACKING_TYPE_STRENGTH);
+    }
+
+    public Exercise(Account account, String name, String clientKey, String trackingType) {
         this.account = account;
         this.name = name;
         this.clientKey = clientKey;
+        this.trackingType = trackingType;
     }
 
     @PrePersist
@@ -93,6 +109,10 @@ public class Exercise {
 
     public String getTrackingType() {
         return trackingType;
+    }
+
+    public boolean isDurationTracked() {
+        return TRACKING_TYPE_DURATION.equals(trackingType);
     }
 
     public boolean isDeleted() {

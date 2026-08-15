@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { usePrs } from '../../hooks/usePrs';
 import { useExerciseTagMap } from '../../hooks/useExerciseTagMap';
 import { useExerciseFilter } from '../../hooks/useExerciseFilter';
-import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
+import { formatDateLabel, toLocalDateStr, formatRestTime } from '../../utils/datetime';
 import { collectTagVocabulary, filterPrRows } from '../../utils/exerciseFilter';
 import { PR_SORT_OPTIONS, sortPrRows } from '../../utils/prSort';
 import Skeleton from '../shared/Skeleton';
@@ -156,7 +156,17 @@ function PRsTabContent() {
                 )}
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                {pr.best.weight === 0 ? (
+                {pr.best.durationSeconds != null ? (
+                  <>
+                    {/* A hold has no est. 1RM (BestDto sends null), so the record IS the time. */}
+                    <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-pr-text)' }}>
+                      {formatRestTime(pr.best.durationSeconds)}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
+                      {pr.best.weight > 0 ? `Longest hold at ${pr.best.weight}${pr.best.unit}` : 'Longest hold'}
+                    </div>
+                  </>
+                ) : pr.best.weight === 0 ? (
                   <>
                     <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-pr-text)' }}>{pr.best.reps} reps</div>
                     <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>Bodyweight</div>

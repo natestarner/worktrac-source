@@ -104,6 +104,7 @@ export function useSessionEntries({ personId, serverEntries, exercises }) {
       id: vars.tempId,
       weight: vars.weight,
       reps: vars.reps,
+      durationSeconds: vars.durationSeconds ?? null,
       unit: vars.unit,
       optimistic: true,
     });

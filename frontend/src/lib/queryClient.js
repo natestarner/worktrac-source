@@ -173,6 +173,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         exerciseId: requireResolvedExerciseId(vars.exerciseId),
         weight: vars.weight,
         reps: vars.reps,
+        durationSeconds: vars.durationSeconds,
         idempotencyKey: vars.idempotencyKey,
         clientLoggedAt: vars.clientLoggedAt,
       };
@@ -213,7 +214,14 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
   client.setMutationDefaults(CREATE_EXERCISE_MUTATION_KEY, {
     scope: { id: OUTBOX_SCOPE_ID },
     mutationFn: async (vars) => {
-      const created = await addExercise({ name: vars.name, idempotencyKey: vars.idempotencyKey });
+      const created = await addExercise({
+        name: vars.name,
+        idempotencyKey: vars.idempotencyKey,
+        // Must ride along: without it a timed exercise created offline replays as 'strength', and
+        // every hold queued against it is then rejected with a 400 on sync -- which shouldRetryWrite
+        // treats as terminal, so those sets would be destroyed rather than retried.
+        trackingType: vars.trackingType,
+      });
       if (vars.personId) await favoriteExercise(vars.personId, created.id);
       return created;
     },
@@ -254,7 +262,12 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
   // -- and the shared serial outbox scope guarantees the create replays first, exactly like
   // requireResolvedExerciseId above. Idempotent (same value re-applied).
   client.setMutationDefaults(EDIT_SET_MUTATION_KEY, durable({
-    mutationFn: (vars) => editSet(requireResolvedSetId(vars.setId), { weight: vars.weight, reps: vars.reps }),
+    mutationFn: (vars) =>
+      editSet(requireResolvedSetId(vars.setId), {
+        weight: vars.weight,
+        reps: vars.reps,
+        durationSeconds: vars.durationSeconds,
+      }),
     onSettled: (_d, _e, vars) => reconcileSetChange(vars),
   }));
 

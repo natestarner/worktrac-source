@@ -17,9 +17,10 @@ import {
   isUnsyncedWrite,
 } from '../../lib/queryClient';
 import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
-import { comparableLb, computePrefillDraft, isPrSet } from '../../utils/formulas';
+import { comparableValue, computePrefillDraft, isPrSet } from '../../utils/formulas';
 import { deriveExerciseSummaryFromHistory, mergeBestWithLocalSets } from '../../utils/exerciseSummaryFromHistory';
-import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
+import { formatDateLabel, formatRestTime, parseDuration, toLocalDateStr } from '../../utils/datetime';
+import { formatSetSpaced } from '../../utils/formatSet';
 import WeightRepsStepper from './WeightRepsStepper';
 import CustomFieldEditorModal from '../shared/CustomFieldEditorModal';
 import ConfigureExerciseModal from '../shared/ConfigureExerciseModal';
@@ -50,9 +51,38 @@ export default function ExerciseDetail({
   const { account, people } = useAuth();
   const activePersonName = people.length >= 2 ? people.find((p) => p.id === personId)?.name : null;
   const activePersonFirstName = activePersonName?.split(' ')[0];
-  const { weightDraft, repsDraft, draftExerciseId, draftSetCount, draftSource, setDraft } = useAppState();
-  const { showCelebration, showToast, startRestTimer, openConfirm } = useUI();
+  const {
+    weightDraft,
+    repsDraft,
+    durationDraft,
+    holdStartedAt,
+    draftExerciseId,
+    draftSetCount,
+    draftSource,
+    setDraft,
+    setHoldStartedAt,
+  } = useAppState();
+  // holdTimers is defaulted because it is read during RENDER: a context missing it would throw
+  // mid-render, and a render-time throw has to be contained rather than allowed to white-screen the
+  // log screen. The handlers below aren't defaulted -- they only run on a tap, where a missing one
+  // should fail loudly rather than silently do nothing.
+  const {
+    showCelebration,
+    showToast,
+    startRestTimer,
+    openConfirm,
+    holdTimers = {},
+    startHoldTimer,
+    stopHoldTimer,
+  } = useUI();
   const queryClient = useQueryClient();
+
+  // The one flag that decides what this screen measures. exercise.trackingType has shipped to the
+  // client on both ExerciseDto and PersonExerciseDto since V6 -- it was simply never read.
+  //
+  // NOT a connectivity branch: this varies by exercise, not by network state, so it does not belong
+  // on resilience.md's register of sanctioned divergences.
+  const isDuration = exercise.trackingType === 'duration';
 
   const contextSessionId = editingSessionId || liveSession?.id || null;
 
@@ -250,6 +280,9 @@ export default function ExerciseDetail({
   }, [justAddedSetId]);
 
   const weightStep = defaultUnit === 'kg' ? 2.5 : 5;
+  // 5 seconds is the granularity a hold is worth nudging by -- 1s would take forever to reach a
+  // minute, 15s overshoots the short holds this is mostly used for.
+  const DURATION_STEP = 5;
 
   // Prefix-matches the registered defaults in queryClient.js (LOG_SET_MUTATION_KEY = ['logSet']),
   // so the mutationFn, retry policy, serial replay scope, and server-truth reconciliation (onSettled)
@@ -298,7 +331,7 @@ export default function ExerciseDetail({
         const key = queryKeys.sessionSets(contextSessionId, exercise.id);
         await queryClient.cancelQueries({ queryKey: key });
         const previous = queryClient.getQueryData(key);
-        const optimisticSet = { id: vars.tempId, weight: vars.weight, reps: vars.reps, unit: defaultUnit, optimistic: true };
+        const optimisticSet = { id: vars.tempId, weight: vars.weight, reps: vars.reps, durationSeconds: vars.durationSeconds ?? null, unit: defaultUnit, optimistic: true };
         queryClient.setQueryData(key, (old = []) => [...old, optimisticSet]);
         setJustAddedSetId(vars.tempId);
         return { previous, key };
@@ -333,12 +366,23 @@ export default function ExerciseDetail({
       // PR celebration is driven by the server's authoritative isPR/best, never a refetch race;
       // the weight/reps shown come from the exact values submitted (the mutation variables).
       if (result.isPR) {
+        const isHold = result.best.durationSeconds != null;
         const isBodyweight = result.best.weight === 0;
         showCelebration({
           exerciseName: exercise.name,
-          isBodyweight,
-          setText: `${variables.weight} ${defaultUnit} × ${variables.reps}`,
-          est1rmText: isBodyweight ? `${variables.reps} reps` : `${result.best.est1rm} ${defaultUnit}`,
+          // A hold has no est. 1RM either, so it takes the same rep-focused presentation branch.
+          isBodyweight: isBodyweight || isHold,
+          setText: formatSetSpaced({
+            weight: variables.weight,
+            reps: variables.reps,
+            durationSeconds: variables.durationSeconds,
+            unit: defaultUnit,
+          }),
+          est1rmText: isHold
+            ? `${formatRestTime(variables.durationSeconds)} hold`
+            : isBodyweight
+              ? `${variables.reps} reps`
+              : `${result.best.est1rm} ${defaultUnit}`,
         });
       }
     },
@@ -367,6 +411,9 @@ export default function ExerciseDetail({
       errorStatus: mutation.state.error?.status,
       weight: mutation.state.variables?.weight,
       reps: mutation.state.variables?.reps,
+      // Selected here or the row renders blank for a hold logged offline -- this projection is the
+      // ONLY source of those rows while contextSessionId is null (the person's whole outage).
+      durationSeconds: mutation.state.variables?.durationSeconds,
       unit: mutation.state.variables?.unit,
       clientLoggedAt: mutation.state.variables?.clientLoggedAt,
     }),
@@ -403,7 +450,7 @@ export default function ExerciseDetail({
   // chronological.
   const pendingBeforeSession = unsyncedLogSets
     .filter((m) => !sessionSets.some((real) => real.id === m.tempId))
-    .map((m) => ({ id: m.tempId, optimistic: true, weight: m.weight, reps: m.reps, unit: m.unit, clientLoggedAt: m.clientLoggedAt }))
+    .map((m) => ({ id: m.tempId, optimistic: true, weight: m.weight, reps: m.reps, durationSeconds: m.durationSeconds ?? null, unit: m.unit, clientLoggedAt: m.clientLoggedAt }))
     .sort((a, b) => new Date(a.clientLoggedAt ?? 0) - new Date(b.clientLoggedAt ?? 0));
 
   // Prepended, not appended -- these are chronologically the earliest set(s) of the session
@@ -470,13 +517,21 @@ export default function ExerciseDetail({
   // honest blank beats another exercise's rep count.
   const shownWeight = userOwnsDraft ? weightDraft : (prefill?.weight ?? null);
   const shownReps = userOwnsDraft ? repsDraft : (prefill?.reps ?? null);
+  const shownDuration = userOwnsDraft ? durationDraft : (prefill?.durationSeconds ?? null);
 
   // Everything that has to produce a NUMBER -- stepping, and the logged value itself -- reads
   // these; only the on-screen value keeps the null so it can render as an em dash. 8 is
   // computePrefillDraft's own no-history default, so a blank reps logs as the default rather than
-  // blocking the tap, exactly as a blank weight logs as 0.
+  // blocking the tap, exactly as a blank weight logs as 0. 30 seconds is the same idea for a hold.
   const weightValue = shownWeight ?? 0;
   const repsValue = shownReps ?? 8;
+  const durationValue = shownDuration ?? 30;
+
+  // While a hold is running the stepper shows live elapsed time rather than the stored draft --
+  // the number IS the timer. Stopping commits it through commitDraft like any typed value.
+  const runningHoldElapsed = holdTimers[personId]?.elapsed ?? null;
+  const holdRunning = isDuration && runningHoldElapsed !== null;
+  const displayedDuration = holdRunning ? runningHoldElapsed : shownDuration;
 
   // Every user edit carries the whole on-screen state and claims ownership. `...patch` sits before
   // setCount/source so a caller can't accidentally override them.
@@ -485,6 +540,7 @@ export default function ExerciseDetail({
       exerciseId: exercise.id,
       weight: shownWeight,
       reps: shownReps,
+      durationSeconds: shownDuration,
       ...patch,
       setCount: displaySets.length,
       source: 'user',
@@ -496,12 +552,49 @@ export default function ExerciseDetail({
   function incWeight() {
     commitDraft({ weight: Math.round((weightValue + weightStep) * 2) / 2 });
   }
-  function decReps() {
-    commitDraft({ reps: Math.max(0, repsValue - 1) });
+  // The second stepper is Reps or Time depending on the exercise. Both clamp at 0; time steps in
+  // 5s, the granularity a hold is actually worth adjusting by.
+  function decSecond() {
+    if (isDuration) commitDraft({ durationSeconds: Math.max(0, durationValue - DURATION_STEP) });
+    else commitDraft({ reps: Math.max(0, repsValue - 1) });
   }
-  function incReps() {
-    commitDraft({ reps: repsValue + 1 });
+  function incSecond() {
+    if (isDuration) commitDraft({ durationSeconds: durationValue + DURATION_STEP });
+    else commitDraft({ reps: repsValue + 1 });
   }
+  function changeSecond(value) {
+    if (isDuration) commitDraft({ durationSeconds: Math.max(0, Math.round(value)) });
+    else commitDraft({ reps: Math.max(0, Math.round(value)) });
+  }
+
+  // Start fills the field hands-free; Stop just writes the elapsed seconds into the draft. Stop
+  // deliberately does NOT log: a mis-tap would otherwise commit a set, and "review, then tap Log
+  // set" is what the primary button means on every other exercise. The timer is a nicer way to
+  // type a number, nothing more.
+  function handleToggleHold() {
+    if (holdRunning) {
+      const elapsed = stopHoldTimer(personId);
+      setHoldStartedAt(null);
+      if (elapsed !== null) commitDraft({ durationSeconds: elapsed });
+      return;
+    }
+    const startedAt = Date.now();
+    // Persisted synchronously (localStorage) so swUpdate's silent post-deploy reload resumes the
+    // hold instead of destroying it mid-effort -- see AppStateContext's holdStartedAt.
+    setHoldStartedAt(startedAt);
+    startHoldTimer(personId, startedAt);
+  }
+
+  // Resume a hold that was running when the document died. UIContext is in-memory, so only the
+  // persisted timestamp survives; recomputing elapsed from it is also what makes the timer immune
+  // to iOS suspending interval callbacks while the screen is locked.
+  useEffect(() => {
+    if (!isDuration || !holdStartedAt || holdTimers[personId]) return;
+    startHoldTimer(personId, holdStartedAt);
+    // Runs only to re-adopt a persisted hold; holdTimers is read, not tracked, to avoid re-adopting
+    // the timer we just stopped.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDuration, holdStartedAt, personId]);
 
   // Commits the computed prefill and claims the stamp for this exercise. Still needed alongside the
   // render-time derivation above: this is what re-seeds the carry-forward after a set is logged,
@@ -512,6 +605,7 @@ export default function ExerciseDetail({
       exerciseId: exercise.id,
       weight: prefill.weight,
       reps: prefill.reps,
+      durationSeconds: prefill.durationSeconds,
       setCount: displaySets.length,
       source: 'prefill',
     });
@@ -520,6 +614,14 @@ export default function ExerciseDetail({
   }, [exercise.id, summary, displaySets.length, userOwnsDraft]);
 
   function handleLogSet() {
+    // A running hold is the value being logged -- take it rather than the stale draft, and clear
+    // the timer so the next set starts from zero.
+    let loggedDuration = durationValue;
+    if (holdRunning) {
+      const elapsed = stopHoldTimer(personId);
+      if (elapsed !== null) loggedDuration = elapsed;
+    }
+    if (holdStartedAt) setHoldStartedAt(null);
     // Rest timer starts immediately for the "instant" feel; it's a live-only concept.
     if (!editingSessionId) startRestTimer(personId, 90);
     const tempId = `optimistic-${newId()}`;
@@ -544,7 +646,10 @@ export default function ExerciseDetail({
       // first-ever bodyweight exercise, and refusing the tap would punish that case to protect
       // a weighted one where the em dash is already visibly not a number.
       weight: weightValue,
-      reps: repsValue,
+      // Exactly one measure, matching the exercise's tracking type -- a hold carries 0 reps
+      // (it genuinely has none) and its seconds; a lift carries reps and no duration.
+      reps: isDuration ? 0 : repsValue,
+      durationSeconds: isDuration ? loggedDuration : null,
       tempId,
       idempotencyKey: newId(),
       clientLoggedAt: new Date().toISOString(),
@@ -579,11 +684,18 @@ export default function ExerciseDetail({
   const lastLabel = summary?.lastSession ? formatDateLabel(toLocalDateStr(summary.lastSession.startedAt)) : '';
   // Both read effectiveBest, not summary.best -- the card and the pills must agree with each other
   // and with the rows on screen, in every connectivity mode.
-  const bestText = effectiveBest ? `${effectiveBest.est1rm} ${effectiveBest.unit}  (${effectiveBest.weight}${effectiveBest.unit}×${effectiveBest.reps})` : 'No PR yet';
+  //
+  // A hold has no est. 1RM (BestDto sends null), so the card names the record it actually has:
+  // the longest hold. Rendering "null lb" would be the "0 lb column" mistake bodyweightOnly
+  // already avoids on the records table.
+  const bestText = !effectiveBest
+    ? 'No PR yet'
+    : effectiveBest.durationSeconds != null
+      ? formatSetSpaced(effectiveBest)
+      : `${effectiveBest.est1rm} ${effectiveBest.unit}  (${effectiveBest.weight}${effectiveBest.unit}×${effectiveBest.reps})`;
+  const bestCardLabel = isDuration ? 'Best · Longest hold' : 'Best · Est. 1RM';
 
-  const bestComparableLb = effectiveBest
-    ? comparableLb(effectiveBest.weight, effectiveBest.reps, effectiveBest.unit)
-    : null;
+  const bestComparable = effectiveBest ? comparableValue(effectiveBest) : null;
 
   return (
     <div>
@@ -705,7 +817,7 @@ export default function ExerciseDetail({
                 )}
               </div>
               <div className="summary-card" style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 'var(--radius-lg)' }}>
-                <div style={{ ...cardLabelStyle, color: 'var(--color-pr-text)' }}>Best &middot; Est. 1RM</div>
+                <div style={{ ...cardLabelStyle, color: 'var(--color-pr-text)' }}>{bestCardLabel}</div>
                 <div className="summary-card-value" style={{ fontWeight: 700, color: 'var(--color-pr-text)' }}>{bestText}</div>
               </div>
             </div>
@@ -744,14 +856,38 @@ export default function ExerciseDetail({
                 onInc={incWeight}
                 onChange={(weight) => commitDraft({ weight })}
               />
+              {/* The second stepper is the whole feature: same control, same layout, only its
+                  meaning changes with the exercise. A hold shows m:ss (the same shape the timer
+                  and every set row use, so a duration never changes format between entering it
+                  and reading it back) and accepts a raw second count when typed. */}
               <WeightRepsStepper
-                label="Reps"
-                value={shownReps}
-                onDec={decReps}
-                onInc={incReps}
-                onChange={(reps) => commitDraft({ reps })}
+                label={isDuration ? 'Time' : 'Reps'}
+                value={isDuration ? displayedDuration : shownReps}
+                displayValue={isDuration && displayedDuration != null ? formatRestTime(displayedDuration) : undefined}
+                parse={isDuration ? parseDuration : undefined}
+                onDec={decSecond}
+                onInc={incSecond}
+                onChange={changeSecond}
               />
             </div>
+            {/* Directly under the field it fills -- the timer is a hands-free way to enter a
+                number, not a second way to log a set. Stopping writes the elapsed seconds into the
+                draft and nothing else; "Log set" below stays the one primary action on every
+                exercise, which is why this screen still has exactly one variant="primary".
+
+                variant="dark", NOT secondary: this card is already --color-surface with a
+                --color-border edge, and .btn-secondary is that exact pair -- so a secondary button
+                here is surface-on-surface and reads as a label rather than a control. `dark` is a
+                solid filled chip, unmistakably tappable and unmistakably not the accent action.
+                size="lg" matches the Log set button's height so the two read as a stack of
+                controls, and the wrapper's margin keeps them from touching. */}
+            {isDuration && (
+              <div style={{ marginBottom: 'var(--space-3)' }}>
+                <Button onClick={handleToggleHold} variant="dark" size="lg" fullWidth>
+                  {holdRunning ? `Stop timer · ${formatRestTime(runningHoldElapsed)}` : 'Start timer'}
+                </Button>
+              </div>
+            )}
             {/* The screen's one primary action, and the only place size="lg" is used on
                 this screen. That isn't just emphasis: at --text-xl/700 the white label
                 clears the AA Large threshold, which is what lets this button keep the
@@ -796,7 +932,7 @@ export default function ExerciseDetail({
                   // reverse only the rendering, not the numbering, so the most recently logged
                   // set shows on top.
                   const setNumber = displaySets.length - i;
-                  const isPR = isPrSet(set.weight, set.reps, set.unit, bestComparableLb);
+                  const isPR = isPrSet(set, bestComparable);
                   return (
                     <div
                       key={set.id}
@@ -823,7 +959,7 @@ export default function ExerciseDetail({
                             to the row via .parentElement. Not worth destabilising the offline
                             set-handling and PR-badge coverage for a subtle refinement. */}
                         <div style={{ fontSize: 'var(--text-lg)', fontWeight: 'var(--weight-bold)', color: 'var(--color-text)' }}>
-                          {set.weight} {set.unit || 'lb'} &times; {set.reps}
+                          {formatSetSpaced(set)}
                         </div>
                         {isPR && (
                           // title/aria-label mirror SetPillRow's PR pill -- "PR" alone is

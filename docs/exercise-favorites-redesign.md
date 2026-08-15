@@ -537,3 +537,56 @@ Also rejected: sourcing the prefill from the warmed `history` cache to close the
 entirely. It would usually put the right number on screen instantly, but it widens the
 `summaryQuery.isPaused || isError → derivedSummary` divergence on the resilience register beyond what
 that entry was reasoned about, for a cosmetic gain. An honest blank is the smaller claim.
+
+## Update — 2026-08-15: exercises can be measured in time, and the library says which (V46–V50)
+
+The library shipped `Plank (sec)` and `Side Plank (sec)` because a set could only be weight × reps,
+so seconds were typed into the Reps field and the unit lived in the *name*. Nothing downstream knew,
+so a 60-second plank was ranked, exported and charted as "60 reps at 0 lb".
+
+**An exercise is now measured either in reps or in time, and the screen tells you which.** That is
+the whole idea; the log screen keeps its two steppers, its one primary button and its set list, and
+only the second stepper's meaning changes.
+
+**One entry per movement, with its natural measure.** Plank, Wall Sit, Dead Hang and Jump Rope are
+time; Burpee, Mountain Climber and Air Squat are reps. Considered and rejected: shipping `Burpee`
+*and* `Burpee (Time)` for the ~9 movements that genuinely go both ways. Two picker rows whose
+difference the app cannot explain is friction at exactly the wrong moment — mid-workout, choosing.
+Those are served by "+ Add your own exercise" instead, which gained a Reps/Time toggle. Two rules
+decided every seeded row: things you **count** are reps, things you **sustain** are time; and a hold
+is a different *movement*, not a mode (`Glute Bridge` / `Glute Bridge Hold` is a legitimate pair,
+`Plank` / `Plank (Time)` is not).
+
+**A weight vest needed no new field.** `weight` already means added load with `0` = bodyweight, the
+convention `comparableLb` / `bodyweightOnly` / `prSort.isBodyweight` already run on.
+
+**`reps = 0` on a hold, rather than a nullable column.** Also rejected: nullable `reps` with an XOR
+constraint. It is more self-describing and it costs `int` → `Integer` across 69 call sites, NPE risk
+at every `weight × reps`, seven DTOs and a rewrite of every existing plank row — to encode something
+that is not even true. A hold genuinely has zero repetitions, so volume and `totalReps` stay correct
+for free. The price is that `reps == 0` cannot be the "is this a hold" marker (it is also a legal
+failed set); `tracking_type` is.
+
+**Ranked on seconds alone, with load as a separate record.** A 60s bodyweight plank ties a 60s 45-lb
+plank. Rejected: a load-adjusted hold score — it needs the person's bodyweight, which the app does
+not store, and inventing one produces a number larger than anything they actually did, the same trap
+`bestEst1rm` documents. "Heaviest load held" sits beside "Longest hold" the way `heaviestWeight` sits
+beside `bestEst1rm`.
+
+**The hold timer is part of the feature, not a follow-up.** Mid-plank you cannot type and cannot
+watch a clock, so manual entry alone would have made the honest answer to "how long can you hold it?"
+be *go get your watch*, in an app whose purpose is being usable during a workout. It reuses
+`UIContext`'s per-person ticker rather than adding a second mechanism, and **Stop fills the field
+without logging** — the primary button keeps meaning the same thing on every exercise.
+
+**Both timers moved to wall-clock time** (`startedAt`/`endsAt`) in the same change. Counting interval
+fires under-reports on the device this app is built for: iOS suspends timer callbacks when the screen
+locks, which mid-hold is the normal case. The ticker also samples faster than it displays (200ms for
+a 1s readout) because a 1s cadence is set at provider mount and left `0:00` on screen for up to two
+seconds after the tap — long enough to read as "it didn't start".
+
+**What was deliberately not reserved for: distance and pace.** V6 reserved `tracking_type = 'cardio'`
+for exactly that, stating it existed so the addition "won't require a schema rework later". It went
+unused for 45 migrations and was the wrong shape when the time came — V46 rewrote the constraint and
+V47 added a column regardless. The reservation saved nothing. What matters is that the extension path
+stays additive, and it does.

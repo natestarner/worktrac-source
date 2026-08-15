@@ -1,4 +1,4 @@
-import { formatDateLabel } from '../../utils/datetime';
+import { formatDateLabel, formatRestTime } from '../../utils/datetime';
 import { convertWeight } from '../../utils/formulas';
 import Skeleton from '../shared/Skeleton';
 
@@ -63,6 +63,39 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
   }
 
   const w = (lb) => convertWeight(lb, 'lb', defaultUnit);
+
+  // Same call as bodyweightOnly below, one measure over: a hold carries 0 reps, so every
+  // weight- and rep-based record is 0 and a column of zeros is worse than no column. The two
+  // records that mean anything are the longest hold and the heaviest load held -- kept separate
+  // rather than fused into one load-adjusted score, exactly as heaviest weight sits beside
+  // est. 1RM. Mirrors ExerciseRecordsDto.durationTracked.
+  if (records.durationTracked) {
+    return (
+      <div style={{ marginTop: 8 }}>
+        <SectionLabel>Records &middot; holds</SectionLabel>
+        <Row
+          label="Longest hold"
+          value={
+            records.longestHold.weightLb > 0
+              ? `${formatRestTime(records.longestHold.durationSeconds)} @ ${w(records.longestHold.weightLb)} ${defaultUnit}`
+              : formatRestTime(records.longestHold.durationSeconds)
+          }
+          date={records.longestHold.date}
+        />
+        {/* Only worth a row once something was actually loaded -- otherwise it just restates the
+            longest hold at 0 lb. */}
+        {records.heaviestLoadHeld?.weightLb > 0 && (
+          <Row
+            label="Heaviest load held"
+            value={`${w(records.heaviestLoadHeld.valueLb)} ${defaultUnit} × ${formatRestTime(records.heaviestLoadHeld.durationSeconds)}`}
+            date={records.heaviestLoadHeld.date}
+          />
+        )}
+        <Row label="Total time under tension" value={formatRestTime(records.totalHoldSeconds)} />
+        <Row label="Total sets" value={records.totalSets} />
+      </div>
+    );
+  }
 
   // Every weight-based record is 0 for an exercise never loaded (pull-ups, push-ups) -- and an
   // est. 1RM there is a rep count wearing a costume. Reps are the real record, so that's all we

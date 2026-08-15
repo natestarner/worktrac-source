@@ -1,4 +1,4 @@
-import { comparableLb } from './formulas';
+import { comparableValue } from './formulas';
 
 // Per-set "was this a PR at the time it was recorded" markers for History, computed entirely
 // client-side over the already-warmed, unpaginated `history` query (every session, every set --
@@ -39,7 +39,7 @@ export function buildHistoryPrFlags(history) {
       // WorkoutSessionService#getHistory's own createdAt-ASC set list -- so no further sort is
       // needed at the set level, only at the session level above.
       const setFlags = entry.sets.map((set) => {
-        const value = comparableLb(set.weight, set.reps, set.unit);
+        const value = comparableValue(set);
         const isPr = best === null || value > best;
         if (isPr) best = value;
         return isPr;

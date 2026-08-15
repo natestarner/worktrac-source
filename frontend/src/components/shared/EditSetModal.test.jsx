@@ -50,7 +50,7 @@ describe('EditSetModal', () => {
     fireEvent.click(screen.getAllByText('+')[0]); // weight stepper's "+", first of the two
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(editSet).toHaveBeenCalledWith(55, { weight: 140, reps: 5 }));
+    await waitFor(() => expect(editSet).toHaveBeenCalledWith(55, { weight: 140, reps: 5, durationSeconds: null }));
     expect(onSaved).toHaveBeenCalled();
   });
 
@@ -68,7 +68,7 @@ describe('EditSetModal', () => {
     fireEvent.blur(weightInput);
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(editSet).toHaveBeenCalledWith(55, { weight: 225, reps: 5 }));
+    await waitFor(() => expect(editSet).toHaveBeenCalledWith(55, { weight: 225, reps: 5, durationSeconds: null }));
     expect(onSaved).toHaveBeenCalled();
   });
 
@@ -134,6 +134,8 @@ describe('EditSetModal', () => {
     fireEvent.click(screen.getAllByText('+')[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(queryClient.getQueryData(queryKeys.sessionSets(101, 1))).toEqual([{ id: 55, weight: 140, reps: 5, unit: 'lb' }]);
+    expect(queryClient.getQueryData(queryKeys.sessionSets(101, 1))).toEqual([
+      { id: 55, weight: 140, reps: 5, durationSeconds: null, unit: 'lb' },
+    ]);
   });
 });
