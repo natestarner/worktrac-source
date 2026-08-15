@@ -32,6 +32,38 @@ How long a person rested before a given set. Rule lives in `WorkoutSetService`
   it; deleting/editing a neighbour never recomputes it.
 - Computed from the injected `Clock`, never `Instant.now()` (see `RestSecondsTest`).
 
+## Duration-tracked exercises (`exercises.tracking_type`, `workout_sets.duration_seconds`, V46-V50)
+
+An exercise measures either reps or seconds held. `tracking_type` is `'strength' | 'duration'`;
+V46 replaced the never-used `'cardio'` reservation with it.
+
+- **`reps` is `0` on a hold, never null.** A hold genuinely has zero repetitions, and keeping the
+  column `NOT NULL` means volume (`weight * reps`), `totalReps` and every weight-based aggregate
+  stay correct with no null handling. `CK_workout_sets_duration_reps` enforces the pairing.
+- **What marks a row as a hold is its exercise's `tracking_type`, NEVER `reps == 0`** — 0 is also a
+  legal strength value (a failed set). Client-side the marker is `durationSeconds != null`.
+- **`weight` is unchanged**: added load, `0` = bodyweight. A weight vest needs no new field, and
+  `comparableLb`/`bodyweightOnly`/`prSort.isBodyweight` keep their existing meaning.
+- **`Exercise.trackingType` has no setter, deliberately.** Flipping it would reinterpret every set
+  already logged against that exercise. It is set at construction and `ExerciseService.update`
+  (rename) ignores the field.
+- **Ranking a hold uses seconds ALONE** (`StatsService#comparableValue`, mirrored in
+  `utils/formulas.js#comparableValue`). Added load deliberately does not enter it — a load-adjusted
+  hold needs the person's bodyweight, which the app doesn't store. "Heaviest load held" is a
+  separate record instead, the same shape as `heaviestWeight` beside `bestEst1rm`.
+
+### ⚠️ `resolveMeasure` must reject as little as possible
+
+`shouldRetryWrite` treats any 4xx outside `{408, 429}` as **terminal**, so every rejection in
+`WorkoutSetService#resolveMeasure` permanently discards a set that may have sat in the durable
+outbox through an entire outage. Only genuinely impossible payloads are refused.
+
+One recoverable shape is **accepted**: a duration exercise receiving `reps > 0` with no
+`durationSeconds` stores the reps as the duration. That is what a client sends when its cached
+exercise catalog predates V50's conversion of `Plank (sec)` / `Side Plank (sec)` (an offline client
+holds that cache for its whole outage), and those numbers already *were* seconds. Widening the
+rejections here is a data-loss bug, not a strictness improvement.
+
 ## Log-set idempotency (`workout_sets.client_key`, V40/V41)
 
 - `findDuplicate` returns the already-committed set (with `isPR = false`) instead of inserting a

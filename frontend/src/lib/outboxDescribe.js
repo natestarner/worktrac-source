@@ -1,4 +1,5 @@
 import { formatSetSpaced } from '../utils/formatSet';
+import { formatRestTime } from '../utils/datetime';
 import { isTempExerciseId } from './exerciseIdMap';
 
 // Turns one queued (paused, durable-outbox) mutation into human-readable text for the "waiting to
@@ -25,8 +26,17 @@ export function describeOutboxMutation({ mutationKey, variables = {} } = {}, { p
       return { kind, personName, exerciseName: variables.name || 'a new exercise', detail: 'created this exercise' };
     case 'editSet':
       // No unit is carried on an edit (see EditSetModal.jsx) -- shown without one rather than
-      // guessing and possibly showing the wrong unit for someone who logs in kg.
-      return { kind, personName, exerciseName, detail: `edited a set to ${variables.weight} × ${variables.reps}` };
+      // guessing and possibly showing the wrong unit for someone who logs in kg. A hold reads as
+      // its time alone, which needs no unit either way.
+      return {
+        kind,
+        personName,
+        exerciseName,
+        detail:
+          variables.durationSeconds != null
+            ? `edited a set to ${formatRestTime(variables.durationSeconds)}`
+            : `edited a set to ${variables.weight} × ${variables.reps}`,
+      };
     case 'deleteSet':
       return { kind, personName, exerciseName, detail: 'deleted a set' };
     case 'saveNote':

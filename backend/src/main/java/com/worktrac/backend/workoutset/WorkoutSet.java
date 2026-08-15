@@ -51,6 +51,16 @@ public class WorkoutSet {
     @Column(nullable = false)
     private int reps;
 
+    // Seconds held, for a set of a duration-tracked exercise (V47). Null for every strength set.
+    // When this is set, reps is 0 -- a hold genuinely has zero repetitions, which keeps volume
+    // (weight * reps) and totalReps correct with no null handling. CK_workout_sets_duration_reps
+    // (V48) enforces that pairing.
+    //
+    // What marks a row as a hold is its EXERCISE's tracking_type, never reps == 0 -- 0 is also a
+    // legal strength value (a failed set).
+    @Column(name = "duration_seconds")
+    private Integer durationSeconds;
+
     @Column(nullable = false, length = 2)
     private String unit;
 
@@ -78,11 +88,17 @@ public class WorkoutSet {
 
     public WorkoutSet(WorkoutSession session, Person person, Exercise exercise, BigDecimal weight, int reps, String unit,
                        Integer restSeconds, Instant createdAt, String clientKey) {
+        this(session, person, exercise, weight, reps, null, unit, restSeconds, createdAt, clientKey);
+    }
+
+    public WorkoutSet(WorkoutSession session, Person person, Exercise exercise, BigDecimal weight, int reps,
+                       Integer durationSeconds, String unit, Integer restSeconds, Instant createdAt, String clientKey) {
         this.session = session;
         this.person = person;
         this.exercise = exercise;
         this.weight = weight;
         this.reps = reps;
+        this.durationSeconds = durationSeconds;
         this.unit = unit;
         this.restSeconds = restSeconds;
         // May be null -> prePersist falls back to now(). When supplied (the client's real logging
@@ -128,6 +144,14 @@ public class WorkoutSet {
 
     public void setReps(int reps) {
         this.reps = reps;
+    }
+
+    public Integer getDurationSeconds() {
+        return durationSeconds;
+    }
+
+    public void setDurationSeconds(Integer durationSeconds) {
+        this.durationSeconds = durationSeconds;
     }
 
     public String getUnit() {

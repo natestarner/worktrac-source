@@ -31,6 +31,49 @@ describe('AddEditExerciseModal', () => {
   });
   afterEach(() => onlineManager.setOnline(true));
 
+  // The measure toggle is the only new decision this feature asks anyone to make, and only when
+  // adding their own exercise. It is create-only: the backend has no setter for trackingType,
+  // because flipping it would reinterpret every set already logged against the exercise.
+  describe('the Reps/Time measure toggle', () => {
+    it('creates a timed exercise when Time is chosen, and carries it on the optimistic row', async () => {
+      const onSaved = vi.fn();
+      renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
+
+      fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Ring Support Hold' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Time' }));
+      fireEvent.click(lastAddButton());
+
+      // ⚠️ The optimistic row must carry the real choice, not a hardcoded 'strength'. It is what
+      // the Log screen reads while the create is still queued -- a wrong value there shows a Reps
+      // stepper for a timed exercise and logs reps against it, which the backend rejects with a
+      // 400 on sync. A 4xx is terminal for a durable write, so those sets would be destroyed.
+      expect(onSaved).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Ring Support Hold', trackingType: 'duration', optimistic: true }),
+      );
+
+      await waitFor(() =>
+        expect(addExercise).toHaveBeenCalledWith({
+          name: 'Ring Support Hold',
+          idempotencyKey: expect.any(String),
+          trackingType: 'duration',
+        }),
+      );
+    });
+
+    it('defaults to Reps', () => {
+      renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />);
+      expect(screen.getByRole('button', { name: 'Reps' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Time' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('is not offered when renaming -- the measure is fixed once sets exist against it', () => {
+      renderWithQuery(
+        <AddEditExerciseModal exercise={{ id: 3, name: 'Plank' }} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />,
+      );
+      expect(screen.queryByRole('group', { name: 'Measured in' })).toBeNull();
+    });
+  });
+
   it('creates an exercise optimistically -- Save closes immediately with a temp exercise, never awaiting the network', async () => {
     const onSaved = vi.fn();
     renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
@@ -44,7 +87,13 @@ describe('AddEditExerciseModal', () => {
 
     // The durable create still replays in the background through the shared outbox mutation and
     // auto-favorites once it syncs.
-    await waitFor(() => expect(addExercise).toHaveBeenCalledWith({ name: 'Cable Row', idempotencyKey: expect.any(String) }));
+    await waitFor(() =>
+      expect(addExercise).toHaveBeenCalledWith({
+        name: 'Cable Row',
+        idempotencyKey: expect.any(String),
+        trackingType: 'strength',
+      }),
+    );
     await waitFor(() => expect(favoriteExercise).toHaveBeenCalledWith(5, 7));
   });
 
@@ -74,7 +123,7 @@ describe('AddEditExerciseModal', () => {
       fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Cable Row' } });
       fireEvent.click(lastAddButton());
 
-      await waitFor(() => expect(addExercise).toHaveBeenCalledWith({ name: 'Cable Row' }));
+      await waitFor(() => expect(addExercise).toHaveBeenCalledWith({ name: 'Cable Row', trackingType: 'strength' }));
       await waitFor(() => expect(favoriteExercise).toHaveBeenCalledWith(5, 7));
       expect(onSaved).toHaveBeenCalledWith({ id: 7 });
     });

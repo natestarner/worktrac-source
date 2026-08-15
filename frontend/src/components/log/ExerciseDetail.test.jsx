@@ -1408,3 +1408,218 @@ describe('ExerciseDetail draft ownership', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Duration-tracked exercises: same screen, same two steppers, only the second one's meaning
+// changes. exercise.trackingType is the one flag that decides it.
+// ---------------------------------------------------------------------------------------------
+describe('ExerciseDetail duration-tracked exercises', () => {
+  const plank = { id: 1, name: 'Plank', trackingType: 'duration', tags: [], isFavorite: true, setupFields: [] };
+  let setDraft;
+  let startHoldTimer;
+  let stopHoldTimer;
+  let setHoldStartedAt;
+
+  function mockUI({ holdTimers = {} } = {}) {
+    startHoldTimer = vi.fn();
+    stopHoldTimer = vi.fn();
+    useUI.mockReturnValue({
+      showCelebration: vi.fn(),
+      showToast: vi.fn(),
+      startRestTimer: vi.fn(),
+      openConfirm: vi.fn(),
+      holdTimers,
+      startHoldTimer,
+      stopHoldTimer,
+    });
+  }
+
+  function mockDraft(overrides = {}) {
+    setDraft = vi.fn();
+    setHoldStartedAt = vi.fn();
+    useAppState.mockReturnValue({
+      weightDraft: 0,
+      repsDraft: 8,
+      durationDraft: 60,
+      holdStartedAt: null,
+      draftExerciseId: plank.id,
+      draftSetCount: TYPED_AFTER_EVERYTHING,
+      draftSource: 'user',
+      setDraft,
+      setHoldStartedAt,
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    mockDraft();
+    mockUI();
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockResolvedValue({
+      set: { id: 1, weight: 0, reps: 0, durationSeconds: 60, unit: 'lb' },
+      session: { id: 101 },
+      isPR: false,
+      best: null,
+    });
+  });
+
+  it('shows a Time stepper instead of Reps, formatted as m:ss', async () => {
+    renderExerciseDetail({ exercise: plank });
+
+    expect(await screen.findByLabelText('Time')).toHaveValue('1:00');
+    expect(screen.queryByLabelText('Reps')).toBeNull();
+    // Weight keeps its label and meaning -- added load, 0 = bodyweight.
+    expect(screen.getByLabelText('Weight (lb)')).toBeInTheDocument();
+  });
+
+  it('logs the duration with zero reps, never reps carrying the seconds', async () => {
+    renderExerciseDetail({ exercise: plank });
+
+    fireEvent.click(await screen.findByRole('button', { name: /Log set/ }));
+
+    await waitFor(() =>
+      expect(logLiveSet).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ exerciseId: 1, weight: 0, reps: 0, durationSeconds: 60 }),
+      ),
+    );
+  });
+
+  it('steps the time by 5 seconds, not 1', async () => {
+    renderExerciseDetail({ exercise: plank });
+
+    fireEvent.click(await screen.findByTitle('Increase Time'));
+    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: 65, source: 'user' }));
+
+    fireEvent.click(screen.getByTitle('Decrease Time'));
+    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: 55, source: 'user' }));
+  });
+
+  // The value must not change shape under your finger: it reads 1:00 unfocused and stays 1:00 when
+  // you tap it. Swapping in "60" on focus silently teaches that only raw seconds are accepted.
+  it('keeps the m:ss formatting while focused', async () => {
+    renderExerciseDetail({ exercise: plank });
+
+    const input = await screen.findByLabelText('Time');
+    fireEvent.focus(input);
+    expect(input).toHaveValue('1:00');
+  });
+
+  it('accepts a typed m:ss value', async () => {
+    renderExerciseDetail({ exercise: plank });
+
+    const input = await screen.findByLabelText('Time');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '2:15' } });
+    fireEvent.blur(input);
+
+    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: 135, source: 'user' }));
+  });
+
+  // A phone's numeric keypad has no colon, so a bare second count has to keep working too.
+  it('accepts a typed bare second count', async () => {
+    renderExerciseDetail({ exercise: plank });
+
+    const input = await screen.findByLabelText('Time');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '95' } });
+    fireEvent.blur(input);
+
+    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: 95, source: 'user' }));
+  });
+
+  it('renders a logged hold as a time, not as a weight x reps row', async () => {
+    listSessionSets.mockResolvedValue([{ id: 1, weight: 0, reps: 0, durationSeconds: 45, unit: 'lb' }]);
+    renderExerciseDetail({ exercise: plank, liveSession: { id: 101 } });
+
+    // Scoped to the set row: the Best card legitimately shows the same time, since this hold is
+    // also the person's longest.
+    const row = (await screen.findByText('Set 1')).parentElement;
+    expect(within(row).getByText('0:45')).toBeInTheDocument();
+  });
+
+  it('renders a loaded hold with its added weight', async () => {
+    listSessionSets.mockResolvedValue([{ id: 1, weight: 25, reps: 0, durationSeconds: 90, unit: 'lb' }]);
+    renderExerciseDetail({ exercise: plank, liveSession: { id: 101 } });
+
+    const row = (await screen.findByText('Set 1')).parentElement;
+    expect(within(row).getByText('25 lb × 1:30')).toBeInTheDocument();
+  });
+
+  it('names the Best card after the record a hold actually has', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 0, reps: 0, durationSeconds: 105, unit: 'lb', est1rm: null },
+    });
+    renderExerciseDetail({ exercise: plank, liveSession: { id: 101 } });
+
+    expect(await screen.findByText('Best · Longest hold')).toBeInTheDocument();
+    expect(screen.getByText('1:45')).toBeInTheDocument();
+  });
+
+  it('a strength exercise is completely untouched -- still Reps, still no timer', async () => {
+    mockDraft({ draftExerciseId: exercise.id, weightDraft: 135, repsDraft: 8 });
+    renderExerciseDetail({ exercise });
+
+    expect(await screen.findByLabelText('Reps')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Time')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Start timer' })).toBeNull();
+  });
+
+  describe('the hold timer', () => {
+    it('starts a per-person hold and persists its start timestamp', async () => {
+      renderExerciseDetail({ exercise: plank });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Start timer' }));
+
+      expect(startHoldTimer).toHaveBeenCalledWith(7, expect.any(Number));
+      // Persisted synchronously so swUpdate's silent post-deploy reload resumes the hold instead
+      // of destroying it mid-effort.
+      expect(setHoldStartedAt).toHaveBeenCalledWith(expect.any(Number));
+    });
+
+    it('shows live elapsed time in the Time field while running', async () => {
+      mockUI({ holdTimers: { 7: { startedAt: 0, elapsed: 42 } } });
+      renderExerciseDetail({ exercise: plank });
+
+      expect(await screen.findByLabelText('Time')).toHaveValue('0:42');
+      expect(screen.getByRole('button', { name: /Stop timer/ })).toHaveTextContent('0:42');
+    });
+
+    // Stop fills the field and nothing else. A mis-tap must never commit a set, and "review, then
+    // tap Log set" is what the primary button means on every other exercise.
+    it('stopping writes the elapsed seconds into the draft without logging', async () => {
+      mockUI({ holdTimers: { 7: { startedAt: 0, elapsed: 42 } } });
+      stopHoldTimer.mockReturnValue(42);
+      renderExerciseDetail({ exercise: plank });
+
+      fireEvent.click(await screen.findByRole('button', { name: /Stop timer/ }));
+
+      expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: 42, source: 'user' }));
+      expect(logLiveSet).not.toHaveBeenCalled();
+      expect(setHoldStartedAt).toHaveBeenCalledWith(null);
+    });
+
+    it('logging while the timer runs uses the timer value, not the stale draft', async () => {
+      mockUI({ holdTimers: { 7: { startedAt: 0, elapsed: 88 } } });
+      stopHoldTimer.mockReturnValue(88);
+      renderExerciseDetail({ exercise: plank });
+
+      fireEvent.click(await screen.findByRole('button', { name: /Log set/ }));
+
+      await waitFor(() =>
+        expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ durationSeconds: 88, reps: 0 })),
+      );
+    });
+
+    it('resumes a hold that was running when the document died', async () => {
+      mockDraft({ holdStartedAt: 1755000000000 });
+      renderExerciseDetail({ exercise: plank });
+
+      await waitFor(() => expect(startHoldTimer).toHaveBeenCalledWith(7, 1755000000000));
+    });
+  });
+});

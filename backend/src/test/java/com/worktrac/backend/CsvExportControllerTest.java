@@ -102,7 +102,7 @@ class CsvExportControllerTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String[] lines = csvResponse.split("\n");
 
-        assertEquals("Date,Time,Exercise,Tags,Set #,Weight,Unit,Reps,Est. 1RM", lines[0]);
+        assertEquals("Date,Time,Exercise,Tags,Set #,Weight,Unit,Reps,Duration (sec),Est. 1RM", lines[0]);
         assertEquals(5, lines.length, "header + 4 set rows (2 for A in session 1, 1 for B in session 1, 1 for A in session 2)");
 
         // Sessions ordered oldest-first: session 1's three rows, then session 2's row.

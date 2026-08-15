@@ -221,6 +221,82 @@ describe('AppStateContext reducer', () => {
     expect(active(restored).weightDraft).toBe(225);
   });
 
+  // ⚠️ The UPGRADE path, not a fresh profile. durationDraft and holdStartedAt were added to
+  // PERSON_DEFAULTS after people already had persisted slices, so every existing install hydrates
+  // a slice that predates them. Without HYDRATE's {...PERSON_DEFAULTS, ...slice} underlay they'd
+  // come back `undefined` -- which is exactly how the Trends weekly-metric switcher blanked the
+  // page on hover for everyone who had used the app before it shipped
+  // (docs/incidents/2026-08-08-trends-hover-blank-page.md). A brand-new person never reproduces it.
+  it('HYDRATE fills in draft fields added after a slice was persisted', () => {
+    const sliceFromBeforeThisFeature = {
+      selectedExerciseId: 4,
+      weightDraft: 135,
+      repsDraft: 8,
+      draftExerciseId: 4,
+      draftSetCount: 2,
+      draftSource: 'user',
+      lastTab: '/app/log',
+    };
+
+    const restored = reducer(initialState, {
+      type: 'HYDRATE',
+      activePersonId: 1,
+      byPerson: { 1: sliceFromBeforeThisFeature },
+    });
+
+    expect(active(restored).durationDraft).toBe(PERSON_DEFAULTS.durationDraft);
+    expect(active(restored).holdStartedAt).toBeNull();
+    // The persisted values themselves must survive the underlay.
+    expect(active(restored).weightDraft).toBe(135);
+    expect(active(restored).draftSource).toBe('user');
+  });
+
+  it('SET_DRAFT writes the duration alongside weight/reps and the whole stamp', () => {
+    let state = withPerson(1);
+    state = reducer(state, {
+      type: 'SET_DRAFT',
+      exerciseId: 7,
+      weight: 0,
+      reps: 0,
+      durationSeconds: 75,
+      setCount: 1,
+      source: 'user',
+    });
+    expect(active(state).durationDraft).toBe(75);
+    expect(active(state).draftExerciseId).toBe(7);
+    expect(active(state).draftSource).toBe('user');
+  });
+
+  // Starting a hold says nothing about who owns the drafts, so it must not restamp them --
+  // otherwise tapping the timer would hand a prefilled weight to the person as if they'd typed it.
+  it('SET_HOLD_STARTED_AT does not touch the draft stamp', () => {
+    let state = withPerson(1);
+    state = reducer(state, {
+      type: 'SET_DRAFT',
+      exerciseId: 7,
+      weight: 0,
+      reps: 0,
+      durationSeconds: 30,
+      setCount: 0,
+      source: 'prefill',
+    });
+    state = reducer(state, { type: 'SET_HOLD_STARTED_AT', startedAt: 1755000000000 });
+
+    expect(active(state).holdStartedAt).toBe(1755000000000);
+    expect(active(state).draftSource).toBe('prefill');
+    expect(active(state).draftExerciseId).toBe(7);
+  });
+
+  it('the hold timestamp is per person, like every other draft field', () => {
+    let state = withPerson(1);
+    state = reducer(state, { type: 'SET_HOLD_STARTED_AT', startedAt: 111 });
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
+    expect(active(state).holdStartedAt).toBeNull();
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
+    expect(active(state).holdStartedAt).toBe(111);
+  });
+
   it('RECONCILE_PEOPLE drops slices for removed people and nulls a dangling active person', () => {
     let state = withPerson(1);
     state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });

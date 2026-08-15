@@ -72,7 +72,8 @@ public class WorkoutSetService {
         // rest_seconds is the gap from the prior set to THIS time, so it stays honest either way
         // (no separate "null on replay" special-case needed).
         Integer restSeconds = computeRestSeconds(session, exercise, loggedAt);
-        return insertSetAndDetectPr(person, session, exercise, request.weight(), request.reps(),
+        Measure measure = resolveMeasure(exercise, request.reps(), request.durationSeconds());
+        return insertSetAndDetectPr(person, session, exercise, request.weight(), measure,
                 account.getDefaultUnit(), restSeconds, loggedAt, request.idempotencyKey());
     }
 
@@ -100,8 +101,48 @@ public class WorkoutSetService {
         // rest_seconds stays null here (this endpoint is never real-time logging -- see the method
         // doc above), but created_at still honors the client timestamp when supplied.
         Instant loggedAt = request.clientLoggedAt() != null ? request.clientLoggedAt() : clock.instant();
-        return insertSetAndDetectPr(person, session, exercise, request.weight(), request.reps(),
+        Measure measure = resolveMeasure(exercise, request.reps(), request.durationSeconds());
+        return insertSetAndDetectPr(person, session, exercise, request.weight(), measure,
                 account.getDefaultUnit(), null, loggedAt, request.idempotencyKey());
+    }
+
+    // What this set actually measures, reconciled against what its exercise is tracked in.
+    //
+    // ⚠️ This must reject as little as possible. shouldRetryWrite treats any 4xx outside {408,429}
+    // as terminal, so every rejection here PERMANENTLY DISCARDS a set that may have been sitting in
+    // the durable outbox through an entire outage. Only genuinely impossible payloads are refused;
+    // one recoverable shape is accepted instead:
+    //
+    //   Legacy shape -- a duration exercise receiving reps and no durationSeconds. This is what a
+    //   client sends when its cached exercise catalog predates V50's conversion of "Plank (sec)"
+    //   into a duration exercise, and an offline client holds that cache for its whole outage.
+    //   Those numbers already WERE seconds (that is what the "(sec)" in the name meant), so
+    //   storing reps as the duration is exact rather than a fudge. Delete this branch once no
+    //   client can still hold a pre-V50 catalog.
+    private Measure resolveMeasure(Exercise exercise, int reps, Integer durationSeconds) {
+        if (!exercise.isDurationTracked()) {
+            if (durationSeconds != null) {
+                throw new IllegalArgumentException(
+                        "%s is tracked in reps, but this set carries a duration".formatted(exercise.getName()));
+            }
+            return new Measure(reps, null);
+        }
+        if (durationSeconds != null) {
+            if (reps != 0) {
+                throw new IllegalArgumentException(
+                        "%s is tracked in seconds; a set cannot carry reps as well".formatted(exercise.getName()));
+            }
+            return new Measure(0, durationSeconds);
+        }
+        if (reps > 0) {
+            return new Measure(0, reps);
+        }
+        throw new IllegalArgumentException(
+                "%s is tracked in seconds, so this set needs a duration".formatted(exercise.getName()));
+    }
+
+    // reps is always 0 when durationSeconds is present -- see WorkoutSet and V48.
+    private record Measure(int reps, Integer durationSeconds) {
     }
 
     // If this write's idempotency key already produced a set (a retried or offline-replayed
@@ -136,15 +177,16 @@ public class WorkoutSetService {
     }
 
     private LogSetResultDto insertSetAndDetectPr(Person person, WorkoutSession session, Exercise exercise,
-                                                  BigDecimal weight, int reps, String unit, Integer restSeconds,
+                                                  BigDecimal weight, Measure measure, String unit, Integer restSeconds,
                                                   Instant createdAt, String clientKey) {
-        Optional<BigDecimal> prevBestComparableLb = statsService.getBestComparableLb(person.getId(), exercise.getId());
+        Optional<BigDecimal> prevBestComparable = statsService.getBestComparableValue(person.getId(), exercise.getId());
 
         WorkoutSet set = workoutSetRepository.save(
-                new WorkoutSet(session, person, exercise, weight, reps, unit, restSeconds, createdAt, clientKey));
+                new WorkoutSet(session, person, exercise, weight, measure.reps(), measure.durationSeconds(), unit,
+                        restSeconds, createdAt, clientKey));
 
-        BigDecimal newComparableLb = statsService.comparableLb(weight, reps, unit);
-        boolean isPR = prevBestComparableLb.isEmpty() || newComparableLb.compareTo(prevBestComparableLb.get()) > 0;
+        BigDecimal newComparable = statsService.comparableValue(weight, measure.reps(), measure.durationSeconds(), unit);
+        boolean isPR = prevBestComparable.isEmpty() || newComparable.compareTo(prevBestComparable.get()) > 0;
         var best = statsService.getBest(person.getId(), exercise.getId()).orElseThrow();
 
         return new LogSetResultDto(WorkoutSetDto.from(set), WorkoutSessionDto.from(session), isPR, best);
@@ -167,8 +209,13 @@ public class WorkoutSetService {
     public WorkoutSetDto editSet(Long accountId, Long setId, EditSetRequest request) {
         WorkoutSet set = workoutSetRepository.findByIdAndSession_Person_Account_Id(setId, accountId)
                 .orElseThrow(() -> new NotFoundException("No such set"));
+        // Same reconciliation (and the same leniency) as a create -- an edit is a separate durable
+        // write that can sit in the outbox just as long, so a rejection here loses it just as
+        // permanently. restSeconds is deliberately untouched: it records what actually happened.
+        Measure measure = resolveMeasure(set.getExercise(), request.reps(), request.durationSeconds());
         set.setWeight(request.weight());
-        set.setReps(request.reps());
+        set.setReps(measure.reps());
+        set.setDurationSeconds(measure.durationSeconds());
         return WorkoutSetDto.from(set);
     }
 

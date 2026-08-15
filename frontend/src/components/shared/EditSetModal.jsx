@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { dispatchDurableWrite, EDIT_SET_MUTATION_KEY } from '../../lib/queryClient';
 import { patchPendingLogSetDisplay } from '../../lib/offlineSetEdits';
 import { queryKeys } from '../../api/queryKeys';
+import { formatRestTime, parseDuration } from '../../utils/datetime';
 import WeightRepsStepper from '../log/WeightRepsStepper';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
@@ -17,7 +18,14 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
   const queryClient = useQueryClient();
   const [weight, setWeight] = useState(set.weight);
   const [reps, setReps] = useState(set.reps);
+  // A hold is edited in seconds. Read off the SET, not the exercise: the set already records which
+  // measure it was logged with, and it is the thing being corrected.
+  const isDuration = set.durationSeconds != null;
+  const [durationSeconds, setDurationSeconds] = useState(set.durationSeconds ?? 0);
   const step = set.unit === 'kg' ? 2.5 : 5;
+  const DURATION_STEP = 5;
+  // Exactly one measure, matching how the set was logged -- same rule as handleLogSet.
+  const measure = isDuration ? { reps: 0, durationSeconds } : { reps, durationSeconds: null };
 
   function handleSave() {
     // Show the new values immediately (offline included, where the write settles only on
@@ -25,7 +33,7 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
     // workout live only as mutation state, not in this cache (see pendingBeforeSession).
     if (sessionId) {
       queryClient.setQueryData(queryKeys.sessionSets(sessionId, exerciseId), (old = []) =>
-        old.map((s) => (s.id === set.id ? { ...s, weight, reps } : s)),
+        old.map((s) => (s.id === set.id ? { ...s, weight, ...measure } : s)),
       );
     }
     if (set.optimistic) {
@@ -34,7 +42,7 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
       // the same idempotency key risks the backend silently discarding the edit). Only the
       // pre-session display needs a direct patch; once a session exists the setQueryData above
       // already covers it.
-      patchPendingLogSetDisplay(queryClient, set.id, { weight, reps });
+      patchPendingLogSetDisplay(queryClient, set.id, { weight, ...measure });
     }
     // Always a real, separate EDIT_SET write -- set.id is the tempId for an optimistic row
     // (resolved once its create syncs, see queryClient.js's requireResolvedSetId/setSetIdMapping)
@@ -42,7 +50,7 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
     // editing a synced set in every connectivity mode. Dispatched against the same context
     // `queryClient` used above (not the app-singleton-only enqueueOutboxWrite) so it lands in the
     // exact mutation cache holding the matching pending create.
-    dispatchDurableWrite(queryClient, EDIT_SET_MUTATION_KEY, { setId: set.id, weight, reps, personId, sessionId, exerciseId, exerciseName });
+    dispatchDurableWrite(queryClient, EDIT_SET_MUTATION_KEY, { setId: set.id, weight, ...measure, personId, sessionId, exerciseId, exerciseName });
     onSaved();
   }
 
@@ -56,14 +64,27 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
         onInc={() => setWeight(Math.round((weight + step) * 2) / 2)}
         onChange={setWeight}
       />
-      <WeightRepsStepper
-        label="Reps"
-        value={reps}
-        size="sm"
-        onDec={() => setReps(Math.max(0, reps - 1))}
-        onInc={() => setReps(reps + 1)}
-        onChange={setReps}
-      />
+      {isDuration ? (
+        <WeightRepsStepper
+          label="Time"
+          value={durationSeconds}
+          displayValue={formatRestTime(durationSeconds)}
+          parse={parseDuration}
+          size="sm"
+          onDec={() => setDurationSeconds(Math.max(0, durationSeconds - DURATION_STEP))}
+          onInc={() => setDurationSeconds(durationSeconds + DURATION_STEP)}
+          onChange={(v) => setDurationSeconds(Math.max(0, v))}
+        />
+      ) : (
+        <WeightRepsStepper
+          label="Reps"
+          value={reps}
+          size="sm"
+          onDec={() => setReps(Math.max(0, reps - 1))}
+          onInc={() => setReps(reps + 1)}
+          onChange={setReps}
+        />
+      )}
       <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel

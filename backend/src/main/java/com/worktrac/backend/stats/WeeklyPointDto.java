@@ -10,6 +10,10 @@ import java.time.LocalDate;
 // totalSets/totalReps are unit-free counts covering the same week. They exist because volume in lb
 // is dominated by whichever lifts happen to be heavy -- a squat day outweighs a whole week of
 // accessory work -- so set count is the better read on how much training actually happened.
+//
+// totalHoldSeconds is the same week's time under tension -- every duration-tracked set summed. A
+// hold contributes 0 to volume and 0 to reps (it carries reps 0), so without this a week of plank
+// and wall-sit work would read as no work at all on every chart but set count.
 public record WeeklyPointDto(LocalDate weekStart, int workoutCount, BigDecimal totalVolumeLb,
-                              int totalSets, int totalReps) {
+                              int totalSets, int totalReps, int totalHoldSeconds) {
 }

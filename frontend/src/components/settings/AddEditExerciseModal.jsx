@@ -8,6 +8,7 @@ import { newId } from '../../utils/id';
 import { useDurableMutation } from '../../hooks/useDurableMutation';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import Modal from '../shared/Modal';
+import SegmentedToggle from '../shared/SegmentedToggle';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
 
@@ -29,6 +30,9 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   const isEditing = !!exercise;
   const [name, setName] = useState(exercise?.name || initialName || '');
   const [nameError, setNameError] = useState(false);
+  // What a set of this exercise measures. Create-only: the backend has no setter for it, because
+  // flipping it would silently reinterpret every set already logged against the exercise.
+  const [trackingType, setTrackingType] = useState('strength');
   const { run, pending: saving } = useGatedMutation();
   const queryClient = useQueryClient();
   // Durable create (create + auto-favorite, both idempotent) so an offline create replays safely and
@@ -54,7 +58,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   // requireSyncedExercise.
   const saveSynced = run(
     async (trimmed) => {
-      const created = await addExercise({ name: trimmed });
+      const created = await addExercise({ name: trimmed, trackingType });
       if (personId) await favoriteExercise(personId, created.id);
       onSaved(created);
     },
@@ -85,14 +89,18 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
     const tempExercise = {
       id: tempId,
       name: trimmed,
-      trackingType: 'strength',
+      // The person's actual choice, not a hardcoded default. This temp row is what the Log screen
+      // reads while the create is still queued, so a hardcoded 'strength' here would show a Reps
+      // stepper for a timed exercise and log reps against it -- which the backend rejects with a
+      // 400 on sync, and a 4xx permanently discards a durable write.
+      trackingType,
       isGlobal: false,
       isFavorite: true,
       tags: [],
       optimistic: true,
     };
     insertOptimisticExercise(queryClient, personId, tempExercise);
-    createExerciseMutation.mutate({ tempId, name: trimmed, personId, idempotencyKey: newId() });
+    createExerciseMutation.mutate({ tempId, name: trimmed, trackingType, personId, idempotencyKey: newId() });
     onSaved(tempExercise);
   }
 
@@ -117,6 +125,27 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       />
       {nameError && (
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 12 }}>Enter an exercise name.</div>
+      )}
+
+      {/* Create-only: an exercise's measure is fixed once sets exist against it. Two options, one
+          line -- the only new decision this feature asks anyone to make, and only when they are
+          adding their own exercise. */}
+      {!isEditing && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-muted)', marginBottom: 8 }}>
+            Measured in
+          </div>
+          <SegmentedToggle
+            ariaLabel="Measured in"
+            fill
+            value={trackingType}
+            onChange={setTrackingType}
+            options={[
+              { label: 'Reps', value: 'strength' },
+              { label: 'Time', value: 'duration' },
+            ]}
+          />
+        </div>
       )}
 
       {isEditing && (

@@ -39,14 +39,18 @@ export function convertWeight(weight, fromUnit, toUnit) {
 //
 // `todaysSets` must be the MERGED set list (ExerciseDetail's displaySets), never the raw
 // sessionSets query -- see the call site.
+// The same walk resolves the second measure too: `reps` for a lift, `durationSeconds` for a hold.
+// Both are always returned so ExerciseDetail can read whichever its exercise uses without the
+// prefill needing to know the exercise's type.
 export function computePrefillDraft(lastSession, todaysSets, defaultUnit) {
   const todays = todaysSets || [];
   if (!lastSession || lastSession.sets.length === 0) {
     const carry = todays[todays.length - 1];
-    if (!carry) return { weight: null, reps: 8 };
+    if (!carry) return { weight: null, reps: 8, durationSeconds: 30 };
     return {
       weight: convertWeight(carry.weight, carry.unit || 'lb', defaultUnit),
       reps: carry.reps,
+      durationSeconds: carry.durationSeconds ?? 30,
     };
   }
   const idx = Math.min(todays.length, lastSession.sets.length - 1);
@@ -54,6 +58,7 @@ export function computePrefillDraft(lastSession, todaysSets, defaultUnit) {
   return {
     weight: convertWeight(refSet.weight, refSet.unit || 'lb', defaultUnit),
     reps: refSet.reps,
+    durationSeconds: refSet.durationSeconds ?? 30,
   };
 }
 
@@ -66,11 +71,24 @@ export function comparableLb(weight, reps, unit) {
   return toLb(epley(weight, reps), unit || 'lb');
 }
 
+// The single number a set is ranked by, whichever measure it uses. Mirrors
+// backend/.../stats/StatsService.java#comparableValue -- keep the two in step.
+//
+// Every comparison this feeds is within ONE exercise, and an exercise has exactly one measure, so
+// seconds are never weighed against pounds. For a hold the value is the duration and added load
+// deliberately does not enter it: a load-adjusted hold would need the person's bodyweight, which
+// the app doesn't store. Load is surfaced as its own "Heaviest load held" record instead.
+export function comparableValue(set) {
+  if (set == null) return null;
+  if (set.durationSeconds != null) return set.durationSeconds;
+  return comparableLb(set.weight, set.reps, set.unit);
+}
+
 // Whether a logged set matches the person's current best comparable value for that
 // exercise (within a small tolerance for rounding), used to show the inline "PR" badge
-// on session-set rows. bestComparableLb must come from comparableLb() above, not the
+// on session-set rows. bestComparable must come from comparableValue() above, not the
 // raw displayed est1rm, or it inherits the same weight-0 collapse this is guarding against.
-export function isPrSet(setWeight, setReps, setUnit, bestComparableLb) {
-  if (bestComparableLb === null || bestComparableLb === undefined) return false;
-  return Math.abs(comparableLb(setWeight, setReps, setUnit) - bestComparableLb) < 0.5;
+export function isPrSet(set, bestComparable) {
+  if (bestComparable === null || bestComparable === undefined) return false;
+  return Math.abs(comparableValue(set) - bestComparable) < 0.5;
 }

@@ -22,7 +22,15 @@ import { useState } from 'react';
 // platform's own way -- the first keystroke replaces a selection exactly like it does in
 // any other text field -- so mobile keeps its native numeric keyboard and desktop never
 // sees an unrequested overlay.
-export default function WeightRepsStepper({ label, value, onDec, onInc, onChange, size = 'lg' }) {
+// `displayValue` is an optional pre-formatted string -- the Time stepper passes m:ss through it.
+// It is what the field shows BOTH focused and unfocused, so the value never changes shape under
+// you: you read "1:00", tap it, and get "1:00" selected, ready to be replaced or edited.
+//
+// `parse` is its inverse, turning whatever was typed back into a number. It exists because the two
+// halves have to agree: showing m:ss while parsing with parseFloat would read "1:30" as 1. The
+// Time stepper's parser accepts m:ss AND a bare second count, since a phone's numeric keypad has
+// no colon on it (see utils/datetime.js#parseDuration).
+export default function WeightRepsStepper({ label, value, displayValue, parse, onDec, onInc, onChange, size = 'lg' }) {
   const isLarge = size === 'lg';
   // Base class always present -- the landscape rules and the e2e helpers both key off it.
   const btnClass = `stepper-circle-btn${isLarge ? '' : ' stepper-circle-btn-sm'} pressable`;
@@ -37,7 +45,7 @@ export default function WeightRepsStepper({ label, value, onDec, onInc, onChange
 
   function commit(raw) {
     setDraft(null);
-    onChange(parseFloat(raw) || 0);
+    onChange(parse ? parse(raw) : parseFloat(raw) || 0);
   }
 
   return (
@@ -62,14 +70,17 @@ export default function WeightRepsStepper({ label, value, onDec, onInc, onChange
             type="text"
             inputMode="decimal"
             className={valueClass}
-            value={draft ?? value ?? ''}
+            value={draft ?? displayValue ?? value ?? ''}
             placeholder="—"
             aria-label={label}
             // Select-all on focus is the whole trick -- see the header comment. The first
             // keystroke replaces the selection, which is exactly the "replace, don't
             // append" behaviour the keypad used to fake with a manual "fresh buffer" flag.
             onFocus={(e) => {
-              setDraft(String(value ?? ''));
+              // Seeds with displayValue so a formatted field (Time) stays formatted while you edit
+              // it -- swapping "1:00" for "60" the instant you tap is a value changing shape under
+              // your finger, and it silently teaches that only raw seconds are accepted.
+              setDraft(String(displayValue ?? value ?? ''));
               e.target.select();
             }}
             onChange={(e) => setDraft(e.target.value)}
@@ -81,7 +92,7 @@ export default function WeightRepsStepper({ label, value, onDec, onInc, onChange
             }}
           />
         ) : (
-          <div className={valueClass}>{value}</div>
+          <div className={valueClass}>{displayValue ?? value}</div>
         )}
         <button type="button" onClick={onInc} title={`Increase ${label}`} className={btnClass}>
           +

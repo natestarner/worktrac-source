@@ -35,6 +35,13 @@ function isBodyweight(row) {
   return row.best.weight === 0;
 }
 
+// A hold has no est. 1RM at all (BestDto sends null), so it falls in the same "can't be ranked on
+// this axis" group as a bodyweight lift -- ranked among its peers by duration, the measure the row
+// actually renders.
+function isHold(row) {
+  return row.best.durationSeconds != null;
+}
+
 export function sortPrRows(rows, sort) {
   const key = PR_SORTS[sort] ? sort : DEFAULT_PR_SORT;
   const sorted = [...rows];
@@ -45,6 +52,10 @@ export function sortPrRows(rows, sort) {
 
   if (key === 'est1rm') {
     return sorted.sort((a, b) => {
+      const aHold = isHold(a);
+      const bHold = isHold(b);
+      if (aHold !== bHold) return aHold ? 1 : -1;
+      if (aHold) return b.best.durationSeconds - a.best.durationSeconds || byName(a, b);
       const aBw = isBodyweight(a);
       const bBw = isBodyweight(b);
       if (aBw !== bBw) return aBw ? 1 : -1;

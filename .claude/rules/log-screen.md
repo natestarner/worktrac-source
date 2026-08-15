@@ -146,6 +146,56 @@ pop an unrequested keypad over a mouse-and-keyboard session.) It commits on blur
 every keystroke — see the component's header comment for why a plain controlled input can't
 support typing a decimal digit by digit.
 
+## The second stepper's meaning is the whole endurance feature
+
+`isDuration = exercise.trackingType === 'duration'` is the single flag. Same screen, same two
+steppers, same one `variant="primary"` — only the second stepper changes from **Reps** to **Time**
+(m:ss, ±5s). **This is not a connectivity branch**, so it does not belong on `resilience.md`'s
+register; that list is specifically for behaviour that differs by network state.
+
+- `handleLogSet` sends exactly one measure: a hold carries `reps: 0` and `durationSeconds`, a lift
+  carries `reps` and `durationSeconds: null`. See `workout-data-model.md` for why reps is 0.
+- **`durationSeconds` must be selected in `pendingBeforeSession`'s `useMutationState` projection.**
+  It is the only source of those rows while `contextSessionId` is null (a person's whole outage),
+  so missing it renders a hold correctly online and blank in all three degraded modes.
+  `parity-endurance.spec.ts` fails in exactly that shape — verified by breaking it.
+- `mergeBestWithLocalSets`/`deriveBest` rank through **`comparableValue`**, not `comparableLb`.
+  Routed through `comparableLb` a hold's weight-0/reps-0 pair reads as a comparable of 0, the `max`
+  silently becomes a no-op, and the PR pill lands on the wrong row for the whole outage.
+- `WeightRepsStepper`'s `displayValue`/`parse` pair is what makes the Time field editable. The
+  field shows m:ss in **both** states — a value that changes shape the instant you tap it silently
+  teaches that only raw seconds are accepted — and `parseDuration` accepts **either** `m:ss` or a
+  bare second count, because a phone's numeric keypad has no colon on it. The two halves must stay
+  in step: formatting as m:ss while parsing with `parseFloat` reads "1:30" as 1.
+- The **Start/Stop timer** button is `variant="dark"`, not `secondary`. The input card is already
+  `--color-surface` with a `--color-border` edge and `.btn-secondary` is that exact pair, so a
+  secondary button there is surface-on-surface and reads as a label rather than a control.
+
+### The hold timer is wall-clock, and that is load-bearing
+
+`UIContext`'s ticker drives `holdTimers` (up) beside `restTimers` (down) from **timestamps**, never
+by counting interval fires. iOS throttles then suspends timer callbacks when the screen locks —
+mid-plank, tap Start and set the iPad down, that is the normal case. A counted timer under-reports
+by however long the screen was off. `startedAt` is also persisted through `AppStateContext`
+(localStorage, synchronous) so `swUpdate.js`'s silent post-deploy reload resumes a max hold instead
+of destroying it at 1:55.
+
+**Stop fills the field; it does not log.** A mis-tap would otherwise commit a set, and "review,
+then tap Log set" is what the primary button means on every other exercise.
+
+Three details of that ticker are load-bearing together — changing one without the others regresses
+something:
+
+1. **It samples every 200ms, not every 1000ms.** A 1s cadence is set when the provider mounts,
+   which has nothing to do with when Start was tapped, so `0:00` sat there for up to 2 seconds and
+   read as "the timer didn't start". The displayed value is still whole seconds.
+2. **Both updaters return `current` unchanged when the displayed number hasn't moved**, so React
+   bails out and the 5x sampling rate still costs ~1 re-render/second. Without this it is a 5x
+   render-rate regression on a context most of the app reads.
+3. **The interval only exists while a timer is running** (`hasActiveTimers`). The provider lives for
+   the whole app, so an always-on ticker fires forever to do nothing — and `RoutineFormModal.test`
+   mounts the real provider with real timers, where that showed up as intermittent failures.
+
 ## Routine stepping is index-based, and that is load-bearing
 
 A routine may list the same exercise more than once (bench, row, bench). `AppStateContext`'s

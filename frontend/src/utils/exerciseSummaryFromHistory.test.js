@@ -61,7 +61,7 @@ describe('deriveExerciseSummaryFromHistory', () => {
 
     const { best } = deriveExerciseSummaryFromHistory(history, SQUAT, 3);
 
-    expect(best).toEqual({ weight: 225, reps: 5, unit: 'lb', sessionStartedAt: '2026-07-20T00:00:00Z', est1rm: 262.5 });
+    expect(best).toEqual({ weight: 225, reps: 5, durationSeconds: null, unit: 'lb', sessionStartedAt: '2026-07-20T00:00:00Z', est1rm: 262.5 });
   });
 
   it('compares across units when picking best, but reports the winning set in its own original unit', () => {

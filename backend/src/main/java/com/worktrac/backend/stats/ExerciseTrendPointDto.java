@@ -16,9 +16,16 @@ import java.time.LocalDate;
 //   bestSetVolumeLb - the single best weight x reps set
 //   sessionVolumeLb - every set for this exercise that session, summed
 //   totalReps/setCount - unit-free work done
+//
+// For a DURATION-tracked exercise every weight-derived field above is 0 by construction (reps is 0
+// on a hold, so volume is 0), and the two fields that carry the actual signal are
+// bestHoldSeconds/totalHoldSeconds. est1rmLb still holds the value isPr was decided on -- which for
+// a hold is the duration -- so don't render it as a weight without checking the exercise; that is
+// the same caveat it already carried for bodyweight sets, where it is a rep count.
 public record ExerciseTrendPointDto(LocalDate date, Long sessionId, BigDecimal weightLb, int reps,
                                      BigDecimal est1rmLb, boolean isPr,
                                      BigDecimal heaviestWeightLb, int heaviestWeightReps,
                                      BigDecimal bestSetVolumeLb, BigDecimal sessionVolumeLb,
-                                     int totalReps, int setCount) {
+                                     int totalReps, int setCount,
+                                     Integer bestHoldSeconds, int totalHoldSeconds) {
 }

@@ -45,6 +45,29 @@ export function formatRestTime(sec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// formatRestTime's inverse, and deliberately permissive about which of the two shapes it gets.
+//
+// Both have to work, because which one a person can type depends on their keyboard: "1:30" is the
+// natural thing to write on a desktop and matches what the field displays, while a phone's numeric
+// keypad has no colon at all, so on mobile the only thing you CAN type is a raw second count.
+// Accepting either means neither platform has a worse experience than the other.
+//
+//   "1:30" -> 90     "90" -> 90      "2:" -> 120     ":45" -> 45      "1:5" -> 65
+//
+// Anything unparseable is 0, matching the plain numeric steppers' `parseFloat(raw) || 0`: a blank
+// is a display state, never a validation gate that blocks logging.
+export function parseDuration(raw) {
+  const text = String(raw ?? '').trim();
+  if (!text) return 0;
+  if (!text.includes(':')) {
+    return Math.max(0, Math.round(parseFloat(text) || 0));
+  }
+  const [minutePart, secondPart] = text.split(':');
+  const minutes = parseInt(minutePart, 10) || 0;
+  const seconds = parseInt(secondPart, 10) || 0;
+  return Math.max(0, minutes * 60 + seconds);
+}
+
 // Full date+time label for timestamps that can be arbitrarily old (admin portal signup/
 // activity dates) -- formatDateLabel's "Today"/"Yesterday" relative framing only makes
 // sense for recent workout activity. Handles null (e.g. an account with no sessions yet
