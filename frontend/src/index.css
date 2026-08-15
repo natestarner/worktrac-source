@@ -849,6 +849,149 @@ input[type='search']::-webkit-search-results-decoration {
   font-size: var(--text-2xl);
 }
 
+/* The Time field opens a picker instead of a keyboard, so it advertises that: a pointer
+   cursor, and no caret to suggest a caret is what you're about to get. It stays a real
+   <input readonly> rather than becoming a <button> -- a button takes its accessible name
+   from its text content, which would replace aria-label="Time" with "1:30". */
+.stepper-value-pick {
+  cursor: pointer;
+  caret-color: transparent;
+}
+
+/* --- Duration wheel (DurationWheel.jsx) --------------------------------
+   The countdown-timer wheel: two scroll-snap columns, min and sec. Geometry lives here
+   rather than inline for the same reason the stepper's does -- the landscape block has to
+   shrink it, and inline styles can only be beaten with !important.
+
+   The row height is the one number everything else is derived from: the scroller shows
+   VISIBLE_ROWS of it, and the top/bottom padding that lets the first and last options reach
+   the centre is exactly (VISIBLE_ROWS - 1) / 2 rows. Expressing that in the stylesheet
+   instead of measuring it in JS is what keeps the two in step. 44px is the app's touch
+   target, the same literal .stepper-circle-btn uses. */
+.duration-wheel {
+  --duration-wheel-row: 44px;
+  --duration-wheel-visible: 5;
+  --duration-wheel-pad: calc(var(--duration-wheel-row) * (var(--duration-wheel-visible) - 1) / 2);
+}
+
+.duration-wheel-cols {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+/* The fixed point you read the wheel against. Painted BEHIND the columns (they establish no
+   stacking context of their own, so DOM order is enough) so the selected number keeps full
+   contrast on top of it. Without a band a snap wheel gives you nothing to tell "committed"
+   from "merely near the middle". */
+.duration-wheel-band {
+  position: absolute;
+  top: var(--duration-wheel-pad);
+  left: 0;
+  right: 0;
+  height: var(--duration-wheel-row);
+  border-radius: var(--radius-md);
+  background: var(--color-subtle-bg);
+  pointer-events: none;
+}
+
+.duration-wheel-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.duration-wheel-scroller {
+  height: calc(var(--duration-wheel-row) * var(--duration-wheel-visible));
+  width: 72px;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  /* A fling inside the wheel must not chain into the sheet or the page behind it. */
+  overscroll-behavior: contain;
+  padding-block: var(--duration-wheel-pad);
+  /* Fade the rows approaching the edges so the column reads as a cylinder rather than a
+     list that abruptly stops. Prefixed copy kept for older iOS Safari, which is exactly the
+     device this control exists for. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 78%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 22%, #000 78%, transparent);
+  scrollbar-width: none;
+  border-radius: var(--radius-md);
+}
+
+.duration-wheel-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.duration-wheel-option {
+  height: var(--duration-wheel-row);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  scroll-snap-align: center;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+  color: var(--color-muted);
+  /* Digits must not shuffle sideways as the value changes -- 1 and 8 are different widths in
+     a proportional face, and the whole column visibly jitters while it scrolls without this. */
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color var(--dur-base) var(--ease-out);
+}
+
+.duration-wheel-option.is-selected {
+  color: var(--color-text);
+  font-weight: var(--weight-bold);
+}
+
+/* position: relative is load-bearing, not a nudge. The selection band is absolutely positioned
+   and the columns each get their own stacking context from mask-image, so both paint in the
+   positioned layer. A static colon paints in the in-flow layer BELOW that, and the band's opaque
+   background covers it completely -- the separator silently disappears while the numbers either
+   side of it look fine. */
+.duration-wheel-colon {
+  position: relative;
+  height: calc(var(--duration-wheel-row) * var(--duration-wheel-visible));
+  display: flex;
+  align-items: center;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
+}
+
+.duration-wheel-caption {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* Announced, never drawn: a screen reader moving one column otherwise hears a bare "1" with
+   no sense of the total it just built. */
+.duration-wheel-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The inline variant inside Edit set, where a nested sheet over an open dialog would mean two
+   scrims and two focus traps. Same wheel, one row shorter so the modal doesn't outgrow its
+   80vh and start scrolling its own header away. */
+.duration-wheel-inline {
+  --duration-wheel-visible: 3;
+  margin-bottom: var(--space-4);
+}
+
 /* "Last time" / "Best est. 1RM" summary cards -- compact in every layout, not just
    landscape; these were disproportionately bulky for how little information they
    carry. */

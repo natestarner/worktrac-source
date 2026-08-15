@@ -1508,27 +1508,139 @@ describe('ExerciseDetail duration-tracked exercises', () => {
     expect(input).toHaveValue('1:00');
   });
 
-  it('accepts a typed m:ss value', async () => {
+  // The Time field opens the wheel rather than a keyboard, which is the whole point: a numeric
+  // keypad has no colon key, so m:ss was never typeable on the device this app is used on.
+  it('opens the duration picker instead of a keyboard when the time is tapped', async () => {
     renderExerciseDetail({ exercise: plank });
 
     const input = await screen.findByLabelText('Time');
-    fireEvent.focus(input);
-    fireEvent.change(input, { target: { value: '2:15' } });
-    fireEvent.blur(input);
+    // readOnly is what suppresses the mobile keyboard; without it the picker and the keyboard
+    // both appear and fight over the bottom of the screen.
+    expect(input).toHaveAttribute('readonly');
+    expect(screen.queryByRole('dialog')).toBeNull();
 
-    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: 135, source: 'user' }));
+    fireEvent.click(input);
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('listbox', { name: 'Minutes' })).toBeInTheDocument();
+    expect(screen.getByRole('listbox', { name: 'Seconds' })).toBeInTheDocument();
   });
 
-  // A phone's numeric keypad has no colon, so a bare second count has to keep working too.
-  it('accepts a typed bare second count', async () => {
+  it("commits a time picked on the wheel, stamped as the person's own", async () => {
+    renderExerciseDetail({ exercise: plank });
+
+    fireEvent.click(await screen.findByLabelText('Time'));
+    // Digit typeahead: 4 then 5 joins into 45 seconds, against the 1 minute already on the wheel.
+    // This is also exactly what the e2e helper drives, because scroll-driving a snap container
+    // from a test is inherently flaky.
+    const seconds = screen.getByRole('listbox', { name: 'Seconds' });
+    fireEvent.keyDown(seconds, { key: '4' });
+    fireEvent.keyDown(seconds, { key: '5' });
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: 105, source: 'user' }));
+  });
+
+  it('picks a time with the arrow keys', async () => {
+    renderExerciseDetail({ exercise: plank });
+
+    fireEvent.click(await screen.findByLabelText('Time'));
+    fireEvent.keyDown(screen.getByRole('listbox', { name: 'Seconds' }), { key: 'ArrowDown' });
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: 61, source: 'user' }));
+  });
+
+  // Clear has to be commitable or it's a dead end. 0:00 isn't a loggable hold, so it lands in the
+  // same "no value chosen" blank that Weight and Reps use -- rendered as the em-dash placeholder.
+  it('clears the time back to blank', async () => {
+    renderExerciseDetail({ exercise: plank });
+
+    fireEvent.click(await screen.findByLabelText('Time'));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: null, source: 'user' }));
+  });
+
+  it('renders a cleared time as an em dash, and still logs a set', async () => {
+    mockDraft({ durationDraft: null });
+    renderExerciseDetail({ exercise: plank });
+
+    expect(await screen.findByLabelText('Time')).toHaveValue('');
+
+    // Blank is a display state, never a validation gate -- the same rule weight and reps follow.
+    fireEvent.click(screen.getByRole('button', { name: /Log set/ }));
+    await waitFor(() =>
+      expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ reps: 0, durationSeconds: 30 })),
+    );
+  });
+
+  // Turning the wheel is not a decision -- only Done is. Otherwise a stray Escape mid-set would
+  // silently overwrite the time rather than silently discard an edit.
+  it('leaves the draft alone when the picker is cancelled', async () => {
+    renderExerciseDetail({ exercise: plank });
+
+    fireEvent.click(await screen.findByLabelText('Time'));
+    fireEvent.keyDown(screen.getByRole('listbox', { name: 'Seconds' }), { key: 'ArrowDown' });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(setDraft).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // Mid-hold the field is a live readout of the timer. Opening a picker onto a number that is
+  // moving underneath it has no coherent answer for what happens when you let go.
+  it('does not open the picker while a hold is running', async () => {
+    mockUI({ holdTimers: { 7: { elapsed: 12 } } });
     renderExerciseDetail({ exercise: plank });
 
     const input = await screen.findByLabelText('Time');
-    fireEvent.focus(input);
-    fireEvent.change(input, { target: { value: '95' } });
-    fireEvent.blur(input);
+    expect(input).toHaveValue('0:12');
 
-    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: 95, source: 'user' }));
+    fireEvent.click(input);
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // Stepping off the bottom clears the field rather than parking on 0:01 -- the same "no duration
+  // chosen" blank Clear produces. 0:01 left sitting there would read as a deliberate choice.
+  it('clears the time when the last step takes it to zero or below', async () => {
+    mockDraft({ durationDraft: 5 });
+    renderExerciseDetail({ exercise: plank });
+
+    fireEvent.click(await screen.findByTitle('Decrease Time'));
+
+    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: null, source: 'user' }));
+  });
+
+  it('clears rather than going negative from an odd remainder', async () => {
+    mockDraft({ durationDraft: 3 });
+    renderExerciseDetail({ exercise: plank });
+
+    fireEvent.click(await screen.findByTitle('Decrease Time'));
+
+    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: null, source: 'user' }));
+  });
+
+  it('still steps normally while there is room above zero', async () => {
+    mockDraft({ durationDraft: 10 });
+    renderExerciseDetail({ exercise: plank });
+
+    fireEvent.click(await screen.findByTitle('Decrease Time'));
+
+    expect(setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: 5, source: 'user' }));
+  });
+
+  it('logs at least one second even if the hold was stopped at zero', async () => {
+    mockDraft({ durationDraft: 0 });
+    renderExerciseDetail({ exercise: plank });
+
+    fireEvent.click(await screen.findByRole('button', { name: /Log set/ }));
+
+    await waitFor(() =>
+      expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ reps: 0, durationSeconds: 1 })),
+    );
   });
 
   it('renders a logged hold as a time, not as a weight x reps row', async () => {

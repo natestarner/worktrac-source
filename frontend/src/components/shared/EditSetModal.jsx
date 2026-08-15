@@ -3,8 +3,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { dispatchDurableWrite, EDIT_SET_MUTATION_KEY } from '../../lib/queryClient';
 import { patchPendingLogSetDisplay } from '../../lib/offlineSetEdits';
 import { queryKeys } from '../../api/queryKeys';
-import { formatRestTime, parseDuration } from '../../utils/datetime';
+import { formatRestTime, MIN_HOLD_SECONDS } from '../../utils/datetime';
 import WeightRepsStepper from '../log/WeightRepsStepper';
+import DurationWheel from './DurationWheel';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
 import Button from './Button';
@@ -22,10 +23,17 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
   // measure it was logged with, and it is the thing being corrected.
   const isDuration = set.durationSeconds != null;
   const [durationSeconds, setDurationSeconds] = useState(set.durationSeconds ?? 0);
+  const [showWheel, setShowWheel] = useState(false);
   const step = set.unit === 'kg' ? 2.5 : 5;
   const DURATION_STEP = 5;
   // Exactly one measure, matching how the set was logged -- same rule as handleLogSet.
   const measure = isDuration ? { reps: 0, durationSeconds } : { reps, durationSeconds: null };
+  // Save refuses a sub-minimum hold rather than quietly rounding it up. EditSetRequest declares
+  // @Min(1) too, and this write is just as durable -- and so just as permanently discarded by a
+  // 4xx -- as the original. Disabling is the same answer DurationPickerSheet's Done gives, and for
+  // the same reason: the inline wheel can genuinely be scrolled to 0:00, and silently correcting a
+  // number you just chose is worse than refusing it, because nothing on screen said 0:00 was out.
+  const tooShort = isDuration && durationSeconds < MIN_HOLD_SECONDS;
 
   function handleSave() {
     // Show the new values immediately (offline included, where the write settles only on
@@ -65,16 +73,30 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
         onChange={setWeight}
       />
       {isDuration ? (
-        <WeightRepsStepper
-          label="Time"
-          value={durationSeconds}
-          displayValue={formatRestTime(durationSeconds)}
-          parse={parseDuration}
-          size="sm"
-          onDec={() => setDurationSeconds(Math.max(0, durationSeconds - DURATION_STEP))}
-          onInc={() => setDurationSeconds(durationSeconds + DURATION_STEP)}
-          onChange={(v) => setDurationSeconds(Math.max(0, v))}
-        />
+        <>
+          <WeightRepsStepper
+            label="Time"
+            value={durationSeconds}
+            displayValue={formatRestTime(durationSeconds)}
+            size="sm"
+            onPick={() => setShowWheel((open) => !open)}
+            onDec={() => setDurationSeconds(Math.max(MIN_HOLD_SECONDS, durationSeconds - DURATION_STEP))}
+            onInc={() => setDurationSeconds(durationSeconds + DURATION_STEP)}
+            onChange={(v) => setDurationSeconds(Math.max(MIN_HOLD_SECONDS, v))}
+          />
+          {/* Inline, not the bottom sheet the log screen opens. A sheet here would be a modal over
+              a modal: two scrims, two focus traps, and an Escape whose target you have to guess.
+              Same wheel, revealed in place under the value it belongs to -- which is also why the
+              value acts as a toggle rather than a one-way open.
+
+              It writes straight to local state with no Done of its own, because this modal already
+              has the pair: Cancel discards every edit in it, Save commits them. That is the same
+              draft-until-committed shape DurationPickerSheet gives the log screen, so the floor
+              lands in the same place -- on `measure` below, not on the wheel. */}
+          {showWheel && (
+            <DurationWheel className="duration-wheel-inline" valueSeconds={durationSeconds} onChange={setDurationSeconds} />
+          )}
+        </>
       ) : (
         <WeightRepsStepper
           label="Reps"
@@ -91,6 +113,7 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
         </button>
         <Button
           onClick={handleSave}
+          disabled={tooShort}
           style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
           Save

@@ -19,9 +19,10 @@ import {
 import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
 import { comparableValue, computePrefillDraft, isPrSet } from '../../utils/formulas';
 import { deriveExerciseSummaryFromHistory, mergeBestWithLocalSets } from '../../utils/exerciseSummaryFromHistory';
-import { formatDateLabel, formatRestTime, parseDuration, toLocalDateStr } from '../../utils/datetime';
+import { formatDateLabel, formatRestTime, MIN_HOLD_SECONDS, toLocalDateStr } from '../../utils/datetime';
 import { formatSetSpaced } from '../../utils/formatSet';
 import WeightRepsStepper from './WeightRepsStepper';
+import DurationPickerSheet from '../shared/DurationPickerSheet';
 import CustomFieldEditorModal from '../shared/CustomFieldEditorModal';
 import ConfigureExerciseModal from '../shared/ConfigureExerciseModal';
 import EditSetModal from '../shared/EditSetModal';
@@ -91,6 +92,7 @@ export default function ExerciseDetail({
   const [editingSet, setEditingSet] = useState(null);
   const [justAddedSetId, setJustAddedSetId] = useState(null);
   const [showSessionNoteModal, setShowSessionNoteModal] = useState(false);
+  const [showDurationPicker, setShowDurationPicker] = useState(false);
   // Resolvers for handleLogSet's tap-ack promise, keyed by tempId -- see logSetMutation's
   // onMutate below.
   const logAckResolvers = useRef(new Map());
@@ -552,19 +554,34 @@ export default function ExerciseDetail({
   function incWeight() {
     commitDraft({ weight: Math.round((weightValue + weightStep) * 2) / 2 });
   }
-  // The second stepper is Reps or Time depending on the exercise. Both clamp at 0; time steps in
-  // 5s, the granularity a hold is actually worth adjusting by.
+  // The second stepper is Reps or Time depending on the exercise. Reps clamps at 0. Time steps in
+  // 5s -- the granularity a hold is actually worth adjusting by -- and stepping off the bottom
+  // CLEARS the field rather than parking on 0:01. Same rule as the picker: there is no 0-second
+  // hold, so 0 means "no duration chosen" and renders as the em dash. Parking at the minimum
+  // instead would leave 0:01 sitting there looking like a deliberate choice, and give the last
+  // press of the - button nothing to do.
   function decSecond() {
-    if (isDuration) commitDraft({ durationSeconds: Math.max(0, durationValue - DURATION_STEP) });
-    else commitDraft({ reps: Math.max(0, repsValue - 1) });
+    if (!isDuration) {
+      commitDraft({ reps: Math.max(0, repsValue - 1) });
+      return;
+    }
+    const next = durationValue - DURATION_STEP;
+    commitDraft({ durationSeconds: next <= 0 ? null : next });
   }
   function incSecond() {
     if (isDuration) commitDraft({ durationSeconds: durationValue + DURATION_STEP });
     else commitDraft({ reps: repsValue + 1 });
   }
   function changeSecond(value) {
-    if (isDuration) commitDraft({ durationSeconds: Math.max(0, Math.round(value)) });
-    else commitDraft({ reps: Math.max(0, Math.round(value)) });
+    if (!isDuration) {
+      commitDraft({ reps: Math.max(0, Math.round(value)) });
+      return;
+    }
+    // null is the picker's cleared state, and it is deliberately NOT clamped up to the minimum:
+    // it means "no duration chosen", the same em-dash blank weight and reps already have. Blank
+    // is a display state here, never a validation gate -- `durationValue` supplies the default at
+    // log time exactly as `weightValue` and `repsValue` do for theirs.
+    commitDraft({ durationSeconds: value == null ? null : Math.max(MIN_HOLD_SECONDS, Math.round(value)) });
   }
 
   // Start fills the field hands-free; Stop just writes the elapsed seconds into the draft. Stop
@@ -649,7 +666,11 @@ export default function ExerciseDetail({
       // Exactly one measure, matching the exercise's tracking type -- a hold carries 0 reps
       // (it genuinely has none) and its seconds; a lift carries reps and no duration.
       reps: isDuration ? 0 : repsValue,
-      durationSeconds: isDuration ? loggedDuration : null,
+      // The last clamp before the wire, and it guards two things the controls can't: a hold
+      // stopped the instant it started (0 elapsed), and a draft persisted by a build that
+      // predates the floor. Sending 0 is a 400, and a definitive 4xx discards the queued write
+      // for good rather than bouncing it back to be fixed.
+      durationSeconds: isDuration ? Math.max(MIN_HOLD_SECONDS, loggedDuration) : null,
       tempId,
       idempotencyKey: newId(),
       clientLoggedAt: new Date().toISOString(),
@@ -857,14 +878,19 @@ export default function ExerciseDetail({
                 onChange={(weight) => commitDraft({ weight })}
               />
               {/* The second stepper is the whole feature: same control, same layout, only its
-                  meaning changes with the exercise. A hold shows m:ss (the same shape the timer
+                  meaning changes with the exercise. A hold shows m:ss -- the same shape the timer
                   and every set row use, so a duration never changes format between entering it
-                  and reading it back) and accepts a raw second count when typed. */}
+                  and reading it back -- and tapping the value opens the min/sec wheel rather than
+                  a keyboard that has no colon on it.
+
+                  onPick is suppressed while a hold is running: the field is then a live readout of
+                  the timer, and opening a picker onto a number that is moving underneath it has no
+                  coherent answer for what happens when you let go. Stop, then adjust. */}
               <WeightRepsStepper
                 label={isDuration ? 'Time' : 'Reps'}
                 value={isDuration ? displayedDuration : shownReps}
                 displayValue={isDuration && displayedDuration != null ? formatRestTime(displayedDuration) : undefined}
-                parse={isDuration ? parseDuration : undefined}
+                onPick={isDuration && !holdRunning ? () => setShowDurationPicker(true) : undefined}
                 onDec={decSecond}
                 onInc={incSecond}
                 onChange={changeSecond}
@@ -1078,6 +1104,20 @@ export default function ExerciseDetail({
           initialNote={sessionNote || ''}
           onClose={() => setShowSessionNoteModal(false)}
           onSave={handleSaveSessionNote}
+        />
+      )}
+
+      {/* The sheet holds its own draft and only calls this on Done -- Cancel, the X and Escape
+          all discard. What it does call is changeSecond, the same handler the +/- buttons use, so
+          a picked value lands in the draft stamped source:'user' exactly as a typed one did: no
+          second path into the draft, and no way for a background re-seed to stomp it. */}
+      {showDurationPicker && (
+        <DurationPickerSheet
+          // shownDuration, not durationValue: a field already blank should open the wheel at 0:00
+          // rather than at the 30s default, which would silently pre-answer the question.
+          valueSeconds={shownDuration ?? 0}
+          onChange={changeSecond}
+          onClose={() => setShowDurationPicker(false)}
         />
       )}
     </div>

@@ -137,8 +137,13 @@ export default function Modal({ width = 320, onClose, title, children, align = '
           // No padding here -- the header and the content wrapper below each own their own
           // padding instead. See the comment on the header for why that split matters.
           boxShadow: 'var(--shadow-4), var(--elevation-hairline)',
+          // `width` means the same thing in both alignments -- "at most this wide" -- it is only
+          // reached from opposite directions. A centred dialog is that width and shrinks on a
+          // narrow phone; a sheet fills the viewport and stops growing at it, so it stays
+          // full-bleed on a phone (where a bottom sheet should meet both edges) without
+          // stretching into a 1400px-wide band of controls on a desktop monitor.
           width: isSheet ? '100%' : width,
-          maxWidth: '100%',
+          maxWidth: isSheet ? width : '100%',
           maxHeight: '80vh',
           overflowY: 'auto',
           outline: 'none',
