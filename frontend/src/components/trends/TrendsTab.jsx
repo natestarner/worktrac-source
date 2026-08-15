@@ -8,7 +8,7 @@ import WeeklyMetricChart from './WeeklyMetricChart';
 import ConsistencyHeatmap from './ConsistencyHeatmap';
 import ExerciseTrendSection from './ExerciseTrendSection';
 import Skeleton from '../shared/Skeleton';
-import RefreshingPill from '../shared/RefreshingPill';
+import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 
 const cardStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 18px' };
@@ -113,7 +113,7 @@ export default function TrendsTab() {
 
   return (
     <div>
-      <RefreshingPill show={isFetching && !loading} />
+      <RefreshIndicator show={isFetching && !loading} />
       <OfflineDataNotice updatedAt={updatedAt} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <RangeToggle weeks={trendsRangeWeeks} onChange={setTrendsRange} />

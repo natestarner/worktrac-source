@@ -235,9 +235,33 @@ outbox count is what signals "not yet synced", not the row.
 
 ## Freshness UX
 
-A cached view paints instantly; `RefreshingPill` (`isFetching && !isLoading`) announces any
+A cached view paints instantly; `RefreshIndicator` (`isFetching && !isLoading`) announces any
 background refetch so an on-screen value never changes silently. Skeletons show only on genuine
 first load.
+
+### A transient indicator must not be able to move the content it reports on
+
+`RefreshIndicator` renders in two places and **neither is in the calling tab's flow**: the visible
+bar is portalled into `.refresh-indicator-slot` (absolutely positioned on the sticky chrome's
+bottom edge, rendered by `AppShell`), and the announcement stays behind as a zero-layout `.sr-only`
+live region. It was an in-flow pill, and with a 60s `staleTime` that pushed the page down ~35px and
+yanked it back on every background refetch.
+
+- **Don't move the bar back into a tab, and don't "simplify" it by reserving a fixed-height slot
+  instead.** A reserved slot costs that space permanently on four tabs to smooth over a couple of
+  seconds of it; floating it over the tab content has no safe anchor (top-right lands on History's
+  "Export data" and the PRs sort row). Persistent chrome is the only placement that reserves
+  nothing, occupies nothing and overlaps nothing at the same time.
+- **The live region is rendered unconditionally, empty when idle.** Screen readers announce changes
+  *within* an existing live region; mounting a populated one and unmounting it is the unreliable
+  version. Don't "clean it up" by rendering it only while refreshing.
+- **The portal target is resolved in an effect, not during render** — on the initial mount the tab's
+  own DOM is committed before `AppShell`'s slot exists to look up. A missing slot degrades to "no
+  bar" (that's every tab's own unit test), never a crash or a stray bar in the tab.
+- `e2e/tests/refresh-indicator.spec.ts` measures the bounding box of a History row during and after
+  a refresh. Verified non-vacuous: an in-flow node in the indicator fails it by exactly 35px.
+- **This applies to any new transient indicator**, not just this one. A *persistent* notice is the
+  opposite call and stays in flow — see the reasoning in `OfflineDataNotice`'s header.
 
 `OfflineDataNotice` is the offline half of that slot, and it reports **both** halves of the truth:
 the `dataUpdatedAt` timestamp *and* `useOutboxCount`, because on these four tabs a queued write is

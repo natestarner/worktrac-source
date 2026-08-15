@@ -42,9 +42,12 @@
     running independently in the background even while a *different* person is active
     (e.g. one person's rest timer must keep counting down while someone else takes their
     turn logging a set). Unchanged by the rework.
-- **Freshness UX:** a cached view paints instantly; a small `RefreshingPill` (driven by
+- **Freshness UX:** a cached view paints instantly; `RefreshIndicator` (driven by
   `isFetching && !isLoading`) announces any background refetch so an on-screen value never
-  changes silently. Skeletons show only on genuine first load (no cache yet).
+  changes silently. Skeletons show only on genuine first load (no cache yet). The indicator
+  is a sweeping bar on the sticky chrome's bottom edge, portalled out of the tab's own tree
+  precisely so it can't move the content it is reporting on — see the design-system note on
+  indicators for transient state.
 - **When adding new client-side state, ask:** "if two people were using this on the same
   device and traded off, would one person's state leak onto the other's screen, or get
   silently reset/destroyed by the other person's actions?" If yes, it needs to go through

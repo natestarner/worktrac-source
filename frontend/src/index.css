@@ -289,6 +289,24 @@ body {
      3.44 on light bg, 3.62 on white, 5.00 on dark bg, 4.54 on dark surface. */
 }
 
+/* Available to assistive tech, invisible and -- the part that matters -- ZERO-SIZED
+   in layout, so a live region can sit permanently in a component's flow without
+   reserving a pixel. `position: absolute` is what takes it out of flow; the clip
+   and 1px box are the standard belt-and-braces against it ever forcing a scrollbar.
+   Don't swap this for `display: none` or `visibility: hidden` -- both remove it
+   from the accessibility tree, which is the one thing it exists for. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .pressable {
   transition:
     background-color var(--dur-base) var(--ease-out),
@@ -785,6 +803,55 @@ input[type='search']::-webkit-search-results-decoration {
   background: var(--color-border);
 }
 
+/* The background-refresh indicator's home, riding the chrome's bottom edge and
+   covering the hairline above while it plays. `RefreshIndicator` portals its bar
+   in here; the slot itself is always in the DOM and always the same size.
+
+   That is the entire point of the design: the indicator is `position: absolute`
+   inside the sticky chrome, so it costs ZERO layout in the tab panel below. It
+   used to be an in-flow "Refreshing..." pill at the top of each tab, and a
+   background refetch every 60s therefore pushed the whole page down ~35px and
+   yanked it back a moment later. An indicator for a transient state must never
+   be able to move the content it is reporting on -- reserve nothing, occupy
+   nothing, overlap nothing. */
+.refresh-indicator-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* Flush INSIDE the chrome's bottom edge, sitting directly on top of the ::after hairline rather
+     than straddling it. Hanging it below (bottom: -2px) put two of its three pixels over the tab
+     panel, where it reads as a line drawn on the content instead of the trailing edge of the
+     header. */
+  bottom: 0;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  /* Above .app-chrome::after, which as a pseudo-element paints after normal
+     children regardless of DOM order. */
+  z-index: 1;
+}
+
+/* An indeterminate sweep, because the client genuinely cannot know how far along
+   a refetch is -- api/client.js exposes no progress, and a cold-starting backend
+   makes any fake percentage a lie. Gradient ends fade to transparent so the bar
+   reads as motion rather than as a growing measurement. */
+.refresh-indicator-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  border-radius: var(--radius-full);
+  /* Solid through the middle, soft only at the ends: a full transparent-to-accent ramp reads as
+     a faint smudge at 3px tall, which is not something you notice on a phone mid-set. */
+  background: linear-gradient(90deg, transparent, var(--color-accent) 30%, var(--color-accent) 70%, transparent);
+  /* linear, NOT --ease-in-out. An eased loop decelerates into both endpoints, and this bar's
+     endpoints are exactly where it is clipped out of view by the slot's overflow -- so easing
+     spends most of each cycle showing nothing, which at phone width reads as no indicator at all
+     (caught in review by screenshotting at 390px). Constant speed keeps it crossing. */
+  animation: refreshSweep 1.1s linear infinite;
+}
+
 /* Two-column layout for the exercise-logging screen: header/cards/input on the left,
    this session's set history on the right. Block (stacked) by default/portrait;
    only the @media block below switches it to a real grid. */
@@ -1121,6 +1188,31 @@ input[type='search']::-webkit-search-results-decoration {
   }
   100% {
     background-position: -200% 0;
+  }
+}
+
+/* The background-refresh sweep. -100% starts the bar just off the left edge (it is
+   translated by its OWN 40% width); 250% carries its trailing edge past the right. */
+@keyframes refreshSweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+/* This one needs a real fallback rather than the blanket rule above. Collapsing an
+   INFINITE sweep to "a single instantaneous frame" leaves the bar parked off-screen
+   at its 250% end state -- i.e. no indicator at all, so someone with the OS setting on
+   would watch values change with nothing having announced it. A static full-width line
+   says the same thing without moving. */
+@media (prefers-reduced-motion: reduce) {
+  .refresh-indicator-bar {
+    animation: none;
+    transform: none;
+    width: 100%;
+    background: var(--color-accent);
   }
 }
 

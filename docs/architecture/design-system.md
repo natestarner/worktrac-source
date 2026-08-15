@@ -103,6 +103,43 @@ Two things are easy to get wrong:
   the control lit until you touch something else.
 - **`prefers-reduced-motion` reduces animations to one instantaneous frame rather than removing
   them**, so anything depending on an `animationend` event still fires.
+- **That blanket rule is wrong for an *indefinite* animation whose end state is "gone".** Collapsing
+  an infinite sweep to one frame parks it at its final off-screen position, i.e. deletes the
+  indicator outright for the people who asked for less motion. `.refresh-indicator-bar` therefore
+  carries its own `prefers-reduced-motion` block with a static full-width line. Any new looping
+  animation that *communicates* something needs the same check: ask what one frame of it looks
+  like, and whether that still says the thing.
+
+## An indicator for a transient state must not move the content it reports on
+
+`RefreshIndicator` is a sweeping bar pinned to the sticky chrome's bottom edge
+(`.refresh-indicator-slot`), portalled there out of the tab's own tree. It is absolutely
+positioned, so it costs zero layout in the tab panel and can start and stop without displacing a
+pixel.
+
+It was an in-flow "Refreshing…" pill at the top of History/PRs/Routines/Trends, and with a 60s
+`staleTime` that meant the page dropped ~35px and snapped back every time a background refetch ran
+— measured exactly, and now asserted, in `e2e/tests/refresh-indicator.spec.ts`. **The thing
+reporting on the content was shoving the content around**, which is worse than not reporting at
+all: the value you were reading moves out from under you.
+
+The two obvious fixes are both worse, and were rejected:
+
+- **Reserve permanent space** for it. Buys smoothness on four tabs with a strip of dead space that
+  is empty ~99% of the time, on a layout that is mostly consumed on a phone held mid-set.
+- **Float it over the tab content.** There is no safe anchor — top-right lands on History's
+  "Export data" button and on the PRs sort row. That trades a jump for an occlusion.
+
+Putting it in chrome that is *always* on screen is what makes "reserve nothing, occupy nothing,
+overlap nothing" possible at once. The rule generalises: **a transient indicator belongs in
+persistent chrome, not in the flow of the thing it describes.** A *persistent* notice is the
+opposite case and stays in flow — `OfflineDataNotice` is a sentence you are meant to stop and read,
+it stands for a whole outage, and it must not sit on top of the data it is qualifying.
+
+The announcement is separate from the bar and stays in the tab's tree as a `.sr-only` live region,
+rendered unconditionally with its text swapped in and out. Screen readers announce changes *within*
+a region that already existed; mounting a populated region and unmounting it is the unreliable
+version. `.sr-only` is `position: absolute`, so it is zero-layout and can be left in place for free.
 
 ## Modals
 
