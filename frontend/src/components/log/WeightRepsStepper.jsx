@@ -30,11 +30,23 @@ import { useState } from 'react';
 // halves have to agree: showing m:ss while parsing with parseFloat would read "1:30" as 1. The
 // Time stepper's parser accepts m:ss AND a bare second count, since a phone's numeric keypad has
 // no colon on it (see utils/datetime.js#parseDuration).
-export default function WeightRepsStepper({ label, value, displayValue, parse, onDec, onInc, onChange, size = 'lg' }) {
+//
+// `onPick` is the Time field's third mode, and ONLY the Time field's: with it the value stops
+// being typed and becomes a target that opens a min/sec wheel (DurationWheel). Weight and Reps
+// never pass it, so nothing above changes for them -- which is the point. A numeric keypad
+// expresses a weight or a rep count exactly; it cannot express m:ss at all, because it has no
+// colon key. That gap is what `parse`'s permissiveness was papering over.
+//
+// It stays a real <input>, read-only, rather than becoming a <button>. A button's accessible
+// name comes from its text content, so it would announce as "1:30" instead of "Time" -- and
+// aria-label="Time" is what both test layers, the screen reader, and the ± buttons' titles all
+// agree this control is called. Read-only also suppresses the mobile keyboard on tap, which is
+// the whole reason to open a picker instead.
+export default function WeightRepsStepper({ label, value, displayValue, parse, onDec, onInc, onChange, onPick, size = 'lg' }) {
   const isLarge = size === 'lg';
   // Base class always present -- the landscape rules and the e2e helpers both key off it.
   const btnClass = `stepper-circle-btn${isLarge ? '' : ' stepper-circle-btn-sm'} pressable`;
-  const valueClass = `stepper-value${isLarge ? '' : ' stepper-value-sm'}`;
+  const valueClass = `stepper-value${isLarge ? '' : ' stepper-value-sm'}${onPick ? ' stepper-value-pick' : ''}`;
 
   // Uncontrolled while focused (`draft`), controlled by `value` otherwise. A plain
   // controlled input re-renders on every keystroke with the PARSED value, which strips a
@@ -65,7 +77,27 @@ export default function WeightRepsStepper({ label, value, displayValue, parse, o
         <button type="button" onClick={onDec} title={`Decrease ${label}`} className={btnClass}>
           &minus;
         </button>
-        {onChange ? (
+        {onPick ? (
+          <input
+            type="text"
+            readOnly
+            className={valueClass}
+            value={displayValue ?? value ?? ''}
+            placeholder="—"
+            aria-label={label}
+            aria-haspopup="dialog"
+            onClick={onPick}
+            // Space and Enter, because read-only or not this is now behaving as a button and
+            // both are what a keyboard user will reach for. Space would otherwise scroll the
+            // page out from under the control it was meant to open.
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onPick();
+              }
+            }}
+          />
+        ) : onChange ? (
           <input
             type="text"
             inputMode="decimal"

@@ -114,16 +114,21 @@ export async function logSetAt(page: Page, weight: number, reps: number) {
 }
 
 
-// The Time stepper shows m:ss in both states, and its input accepts EITHER m:ss or a bare second
-// count (see utils/datetime.js#parseDuration). This fills raw seconds -- the shape a phone keypad
-// can produce -- and then verifies the formatted read-back, so the helper exercises both halves of
-// the format/parse pair rather than assuming they agree.
+// The Time stepper shows m:ss in both states. Tapping it opens the min/sec wheel
+// (DurationWheel) rather than a keyboard, because a phone's numeric keypad has no colon key --
+// which is the whole reason the picker exists. The field itself stays a real <input>, read-only,
+// so `inputValue()` still reads the committed value back; only `fill()` no longer applies.
 function asClock(totalSeconds: number) {
   const m = Math.floor(totalSeconds / 60);
   const sec = totalSeconds % 60;
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
+// Drives the wheel by DIGIT TYPEAHEAD, not by scrolling and not by N arrow presses. Scroll-driving
+// a scroll-snap container from Playwright means racing momentum and snap physics for a value we
+// then have to read back -- inherently flaky, and slow. Typing "4" "5" into the seconds column is
+// one deterministic step, and it exercises the same keyboard interface that answers the
+// "unrequested overlay over a mouse-and-keyboard session" objection in the app itself.
 export async function setHoldSeconds(page: Page, target: number) {
   const value = page.locator('.stepper-row').filter({ hasText: 'Time' }).locator('.stepper-value');
   const expected = asClock(target);
@@ -132,8 +137,28 @@ export async function setHoldSeconds(page: Page, target: number) {
     .poll(
       async () => {
         if ((await value.inputValue()) === expected) return expected;
-        await value.fill(String(target));
-        await value.press('Enter');
+
+        await value.click();
+        const sheet = page.getByRole('dialog');
+        await expect(sheet).toBeVisible();
+
+        // Both columns every time, including a zero: the wheel keeps whatever the field already
+        // held, so leaving a column untouched leaves the PREVIOUS set's minutes in place.
+        for (const [name, digits] of [
+          ['Minutes', String(Math.floor(target / 60))],
+          ['Seconds', String(target % 60)],
+        ] as const) {
+          const column = sheet.getByRole('listbox', { name });
+          // focus(), not click(): the column's centre is an option row, and clicking it would
+          // select whatever happens to be sitting in the selection band. Focusing also blurs the
+          // other column, which resets its typeahead buffer -- so these digits mean the same
+          // thing on a retry as they did on the first attempt.
+          await column.focus();
+          for (const digit of digits) await column.press(digit);
+        }
+
+        await sheet.getByRole('button', { name: 'Done' }).click();
+        await expect(sheet).toBeHidden();
         return value.inputValue();
       },
       { timeout: 20000 },

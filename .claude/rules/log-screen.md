@@ -162,11 +162,73 @@ register; that list is specifically for behaviour that differs by network state.
 - `mergeBestWithLocalSets`/`deriveBest` rank through **`comparableValue`**, not `comparableLb`.
   Routed through `comparableLb` a hold's weight-0/reps-0 pair reads as a comparable of 0, the `max`
   silently becomes a no-op, and the PR pill lands on the wrong row for the whole outage.
-- `WeightRepsStepper`'s `displayValue`/`parse` pair is what makes the Time field editable. The
-  field shows m:ss in **both** states — a value that changes shape the instant you tap it silently
-  teaches that only raw seconds are accepted — and `parseDuration` accepts **either** `m:ss` or a
-  bare second count, because a phone's numeric keypad has no colon on it. The two halves must stay
-  in step: formatting as m:ss while parsing with `parseFloat` reads "1:30" as 1.
+- **The Time value opens a picker, and Weight/Reps deliberately do not.** `WeightRepsStepper`'s
+  `onPick` is the Time field's third mode: the value becomes a read-only `<input>` that opens
+  `DurationPickerSheet` (a min/sec wheel — `DurationWheel` — in `Modal align="bottom"`). The
+  asymmetry is the whole justification, so don't "unify" it: a numeric keypad expresses a weight
+  or a rep count exactly, and cannot express `m:ss` at all, because it has no colon key. That gap
+  is why `parseDuration` had to accept a bare second count in the first place — the field showed
+  `1:30` while the only thing a thumb could physically type was `90`.
+  - It stays an `<input readonly>` rather than becoming a `<button>`. A button takes its
+    accessible name from its text content, which would replace `aria-label="Time"` with `"1:30"`
+    and break both test layers at once. `readOnly` is also what suppresses the mobile keyboard.
+  - **`DurationWheel`'s keyboard interface is load-bearing, not an accessibility afterthought.**
+    Arrow keys, Home/End, PageUp/Down and **digit typeahead** are what answer the objection that
+    removed the old `NumericKeypad` ("doesn't pop an unrequested keypad over a mouse-and-keyboard
+    session"). It is also what the e2e helper drives — scroll-driving a snap container from a test
+    means racing momentum physics for a value you then read back. Typeahead resets on blur so a
+    keystroke's meaning depends only on the current visit.
+  - `EditSetModal` renders the same wheel **inline** rather than opening the sheet: a sheet there
+    would be a modal over a modal — two scrims, two focus traps, and an Escape whose target you'd
+    have to guess.
+  - **Turning the wheel is not a decision — only Done is.** `DurationPickerSheet` holds the value
+    as local draft state, so Cancel, the header X and Escape all discard. This is the same
+    principle as "a modal never closes on a backdrop tap", pointed the other way: if closing
+    *kept* the value, a stray Escape mid-set would silently **overwrite** a time rather than
+    silently discard an edit. `EditSetModal`'s inline wheel needs no Done of its own because that
+    modal already has the pair — Cancel discards, Save commits.
+  - **`0:00` on the wheel means *unset*, and commits as `null`.** That one rule is what makes the
+    sheet's **Clear** button work, and three earlier attempts at it were each wrong in an
+    instructive way — don't re-derive any of them:
+    1. *Clamping inside the wheel* snapped it back from `0:00` under a finger still moving, and
+       made Clear a lie: the button claimed an empty state the control then refused to show.
+    2. *Clamping on the way out* meant you cleared to `0:00`, pressed Done, and the field read
+       `0:01` — the app silently overruling a number you had just chosen.
+    3. *Disabling Done at `0:00`* (what a platform countdown timer does) is honest but a **dead
+       end here**: it leaves no way to commit the thing Clear just did. A countdown timer has no
+       "unset" to fall back on, so refusing is all it can do. This screen does have one.
+
+    `null` is already how Weight and Reps say "no value chosen yet" (an em dash), and **blank must
+    never be a validation gate** — see the prefill section above. So a cleared duration lands in
+    exactly that state, `Log set` still works, and `durationValue`'s `?? 30` supplies the default
+    at log time exactly as `weightValue`'s `?? 0` does. `null` is not `0`, so the `@Min(1)` floor
+    is untouched by any of this.
+
+    **The `−` button follows the same rule**: stepping off the bottom (from `0:05` or less)
+    clears the field rather than parking on `0:01`. A minimum left sitting in the field reads as
+    a deliberate choice, and it gives the last press of `−` nothing to do.
+
+    `EditSetModal` is the deliberate exception on both counts: an already-logged set cannot become
+    blank, so it has no Clear, its `−` clamps at `MIN_HOLD_SECONDS`, and its Save is `disabled`
+    below it.
+  - The sheet caps its width via `Modal`'s `width` prop. For `align="bottom"` that prop is a
+    **max**-width, not a width: full-bleed on a phone, and not a 1400px band of controls on a
+    desktop monitor.
+  - `onPick` is suppressed while `holdRunning` — the field is then a live readout of the timer,
+    and a picker onto a number moving underneath it has no coherent answer for what happens when
+    you let go.
+- `formatRestTime` still renders the field in **both** states, and `parseDuration` still backs
+  `EditSetModal`'s stepper. The two halves must stay in step: formatting as m:ss while parsing
+  with `parseFloat` reads "1:30" as 1.
+- **A hold's duration is floored at `MIN_HOLD_SECONDS` (`utils/datetime.js`), and every path that
+  can commit one must agree** — the ± steppers clamp, the two picker commits *refuse* (see above),
+  and `handleLogSet` clamps as the last line before the wire.
+  `LogSetRequest`/`EditSetRequest` declare `durationSeconds` `@Min(1)`, so a 0 is
+  a 400 — and a definitive 4xx is the one thing that ends a durable write's retries, so a
+  0-second hold isn't rejected with a chance to fix it, it's **discarded for good** behind a
+  "Couldn't save that set" toast. `0:00` is the top of both wheel columns, i.e. one flick away.
+  The `handleLogSet` clamp is not redundant with the control clamps: it also covers a hold stopped
+  the instant it started, and a draft persisted by a build that predates the floor.
 - The **Start/Stop timer** button is `variant="dark"`, not `secondary`. The input card is already
   `--color-surface` with a `--color-border` edge and `.btn-secondary` is that exact pair, so a
   secondary button there is surface-on-surface and reads as a label rather than a control.

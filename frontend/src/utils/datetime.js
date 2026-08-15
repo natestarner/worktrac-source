@@ -45,6 +45,14 @@ export function formatRestTime(sec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// The shortest hold that can be logged, and it is a backend constraint rather than a taste call:
+// LogSetRequest/EditSetRequest declare durationSeconds @Min(1). A 0 is therefore a 400, and a
+// definitive 4xx is the one thing that ends a durable write's retries (shouldRetryWrite) -- so a
+// hold logged at 0:00 isn't rejected with a chance to fix it, it is discarded for good behind a
+// "Couldn't save that set" toast. Every control that can produce a duration clamps to this, and
+// they must agree: the ± steppers, the DurationWheel, and the value handed to handleLogSet.
+export const MIN_HOLD_SECONDS = 1;
+
 // formatRestTime's inverse, and deliberately permissive about which of the two shapes it gets.
 //
 // Both have to work, because which one a person can type depends on their keyboard: "1:30" is the
