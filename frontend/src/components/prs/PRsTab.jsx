@@ -9,7 +9,7 @@ import { formatDateLabel, toLocalDateStr, formatRestTime } from '../../utils/dat
 import { collectTagVocabulary, filterPrRows } from '../../utils/exerciseFilter';
 import { PR_SORT_OPTIONS, sortPrRows } from '../../utils/prSort';
 import Skeleton from '../shared/Skeleton';
-import RefreshingPill from '../shared/RefreshingPill';
+import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
 import { tagChipStyle } from '../shared/tagChipStyle';
@@ -60,7 +60,7 @@ function PRsTabContent() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <RefreshingPill show={isFetching && !loading} />
+      <RefreshIndicator show={isFetching && !loading} />
       <OfflineDataNotice updatedAt={updatedAt} />
 
       {!loading && prs.length > 0 && (

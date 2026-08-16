@@ -110,7 +110,7 @@ export default function ExerciseDetail({
     // contextSessionId collapses to null both "before this person has ever logged anything" and
     // "after their live session just ended" -- two points in time with genuinely different
     // summaries sharing the same cache key. staleTime 0 means a remount always revalidates in the
-    // background (the cached value still paints instantly; the RefreshingPill covers the gap)
+    // background (the cached value still paints instantly; the RefreshIndicator covers the gap)
     // instead of ever serving a same-key-but-stale answer here.
     staleTime: 0,
   });
@@ -160,7 +160,7 @@ export default function ExerciseDetail({
   // summaryQuery above), so a stale cached answer from the FIRST of those two moments can already
   // be sitting under this exact key by the time the second one needs it. `staleTime: 0` means that
   // stale value paints instantly and a background revalidation kicks off to correct it -- fine
-  // online (the RefreshingPill covers the brief gap), but if that revalidation is the one that
+  // online (the RefreshIndicator covers the brief gap), but if that revalidation is the one that
   // gets stuck, the stale-but-present answer would otherwise stand forever. `history` doesn't have
   // this collapsed-key problem, so it's the more trustworthy source once the live query can't
   // confirm which of the two moments its cached data actually belongs to.

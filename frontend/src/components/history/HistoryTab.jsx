@@ -12,7 +12,7 @@ import { collectTagVocabulary, filterHistorySessions } from '../../utils/exercis
 import PastSessionModal from './PastSessionModal';
 import Button from '../shared/Button';
 import Skeleton from '../shared/Skeleton';
-import RefreshingPill from '../shared/RefreshingPill';
+import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import SetPillRow from '../shared/SetPillRow';
@@ -132,7 +132,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
         </OfflineDisabledWrap>
       </div>
 
-      <RefreshingPill show={isFetching && !loading} />
+      <RefreshIndicator show={isFetching && !loading} />
       <OfflineDataNotice updatedAt={updatedAt} />
 
       {!loading && history.length > 0 && (

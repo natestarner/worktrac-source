@@ -3,9 +3,17 @@ import { useOutboxCount } from '../../hooks/useOutboxCount';
 import { formatDateTime } from '../../utils/datetime';
 
 // Shown on read-only tabs (History/PRs/Trends/Routines) while offline, so a cached view is
-// never mistaken for live data. Mirrors RefreshingPill's visual language -- the two occupy the
-// same "freshness" slot in each tab's top area and never show at once (this needs offline; that
-// needs online + a background fetch). `updatedAt` is a query's `dataUpdatedAt` (ms epoch);
+// never mistaken for live data. The other half of the freshness story is `RefreshIndicator`, and
+// the two can never show at once (this needs offline; that needs online + a background fetch).
+//
+// This one stays IN FLOW while the refresh indicator deliberately doesn't, and the difference is
+// duration, not importance. A background refetch lasts a second or two, so an in-flow indicator
+// spent its whole life shoving the page down and yanking it back. This notice stands for an entire
+// outage: it is a sentence you are meant to stop and read, it must not sit on top of the data it
+// is qualifying, and it appears in the same instant `OfflineBanner` pushes the whole app down
+// anyway -- so reserving permanent empty space on four tabs would buy nothing.
+//
+// `updatedAt` is a query's `dataUpdatedAt` (ms epoch);
 // `formatDateTime` accepts that directly, same as it does an ISO string, since `new Date(ms)`
 // and `new Date(isoString)` both work.
 //

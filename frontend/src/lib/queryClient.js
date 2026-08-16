@@ -22,7 +22,7 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       // A moderate freshness window so returning to a view you saw recently paints instantly
-      // and does NOT refetch (no "Refreshing..." pill, no value pop). Window-focus refetch only
+      // and does NOT refetch (no refresh indicator, no value pop). Window-focus refetch only
       // refires queries that have actually gone stale past this.
       staleTime: 60 * 1000,
       // Must be >= the persister maxAge below, or persisted entries would be garbage-collected

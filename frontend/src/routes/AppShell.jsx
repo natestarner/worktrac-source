@@ -17,6 +17,7 @@ import OfflineBanner from '../components/shared/OfflineBanner';
 import ConnectionTroubleBanner from '../components/shared/ConnectionTroubleBanner';
 import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
 import ErrorBoundary from '../components/shared/ErrorBoundary';
+import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator';
 
 export default function AppShell() {
   const { people, refreshPeople } = useAuth();
@@ -119,6 +120,12 @@ export default function AppShell() {
         <Header />
         <PersonPillBar />
         <TabsNav />
+        {/* The background-refresh bar's home. Empty until a tab's RefreshIndicator portals into
+            it, and absolutely positioned on the chrome's bottom edge either way -- so a refetch
+            starting and finishing cannot move a single pixel of the tab below. Rendering the slot
+            here rather than per-tab is what lets it live in the one piece of the app that is
+            always on screen; see RefreshIndicator.jsx. */}
+        <div id={REFRESH_INDICATOR_SLOT_ID} className="refresh-indicator-slot" />
       </div>
       {/* Padding lives on .tab-panel in index.css, not here -- an inline `padding`
           shorthand would override the class's top value. */}

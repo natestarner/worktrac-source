@@ -11,7 +11,7 @@ import { removeRoutine } from '../../api/routines';
 import RoutineFormModal from './RoutineFormModal';
 import CopyRoutineModal from './CopyRoutineModal';
 import Skeleton from '../shared/Skeleton';
-import RefreshingPill from '../shared/RefreshingPill';
+import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 
@@ -54,7 +54,7 @@ export default function RoutinesTab() {
         </button>
       </OfflineDisabledWrap>
 
-      <RefreshingPill show={isFetching && !loading} />
+      <RefreshIndicator show={isFetching && !loading} />
       <OfflineDataNotice updatedAt={updatedAt} />
 
       {loading && (
