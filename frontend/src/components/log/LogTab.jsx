@@ -18,6 +18,7 @@ import ExerciseDetail from './ExerciseDetail';
 import SessionSummary from './SessionSummary';
 import EndWorkoutConfirmModal from '../shared/EndWorkoutConfirmModal';
 import AddEditExerciseModal from '../settings/AddEditExerciseModal';
+import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
 import { IconClose } from '../shared/icons';
 
@@ -195,6 +196,19 @@ export default function LogTab() {
     if (wasLast) showToast('Routine complete!', 2400);
   }
 
+  // Bailing out of a routine partway through, as distinct from completing it via "Finish
+  // routine". END_ROUTINE deliberately leaves `selectedExerciseId` alone (unlike stepping past
+  // the last exercise, which returns to the picker), so this drops the routine chrome and leaves
+  // the person exactly where they are -- free to keep logging the exercise they're on, off-script.
+  //
+  // No confirm dialog: this clears client-side navigation state only. Nothing logged is touched,
+  // and the routine can be restarted from the picker's quick-start list. A modal here would cost
+  // a tap on every deliberate use to guard an action with nothing to undo.
+  function handleEndRoutine() {
+    endRoutine();
+    showToast('Routine ended.');
+  }
+
   return (
     <div>
       {!routinesLoading && routines.length === 0 && !routineBannerDismissed && (
@@ -303,12 +317,24 @@ export default function LogTab() {
 
       {activeRoutine && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16, marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          {/* "End routine" lives up here, in the one piece of chrome that's on screen for the
+              whole life of a routine (this card renders above BOTH the picker and the exercise
+              screen). Before it, the only exit was "Finish routine" below -- which appears solely
+              on the last step, and only while an exercise is open -- so leaving a routine early
+              meant scrubbing the pill strip to its end and tapping in. Muted rather than the
+              `ghost` variant's accent text: it sits beside the accent-coloured "n of m" counter,
+              and two accent items in one row blur into each other. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)', marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               {activeRoutine.name}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent-text)' }}>
-              {Math.min(routineIndex + 1, activeRoutine.exercises.length)} of {activeRoutine.exercises.length}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent-text)' }}>
+                {Math.min(routineIndex + 1, activeRoutine.exercises.length)} of {activeRoutine.exercises.length}
+              </div>
+              <Button variant="ghost" size="sm" onClick={handleEndRoutine} style={{ color: 'var(--color-muted)' }}>
+                End routine
+              </Button>
             </div>
           </div>
           {/* .hscroll, not an inline overflowX: this strip gets a deliberately thick, always-
@@ -342,25 +368,28 @@ export default function LogTab() {
             })}
           </div>
 
-          {selectedExercise && (
-            <button
-              onClick={handleNextExercise}
-              style={{
-                width: '100%',
-                marginTop: 12,
-                padding: 14,
-                background: 'var(--color-dark)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 12,
-                fontSize: 15,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {routineIndex + 1 >= activeRoutine.exercises.length ? 'Finish routine' : 'Next exercise'}
-            </button>
-          )}
+          {/* Not gated on `selectedExercise`. That condition was carried over verbatim in #64 when
+              this button moved up here out of ExerciseDetail (which only ever renders WITH an
+              exercise open), so it was incidental rather than a decision -- and it meant backing
+              out to the picker mid-routine hid the only way to advance. The label stays honest on
+              both screens: from the picker, "Next exercise" advances a step and opens it. */}
+          <button
+            onClick={handleNextExercise}
+            style={{
+              width: '100%',
+              marginTop: 12,
+              padding: 14,
+              background: 'var(--color-dark)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 12,
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            {routineIndex + 1 >= activeRoutine.exercises.length ? 'Finish routine' : 'Next exercise'}
+          </button>
         </div>
       )}
 

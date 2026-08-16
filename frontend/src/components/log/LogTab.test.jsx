@@ -92,13 +92,19 @@ describe('LogTab routine nav button placement', () => {
     vi.clearAllMocks();
   });
 
-  it('does not show the routine nav button on the exercise picker, before an exercise is selected', () => {
-    useAppState.mockReturnValue(baseAppState({ selectedExerciseId: null }));
+  // The nav button used to be gated on `selectedExercise` -- a condition inherited from when it
+  // lived inside ExerciseDetail, which only renders WITH an exercise open. Backing out to the
+  // picker mid-routine therefore hid the only way to advance the routine, leaving the card with
+  // a position readout and no controls but the pills.
+  it('shows the routine nav button on the exercise picker too, before an exercise is selected', () => {
+    const appState = baseAppState({ selectedExerciseId: null, routineIndex: 0 });
+    useAppState.mockReturnValue(appState);
     render(<MemoryRouter><LogTab /></MemoryRouter>);
 
     expect(screen.getByText('exercise-picker')).toBeInTheDocument();
-    expect(screen.queryByText('Next exercise')).not.toBeInTheDocument();
-    expect(screen.queryByText('Finish routine')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next exercise' }));
+    expect(appState.nextExerciseInRoutine).toHaveBeenCalledWith([1, 2]);
   });
 
   it('shows "Next exercise" in the routine card while mid-routine, and advances on click', () => {
@@ -119,6 +125,70 @@ describe('LogTab routine nav button placement', () => {
 
     expect(screen.getByText('Finish routine')).toBeInTheDocument();
     expect(screen.queryByText('Next exercise')).not.toBeInTheDocument();
+  });
+
+  // Ending a routine early. Before this button the only exit was "Finish routine", which shows
+  // solely on the LAST step -- so bailing out at step 1 of 8 meant scrubbing the pill strip to
+  // the end and tapping in, or stepping through every remaining exercise.
+  describe('ending a routine early', () => {
+    it('offers "End routine" on the exercise screen and clears the routine', () => {
+      const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
+      useAppState.mockReturnValue(appState);
+      const showToast = vi.fn();
+      useUI.mockReturnValue({ showToast, skipRestTimer: vi.fn() });
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      fireEvent.click(screen.getByRole('button', { name: 'End routine' }));
+
+      expect(appState.endRoutine).toHaveBeenCalled();
+      expect(showToast).toHaveBeenCalledWith('Routine ended.');
+    });
+
+    // The whole point of the placement: the routine card renders above BOTH the picker and the
+    // exercise screen, so the exit is reachable from either without first opening an exercise.
+    it('offers "End routine" on the picker too, with no exercise selected', () => {
+      const appState = baseAppState({ selectedExerciseId: null, routineIndex: 0 });
+      useAppState.mockReturnValue(appState);
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      expect(screen.getByText('exercise-picker')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'End routine' }));
+
+      expect(appState.endRoutine).toHaveBeenCalled();
+    });
+
+    // Reachable from the FIRST step, not just the last -- this is the gap the button exists to
+    // close, so assert it at a position where "Finish routine" is nowhere on screen.
+    it('is available mid-routine, where "Finish routine" is not', () => {
+      useAppState.mockReturnValue(baseAppState({ selectedExerciseId: 1, routineIndex: 0 }));
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      expect(screen.getByRole('button', { name: 'End routine' })).toBeInTheDocument();
+      expect(screen.queryByText('Finish routine')).not.toBeInTheDocument();
+    });
+
+    // Ending the ROUTINE is not ending the WORKOUT: the session stays live (no endWorkout call,
+    // no confirm modal), so the person can keep logging off-script. The reverse direction --
+    // ending the workout also ends the routine -- is covered separately below.
+    it('leaves the live workout session running', () => {
+      useAppState.mockReturnValue(baseAppState({ selectedExerciseId: 1, routineIndex: 0 }));
+      useLiveSession.mockReturnValue({ session: { id: 55, startedAt: '2026-07-15T12:00:00Z' }, refetch: vi.fn() });
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      fireEvent.click(screen.getByRole('button', { name: 'End routine' }));
+
+      expect(endWorkout).not.toHaveBeenCalled();
+      expect(screen.getByText(/Session in progress/)).toBeInTheDocument();
+    });
+
+    // The routine card is what carries the button, so it must not linger once the routine is
+    // over -- and there is no second exit to leave behind.
+    it('is absent once no routine is active', () => {
+      useAppState.mockReturnValue(baseAppState({ selectedExerciseId: 1, activeRoutineId: null }));
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      expect(screen.queryByRole('button', { name: 'End routine' })).not.toBeInTheDocument();
+    });
   });
 
   it('scrolls the current routine pill into view as the routine advances', () => {
