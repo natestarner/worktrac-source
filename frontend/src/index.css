@@ -159,6 +159,20 @@
   --shadow-4: 0 24px 48px rgba(28, 27, 25, 0.2); /* modal, celebration */
   --elevation-hairline: none; /* dark mode only; see below */
 
+  /* --- Stacking --------------------------------------------------------
+     Only the two layers with a HARD ordering constraint on each other are
+     tokenised. The rest of the app's overlays (rest timer 18, toast 40,
+     celebration 50, modal 100, SW updater 1000) never overlap one another,
+     so they stay as local values.
+
+     The constraint: the account dropdown hangs out of the header, which sits
+     ABOVE the sticky chrome in the document but must paint BELOW it while
+     scrolling past. Same stacking context, so an equal z-index is resolved by
+     DOM order and the chrome wins -- which is what silently swallowed clicks
+     on the menu (7 e2e specs) when the header moved out of the chrome. */
+  --z-app-chrome: 10;
+  --z-header-menu: 12;
+
   /* --- Motion ----------------------------------------------------------
      Durations are short on purpose: this is a tool used mid-set, and anything
      that makes the UI feel like it's waiting on an animation is wrong. */
@@ -780,14 +794,15 @@ input[type='search']::-webkit-search-results-decoration {
   padding: var(--space-5) var(--space-6) 0;
 }
 
-/* Header + tabs travel together as one sticky unit. Previously the header never
-   stuck, the tab bar never stuck, and the person bar stuck only when a household
-   had two or more people -- so a single-person household scrolling a sets list
-   lost every navigation affordance off the top of the screen. */
+/* The one sticky box. WHAT is inside it is decided in AppShell.jsx (the tab bar always; the
+   person bar only for a household of two or more) -- but it is always a contiguous run ending
+   at the tab bar, which is what lets this stay a single element at top:0 instead of a stack of
+   sticky siblings each needing the summed height of the ones above it as its own `top`.
+   Anything anchored to the chrome's bottom edge below depends on that. */
 .app-chrome {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: var(--z-app-chrome);
   background: var(--color-bg);
 }
 

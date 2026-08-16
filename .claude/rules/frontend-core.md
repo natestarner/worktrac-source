@@ -35,6 +35,34 @@ Full reasoning: `docs/architecture/design-system.md`.
 - **New `position: fixed` chrome needs `env(safe-area-inset-*)`**, or it sits under the home
   indicator in the installed PWA.
 
+### The sticky chrome: what's in the box decides what can paint over it
+
+`AppShell` renders **one** `position: sticky` box (`.app-chrome`) and chooses what goes in it by
+household size: the tab bar always; the person bar only at two or more people, where it's a
+switcher rather than a label; the Huddle lockup never. All three used to travel together, which
+spent 218px portrait / 178px landscape on permanent chrome — near half the viewport on a phone
+held sideways mid-set.
+
+- **Whatever is sticky must stay a contiguous run ending at the tab bar.** That's what keeps it a
+  single element at `top: 0`. A stack of sticky siblings each needs the summed height of the ones
+  above it as its own `top`, which no CSS token can know — it varies with orientation, the logo,
+  and the safe-area insets.
+- **`.refresh-indicator-slot` and the `::after` hairline are absolutely positioned on that box's
+  bottom edge.** Anything that moves them outside it scrolls them away with the page and quietly
+  breaks the zero-layout guarantee above.
+- **Chrome that hangs *out* of the header must beat `--z-app-chrome`.** The header sits above the
+  chrome in the document but has to paint *below* it while scrolling past, so it can't just be
+  given a higher z-index. Its dropdown is a sibling of the chrome, not a child: at an equal
+  z-index the later-in-DOM chrome wins the hit test and silently eats the clicks. That's
+  `--z-header-menu`, and it's why `UserMenu`'s panel is the one overlay with a tokenised z-index.
+  It surfaced as seven unrelated specs failing on `person-pill-bar … intercepts pointer events`.
+- Crossing 1↔2 people **remounts `PersonPillBar`** (it changes tree position). Fine today — its
+  only local state is `showAddPerson`, and `AddPersonModal` calls `onClose()` itself. Any new
+  local state in that component needs to survive the move or not matter.
+
+Covered by `AppShell.test.jsx` (structure) and `e2e/tests/sticky-chrome.spec.ts` (the actual
+pixels — jsdom computes no layout, so only the e2e file can prove the behaviour).
+
 ### Modals: `Modal` never closes on a backdrop tap
 
 Every dialog goes through `components/shared/Modal.jsx`. The only exits are the header's X, a

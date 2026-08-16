@@ -19,8 +19,9 @@ import { IconClose } from './icons';
 //
 // Rendered through a portal onto document.body. Without that, a modal is subject to the
 // stacking context of whatever it happens to be declared inside -- and .app-chrome is
-// position:sticky with a z-index, so a modal opened from the person bar or the header
-// would be trapped beneath later siblings no matter what z-index it asked for. The portal
+// position:sticky with a z-index, so a modal opened from the person bar (which sits inside
+// that chrome for a household of two or more) would be trapped beneath later siblings no
+// matter what z-index it asked for. The portal
 // makes placement in the tree irrelevant, which is also why PersonPillBar no longer needs
 // to render AddPersonModal outside its own sticky wrapper.
 const FOCUSABLE =

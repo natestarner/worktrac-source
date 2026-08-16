@@ -116,7 +116,10 @@ export default function UserMenu({ booting = false }) {
             boxShadow: '0 4px 16px rgba(0,0,0,0.16)',
             minWidth: 180,
             overflow: 'hidden',
-            zIndex: 10,
+            // Must beat --z-app-chrome: this panel hangs below the header, which is no longer
+            // inside the sticky chrome, so it is the chrome it overlaps rather than the chrome's
+            // own children. At an equal z-index the later-in-DOM chrome wins and eats the clicks.
+            zIndex: 'var(--z-header-menu)',
           }}
         >
           <MenuItem label="Profile" onClick={() => go('/app/profile')} />
