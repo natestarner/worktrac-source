@@ -44,16 +44,6 @@ describe('DurationPickerSheet', () => {
   // Turning the wheel is not a decision. If closing kept the value, a stray Escape would silently
   // OVERWRITE a time rather than silently discard one -- the same class of accident the "a modal
   // never closes on a backdrop tap" rule exists to prevent, pointed the other way.
-  it('discards the edit on Cancel', () => {
-    open(90);
-
-    fireEvent.keyDown(secondsCol(), { key: '4' });
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-
-    expect(onChange).not.toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalled();
-  });
-
   it('discards the edit on the header X', () => {
     open(90);
 
@@ -123,6 +113,20 @@ describe('DurationPickerSheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Done' }));
 
     expect(onChange).toHaveBeenCalledWith(20);
+  });
+
+  // The sheet carries ONE edit and ONE decision, and the header X is the whole discard path. A
+  // footer Cancel was a second control for an act the X already performs -- same callback, same
+  // meaning, on a row read one-handed mid-set. The two tests above are what it was there for, and
+  // they still pass without it; this is what notices if it comes back "for consistency" with the
+  // thirteen modals that do have a Cancel/submit pair.
+  it('has no second way to dismiss beside the header X', () => {
+    open(90);
+
+    const names = within(screen.getByRole('dialog'))
+      .getAllByRole('button')
+      .map((button) => button.getAttribute('aria-label') || button.textContent);
+    expect(names).toEqual(['Close', 'Clear', 'Done']);
   });
 
   it('is titled for a duration, not a clock time', () => {

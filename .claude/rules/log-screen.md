@@ -182,11 +182,29 @@ register; that list is specifically for behaviour that differs by network state.
     would be a modal over a modal — two scrims, two focus traps, and an Escape whose target you'd
     have to guess.
   - **Turning the wheel is not a decision — only Done is.** `DurationPickerSheet` holds the value
-    as local draft state, so Cancel, the header X and Escape all discard. This is the same
-    principle as "a modal never closes on a backdrop tap", pointed the other way: if closing
-    *kept* the value, a stray Escape mid-set would silently **overwrite** a time rather than
-    silently discard an edit. `EditSetModal`'s inline wheel needs no Done of its own because that
-    modal already has the pair — Cancel discards, Save commits.
+    as local draft state, so the header X and Escape both discard. This is the same principle as
+    "a modal never closes on a backdrop tap", pointed the other way: if closing *kept* the value,
+    a stray Escape mid-set would silently **overwrite** a time rather than silently discard an
+    edit. `EditSetModal`'s inline wheel needs no Done of its own because that modal already has
+    the pair — Cancel discards, Save commits.
+  - **The sheet has no footer Cancel, and adding one back is the bug.** It had one, and it was a
+    second control for an act the header X already performs — same `onClose`, same meaning, on a
+    row read one-handed mid-set. This is a deliberate divergence from the thirteen modals that do
+    carry a `cancelButtonStyle`/submit pair: those are centred dialogs whose footer is the whole
+    exit vocabulary, whereas a short sheet puts the X within the same thumb's reach as the
+    controls. `DurationPickerSheet.test.jsx` asserts the dialog's buttons are exactly
+    `Close, Clear, Done`, so a Cancel restored "for consistency" fails there.
+    - **Clear then takes the vacated slot, and the two split the row as equal `flex: 1` halves**
+      — the same shape `cancelButtonStyle` gives the other thirteen modals. Equal widths are what
+      put the gap between them on the sheet's centre axis, where it lines up with the wheel's
+      colon directly above; that shared axis is what makes the footer read as settled under a
+      centred wheel. Three earlier placements were rejected on sight — don't re-derive them:
+      Clear alone at the far left (flush to the content edge, and again optically aligned past it
+      so its glyphs met the selection band) read as a control that had drifted out of the row,
+      and a right-grouped pair at their natural widths left the footer visibly heavier on one
+      side than the wheel above it. Hierarchy is carried by **weight** instead: a ghost Clear
+      against a filled Done. Their gap is `--space-3` rather than the old pair's `--space-2`,
+      because Clear's neighbour is now the button that commits.
   - **`0:00` on the wheel means *unset*, and commits as `null`.** That one rule is what makes the
     sheet's **Clear** button work, and three earlier attempts at it were each wrong in an
     instructive way — don't re-derive any of them:
@@ -204,13 +222,18 @@ register; that list is specifically for behaviour that differs by network state.
     at log time exactly as `weightValue`'s `?? 0` does. `null` is not `0`, so the `@Min(1)` floor
     is untouched by any of this.
 
-    **The `−` button follows the same rule**: stepping off the bottom (from `0:05` or less)
-    clears the field rather than parking on `0:01`. A minimum left sitting in the field reads as
-    a deliberate choice, and it gives the last press of `−` nothing to do.
+    **The `−` button follows the same rule**, on both screens: stepping off the bottom (from
+    `0:05` or less) goes to empty/`0:00` rather than parking on `0:01`. A minimum left sitting in
+    the field reads as a deliberate one-second hold, and it gives the last press of `−` nothing to
+    do. **No duration control clamps on its own** — the floor lives on the commit, and only there.
 
-    `EditSetModal` is the deliberate exception on both counts: an already-logged set cannot become
-    blank, so it has no Clear, its `−` clamps at `MIN_HOLD_SECONDS`, and its Save is `disabled`
-    below it.
+    `EditSetModal` differs in what the bottom *means*, not in whether `−` can reach it: an
+    already-logged set has no blank to fall back on, so it has no Clear, `0:00` is simply not
+    saveable, and its Save is `disabled` below `MIN_HOLD_SECONDS` (the same answer
+    `DurationPickerSheet` cannot give, because there Clear must stay commitable). Its `−` used to
+    clamp at the minimum and was the one control out of step; it now reaches `0:00` like its own
+    inline wheel already could. The dead end is one press of `+` wide, which is what makes
+    refusing acceptable there and unacceptable on the log screen.
   - The sheet caps its width via `Modal`'s `width` prop. For `align="bottom"` that prop is a
     **max**-width, not a width: full-bleed on a phone, and not a 1400px band of controls on a
     desktop monitor.
