@@ -8,16 +8,20 @@ import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../context/AppStateContext';
 import { migrateLegacyRestTimerPrefs } from '../lib/restTimerMigration';
 import { tryForceUpdate } from '../lib/swUpdate';
+import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator';
 
 vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../lib/restTimerMigration', () => ({ migrateLegacyRestTimerPrefs: vi.fn() }));
 vi.mock('../lib/swUpdate', () => ({ tryForceUpdate: vi.fn() }));
-// AppShell's own job here is the update-trigger wiring -- its child components (already covered by
-// their own tests) are stubbed out so a render doesn't need their full dependency graph.
-vi.mock('../components/layout/Header', () => ({ default: () => null }));
-vi.mock('../components/layout/PersonPillBar', () => ({ default: () => null }));
-vi.mock('../components/layout/TabsNav', () => ({ default: () => null }));
+// AppShell's own job here is the update-trigger wiring and the chrome composition -- its child
+// components (already covered by their own tests) are stubbed out so a render doesn't need their
+// full dependency graph. The three chrome bars carry a `data-chrome` marker rather than rendering
+// null, because WHICH of them lands inside the sticky .app-chrome box is AppShell's decision and
+// nothing else asserts it.
+vi.mock('../components/layout/Header', () => ({ default: () => <div data-chrome="header" /> }));
+vi.mock('../components/layout/PersonPillBar', () => ({ default: () => <div data-chrome="person" /> }));
+vi.mock('../components/layout/TabsNav', () => ({ default: () => <div data-chrome="tabs" /> }));
 vi.mock('../components/shared/Toast', () => ({ default: () => null }));
 vi.mock('../components/shared/ConfirmDialog', () => ({ default: () => null }));
 vi.mock('../components/shared/PRCelebration', () => ({ default: () => null }));
@@ -156,5 +160,78 @@ describe('AppShell forced-reload triggers', () => {
     act(() => document.dispatchEvent(new Event('visibilitychange')));
 
     expect(tryForceUpdate).not.toHaveBeenCalled();
+  });
+});
+
+// jsdom computes no layout, so these assert the STRUCTURE that produces the sticky behaviour --
+// which bar sits inside the single `position: sticky` box -- and leave the pixels to
+// e2e/tests/sticky-chrome.spec.ts, which scrolls a real browser.
+describe('AppShell sticky chrome', () => {
+  const solo = [{ id: 7, name: 'Nate', isPrimary: true }];
+  const household = [{ id: 7, name: 'Nate', isPrimary: true }, { id: 8, name: 'Sam' }];
+
+  function mountWith(people) {
+    useAuth.mockReturnValue({ people, refreshPeople: vi.fn() });
+    useAppState.mockReturnValue(baseAppState());
+    return renderShell();
+  }
+
+  const inChrome = (container) =>
+    [...container.querySelectorAll('.app-chrome [data-chrome]')].map((el) => el.dataset.chrome);
+  const allBars = (container) => [...container.querySelectorAll('[data-chrome]')].map((el) => el.dataset.chrome);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    migrateLegacyRestTimerPrefs.mockResolvedValue(false);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sticks only the tab bar for a one-person household', () => {
+    const { container } = mountWith(solo);
+
+    expect(inChrome(container)).toEqual(['tabs']);
+  });
+
+  it('sticks the person bar too once a second person exists', () => {
+    const { container } = mountWith(household);
+
+    expect(inChrome(container)).toEqual(['person', 'tabs']);
+  });
+
+  it('never sticks the Huddle lockup, whatever the household size', () => {
+    expect(inChrome(mountWith(solo).container)).not.toContain('header');
+    expect(inChrome(mountWith(household).container)).not.toContain('header');
+  });
+
+  // The bars only change which box they live in -- what someone SEES at the top of an unscrolled
+  // page must be identical either way. Moving the person bar out of the chrome by rendering it
+  // somewhere else in the flow would satisfy the assertions above and break this one.
+  it('renders the same visual order in both cases', () => {
+    expect(allBars(mountWith(solo).container)).toEqual(['header', 'person', 'tabs']);
+    expect(allBars(mountWith(household).container)).toEqual(['header', 'person', 'tabs']);
+  });
+
+  // The load-bearing half of keeping the sticky region a contiguous suffix: the refresh
+  // indicator's slot is absolutely positioned on the chrome's bottom edge, so if it ever fell
+  // outside the sticky box it would scroll away with the page (see RefreshIndicator.jsx).
+  it('keeps the refresh-indicator slot inside the sticky box in both cases', () => {
+    for (const people of [solo, household]) {
+      const { container } = mountWith(people);
+      expect(container.querySelector(`.app-chrome #${REFRESH_INDICATOR_SLOT_ID}`)).not.toBeNull();
+    }
+  });
+
+  it('moves the person bar into the chrome when a household grows from one to two', () => {
+    useAppState.mockReturnValue(baseAppState());
+    useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn() });
+    const { container, rerenderApp } = renderShell();
+    expect(inChrome(container)).toEqual(['tabs']);
+
+    useAuth.mockReturnValue({ people: household, refreshPeople: vi.fn() });
+    rerenderApp();
+
+    expect(inChrome(container)).toEqual(['person', 'tabs']);
+    expect(allBars(container)).toEqual(['header', 'person', 'tabs']);
   });
 });

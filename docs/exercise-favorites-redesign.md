@@ -590,3 +590,48 @@ for exactly that, stating it existed so the addition "won't require a schema rew
 unused for 45 migrations and was the wrong shape when the time came — V46 rewrote the constraint and
 V47 added a column regardless. The reservation saved nothing. What matters is that the extension path
 stays additive, and it does.
+
+## Update — 2026-08-16: only the chrome that is doing work stays on screen
+
+The design system pass made the Huddle lockup, the person bar and the tab bar travel together as
+one sticky unit. It was fixing something real — before it, a single-person household scrolling a
+sets list lost the tab bar off the top of the screen, because the person bar was the only one of
+the three that ever stuck and it only stuck at two or more people. But it fixed that by making all
+three stick for everyone, which spends **218px portrait / 178px landscape** permanently. An iPhone
+held sideways mid-set has a ~390px viewport; that was ~46% of the screen given over to navigation
+in the one posture where screen space is scarcest.
+
+**Decision worth recording: stickiness is per-bar and depends on household size.** The tab bar
+always sticks — it is navigation rather than context, and losing it was the original complaint. The
+person bar sticks only at two or more people, where it is a switcher; with one person it is a
+single always-active pill showing you your own name, which is a label, and labels can scroll away.
+The Huddle lockup never sticks: it is branding, and the account menu it carries is not something
+you reach for between sets. Both cases land near 145px.
+
+**The person bar moves between two tree positions rather than toggling a CSS class**, which is the
+part worth not undoing. It keeps the sticky region a contiguous *suffix* of the chrome in both
+cases, so it stays one sticky box at `top: 0`. The alternative — a stack of sticky siblings — needs
+each one's `top` to equal the summed height of the bars above it, and that number is not knowable
+in CSS: it changes with orientation (the landscape rules re-pad all three bars), with the logo, and
+with the safe-area insets. It would have meant a ResizeObserver feeding a custom property, to buy
+nothing. The cost of the chosen approach is that crossing 1↔2 people remounts `PersonPillBar`,
+which is free today because its only local state is `showAddPerson` and `AddPersonModal` closes
+itself.
+
+**What this cost, and the general lesson: moving an element out of a sticky box moves it out of a
+stacking context.** The account dropdown hangs out of the header and down across the chrome. While
+the header lived *inside* `.app-chrome` the menu was a child of that context and painted over its
+siblings for free; outside it, the menu and the chrome are siblings both at `z-index: 10`, ties
+resolve by DOM order, and the chrome — later in the DOM — won the hit test and silently swallowed
+every click. Nothing was visually wrong; the menu rendered perfectly and simply could not be
+clicked.
+
+The header cannot just be given a higher z-index than the chrome, because it has to paint *below*
+it while scrolling past. So the dropdown gets its own layer instead, and the two z-indexes that now
+constrain each other are the only tokenised ones (`--z-app-chrome`, `--z-header-menu`) — the app's
+other overlays (rest timer, toast, celebration, modal, SW updater) never overlap one another and
+stay as local values. Tokenising all eight would imply an ordering that does not exist.
+
+That regression was caught only as **seven unrelated specs** failing on `person-pill-bar …
+intercepts pointer events`, which is a slow and confusing way to learn it. `sticky-chrome.spec.ts`
+now asserts the menu is clickable over the chrome directly.

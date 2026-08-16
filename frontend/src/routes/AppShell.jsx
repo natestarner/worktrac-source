@@ -107,18 +107,39 @@ export default function AppShell() {
     return null;
   }
 
+  // See the chrome comment below. Read straight off `people` rather than held in state, so a
+  // household that grows or shrinks re-lays-out on the same render as the pill row itself.
+  const personBarSticks = people.length >= 2;
+
   return (
     <div className="app-shell" style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
       <OfflineBanner />
       <ConnectionTroubleBanner />
       <OfflineRecoveryPrompt />
-      {/* Header, person bar and tabs travel together as one sticky unit. Previously the
-          header never stuck, the tab bar never stuck, and the person bar stuck only for a
-          household with two or more people -- so scrolling a sets list mid-workout took
-          every navigation affordance off the top of the screen. */}
+      {/* Only what is doing real work stays on screen. All three bars used to travel together as
+          one sticky unit, which cost 218px portrait / 178px landscape of permanent chrome -- on an
+          iPhone held sideways mid-set that is ~46% of the viewport spent on navigation. So:
+
+            - The tab bar always sticks. It is the one thing that is navigation rather than
+              context, and losing it off the top mid-workout was the original complaint that made
+              all of this sticky in the first place (#151).
+            - The person bar sticks only for a household of two or more, where it is a switcher.
+              With one person it is a single always-active pill showing your own name, so it
+              scrolls away like any other content.
+            - The Huddle lockup never sticks. It is branding; the account menu it carries is not
+              something you reach for between sets.
+
+          Note the person bar MOVES between the two positions rather than toggling a CSS class.
+          That keeps the sticky region a contiguous suffix of the chrome in both cases, so it stays
+          one sticky box at top:0 -- no measured height for a second sticky element to offset
+          against, and the refresh slot and hairline below stay anchored to the one box that is
+          always stuck. Crossing 1->2 people therefore remounts PersonPillBar, which is fine: its
+          only local state is `showAddPerson`, and the add flow that triggers the crossing calls
+          onClose() itself (AddPersonModal.jsx). */}
+      <Header />
+      {!personBarSticks && <PersonPillBar />}
       <div className="app-chrome">
-        <Header />
-        <PersonPillBar />
+        {personBarSticks && <PersonPillBar />}
         <TabsNav />
         {/* The background-refresh bar's home. Empty until a tab's RefreshIndicator portals into
             it, and absolutely positioned on the chrome's bottom edge either way -- so a refetch
