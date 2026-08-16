@@ -293,6 +293,36 @@ Two consequences that are correct, not bugs: with *adjacent* duplicates "Next ex
 write into the same exercise's single set list for the session, which is the whole point of
 cycling back.
 
+### Every routine control lives in the card, and none of them may be gated on `selectedExercise`
+
+`LogTab`'s routine card renders above **both** the picker and the exercise screen, which makes it
+the only chrome present for the whole life of a routine. That is why it carries the controls, and
+why a gate on `selectedExercise` is wrong on any of them: the picker is a normal mid-routine
+place to be (back out, log something off-script, resume), and a gated control leaves a position
+readout there with nothing but the pills to act on.
+
+- **`Next exercise` / `Finish routine` is deliberately ungated.** It briefly wasn't: the condition
+  came along verbatim in #64 when the button moved up out of `ExerciseDetail` (which only renders
+  *with* an exercise open), so it was incidental, never a decision. From the picker the label still
+  means what it says — it advances a step and opens it.
+- **`End routine` is the early exit, and it must stay reachable from step 1.** Before it, the only
+  control that cleared routine state was `Finish routine`, which appears on the **last** step
+  alone — so leaving a routine early meant stepping through the remainder or scrubbing the pill
+  strip to its end and tapping in. Reaching the end is not a precondition for stopping.
+- **The two exits are not redundant, and neither should be folded into the other.** `Finish
+  routine` steps *past* the last index: `NEXT_EXERCISE_IN_ROUTINE` clears `selectedExerciseId`, so
+  it ends with a "Routine complete!" toast back on the picker. `END_ROUTINE` deliberately leaves
+  `selectedExerciseId` **alone**, so bailing out drops the routine chrome and leaves the person on
+  the exercise they were on, free to keep logging off-script.
+- **No confirm dialog on `End routine`.** It clears client-side navigation state only — nothing
+  logged is touched, and the routine restarts from the picker's quick-start list, which
+  `ExercisePicker` shows precisely when no routine is active. A modal would tax every deliberate
+  use to guard an action with nothing to undo. (`EndWorkoutConfirmModal` is the opposite case: it
+  ends a real session server-side, and calls `endRoutine()` on the way through.)
+
+None of this is a connectivity branch — routine position is pure client state — so it does not
+belong on `resilience.md`'s register.
+
 ## Editable temp rows
 
 `editableTempIds` is what gives a paused/retrying/errored row its Edit and Delete controls
