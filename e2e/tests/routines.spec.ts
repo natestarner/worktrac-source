@@ -96,6 +96,51 @@ test.describe('Routines', () => {
     await expect(page.getByText('Routine complete!')).toBeVisible();
   });
 
+  // Bailing out of a routine partway through. The only exit used to be "Finish routine", which
+  // appears on the LAST step alone -- so leaving a 3-exercise routine at step 1 meant stepping
+  // through the other two, or scrubbing the pill strip to its end and tapping in. This asserts
+  // the exit is reachable from the FIRST step, which is what makes it an early exit at all.
+  test('end a routine early, from the first exercise, without stepping to the end', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Riley');
+
+    await page.getByRole('link', { name: 'Routines' }).click();
+    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Long Day');
+    await addExerciseToRoutine(page, 'Barbell Bench Press');
+    await addExerciseToRoutine(page, 'Dumbbell Overhead Press');
+    await addExerciseToRoutine(page, 'Barbell Back Squat');
+    await page.getByRole('button', { name: 'Save routine' }).click();
+
+    await page.getByRole('button', { name: 'Start routine' }).click();
+    await expect(page).toHaveURL(/\/app\/log/);
+    await expect(page.getByText('1 of 3')).toBeVisible();
+
+    // The point of the whole change: at step 1 there is no "Finish routine" anywhere, and there
+    // does not need to be.
+    await expect(page.getByRole('button', { name: 'Finish routine' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'End routine' }).click();
+
+    await expect(page.getByText('Routine ended.', { exact: true })).toBeVisible();
+    await expect(page.getByText('1 of 3')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'End routine' })).toHaveCount(0);
+
+    // Ending the routine is not ending the workout, and it doesn't yank you off the exercise you
+    // were on -- the set logger is still right there to keep using off-script.
+    await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await expect(page.getByText('Set 1', { exact: true })).toBeVisible();
+
+    // And the routine is restartable from the picker, so ending early costs nothing permanent.
+    // The picker's quick-start list is itself the proof the routine really ended: ExercisePicker
+    // renders it only when NO routine is active (`showRoutineQuickStart`), and it's suppressed for
+    // the entire life of one. Its rows are labelled "<name> Start →", not "Start routine" -- that
+    // button belongs to the Routines tab.
+    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
+    await page.getByRole('button', { name: /All exercises/ }).click();
+    await expect(page.getByText('Start a routine', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Long Day/ })).toBeVisible();
+  });
+
   test('copy a routine to another person and it appears independently in their routine list', async ({ page, request }) => {
     await registerHousehold(page, request, 'Jordan');
 
