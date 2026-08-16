@@ -153,7 +153,10 @@ test.describe('endurance exercises', () => {
 
   // Turning the wheel is not a decision -- only Done is. If closing kept the value, a stray
   // Escape mid-set would silently OVERWRITE a time rather than silently discard an edit.
-  test('cancelling the picker discards the edit', async ({ page, request }) => {
+  //
+  // Both exits are checked here because they are now the ONLY two: the sheet has no footer Cancel,
+  // since the X already is that button and a second one just widens a row read one-handed mid-set.
+  test('dismissing the picker discards the edit', async ({ page, request }) => {
     await registerHousehold(page, request, 'Cass');
     await pickExercise(page, 'Wall Sit');
 
@@ -169,16 +172,16 @@ test.describe('endurance exercises', () => {
     await seconds.focus();
     await seconds.press('4');
     await seconds.press('5');
-    await sheet.getByRole('button', { name: 'Cancel' }).click();
+    await sheet.getByRole('button', { name: 'Close' }).click();
 
     await expect(sheet).toBeHidden();
     await expect(time).toHaveValue(before);
 
-    // The X discards too -- it is the same dismissal, so it cannot mean the opposite thing.
+    // Escape discards too -- it is the same dismissal, so it cannot mean the opposite thing.
     await time.click();
     await sheet.getByRole('listbox', { name: 'Seconds' }).focus();
     await sheet.getByRole('listbox', { name: 'Seconds' }).press('4');
-    await sheet.getByRole('button', { name: 'Close' }).click();
+    await page.keyboard.press('Escape');
 
     await expect(sheet).toBeHidden();
     await expect(time).toHaveValue(before);
@@ -234,6 +237,42 @@ test.describe('endurance exercises', () => {
     // And blank is still not a validation gate.
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(setRows(page).getByText('0:30', { exact: true })).toBeVisible();
+  });
+
+  // The edit modal's - follows the same rule, and used to be the one control that didn't: it
+  // clamped at the minimum, so stepping off the bottom parked on 0:01 and the last press did
+  // nothing. What 0:00 MEANS is still different here -- an already-logged set has no blank to fall
+  // back on, so Save refuses it rather than the field emptying -- but that is the floor doing its
+  // job on the commit, which is where every other duration control already puts it.
+  test('editing a hold steps down to 0:00, where Save refuses it', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Edda');
+    await pickExercise(page, 'Wall Sit');
+    await logHoldAt(page, 30);
+
+    await setRows(page).getByRole('button', { name: 'Edit', exact: true }).click();
+    const modal = page.getByRole('dialog');
+    const time = modal.locator('.stepper-row').filter({ hasText: 'Time' }).locator('.stepper-value');
+    await expect(time).toHaveValue('0:30');
+
+    for (const expected of ['0:25', '0:20', '0:15', '0:10', '0:05']) {
+      await modal.getByTitle('Decrease Time').click();
+      await expect(time).toHaveValue(expected);
+    }
+
+    // The sixth press reaches 0:00 instead of parking on 0:01 -- and 0:00 is simply not a set the
+    // backend will take (@Min(1)), so Save refuses rather than rounding the number up behind you.
+    await modal.getByTitle('Decrease Time').click();
+    await expect(time).toHaveValue('0:00');
+    await expect(modal.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+    // ...and it is a dead end you can walk straight back out of, which is what makes refusing
+    // acceptable rather than a trap.
+    await modal.getByTitle('Increase Time').click();
+    await expect(time).toHaveValue('0:05');
+    await modal.getByRole('button', { name: 'Save' }).click();
+
+    await expect(modal).toBeHidden();
+    await expect(setRows(page).getByText('0:05', { exact: true })).toBeVisible();
   });
 
   test('a duration can be picked again after clearing', async ({ page, request }) => {

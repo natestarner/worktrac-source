@@ -138,4 +138,66 @@ describe('EditSetModal', () => {
       { id: 55, weight: 140, reps: 5, durationSeconds: null, unit: 'lb' },
     ]);
   });
+
+  // Editing a HOLD. The Time stepper's floor lives on Save, never on the controls -- both of them
+  // can reach 0:00, and neither rounds a number up behind you.
+  describe('a duration-tracked set', () => {
+    const hold = { id: 55, weight: 0, reps: 0, durationSeconds: 30, unit: 'lb' };
+
+    function renderHold() {
+      return renderWithQuery(
+        <EditSetModal set={hold} personId={7} exerciseId={1} sessionId={101} onClose={onClose} onSaved={onSaved} />,
+      );
+    }
+    // The Time stepper is the second of the two rows, so its +/- are the second of each pair.
+    const decTime = () => screen.getAllByTitle('Decrease Time')[0];
+
+    it('shows the hold as m:ss against a Time label, not as reps', () => {
+      renderHold();
+
+      expect(screen.getByLabelText('Time')).toHaveValue('0:30');
+      expect(screen.queryByLabelText('Reps')).toBeNull();
+    });
+
+    // The bug this covers: - used to clamp at MIN_HOLD_SECONDS, so stepping off the bottom parked
+    // on 0:01 and the last press did nothing. 0:01 sitting in the field reads as a deliberate
+    // one-second hold. Same rule as the log screen's - button.
+    it('steps the time down to 0:00 instead of parking on 0:01', () => {
+      renderHold();
+      const time = screen.getByLabelText('Time');
+
+      fireEvent.click(decTime()); // 0:30 -> 0:25
+      expect(time).toHaveValue('0:25');
+
+      for (let i = 0; i < 5; i += 1) fireEvent.click(decTime());
+      expect(time).toHaveValue('0:00');
+    });
+
+    // An already-logged set has no blank to fall back on the way the log screen's draft does, so
+    // 0:00 here is simply not saveable -- durationSeconds is @Min(1), and a definitive 4xx ends a
+    // durable write's retries for good. Refusing is honest; rounding it up to 0:01 behind your
+    // back would not be.
+    it('disables Save at 0:00 rather than rounding the hold up', () => {
+      renderHold();
+
+      for (let i = 0; i < 6; i += 1) fireEvent.click(decTime());
+
+      expect(screen.getByLabelText('Time')).toHaveValue('0:00');
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    });
+
+    // ...and it is a dead end you can walk back out of, which is what makes refusing acceptable.
+    it('re-enables Save as soon as the hold is stepped back up', async () => {
+      renderHold();
+
+      for (let i = 0; i < 6; i += 1) fireEvent.click(decTime());
+      fireEvent.click(screen.getAllByTitle('Increase Time')[0]);
+
+      const save = screen.getByRole('button', { name: 'Save' });
+      expect(save).toBeEnabled();
+      fireEvent.click(save);
+
+      await waitFor(() => expect(editSet).toHaveBeenCalledWith(55, { weight: 0, reps: 0, durationSeconds: 5 }));
+    });
+  });
 });

@@ -30,9 +30,10 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
   const measure = isDuration ? { reps: 0, durationSeconds } : { reps, durationSeconds: null };
   // Save refuses a sub-minimum hold rather than quietly rounding it up. EditSetRequest declares
   // @Min(1) too, and this write is just as durable -- and so just as permanently discarded by a
-  // 4xx -- as the original. Disabling is the same answer DurationPickerSheet's Done gives, and for
-  // the same reason: the inline wheel can genuinely be scrolled to 0:00, and silently correcting a
-  // number you just chose is worse than refusing it, because nothing on screen said 0:00 was out.
+  // 4xx -- as the original. Silently correcting a number you just chose is worse than refusing it,
+  // because nothing on screen said 0:00 was out. BOTH duration controls here can reach 0:00 -- the
+  // inline wheel by scrolling, the - button by stepping off the bottom -- so this is the single
+  // floor they share, and it is deliberately the only one: neither control clamps on its own.
   const tooShort = isDuration && durationSeconds < MIN_HOLD_SECONDS;
 
   function handleSave() {
@@ -74,15 +75,25 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
       />
       {isDuration ? (
         <>
+          {/* Stepping off the bottom goes to 0:00 rather than parking on 0:01 -- the same rule the
+              log screen's - button follows. A minimum left sitting in the field reads as a
+              deliberate one-second hold, and it gives the last press of - nothing to do.
+
+              What 0:00 MEANS still differs between the two screens, and that difference is the
+              real exception here, not the clamp: on the log screen it is "no duration chosen",
+              renders as an em dash, and Log set carries on with the default. An already-logged set
+              has no such blank to fall back to, so here 0:00 is simply not a saveable set and
+              `tooShort` disables Save. That is not a new dead end -- this modal's own inline wheel
+              could already be scrolled to 0:00, and the - button reaching the same value is what
+              makes the two agree. Recovering is one press of + or one pick on the wheel. */}
           <WeightRepsStepper
             label="Time"
             value={durationSeconds}
             displayValue={formatRestTime(durationSeconds)}
             size="sm"
             onPick={() => setShowWheel((open) => !open)}
-            onDec={() => setDurationSeconds(Math.max(MIN_HOLD_SECONDS, durationSeconds - DURATION_STEP))}
+            onDec={() => setDurationSeconds(Math.max(0, durationSeconds - DURATION_STEP))}
             onInc={() => setDurationSeconds(durationSeconds + DURATION_STEP)}
-            onChange={(v) => setDurationSeconds(Math.max(MIN_HOLD_SECONDS, v))}
           />
           {/* Inline, not the bottom sheet the log screen opens. A sheet here would be a modal over
               a modal: two scrims, two focus traps, and an Escape whose target you have to guess.

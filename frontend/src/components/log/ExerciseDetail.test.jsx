@@ -1577,13 +1577,14 @@ describe('ExerciseDetail duration-tracked exercises', () => {
   });
 
   // Turning the wheel is not a decision -- only Done is. Otherwise a stray Escape mid-set would
-  // silently overwrite the time rather than silently discard an edit.
-  it('leaves the draft alone when the picker is cancelled', async () => {
+  // silently overwrite the time rather than silently discard an edit. The sheet has no Cancel of
+  // its own: the header X is the discard path, and duplicating it only widens the row.
+  it('leaves the draft alone when the picker is dismissed', async () => {
     renderExerciseDetail({ exercise: plank });
 
     fireEvent.click(await screen.findByLabelText('Time'));
     fireEvent.keyDown(screen.getByRole('listbox', { name: 'Seconds' }), { key: 'ArrowDown' });
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     expect(setDraft).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
