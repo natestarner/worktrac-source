@@ -193,6 +193,11 @@ wait_for_url() {
 wait_for_url "backend " "http://localhost:$BACKEND_PORT/actuator/health" "$LOG_DIR/backend.log"
 wait_for_url "frontend" "http://localhost:$FRONTEND_PORT" "$LOG_DIR/frontend.log"
 
+# Both ports answer, so down.sh's "this stop was intentional" breadcrumb has done its job. Clearing
+# it here rather than letting it age out is what keeps the next death honestly labelled: a server
+# that dies a minute from now must not inherit the intent of the restart that preceded it.
+rm -f "$LOG_DIR/.planned-stop"
+
 echo ""
 echo "=== Worktree '$WORKTREE_SLUG' is up ==="
 echo "  backend  -> http://localhost:$BACKEND_PORT"

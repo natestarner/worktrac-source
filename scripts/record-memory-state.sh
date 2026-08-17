@@ -37,6 +37,22 @@ LABEL="${1:-server}"      # backend | frontend
 SLUG="${2:-unknown}"      # which worktree, so the shared ledger is attributable
 RC="${3:-?}"              # the exit code that just landed
 
+# Planned or not? down.sh drops a sentinel immediately before it kills anything, so an exit that
+# follows one is a deliberate stop (/run-local, /stop-local, `e2e.sh --restart`) rather than the
+# failure this ledger exists for. Both are recorded -- tagging at write time and filtering at read
+# time keeps the full history, where dropping planned stops outright would throw away the evidence
+# that a "planned" stop was actually something else. deaths.sh hides them by default.
+# Freshness-based rather than delete-on-read, because the dying wrapper runs asynchronously and a
+# sentinel consumed by the first server would mislabel the second one as unexpected.
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SENTINEL="$(cd "$SELF_DIR/.." && pwd)/.dev-logs/.planned-stop"
+INTENT=unexpected
+if [ -f "$SENTINEL" ]; then
+  _now=$(date +%s)
+  _then=$(stat -c %Y "$SENTINEL" 2>/dev/null || echo 0)
+  [ "$((_now - _then))" -le 60 ] && INTENT=planned
+fi
+
 SNAP=$(powershell.exe -NoProfile -Command '
 $m = Get-CimInstance Win32_PerfRawData_PerfOS_Memory -ErrorAction SilentlyContinue
 $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
@@ -66,6 +82,6 @@ if [ -n "$LEDGER_DIR" ] && [ -d "$LEDGER_DIR" ]; then
   LEDGER="$LEDGER_DIR/worktrac-server-deaths.log"
   # `>>` with a single short line is atomic enough for concurrent worktrees on Windows; this is a
   # forensic trail, not a transaction log, and interleaving would only ever cost one line.
-  printf '%s  worktree=%-28s server=%-8s rc=%-4s %s\n' \
-    "$(date +%Y-%m-%dT%H:%M:%S)" "$SLUG" "$LABEL" "$RC" "$SNAP" >> "$LEDGER" 2>/dev/null || true
+  printf '%s  intent=%-10s worktree=%-30s server=%-8s rc=%-4s %s\n' \
+    "$(date +%Y-%m-%dT%H:%M:%S)" "$INTENT" "$SLUG" "$LABEL" "$RC" "$SNAP" >> "$LEDGER" 2>/dev/null || true
 fi

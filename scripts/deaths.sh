@@ -8,10 +8,27 @@
 # retiring a worktree via scripts/worktree-cleanup.sh deleted its share of the history outright.
 # up.sh now also appends every death to one shared ledger in the common git dir; this reads it.
 #
-# Usage: bash scripts/deaths.sh [N]      # N = how many recent entries to show (default 20)
+# By default this shows only UNEXPECTED exits. down.sh drops a breadcrumb before every deliberate
+# stop, so /run-local, /stop-local and `e2e.sh --restart` are tagged `intent=planned` and hidden --
+# they are the overwhelming majority of entries and burying one real death under fifty routine
+# restarts is exactly how this stops being useful. They are still written, and `--all` shows them:
+# if a stop you believed was planned turns out not to have been, the record is there.
+#
+# Usage: bash scripts/deaths.sh [N] [--all]
+#   bash scripts/deaths.sh              # 20 most recent unexpected exits
+#   bash scripts/deaths.sh 50           # 50 most recent unexpected exits
+#   bash scripts/deaths.sh 50 --all     # include deliberate stops too
 set -uo pipefail
 
-LIMIT="${1:-20}"
+LIMIT=20
+SHOW_ALL=0
+for arg in "$@"; do
+  case "$arg" in
+    --all) SHOW_ALL=1 ;;
+    ''|*[!0-9]*) ;;
+    *) LIMIT="$arg" ;;
+  esac
+done
 
 LEDGER_DIR="$(git rev-parse --git-common-dir 2>/dev/null || true)"
 if [ -z "$LEDGER_DIR" ]; then
@@ -34,9 +51,25 @@ if [ ! -s "$LEDGER" ]; then
 fi
 
 total=$(wc -l < "$LEDGER" | tr -d ' ')
-echo "== $total recorded exit(s); showing the most recent $LIMIT =="
+planned=$(grep -c 'intent=planned' "$LEDGER" || true)
+
+if [ "$SHOW_ALL" -eq 1 ]; then
+  SELECTED=$(cat "$LEDGER")
+  echo "== $total recorded exit(s), including $planned deliberate stop(s); most recent $LIMIT =="
+else
+  SELECTED=$(grep -v 'intent=planned' "$LEDGER" || true)
+  echo "== $total recorded exit(s); $planned deliberate stop(s) hidden (--all shows them) =="
+fi
+
+if [ -z "$SELECTED" ]; then
+  echo ""
+  echo "No unexpected exits recorded. Every stop so far came from down.sh -- i.e. nothing has died"
+  echo "on its own since this ledger began. That is the outcome you want."
+  exit 0
+fi
+
 echo ""
-tail -n "$LIMIT" "$LEDGER"
+printf '%s\n' "$SELECTED" | tail -n "$LIMIT"
 
 echo ""
 echo "== Does memory explain them? =="
@@ -72,4 +105,4 @@ awk '
       print "  Read the lines above the marker in that worktree'\''s .dev-logs/<server>.log instead."
     }
   }
-' "$LEDGER"
+' <<< "$SELECTED"
