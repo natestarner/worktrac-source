@@ -10,6 +10,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/worktree-env.sh"
 
+# Breadcrumb for the death ledger: anything killed from here is INTENTIONAL, and the ledger needs
+# to know. Without it every /run-local, /stop-local and `e2e.sh --restart` writes two entries, so
+# routine stops outnumber real deaths by a wide margin and the one occurrence worth reading is
+# buried -- which defeats the point of keeping the ledger at all.
+# Written BEFORE the kill, because the dying server's wrapper reads it as it exits.
+# record-memory-state.sh treats a sentinel younger than 60s as "planned"; up.sh deletes it once the
+# replacement stack is confirmed listening, so this window can never leak into a later real death.
+LOG_DIR="$(cd "$SCRIPT_DIR/.." && pwd)/.dev-logs"
+mkdir -p "$LOG_DIR"
+: > "$LOG_DIR/.planned-stop"
+
 pids=$(netstat -ano | grep -E ":(${BACKEND_PORT}|${FRONTEND_PORT})[[:space:]].*LISTENING" | awk '{print $NF}' | sort -u || true)
 
 if [ -z "$pids" ]; then

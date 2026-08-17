@@ -38,16 +38,35 @@ mkdir -p "$LOG_DIR"
 #   * A recorded `[[frontend exited rc=127 at ...]]` line was captured. That line is echoed by the
 #     `bash -c` WRAPPER, so the wrapper was still alive when npm returned -- i.e. the process GROUP
 #     was not signalled. This rules out "something SIGKILLed the group", which had been the leading
-#     theory, and rules in "npm returned on its own".
-#   * rc=127 is a shell "command not found", not a crash: no Vite/node stack trace, no error output,
-#     nothing in the log after the ready banner. A JS OOM would print a heap trace and exit 134;
-#     a signal would be 128+n. 127 points at the `npm` -> `npm.cmd` -> node shim chain losing its
-#     console/child under Git-for-Windows, not at Vite or the app.
+#     theory.
 #   * It reproduces only under sustained parallel load (`--workers=2` full suite); a `--workers=1`
 #     full suite completed with the server still serving.
-# So: still unresolved as a root cause, but the failure is now known to be a self-exit in the npm
-# shim layer rather than an external kill or an application crash. Don't re-litigate the group-kill
-# theory without new evidence.
+#
+# 2026-08-16 -- THE rc=127 READING ABOVE WAS WRONG, and it sent two investigations down a dead end.
+# It used to continue: "...and rules in 'npm returned on its own'... 127 points at the npm ->
+# npm.cmd -> node shim chain losing its console/child under Git-for-Windows". Both halves are false,
+# and this was established by experiment rather than argument:
+#   * MEASURED: kill the Vite process directly (`Stop-Process -Id <pid> -Force`, which is a Windows
+#     TerminateProcess and touches nothing else) and the wrapper survives and records EXACTLY
+#     `[[frontend exited rc=127]]`. Reproduced three times, including via down.sh's own
+#     netstat-based kill. So rc=127 is precisely what an EXTERNAL KILL of the child looks like here.
+#     "Wrapper alive, therefore it exited on its own" does not follow: killing the child alone
+#     always leaves the wrapper alive to report.
+#   * MEASURED: 127 still appears with npm removed from the launch path entirely -- the frontend was
+#     temporarily launched as `node node_modules/vite/bin/vite.js`, no npm and no .bin shim, and an
+#     external kill still produced exactly 127. A theory that blames the npm shim cannot explain a
+#     code produced when no npm shim is involved. (That launch change has since been reverted --
+#     see the note at the frontend launch below for why it wasn't worth keeping on its own.)
+#   * CONSEQUENCE: rc=127 DOES NOT DISCRIMINATE between "exited on its own" and "was killed". Any
+#     future reasoning that leans on it to answer that question is unsound. The `mem-at-exit` line
+#     recorded next to it (see _record_exit) is what carries actual information now.
+#
+# What is still open: WHAT terminates it. The leading candidate is host commit-charge exhaustion --
+# measured 2026-08-16, a full suite at 11 workers drove Windows commit to 98.8% of a 49.59 GB limit
+# while free physical RAM still read 4.3 GB. That divergence is why an earlier pass recorded "7+ GB
+# free throughout" and struck OOM off the list: free RAM is the wrong instrument and never moves in
+# time. Note also the frontend/backend asymmetry this predicts and which holds in every recorded
+# case: the JVM commits its heap at startup and stops asking, while node allocates continuously.
 #
 # A PowerShell Start-Process launcher was tried as a setsid substitute and REVERTED: it could not
 # be shown to start the backend reliably, and trading a working start for an unverified fix to an
@@ -74,8 +93,21 @@ fi
 #   "[[backend exited rc=N ...]]" present -> it exited on its own; rc and the lines above say why
 #   line absent, process gone            -> something killed it (SIGKILL leaves no trace)
 # which is exactly the fork that went unanswered while this was being chased.
+#
+# It now also records WHY, not just THAT. The rc alone left the real question open for months: 127
+# is a shell "command not found", which says the exit came from the process-spawn layer but not
+# what starved it. A second line -- `[[<name> mem-at-exit]] commit=..%` -- captures host commit
+# charge at that instant (see scripts/record-memory-state.sh for why commit and not free RAM).
+#
+# ORDER MATTERS. `echo` is a bash BUILTIN, so the rc line needs no fork and lands even on a host
+# too starved to spawn anything; the snapshot after it spawns PowerShell and may legitimately fail
+# under that same pressure. Never reorder these so a failing snapshot can cost us the rc line.
+# `rc=$?` is captured immediately for the same reason -- anything in between clobbers it.
+# The slug is baked in at launch time so the SHARED ledger can attribute a death to the worktree it
+# came from -- `$rc` stays literal here on purpose, for the inner shell to expand when it fires.
 _record_exit() {
-  printf '%s; echo "[[%s exited rc=$? at $(date +%%T)]]"' "$1" "$2"
+  printf '%s; rc=$?; echo "[[%s exited rc=$rc at $(date +%%Y-%%m-%%dT%%H:%%M:%%S)]]"; bash "%s/record-memory-state.sh" %s %s $rc' \
+    "$1" "$2" "$SCRIPT_DIR" "$2" "$WORKTREE_SLUG"
 }
 
 # ...but the marker above is only useful if it OUTLIVES the death it describes, and until
@@ -117,6 +149,16 @@ disown
 echo "Starting frontend..."
 cd "$REPO_ROOT/frontend"
 [ -d node_modules ] || npm install
+# TRIED AND REVERTED 2026-08-16 -- don't redo it without new evidence. This launched Vite as
+# `node node_modules/vite/bin/vite.js`, bypassing both npm and node_modules/.bin/vite, to test the
+# then-current theory that rc=127 came from the npm shim chain losing its child under
+# Git-for-Windows. The experiment KILLED that theory rather than confirming it: 127 still appears
+# with npm absent entirely, because 127 is simply what an externally-terminated child looks like
+# here (see the 2026-08-16 block above). With its motivation gone, the direct call was left with
+# only a marginal upside -- one fewer node process, ~60 MB -- against two real costs: package.json
+# stops being the source of truth for how the dev server starts, so a later `vite --host` or
+# NODE_OPTIONS added to the "dev" script would be silently ignored; and a hardcoded bin path breaks
+# on a Vite major that relocates it. Not worth it. Keep `npm run dev`.
 FRONTEND_PORT="$FRONTEND_PORT" VITE_BACKEND_ORIGIN="$VITE_BACKEND_ORIGIN" \
   _detach bash -c "$(_record_exit 'npm run dev' 'frontend')" >> "$LOG_DIR/frontend.log" 2>&1 &
 disown
@@ -150,6 +192,11 @@ wait_for_url() {
 
 wait_for_url "backend " "http://localhost:$BACKEND_PORT/actuator/health" "$LOG_DIR/backend.log"
 wait_for_url "frontend" "http://localhost:$FRONTEND_PORT" "$LOG_DIR/frontend.log"
+
+# Both ports answer, so down.sh's "this stop was intentional" breadcrumb has done its job. Clearing
+# it here rather than letting it age out is what keeps the next death honestly labelled: a server
+# that dies a minute from now must not inherit the intent of the restart that preceded it.
+rm -f "$LOG_DIR/.planned-stop"
 
 echo ""
 echo "=== Worktree '$WORKTREE_SLUG' is up ==="
