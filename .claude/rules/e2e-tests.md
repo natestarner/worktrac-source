@@ -84,11 +84,20 @@ Full narrative: `docs/architecture/testing.md`.
      and `e2e.sh` scopes its search to the last session, so **exit-vs-killed is an open question
      the next occurrence will answer** — read it, don't assume it.
 
-     A hypothesis for the frontend/backend asymmetry, to be checked against that marker rather
-     than assumed: without `setsid` both servers stay in the invoking shell's process group, but
-     `mvn spring-boot:run` forks a separate JVM (a detached grandchild that outlives a
-     process-group teardown) while `npm run dev` leaves Vite a direct descendant. If the next
-     death carries an `rc`, this is wrong and the lines above it hold the answer.
+     **2026-08-16 — `rc=127` does NOT mean "it exited on its own". Measured, not argued.**
+     Killing the Vite process directly (`Stop-Process -Force`, a Windows `TerminateProcess` that
+     touches nothing else) leaves the wrapper alive and records exactly `[[frontend exited
+     rc=127]]` — reproduced three times, including via `down.sh`'s own kill. So an external kill
+     of the child produces the identical marker a self-exit would. The same 127 also appears with
+     **npm removed from the launch path entirely** (`up.sh` now runs `node
+     node_modules/vite/bin/vite.js` directly), so the old "npm shim lost its console" reading
+     cannot be right either. Treat `rc=127` as *no information* on exit-vs-killed; read the
+     `mem-at-exit` line beside it instead.
+
+     The old process-group hypothesis for the frontend/backend asymmetry is also dead: the wrapper
+     surviving proves the group was never signalled. The asymmetry that does fit every recorded
+     case is **memory**: the JVM commits its heap at startup and stops asking, while node
+     allocates continuously, so under host memory exhaustion node is the one that fails.
 
      It is **load-dependent, not deterministic**: the same stack survived several full runs and
      then died three in a row, and the surviving runs were the fastest. Concurrent CPU load
@@ -98,9 +107,22 @@ Full narrative: `docs/architecture/testing.md`.
 
      **You will not have to guess if it happens again.** `up.sh` wraps each server so its exit is
      recorded in its own log, and `e2e.sh` checks both ports *after* the run:
-     - `[[frontend exited rc=N ...]]` present → it exited on its own; `rc` and the lines above say why.
-     - Line absent and the process is gone → something killed it (SIGKILL leaves no trace); suspect
-       another worktree or an external `taskkill`.
+     - `[[frontend exited rc=N ...]]` present → the wrapper outlived the child. That is all it
+       means — see the 2026-08-16 note above; `rc=127` in particular is produced by an external
+       kill just as readily as by a self-exit.
+     - `[[frontend mem-at-exit]] commit=…%` on the next line is the informative one. Commit charge
+       at or near 100% points at host memory exhaustion (the leading candidate); a comfortable
+       number there means look elsewhere. Free RAM on that line is deliberately shown alongside
+       to make the divergence visible — it stays healthy while commit runs out.
+     - Line absent and the process is gone → the wrapper died too, so something took out the whole
+       tree; suspect another worktree or an external `taskkill`.
+
+     **`bash scripts/deaths.sh` is the first thing to run when this happens.** Every exit from
+     every worktree is appended to one shared ledger in the common git dir, with the memory state
+     at that moment — so the question "it keeps dying, what do the occurrences have in common?" is
+     answerable in one command instead of by hunting through per-worktree `.dev-logs/` that
+     `worktree-cleanup.sh` may already have deleted. It prints a verdict: exits at ≥95% commit
+     point at the host memory ceiling; comfortable commit means look elsewhere.
 
      `e2e.sh` fails the run with a loud message in that case, so a mid-run death can never again be
      mistaken for a batch of code regressions.
