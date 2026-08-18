@@ -58,44 +58,70 @@
 
 ---
 
-## ⚠️ STILL OPEN as of 2026-08-18 — the edit is sometimes lost for real
+## Follow-up (2026-08-18) — the correction was applied, then hidden by a stale cache key
 
-**This is a live bug with a reproduction, not an expected failure.** It is recorded here rather
-than as a new `docs/incidents/` entry because that directory is for *resolved* post-mortems, and
-because this is the same flow the fix above describes.
+Filed as issue #182 as an open, pre-existing, **server-side** data-loss bug, on the strength of the
+symptom: `parity-active-loop`'s *"correcting a just-logged set applies immediately"* failed ~3 of 8
+runs in `lie-fi` and `hard-offline`, at `afterReconnect` — i.e. after `waitForOutboxDrain` — with
+the row showing the originally-logged `0 lb × 8`. **Every part of that characterisation was wrong**,
+and how each was arrived at is the more useful thing to record.
 
-`e2e/tests/parity-active-loop.spec.ts`'s **"correcting a just-logged set applies immediately"**
-fails intermittently — measured **3 of 8 runs**, in `lie-fi` and `hard-offline` alike. It is easy
-to dismiss as flake. It is not.
+### What it actually was
 
-What was established 2026-08-18:
+`reconcileSetChange` invalidated `session-sets(vars.sessionId, exerciseId)` — the session id
+captured **at dispatch time**. For the one case this whole document exists to describe, correcting a
+set logged before its session existed, that id is `null` and stays `null`: `contextSessionId` is
+null for a person's entire outage (`ExerciseDetail.jsx`), so `EditSetModal` dispatches
+`sessionId: null` and the write carries it forever.
 
-- **It fails at `afterReconnect`, not the in-mode assertion.** That assertion runs *after*
-  `waitForOutboxDrain`, so it is a claim about the FINAL state, not the "brief revert-then-correct
-  flicker" this document sanctions above. Do not conflate the two: the sanctioned flicker is
-  transient and self-correcting; this is terminal.
-- **The DOM at failure reads `This session  Set 1  0 lb × 8`** — the corrected value has reverted
-  to the value originally logged.
-- **The loss is SERVER-SIDE.** A throwaway spec ran the same flow and then *reloaded the page*,
-  discarding all client cache and optimistic state. In 1 of 4 runs the server still returned `0`
-  after the reload. A refresh does not recover it; the correction is gone.
-- **It is not caused by the log-screen reconciliation work landing alongside this note.** Measured
-  like-for-like: 8 runs on that branch (3 failed) and 8 runs on unmodified `main` (3 failed) —
-  identical rate.
+So on reconnect:
 
-Real-world shape: log a set offline, correct it before it syncs, reconnect — and the correction is
-sometimes silently discarded. That is squarely the scenario this app exists to survive.
+1. `LOG_SET` replays, the server creates the session and the set at the **pre-edit** value, and its
+   `onSettled` seeds `session-sets(<real id>, ex)` from the response and invalidates it.
+2. That invalidation's refetch races the `EDIT_SET` replaying immediately behind it.
+3. `EDIT_SET` succeeds — the server now holds the corrected value.
+4. Its `onSettled` invalidates `session-sets(null, ex)`: an empty, unobserved query. The real key,
+   which is what the screen reads, is left holding the pre-edit value **and marked fresh**.
 
-Where to look (not yet investigated): the ordering between the create's replay and the dependent
-`EDIT_SET` replay inside the shared serial outbox scope, `setIdMap`'s temp→real resolution timing
-(`requireResolvedSetId`), and the backend's `WorkoutSetService#findDuplicate` idempotency dedup —
-which, per the analysis above, "returns the committed row *ignoring the new payload*". The comment
-in the spec itself names that dedup as the suspected mechanism.
+Nothing refetched it again, so the applied correction stayed invisible until that query went stale
+on its own 60s later. Whether it showed at all came down to whether step 2's refetch resolved
+before or after step 3 committed — hence intermittent, and hence terminal rather than the
+revert-then-correct flicker sanctioned above (that one is transient and self-correcting; this one
+never corrected).
 
-Reproduce with:
+Fix: reconcile against the session id **the server reports**. `WorkoutSetDto` already carries
+`sessionId`, so the PATCH response is authoritative — no backend change was needed. Same idiom
+`LOG_SET` (`data?.session?.id`) and `SAVE_NOTE` (`data?.sessionId`) already use, for the same reason.
 
-    cd e2e && bash ../scripts/e2e.sh parity-active-loop.spec.ts \
-      -g "correcting a just-logged set applies immediately" --repeat-each=8
+### Three wrong conclusions, and what produced each
 
-To tell server-loss from client-staleness, reload the page after the drain and re-read the row: if
-it still shows the pre-edit value, the server has it too.
+- **"The loss is server-side."** Established by reloading the page after the drain and re-reading
+  the row. But a reload cannot separate *lost* from *not applied yet*, and `waitForOutboxDrain`
+  returns as soon as the edit un-pauses (`useOutboxCount` deliberately ignores a non-paused write
+  with `failureCount: 0`), so the reload routinely beat the in-flight PATCH. Asking the API
+  directly instead showed `weight: 10` on the server in **every** run, including every failing one.
+  **A page reload is a client-state probe, not a server-truth probe.**
+- **"Pre-existing — it predates the change that surfaced it."** Measured 8 runs on the branch and 8
+  on `main`, got 3 and 3, and concluded "identical". Re-measured on one stack with only #181's two
+  frontend files moving: **0/32 with them reverted, 13/32 with them restored.** Eight runs a side
+  cannot distinguish 0% from 40%. The spec predating the change is not evidence either — it was
+  passing.
+- **"The mechanism is `WorkoutSetService#findDuplicate` discarding the edit."** Inherited from the
+  analysis higher up this page, where it is real. It cannot apply here: the parity harness's lie-fi
+  is `route.abort('failed')`, so no request reaches the server at all during the fault window, and
+  hard-offline never dispatches. **A plausible mechanism already written down is the easiest thing
+  to stop looking behind.**
+
+### What #181 changed
+
+#181 did not introduce the wrong key — that dates from this document's own redesign. It made it
+*reachable*. Before it, `LOG_SET`'s `onSettled` only invalidated; `session-sets(<real id>, ex)` had
+no observer and no data, so it was first fetched only after a `liveSession` refetch flipped
+`contextSessionId` — a full round trip later, by which time the edit had long committed. #181
+promotes the session and seeds that key synchronously from the response, which is what put the
+refetch in a genuine race with the edit. A latent defect became a ~40% one.
+
+Guard: `queryClient.test.js`'s *"EDIT_SET reconciles against the session the server reports"*,
+asserted against a real cache rather than a spy on `invalidateQueries` — a spy passes just as
+happily on a key nothing observes, which is the bug itself.
+

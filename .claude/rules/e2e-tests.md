@@ -159,13 +159,25 @@ Full narrative: `docs/architecture/testing.md`.
 
 ## Flakiness — where the record lives
 
-- **`parity-active-loop` "correcting a just-logged set applies immediately" is NOT flake — it is a
-  known OPEN data-loss bug.** It fails ~3 of 8 runs in `lie-fi` and `hard-offline`, at
-  `afterReconnect` (i.e. *after* the outbox drained), showing the pre-edit value. Verified
-  2026-08-18 to be lost **server-side**: reload the page, discarding all client state, and the
-  server still returns the old value. Do not "stabilise" it, retry it away, or read a red run here
-  as environmental. Full reproduction and where to look:
-  `docs/incidents/2026-07-30-editing-queued-offline-set.md` (the "STILL OPEN" section at the end).
+- **`parity-active-loop` "correcting a just-logged set applies immediately" — FIXED 2026-08-18, and
+  the lesson is about attribution, not the bug.** It failed ~3 of 8 runs in `lie-fi` and
+  `hard-offline` at `afterReconnect`, showing the pre-edit value. It was recorded here as a *known
+  open, pre-existing, server-side* data-loss bug. **All three of those were wrong**, and each wrong
+  one came from stopping at the first plausible reading:
+  - Not server-side. Querying the API directly (rather than reloading the page, which cannot
+    distinguish "lost" from "not applied yet") showed `weight: 10` on the server in **every** run,
+    including every failing one. The write always landed; only the client's cache was stale.
+  - Not pre-existing. Measured like-for-like on one stack: **0/32 failures** with #181's two
+    frontend files reverted, **13/32** with them restored. The earlier "identical rate on `main`"
+    finding compared 8 runs against 8 and could not have resolved that.
+  - Do not conclude "pre-existing" from a spec that predates the change, or "server-side" from a
+    reload. Ask the server directly, and measure both sides on the same stack with enough runs to
+    tell 0% from 40%.
+
+  Root cause and the fix: `docs/incidents/2026-07-30-editing-queued-offline-set.md`. The durable
+  guard is `queryClient.test.js`'s "EDIT_SET reconciles against the session the server reports" —
+  this e2e is a race by construction, so it detects the bug but must not be the only thing pinning
+  it.
 
 - **E2E never runs in this repo's CI.** `ci.yml` is `backend-ci` + `frontend-ci` only. The suite
   runs in GitHub in exactly one place: `worktrac-deploy`'s `deploy-lower.yml`, job `e2e-tests`,

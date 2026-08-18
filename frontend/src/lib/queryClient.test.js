@@ -338,6 +338,96 @@ describe('EDIT_SET guards against an unresolved temp set id (a set logged offlin
   });
 });
 
+// The half that made an applied correction look like data loss. An edit queued while the set's
+// session did not exist yet carries `sessionId: null` FOREVER -- contextSessionId stays null for a
+// person's entire outage -- so reconciling on `vars.sessionId` marked an empty, unobserved key
+// stale while the row on screen was read from the real session's key, which LOG_SET's own onSettled
+// had just seeded with the PRE-EDIT value and left fresh. The edit was on the server the whole
+// time; nothing ever refetched it. Measured 13/32 in the two degraded modes before this fix, 0/48
+// after (and 0/32 before the reconciliation this races was introduced, in #181).
+//
+// Against the real cache, not a spy on invalidateQueries, so it also proves the key SHAPE matches
+// what ExerciseDetail actually reads -- a spy would happily pass on a key nothing observes, which
+// is precisely the bug.
+describe('EDIT_SET reconciles against the session the server reports, not the one captured at dispatch', () => {
+  let client;
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await clearSetIdMap();
+    client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    registerOfflineMutationDefaults(client, { retry: false });
+  });
+  afterEach(async () => {
+    await clearSetIdMap();
+  });
+
+  function dispatchEdit(variables) {
+    const observer = new MutationObserver(client, {
+      ...client.getMutationDefaults(EDIT_SET_MUTATION_KEY),
+      mutationKey: EDIT_SET_MUTATION_KEY,
+    });
+    return observer.mutate(variables);
+  }
+
+  const isStale = (client_, key) => client_.getQueryState(key).isInvalidated;
+
+  it('invalidates the REAL session key when the edit was queued before the session existed', async () => {
+    // WorkoutSetDto carries sessionId, so the response is the one reliable source for it here.
+    editSet.mockResolvedValue({ id: 4242, sessionId: 42, exerciseId: 3, weight: 10, reps: 8 });
+    setSetIdMapping('optimistic-queued-offline', 4242);
+
+    const realKey = queryKeys.sessionSets(42, 3);
+    const realSummary = queryKeys.exerciseSummary(7, 3, 42);
+    client.setQueryData(realKey, [{ id: 4242, weight: 0, reps: 8 }]);
+    client.setQueryData(realSummary, { stub: true });
+
+    // Exactly what EditSetModal dispatches for a set logged before any session existed.
+    await dispatchEdit({ setId: 'optimistic-queued-offline', weight: 10, reps: 8, personId: 7, sessionId: null, exerciseId: 3, exerciseName: 'Squat' });
+
+    expect(isStale(client, realKey)).toBe(true);
+    expect(isStale(client, realSummary)).toBe(true);
+  });
+
+  it('still invalidates correctly for an already-synced set, where the captured id was right all along', async () => {
+    editSet.mockResolvedValue({ id: 999, sessionId: 10, exerciseId: 3, weight: 10, reps: 8 });
+
+    const key = queryKeys.sessionSets(10, 3);
+    client.setQueryData(key, [{ id: 999, weight: 0, reps: 8 }]);
+
+    await dispatchEdit({ setId: 999, weight: 10, reps: 8, personId: 7, sessionId: 10, exerciseId: 3, exerciseName: 'Squat' });
+
+    expect(isStale(client, key)).toBe(true);
+  });
+
+  it('falls back to the captured id when the server answered without one', async () => {
+    // Not a shape the backend produces today, but the fallback is what keeps an already-synced
+    // edit reconciling if it ever stops carrying sessionId -- worth pinning rather than assuming.
+    editSet.mockResolvedValue({ id: 999, weight: 10, reps: 8 });
+
+    const key = queryKeys.sessionSets(10, 3);
+    client.setQueryData(key, [{ id: 999, weight: 0, reps: 8 }]);
+
+    await dispatchEdit({ setId: 999, weight: 10, reps: 8, personId: 7, sessionId: 10, exerciseId: 3, exerciseName: 'Squat' });
+
+    expect(isStale(client, key)).toBe(true);
+  });
+
+  // Person scoping is not incidental here: reconcileSetChange also invalidates prs/history/trends,
+  // and those are per-person keys.
+  it('does not invalidate another person\'s session sets', async () => {
+    editSet.mockResolvedValue({ id: 4242, sessionId: 42, exerciseId: 3, weight: 10, reps: 8 });
+    setSetIdMapping('optimistic-queued-offline', 4242);
+
+    const otherPersonsSets = queryKeys.sessionSets(77, 3);
+    client.setQueryData(queryKeys.sessionSets(42, 3), [{ id: 4242, weight: 0, reps: 8 }]);
+    client.setQueryData(otherPersonsSets, [{ id: 5, weight: 50, reps: 5 }]);
+
+    await dispatchEdit({ setId: 'optimistic-queued-offline', weight: 10, reps: 8, personId: 7, sessionId: null, exerciseId: 3, exerciseName: 'Squat' });
+
+    expect(isStale(client, otherPersonsSets)).toBe(false);
+  });
+});
+
 // These three exercise the app's singleton client (its defaults are already registered at module
 // load with the real shouldRetryWrite policy), the same way UserMenu.test.jsx does -- flushOutbox,
 // clearOutboxMutations, and resetQueryCache all operate on that singleton, not a client parameter.

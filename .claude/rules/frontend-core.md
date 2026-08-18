@@ -202,6 +202,24 @@ Note this is the opposite call from `offlineCacheWarm.js`, which deliberately *e
 warming them is a costly prefetch fan-out across every person, whereas invalidating them is free
 (nothing refetches until the tab is actually mounted).
 
+### Invalidate the key the screen READS — a session id captured at dispatch may be null
+
+Getting the key *list* right is only half of it. `sessionSets` and `exerciseSummary` are keyed on a
+session id, and **a durable write cannot trust the one it captured when it was dispatched**: for a
+set logged before any session existed, `contextSessionId` is `null` for the person's entire outage,
+so the queued write carries `sessionId: null` forever while the row on screen is read from the real
+session's key once the create syncs. Invalidating the null key marks an empty, unobserved query
+stale and silently leaves the observed one fresh — the write lands on the server and the screen
+never shows it (`docs/incidents/2026-07-30-editing-queued-offline-set.md`, follow-up).
+
+**Take the id from the server's response**, which every one of these writes already gets:
+`LOG_SET` uses `data?.session?.id`, `SAVE_NOTE` uses `data?.sessionId`, `EDIT_SET` uses
+`data?.sessionId` (`WorkoutSetDto` carries it). `DELETE_SET` is the one exception and is commented
+as such — it has no response body, and is unreachable for an unsynced set.
+
+Assert this against a **real cache**, never a spy on `invalidateQueries`: a spy passes just as
+happily on a key nothing observes, which is exactly the failure mode.
+
 ## Writes: durable vs online-gated
 
 | Feature | Offline? |
