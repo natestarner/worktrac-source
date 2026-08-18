@@ -314,9 +314,23 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     ...extra,
   });
 
-  const reconcileSetChange = (vars) => {
-    client.invalidateQueries({ queryKey: queryKeys.sessionSets(vars.sessionId, vars.exerciseId) });
-    client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, vars.sessionId) });
+  // `sessionId` is an EXPLICIT parameter rather than something read off `vars`, because the id a
+  // set-change write captured at DISPATCH time is null in precisely the case this whole design
+  // exists to serve: correcting a set logged before its session existed. `contextSessionId` stays
+  // null for a person's entire outage (ExerciseDetail.jsx), so an edit queued then carries
+  // `sessionId: null` forever, while the row the user is looking at is read from
+  // `session-sets(<real id>, ex)` once the create syncs and materializes the session.
+  //
+  // Invalidating the null key marked an empty, unobserved query stale and left the real one FRESH
+  // -- so a correction that had already committed server-side stayed invisible until that query
+  // went stale on its own 60s later. It presented as the edit being silently lost (it was not: the
+  // server had it all along), intermittently, because it only shows when LOG_SET's own refetch of
+  // the real key wins the race against the edit committing. Full account, including the three
+  // wrong conclusions it produced first:
+  // docs/incidents/2026-07-30-editing-queued-offline-set.md ("Follow-up (2026-08-18)").
+  const reconcileSetChange = (vars, sessionId) => {
+    client.invalidateQueries({ queryKey: queryKeys.sessionSets(sessionId, vars.exerciseId) });
+    client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
     client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
     client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
     invalidateTrends(client, vars.personId);
@@ -337,7 +351,12 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         reps: vars.reps,
         durationSeconds: vars.durationSeconds,
       }),
-    onSettled: (_d, _e, vars) => reconcileSetChange(vars),
+    // From the RESPONSE first -- WorkoutSetDto carries the set's real `sessionId`, which is the only
+    // reliable answer when this edit was queued before the session existed. Same idiom LOG_SET
+    // (`data?.session?.id`) and SAVE_NOTE (`data?.sessionId`) already use, for the same reason.
+    // `data` is undefined whenever the server did not answer, and then there is nothing to
+    // reconcile against anyway -- the write has not landed and will retry.
+    onSettled: (data, _e, vars) => reconcileSetChange(vars, data?.sessionId ?? vars.sessionId ?? null),
   }));
 
   // Delete a set. A replay of an already-applied delete comes back 404 -- that's the intended end
@@ -351,7 +370,17 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         throw error;
       }
     },
-    onSettled: (_d, _e, vars) => reconcileSetChange(vars),
+    // No response to read a session id from (the endpoint is 204), and none is needed: unlike an
+    // edit, a delete is UNREACHABLE for a set whose create is still queued, at BOTH dispatch sites.
+    // ExerciseDetail's handleDeleteSet cancels the pending create outright for `set.optimistic` and
+    // returns before reaching this; SessionSummary dispatches only for the non-optimistic remainder
+    // and is `OfflineDisabledWrap`ped anyway, because the `listSessionSets` read it needs to
+    // enumerate those rows is online-only. So a DELETE_SET always targets a synced set, whose
+    // session has by definition materialized, and `vars.sessionId` is that real id rather than
+    // null. Passing it explicitly is a no-op today (queryKeys coalesces undefined to null) and
+    // exists to keep the choice visible: if either of those guards is ever removed, this call site
+    // needs the same treatment EDIT_SET just got.
+    onSettled: (_d, _e, vars) => reconcileSetChange(vars, vars.sessionId ?? null),
   }));
 
   // Save/clear a note (blank clears it server-side). Natural idempotent upsert. A live note may
