@@ -16,6 +16,7 @@ import {
 } from './queryClient';
 import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './exerciseIdMap';
 import { _getMappingForTest, clearSetIdMap, setSetIdMapping } from './setIdMap';
+import { markSessionEnded } from './endedSessions';
 import { editSet, logLiveSet, logSetIntoSession } from '../api/sets';
 import { queryKeys } from '../api/queryKeys';
 import { setAuthToken } from '../api/client';
@@ -560,5 +561,184 @@ describe('isUnsyncedWrite', () => {
       const stillRetrying = shouldRetryWrite(1, { status });
       expect(isUnsyncedWrite({ status: 'error', errorStatus: status })).toBe(stillRetrying);
     }
+  });
+});
+
+
+// The first set of a workout used to vanish for two sequential round trips: it left
+// ExerciseDetail's pendingBeforeSession the instant the mutation reported success, while
+// contextSessionId was still null and sessionSets had never been fetched under the just-created
+// session's key. onSettled now reconciles straight from the response instead.
+//
+// The degraded-conditions block below is the load-bearing half of this suite: it proves the new
+// writes are UNREACHABLE unless the server actually answered with a body.
+describe('logSet onSettled reconciles from the response (first-set flash)', () => {
+  let client;
+  const PERSON = 7;
+  const EXERCISE = 3;
+  const SESSION = { id: 55, startedAt: '2026-08-17T10:00:00Z', endedAt: null, manual: false };
+  const SET = { id: 4242, sessionId: 55, exerciseId: 3, weight: 100, reps: 5, durationSeconds: null, unit: 'lb', createdAt: 't', restSeconds: null };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await clearSetIdMap();
+    localStorage.clear();
+    client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    registerOfflineMutationDefaults(client, { retry: false });
+  });
+  afterEach(async () => {
+    await clearSetIdMap();
+    localStorage.clear();
+  });
+
+  function dispatch(overrides = {}) {
+    const observer = new MutationObserver(client, {
+      ...client.getMutationDefaults(LOG_SET_MUTATION_KEY),
+      mutationKey: LOG_SET_MUTATION_KEY,
+    });
+    return observer.mutate({
+      mode: 'live', personId: PERSON, exerciseId: EXERCISE, weight: 100, reps: 5,
+      tempId: 'optimistic-abc', idempotencyKey: 'k1', clientLoggedAt: 't', sessionId: null,
+      ...overrides,
+    });
+  }
+
+  it('promotes the real session from the response, so contextSessionId needs no round trip', async () => {
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET });
+
+    await dispatch();
+
+    expect(client.getQueryData(queryKeys.liveSession(PERSON))).toEqual(SESSION);
+  });
+
+  it('seeds the confirmed row, carrying tempId so the row keeps one React key', async () => {
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET });
+
+    await dispatch();
+
+    expect(client.getQueryData(queryKeys.sessionSets(55, EXERCISE))).toEqual([
+      { ...SET, tempId: 'optimistic-abc' },
+    ]);
+  });
+
+  // Sets 2+ (and session-edit mode) DO get an optimistic row from onMutate, keyed on the tempId.
+  // Appending the confirmed row instead of replacing it would paint the same set twice.
+  it('REPLACES an optimistic row in place rather than duplicating it', async () => {
+    client.setQueryData(queryKeys.sessionSets(55, EXERCISE), [
+      { id: 1, weight: 95, reps: 5 },
+      { id: 'optimistic-abc', weight: 100, reps: 5, optimistic: true },
+    ]);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET });
+
+    await dispatch();
+
+    const rows = client.getQueryData(queryKeys.sessionSets(55, EXERCISE));
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual({ ...SET, tempId: 'optimistic-abc' });
+  });
+
+  it('is a no-op when the server row is already present (a replay)', async () => {
+    client.setQueryData(queryKeys.sessionSets(55, EXERCISE), [SET]);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET });
+
+    await dispatch();
+
+    expect(client.getQueryData(queryKeys.sessionSets(55, EXERCISE))).toEqual([SET]);
+  });
+
+  // The same null -> real key flip cold-keyed the summary, dropping the cards to skeletons and
+  // blinking the weight/reps steppers through an em dash (prefill derives from summary.lastSession).
+  it('carries the summary across the null -> real session key', async () => {
+    const summary = { lastSession: { sets: [{ weight: 95, reps: 5 }] }, best: { est1rm: 110 } };
+    client.setQueryData(queryKeys.exerciseSummary(PERSON, EXERCISE, null), summary);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET });
+
+    await dispatch();
+
+    expect(client.getQueryData(queryKeys.exerciseSummary(PERSON, EXERCISE, 55))).toEqual(summary);
+  });
+
+  it('never overwrites a summary already fetched under the real key', async () => {
+    client.setQueryData(queryKeys.exerciseSummary(PERSON, EXERCISE, null), { lastSession: 'STALE', best: null });
+    client.setQueryData(queryKeys.exerciseSummary(PERSON, EXERCISE, 55), { lastSession: 'REAL', best: null });
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET });
+
+    await dispatch();
+
+    expect(client.getQueryData(queryKeys.exerciseSummary(PERSON, EXERCISE, 55))).toEqual({ lastSession: 'REAL', best: null });
+  });
+
+  // mode 'session' is "editing a specific PAST session" -- its response carries that session, which
+  // is emphatically not this person's live session.
+  it('does NOT promote a session in mode "session" (editing a past workout)', async () => {
+    logSetIntoSession.mockResolvedValue({ isPR: false, best: null, session: { id: 999, startedAt: 'x' }, set: { ...SET, sessionId: 999 } });
+
+    await dispatch({ mode: 'session', sessionId: 999 });
+
+    expect(client.getQueryData(queryKeys.liveSession(PERSON))).toBeUndefined();
+  });
+
+  // A queued set replaying after End Workout must not resurrect the finished session into the cache.
+  it('does NOT promote a session this device has already ended', async () => {
+    markSessionEnded(PERSON, 55);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET });
+
+    await dispatch();
+
+    expect(client.getQueryData(queryKeys.liveSession(PERSON))).toBeUndefined();
+  });
+
+  // ---- Degraded conditions: the whole block must be inert ------------------------------------
+  // `data` is non-undefined only when the server returned a success body, so none of the writes
+  // above can fire while offline (the mutation pauses and never settles), during lie-fi or on a
+  // definitive 4xx (settles with data === undefined), or against a 5xx / cold start.
+  // pendingBeforeSession stays the sole source of those rows, exactly as before this change.
+  describe('is inert unless the server actually answered', () => {
+    function expectNothingWritten() {
+      expect(client.getQueryData(queryKeys.liveSession(PERSON))).toBeUndefined();
+      expect(client.getQueryData(queryKeys.sessionSets(55, EXERCISE))).toBeUndefined();
+      expect(client.getQueryData(queryKeys.sessionSets(null, EXERCISE))).toBeUndefined();
+      expect(client.getQueryData(queryKeys.exerciseSummary(PERSON, EXERCISE, 55))).toBeUndefined();
+    }
+
+    it('writes nothing on a statusless network rejection (lie-fi, retries exhausted)', async () => {
+      logLiveSet.mockRejectedValue(new TypeError('Failed to fetch'));
+      await dispatch().catch(() => {});
+      expectNothingWritten();
+    });
+
+    it('writes nothing on a 503 (DB down / backend cold start)', async () => {
+      logLiveSet.mockRejectedValue({ status: 503 });
+      await dispatch().catch(() => {});
+      expectNothingWritten();
+    });
+
+    it('writes nothing on a definitive 4xx', async () => {
+      logLiveSet.mockRejectedValue({ status: 400 });
+      await dispatch().catch(() => {});
+      expectNothingWritten();
+    });
+
+    it('writes nothing while paused offline -- the mutation never settles at all', async () => {
+      const wasOnline = onlineManager.isOnline();
+      onlineManager.setOnline(false);
+      try {
+        logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET });
+        dispatch().catch(() => {});
+        await Promise.resolve();
+        expect(logLiveSet).not.toHaveBeenCalled();
+        expectNothingWritten();
+      } finally {
+        onlineManager.setOnline(wasOnline);
+      }
+    });
+
+    // A response missing either half must not half-apply the reconciliation.
+    it('writes nothing when the response carries no session (defensive)', async () => {
+      logLiveSet.mockResolvedValue({ isPR: false, best: null, session: null, set: SET });
+      await dispatch().catch(() => {});
+      expect(client.getQueryData(queryKeys.liveSession(PERSON))).toBeUndefined();
+      expect(client.getQueryData(queryKeys.sessionSets(null, EXERCISE))).toBeUndefined();
+    });
   });
 });
