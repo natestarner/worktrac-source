@@ -279,6 +279,27 @@ transient error, a row gets Edit/Delete controls immediately — as durable/edit
 row — rather than an indefinite spinner over a request that may never succeed. The banner's
 outbox count is what signals "not yet synced", not the row.
 
+**It only covers LOG_SET creates.** `ExerciseDetail` gates it on `set.optimistic` and derives it
+from `logSetMutationKey`, so an in-flight edit, delete, note, favorite or end-workout has no row
+mark at all. Don't reason about it as a general "a write is in flight" signal — it isn't one.
+
+### Two predicates, two questions: never use the display one for a destructive decision
+
+`useOutboxCount`'s `countQueuedWrites` (paused / errored / `failureCount > 0`) answers **"what
+should I show?"**. It deliberately omits a brand-new first attempt still in flight so a fast online
+write doesn't flash the banner — correct for chrome, and it must stay.
+
+`getUnsyncedWriteCount` (built on `isUnsyncedWrite`) answers **"would anything be destroyed if the
+outbox were thrown away right now?"**, and a write on the wire counts. That is the one the logout
+guard asks, because `logout()` clears both the in-memory outbox and its persisted copy — so a
+request that fails after that has nothing left to retry from. Asking the display predicate left the
+last write of a drain unguarded while `AuthContext`'s own comment claimed the warning made the
+discard "a confirmed choice, not silent data loss".
+
+**Any new destructive or irreversible action gates on the safety predicate, never the display
+one.** The two are pinned side by side in `useOutboxCount.test.jsx` precisely so the divergence
+reads as deliberate rather than as an inconsistency to unify.
+
 ## Freshness UX
 
 A cached view paints instantly; `RefreshIndicator` (`isFetching && !isLoading`) announces any
