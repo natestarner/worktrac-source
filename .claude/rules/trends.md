@@ -109,3 +109,30 @@ one of those passes or gets a projection/`@Query` aggregate — it does not add 
   sequential ramp by design.
 - Weekly buckets start **Monday** (`DayOfWeek.MONDAY` server-side, `mondayOf` client-side). The
   heatmap's rows and the bar charts must agree or the same day lands in different weeks.
+
+## Every chart carries a "?" — keep it honest and keep it on screen
+
+`components/shared/ChartHelp.jsx` + `trends/chartHelp.js`. A dot on the line chart is **one
+session, not one day**, and three of the five exercise metrics are a single best set while two are
+session totals — the chart shows no difference between them, which is what this exists to fix.
+
+- **A new metric ships with its own sentence, on the spec.** `dotMeaning` lives on
+  `EXERCISE_METRICS`, `barMeaning` on `WEEKLY_METRICS`, reached via `metricSpec`/`weeklyMetricSpec`
+  like every other field. Don't start a parallel copy table keyed by metric name — that's the raw
+  table lookup the hover-blank-page incident was about, one indirection later.
+- **Say which one it is.** A best-set metric names the set; a total says "session total, not one
+  set". `chartHelp.test.js` asserts both.
+- **Never call the PR measure "estimated 1RM" flat out.** `isPr` follows `comparableValue`, which
+  is a **rep count** at weight 0 and **seconds** for a hold — so that phrasing is wrong for
+  pull-ups and planks on *every* metric, not just the rep ones. Name all three cases, or name
+  none. The panel's PR line must also survive the metric switcher unchanged, because the measure
+  does: what it owes the reader is why a green dot is not always the plotted line's high point.
+- **The four `?` labels must stay mutually non-containing** — all four are on screen at once and
+  Playwright matches an accessible name as a substring. Also asserted.
+- **Don't delete `ChartHelp`'s measure-and-nudge effect, and don't replace it with a CSS clamp.**
+  `WeeklyMetricChart`'s header wraps on a phone, so its `?` moves mid-row and a right-anchored
+  panel lands 45px off the left edge with the text clipped. Where the trigger ends up depends on
+  the wrap point, so no static rule gets it right. jsdom has no layout — the bounding-box test in
+  `trends.spec.ts` is the only guard.
+- **Keep the panel unmounted while closed.** Its copy repeats phrases other specs on this screen
+  select by; an always-mounted panel breaks them.
