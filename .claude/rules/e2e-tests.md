@@ -94,10 +94,35 @@ Full narrative: `docs/architecture/testing.md`.
      cannot be right either. Treat `rc=127` as *no information* on exit-vs-killed; read the
      `mem-at-exit` line beside it instead.
 
-     The old process-group hypothesis for the frontend/backend asymmetry is also dead: the wrapper
-     surviving proves the group was never signalled. The asymmetry that does fit every recorded
-     case is **memory**: the JVM commits its heap at startup and stops asking, while node
-     allocates continuously, so under host memory exhaustion node is the one that fails.
+     **2026-08-18 — SOLVED, and the two readings above it are both wrong.** The process-group
+     hypothesis was dismissed here on the grounds that "the wrapper surviving proves the group was
+     never signalled". That inference does not hold: the wrapper writes its marker *after* npm
+     returns, so it survives long enough to record a death it is itself about to share. And the
+     memory reading is disproven outright — Windows has logged **zero**
+     `Microsoft-Windows-Resource-Exhaustion-Detector` events *ever* on this host, commit sat at
+     **49–60%** at every recorded death, and there were **zero** Application Error / Windows Error
+     Reporting events in the death window (so node was terminated, not faulted, and not starved).
+
+     What it actually is: **`setsid` is absent from stock Git-for-Windows, so `up.sh`'s `_detach`
+     degraded to bare `nohup` — which leaves the child on the SAME CONSOLE as the shell that
+     started it.** A console-wide CTRL event reaches every process attached to that console.
+     Measured with a 1-second poll: `bash <- bash <- npm(node) <- cmd <- vite(node)` all vanished
+     inside a single tick, which is what one console event delivered to all of them looks like.
+
+     Note ancestry does NOT show this — the chain root is orphaned under *both* launch methods, so
+     a parent walk cannot tell them apart. The discriminating property is console membership,
+     measured directly via `AttachConsole`:
+       - old `nohup` path  -> **HAS a console**  (shares console CTRL events)
+       - `detach-launch.js` -> **NO console**    (`spawn({detached:true})` =
+         `DETACHED_PROCESS` + `CREATE_NEW_PROCESS_GROUP`)
+
+     **Fix: the frontend launches through `scripts/detach-launch.js`.** Three full suites then ran
+     back to back with the *same* Vite pid still serving, against three deaths in the previous four
+     runs. The backend is deliberately left on the old path — it already survives, and changing its
+     launch is what got the PowerShell `Start-Process` attempt reverted twice.
+
+     **Do not "simplify" the frontend back to `_detach`/`nohup`.** That is the bug, and it is
+     invisible in a parent-process listing.
 
      It is **load-dependent, not deterministic**: the same stack survived several full runs and
      then died three in a row, and the surviving runs were the fastest. Concurrent CPU load
@@ -133,6 +158,14 @@ Full narrative: `docs/architecture/testing.md`.
   default project.
 
 ## Flakiness — where the record lives
+
+- **`parity-active-loop` "correcting a just-logged set applies immediately" is NOT flake — it is a
+  known OPEN data-loss bug.** It fails ~3 of 8 runs in `lie-fi` and `hard-offline`, at
+  `afterReconnect` (i.e. *after* the outbox drained), showing the pre-edit value. Verified
+  2026-08-18 to be lost **server-side**: reload the page, discarding all client state, and the
+  server still returns the old value. Do not "stabilise" it, retry it away, or read a red run here
+  as environmental. Full reproduction and where to look:
+  `docs/incidents/2026-07-30-editing-queued-offline-set.md` (the "STILL OPEN" section at the end).
 
 - **E2E never runs in this repo's CI.** `ci.yml` is `backend-ci` + `frontend-ci` only. The suite
   runs in GitHub in exactly one place: `worktrac-deploy`'s `deploy-lower.yml`, job `e2e-tests`,

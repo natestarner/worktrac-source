@@ -55,3 +55,47 @@
     chasing every polish case. See `git log --grep="editing a still-queued" -i` for the full
     design discussion.
 
+
+---
+
+## ⚠️ STILL OPEN as of 2026-08-18 — the edit is sometimes lost for real
+
+**This is a live bug with a reproduction, not an expected failure.** It is recorded here rather
+than as a new `docs/incidents/` entry because that directory is for *resolved* post-mortems, and
+because this is the same flow the fix above describes.
+
+`e2e/tests/parity-active-loop.spec.ts`'s **"correcting a just-logged set applies immediately"**
+fails intermittently — measured **3 of 8 runs**, in `lie-fi` and `hard-offline` alike. It is easy
+to dismiss as flake. It is not.
+
+What was established 2026-08-18:
+
+- **It fails at `afterReconnect`, not the in-mode assertion.** That assertion runs *after*
+  `waitForOutboxDrain`, so it is a claim about the FINAL state, not the "brief revert-then-correct
+  flicker" this document sanctions above. Do not conflate the two: the sanctioned flicker is
+  transient and self-correcting; this is terminal.
+- **The DOM at failure reads `This session  Set 1  0 lb × 8`** — the corrected value has reverted
+  to the value originally logged.
+- **The loss is SERVER-SIDE.** A throwaway spec ran the same flow and then *reloaded the page*,
+  discarding all client cache and optimistic state. In 1 of 4 runs the server still returned `0`
+  after the reload. A refresh does not recover it; the correction is gone.
+- **It is not caused by the log-screen reconciliation work landing alongside this note.** Measured
+  like-for-like: 8 runs on that branch (3 failed) and 8 runs on unmodified `main` (3 failed) —
+  identical rate.
+
+Real-world shape: log a set offline, correct it before it syncs, reconnect — and the correction is
+sometimes silently discarded. That is squarely the scenario this app exists to survive.
+
+Where to look (not yet investigated): the ordering between the create's replay and the dependent
+`EDIT_SET` replay inside the shared serial outbox scope, `setIdMap`'s temp→real resolution timing
+(`requireResolvedSetId`), and the backend's `WorkoutSetService#findDuplicate` idempotency dedup —
+which, per the analysis above, "returns the committed row *ignoring the new payload*". The comment
+in the spec itself names that dedup as the suspected mechanism.
+
+Reproduce with:
+
+    cd e2e && bash ../scripts/e2e.sh parity-active-loop.spec.ts \
+      -g "correcting a just-logged set applies immediately" --repeat-each=8
+
+To tell server-loss from client-staleness, reload the page after the drain and re-read the row: if
+it still shows the pre-edit value, the server has it too.
