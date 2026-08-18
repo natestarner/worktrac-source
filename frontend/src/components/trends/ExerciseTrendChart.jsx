@@ -7,9 +7,14 @@ import { metricSpec } from './exerciseMetrics';
 // ExerciseDetail.jsx) rather than a categorical hue -- this is a state distinction (new
 // best-ever vs. not), not an identity one.
 //
-// PR marking always tracks est. 1RM, whatever metric is being plotted: `isPr` is a fact about the
-// session, not about the current view, and dropping the dots on the other metrics would hide the
-// only milestone the chart has.
+// PR marking always tracks the SAME measure, whatever metric is being plotted: `isPr` is a fact
+// about the session, not about the current view, and dropping the dots on the other metrics would
+// hide the only milestone the chart has. A consequence worth knowing: a green dot need not be the
+// high point of the line currently on screen.
+//
+// That measure is `StatsService#comparableValue` -- est. 1RM for a loaded lift, but the REP COUNT
+// for a bodyweight set and SECONDS for a hold. Don't describe it as "est. 1RM" flatly (this
+// comment used to, and the chart's help copy inherited the error); see .claude/rules/trends.md.
 function TrendDot({ cx, cy, payload }) {
   const isPr = payload.isPr;
   return (

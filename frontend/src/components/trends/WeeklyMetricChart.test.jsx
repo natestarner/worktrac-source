@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { ChartTooltip, weeklyMetricSpec } from './WeeklyMetricChart';
+import { ChartTooltip } from './WeeklyMetricChart';
+import { weeklyMetricSpec } from './weeklyMetrics';
 
 const payload = [{ payload: { weekStart: '2026-07-13', metricValue: 12450 } }];
 

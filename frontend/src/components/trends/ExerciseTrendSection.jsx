@@ -7,7 +7,9 @@ import { convertWeight } from '../../utils/formulas';
 import ExerciseTrendChart from './ExerciseTrendChart';
 import ExerciseRecordsTable from './ExerciseRecordsTable';
 import SegmentedToggle from '../shared/SegmentedToggle';
+import ChartHelp from '../shared/ChartHelp';
 import { EXERCISE_METRIC_OPTIONS, metricSpec } from './exerciseMetrics';
+import { exerciseTrendHelp } from './chartHelp';
 import Skeleton from '../shared/Skeleton';
 
 // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
@@ -56,8 +58,13 @@ export default function ExerciseTrendSection({
 
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', marginBottom: 12 }}>
-        Exercise progress &middot; {spec.title}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+        {/* One text node, deliberately: an e2e spec looks this header up by its full string, and
+            RTL's getByText concatenates only direct children. Don't split it into spans. */}
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)' }}>
+          Exercise progress &middot; {spec.title}
+        </div>
+        <ChartHelp help={exerciseTrendHelp(metric)} />
       </div>
 
       <select value={exerciseId || ''} onChange={(e) => onSelectExercise(Number(e.target.value))} style={selectStyle}>

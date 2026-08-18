@@ -2,29 +2,14 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recha
 import { formatDateLabel } from '../../utils/datetime';
 import { convertWeight } from '../../utils/formulas';
 import SegmentedToggle from '../shared/SegmentedToggle';
+import ChartHelp from '../shared/ChartHelp';
+import { weeklyMetricHelp } from './chartHelp';
+import { WEEKLY_METRIC_OPTIONS, weeklyMetricSpec } from './weeklyMetrics';
 
 // One switchable bar chart rather than three stacked ones -- Trends is used mid-workout on a
 // phone, and three more full-height charts would push the exercise section off the screen.
 //
-// Volume answers "how much load did I move", sets/reps answer "how much work did I do". They
-// disagree often: a heavy squat week can outweigh a whole week of accessory work on volume while
-// logging fewer sets, which is exactly why set count is the metric the evidence-based apps lead
-// with.
-export const WEEKLY_METRICS = {
-  volume: { label: 'Volume', dataKey: 'totalVolumeLb', isWeight: true },
-  sets: { label: 'Sets', dataKey: 'totalSets', isWeight: false },
-  reps: { label: 'Reps', dataKey: 'totalReps', isWeight: false },
-};
-
-const METRIC_OPTIONS = Object.entries(WEEKLY_METRICS).map(([value, m]) => ({ label: m.label, value }));
-
-// Mirrors exerciseMetrics.js's metricSpec. Every read of WEEKLY_METRICS goes through this: an
-// unrecognized metric used to fall back in the chart body but NOT in the tooltip, so a person
-// whose persisted UI state predated this switcher rendered the chart fine and then blanked the
-// whole page the moment they hovered it. See docs/incidents/2026-08-08-trends-hover-blank-page.md.
-export function weeklyMetricSpec(metric) {
-  return WEEKLY_METRICS[metric] || WEEKLY_METRICS.volume;
-}
+// The metric table itself now lives in weeklyMetrics.js -- see the note there for why.
 
 // Exported for tests only. The chart body around it can't be asserted in jsdom (recharts'
 // ResponsiveContainer has no layout there -- see .claude/rules/trends.md), but the tooltip is
@@ -68,7 +53,12 @@ export default function WeeklyMetricChart({ weeks, metric, onMetricChange, defau
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)' }}>
           {spec.isWeight ? `${spec.label} lifted per week (${defaultUnit})` : `${spec.label} per week`}
         </div>
-        <SegmentedToggle options={METRIC_OPTIONS} value={metric} onChange={onMetricChange} ariaLabel="Weekly metric" />
+        {/* The "?" is the last item in the header on every chart, so its right-anchored panel
+            always opens inside the card rather than off the edge of a phone screen. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <SegmentedToggle options={WEEKLY_METRIC_OPTIONS} value={metric} onChange={onMetricChange} ariaLabel="Weekly metric" />
+          <ChartHelp help={weeklyMetricHelp(metric)} />
+        </div>
       </div>
       <ResponsiveContainer width="100%" height={160}>
         <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>

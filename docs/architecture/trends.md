@@ -110,6 +110,33 @@ household where a dad and his sons all use the app.
 It's also the only chart here not built with recharts. A day grid isn't a plot, and staying out of
 recharts means it's the one Trends chart that can be asserted on for real in jsdom.
 
+## The 2026-08-17 addition: a "?" on every chart
+
+Every chart here answers a question that looks obvious and isn't, and the charts themselves give
+no way to tell. The line chart is the worst offender: a dot is **one session**, not one day, so two
+workouts in a day put two dots on the same date label — and what the dot *measures* changes with
+the metric switcher, where three options are a single best set and two are session totals. Nothing
+on screen distinguishes "your best set that day" from "everything you did that day", and reading
+`Volume` as the former is a plausible, silent misreading of your own training history.
+
+So each chart header carries a tappable `?` (`components/shared/ChartHelp.jsx`) that explains its
+marks in plain English, and the per-metric sentence rides on the metric spec itself
+(`dotMeaning` on `EXERCISE_METRICS`, `barMeaning` on `WEEKLY_METRICS`) rather than in a parallel
+copy table — so it follows the same `metricSpec`/`weeklyMetricSpec` fallback as everything else,
+and a new metric cannot ship without one.
+
+Two things about it are less obvious than they look:
+
+- **It opens on tap, not hover.** This is an iPad-in-the-gym app; hover does not exist there, and
+  on iOS a hover-opened panel sticks after a tap. One mechanism covers both input types.
+- **The panel's position has to be measured, not predicted.** `WeeklyMetricChart`'s header wraps on
+  a phone, which moves its `?` from the card's right edge into the middle of a row — and a panel
+  anchored to that trigger's right edge started 45px off the left of a 390px screen with every line
+  clipped. Where the trigger lands depends on the wrap point, which varies with viewport,
+  orientation and the metric's label, so `ChartHelp` measures the mounted panel and nudges it back
+  on screen. jsdom computes no layout, so `trends.spec.ts`'s bounding-box test is the only thing
+  that can catch a regression here.
+
 ## Deliberately not built
 
 Scoped out on 2026-08-07, listed so the reasoning isn't re-derived:

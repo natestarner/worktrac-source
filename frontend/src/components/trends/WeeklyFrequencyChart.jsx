@@ -1,5 +1,7 @@
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { formatDateLabel } from '../../utils/datetime';
+import ChartHelp from '../shared/ChartHelp';
+import { WORKOUT_FREQUENCY_HELP } from './chartHelp';
 
 function ChartTooltip({ active, payload }) {
   if (!active || !payload || payload.length === 0) return null;
@@ -26,7 +28,10 @@ function ChartTooltip({ active, payload }) {
 export default function WeeklyFrequencyChart({ weeks }) {
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 12px 8px' }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', padding: '0 8px 8px' }}>Workouts per week</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 8px 8px' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)' }}>Workouts per week</div>
+        <ChartHelp help={WORKOUT_FREQUENCY_HELP} />
+      </div>
       <ResponsiveContainer width="100%" height={160}>
         <BarChart data={weeks} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <XAxis

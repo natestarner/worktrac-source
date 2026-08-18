@@ -92,6 +92,116 @@ test.describe('Trends analytics', () => {
     await expect(page.getByText('Exercise progress · total reps')).toBeVisible();
   });
 
+  // Every chart on this tab answers a question that LOOKS obvious and isn't -- most of all the
+  // line chart, whose dots are one per SESSION (not per day) and whose meaning changes with the
+  // metric switcher, two of whose five options are session totals rather than a best set.
+  test('every chart has a "?" that explains its own datapoints in plain English', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+
+    await pickExercise(page, 'Barbell Bench Press');
+    await logSet(page, 225, 1);
+    await logSet(page, 185, 8);
+
+    await page.getByRole('link', { name: 'Trends' }).click();
+
+    // All four are present and, crucially, closed -- their copy repeats phrases the rest of this
+    // file selects by, so an always-mounted panel would break the specs above.
+    const consistencyHelp = page.getByRole('button', { name: 'What the consistency grid shows' });
+    const workoutsHelp = page.getByRole('button', { name: 'What the workouts chart shows' });
+    const weeklyHelp = page.getByRole('button', { name: 'What the weekly totals chart shows' });
+    const progressHelp = page.getByRole('button', { name: 'What the progress chart shows' });
+    for (const trigger of [consistencyHelp, workoutsHelp, weeklyHelp, progressHelp]) {
+      await expect(trigger).toBeVisible();
+    }
+    await expect(page.getByText(/One dot per workout session/)).toBeHidden();
+
+    // --- The heatmap says it ignores the range toggle, which nothing else on screen does ---
+    await consistencyHelp.click();
+    await expect(page.getByText(/always the last 6 months/)).toBeVisible();
+
+    // --- Workouts per week counts SESSIONS, not exercises or sets ---
+    await workoutsHelp.click();
+    await expect(page.getByText(/always the last 6 months/)).toBeHidden(); // the first one closed
+    await expect(page.getByText(/counts separate workout sessions/)).toBeVisible();
+
+    // --- The weekly bars follow their own metric switcher ---
+    await weeklyHelp.click();
+    await expect(page.getByText(/Volume is weight × reps/)).toBeVisible();
+    await page.getByRole('group', { name: 'Weekly metric' }).getByRole('button', { name: 'Sets', exact: true }).click();
+    await weeklyHelp.click();
+    await expect(page.getByText(/Every set you logged that week counts once/)).toBeVisible();
+
+    // --- The line chart: one dot per session, and what the dot measures follows the metric ---
+    await progressHelp.click();
+    await expect(page.getByText(/One dot per workout session/)).toBeVisible();
+    await expect(page.getByText(/Two sessions in the same day give you two dots/)).toBeVisible();
+    await expect(page.getByText(/best single set, scored by estimated 1RM/)).toBeVisible();
+    // The PR rule the chart gives no other clue about: green is judged on one measure regardless
+    // of the metric, so a PR dot need not be the high point of the line you are looking at. It
+    // must NOT be described as an estimated 1RM -- that measure is a rep count for a bodyweight
+    // exercise and seconds for a hold (StatsService#comparableValue).
+    await expect(page.getByText(/not always the highest point on this chart/)).toBeVisible();
+    await expect(page.getByText(/rep count for a bodyweight exercise/)).toBeVisible();
+
+    // Escape closes it, the same exit Modal offers.
+    await page.keyboard.press('Escape');
+    await expect(page.getByText(/One dot per workout session/)).toBeHidden();
+
+    // A session TOTAL has to say so -- reading "Volume" as a best set is the misunderstanding
+    // this whole affordance exists to prevent.
+    const exerciseMetric = page.getByRole('group', { name: 'Exercise metric' });
+    await exerciseMetric.getByRole('button', { name: 'Volume', exact: true }).click();
+    await progressHelp.click();
+    await expect(page.getByText(/session total, not one set/)).toBeVisible();
+    await expect(page.getByText(/best single set, scored by estimated 1RM/)).toBeHidden();
+
+    // ...and a best-set metric has to say THAT, including that it is often a different set.
+    await progressHelp.click();
+    await exerciseMetric.getByRole('button', { name: 'Top weight', exact: true }).click();
+    await progressHelp.click();
+    await expect(page.getByText(/heaviest weight you touched that session/)).toBeVisible();
+    await expect(page.getByText(/session total, not one set/)).toBeHidden();
+  });
+
+  // Only a real browser can prove this: jsdom computes no layout, so ChartHelp's clamping effect
+  // is a no-op in every unit test and this is the sole place the geometry is checked.
+  test('a help panel stays fully on screen on a phone, wherever its "?" ended up', async ({ page, request }) => {
+    // 390px is an iPhone in portrait. It matters because WeeklyMetricChart's header WRAPS at this
+    // width, moving its "?" from the card's right edge into the middle of a row -- and a panel
+    // hung off the right of a mid-row trigger started 45px off the left of the screen, with the
+    // first characters of every line clipped.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await registerHousehold(page, request, 'Nate');
+
+    await pickExercise(page, 'Barbell Bench Press');
+    await logSet(page, 185, 8);
+
+    await page.getByRole('link', { name: 'Trends' }).click();
+    await expect(page.getByTestId('consistency-grid')).toBeVisible();
+
+    const labels = [
+      'What the consistency grid shows',
+      'What the workouts chart shows',
+      'What the weekly totals chart shows',
+      'What the progress chart shows',
+    ];
+
+    for (const label of labels) {
+      const trigger = page.getByRole('button', { name: label });
+      await trigger.scrollIntoViewIfNeeded();
+      await trigger.click();
+
+      const panel = page.getByRole('note');
+      await expect(panel).toBeVisible();
+      const box = await panel.boundingBox();
+      expect(box, `${label}: panel has no box`).not.toBeNull();
+      expect(box!.x, `${label}: panel runs off the left edge`).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width, `${label}: panel runs off the right edge`).toBeLessThanOrEqual(390);
+
+      await page.keyboard.press('Escape');
+    }
+  });
+
   test('a bodyweight-only lift gets a rep-based records view, not a column of zeros', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
 

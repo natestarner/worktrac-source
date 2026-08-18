@@ -143,6 +143,17 @@ export const IconTrash = (props) => (
   </Icon>
 );
 
+// The "?" affordance on a chart header. Lucide's circle-help: the dot is a
+// separate 0-length path rather than a <circle> so it inherits the round cap
+// and stays visible at 16px.
+export const IconHelp = (props) => (
+  <Icon {...props}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" />
+    <path d="M12 17h.01" />
+  </Icon>
+);
+
 // Empty-state illustration marks. Larger and lighter-weight than the inline
 // icons above -- an empty state is the one place an icon carries real size.
 export const IconInbox = (props) => (

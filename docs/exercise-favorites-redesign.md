@@ -635,3 +635,48 @@ stay as local values. Tokenising all eight would imply an ordering that does not
 That regression was caught only as **seven unrelated specs** failing on `person-pill-bar …
 intercepts pointer events`, which is a slow and confusing way to learn it. `sticky-chrome.spec.ts`
 now asserts the menu is clickable over the chrome directly.
+
+## Update — 2026-08-17: every Trends chart explains its own datapoints
+
+Trends grew a lot on 2026-08-07 and got trimmed on 2026-08-08, but neither pass told you what a
+mark on a chart actually *is* — and on the exercise line chart that is genuinely ambiguous. The
+question that prompted this: "there's a dot for each session, not each day, right? and each dot is
+the best set for that session?" The first half is yes. The second half is **yes for three of the
+five metrics and no for two**, and nothing on screen said so.
+
+`Est. 1RM`, `Top weight` and `Best set` each plot one set — and *not the same set*, since a heavy
+single tops the bar while a lighter set for more reps wins on Epley. `Volume` and `Reps` plot
+session **totals**. Reading `Volume` as "my best set that day" is a plausible, silent misreading of
+your own training history, and the chart offered no way to notice.
+
+**Decision: a tappable `?` on each chart header, not a hover tooltip and not an "about Trends"
+page.** Tap, because hover does not exist on the iPad this app is used on and iOS leaves a
+hover-opened panel stuck after a tap. Per-chart, because the answer changes with the metric
+switcher and a static page would drift from it.
+
+**The copy rides on the metric spec** (`dotMeaning` on `EXERCISE_METRICS`, `barMeaning` on
+`WEEKLY_METRICS`) rather than living in a parallel table keyed by metric name. That is the
+2026-08-08 hover-blank-page lesson one indirection along: anything keyed by metric must reach the
+screen through `metricSpec`/`weeklyMetricSpec` so an unrecognized value falls back instead of
+throwing — and it means a new metric cannot ship without its own sentence.
+
+**Two things this cost, both worth recording.**
+
+**The PR line was wrong, and metric-independence is what hid it.** `isPr` deliberately tracks one
+measure whatever metric is plotted, so the sentence about green dots is identical on all five — and
+it read "a new best estimated 1RM". But PR marking runs through `StatsService#comparableValue`,
+which is a **rep count** at weight 0 and **seconds** for a hold. The line was therefore inaccurate
+for pull-ups and planks on *every* metric, not just the rep-based ones. It now names all three
+cases, and says the thing the reader actually needed: a green dot is not always the highest point
+on the chart in front of you. The stale comment in `ExerciseTrendChart.jsx` that the copy inherited
+the error from is corrected too — that comment is how the mistake propagated, and it would have
+been used to "correct" the new copy back.
+
+**A popover anchored to a control cannot be positioned by CSS alone when its header wraps.**
+`WeeklyMetricChart`'s header wraps at phone width, moving its `?` from the card's right edge into
+the middle of a row; a 300px panel hung off that trigger's right edge opened ~45px off the left of
+a 390px screen with the first characters of every line clipped. The wrap point varies with
+viewport, orientation and the metric's label, so no static rule gets it right — `ChartHelp`
+measures the mounted panel and nudges it back on screen. jsdom computes no layout, so this is
+invisible to every unit test; a bounding-box assertion in `trends.spec.ts` is the only guard, and
+it exists because the clipped panel showed up in a screenshot rather than in a test.
