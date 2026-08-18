@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { queryClient } from '../../lib/queryClient';
-import { getQueuedWriteCount } from '../../hooks/useOutboxCount';
+import { getUnsyncedWriteCount } from '../../hooks/useOutboxCount';
 
 // `booting` is passed by AppShellSkeleton only. That skeleton renders a REAL Header so the
 // boot paint matches the loaded one pixel-for-pixel -- but the tree it renders is guaranteed to
@@ -63,7 +63,12 @@ export default function UserMenu({ booting = false }) {
     // yet (hardening #4 -- a forced 401 logout, by contrast, preserves the outbox to replay after
     // re-login; only this explicit user action discards). Reading the count off the app's singleton
     // client keeps this a pure local-state confirm, with no extra context dependency in the header.
-    const queued = getQueuedWriteCount(queryClient);
+    //
+    // getUnsyncedWriteCount, NOT the banner's getQueuedWriteCount: the banner deliberately ignores
+    // a write that is in flight on its first attempt (so a fast online write doesn't flash it), and
+    // a write on the wire is exactly one this action would strip of its retry. Asking the display
+    // predicate here left the last write of a drain unguarded.
+    const queued = getUnsyncedWriteCount(queryClient);
     if (queued > 0) {
       setPendingLogoutCount(queued);
     } else {

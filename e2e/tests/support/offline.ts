@@ -1,4 +1,5 @@
-import { Page, expect } from '@playwright/test';
+import { Page, Request, expect } from '@playwright/test';
+import { API_ONLY } from './faults';
 
 // Hard offline (navigator.onLine flips false) -- what `context.setOffline` drives. Distinct from
 // the manual pin (see pinOfflineViaBanner below): both end up in the same elected-offline mode via
@@ -125,12 +126,90 @@ export function outboxCountText(page: Page, n: number) {
 // docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md showed up only in lie-fi
 // -- the one mode whose write has failureCount > 0 and so stays counted until it genuinely succeeds.
 //
-// The per-row "Saving..." state is exactly the first-in-flight-attempt signal the count omits, so
-// waiting out both closes the gap with no new plumbing. Do NOT "fix" useOutboxCount instead: its
-// exclusion is deliberate product behaviour (see that hook's header comment).
+// This helper used to pair that count with "Saving..." on the theory that the per-row state is
+// exactly the first-in-flight-attempt signal the count omits. **It is not.** "Saving..." renders
+// only for an optimistic LOG_SET row -- ExerciseDetail gates it on `set.optimistic` and derives it
+// from `logSetMutationKey` alone -- so an in-flight EDIT_SET, DELETE_SET, note, favorite or
+// end-workout is invisible to BOTH signals. That hole is what let a corrected offline set be
+// asserted while its PATCH was still on the wire, and it is why the resulting red was misread as
+// server-side data loss (docs/incidents/2026-07-30-editing-queued-offline-set.md, follow-up).
+//
+// So the remaining condition is MEASURED rather than inferred: no backend WRITE in flight, and
+// none started for a short quiet window (writes only -- see trackApiRequests for why reads are
+// excluded). The two halves are complementary, not redundant -- a
+// write that is paused, retrying or mid-backoff makes no request at all and is caught by the count
+// above; a write on the wire makes no UI mark and is caught here. The quiet window also spans the
+// microtask gap between one serial outbox write finishing and the next being un-paused behind it,
+// which a bare `inFlight === 0` check would read as "drained".
+//
+// Do NOT "fix" useOutboxCount instead: its exclusion is deliberate product behaviour (see that
+// hook's header comment). The logout guard, which genuinely needs the honest answer rather than
+// the display one, uses getUnsyncedWriteCount for exactly that reason.
+const API_QUIET_MS = 400;
+
 export async function waitForOutboxDrain(page: Page, timeout = 15000) {
-  await expect(page.getByText(/waiting to sync/i)).toBeHidden({ timeout });
-  await expect(savingRow(page)).toBeHidden({ timeout });
+  // Attached BEFORE the assertions below, deliberately: the last queued write issues its request in
+  // the same turn the banner's count drops to zero, so a tracker started afterwards can miss the
+  // very request this helper exists to wait for.
+  const api = trackApiRequests(page);
+  try {
+    await expect(page.getByText(/waiting to sync/i)).toBeHidden({ timeout });
+    await expect(savingRow(page)).toBeHidden({ timeout });
+    await expect
+      .poll(() => api.quietForMs(), {
+        timeout,
+        message: 'API traffic never went quiet -- a durable write is probably still in flight',
+      })
+      .toBeGreaterThanOrEqual(API_QUIET_MS);
+  } finally {
+    api.stop();
+  }
+}
+
+// Counts in-flight WRITES to the backend. Two filters, both load-bearing:
+//
+//   - API_ONLY, reused from faults.ts rather than re-written: in dev, Vite serves unbundled source
+//     whose paths also contain "/api/" (e.g. /src/api/queryKeys.js), and that regex is anchored to
+//     the segment right after the origin precisely so those don't match.
+//   - Non-GET/HEAD. The outbox only ever issues POST/PUT/PATCH/DELETE, so reads are irrelevant to
+//     "has the outbox drained" -- and waiting on them is actively harmful: reconnecting fires
+//     offlineCacheWarm's prefetch fan-out across every household member, so an all-requests filter
+//     made this helper wait out the entire warm on every call. Measured: it roughly doubled the
+//     suite's wall-clock, which in turn made the known load-dependent Vite death far likelier
+//     (two runs in a row died mid-suite; see .claude/rules/e2e-tests.md).
+function trackApiRequests(page: Page) {
+  let inFlight = 0;
+  // Seeded to now, not 0, so every call pays one quiet window before passing. That floor is what
+  // makes the check meaningful when a write is dispatched just after this tracker attaches.
+  let lastActivity = Date.now();
+  const isApi = (request: Request) =>
+    API_ONLY.test(request.url()) && request.method() !== 'GET' && request.method() !== 'HEAD';
+  const onRequest = (request: Request) => {
+    if (!isApi(request)) return;
+    inFlight += 1;
+    lastActivity = Date.now();
+  };
+  // Both terminal events, so an aborted request (every lie-fi and hard-offline attempt) releases
+  // its slot instead of pinning the counter above zero until the timeout.
+  const onDone = (request: Request) => {
+    if (!isApi(request)) return;
+    inFlight = Math.max(0, inFlight - 1);
+    lastActivity = Date.now();
+  };
+  page.on('request', onRequest);
+  page.on('requestfinished', onDone);
+  page.on('requestfailed', onDone);
+  return {
+    // 0 while anything is outstanding, otherwise how long the backend has been silent. Clamped at
+    // zero rather than allowed to go negative for a request that was already in flight when this
+    // tracker attached and whose 'request' event we therefore never saw.
+    quietForMs: () => (inFlight > 0 ? 0 : Date.now() - lastActivity),
+    stop: () => {
+      page.off('request', onRequest);
+      page.off('requestfinished', onDone);
+      page.off('requestfailed', onDone);
+    },
+  };
 }
 
 // The per-row state shown while a logged set is unsynced (paused, retrying, or mid-backoff) --

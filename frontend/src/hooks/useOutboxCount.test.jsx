@@ -1,7 +1,7 @@
 import { MutationObserver, QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
-import { getQueuedWriteCount, useOutboxCount } from './useOutboxCount';
+import { getQueuedWriteCount, getUnsyncedWriteCount, useOutboxCount } from './useOutboxCount';
 import { LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from '../lib/queryClient';
 import { logLiveSet } from '../api/sets';
 
@@ -66,6 +66,60 @@ describe('getQueuedWriteCount', () => {
     dispatchLogSet(client);
     await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalled());
     expect(getQueuedWriteCount(client)).toBe(0);
+  });
+});
+
+// The SAFETY counterpart. Every case below is the same scenario as one above -- the point is
+// precisely where the two answers differ, so they are kept adjacent rather than in their own file.
+describe('getUnsyncedWriteCount (the logout data-loss guard)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 1 }, set: { id: 1 } });
+    onlineManager.setOnline(true);
+  });
+  afterEach(() => onlineManager.setOnline(true));
+
+  it('is 0 with no queued writes', () => {
+    expect(getUnsyncedWriteCount(newClient())).toBe(0);
+  });
+
+  // THE case this function exists for, and the exact scenario the display count above returns 0
+  // for. A write on the wire has not reached the server, and logout throws away both the in-memory
+  // outbox and its persisted copy -- so if that request fails there is nothing left to retry from.
+  it('counts a write still in flight on its first attempt -- the one the banner deliberately ignores', async () => {
+    const client = newClient();
+    logLiveSet.mockReturnValue(new Promise(() => {})); // never resolves -- first attempt still in flight
+    dispatchLogSet(client);
+    await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+
+    expect(getUnsyncedWriteCount(client)).toBe(1);
+    // Pinned side by side: this divergence is the whole point, not an inconsistency to unify.
+    expect(getQueuedWriteCount(client)).toBe(0);
+  });
+
+  it('counts writes paused offline, exactly like the display count', async () => {
+    const client = newClient();
+    onlineManager.setOnline(false);
+    dispatchLogSet(client);
+    dispatchLogSet(client);
+    await vi.waitFor(() => expect(getUnsyncedWriteCount(client)).toBe(2));
+  });
+
+  it('drops to 0 once the write genuinely succeeds', async () => {
+    const client = newClient();
+    dispatchLogSet(client);
+    await vi.waitFor(() => expect(getUnsyncedWriteCount(client)).toBe(0));
+  });
+
+  // A definitive 4xx is the server's real answer and onError has already rolled the write back --
+  // there is nothing left to lose, so warning about it would be a false alarm on every logout for
+  // the rest of the session. Same carve-out isUnsyncedWrite makes for every screen.
+  it('does not count a write the server definitively rejected', async () => {
+    const client = newClient();
+    logLiveSet.mockRejectedValue({ status: 400 });
+    dispatchLogSet(client);
+    await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+    await vi.waitFor(() => expect(getUnsyncedWriteCount(client)).toBe(0));
   });
 });
 

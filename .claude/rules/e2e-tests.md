@@ -274,12 +274,21 @@ Phases, in order — `setup` runs **online**, everything after runs **in the mod
   offline (where `derivedSummary` resolves synchronously from the warmed cache) and very visible
   online (where it lasts a round trip). Checking only the offline modes would have concluded there
   was no bug.
-- **`waitForOutboxDrain` is the only sanctioned "the write reached the server" gate, and the banner
-  count alone is not one.** `useOutboxCount` stops counting a write once it is a plain in-flight
-  first attempt, which also fires the instant a paused write resumes — so gating on the banner text
-  by hand lets a reload land with the write still in the outbox, and whatever renders next came from
+- **`waitForOutboxDrain` is the only sanctioned "the write reached the server" gate, and neither UI
+  signal alone is one.** `useOutboxCount` stops counting a write once it is a plain in-flight first
+  attempt, which also fires the instant a paused write resumes — so gating on the banner text by
+  hand lets a reload land with the write still in the outbox, and whatever renders next came from
   `restoreOutbox`'s replay, not the server. That made three of four parity modes pass vacuously
-  (`docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md`).
+  (`docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md`). Pairing it with
+  "Saving…" was then assumed to close that gap and **does not**: that row state exists only for
+  optimistic LOG_SET rows, so an in-flight EDIT_SET/DELETE_SET/note/favorite is invisible to both.
+  The helper now also waits for backend **writes** to go quiet, measured from Playwright's request
+  events.
+- **Wait on writes, not on all `/api/` traffic.** The first cut of the above waited for any API
+  request to settle, which meant waiting out `offlineCacheWarm`'s prefetch fan-out on every call —
+  it roughly doubled suite wall-clock, and two consecutive full runs then died to the
+  load-dependent Vite death. Reads say nothing about whether the outbox drained; filter to
+  non-GET/HEAD.
 - **A `fixmeModes` entry is a hypothesis, not a diagnosis.** Recording a found divergence instead of
   blind-patching is right, but confirm the reproduction measures what it claims before reasoning
   from *which* modes it names — the 2026-08-12 entry's mode list was an artifact of how long each
