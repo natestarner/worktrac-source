@@ -360,10 +360,17 @@ export default function ExerciseDetail({
       showToast(error.message || "Couldn't save that set", { tone: 'error' });
     },
     onSuccess: (result, variables) => {
-      setJustAddedSetId(result.set.id);
-      // Pull the (possibly just-created) live session so its id propagates to the green dot, banner,
-      // and this screen's contextSessionId right away. Interactive-only: a replayed set has no
-      // observer here, so the registered default's liveSession invalidation covers that case.
+      // justAddedSetId is deliberately NOT re-stamped to the server id here. The row keeps its
+      // tempId as its React key across the optimistic -> confirmed swap (see `rowKey` in the set
+      // list below), so the stamp onMutate already set still matches and the 1.1s `set-row-new`
+      // flash runs once to completion instead of restarting on a remounted row.
+      //
+      // The refetch below is kept, though the registered LOG_SET default now writes the real session straight from this
+      // response (queryClient.js) so contextSessionId no longer WAITS on this round trip. It stays
+      // because it is what drives the liveSession prop in this component's own test harness, and
+      // because a revalidation against server truth after a write is right on its own terms. It is
+      // now a background refetch over an already-correct value, not the thing the set list is
+      // blocked on -- TanStack dedupes it against the default's invalidation of the same key.
       if (!editingSessionId) refetchLiveSession?.();
       // PR celebration is driven by the server's authoritative isPR/best, never a refetch race;
       // the weight/reps shown come from the exact values submitted (the mutation variables).
@@ -451,7 +458,15 @@ export default function ExerciseDetail({
   // it's kept as a belt-and-suspenders guarantee rather than relying on mutation-cache order being
   // chronological.
   const pendingBeforeSession = unsyncedLogSets
-    .filter((m) => !sessionSets.some((real) => real.id === m.tempId))
+    // Matches the confirmed row by EITHER id: `real.id === tempId` is the pre-existing case (an
+    // onMutate optimistic row, which carries the tempId as its id), and `real.tempId === tempId` is
+    // the row LOG_SET's onSettled seeded straight from the response, which carries the server id
+    // with the tempId alongside. Without the second, a pending row stayed in this list until the
+    // mutation flipped to 'success' -- and setQueryData and that dispatch are separated by an await
+    // inside TanStack's execute(), so notifyManager could flush a render between them and paint the
+    // set twice. Note this predicate FAILS OPEN: an id that doesn't match anything leaves the
+    // pending row rendering exactly as before, so it can never make a logged set disappear.
+    .filter((m) => !sessionSets.some((real) => real.id === m.tempId || real.tempId === m.tempId))
     .map((m) => ({ id: m.tempId, optimistic: true, weight: m.weight, reps: m.reps, durationSeconds: m.durationSeconds ?? null, unit: m.unit, clientLoggedAt: m.clientLoggedAt }))
     .sort((a, b) => new Date(a.clientLoggedAt ?? 0) - new Date(b.clientLoggedAt ?? 0));
 
@@ -959,10 +974,16 @@ export default function ExerciseDetail({
                   // set shows on top.
                   const setNumber = displaySets.length - i;
                   const isPR = isPrSet(set, bestComparable);
+                  // One identity for the row's whole life. A confirmed row seeded by LOG_SET's
+                  // onSettled carries the tempId its optimistic predecessor was keyed on, so the
+                  // temp -> real swap updates the row in place instead of unmounting it and
+                  // replaying `set-row-new`. Used for the highlight test too, so the animation
+                  // tracks the same row rather than restarting on a new one.
+                  const rowKey = set.tempId ?? set.id;
                   return (
                     <div
-                      key={set.id}
-                      className={set.id === justAddedSetId ? 'set-row-new' : undefined}
+                      key={rowKey}
+                      className={rowKey === justAddedSetId ? 'set-row-new' : undefined}
                       style={{
                         display: 'flex',
                         alignItems: 'center',

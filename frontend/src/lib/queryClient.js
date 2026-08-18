@@ -10,6 +10,7 @@ import { getAuthToken } from '../api/client';
 import { OUTBOX_SCOPE_ID } from './outboxPersistence';
 import { resolveExerciseId, setExerciseIdMapping, isTempExerciseId } from './exerciseIdMap';
 import { resolveSetId, setSetIdMapping, isTempSetId } from './setIdMap';
+import { isSessionEnded } from './endedSessions';
 import { byEnqueueOrder, withEnqueueSeq } from './outboxSequence';
 
 // Bump when the shape of anything we cache changes incompatibly -- the persister discards a
@@ -195,6 +196,74 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         setSetIdMapping(vars.tempId, data.set.id);
       }
       const sessionId = data?.session?.id ?? vars.sessionId ?? null;
+      // Reconcile FROM THE RESPONSE, before invalidating -- rather than refetching to discover what
+      // the response already told us. Without this the FIRST set of a workout vanished for two
+      // sequential round trips: it left ExerciseDetail's pendingBeforeSession the instant the
+      // mutation reported success, while contextSessionId was still null (awaiting a liveSession
+      // refetch) and sessionSets had not yet been fetched under the newly-created session's key.
+      //
+      // `data` is non-undefined ONLY when the server returned a success body, so this whole block is
+      // unreachable while paused offline (never settles), during lie-fi or on a definitive 4xx
+      // (settles with data === undefined), and against a 5xx/cold start (retries forever, settling
+      // only on eventual success). Degraded behaviour is therefore unchanged: pendingBeforeSession
+      // stays the sole source of those rows for a person's entire outage.
+      if (data?.set?.id && data?.session?.id) {
+        // The live session's real id, straight from the write that created it. LogSetResultDto
+        // carries the same WorkoutSessionDto record GET /people/{id}/sessions/live returns, so this
+        // is exactly the value a refetch would have produced -- no shape drift, and an honest
+        // dataUpdatedAt, since it is server data rather than something the client invented.
+        //
+        // NEVER for mode 'session': that response carries the PAST session being edited, which is
+        // not this person's live session. Same guard as the invalidation below.
+        //
+        // isSessionEnded stops a write replaying after End Workout from resurrecting a finished
+        // session. useLiveSession already suppresses that on read; this keeps a stale copy from
+        // being written and persisted in the first place.
+        if (vars.mode !== 'session' && !isSessionEnded(vars.personId, data.session.id)) {
+          client.setQueryData(queryKeys.liveSession(vars.personId), data.session);
+        }
+        // Seed the confirmed row so the list is never empty between the write succeeding and the
+        // invalidation's refetch landing. THREE cases, and conflating them duplicates rows:
+        //   - already reconciled (a row with this server id) -> leave alone
+        //   - an optimistic row from onMutate (set 2+, or session-edit mode, where onMutate DID
+        //     have a session id to write against) -> REPLACE IN PLACE, keeping its position
+        //   - no row at all (the first set of a new workout, where onMutate had no key to write
+        //     to) -> append
+        // `tempId` rides along so ExerciseDetail can hold one React key across the
+        // optimistic -> confirmed swap instead of unmounting the row and replaying its flash.
+        client.setQueryData(queryKeys.sessionSets(sessionId, vars.exerciseId), (old) => {
+          const rows = old ?? [];
+          if (rows.some((r) => r.id === data.set.id)) return rows;
+          const confirmed = { ...data.set, tempId: vars.tempId };
+          const idx = rows.findIndex((r) => r.id === vars.tempId);
+          if (idx === -1) return [...rows, confirmed];
+          const next = rows.slice();
+          next[idx] = confirmed;
+          return next;
+        });
+        // The same contextSessionId null -> real flip cold-keys the summary, which is what dropped
+        // the "Last time"/"Best" cards to skeletons and blinked the weight/reps steppers through an
+        // em dash (prefill derives from summary.lastSession). Carry the previous key's value across
+        // rather than render a loading state over an answer already in hand; the invalidation
+        // immediately below revalidates it.
+        //
+        // This is the IDENTICAL answer, not an approximation. StatsService#getSummary takes the
+        // session id as `excludeSessionId` and getLastSession skips that session's sets, so the
+        // value under the new key means "most recent session OTHER than the one just created" --
+        // and the cached null-key value was fetched before that session existed, so it already is
+        // that. (`best` ignores the parameter entirely and is stale by exactly the set just logged,
+        // which is precisely what ExerciseDetail's mergeBestWithLocalSets already folds in.)
+        //
+        // Live path only, and only into a key holding nothing: for mode 'session' the id was known
+        // all along, so no null-keyed value belongs under it.
+        if (vars.mode !== 'session') {
+          const summaryKey = queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId);
+          if (client.getQueryData(summaryKey) === undefined) {
+            const carried = client.getQueryData(queryKeys.exerciseSummary(vars.personId, vars.exerciseId, null));
+            if (carried !== undefined) client.setQueryData(summaryKey, carried);
+          }
+        }
+      }
       client.invalidateQueries({ queryKey: queryKeys.sessionSets(sessionId, vars.exerciseId) });
       client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
       if (vars.mode !== 'session') {

@@ -61,12 +61,44 @@ mkdir -p "$LOG_DIR"
 #     future reasoning that leans on it to answer that question is unsound. The `mem-at-exit` line
 #     recorded next to it (see _record_exit) is what carries actual information now.
 #
-# What is still open: WHAT terminates it. The leading candidate is host commit-charge exhaustion --
-# measured 2026-08-16, a full suite at 11 workers drove Windows commit to 98.8% of a 49.59 GB limit
-# while free physical RAM still read 4.3 GB. That divergence is why an earlier pass recorded "7+ GB
-# free throughout" and struck OOM off the list: free RAM is the wrong instrument and never moves in
-# time. Note also the frontend/backend asymmetry this predicts and which holds in every recorded
-# case: the JVM commits its heap at startup and stops asking, while node allocates continuously.
+# 2026-08-18 -- SOLVED. It is not memory, and the frontend/backend asymmetry below is explained by
+# process ANCESTRY, not by how the JVM and node allocate. Vite was never detached in the first
+# place:
+#   * `setsid` does not exist in stock Git-for-Windows, so `_detach` degrades to bare `nohup` --
+#     which ignores SIGHUP but leaves the child INSIDE the launching shell's process tree. The
+#     fallback branch below says so out loud; what was missed is that this is the whole bug.
+#   * MEASURED with a 1-second process-chain poll across a reproduction: the ENTIRE chain vanished
+#     within one tick --
+#         bash <- bash <- npm(node) <- cmd <- vite(node)
+#     both bash shells included. Vite was never singled out; the shell tree was torn down and Vite
+#     went with it. That is also why rc=127 shows up: per the 2026-08-16 block, 127 is what an
+#     externally terminated child looks like here.
+#   * The backend survives the same teardown BY ACCIDENT: Maven forks the Spring Boot JVM into a
+#     process whose parent has already exited, so the real server is orphaned and out of the tree
+#     before any teardown can reach it. Nothing to do with heap-vs-continuous allocation.
+#   * RULED OUT, with instruments rather than argument: host commit-charge exhaustion (Windows has
+#     logged ZERO Microsoft-Windows-Resource-Exhaustion-Detector events, ever, and commit sat at
+#     49-60% at every recorded death); and a crash (ZERO Application Error / Windows Error
+#     Reporting events in the death window -- so node was terminated, not faulted).
+#   * Why it bites agent sessions hardest, and why "use separate shell invocations" was never a
+#     usable workaround there: Claude Code keeps ONE persistent shell across every command, so
+#     up.sh and the test run always share it. The advice is unfollowable by construction.
+#   * FIX: the frontend launches through scripts/detach-launch.js, which uses node's
+#     spawn({detached:true}) (DETACHED_PROCESS + CREATE_NEW_PROCESS_GROUP on Windows). Verified the
+#     chain root's parent is dead afterwards -- the same orphaned shape Maven gives the backend --
+#     and a full e2e suite then completed with the SAME vite pid still serving. The backend is
+#     deliberately left alone: it already escapes, and changing its launch is what got the
+#     PowerShell Start-Process attempt reverted twice.
+#
+# SUPERSEDED by the 2026-08-18 block above, kept because the measurement in it is still true and
+# still worth knowing: a full suite at 11 workers drove Windows commit to 98.8% of a 49.59 GB limit
+# while free physical RAM still read 4.3 GB -- so free RAM is the wrong instrument for memory
+# pressure here, and "7+ GB free throughout" never justified striking OOM off the list. What that
+# pass got wrong was the conclusion: commit pressure is not what terminates the frontend (every
+# recorded death sits at 49-60% commit, and Windows has never logged a resource-exhaustion event),
+# and the frontend/backend asymmetry is process ancestry, not JVM-vs-node allocation behaviour.
+# Keep the 11-worker number in mind as a REASON NOT TO RAISE E2E_WORKERS on this host; do not
+# reach for it to explain a dead dev server.
 #
 # A PowerShell Start-Process launcher was tried as a setsid substitute and REVERTED: it could not
 # be shown to start the backend reliably, and trading a working start for an unverified fix to an
@@ -159,9 +191,28 @@ cd "$REPO_ROOT/frontend"
 # stops being the source of truth for how the dev server starts, so a later `vite --host` or
 # NODE_OPTIONS added to the "dev" script would be silently ignored; and a hardcoded bin path breaks
 # on a Vite major that relocates it. Not worth it. Keep `npm run dev`.
+# Launched through detach-launch.js rather than `_detach` (see that file's header for the full
+# root cause). `setsid` is absent here, so `_detach` is bare `nohup`, which leaves Vite inside the
+# launching shell's process tree -- and when that tree is torn down, Vite dies with it, which is
+# the rc=127 mid-run death this project chased through three wrong theories. node's
+# spawn({detached:true}) is what actually leaves the tree. Still `npm run dev`, still wrapped by
+# _record_exit, so package.json stays the source of truth and the death ledger still gets its
+# entry; only the detachment changed.
+# Fail FAST and legibly if the launcher is missing (e.g. a worktree created from a commit that
+# took up.sh but not detach-launch.js -- they must ship together). Without this the frontend simply
+# never starts and you wait out wait_for_url's 150s timeout, which then tails a log the launcher
+# never got to write, i.e. the least informative possible failure.
+if [ ! -f "$SCRIPT_DIR/detach-launch.js" ]; then
+  echo "up.sh: FATAL -- scripts/detach-launch.js is missing." >&2
+  echo "  The frontend is launched through it so Vite gets its own console/process group and" >&2
+  echo "  cannot be killed by a console CTRL event aimed at the shell that started it." >&2
+  echo "  It must be committed alongside this script. See its header for why." >&2
+  exit 1
+fi
+
 FRONTEND_PORT="$FRONTEND_PORT" VITE_BACKEND_ORIGIN="$VITE_BACKEND_ORIGIN" \
-  _detach bash -c "$(_record_exit 'npm run dev' 'frontend')" >> "$LOG_DIR/frontend.log" 2>&1 &
-disown
+  node "$SCRIPT_DIR/detach-launch.js" "$LOG_DIR/frontend.log" \
+    bash -c "$(_record_exit 'npm run dev' 'frontend')" > /dev/null
 
 echo ""
 echo "Backend  -- log: $LOG_DIR/backend.log"

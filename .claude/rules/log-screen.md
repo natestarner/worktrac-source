@@ -55,6 +55,48 @@ person's synced sets are missing from "This session" entirely. `useLiveSession`'
 function for exactly this reason — don't flatten it back to a number
 (`docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md`).
 
+### Handing a row OFF those fallbacks must OVERLAP, and `tempId` is the hinge
+
+A pending row leaves `pendingBeforeSession` the instant its mutation reports `success`
+(`isUnsyncedWrite`). Nothing else was putting it back: on the FIRST set of a workout `onMutate` had
+no session id to write an optimistic `sessionSets` row against, and `contextSessionId` was still
+null pending a `liveSession` refetch. So the set vanished for **two sequential round trips** and the
+"This session" card unmounted around it. The same `null -> real` key flip cold-keyed
+`exerciseSummary`, dropping the summary cards to skeletons and blinking the steppers through an em
+dash (`prefill` derives from `summary.lastSession`).
+
+`LOG_SET`'s `onSettled` (`queryClient.js`) closes it by reconciling **from the response** instead of
+refetching to discover what the response already carried — `LogSetResultDto` holds the same
+`WorkoutSessionDto` and `WorkoutSetDto` records the two GET endpoints return. Three things there are
+load-bearing together:
+
+- **The confirmed row is seeded carrying `vars.tempId`.** That single field is what couples the two
+  halves: `pendingBeforeSession`'s exclusion predicate matches `real.id === tempId ||
+  real.tempId === tempId`, and the row's React key is `set.tempId ?? set.id`. Drop it and you get
+  BOTH the flash back (the row unmounts and replays `set-row-new`) and a transient **duplicate**
+  row — `setQueryData` and the `success` dispatch are separated by an `await` inside TanStack's
+  `execute()`, so `notifyManager` can flush a render between them.
+- **The seed REPLACES a matching optimistic row in place; it does not append.** Sets 2+ and
+  session-edit mode *do* get an `onMutate` row (keyed on the tempId), and appending beside it paints
+  the same set twice.
+- **The session promotion is guarded on `mode !== 'session'` and `isSessionEnded`.** A
+  `mode: 'session'` response carries the PAST session being edited, not the live one; and a set
+  replaying after End Workout must not resurrect a finished session into the cache.
+
+**None of this may become a connectivity branch.** It sits behind `if (data?.set?.id &&
+data?.session?.id)`, and `data` is non-undefined only when the server answered — so it is
+unreachable while paused offline (never settles), under lie-fi or a definitive 4xx (settles with
+`data === undefined`), and against a 5xx/cold start. That is why it needs no row on
+`resilience.md`'s register. `queryClient.test.js` asserts the inertness directly, and
+`e2e/tests/parity-first-set.spec.ts` samples the row count **per animation frame** across all four
+modes — a retrying matcher cannot express "this was never absent", it just waits the bug out.
+
+Known and pre-existing, NOT introduced by the above: mid-drain, `displaySets` prepends
+`pendingBeforeSession` on the assumption those rows are "chronologically the earliest", which is
+untrue once one queued set has confirmed and later ones have not. The order churns transiently while
+an outbox of several sets drains. Before the reconciliation above, that window also **dropped rows
+entirely** (3 -> 2 -> 1 on a three-set drain); it now keeps every row and only reorders.
+
 ## Anything derived from `history` must also fold in the unsynced sets on screen
 
 `history` and `exerciseSummary` are only ever **invalidated** after a write, never optimistically
