@@ -371,11 +371,15 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       }
     },
     // No response to read a session id from (the endpoint is 204), and none is needed: unlike an
-    // edit, a delete is UNREACHABLE for a set whose create is still queued -- ExerciseDetail's
-    // handleDeleteSet cancels the pending create outright for `set.optimistic` and returns before
-    // ever dispatching this. So a DELETE_SET always targets a synced set, whose session has by
-    // definition materialized, and `vars.sessionId` is that real id rather than null. If that
-    // early return is ever removed, this call site needs the same treatment EDIT_SET just got.
+    // edit, a delete is UNREACHABLE for a set whose create is still queued, at BOTH dispatch sites.
+    // ExerciseDetail's handleDeleteSet cancels the pending create outright for `set.optimistic` and
+    // returns before reaching this; SessionSummary dispatches only for the non-optimistic remainder
+    // and is `OfflineDisabledWrap`ped anyway, because the `listSessionSets` read it needs to
+    // enumerate those rows is online-only. So a DELETE_SET always targets a synced set, whose
+    // session has by definition materialized, and `vars.sessionId` is that real id rather than
+    // null. Passing it explicitly is a no-op today (queryKeys coalesces undefined to null) and
+    // exists to keep the choice visible: if either of those guards is ever removed, this call site
+    // needs the same treatment EDIT_SET just got.
     onSettled: (_d, _e, vars) => reconcileSetChange(vars, vars.sessionId ?? null),
   }));
 
