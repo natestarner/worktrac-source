@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
 import { FAVORITE_MUTATION_KEY } from '../../lib/queryClient';
 import { queryKeys } from '../../api/queryKeys';
+import { clearExerciseIdMap, setExerciseIdMapping } from '../../lib/exerciseIdMap';
 import AddEditExerciseModal from './AddEditExerciseModal';
 import { addExercise, favoriteExercise, listExercises, listPersonExercises } from '../../api/exercises';
 import { useUI } from '../../context/UIContext';
@@ -41,6 +42,7 @@ describe('AddEditExerciseModal', () => {
     favoriteExercise.mockResolvedValue({});
     listExercises.mockResolvedValue([]);
     listPersonExercises.mockResolvedValue([]);
+    clearExerciseIdMap();
     useUI.mockReturnValue({ showToast });
   });
   afterEach(() => onlineManager.setOnline(true));
@@ -328,6 +330,32 @@ describe('AddEditExerciseModal', () => {
       const listed = queryClient.getQueryData(queryKeys.personExercises(5)).find((e) => e.id === 42);
       expect(listed).toBeDefined();
       expect(listed.isFavorite).toBe(true);
+    });
+
+    it('patches the row this person already has under its TEMP id, instead of adding a second', async () => {
+      // The catalog and the person's list are separate queries refetched by separate requests, so
+      // they do not flip temp -> real in lockstep. Matching by raw id misses the temp row and
+      // appends a second one -- two identically-named chips in the picker, i.e. exactly the defect
+      // this feature exists to prevent. It surfaced as a flaky lower e2e:
+      // exercise-duplicates.spec.ts's "a third attempt at an already-suffixed name" found 2
+      // elements where it expected 1.
+      const tempId = 'temp-exercise-ringhold';
+      setExerciseIdMapping(tempId, 42);
+      listExercises.mockResolvedValue([benchPress]); // catalog: real id
+      listPersonExercises.mockResolvedValue([
+        { id: tempId, name: 'Bench Press', trackingType: 'strength', isGlobal: false, isFavorite: false, tags: [] },
+      ]);
+      const { queryClient } = renderWithQuery(
+        <AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />,
+      );
+      await waitFor(() => expect(queryClient.getQueryData(queryKeys.personExercises(5))).toBeDefined());
+
+      fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Bench Press' } });
+      fireEvent.click(await screen.findByRole('button', { name: 'Open Bench Press' }));
+
+      const rows = queryClient.getQueryData(queryKeys.personExercises(5));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].isFavorite).toBe(true);
     });
 
     it('does not invent the person list when it has never been fetched', async () => {
