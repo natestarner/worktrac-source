@@ -6,6 +6,7 @@ import { useUI } from '../../context/UIContext';
 import { useHistory } from '../../hooks/useHistory';
 import { useDurableMutation } from '../../hooks/useDurableMutation';
 import { queryKeys } from '../../api/queryKeys';
+import { isTempExerciseId } from '../../lib/exerciseIdMap';
 import { newId } from '../../utils/id';
 import { getExerciseSummary } from '../../api/stats';
 import { listSessionSets } from '../../api/sets';
@@ -793,7 +794,25 @@ export default function ExerciseDetail({
               icon={IconNote}
               tone={sessionNote ? 'accent' : 'default'}
             />
-            <IconButton onClick={() => setShowConfigureModal(true)} label="Customize this exercise" icon={IconMore} />
+            {/* Disabled until the exercise exists on the server. Everything behind this button is a
+                Tier-3 write that posts the exercise id straight to `api/*` -- rename, tags, setup
+                fields, delete -- and none of them resolve a temp id (unlike the durable writes,
+                which go through requireResolvedExerciseId). Against `temp-exercise-<uuid>` the
+                request 404s and the change silently does not happen: the field you just added
+                simply never appears.
+                Disabling the ENTRY POINT rather than locking the modal's controls is the same call
+                OfflineDisabledWrap makes for the other Tier-3 entry points, and it is what
+                AppShellSkeleton's disabled account control does for the same reason -- a disabled
+                button fails Playwright's actionability check, so a click waits for the exercise to
+                sync instead of firing at an id the server has never seen.
+                Reachable online only since the create stopped waiting on a refetch before opening
+                this screen (#186); offline it was always reachable, and always broken. */}
+            <IconButton
+              onClick={() => setShowConfigureModal(true)}
+              label="Customize this exercise"
+              icon={IconMore}
+              disabled={isTempExerciseId(exercise.id)}
+            />
           </div>
           {exercise.tags?.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>

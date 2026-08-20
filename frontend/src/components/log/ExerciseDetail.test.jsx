@@ -1746,3 +1746,53 @@ describe('ExerciseDetail duration-tracked exercises', () => {
     });
   });
 });
+
+
+// Everything behind "Customize this exercise" is a Tier-3 write that posts the exercise id straight
+// to `api/*` -- rename, tags, setup fields, delete -- and none of them resolve a temp id, unlike the
+// durable writes which go through requireResolvedExerciseId. Against `temp-exercise-<uuid>` those
+// requests 404 and the change silently does not happen: the setup field you just added simply never
+// appears, with no error and no sign the tap was discarded.
+//
+// It surfaced on lower as admin.spec.ts's "a custom setup field lets each person set their own value
+// for it" failing all three attempts. That spec creates an exercise and opens Customize immediately.
+// Before #186 the create awaited a catalog refetch first, which was long enough online that the
+// create had synced and the selection had migrated to the real id by the time anything could be
+// tapped; removing that wait made the window genuinely reachable. Offline it was always reachable,
+// and always broken.
+describe('ExerciseDetail Customize is unavailable until the exercise exists on the server', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useAppState.mockReturnValue(typedDraft());
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+  });
+
+  it('disables Customize while the exercise id is still a temp id', () => {
+    renderExerciseDetail({ exercise: { ...exercise, id: 'temp-exercise-abc', optimistic: true } });
+
+    // Disabled rather than hidden, and rather than locking the controls inside the modal: this is
+    // the same "disable the Tier-3 entry point up front" call OfflineDisabledWrap makes elsewhere,
+    // and a disabled button fails Playwright's actionability check, so a click WAITS for the
+    // exercise to sync instead of firing at an id the server has never seen.
+    expect(screen.getByRole('button', { name: 'Customize this exercise' })).toBeDisabled();
+  });
+
+  it('enables it once the exercise carries a real server id', () => {
+    renderExerciseDetail();
+    expect(screen.getByRole('button', { name: 'Customize this exercise' })).toBeEnabled();
+  });
+
+  it('does not disable the durable controls, which resolve temp ids themselves', () => {
+    // Favorite and the session note are durable writes in the outbox scope; they queue against the
+    // temp id and resolve it on replay. Disabling them would break offline logging, which is the
+    // whole point of being able to create an exercise before it has synced.
+    renderExerciseDetail({ exercise: { ...exercise, id: 'temp-exercise-abc', optimistic: true } });
+
+    expect(screen.getByRole('button', { name: /favorites/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /note for this session/ })).toBeEnabled();
+  });
+});
