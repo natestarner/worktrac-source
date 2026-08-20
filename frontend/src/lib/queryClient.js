@@ -299,6 +299,29 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     onSettled: (created, _error, vars) => {
       if (created?.id) {
         setExerciseIdMapping(vars.tempId, created.id);
+        // Swap the optimistic row for the confirmed one IN PLACE, *before* invalidating -- the same
+        // reconcile-from-the-response rule LOG_SET follows above, and for the same reason.
+        //
+        // LogTab's selection migrates from the temp id to the real one the moment this mutation
+        // reports success, but an invalidation only marks the two keys stale: the real row does not
+        // arrive until its refetch completes a round trip later. For that whole window neither id is
+        // in the cache, so `selectedExercise` resolves to null, ExerciseDetail UNMOUNTS, and the Log
+        // tab drops back to the picker -- swallowing whatever the person was mid-tap on (it ate the
+        // first tap on the Time field of a just-created timed exercise, which is how it was found).
+        //
+        // `created` is the server's own ExerciseDto, so this is exactly what the refetch will
+        // return; the invalidations below still run and revalidate it. The per-person overlay
+        // (isFavorite/tags) is preserved from the optimistic row, since ExerciseDto doesn't carry it.
+        const swapInConfirmed = (rows) => {
+          const list = rows ?? [];
+          const idx = list.findIndex((e) => e.id === vars.tempId);
+          if (idx === -1) return list.some((e) => e.id === created.id) ? list : [...list, created];
+          const next = list.slice();
+          next[idx] = { ...list[idx], ...created };
+          return next;
+        };
+        client.setQueryData(queryKeys.exercises(), swapInConfirmed);
+        client.setQueryData(queryKeys.personExercises(vars.personId), swapInConfirmed);
         client.invalidateQueries({ queryKey: queryKeys.exercises() });
         client.invalidateQueries({ queryKey: queryKeys.personExercises(vars.personId) });
       }

@@ -73,6 +73,38 @@ rejections here is a data-loss bug, not a strictness improvement.
   same-key edit-via-recreate is silently discarded. An edit is always a separate `EDIT_SET` write.
   See `docs/incidents/2026-07-30-editing-queued-offline-set.md`.
 
+## Creating an exercise that already exists returns it -- never a 409
+
+`ExerciseService.add` resolves in a fixed order: **`clientKey` -> validate `trackingType` ->
+`(visible to account, name, trackingType)` -> insert.** A match on the third step returns the
+existing row. The client applies the identical rule before it dispatches
+(`utils/exerciseDuplicates.js`); the server is the backstop for what a cache cannot see -- two
+devices creating offline, or a create sent against a stale catalog snapshot.
+
+- **Do not express this as a 409, and do not add a unique index on the name.** A definitive 4xx is
+  the only thing that ends a durable write's retries (`shouldRetryWrite`), so a rejected create is
+  discarded permanently -- together with every set already queued behind it against a temp exercise
+  id that would then never resolve. A 200 carrying the existing row is what lets that temp id map
+  onto something real.
+- **The name lookup returns a `List`, not an `Optional`.** Nothing prevented duplicate names before
+  this, so accounts already hold rows that match; a single-result query would throw
+  `NonUniqueResultException` on exactly the data this exists to stop growing. Ordering (own account
+  before global, then lowest id) is in the query, and mirrors the client's `preferredMatch`.
+- **Matching is case-insensitive on both sides.** SQL Server's default collation is, so the client
+  lowercases to agree; a case-sensitive client check would let "bench press" through and then
+  silently resolve to the existing row on sync.
+- **A global (preloaded) exercise counts as a duplicate**, so sets land on the canonical row rather
+  than a private fork. The scoping mirrors `findVisibleToAccount`; it must never match across
+  accounts.
+- **Known gap, accepted:** the server does not apply the client's `(Time)`/`(Reps)` suffix, so two
+  devices creating the same name offline with *different* measures still converge to two rows
+  sharing a name. It needs a genuine cross-device offline race, it is no worse than the old
+  behaviour, and the alternative -- the server renaming what the client asked for -- is worse.
+
+Same-name-different-measure is a *different exercise*, and only the name is disambiguated. Never
+rename the existing one to match: it already has sets and PRs against it, and rename is an
+online-only write. `V50__convert_seconds_exercises_to_duration.sql` made the same call.
+
 ## Exercise notes — two independent features, don't conflate
 
 - **Persistent note** (`person_exercise.note`, V35) — standing per-person reminder, every session.

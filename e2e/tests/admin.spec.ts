@@ -36,9 +36,12 @@ test.describe('App Settings', () => {
   test('add a tag, create a custom exercise, add and remove a person, switch units', async ({ page, request }) => {
     await registerHousehold(page, request, 'Alex');
 
-    // Custom exercises are created from the Log picker now, not App Settings.
-    await addOwnExercise(page, 'Sled Push');
-    await expect(page.getByText('Sled Push')).toBeVisible();
+    // Custom exercises are created from the Log picker now, not App Settings. The name must not be
+    // one the seeded library already carries ('Sled Push' was, as a TIMED exercise): adding a name
+    // that already exists now resolves to the existing one, or gets a "(Reps)" suffix when only the
+    // measure differs -- so a colliding fixture name silently stops testing "created by you".
+    await addOwnExercise(page, 'Yoke Carry Press');
+    await expect(page.getByText('Yoke Carry Press', { exact: true })).toBeVisible();
 
     await openAppSettings(page);
 
@@ -70,7 +73,8 @@ test.describe('App Settings', () => {
     await registerHousehold(page, request, 'Riley');
 
     // Your own exercise: delete lives in its Customize modal, and the confirm keeps logged sets.
-    await addOwnExercise(page, 'Sled Push');
+    // Name deliberately absent from the seeded library -- see the note in the test above.
+    await addOwnExercise(page, 'Yoke Carry Press');
     await page.getByRole('button', { name: 'Customize this exercise' }).click();
     await expect(page.getByRole('dialog').getByText('Created by you')).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete this exercise' }).click();

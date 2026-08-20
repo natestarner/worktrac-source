@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LogTab from './LogTab';
+import { renderWithQuery } from '../../test/queryWrapper';
+import { setExerciseIdMapping, clearExerciseIdMap } from '../../lib/exerciseIdMap';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
@@ -23,13 +25,27 @@ vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 vi.mock('../../hooks/useExercises', () => ({ useExercises: vi.fn() }));
 vi.mock('../../hooks/usePersonExercises', () => ({ usePersonExercises: vi.fn() }));
 vi.mock('../../hooks/useTags', () => ({ useTags: vi.fn() }));
-vi.mock('../../api/exercises', () => ({ favoriteExercise: vi.fn(), unfavoriteExercise: vi.fn() }));
+vi.mock('../../api/exercises', () => ({
+  addExercise: vi.fn().mockResolvedValue({ id: 4242 }),
+  favoriteExercise: vi.fn().mockResolvedValue({}),
+  unfavoriteExercise: vi.fn(),
+  updateExercise: vi.fn(),
+  listExercises: vi.fn().mockResolvedValue([]),
+  listPersonExercises: vi.fn().mockResolvedValue([]),
+}));
 vi.mock('../../hooks/useRoutines', () => ({ useRoutines: vi.fn() }));
 vi.mock('../../hooks/useLiveSession', () => ({ useLiveSession: vi.fn() }));
 vi.mock('../../hooks/useHistory', () => ({ useHistory: vi.fn() }));
 vi.mock('../../hooks/useSessionEntries', () => ({ useSessionEntries: vi.fn() }));
 vi.mock('../../api/sessions', () => ({ endWorkout: vi.fn().mockResolvedValue(), editSession: vi.fn() }));
-vi.mock('./ExercisePicker', () => ({ default: () => <div>exercise-picker</div> }));
+vi.mock('./ExercisePicker', () => ({
+  default: ({ onAddExercise }) => (
+    <div>
+      exercise-picker
+      <button onClick={() => onAddExercise('Zercher Squat')}>mock-add-own</button>
+    </div>
+  ),
+}));
 vi.mock('./ExerciseDetail', () => ({ default: () => <div>exercise-detail</div> }));
 // Renders the entries LogTab hands it (rather than a static placeholder) so a test can verify
 // LogTab's own wiring -- the merge/offline logic itself is useSessionEntries' own test's job.
@@ -68,6 +84,7 @@ function baseAppState(overrides = {}) {
     endRoutine: vi.fn(),
     doneEditingSession: vi.fn(),
     updateEditingSession: vi.fn(),
+    setExerciseSearch: vi.fn(),
     ...overrides,
   };
 }
@@ -315,5 +332,74 @@ describe('LogTab "create a routine" banner', () => {
     unmount();
     render(<MemoryRouter><LogTab /></MemoryRouter>);
     expect(screen.queryByText(bannerText, { exact: false })).not.toBeInTheDocument();
+  });
+});
+
+
+// Creating an exercise stopped opening its detail screen while ONLINE: handleExerciseCreated
+// awaited an invalidation of queryKeys.exercises()/personExercises() -- the exact two keys
+// insertOptimisticExercise had just written the new exercise into -- so the optimistic row was
+// evicted milliseconds before selectExercise named it, and selectedExercise resolved to null.
+// Offline the same await is a no-op (a paused query's invalidation resolves immediately), which is
+// why every existing spec ran in a mode where the bug is invisible. See
+// docs/incidents/2026-08-19-exercise-create-navigation-lost-online.md.
+describe('opening a newly created exercise', () => {
+  // Never-settling refetches. This is the whole point of the test: if handleExerciseCreated ever
+  // awaits one of these again, selectExercise is never reached and the assertions below fail --
+  // which is exactly the shape the online bug had.
+  const neverSettles = () => vi.fn(() => new Promise(() => {}));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearExerciseIdMap();
+    useUI.mockReturnValue({ showToast: vi.fn() });
+    useExercises.mockReturnValue({ exercises: [], loading: false, refetch: neverSettles() });
+    usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: neverSettles() });
+    useTags.mockReturnValue({ tags: [], loading: false, refetch: neverSettles() });
+    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false, updatedAt: Date.now() });
+    useLiveSession.mockReturnValue({ session: null, refetch: vi.fn() });
+    useHistory.mockReturnValue({ history: [], loading: false, refetch: vi.fn() });
+    useSessionEntries.mockReturnValue([]);
+  });
+
+  afterEach(() => clearExerciseIdMap());
+
+  it('selects the new exercise immediately, without waiting on a catalog refetch', async () => {
+    const appState = baseAppState({ selectedExerciseId: null, activeRoutineId: null });
+    useAppState.mockReturnValue(appState);
+    renderWithQuery(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    fireEvent.click(screen.getByRole('button', { name: 'mock-add-own' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add', exact: true }));
+
+    // The optimistic temp id, selected straight off the row the modal just wrote into the cache.
+    // The temp -> real swap happens later, via LogTab's mutation-cache subscription.
+    await waitFor(() => expect(appState.selectExercise).toHaveBeenCalledTimes(1));
+    expect(appState.selectExercise).toHaveBeenCalledWith(expect.stringMatching(/^temp-exercise-/));
+  });
+
+  it('migrates a restored temp selection to the real id already waiting in the map', () => {
+    // The mutation-cache subscription only ever sees mappings recorded from the moment it
+    // subscribes. A create can sync while LogTab is unmounted -- another tab, or during boot --
+    // leaving a temp selection restored from persisted state with a real id already on hand.
+    setExerciseIdMapping('temp-exercise-restored', 4242);
+    const appState = baseAppState({ selectedExerciseId: 'temp-exercise-restored', activeRoutineId: null });
+    useAppState.mockReturnValue(appState);
+
+    renderWithQuery(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    expect(appState.selectExercise).toHaveBeenCalledWith(4242);
+  });
+
+  it('leaves an unmapped temp selection alone', () => {
+    // Still queued in the outbox: the temp id is the right thing to be looking at, and the
+    // subscription will migrate it when the create syncs.
+    const appState = baseAppState({ selectedExerciseId: 'temp-exercise-queued', activeRoutineId: null });
+    useAppState.mockReturnValue(appState);
+
+    renderWithQuery(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    expect(appState.selectExercise).not.toHaveBeenCalled();
   });
 });

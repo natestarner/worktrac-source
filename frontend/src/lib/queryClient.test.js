@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { MutationObserver, QueryClient, dehydrate, hydrate, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  CREATE_EXERCISE_MUTATION_KEY,
   EDIT_SET_MUTATION_KEY,
   LOG_SET_MUTATION_KEY,
   clearOutboxMutations,
@@ -18,6 +19,7 @@ import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './e
 import { _getMappingForTest, clearSetIdMap, setSetIdMapping } from './setIdMap';
 import { markSessionEnded } from './endedSessions';
 import { editSet, logLiveSet, logSetIntoSession } from '../api/sets';
+import { addExercise, favoriteExercise } from '../api/exercises';
 import { queryKeys } from '../api/queryKeys';
 import { setAuthToken } from '../api/client';
 
@@ -27,6 +29,12 @@ vi.mock('../api/sets', () => ({
   editSet: vi.fn(),
   deleteSet: vi.fn(),
   listSessionSets: vi.fn(),
+}));
+
+vi.mock('../api/exercises', () => ({
+  addExercise: vi.fn(),
+  favoriteExercise: vi.fn(),
+  unfavoriteExercise: vi.fn(),
 }));
 
 describe('shouldRetryWrite (failure taxonomy, hardening #8)', () => {
@@ -830,5 +838,120 @@ describe('logSet onSettled reconciles from the response (first-set flash)', () =
       expect(client.getQueryData(queryKeys.liveSession(PERSON))).toBeUndefined();
       expect(client.getQueryData(queryKeys.sessionSets(null, EXERCISE))).toBeUndefined();
     });
+  });
+});
+
+
+// The optimistic exercise must be replaced by the server's row IN THE CACHE, not merely invalidated.
+//
+// LogTab migrates its selection from the temp id to the real one the instant this mutation reports
+// success. An invalidation only marks the two keys stale -- the real row does not land until its
+// refetch completes a round trip later -- so without the in-place swap there is a window where
+// neither id is in either list, `selectedExercise` resolves to null, and ExerciseDetail unmounts
+// back to the picker. That window swallowed the first tap on a just-created timed exercise's Time
+// field (caught by endurance.spec.ts, which passed on main and failed on the branch).
+describe('createExercise onSettled reconciles from the response, not just by invalidating', () => {
+  let client;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await clearExerciseIdMap();
+    client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    registerOfflineMutationDefaults(client, { retry: false });
+    favoriteExercise.mockResolvedValue({});
+  });
+  afterEach(async () => {
+    await clearExerciseIdMap();
+  });
+
+  function dispatch(variables) {
+    const observer = new MutationObserver(client, {
+      ...client.getMutationDefaults(CREATE_EXERCISE_MUTATION_KEY),
+      mutationKey: CREATE_EXERCISE_MUTATION_KEY,
+    });
+    return observer.mutate(variables);
+  }
+
+  function seedOptimistic(tempId, personId) {
+    const row = { id: tempId, name: 'Ring Support Hold', trackingType: 'duration', isGlobal: false, isFavorite: true, tags: [], optimistic: true };
+    client.setQueryData(queryKeys.exercises(), [row]);
+    client.setQueryData(queryKeys.personExercises(personId), [row]);
+  }
+
+  it('replaces the temp row with the server row in both lists, in place', async () => {
+    const tempId = newTempExerciseId();
+    seedOptimistic(tempId, 7);
+    addExercise.mockResolvedValue({ id: 4242, name: 'Ring Support Hold', trackingType: 'duration', isGlobal: false });
+
+    await dispatch({ tempId, name: 'Ring Support Hold', trackingType: 'duration', personId: 7, idempotencyKey: 'k1' });
+
+    for (const key of [queryKeys.exercises(), queryKeys.personExercises(7)]) {
+      const rows = client.getQueryData(key);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).toBe(4242);
+      // The measure must survive the swap -- ExerciseDetail reads it to decide Reps vs Time.
+      expect(rows[0].trackingType).toBe('duration');
+    }
+  });
+
+  it('keeps the per-person overlay the optimistic row carried', async () => {
+    // ExerciseDto has no isFavorite/tags, so a blind overwrite would drop the exercise out of the
+    // person's picker until the refetch landed -- the same one-round-trip hole, in a different shape.
+    const tempId = newTempExerciseId();
+    seedOptimistic(tempId, 7);
+    addExercise.mockResolvedValue({ id: 4242, name: 'Ring Support Hold', trackingType: 'duration', isGlobal: false });
+
+    await dispatch({ tempId, name: 'Ring Support Hold', trackingType: 'duration', personId: 7, idempotencyKey: 'k2' });
+
+    // Looked up BY THE REAL ID on purpose: reading [0].isFavorite would still find the untouched
+    // optimistic row and pass with the swap deleted.
+    const confirmed = client.getQueryData(queryKeys.personExercises(7)).find((e) => e.id === 4242);
+    expect(confirmed).toBeDefined();
+    expect(confirmed.isFavorite).toBe(true);
+    expect(confirmed.tags).toEqual([]);
+  });
+
+  it('adds the server row when the temp row has already gone (a refetch beat it)', async () => {
+    // The invalidations from a PREVIOUS create can land mid-flight and replace the array, taking the
+    // temp row with them. The confirmed exercise still has to end up in the list.
+    const tempId = newTempExerciseId();
+    client.setQueryData(queryKeys.exercises(), []);
+    client.setQueryData(queryKeys.personExercises(7), []);
+    addExercise.mockResolvedValue({ id: 4242, name: 'Ring Support Hold', trackingType: 'duration', isGlobal: false });
+
+    await dispatch({ tempId, name: 'Ring Support Hold', trackingType: 'duration', personId: 7, idempotencyKey: 'k3' });
+
+    expect(client.getQueryData(queryKeys.exercises()).map((e) => e.id)).toEqual([4242]);
+    expect(client.getQueryData(queryKeys.personExercises(7)).map((e) => e.id)).toEqual([4242]);
+  });
+
+  it('does not duplicate when the server row is already present', async () => {
+    // A replayed create returns the already-committed exercise, which a refetch may have brought in
+    // first. Appending beside it would put the same exercise in the picker twice.
+    const tempId = newTempExerciseId();
+    const real = { id: 4242, name: 'Ring Support Hold', trackingType: 'duration', isGlobal: false };
+    client.setQueryData(queryKeys.exercises(), [real]);
+    client.setQueryData(queryKeys.personExercises(7), [real]);
+    addExercise.mockResolvedValue(real);
+
+    await dispatch({ tempId, name: 'Ring Support Hold', trackingType: 'duration', personId: 7, idempotencyKey: 'k3b' });
+
+    expect(client.getQueryData(queryKeys.exercises())).toHaveLength(1);
+    expect(client.getQueryData(queryKeys.personExercises(7))).toHaveLength(1);
+  });
+
+  it('is inert when the write never reached the server', async () => {
+    // Same argument as LOG_SET's reconciliation: it sits behind `created?.id`, so it cannot run
+    // while paused offline (never settles), on a definitive 4xx, or against a 5xx. No connectivity
+    // branch, and nothing for resilience.md's register.
+    const tempId = newTempExerciseId();
+    seedOptimistic(tempId, 7);
+    addExercise.mockRejectedValueOnce({ status: 400 });
+
+    await dispatch({ tempId, name: 'Ring Support Hold', trackingType: 'duration', personId: 7, idempotencyKey: 'k4' }).catch(() => {});
+
+    // The optimistic row is left exactly as it was -- it is still the only thing the screen has.
+    expect(client.getQueryData(queryKeys.exercises())[0].id).toBe(tempId);
+    expect(client.getQueryData(queryKeys.personExercises(7))[0].id).toBe(tempId);
   });
 });
