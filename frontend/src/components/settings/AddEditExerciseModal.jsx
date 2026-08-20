@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { addExercise, updateExercise, favoriteExercise } from '../../api/exercises';
 import { queryKeys } from '../../api/queryKeys';
 import { CREATE_EXERCISE_MUTATION_KEY, FAVORITE_MUTATION_KEY } from '../../lib/queryClient';
-import { isTempExerciseId, newTempExerciseId } from '../../lib/exerciseIdMap';
+import { isTempExerciseId, newTempExerciseId, resolveExerciseId } from '../../lib/exerciseIdMap';
 import { newId } from '../../utils/id';
 import { MAX_EXERCISE_NAME_LENGTH, MEASURE_OPTIONS, measureLabel, resolveExerciseCreate } from '../../utils/exerciseDuplicates';
 import { useDurableMutation } from '../../hooks/useDurableMutation';
@@ -119,9 +119,18 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       // there) would not be enough. Returning undefined for a missing entry deliberately declines to
       // BUILD the list -- same rule, and same reason, as CREATE_EXERCISE's onSettled in
       // queryClient.js.
+      // Compare through the id map, not by raw id. `exercise` came from the CATALOG, which may
+      // already carry the real server id while this person's list still holds the same exercise
+      // under its temp id (the two are separate queries, refetched by separate requests, so they
+      // do not flip in lockstep). Matching on `e.id === exercise.id` misses that row and appends a
+      // SECOND one -- two identically-named chips in the picker, which is the exact defect this
+      // whole feature exists to prevent. resolveExerciseId returns the id unchanged when there is
+      // no mapping, so this is the plain comparison in every other case.
+      const sameExercise = (row) =>
+        row.id === exercise.id || resolveExerciseId(row.id) === resolveExerciseId(exercise.id);
       const addOrPatch = (rows) => {
         if (rows === undefined) return undefined;
-        const idx = rows.findIndex((e) => e.id === exercise.id);
+        const idx = rows.findIndex(sameExercise);
         if (idx === -1) return [...rows, { tags: [], ...exercise, isFavorite: true }];
         const next = rows.slice();
         next[idx] = { ...rows[idx], isFavorite: true };
