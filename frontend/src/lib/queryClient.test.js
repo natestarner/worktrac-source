@@ -940,6 +940,31 @@ describe('createExercise onSettled reconciles from the response, not just by inv
     expect(client.getQueryData(queryKeys.personExercises(7))).toHaveLength(1);
   });
 
+  it('never BUILDS either list -- a replay after a cache clear must not invent a catalog', async () => {
+    // A create replayed from the outbox has no component behind it, and the query cache it was
+    // queued against may be gone: cleared on an auth change, or dropped by the 24h maxAge / buster
+    // bump the outbox deliberately does not share. Building the entry here would leave a catalog
+    // holding exactly this one exercise, stamped as freshly fetched -- and with no observer to
+    // refetch it, or offline before the invalidation lands, that is the person's whole library.
+    const tempId = newTempExerciseId();
+    addExercise.mockResolvedValue({ id: 4242, name: 'Ring Support Hold', trackingType: 'duration', isGlobal: false });
+
+    await dispatch({ tempId, name: 'Ring Support Hold', trackingType: 'duration', personId: 7, idempotencyKey: 'k7' });
+
+    expect(client.getQueryData(queryKeys.exercises())).toBeUndefined();
+    expect(client.getQueryData(queryKeys.personExercises(7))).toBeUndefined();
+  });
+
+  it('clears the optimistic marker off the confirmed row', async () => {
+    const tempId = newTempExerciseId();
+    seedOptimistic(tempId, 7);
+    addExercise.mockResolvedValue({ id: 4242, name: 'Ring Support Hold', trackingType: 'duration', isGlobal: false });
+
+    await dispatch({ tempId, name: 'Ring Support Hold', trackingType: 'duration', personId: 7, idempotencyKey: 'k8' });
+
+    expect(client.getQueryData(queryKeys.exercises())[0]).not.toHaveProperty('optimistic');
+  });
+
   it('is inert when the write never reached the server', async () => {
     // Same argument as LOG_SET's reconciliation: it sits behind `created?.id`, so it cannot run
     // while paused offline (never settles), on a definitive 4xx, or against a 5xx. No connectivity

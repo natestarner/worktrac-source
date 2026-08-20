@@ -192,6 +192,17 @@ the row was evicted milliseconds before it was named, and the person landed back
   resolves through `resolveExerciseId` *before* subscribing — a create that synced while the
   component was unmounted (another tab, during boot) otherwise leaves a temp id selected forever.
 
+- **An optimistic write may PATCH a query entry; it must never BUILD one.** `setQueryData` calls
+  `queryCache.build()`, so writing to a key with no entry *creates* it -- holding whatever that one
+  updater returned, stamped `dataUpdatedAt = Date.now()`. A create replayed from the outbox has no
+  component behind it and the cache it was queued against may be gone (cleared on an auth change,
+  or dropped by the 24h `maxAge` / `buster` the outbox deliberately does not share), so this is a
+  reachable state, not a hypothetical. The result is a catalog whose only member is that one
+  exercise: online the following invalidation repairs it in a round trip, but a replay can land on
+  any tab, and with no observer to refetch -- or offline before it lands -- that stands as the
+  person's entire library. **Return `undefined` from the updater when `rows === undefined`**;
+  TanStack then skips the write entirely. Applies to `CREATE_EXERCISE`'s `onSettled` and to
+  `AddEditExerciseModal`'s open-an-existing-exercise favorite alike.
 - **Reaching the screen sooner means the temp->real swap now happens WHILE someone is using it, so
   the swap must reconcile from the response.** `CREATE_EXERCISE`'s `onSettled` replaces the
   optimistic row with the server's row in both keys *before* invalidating. Invalidating alone only

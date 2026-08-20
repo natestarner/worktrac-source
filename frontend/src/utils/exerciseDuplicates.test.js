@@ -122,6 +122,22 @@ describe('resolveExerciseCreate', () => {
     });
   });
 
+  it('drops the suffix rather than exceed the name column', () => {
+    // exercises.name is NVARCHAR(200) with no @Size on the request, so an over-long name is a 500,
+    // and shouldRetryWrite retries a 5xx forever -- head-of-line-blocking the whole serial outbox.
+    // Two rows sharing a name is cosmetic; a wedged outbox is not.
+    const long = 'P'.repeat(196); // 196 + ' (Time)' = 203
+    const clash = { id: 9, name: long, trackingType: 'strength', isGlobal: false };
+    expect(resolve([clash], long, 'duration')).toEqual({ kind: 'create', name: long, clashWith: clash });
+  });
+
+  it('still suffixes when the result fits exactly', () => {
+    const long = 'P'.repeat(193); // 193 + ' (Time)' = 200
+    const clash = { id: 9, name: long, trackingType: 'strength', isGlobal: false };
+    expect(resolve([clash], long, 'duration').name).toBe(`${long} (Time)`);
+    expect(resolve([clash], long, 'duration').name).toHaveLength(200);
+  });
+
   it('returns a plain create for a blank name -- the modal rejects it before saving', () => {
     expect(resolve([bench], '   ')).toEqual({ kind: 'create', name: '', clashWith: null });
   });

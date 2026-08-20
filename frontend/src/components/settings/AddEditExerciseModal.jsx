@@ -5,7 +5,7 @@ import { queryKeys } from '../../api/queryKeys';
 import { CREATE_EXERCISE_MUTATION_KEY, FAVORITE_MUTATION_KEY } from '../../lib/queryClient';
 import { isTempExerciseId, newTempExerciseId } from '../../lib/exerciseIdMap';
 import { newId } from '../../utils/id';
-import { MEASURE_OPTIONS, measureLabel, resolveExerciseCreate } from '../../utils/exerciseDuplicates';
+import { MAX_EXERCISE_NAME_LENGTH, MEASURE_OPTIONS, measureLabel, resolveExerciseCreate } from '../../utils/exerciseDuplicates';
 import { useDurableMutation } from '../../hooks/useDurableMutation';
 import { useExercises } from '../../hooks/useExercises';
 import { usePersonExercises } from '../../hooks/usePersonExercises';
@@ -55,6 +55,12 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
     ? null
     : resolveExerciseCreate({ catalog, name, trackingType });
   const openTarget = resolution?.kind === 'open' ? resolution.exercise : null;
+  // Bounded so a very long name cannot turn the primary button into a paragraph (a name allows 200
+  // characters; this modal is 340px wide). The VISIBLE text is what gets truncated and the
+  // accessible name simply matches it -- an aria-label carrying the full name would visibly differ
+  // from the label (WCAG 2.5.3), and e2e selects this button by its accessible name.
+  const openLabel =
+    openTarget && (openTarget.name.length > 32 ? `${openTarget.name.slice(0, 32)}…` : openTarget.name);
   const duplicateNote = openTarget
     ? 'You already have this exercise.'
     : resolution?.clashWith
@@ -103,6 +109,25 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   function openExisting(exercise) {
     const alreadyFavorite = personExercises.some((e) => e.id === exercise.id && e.isFavorite);
     if (personId && !alreadyFavorite && !isTempExerciseId(exercise.id)) {
+      // Put it in the picker NOW, the same way the create path's optimistic row does, and for the
+      // same reason: FAVORITE has no onMutate, only an invalidation, and an invalidation is a no-op
+      // while paused. Without this, "I added it and it isn't in my list" would be true offline and
+      // false online -- a connectivity-shaped difference in a flow that must not have one.
+      //
+      // Add-or-patch, not patch: a preloaded exercise the person has never favorited is not in their
+      // list at all, so ExerciseDetail's handleToggleFavorite (which only maps over rows already
+      // there) would not be enough. Returning undefined for a missing entry deliberately declines to
+      // BUILD the list -- same rule, and same reason, as CREATE_EXERCISE's onSettled in
+      // queryClient.js.
+      const addOrPatch = (rows) => {
+        if (rows === undefined) return undefined;
+        const idx = rows.findIndex((e) => e.id === exercise.id);
+        if (idx === -1) return [...rows, { tags: [], ...exercise, isFavorite: true }];
+        const next = rows.slice();
+        next[idx] = { ...rows[idx], isFavorite: true };
+        return next;
+      };
+      queryClient.setQueryData(queryKeys.personExercises(personId), addOrPatch);
       // exerciseName rides along the same way ExerciseDetail's favorite does, so the outbox row
       // reads correctly without depending on the catalog cache still holding this exercise.
       favoriteMutation.mutate({ personId, exerciseId: exercise.id, exerciseName: exercise.name, favorite: true });
@@ -172,6 +197,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
           if (nameError) setNameError(false);
         }}
         placeholder="Exercise name"
+        maxLength={MAX_EXERCISE_NAME_LENGTH}
         style={{
           width: '100%',
           boxSizing: 'border-box',
@@ -228,7 +254,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
           disabled={saving}
           style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
-          {isEditing ? 'Save' : openTarget ? `Open ${openTarget.name}` : 'Add'}
+          {isEditing ? 'Save' : openTarget ? `Open ${openLabel}` : 'Add'}
         </Button>
       </div>
     </Modal>

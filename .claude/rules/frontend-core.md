@@ -273,6 +273,33 @@ happily on a key nothing observes, which is exactly the failure mode.
   disable the control up front. Both read `useOnlineStatus` only, so they deliberately do **not**
   react to lie-fi.
 
+## Adding an exercise that already exists opens it, and that check lives on BOTH sides
+
+`utils/exerciseDuplicates.js`'s `resolveExerciseCreate` is the single derivation behind the Add
+modal's note, its primary button and its save handler — keep it that way, so those three cannot
+disagree. `ExerciseService.add` applies the same rule server-side for what a cache cannot see (two
+devices creating offline, a stale catalog). Full backend contract: `.claude/rules/workout-data-model.md`.
+
+- **It is not a connectivity branch and must not become one.** It reads whatever
+  `queryKeys.exercises()` holds, by one code path in every mode. What varies while degraded is the
+  *content* of that cache: on a device that has never warmed it the resolver finds nothing and the
+  create proceeds exactly as before. It degrades; it never blocks, and it never gates on
+  `useOnlineStatus`.
+- **Matching is case-insensitive**, because SQL Server's collation is. A case-sensitive client check
+  would let "bench press" through and then silently resolve to the existing row on sync — so the
+  picker would show one row for an exercise the person was told they had created.
+- **Opening an existing exercise must put it in the picker optimistically.** `FAVORITE` has no
+  `onMutate`, only an invalidation, and an invalidation is a no-op while paused — so without the
+  local write "I added it and it isn't in my list" would be true offline and false online. It is an
+  add-or-patch, since a preloaded exercise the person has never favorited is not in their list at
+  all (`ExerciseDetail`'s `handleToggleFavorite` only maps over rows already there). It must not
+  BUILD the list — see `offline-internals.md`.
+- **`exercises.name` is `NVARCHAR(200)` and `ExerciseRequest` has no `@Size`.** An over-long name is
+  a DB error → 500 → `shouldRetryWrite` retries forever, head-of-line-blocking the one serial outbox
+  scope. So the disambiguating `(Time)`/`(Reps)` suffix is **dropped** rather than allowed to push a
+  name over the limit, and the field carries `maxLength`. Two rows sharing a name is cosmetic; a
+  wedged outbox is not.
+
 ## A durable write is not the same as a visible value
 
 A per-session display value needs its own pending-mutation fallback. `contextSessionId` stays

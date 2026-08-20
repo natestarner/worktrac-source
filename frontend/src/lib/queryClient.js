@@ -312,12 +312,24 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         // `created` is the server's own ExerciseDto, so this is exactly what the refetch will
         // return; the invalidations below still run and revalidate it. The per-person overlay
         // (isFavorite/tags) is preserved from the optimistic row, since ExerciseDto doesn't carry it.
+        //
+        // It must NEVER build the entry, only reconcile one that already exists. A create replayed
+        // from the outbox has no component behind it, and the query cache it was queued against may
+        // be gone -- cleared on an auth change, or dropped by the 24h maxAge / buster bump the
+        // OUTBOX deliberately does not share. Building here would leave a catalog holding exactly
+        // this one exercise, stamped as freshly fetched: online the invalidation below fixes it in a
+        // round trip, but with no observer to refetch (the replay can land on any tab), or offline
+        // before that lands, it stands as the person's entire exercise library.
         const swapInConfirmed = (rows) => {
-          const list = rows ?? [];
-          const idx = list.findIndex((e) => e.id === vars.tempId);
-          if (idx === -1) return list.some((e) => e.id === created.id) ? list : [...list, created];
-          const next = list.slice();
-          next[idx] = { ...list[idx], ...created };
+          if (rows === undefined) return undefined;
+          const idx = rows.findIndex((e) => e.id === vars.tempId);
+          if (idx === -1) return rows.some((e) => e.id === created.id) ? rows : [...rows, created];
+          const next = rows.slice();
+          const merged = { ...rows[idx], ...created };
+          // The row is confirmed now. Leaving the optimistic marker on it would say otherwise to any
+          // future reader (today only SETS consult that flag, so this is honesty, not a live bug).
+          delete merged.optimistic;
+          next[idx] = merged;
           return next;
         };
         client.setQueryData(queryKeys.exercises(), swapInConfirmed);

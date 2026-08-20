@@ -3,6 +3,7 @@ import { onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
 import { FAVORITE_MUTATION_KEY } from '../../lib/queryClient';
+import { queryKeys } from '../../api/queryKeys';
 import AddEditExerciseModal from './AddEditExerciseModal';
 import { addExercise, favoriteExercise, listExercises, listPersonExercises } from '../../api/exercises';
 import { useUI } from '../../context/UIContext';
@@ -306,6 +307,62 @@ describe('AddEditExerciseModal', () => {
 
       expect(onSaved).toHaveBeenCalledWith(benchPress);
       expect(addExercise).not.toHaveBeenCalled();
+    });
+
+    it('puts the opened exercise in the picker immediately, without waiting for the favorite to sync', async () => {
+      // FAVORITE has no onMutate, only an invalidation -- and an invalidation is a no-op while
+      // paused. Without the optimistic write, "I added it and it isn't in my list" would be true
+      // offline and false online, which is a connectivity-shaped difference in a flow that must not
+      // have one. Asserted through the CACHE rather than a spy: a spy on invalidateQueries passes
+      // just as happily on a key nothing observes.
+      listExercises.mockResolvedValue([benchPress]);
+      const { queryClient } = renderWithQuery(
+        <AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />,
+      );
+      // The person's list must already exist -- the modal deliberately declines to BUILD it.
+      await waitFor(() => expect(queryClient.getQueryData(queryKeys.personExercises(5))).toBeDefined());
+
+      fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Bench Press' } });
+      fireEvent.click(await screen.findByRole('button', { name: 'Open Bench Press' }));
+
+      const listed = queryClient.getQueryData(queryKeys.personExercises(5)).find((e) => e.id === 42);
+      expect(listed).toBeDefined();
+      expect(listed.isFavorite).toBe(true);
+    });
+
+    it('does not invent the person list when it has never been fetched', async () => {
+      // Same rule as CREATE_EXERCISE's onSettled: building the entry here would leave a picker whose
+      // only member is this one exercise, stamped fresh, for as long as nothing refetches it.
+      listExercises.mockResolvedValue([benchPress]);
+      listPersonExercises.mockImplementation(() => new Promise(() => {}));
+      const { queryClient } = renderWithQuery(
+        <AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />,
+      );
+
+      fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Bench Press' } });
+      fireEvent.click(await screen.findByRole('button', { name: 'Open Bench Press' }));
+
+      expect(queryClient.getQueryData(queryKeys.personExercises(5))).toBeUndefined();
+    });
+
+    it('bounds the button label so a very long name cannot become a paragraph', async () => {
+      // Names allow 200 characters and this modal is 340px wide. The visible text is truncated and
+      // the accessible name matches it -- an aria-label carrying the full name would differ visibly
+      // from the label (WCAG 2.5.3).
+      const longName = 'Single Arm Half Kneeling Landmine Press';
+      listExercises.mockResolvedValue([{ id: 43, name: longName, trackingType: 'strength', isGlobal: false }]);
+      renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />);
+
+      fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: longName } });
+
+      expect(await screen.findByRole('button', { name: 'Open Single Arm Half Kneeling Landmin…' })).toBeInTheDocument();
+    });
+
+    it('caps the name field at the length the column can hold', () => {
+      // exercises.name is NVARCHAR(200) with no @Size on the request, so a longer name is a 500 --
+      // and a 5xx retries forever, wedging the serial outbox.
+      renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />);
+      expect(screen.getByPlaceholderText('Exercise name')).toHaveAttribute('maxlength', '200');
     });
 
     it('leaves renaming alone -- no duplicate note, no Open button', async () => {

@@ -10,6 +10,12 @@ export const MEASURE_OPTIONS = [
 
 const DEFAULT_TRACKING_TYPE = 'strength';
 
+// exercises.name is NVARCHAR(200) and ExerciseRequest carries no @Size, so an over-long name is a
+// database error -> 500 -> shouldRetryWrite retries FOREVER, head-of-line-blocking the one serial
+// outbox scope. The suffix below must therefore never be the thing that pushes a name over: see
+// resolveExerciseCreate, which drops it rather than risk that. Also the input's maxLength.
+export const MAX_EXERCISE_NAME_LENGTH = 200;
+
 export function measureLabel(trackingType) {
   const option = MEASURE_OPTIONS.find((o) => o.value === trackingType);
   return (option ?? MEASURE_OPTIONS[0]).label;
@@ -91,6 +97,10 @@ export function resolveExerciseCreate({ catalog, name, trackingType }) {
   const clashWith = preferredMatch(clashes);
 
   const suffixed = `${trimmed} (${measureLabel(measure)})`;
+
+  // Falling back to the unsuffixed name reproduces exactly today's behaviour (two rows sharing a
+  // name), which is a cosmetic problem. Sending a name the column cannot hold is a wedged outbox.
+  if (suffixed.length > MAX_EXERCISE_NAME_LENGTH) return { kind: 'create', name: trimmed, clashWith };
 
   // The suffixed name can itself already be taken: "Plank" (Reps) and "Plank (Time)" both exist and
   // the person types "Plank" with Time selected. Creating here would produce exactly the duplicate
