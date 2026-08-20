@@ -29,8 +29,11 @@ export default function Toast() {
       aria-live={toast.tone === 'error' ? 'assertive' : 'polite'}
       style={{
         position: 'fixed',
-        // Clears the home indicator on a standalone-display PWA.
-        bottom: 'calc(var(--space-8) + env(safe-area-inset-bottom))',
+        // Clears the home indicator on a standalone-display PWA, AND the session bar when one is
+        // mounted (--bottom-bar-height is 0 otherwise). Without that term the toast lands on the
+        // bar -- which is exactly the defect it had against the floating rest timer it replaces,
+        // where a z-40 toast blanked the z-18 countdown for the toast's full 3.2s.
+        bottom: 'calc(var(--bottom-bar-height, 0px) + var(--space-8) + env(safe-area-inset-bottom))',
         left: '50%',
         maxWidth: 'min(92vw, 480px)',
         textAlign: 'center',

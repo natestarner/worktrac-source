@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initialState, reducer, PERSON_DEFAULTS } from './AppStateContext';
+import { initialState, reducer, selectRestTimersByPerson, PERSON_DEFAULTS } from './AppStateContext';
 
 // The active person's slice, flattened -- mirrors what the provider exposes to consumers.
 function active(state) {
@@ -251,6 +251,105 @@ describe('AppStateContext reducer', () => {
     expect(active(restored).draftSource).toBe('user');
   });
 
+  // Both rest fields are written together, always. A start with no target would resume against the
+  // app default instead of the target that was actually in force when the set was logged -- which
+  // is the same class of bug as re-deriving the target from whatever exercise is on screen.
+  it('SET_REST_TIMER writes the start and its target together, and clears both as a pair', () => {
+    let state = withPerson(1);
+
+    state = reducer(state, { type: 'SET_REST_TIMER', startedAt: 1700000000000, targetSeconds: 120 });
+    expect(active(state).restStartedAt).toBe(1700000000000);
+    expect(active(state).restTargetSeconds).toBe(120);
+
+    state = reducer(state, { type: 'SET_REST_TIMER', startedAt: null, targetSeconds: null });
+    expect(active(state).restStartedAt).toBeNull();
+    expect(active(state).restTargetSeconds).toBeNull();
+  });
+
+  // Clearing is expressed as "no start", so a clear that forgot to null the target must not leave a
+  // stale one behind for the next resume to pick up.
+  it('SET_REST_TIMER drops the target whenever the start is cleared', () => {
+    let state = withPerson(1);
+    state = reducer(state, { type: 'SET_REST_TIMER', startedAt: 1700000000000, targetSeconds: 120 });
+
+    state = reducer(state, { type: 'SET_REST_TIMER', startedAt: null, targetSeconds: 120 });
+    expect(active(state).restTargetSeconds).toBeNull();
+  });
+
+  // Per-person isolation: the rest timer is one person's state, and switching people must not
+  // carry it across.
+  it('SET_REST_TIMER defaults to the active person', () => {
+    let state = reducer(withPerson(1), { type: 'SET_REST_TIMER', startedAt: 1700000000000, targetSeconds: 90 });
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
+
+    expect(active(state).restStartedAt).toBeNull();
+    expect(state.byPerson[1].restStartedAt).toBe(1700000000000);
+  });
+
+  // Starting a timer is always the active person, but DISCARDING an expired one on boot is not:
+  // that runs for every household member at once. Without an explicit target the boot sweep could
+  // only ever clear one of them -- and would silently clear the WRONG person's.
+  it('SET_REST_TIMER can target a person who is not active', () => {
+    let state = reducer(withPerson(1), { type: 'SET_REST_TIMER', startedAt: 1700000000000, targetSeconds: 90 });
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
+
+    state = reducer(state, { type: 'SET_REST_TIMER', personId: 1, startedAt: null, targetSeconds: null });
+
+    expect(state.byPerson[1].restStartedAt).toBeNull();
+    // ...and left the active person alone.
+    expect(state.byPerson[2].restStartedAt).toBeNull();
+  });
+
+  it('SET_REST_TIMER targeting a person seeds their slice from the defaults', () => {
+    const state = reducer(withPerson(1), {
+      type: 'SET_REST_TIMER',
+      personId: 5,
+      startedAt: 1700000000000,
+      targetSeconds: 120,
+    });
+
+    expect(state.byPerson[5].restStartedAt).toBe(1700000000000);
+    expect(state.byPerson[5].repsDraft).toBe(PERSON_DEFAULTS.repsDraft);
+  });
+});
+
+// The projection AppShell resumes from. It spans EVERY person, which is the whole point: a reload
+// used to restore only the active person's timer, so the ring belonging to whoever was NOT holding
+// the device -- the one the feature exists for -- vanished until you switched to them.
+describe('selectRestTimersByPerson', () => {
+  it('returns every person with a persisted rest timer, not just one', () => {
+    const byPerson = {
+      1: { ...PERSON_DEFAULTS, restStartedAt: 1700000000000, restTargetSeconds: 90 },
+      2: { ...PERSON_DEFAULTS, restStartedAt: 1700000005000, restTargetSeconds: 120 },
+    };
+
+    expect(selectRestTimersByPerson(byPerson)).toEqual({
+      1: { startedAt: 1700000000000, targetSeconds: 90 },
+      2: { startedAt: 1700000005000, targetSeconds: 120 },
+    });
+  });
+
+  it('omits people who are not resting', () => {
+    const byPerson = {
+      1: { ...PERSON_DEFAULTS, restStartedAt: 1700000000000, restTargetSeconds: 90 },
+      2: { ...PERSON_DEFAULTS },
+    };
+
+    expect(Object.keys(selectRestTimersByPerson(byPerson))).toEqual(['1']);
+  });
+
+  // A slice persisted before the target existed carries a start but no target. It must still
+  // resume -- against the app default -- rather than being dropped.
+  it('keeps a person whose target is missing, reporting it as null', () => {
+    const byPerson = { 1: { ...PERSON_DEFAULTS, restStartedAt: 1700000000000, restTargetSeconds: undefined } };
+
+    expect(selectRestTimersByPerson(byPerson)).toEqual({ 1: { startedAt: 1700000000000, targetSeconds: null } });
+  });
+
+  it('is empty for a household where nobody is resting', () => {
+    expect(selectRestTimersByPerson({ 1: { ...PERSON_DEFAULTS } })).toEqual({});
+  });
+
   it('SET_DRAFT writes the duration alongside weight/reps and the whole stamp', () => {
     let state = withPerson(1);
     state = reducer(state, {
@@ -357,6 +456,12 @@ describe('AppStateContext reducer', () => {
     expect(restored.byPerson[1].draftExerciseId).toBeNull();
     expect(restored.byPerson[1].draftSetCount).toBe(0);
     expect(restored.byPerson[1].draftSource).toBe('prefill');
+    // The rest-timer pair is the newest such field. A slice from before the session bar shipped
+    // must hydrate them as null, not undefined -- AppShell's resume reads restStartedAt directly on
+    // mount, so an undefined there is evaluated on literally every existing install's first boot
+    // after the deploy.
+    expect(restored.byPerson[1].restStartedAt).toBeNull();
+    expect(restored.byPerson[1].restTargetSeconds).toBeNull();
     // Backfilling must not clobber what WAS persisted.
     expect(restored.byPerson[1].selectedExerciseId).toBe(7);
     expect(restored.byPerson[1].weightDraft).toBe(225);

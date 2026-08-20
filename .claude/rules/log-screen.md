@@ -323,6 +323,51 @@ something:
    the whole app, so an always-on ticker fires forever to do nothing — and `RoutineFormModal.test`
    mounts the real provider with real timers, where that showed up as intermittent failures.
 
+
+### The rest timer counts UP, and lives in two places at once
+
+`RestTimerBar` is gone. The rest timer has no overlay of its own: it renders as a readout in
+`SessionBar` (fixed bottom chrome, `components/layout/`) and as a ring on every person's pill in
+`PersonPillBar`. `restTimers[personId]` is `{ startedAt, targetSeconds, elapsed, capped }`.
+
+- **It counts up toward a target, never down to zero, and that is not cosmetic.** A full ring is a
+  stable "you're ready" state that holds indefinitely; a drained one at zero is empty, i.e.
+  visually identical to "not resting". Counting up also preserves **overrun** — the old
+  self-destruct-at-zero destroyed the difference between going at 0:90 and sitting for five
+  minutes, a number `workout_sets.rest_seconds` already records on every set.
+- **`targetSeconds` is snapshotted at `startRestTimer` and never re-derived.** The obvious
+  implementation looks it up from `selectedExerciseId`, but that is what the person is *looking
+  at*, not what they last logged — browse from bench to curls without logging and the ring jumps.
+- **There is a 10-minute ceiling, and a capped timer must stay in the map while leaving
+  `hasActiveTimers` false.** Counting up has no natural end, so without it a forgotten timer keeps
+  the shared 200ms ticker alive forever. Dropping the entry instead would blank the ring for
+  someone who genuinely still hasn't gone.
+- **Both numbers come from `UIContext`, never from `sessionSets`.** "Elapsed since the last set in
+  this session" reads like a query, but `contextSessionId` is `null` for a person's entire
+  offline/lie-fi stretch, so any query keyed on it never runs — that would ship a live ring above a
+  blank readout for the whole outage. One clock, client-side, wall-clock derived.
+- **`startedAt`/`targetSeconds` are persisted to `AppStateContext`** (localStorage, synchronous) so
+  `swUpdate.js`'s silent post-deploy reload resumes the timer instead of destroying it — the same
+  treatment `holdStartedAt` gets, for the same reason. `AppShell` resumes on mount and **discards a
+  start already past the ceiling** rather than restoring three days of elapsed.
+- **The resume covers EVERY person, not just the active one, and `SET_REST_TIMER` therefore takes
+  a `personId`.** This is the one projection that reads across `byPerson`
+  (`selectRestTimersByPerson`), and it has to be: the ring answers *"is anyone ELSE ready to go"*,
+  so an active-person-only resume blanks precisely the rings the feature exists for. It shipped
+  that way — after a reload the other person's ring was gone until you switched to them, which
+  restored their timer as a side effect of them becoming active. **A one-person household cannot
+  reproduce it**, which is why it got through; the guards are `AppShell.test.jsx`'s resume block
+  and `multi-person.spec.ts`'s reload spec, both verified against the old behaviour.
+- **Every path that ends a rest must clear BOTH copies in one synchronous step** — ending the
+  workout (`EndWorkoutConfirmModal`) and starting a hold (`ExerciseDetail`). Clearing only the
+  in-memory one leaves the persisted start for the next mount to resume, which is the same
+  resurrection `endedSessions.js` exists to prevent for the live session.
+- **No `+30s`, no `−15s`, no Skip.** `+30s` negotiates with a deadline that has no authority, and
+  Skip duplicates what logging the next set already does. Logging the next set restarts it.
+- **The target resolves through `utils/restTarget.js`**, not a literal at the call site. It returns
+  the app default for everyone today; the per-person and per-exercise columns drop into that one
+  function plus their two write surfaces, because every consumer already reads the snapshot.
+
 ## Routine stepping is index-based, and that is load-bearing
 
 A routine may list the same exercise more than once (bench, row, bench). `AppStateContext`'s

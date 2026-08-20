@@ -24,8 +24,11 @@ export default function ServiceWorkerUpdater() {
         left: 'var(--space-4)',
         right: 'var(--space-4)',
         // Clears the home indicator on a standalone-display PWA; resolves to plain
-        // --space-4 anywhere there's no inset.
-        bottom: 'calc(var(--space-4) + env(safe-area-inset-bottom))',
+        // --space-4 anywhere there's no inset. --bottom-bar-height clears the session bar too --
+        // this banner is z-1000, so without it it would paint straight over "End workout". It is
+        // set on documentElement rather than on .app-shell precisely because this component is
+        // mounted in App.jsx, outside the shell, and so inherits nothing from it.
+        bottom: 'calc(var(--bottom-bar-height, 0px) + var(--space-4) + env(safe-area-inset-bottom))',
         margin: '0 auto',
         maxWidth: 420,
         display: 'flex',

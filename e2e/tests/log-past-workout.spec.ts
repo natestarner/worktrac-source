@@ -28,8 +28,11 @@ test.describe('Log a past workout', () => {
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('Set 2')).toBeVisible();
 
-    // Sets added while editing a past session must never start the live rest timer.
-    await expect(page.getByText('Rest')).toHaveCount(0);
+    // Sets added while editing a past session must never start the live rest timer -- and the
+    // session bar stays away entirely, because editing a past session is an editor, not a live
+    // session. (Its own date/time card above stays in flow; that one IS a form.)
+    await expect(page.getByRole('img', { name: /^Rest [0-9]/ })).toHaveCount(0);
+    await expect(page.getByText(/Session in progress/)).toHaveCount(0);
 
     // Remove the newest set (rows render newest-first, so the first "Delete" link in DOM
     // order belongs to Set 2's row). Two "Delete" buttons exist before the confirm dialog

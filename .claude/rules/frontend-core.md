@@ -63,6 +63,39 @@ held sideways mid-set.
 Covered by `AppShell.test.jsx` (structure) and `e2e/tests/sticky-chrome.spec.ts` (the actual
 pixels — jsdom computes no layout, so only the e2e file can prove the behaviour).
 
+### The bottom chrome: one fixed bar that reserves its own space
+
+`SessionBar` is the counterpart to `.app-chrome` at the other edge — **one** `position: fixed` box
+whose *contents* vary, mounted app-wide in `AppShell`, rendered only while the active person has a
+live session. It replaced two things at once: an in-flow "Session in progress" card at the top of
+the Log tab (~66px, which shoved the primary button down out from under the thumb at the exact
+moment a set was logged) and a floating rest-timer pill that hovered over whatever was at the
+bottom of the scroll.
+
+- **One box, never a stack of fixed siblings** — `.app-chrome`'s rule pointed the other way.
+  Siblings cannot know each other's height and no CSS token can supply it.
+- **`fixed`, not `sticky`.** Sticky-to-bottom only works for an element in flow at the end of a
+  scroll container; this has to hold its place over every tab.
+- **Its height must not change when the rest timer starts.** A bar that grew would move the same
+  tap-jump from the top of the screen to the bottom, and desync the reserved padding.
+- **It must RESERVE space, not float over content.** `.app-shell`'s `padding-bottom` adds
+  `--bottom-bar-height` in both the portrait and landscape rules. Growing padding-bottom moves
+  nothing on screen (it only extends the scroll range), which is why this placement has no
+  tap-jump. Without it the end of every tab is unreachable — and the failure presents as pointer
+  interception, which is how `c100a4f` (#176) surfaced as *seven unrelated specs* failing on
+  `person-pill-bar … intercepts pointer events`.
+- **`--bottom-bar-height` is set on `document.documentElement`, by the bar itself.** Custom
+  properties only inherit downward and **`ServiceWorkerUpdater` is mounted in `App.jsx`, outside
+  `.app-shell`** — at z-1000 it would paint straight over "End workout". `Toast` needs the same
+  term: it sat at the same coordinates as the old rest timer and blanked it for 3.2s. The
+  component that decides whether the bar is on screen owns the reservation, so the two cannot
+  drift apart.
+- **`e2e/tests/session-bar.spec.ts` must keep measuring a page long enough to scroll.** A first
+  cut asserted on "Log set" and passed with the reserved padding deleted — that button sits
+  mid-page, so scrolling to the bottom moves it off the *top*. What the padding guarantees is that
+  the **end of the document** clears the bar; a fixed bottom bar necessarily overlaps mid-document
+  content at some scroll position, and asserting otherwise fails against correct code.
+
 ### Modals: `Modal` never closes on a backdrop tap
 
 Every dialog goes through `components/shared/Modal.jsx`. The only exits are the header's X, a

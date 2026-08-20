@@ -3,16 +3,18 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../context/AppStateContext';
+import { useUI } from '../context/UIContext';
+import { DEFAULT_REST_TARGET_SECONDS, isRestTimerExpired } from '../utils/restTarget';
 import { migrateLegacyRestTimerPrefs } from '../lib/restTimerMigration';
 import { tryForceUpdate } from '../lib/swUpdate';
 import { useOfflineCacheWarming } from '../hooks/useOfflineCacheWarming';
 import Header from '../components/layout/Header';
 import PersonPillBar from '../components/layout/PersonPillBar';
+import SessionBar from '../components/layout/SessionBar';
 import TabsNav from '../components/layout/TabsNav';
 import Toast from '../components/shared/Toast';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import PRCelebration from '../components/shared/PRCelebration';
-import RestTimerBar from '../components/shared/RestTimerBar';
 import OfflineBanner from '../components/shared/OfflineBanner';
 import ConnectionTroubleBanner from '../components/shared/ConnectionTroubleBanner';
 import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
@@ -21,7 +23,14 @@ import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator
 
 export default function AppShell() {
   const { people, refreshPeople } = useAuth();
-  const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId } = useAppState();
+  const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId, restTimersByPerson, setRestTimer } =
+    useAppState();
+  const { restTimers, startRestTimer } = useUI();
+  // Mirrors restTimers so the resume effect can ask "is this one already running?" without taking
+  // the map as a dependency -- it changes identity every tick, which would re-run the effect once a
+  // second for the whole rest period.
+  const restTimersRef = useRef(restTimers);
+  restTimersRef.current = restTimers;
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -51,6 +60,34 @@ export default function AppShell() {
       if (changed) refreshPeople();
     });
   }, [people, refreshPeople]);
+
+  // Resume a rest timer that was running when the document died. UIContext is in-memory, so only
+  // the persisted timestamp survives `swUpdate.js`'s silent post-deploy reload; recomputing elapsed
+  // from it is also what makes the timer immune to iOS suspending interval callbacks while the
+  // screen is locked. Mirrors ExerciseDetail's hold-timer resume exactly, including reading (not
+  // tracking) the in-memory map so re-adopting can't fight the timer that was just started.
+  //
+  // A start already past the ceiling is DISCARDED, not restored: close the app on Friday, reopen on
+  // Monday, and a naive resume computes three days of elapsed and lights the ring for a workout that
+  // ended before the weekend. Clearing the persisted copy is what stops it being reconsidered on
+  // every subsequent mount.
+  //
+  // EVERY person's timer, not just the active one's. Resuming only the active person is what a
+  // reload used to do, and it blanked exactly the rings this feature exists for: the person holding
+  // the device reads the bar, while the rings answer "is anyone ELSE ready to go". Their ring only
+  // reappeared if you happened to switch to them, which restored their timer incidentally.
+  useEffect(() => {
+    for (const [key, persisted] of Object.entries(restTimersByPerson)) {
+      const personId = Number(key);
+      // Read, don't track -- re-adopting must not fight a timer that was just started.
+      if (restTimersRef.current[personId]) continue;
+      if (isRestTimerExpired(persisted.startedAt)) {
+        setRestTimer({ personId });
+        continue;
+      }
+      startRestTimer(personId, persisted.targetSeconds ?? DEFAULT_REST_TARGET_SECONDS, persisted.startedAt);
+    }
+  }, [restTimersByPerson, setRestTimer, startRestTimer]);
 
   // Keep the active person's slice (`byPerson[id].lastTab`) in sync with whichever tab they're
   // on, so switching to someone else and back resumes on the same tab too.
@@ -160,7 +197,7 @@ export default function AppShell() {
         </ErrorBoundary>
       </div>
 
-      <RestTimerBar />
+      <SessionBar />
       <Toast />
       <PRCelebration />
       <ConfirmDialog />

@@ -1,15 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../utils/restTarget';
 
 // Cross-cutting overlays that live above the tab content: toast, the destructive-action
-// confirm dialog, the PR celebration, and the persistent rest timer bar. Toast/confirm/
+// confirm dialog, and the PR celebration -- plus the two workout timers. Toast/confirm/
 // celebration are genuinely global (a one-shot notification tied to whatever the active
 // person just did). The rest timer is NOT -- people trade off sets while working out
-// together, so each person needs their own independent countdown that keeps running in
+// together, so each person needs their own independent timer that keeps running in
 // the background while someone else is active; see restTimers below.
 
 const UIContext = createContext(null);
-
-const REST_DURATION = 90;
 
 // How often the shared ticker SAMPLES the clock -- not how often the display changes, which is
 // still once a second. See the ticker below for why these are different numbers.
@@ -19,7 +18,13 @@ export function UIProvider({ children }) {
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [celebration, setCelebration] = useState(null);
-  const [restTimers, setRestTimers] = useState({}); // { [personId]: { secondsLeft, total, endsAt } }
+  // Counts UP toward targetSeconds rather than down to zero, and both halves of that matter:
+  // a FULL ring is a stable "you're ready" state that holds indefinitely, where a drained one at
+  // zero is empty -- visually identical to "not resting" -- and counting up preserves OVERRUN,
+  // which the old self-destruct-at-zero destroyed. The difference between going at 0:90 and sitting
+  // for five minutes is a number workout_sets.rest_seconds already records on every set.
+  // `capped` freezes an entry at REST_CEILING_SECONDS; see hasActiveTimers below for why.
+  const [restTimers, setRestTimers] = useState({}); // { [personId]: { startedAt, targetSeconds, elapsed, capped } }
   const [holdTimers, setHoldTimers] = useState({}); // { [personId]: { startedAt, elapsed } }
 
   const toastTimerRef = useRef(null);
@@ -41,7 +46,7 @@ export function UIProvider({ children }) {
   // A single persistent ticker drives every active person's timer -- one interval for both maps,
   // rather than juggling one per person (or, worse, a second mechanism for hold timers).
   //
-  // ⚠️ Both timers are derived from WALL-CLOCK timestamps (endsAt / startedAt), never by counting
+  // ⚠️ Both timers are derived from WALL-CLOCK timestamps (startedAt), never by counting
   // interval fires. A tick counter is wrong on the device this app is built for: iOS throttles and
   // then suspends timers when the screen locks or the app is backgrounded, which mid-plank is the
   // normal case, not an edge case -- tap Start, set the iPad down, and a counted timer under-reports
@@ -67,7 +72,13 @@ export function UIProvider({ children }) {
   // the updaters below both bail out immediately on an empty map. Anchoring it to `hasActiveTimers`
   // also means the interval is created at the moment a timer starts, so its phase is aligned with
   // the start rather than with whenever the provider happened to mount.
-  const hasActiveTimers = Object.keys(restTimers).length > 0 || Object.keys(holdTimers).length > 0;
+  //
+  // A CAPPED rest timer deliberately does not count as active. It stays in the map (the ring stays
+  // lit -- that person still hasn't gone) but its value can never change again, so keeping the
+  // interval alive for it would burn a callback five times a second forever to do nothing. That is
+  // the same always-on-ticker problem the `hasActiveTimers` gate was introduced to solve.
+  const hasActiveTimers =
+    Object.values(restTimers).some((timer) => !timer.capped) || Object.keys(holdTimers).length > 0;
 
   useEffect(() => {
     if (!hasActiveTimers) return undefined;
@@ -80,15 +91,17 @@ export function UIProvider({ children }) {
         let changed = false;
         const next = {};
         for (const [personId, timer] of entries) {
-          const secondsLeft = Math.ceil((timer.endsAt - now) / 1000);
-          if (secondsLeft <= 0) {
-            changed = true; // expired: dropped from the map
+          if (timer.capped) {
+            next[personId] = timer; // frozen at the ceiling; nothing left to compute
             continue;
           }
-          if (secondsLeft === timer.secondsLeft) {
+          const raw = Math.floor((now - timer.startedAt) / 1000);
+          const elapsed = Math.min(raw, REST_CEILING_SECONDS);
+          const capped = raw >= REST_CEILING_SECONDS;
+          if (elapsed === timer.elapsed && capped === timer.capped) {
             next[personId] = timer;
           } else {
-            next[personId] = { ...timer, secondsLeft };
+            next[personId] = { ...timer, elapsed, capped };
             changed = true;
           }
         }
@@ -163,24 +176,30 @@ export function UIProvider({ children }) {
     setCelebration(null);
   }, []);
 
-  const startRestTimer = useCallback((personId, seconds = REST_DURATION) => {
-    setRestTimers((current) => ({
-      ...current,
-      [personId]: { secondsLeft: seconds, total: seconds, endsAt: Date.now() + seconds * 1000 },
-    }));
-  }, []);
-  const addRestTime = useCallback((personId, delta) => {
-    setRestTimers((current) => {
-      if (!current[personId]) return current;
-      const secondsLeft = Math.max(0, current[personId].secondsLeft + delta);
-      // endsAt is the source of truth, so shifting time has to move it, not just the display value.
-      return {
+  // `targetSeconds` is SNAPSHOTTED here and never re-derived. The natural implementation looks the
+  // target up from whatever exercise is selected, but that is what the person is LOOKING AT, not
+  // what they last logged -- browse from bench to curls without logging and the ring would jump.
+  //
+  // `startedAt` may be supplied to resume a timer that was running before a reload, the same way
+  // startHoldTimer takes one; ExerciseDetail persists it through AppStateContext. Elapsed is
+  // recomputed from the wall clock either way, so a resume lands at the right position rather than
+  // restarting at zero.
+  const startRestTimer = useCallback(
+    (personId, targetSeconds = DEFAULT_REST_TARGET_SECONDS, startedAt = Date.now()) => {
+      const raw = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+      setRestTimers((current) => ({
         ...current,
-        [personId]: { ...current[personId], secondsLeft, endsAt: current[personId].endsAt + delta * 1000 },
-      };
-    });
-  }, []);
-  const skipRestTimer = useCallback((personId) => {
+        [personId]: {
+          startedAt,
+          targetSeconds,
+          elapsed: Math.min(raw, REST_CEILING_SECONDS),
+          capped: raw >= REST_CEILING_SECONDS,
+        },
+      }));
+    },
+    [],
+  );
+  const clearRestTimer = useCallback((personId) => {
     setRestTimers((current) => {
       if (!current[personId]) return current;
       const next = { ...current };
@@ -236,13 +255,12 @@ export function UIProvider({ children }) {
       dismissCelebration,
       restTimers,
       startRestTimer,
-      addRestTime,
-      skipRestTimer,
+      clearRestTimer,
       holdTimers,
       startHoldTimer,
       stopHoldTimer,
     }),
-    [toast, confirmDialog, celebration, restTimers, holdTimers, showToast, openConfirm, closeConfirm, runConfirm, showCelebration, dismissCelebration, startRestTimer, addRestTime, skipRestTimer, startHoldTimer, stopHoldTimer],
+    [toast, confirmDialog, celebration, restTimers, holdTimers, showToast, openConfirm, closeConfirm, runConfirm, showCelebration, dismissCelebration, startRestTimer, clearRestTimer, startHoldTimer, stopHoldTimer],
   );
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

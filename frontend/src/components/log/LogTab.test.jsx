@@ -12,8 +12,6 @@ import { useLiveSession } from '../../hooks/useLiveSession';
 import { useHistory } from '../../hooks/useHistory';
 import { useSessionEntries } from '../../hooks/useSessionEntries';
 import { endWorkout } from '../../api/sessions';
-import { queryClient } from '../../lib/queryClient';
-import { tryForceUpdate } from '../../lib/swUpdate';
 
 // LogTab's own job here is placement: the Next Exercise / Finish Routine button lives in
 // the routine progress card (rendered by LogTab itself, near the top of the page) rather
@@ -31,7 +29,6 @@ vi.mock('../../hooks/useLiveSession', () => ({ useLiveSession: vi.fn() }));
 vi.mock('../../hooks/useHistory', () => ({ useHistory: vi.fn() }));
 vi.mock('../../hooks/useSessionEntries', () => ({ useSessionEntries: vi.fn() }));
 vi.mock('../../api/sessions', () => ({ endWorkout: vi.fn().mockResolvedValue(), editSession: vi.fn() }));
-vi.mock('../../lib/swUpdate', () => ({ tryForceUpdate: vi.fn() }));
 vi.mock('./ExercisePicker', () => ({ default: () => <div>exercise-picker</div> }));
 vi.mock('./ExerciseDetail', () => ({ default: () => <div>exercise-detail</div> }));
 // Renders the entries LogTab hands it (rather than a static placeholder) so a test can verify
@@ -78,7 +75,7 @@ function baseAppState(overrides = {}) {
 describe('LogTab routine nav button placement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useUI.mockReturnValue({ showToast: vi.fn(), skipRestTimer: vi.fn() });
+    useUI.mockReturnValue({ showToast: vi.fn() });
     useExercises.mockReturnValue({ exercises: [{ id: 1, name: 'Bench Press' }, { id: 2, name: 'Overhead Press' }], loading: false });
     usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
@@ -135,7 +132,7 @@ describe('LogTab routine nav button placement', () => {
       const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
       useAppState.mockReturnValue(appState);
       const showToast = vi.fn();
-      useUI.mockReturnValue({ showToast, skipRestTimer: vi.fn() });
+      useUI.mockReturnValue({ showToast });
       render(<MemoryRouter><LogTab /></MemoryRouter>);
 
       fireEvent.click(screen.getByRole('button', { name: 'End routine' }));
@@ -178,7 +175,10 @@ describe('LogTab routine nav button placement', () => {
       fireEvent.click(screen.getByRole('button', { name: 'End routine' }));
 
       expect(endWorkout).not.toHaveBeenCalled();
-      expect(screen.getByText(/Session in progress/)).toBeInTheDocument();
+      // That the session stays VISIBLE is SessionBar's assertion now -- LogTab no longer paints
+      // any session chrome of its own, so the absence of an End workout control here is the
+      // positive check that the banner really did move rather than being duplicated.
+      expect(screen.queryByRole('button', { name: 'End workout' })).not.toBeInTheDocument();
     });
 
     // The routine card is what carries the button, so it must not linger once the routine is
@@ -202,39 +202,6 @@ describe('LogTab routine nav button placement', () => {
     rerender(<MemoryRouter><LogTab /></MemoryRouter>);
 
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-  });
-
-  it('ending the workout mid-routine also ends the routine and stops that person\'s rest timer', async () => {
-    const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
-    useAppState.mockReturnValue(appState);
-    useLiveSession.mockReturnValue({ session: { id: 55, startedAt: '2026-07-15T12:00:00Z' }, refetch: vi.fn() });
-    const skipRestTimer = vi.fn();
-    useUI.mockReturnValue({ showToast: vi.fn(), skipRestTimer });
-    render(<MemoryRouter><LogTab /></MemoryRouter>);
-
-    // The live-session bar and the confirm modal's own button share the label "End
-    // workout" once the modal is open -- the confirm modal's is the one added last.
-    fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
-    const confirmButton = screen.getAllByRole('button', { name: 'End workout' }).at(-1);
-    fireEvent.click(confirmButton);
-
-    await waitFor(() => expect(endWorkout).toHaveBeenCalledWith(7));
-    expect(appState.endRoutine).toHaveBeenCalled();
-    expect(skipRestTimer).toHaveBeenCalledWith(7);
-  });
-
-  it('ending the workout is a forced-reload trigger point', async () => {
-    const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
-    useAppState.mockReturnValue(appState);
-    useLiveSession.mockReturnValue({ session: { id: 55, startedAt: '2026-07-15T12:00:00Z' }, refetch: vi.fn() });
-    render(<MemoryRouter><LogTab /></MemoryRouter>);
-
-    fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
-    const confirmButton = screen.getAllByRole('button', { name: 'End workout' }).at(-1);
-    fireEvent.click(confirmButton);
-
-    await waitFor(() => expect(endWorkout).toHaveBeenCalledWith(7));
-    expect(tryForceUpdate).toHaveBeenCalledWith(queryClient, 7);
   });
 
   // Regression test: `routinesLoading`/`isFetching` both read as "settled" (false) in states where
@@ -281,20 +248,6 @@ describe('LogTab routine nav button placement', () => {
     render(<MemoryRouter><LogTab /></MemoryRouter>);
 
     expect(appState.endRoutine).toHaveBeenCalled();
-  });
-
-  // While offline with no live session yet, ExerciseDetail's onMutate optimistically seeds a
-  // PROVISIONAL session -- { id: null, startedAt: <clientLoggedAt> } -- into the same
-  // liveSession cache useLiveSession reads (see ExerciseDetail.jsx's onMutate). LogTab itself
-  // needs no code change to handle this: it already gates on `liveSession` truthiness, not
-  // `liveSession.id`. This is a regression test proving that stays true.
-  it('shows the "Session in progress" banner and End workout button for a provisional (id: null) live session', () => {
-    useAppState.mockReturnValue(baseAppState({ selectedExerciseId: 1, routineIndex: 0 }));
-    useLiveSession.mockReturnValue({ session: { id: null, startedAt: '2026-07-22T09:00:00Z' }, refetch: vi.fn() });
-    render(<MemoryRouter><LogTab /></MemoryRouter>);
-
-    expect(screen.getByText(/Session in progress/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'End workout' })).toBeInTheDocument();
   });
 
   // Previously SessionSummary was gated on a truthy SERVER session id, so it stayed entirely

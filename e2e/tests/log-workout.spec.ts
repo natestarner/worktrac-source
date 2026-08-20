@@ -30,8 +30,12 @@ test.describe('Log workout', () => {
     await page.screenshot({ path: 'test-results/pr-celebration.png' });
     await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
 
-    // Rest timer should now be showing.
-    await expect(page.getByText('Rest')).toBeVisible();
+    // Logging a set starts the session, so the bottom session bar appears -- carrying the rest
+    // timer, which counts UP from 0:00. The readout is deliberately bare digits (no visible "Rest"
+    // text, which would substring-collide with Settings' "Rest timer" toggle), so it is selected by
+    // its role="img" accessible name.
+    await expect(page.getByText(/Session in progress/)).toBeVisible();
+    await expect(page.getByRole('img', { name: /^Rest [0-9]/ })).toBeVisible();
 
     // Browse every other tab and confirm each renders its expected empty/seed state.
     await page.getByRole('link', { name: 'History' }).click();

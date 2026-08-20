@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { queryClient, CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
-import { tryForceUpdate } from '../../lib/swUpdate';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
@@ -12,11 +11,10 @@ import { useLiveSession } from '../../hooks/useLiveSession';
 import { useHistory } from '../../hooks/useHistory';
 import { useSessionEntries } from '../../hooks/useSessionEntries';
 import { editSession } from '../../api/sessions';
-import { formatTime, localDateTimeToIso, toLocalDateStr, toLocalTimeStr } from '../../utils/datetime';
+import { localDateTimeToIso, toLocalDateStr, toLocalTimeStr } from '../../utils/datetime';
 import ExercisePicker from './ExercisePicker';
 import ExerciseDetail from './ExerciseDetail';
 import SessionSummary from './SessionSummary';
-import EndWorkoutConfirmModal from '../shared/EndWorkoutConfirmModal';
 import AddEditExerciseModal from '../settings/AddEditExerciseModal';
 import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
@@ -68,7 +66,6 @@ export default function LogTab() {
   // below must still show for it, sourced from pending mutations instead (see useSessionEntries).
   const hasActiveSession = !!editingSession || !!liveSession;
   const { history, loading: historyLoading, refetch: refetchHistory } = useHistory(activeSessionId ? activePersonId : null);
-  const [showEndWorkoutConfirm, setShowEndWorkoutConfirm] = useState(false);
   const [addExerciseName, setAddExerciseName] = useState(null); // null = closed; string = create modal prefilled with this name
   const [routineBannerDismissed, setRoutineBannerDismissed] = useState(false);
   const routinePillRefs = useRef({});
@@ -289,31 +286,12 @@ export default function LogTab() {
         </div>
       )}
 
-      {!editingSession && liveSession && (
-        <div
-          style={{
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 16,
-            padding: '14px 20px',
-            marginBottom: 16,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block' }} />
-            <div style={{ fontSize: 14, fontWeight: 700 }}>Session in progress &middot; started {formatTime(liveSession.startedAt)}</div>
-          </div>
-          <button
-            onClick={() => setShowEndWorkoutConfirm(true)}
-            style={{ background: 'none', border: 'none', color: 'var(--color-muted)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
-          >
-            End workout
-          </button>
-        </div>
-      )}
+      {/* The "Session in progress" card used to render HERE, above everything else in the tab. It
+          mounted the instant a set was logged (at onMutate, so in every connectivity mode) and cost
+          ~66px in flow, shoving the primary "Log set" button down out from under the thumb that had
+          just pressed it. It now lives in SessionBar -- fixed bottom chrome, mounted app-wide, which
+          reserves its own space rather than displacing anything. The "Editing past session" card
+          above stays in flow deliberately: that one is a form, not a status. */}
 
       {activeRoutine && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16, marginBottom: 16 }}>
@@ -451,25 +429,6 @@ export default function LogTab() {
           initialName={addExerciseName}
           onClose={() => setAddExerciseName(null)}
           onSaved={handleExerciseCreated}
-        />
-      )}
-
-      {showEndWorkoutConfirm && (
-        <EndWorkoutConfirmModal
-          personId={activePersonId}
-          onClose={() => setShowEndWorkoutConfirm(false)}
-          onEnded={() => {
-            setShowEndWorkoutConfirm(false);
-            endRoutine();
-            // Ending a workout from the exercise screen returns this person to their Log picker.
-            backToPicker();
-            refetchLiveSession();
-            showToast('Workout ended. Logging a set anytime starts a new one.');
-            // An explicit "I'm done with this session" signal -- one of the forced-reload trigger
-            // points (guarded: a no-op if the END_WORKOUT write itself, or anything else for this
-            // person, is still in flight and not yet durable). See swUpdate.js.
-            tryForceUpdate(queryClient, activePersonId);
-          }}
         />
       )}
     </div>

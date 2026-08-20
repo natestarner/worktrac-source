@@ -243,7 +243,7 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
     // connection. The picker rendering doesn't itself prove this: a not-yet-corrected "still
     // live" snapshot would freeze that way forever offline (a paused query can never revalidate
     // it away), wrongly excluding this very session from "Last time" on the next visit.
-    await expect(personPill(page, personName).locator('span')).toHaveCount(1);
+    await expect(personPill(page, personName).getByTestId('live-session-dot')).toHaveCount(0);
   }
 
   test('derives Last time/Best est. 1RM hard offline for an (exercise, no-live-session) key never fetched before', async ({
