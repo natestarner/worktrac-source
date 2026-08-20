@@ -754,3 +754,85 @@ is always the active person, but *discarding an expired one on boot* runs for th
 at once and would otherwise have cleared the wrong person's. **A one-person household cannot
 reproduce this class of bug**, which is why it got through; anything touching per-person state
 needs a two-person test to mean anything.
+
+## Update — 2026-08-20: adding an exercise you already have opens it instead of duplicating
+
+The redesign's whole premise is **one entry per movement** — that is why fork-on-write was removed,
+why the picker is search-first, and why `V50` retired the `(sec)` naming hack rather than leave two
+Planks in one picker. Nothing enforced it at the point where duplicates are actually created. The
+Add modal did no name check, `ExerciseService.add` deduped only on `idempotencyKey`, and the schema
+has no unique index on the name. Typing a name you already had silently made a second row,
+indistinguishable from the first everywhere the app renders a bare name: the picker chip, History,
+PRs, Trends, the routine strip.
+
+**Resolved while you type, not after you commit.** Same name *and* same measure → the primary
+button becomes `Open <name>` and nothing is created. Same name, different measure → it saves as
+`Plank (Time)`, previewed in the modal before you tap. An exercise you already have is not an
+error — it is the thing you were reaching for — so blocking the save and making you rename your way
+out of it was rejected. So was a silent redirect: it is the same outcome with the explanation
+removed.
+
+**Only the new exercise gets the suffix; the existing one is never renamed.** It already has sets
+and PRs against it, and rename is an online-only (Tier 3) write, so a rename here would be a
+Tier-3 dependency inside a flow that must work offline. `V50` made the same call for the same
+reason — it dropped the `(sec)` suffix *only where the cleaned name was free*.
+
+**The server applies the same rule, and deliberately as a 200, not a 409.** `ExerciseService.add`
+now resolves `clientKey → validate trackingType → (visible-to-account, name, trackingType) →
+insert`, returning the existing row on a match. That backstops what the client's cache cannot see:
+two devices creating the same exercise offline, or a create dispatched against a stale catalog. A
+409 was the obvious shape and is the wrong one — a definitive 4xx is the only thing that ends a
+durable write's retries, so a rejected create is discarded *for good*, along with every set already
+queued behind it against a temp exercise id that would then never resolve. A cosmetic duplicate is
+recoverable; a silently destroyed workout is not. For the same reason there is still no unique
+index on the name.
+
+**Known gap, accepted:** the server does not apply the `(Time)`/`(Reps)` suffix, so two devices
+creating the same name offline with *different* measures still converge to two rows sharing a name.
+It needs a genuine cross-device offline race, it is no worse than the old behaviour, and the
+alternative — the server renaming what the client asked for — is worse than the gap.
+
+### Three bugs came out of this, and two of them were mine
+
+The first was pre-existing and had shipped ten PRs earlier: **creating an exercise had stopped
+opening its detail screen, online only.** `AddEditExerciseModal` has handed `onSaved` an optimistic
+temp row since #95, but `LogTab.handleExerciseCreated` still awaited an invalidation of the two keys
+`insertOptimisticExercise` had just written that row into — so the row was evicted milliseconds
+before `selectExercise` named it. Invisible in all three degraded modes (a paused query's
+invalidation resolves immediately; a lie-fi refetch keeps its data), and the flow had **no online
+coverage at all**. Full post-mortem in
+`docs/incidents/2026-08-19-exercise-create-navigation-lost-online.md`.
+
+The second was introduced by the fix for the first. Reaching the screen sooner means the temp→real
+swap now happens *while someone is using it*, and `CREATE_EXERCISE`'s `onSettled` only invalidated —
+leaving a full round trip where neither id was in the cache, `selectedExercise` was `null`, and
+`ExerciseDetail` unmounted back to the picker. It ate the first tap on a new timed exercise's Time
+field. It now reconciles from the response first, like `LOG_SET` already did. **It was nearly
+written off as parallel-run flakiness**: the spec failed in the full suite and passed in isolation.
+What settled it was a control run of the same specs on stashed `main` — 32/32 green.
+
+The third was found by asking, after the work looked finished, what could still break offline —
+and it is the one worth remembering. `setQueryData` calls `queryCache.build()`, so an optimistic
+write to a key with **no** entry *creates* it. A create replayed from the outbox has no component
+behind it and the cache it was queued against may be gone (cleared on an auth change, or dropped by
+the 24h `maxAge`/`buster` the outbox deliberately does not share), so the reconciliation could leave
+a catalog whose only member was that one exercise, stamped as freshly fetched. Online the following
+invalidation repairs it in a round trip; with no observer to refetch, or offline before it lands, it
+stands as the person's entire library. **An optimistic write may patch a query entry; it must never
+build one.**
+
+Three smaller things fell out of the same audit: opening an existing exercise had to write the
+favorite optimistically (`FAVORITE` has no `onMutate`, so otherwise "I added it and it isn't in my
+list" was true offline and false online — a connectivity-shaped difference in a flow that must not
+have one); the `(Time)` suffix had to stop short of `NVARCHAR(200)`, because an over-long name is a
+500 and a 5xx retries forever, head-of-line-blocking the one serial outbox scope; and `Open <name>`
+had to be length-bounded so a 200-character name could not turn the primary button into a
+paragraph.
+
+**The guard that matters is `parity-exercise-create.spec.ts`**, which runs the create flow across
+all four connectivity modes. Its first version passed against the reintroduced bug — the app
+recovers on its own once the create syncs, so every auto-retrying matcher simply waited it out. It
+now samples per animation frame and asserts the picker was never painted after the dialog closed;
+restoring the await fails `[online]` on 8 painted frames and `[lie-fi]` on 182, while both offline
+modes correctly pass. That asymmetry is the point: the fix made online match what degraded already
+did, without disturbing degraded.
