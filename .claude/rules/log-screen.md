@@ -350,6 +350,14 @@ something:
   `swUpdate.js`'s silent post-deploy reload resumes the timer instead of destroying it — the same
   treatment `holdStartedAt` gets, for the same reason. `AppShell` resumes on mount and **discards a
   start already past the ceiling** rather than restoring three days of elapsed.
+- **The resume covers EVERY person, not just the active one, and `SET_REST_TIMER` therefore takes
+  a `personId`.** This is the one projection that reads across `byPerson`
+  (`selectRestTimersByPerson`), and it has to be: the ring answers *"is anyone ELSE ready to go"*,
+  so an active-person-only resume blanks precisely the rings the feature exists for. It shipped
+  that way — after a reload the other person's ring was gone until you switched to them, which
+  restored their timer as a side effect of them becoming active. **A one-person household cannot
+  reproduce it**, which is why it got through; the guards are `AppShell.test.jsx`'s resume block
+  and `multi-person.spec.ts`'s reload spec, both verified against the old behaviour.
 - **Every path that ends a rest must clear BOTH copies in one synchronous step** — ending the
   workout (`EndWorkoutConfirmModal`) and starting a hold (`ExerciseDetail`). Clearing only the
   in-memory one leaves the persisted start for the next mount to resume, which is the same
@@ -359,6 +367,7 @@ something:
 - **The target resolves through `utils/restTarget.js`**, not a literal at the call site. It returns
   the app default for everyone today; the per-person and per-exercise columns drop into that one
   function plus their two write surfaces, because every consumer already reads the snapshot.
+
 ## Routine stepping is index-based, and that is load-bearing
 
 A routine may list the same exercise more than once (bench, row, bench). `AppStateContext`'s

@@ -23,9 +23,14 @@ import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator
 
 export default function AppShell() {
   const { people, refreshPeople } = useAuth();
-  const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId, restStartedAt, restTargetSeconds, setRestTimer } =
+  const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId, restTimersByPerson, setRestTimer } =
     useAppState();
   const { restTimers, startRestTimer } = useUI();
+  // Mirrors restTimers so the resume effect can ask "is this one already running?" without taking
+  // the map as a dependency -- it changes identity every tick, which would re-run the effect once a
+  // second for the whole rest period.
+  const restTimersRef = useRef(restTimers);
+  restTimersRef.current = restTimers;
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -67,18 +72,22 @@ export default function AppShell() {
   // ended before the weekend. Clearing the persisted copy is what stops it being reconsidered on
   // every subsequent mount.
   //
-  // Known and matching the hold timer: AppStateContext exposes only the ACTIVE person's slice, so a
-  // reload resumes only their timer. Other members' rings restart empty.
+  // EVERY person's timer, not just the active one's. Resuming only the active person is what a
+  // reload used to do, and it blanked exactly the rings this feature exists for: the person holding
+  // the device reads the bar, while the rings answer "is anyone ELSE ready to go". Their ring only
+  // reappeared if you happened to switch to them, which restored their timer incidentally.
   useEffect(() => {
-    if (!activePersonId || !restStartedAt) return;
-    if (restTimers[activePersonId]) return;
-    if (isRestTimerExpired(restStartedAt)) {
-      setRestTimer({});
-      return;
+    for (const [key, persisted] of Object.entries(restTimersByPerson)) {
+      const personId = Number(key);
+      // Read, don't track -- re-adopting must not fight a timer that was just started.
+      if (restTimersRef.current[personId]) continue;
+      if (isRestTimerExpired(persisted.startedAt)) {
+        setRestTimer({ personId });
+        continue;
+      }
+      startRestTimer(personId, persisted.targetSeconds ?? DEFAULT_REST_TARGET_SECONDS, persisted.startedAt);
     }
-    startRestTimer(activePersonId, restTargetSeconds ?? DEFAULT_REST_TARGET_SECONDS, restStartedAt);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePersonId, restStartedAt, restTargetSeconds]);
+  }, [restTimersByPerson, setRestTimer, startRestTimer]);
 
   // Keep the active person's slice (`byPerson[id].lastTab`) in sync with whichever tab they're
   // on, so switching to someone else and back resumes on the same tab too.

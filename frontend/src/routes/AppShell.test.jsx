@@ -39,8 +39,7 @@ function baseAppState(overrides = {}) {
     lastTab: '/app/log',
     setLastTab: vi.fn(),
     selectedExerciseId: null,
-    restStartedAt: null,
-    restTargetSeconds: null,
+    restTimersByPerson: {},
     setRestTimer: vi.fn(),
     ...overrides,
   };
@@ -244,5 +243,119 @@ describe('AppShell sticky chrome', () => {
 
     expect(inChrome(container)).toEqual(['person', 'tabs']);
     expect(allBars(container)).toEqual(['header', 'person', 'tabs']);
+  });
+});
+
+// Resuming a rest timer that was running when the document died. UIContext is in-memory, so the
+// persisted start in AppStateContext is the only record it survives on.
+//
+// ⚠️ This ran for the ACTIVE person only, and that shipped a bug: with two people in the household,
+// reloading while person A was selected blanked person B's ring entirely -- and it came back only
+// if you switched to B, which restored their timer as a side effect of them becoming active. The
+// ring exists precisely to answer "is anyone ELSE ready to go", so the one person it was guaranteed
+// to fail for was the one it was built for. A single-person household could never reproduce it.
+describe('AppShell rest timer resume', () => {
+  const NOW = 1700000000000;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate', isPrimary: true }, { id: 8, name: 'Sam' }], refreshPeople: vi.fn() });
+    useUI.mockReturnValue(baseUI());
+    migrateLegacyRestTimerPrefs.mockResolvedValue(false);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("resumes EVERY person's timer, not just the active one's", () => {
+    const startRestTimer = vi.fn();
+    useUI.mockReturnValue(baseUI({ startRestTimer }));
+    useAppState.mockReturnValue(
+      baseAppState({
+        activePersonId: 7,
+        restTimersByPerson: {
+          7: { startedAt: NOW - 30000, targetSeconds: 90 },
+          8: { startedAt: NOW - 45000, targetSeconds: 120 },
+        },
+      }),
+    );
+
+    renderShell();
+
+    expect(startRestTimer).toHaveBeenCalledWith(7, 90, NOW - 30000);
+    // The one that used to be dropped on the floor.
+    expect(startRestTimer).toHaveBeenCalledWith(8, 120, NOW - 45000);
+  });
+
+  it('resumes a non-active person even when the active person has no timer at all', () => {
+    const startRestTimer = vi.fn();
+    useUI.mockReturnValue(baseUI({ startRestTimer }));
+    useAppState.mockReturnValue(
+      baseAppState({ activePersonId: 7, restTimersByPerson: { 8: { startedAt: NOW - 10000, targetSeconds: 90 } } }),
+    );
+
+    renderShell();
+
+    expect(startRestTimer).toHaveBeenCalledWith(8, 90, NOW - 10000);
+  });
+
+  it('falls back to the default target for a slice persisted before targets existed', () => {
+    const startRestTimer = vi.fn();
+    useUI.mockReturnValue(baseUI({ startRestTimer }));
+    useAppState.mockReturnValue(
+      baseAppState({ restTimersByPerson: { 7: { startedAt: NOW - 5000, targetSeconds: null } } }),
+    );
+
+    renderShell();
+
+    expect(startRestTimer).toHaveBeenCalledWith(7, 90, NOW - 5000);
+  });
+
+  // Close the app on Friday, reopen on Monday: a naive resume computes three days of elapsed and
+  // lights the ring for a workout that ended before the weekend.
+  it('discards a start already past the ceiling instead of resuming it', () => {
+    const startRestTimer = vi.fn();
+    const setRestTimer = vi.fn();
+    useUI.mockReturnValue(baseUI({ startRestTimer }));
+    useAppState.mockReturnValue(
+      baseAppState({ setRestTimer, restTimersByPerson: { 8: { startedAt: NOW - 3 * 24 * 60 * 60 * 1000, targetSeconds: 90 } } }),
+    );
+
+    renderShell();
+
+    expect(startRestTimer).not.toHaveBeenCalled();
+    // Cleared against THAT person, not whoever happens to be active -- the whole reason the action
+    // takes a personId.
+    expect(setRestTimer).toHaveBeenCalledWith({ personId: 8 });
+  });
+
+  it('does not re-adopt a timer that is already running in memory', () => {
+    const startRestTimer = vi.fn();
+    useUI.mockReturnValue(
+      baseUI({ startRestTimer, restTimers: { 7: { startedAt: NOW - 30000, targetSeconds: 90, elapsed: 30 } } }),
+    );
+    useAppState.mockReturnValue(
+      baseAppState({ restTimersByPerson: { 7: { startedAt: NOW - 30000, targetSeconds: 90 } } }),
+    );
+
+    renderShell();
+
+    expect(startRestTimer).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when nobody in the household is resting', () => {
+    const startRestTimer = vi.fn();
+    const setRestTimer = vi.fn();
+    useUI.mockReturnValue(baseUI({ startRestTimer }));
+    useAppState.mockReturnValue(baseAppState({ setRestTimer, restTimersByPerson: {} }));
+
+    renderShell();
+
+    expect(startRestTimer).not.toHaveBeenCalled();
+    expect(setRestTimer).not.toHaveBeenCalled();
   });
 });

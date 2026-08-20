@@ -75,12 +75,42 @@ const initialState = {
   byPerson: {}, // { [personId]: { ...PERSON_DEFAULTS } }
 };
 
-// Patch the active person's slice. A no-op if there's no active person yet.
-function updateActive(state, patch) {
-  const id = state.activePersonId;
+// Patch ONE person's slice, whether or not they are the active person. Almost everything here
+// describes what the ACTIVE person is doing and so goes through updateActive below; the exception
+// is the rest timer, which is the one piece of per-person state something other than that person's
+// own action (a reload) has to be able to reconcile. A no-op for a null id.
+function updatePerson(state, id, patch) {
   if (id == null) return state;
   const current = state.byPerson[id] || PERSON_DEFAULTS;
   return { ...state, byPerson: { ...state.byPerson, [id]: { ...current, ...patch } } };
+}
+
+// Patch the active person's slice. A no-op if there's no active person yet.
+function updateActive(state, patch) {
+  return updatePerson(state, state.activePersonId, patch);
+}
+
+// Every person's persisted rest timer, keyed by personId -- the ONE piece of per-person state read
+// for EVERY person rather than only the active one.
+//
+// It has to be: the rest ring on each person's pill is the whole reason the timer is per-person,
+// and UIContext (where running timers live) is in-memory, so after a reload this slice is the only
+// record that anyone was resting. Reading just the active slice meant a reload blanked exactly the
+// rings the feature exists for -- the ones belonging to whoever is NOT holding the device -- and
+// they only came back if you happened to switch to that person, which restored their timer as a
+// side effect of them becoming active.
+//
+// Deliberately a narrow projection rather than byPerson itself: nothing else should start reading
+// other people's slices, because what a person is doing right now belongs to them.
+export function selectRestTimersByPerson(byPerson) {
+  return Object.fromEntries(
+    Object.entries(byPerson)
+      .filter(([, slice]) => slice.restStartedAt)
+      .map(([personId, slice]) => [
+        personId,
+        { startedAt: slice.restStartedAt, targetSeconds: slice.restTargetSeconds ?? null },
+      ]),
+  );
 }
 
 // Exported (alongside initialState/PERSON_DEFAULTS) so the reducer's transitions can be unit
@@ -171,8 +201,12 @@ export function reducer(state, action) {
       return updateActive(state, { holdStartedAt: action.startedAt });
     // Both fields are written together, always -- a start with no target resumes against the app
     // default instead of the target that was actually in force when the set was logged.
+    //
+    // Targets a person explicitly, defaulting to the active one. STARTING a timer is always the
+    // active person (they just logged a set), but DISCARDING an expired one on boot is not: that
+    // runs for every household member at once, and updateActive could only ever reach one of them.
     case 'SET_REST_TIMER':
-      return updateActive(state, {
+      return updatePerson(state, action.personId ?? state.activePersonId, {
         restStartedAt: action.startedAt ?? null,
         restTargetSeconds: action.startedAt ? (action.targetSeconds ?? null) : null,
       });
@@ -288,6 +322,7 @@ export function AppStateProvider({ children }) {
       setRestTimer: (options) =>
         dispatch({
           type: 'SET_REST_TIMER',
+          personId: options?.personId ?? null,
           startedAt: options?.startedAt ?? null,
           targetSeconds: options?.targetSeconds ?? null,
         }),
@@ -306,9 +341,13 @@ export function AppStateProvider({ children }) {
   // `selectedExerciseId`, `weightDraft`, etc. exactly as before -- the byPerson model is an
   // internal implementation detail.
   const active = state.byPerson[state.activePersonId] || PERSON_DEFAULTS;
+
+  // See selectRestTimersByPerson above for why this one projection spans every person.
+  const restTimersByPerson = useMemo(() => selectRestTimersByPerson(state.byPerson), [state.byPerson]);
+
   const value = useMemo(
-    () => ({ activePersonId: state.activePersonId, hydrated, ...active, ...actions }),
-    [state.activePersonId, hydrated, active, actions],
+    () => ({ activePersonId: state.activePersonId, hydrated, restTimersByPerson, ...active, ...actions }),
+    [state.activePersonId, hydrated, restTimersByPerson, active, actions],
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

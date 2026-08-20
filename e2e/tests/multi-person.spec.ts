@@ -235,6 +235,36 @@ test.describe('Multi-person switching', () => {
     await expect(restReadout(page)).toBeVisible();
   });
 
+  // A reload used to blank the ring of whoever was NOT the active person -- and it came back only
+  // if you switched to them, which restored their timer as a side effect of them becoming active.
+  // So the one person the ring was guaranteed to fail for was the person it exists for. Note this
+  // is unreproducible in a one-person household, which is why it shipped.
+  test('a reload keeps the rest ring of a person who is NOT the active one', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Alex');
+
+    await page.getByRole('button', { name: '+ Add person' }).click();
+    await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
+    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
+
+    // Alex rests.
+    await personPill(page, 'Alex').click();
+    await pickExercise(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await expect(page.getByText('New PR!')).toBeVisible();
+    await page.getByText('New PR!').click({ force: true });
+    await expect(restRing(page, 'Alex')).toBeVisible();
+
+    // Hand the device to Sam, then reload -- the post-deploy forced reload does exactly this.
+    await personPill(page, 'Sam').click();
+    await expect(restRing(page, 'Alex')).toBeVisible();
+    await page.reload();
+
+    // Alex's ring is still there, WITHOUT having to switch back to Alex to restore it.
+    await expect(restRing(page, 'Alex')).toBeVisible();
+    await expect(personPill(page, 'Sam')).toHaveAttribute('aria-pressed', 'true');
+    // And Sam, who never rested, still has none.
+    await expect(restRing(page, 'Sam')).toHaveCount(0);
+  });
   test('ending the workout stops that person\'s rest timer', async ({ page, request }) => {
     await registerHousehold(page, request, 'Alex');
     await pickExercise(page, 'Barbell Bench Press');
