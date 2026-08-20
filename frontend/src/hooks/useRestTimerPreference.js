@@ -5,7 +5,9 @@ import { setRestTimerPreference } from '../api/people';
 // The rest-timer display preference now lives account-side, per person, exposed on each person in
 // the /api/auth/me people list -- so it's consistent across devices and every person's toggle can
 // be configured together in Settings (a household-wide setting, not the old per-device localStorage
-// flag). This only controls whether RestTimerBar renders; rest_seconds is recorded regardless.
+// flag). This only controls whether the rest READOUT renders -- the session bar's timer slot and
+// the person pill's ring; rest_seconds is recorded regardless, and the session bar itself still
+// shows for a person who has switched their rest timer off.
 // Enabled by default. Keeps the [enabled, setEnabled] shape its callers already use.
 export function useRestTimerPreference(personId) {
   const { people, refreshPeople } = useAuth();

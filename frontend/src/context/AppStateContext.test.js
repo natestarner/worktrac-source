@@ -251,6 +251,41 @@ describe('AppStateContext reducer', () => {
     expect(active(restored).draftSource).toBe('user');
   });
 
+  // Both rest fields are written together, always. A start with no target would resume against the
+  // app default instead of the target that was actually in force when the set was logged -- which
+  // is the same class of bug as re-deriving the target from whatever exercise is on screen.
+  it('SET_REST_TIMER writes the start and its target together, and clears both as a pair', () => {
+    let state = withPerson(1);
+
+    state = reducer(state, { type: 'SET_REST_TIMER', startedAt: 1700000000000, targetSeconds: 120 });
+    expect(active(state).restStartedAt).toBe(1700000000000);
+    expect(active(state).restTargetSeconds).toBe(120);
+
+    state = reducer(state, { type: 'SET_REST_TIMER', startedAt: null, targetSeconds: null });
+    expect(active(state).restStartedAt).toBeNull();
+    expect(active(state).restTargetSeconds).toBeNull();
+  });
+
+  // Clearing is expressed as "no start", so a clear that forgot to null the target must not leave a
+  // stale one behind for the next resume to pick up.
+  it('SET_REST_TIMER drops the target whenever the start is cleared', () => {
+    let state = withPerson(1);
+    state = reducer(state, { type: 'SET_REST_TIMER', startedAt: 1700000000000, targetSeconds: 120 });
+
+    state = reducer(state, { type: 'SET_REST_TIMER', startedAt: null, targetSeconds: 120 });
+    expect(active(state).restTargetSeconds).toBeNull();
+  });
+
+  // Per-person isolation: the rest timer is one person's state, and switching people must not
+  // carry it across.
+  it('SET_REST_TIMER only touches the active person', () => {
+    let state = reducer(withPerson(1), { type: 'SET_REST_TIMER', startedAt: 1700000000000, targetSeconds: 90 });
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
+
+    expect(active(state).restStartedAt).toBeNull();
+    expect(state.byPerson[1].restStartedAt).toBe(1700000000000);
+  });
+
   it('SET_DRAFT writes the duration alongside weight/reps and the whole stamp', () => {
     let state = withPerson(1);
     state = reducer(state, {
@@ -357,6 +392,12 @@ describe('AppStateContext reducer', () => {
     expect(restored.byPerson[1].draftExerciseId).toBeNull();
     expect(restored.byPerson[1].draftSetCount).toBe(0);
     expect(restored.byPerson[1].draftSource).toBe('prefill');
+    // The rest-timer pair is the newest such field. A slice from before the session bar shipped
+    // must hydrate them as null, not undefined -- AppShell's resume reads restStartedAt directly on
+    // mount, so an undefined there is evaluated on literally every existing install's first boot
+    // after the deploy.
+    expect(restored.byPerson[1].restStartedAt).toBeNull();
+    expect(restored.byPerson[1].restTargetSeconds).toBeNull();
     // Backfilling must not clobber what WAS persisted.
     expect(restored.byPerson[1].selectedExerciseId).toBe(7);
     expect(restored.byPerson[1].weightDraft).toBe(225);

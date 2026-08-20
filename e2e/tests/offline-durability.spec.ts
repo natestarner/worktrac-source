@@ -127,9 +127,11 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     // liveSession is suppressed here, contextSessionId is null and the ended session's cached
     // sets cannot reach "This session" -- that leak is downstream of exactly this value.
     await expect(page.getByText(/Session in progress/)).toBeHidden();
-    // The person pill's live-session dot is the other consumer of the same query (a second span
-    // appears only while a session is live -- same signal offline-reads.spec.ts uses).
-    await expect(page.locator('.person-pill-bar').getByRole('button', { name: /Quinn/ }).locator('span')).toHaveCount(1);
+    // The person pill's live-session dot is the other consumer of the same query -- same signal
+    // offline-reads.spec.ts uses.
+    await expect(
+      page.locator('.person-pill-bar').getByRole('button', { name: /Quinn/ }).getByTestId('live-session-dot'),
+    ).toHaveCount(0);
 
     await page.context().setOffline(false);
   });

@@ -3,18 +3,26 @@ import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UIProvider, useUI } from './UIContext';
 
-// People trade off sets while working out together, so each person needs their own
-// independent rest countdown -- starting one person's timer must never reset or destroy
-// another's, and each ticks down in the background regardless of who's currently active.
+// People trade off sets while working out together, so each person needs their own independent
+// rest timer -- starting one person's must never reset or destroy another's, and each keeps
+// running in the background regardless of who's currently active.
+//
+// The timer counts UP toward a snapshotted target rather than down to zero. A full ring is a
+// stable "ready" state that holds; a drained one at zero is indistinguishable from "not resting",
+// and self-destructing at zero destroyed the overrun entirely -- the difference between going at
+// 0:90 and sitting there for five minutes, which rest_seconds already records.
 function TimerHarness({ personId }) {
-  const { restTimers, startRestTimer, addRestTime, skipRestTimer } = useUI();
+  const { restTimers, startRestTimer, clearRestTimer } = useUI();
   const timer = restTimers[personId];
   return (
     <div>
-      <span data-testid={`secondsLeft-${personId}`}>{timer ? timer.secondsLeft : 'none'}</span>
+      <span data-testid={`elapsed-rest-${personId}`}>{timer ? timer.elapsed : 'none'}</span>
+      <span data-testid={`target-${personId}`}>{timer ? timer.targetSeconds : 'none'}</span>
+      <span data-testid={`capped-${personId}`}>{timer ? String(!!timer.capped) : 'none'}</span>
       <button onClick={() => startRestTimer(personId, 90)}>start-{personId}</button>
-      <button onClick={() => addRestTime(personId, 30)}>add30-{personId}</button>
-      <button onClick={() => skipRestTimer(personId)}>skip-{personId}</button>
+      <button onClick={() => clearRestTimer(personId)}>clear-{personId}</button>
+      {/* What AppShell does on mount with the timestamp persisted to localStorage. */}
+      <button onClick={() => startRestTimer(personId, 90, Date.now() - 40000)}>resume-{personId}</button>
     </div>
   );
 }
@@ -41,44 +49,95 @@ describe('UIContext per-person rest timers', () => {
     renderTwoPeople();
 
     act(() => screen.getByText('start-1').click());
-    expect(screen.getByTestId('secondsLeft-1').textContent).toBe('90');
-    expect(screen.getByTestId('secondsLeft-2').textContent).toBe('none');
+    expect(screen.getByTestId('elapsed-rest-1').textContent).toBe('0');
+    expect(screen.getByTestId('elapsed-rest-2').textContent).toBe('none');
 
     act(() => vi.advanceTimersByTime(5000));
-    expect(screen.getByTestId('secondsLeft-1').textContent).toBe('85');
+    expect(screen.getByTestId('elapsed-rest-1').textContent).toBe('5');
 
-    // Person 2 starts their own timer while person 1's is mid-countdown.
+    // Person 2 starts their own timer while person 1's is already running.
     act(() => screen.getByText('start-2').click());
-    expect(screen.getByTestId('secondsLeft-2').textContent).toBe('90');
-    expect(screen.getByTestId('secondsLeft-1').textContent).toBe('85'); // untouched
+    expect(screen.getByTestId('elapsed-rest-2').textContent).toBe('0');
+    expect(screen.getByTestId('elapsed-rest-1').textContent).toBe('5'); // untouched
 
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByTestId('secondsLeft-1').textContent).toBe('84');
-    expect(screen.getByTestId('secondsLeft-2').textContent).toBe('89');
+    expect(screen.getByTestId('elapsed-rest-1').textContent).toBe('6');
+    expect(screen.getByTestId('elapsed-rest-2').textContent).toBe('1');
   });
 
-  it('addRestTime and skipRestTimer only affect the targeted person', () => {
+  it('clearRestTimer only affects the targeted person', () => {
     renderTwoPeople();
 
     act(() => screen.getByText('start-1').click());
     act(() => screen.getByText('start-2').click());
+    act(() => vi.advanceTimersByTime(3000));
 
-    act(() => screen.getByText('add30-1').click());
-    expect(screen.getByTestId('secondsLeft-1').textContent).toBe('120');
-    expect(screen.getByTestId('secondsLeft-2').textContent).toBe('90');
-
-    act(() => screen.getByText('skip-2').click());
-    expect(screen.getByTestId('secondsLeft-2').textContent).toBe('none');
-    expect(screen.getByTestId('secondsLeft-1').textContent).toBe('120'); // untouched
+    act(() => screen.getByText('clear-2').click());
+    expect(screen.getByTestId('elapsed-rest-2').textContent).toBe('none');
+    expect(screen.getByTestId('elapsed-rest-1').textContent).toBe('3'); // untouched
   });
 
-  it('a timer clears itself once it reaches zero', () => {
+  // The target is snapshotted at the tap and never re-derived, so nothing that happens afterwards
+  // (browsing to another exercise with a different target, say) can rescale a ring mid-fill.
+  it('snapshots the target at start', () => {
     renderTwoPeople();
 
     act(() => screen.getByText('start-1').click());
-    act(() => vi.advanceTimersByTime(90000));
+    expect(screen.getByTestId('target-1').textContent).toBe('90');
+  });
 
-    expect(screen.getByTestId('secondsLeft-1').textContent).toBe('none');
+  // The old countdown deleted itself at zero, which destroyed the overrun with it.
+  it('keeps counting past the target instead of clearing itself', () => {
+    renderTwoPeople();
+
+    act(() => screen.getByText('start-1').click());
+    act(() => vi.advanceTimersByTime(112000));
+
+    expect(screen.getByTestId('elapsed-rest-1').textContent).toBe('112');
+    expect(screen.getByTestId('capped-1').textContent).toBe('false');
+  });
+
+  // Counting up has no natural end. At the ceiling the value has to freeze AND the shared interval
+  // has to stop -- an entry that can never change again would otherwise keep a callback firing five
+  // times a second for the rest of the app's life, which is the exact problem hasActiveTimers
+  // exists to prevent.
+  it('caps at the ceiling, keeps the entry, and stops the ticker', () => {
+    renderTwoPeople();
+
+    act(() => screen.getByText('start-1').click());
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    act(() => vi.advanceTimersByTime(600000));
+    expect(screen.getByTestId('elapsed-rest-1').textContent).toBe('600');
+    expect(screen.getByTestId('capped-1').textContent).toBe('true');
+    expect(vi.getTimerCount()).toBe(0);
+
+    // And it genuinely stopped: more clock time changes nothing, and the entry stays on screen so
+    // that person's ring stays lit -- they still haven't gone.
+    act(() => vi.advanceTimersByTime(120000));
+    expect(screen.getByTestId('elapsed-rest-1').textContent).toBe('600');
+  });
+
+  // ⚠️ Same reason the hold timer reads the wall clock: iOS suspends interval callbacks when the
+  // screen locks, so a counted timer under-reports by however long the screen was off.
+  it('reports real elapsed time across a gap in interval firing, not a count of ticks', () => {
+    renderTwoPeople();
+
+    act(() => screen.getByText('start-1').click());
+    act(() => {
+      vi.setSystemTime(Date.now() + 60000);
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(screen.getByTestId('elapsed-rest-1').textContent).toBe('61');
+  });
+
+  it('resuming from a persisted startedAt recovers a timer the document died during', () => {
+    renderTwoPeople();
+
+    act(() => screen.getByText('resume-1').click());
+    expect(screen.getByTestId('elapsed-rest-1').textContent).toBe('40');
+    expect(screen.getByTestId('capped-1').textContent).toBe('false');
   });
 });
 
@@ -92,7 +151,7 @@ function HoldHarness({ personId }) {
     <div>
       <span data-testid={`elapsed-${personId}`}>{timer ? timer.elapsed : 'none'}</span>
       <span data-testid={`stopped-${personId}`}>{stopped === null ? 'none' : stopped}</span>
-      <span data-testid={`rest-${personId}`}>{restTimers[personId] ? restTimers[personId].secondsLeft : 'none'}</span>
+      <span data-testid={`rest-${personId}`}>{restTimers[personId] ? restTimers[personId].elapsed : 'none'}</span>
       <button onClick={() => startHoldTimer(personId)}>hold-start-{personId}</button>
       <button onClick={() => setStopped(stopHoldTimer(personId))}>hold-stop-{personId}</button>
       <button onClick={() => startRestTimer(personId, 90)}>rest-start-{personId}</button>
@@ -183,11 +242,11 @@ describe('UIContext per-person hold timers', () => {
 
     act(() => screen.getByText('rest-start-1').click());
     act(() => screen.getByText('rest-start-2').click());
-    expect(screen.getByTestId('rest-1').textContent).toBe('90');
+    expect(screen.getByTestId('rest-1').textContent).toBe('0');
 
     act(() => screen.getByText('hold-start-1').click());
     expect(screen.getByTestId('rest-1').textContent).toBe('none');
-    expect(screen.getByTestId('rest-2').textContent).toBe('90'); // untouched
+    expect(screen.getByTestId('rest-2').textContent).toBe('0'); // untouched
   });
 
   // The reported bug: "Start timer has a 1 or 2 second delay before it actually starts". The value

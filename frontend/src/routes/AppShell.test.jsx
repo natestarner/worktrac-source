@@ -6,12 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppShell from './AppShell';
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../context/AppStateContext';
+import { useUI } from '../context/UIContext';
 import { migrateLegacyRestTimerPrefs } from '../lib/restTimerMigration';
 import { tryForceUpdate } from '../lib/swUpdate';
 import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator';
 
 vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../context/AppStateContext', () => ({ useAppState: vi.fn() }));
+vi.mock('../context/UIContext', () => ({ useUI: vi.fn() }));
 vi.mock('../lib/restTimerMigration', () => ({ migrateLegacyRestTimerPrefs: vi.fn() }));
 vi.mock('../lib/swUpdate', () => ({ tryForceUpdate: vi.fn() }));
 // AppShell's own job here is the update-trigger wiring and the chrome composition -- its child
@@ -25,7 +27,7 @@ vi.mock('../components/layout/TabsNav', () => ({ default: () => <div data-chrome
 vi.mock('../components/shared/Toast', () => ({ default: () => null }));
 vi.mock('../components/shared/ConfirmDialog', () => ({ default: () => null }));
 vi.mock('../components/shared/PRCelebration', () => ({ default: () => null }));
-vi.mock('../components/shared/RestTimerBar', () => ({ default: () => null }));
+vi.mock('../components/layout/SessionBar', () => ({ default: () => null }));
 vi.mock('../components/shared/OfflineBanner', () => ({ default: () => null }));
 vi.mock('../components/shared/ConnectionTroubleBanner', () => ({ default: () => null }));
 vi.mock('../components/shared/OfflineRecoveryPrompt', () => ({ default: () => null }));
@@ -37,8 +39,15 @@ function baseAppState(overrides = {}) {
     lastTab: '/app/log',
     setLastTab: vi.fn(),
     selectedExerciseId: null,
+    restStartedAt: null,
+    restTargetSeconds: null,
+    setRestTimer: vi.fn(),
     ...overrides,
   };
+}
+
+function baseUI(overrides = {}) {
+  return { restTimers: {}, startRestTimer: vi.fn(), ...overrides };
 }
 
 // Exposes react-router's navigate() to the test so a "section switch" can be driven the same way
@@ -92,6 +101,7 @@ describe('AppShell forced-reload triggers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate', isPrimary: true }, { id: 8, name: 'Sam' }], refreshPeople: vi.fn() });
+    useUI.mockReturnValue(baseUI());
     migrateLegacyRestTimerPrefs.mockResolvedValue(false);
   });
 
@@ -182,6 +192,7 @@ describe('AppShell sticky chrome', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useUI.mockReturnValue(baseUI());
     migrateLegacyRestTimerPrefs.mockResolvedValue(false);
   });
 

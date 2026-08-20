@@ -9,6 +9,20 @@ function personPill(page, name: string) {
   return page.locator('.person-pill-bar').getByRole('button', { name: new RegExp(name) });
 }
 
+// The rest timer now has two surfaces, and they answer different questions. The session bar at the
+// bottom is the ACTIVE person's precise readout; the ring on each pill says whether ANY person is
+// resting -- which is the question that actually matters when a device is being traded off. Both
+// are role="img" badges folded into their container's accessible name, following the live-session
+// dot's pattern; neither puts a visible "Rest" on screen, which would substring-collide with
+// Settings' "Rest timer" toggle.
+function restReadout(page) {
+  return page.getByRole('img', { name: /^Rest [0-9]/ });
+}
+
+function restRing(page, name: string) {
+  return personPill(page, name).getByRole('img', { name: /^(Resting|Rest ready)$/ });
+}
+
 test.describe('Multi-person switching', () => {
   test('switching people and back resumes exactly where each left off', async ({ page, request }) => {
     await registerHousehold(page, request, 'Alex');
@@ -201,16 +215,24 @@ test.describe('Multi-person switching', () => {
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('New PR!')).toBeVisible();
     await page.getByText('New PR!').click({ force: true });
-    await expect(page.getByText('Rest')).toBeVisible();
+    await expect(restReadout(page)).toBeVisible();
+    await expect(restRing(page, 'Alex')).toBeVisible();
 
-    // Sam has never logged anything -- switching to Sam must NOT show Alex's timer.
+    // Sam has never logged anything -- switching to Sam must NOT show Alex's timer in the bar,
+    // and Sam has no session at all so the bar itself goes away.
     await personPill(page, 'Sam').click();
-    await expect(page.getByText('Rest')).toHaveCount(0);
+    await expect(restReadout(page)).toHaveCount(0);
+    await expect(restRing(page, 'Sam')).toHaveCount(0);
+
+    // ...but Alex's ring keeps filling on Alex's OWN pill while Sam is active. This is the whole
+    // point of the ring: the device sits in front of whoever is lifting, so before it the only
+    // person who could see a rest timer was the one who didn't need to look it up.
+    await expect(restRing(page, 'Alex')).toBeVisible();
 
     // Switching back to Alex, their timer is still running (not reset or destroyed by
     // having switched away).
     await personPill(page, 'Alex').click();
-    await expect(page.getByText('Rest')).toBeVisible();
+    await expect(restReadout(page)).toBeVisible();
   });
 
   test('ending the workout stops that person\'s rest timer', async ({ page, request }) => {
@@ -220,11 +242,16 @@ test.describe('Multi-person switching', () => {
     await page.getByRole('button', { name: 'Log set' }).click();
     await expect(page.getByText('New PR!')).toBeVisible();
     await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
-    await expect(page.getByText('Rest')).toBeVisible();
+    await expect(restReadout(page)).toBeVisible();
+    await expect(restRing(page, 'Alex')).toBeVisible();
 
     await page.getByRole('button', { name: 'End workout' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
-    await expect(page.getByText('Rest')).toHaveCount(0);
+
+    // Both surfaces clear, and so does the bar that hosted them.
+    await expect(restReadout(page)).toHaveCount(0);
+    await expect(restRing(page, 'Alex')).toHaveCount(0);
+    await expect(page.getByText(/Session in progress/)).toHaveCount(0);
   });
 
   test('switching people preserves a half-typed exercise search', async ({ page, request }) => {

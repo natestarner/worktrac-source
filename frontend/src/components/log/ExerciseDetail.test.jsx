@@ -72,6 +72,8 @@ function typedDraft({ weight = 135, reps = 8, exerciseId = exercise.id } = {}) {
     draftSetCount: TYPED_AFTER_EVERYTHING,
     draftSource: 'user',
     setDraft: vi.fn(),
+    setHoldStartedAt: vi.fn(),
+    setRestTimer: vi.fn(),
   };
 }
 
@@ -115,7 +117,10 @@ describe('ExerciseDetail rest-timer live-vs-retroactive gating', () => {
     fireEvent.click(await screen.findByText('Log set'));
 
     await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
-    expect(startRestTimer).toHaveBeenCalledWith(7, 90);
+    // (personId, targetSeconds, startedAt). The target is SNAPSHOTTED at the tap rather than
+    // re-derived later from whatever exercise is on screen, and startedAt is passed explicitly so
+    // the same call shape can resume a timer after a reload.
+    expect(startRestTimer).toHaveBeenCalledWith(7, 90, expect.any(Number));
   });
 
   it('does not start the rest timer when logging a set while editing a past session', async () => {
@@ -1179,6 +1184,8 @@ describe('ExerciseDetail weight prefill', () => {
     });
     useAppState.mockImplementation(() => ({
       ...slice,
+      setHoldStartedAt: vi.fn(),
+      setRestTimer: vi.fn(),
       setDraft: ({ exerciseId, weight, reps, setCount, source }) =>
         setSlice({
           weightDraft: weight,
@@ -1286,6 +1293,8 @@ describe('ExerciseDetail draft ownership', () => {
       draftSetCount: 0,
       draftSource: 'prefill',
       setDraft,
+      setHoldStartedAt: vi.fn(),
+      setRestTimer: vi.fn(),
       ...overrides,
     });
   }
@@ -1447,6 +1456,7 @@ describe('ExerciseDetail duration-tracked exercises', () => {
       draftSource: 'user',
       setDraft,
       setHoldStartedAt,
+      setRestTimer: vi.fn(),
       ...overrides,
     });
   }

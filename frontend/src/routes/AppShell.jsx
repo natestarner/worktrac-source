@@ -3,16 +3,18 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppState } from '../context/AppStateContext';
+import { useUI } from '../context/UIContext';
+import { DEFAULT_REST_TARGET_SECONDS, isRestTimerExpired } from '../utils/restTarget';
 import { migrateLegacyRestTimerPrefs } from '../lib/restTimerMigration';
 import { tryForceUpdate } from '../lib/swUpdate';
 import { useOfflineCacheWarming } from '../hooks/useOfflineCacheWarming';
 import Header from '../components/layout/Header';
 import PersonPillBar from '../components/layout/PersonPillBar';
+import SessionBar from '../components/layout/SessionBar';
 import TabsNav from '../components/layout/TabsNav';
 import Toast from '../components/shared/Toast';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import PRCelebration from '../components/shared/PRCelebration';
-import RestTimerBar from '../components/shared/RestTimerBar';
 import OfflineBanner from '../components/shared/OfflineBanner';
 import ConnectionTroubleBanner from '../components/shared/ConnectionTroubleBanner';
 import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
@@ -21,7 +23,9 @@ import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator
 
 export default function AppShell() {
   const { people, refreshPeople } = useAuth();
-  const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId } = useAppState();
+  const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId, restStartedAt, restTargetSeconds, setRestTimer } =
+    useAppState();
+  const { restTimers, startRestTimer } = useUI();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -51,6 +55,30 @@ export default function AppShell() {
       if (changed) refreshPeople();
     });
   }, [people, refreshPeople]);
+
+  // Resume a rest timer that was running when the document died. UIContext is in-memory, so only
+  // the persisted timestamp survives `swUpdate.js`'s silent post-deploy reload; recomputing elapsed
+  // from it is also what makes the timer immune to iOS suspending interval callbacks while the
+  // screen is locked. Mirrors ExerciseDetail's hold-timer resume exactly, including reading (not
+  // tracking) the in-memory map so re-adopting can't fight the timer that was just started.
+  //
+  // A start already past the ceiling is DISCARDED, not restored: close the app on Friday, reopen on
+  // Monday, and a naive resume computes three days of elapsed and lights the ring for a workout that
+  // ended before the weekend. Clearing the persisted copy is what stops it being reconsidered on
+  // every subsequent mount.
+  //
+  // Known and matching the hold timer: AppStateContext exposes only the ACTIVE person's slice, so a
+  // reload resumes only their timer. Other members' rings restart empty.
+  useEffect(() => {
+    if (!activePersonId || !restStartedAt) return;
+    if (restTimers[activePersonId]) return;
+    if (isRestTimerExpired(restStartedAt)) {
+      setRestTimer({});
+      return;
+    }
+    startRestTimer(activePersonId, restTargetSeconds ?? DEFAULT_REST_TARGET_SECONDS, restStartedAt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePersonId, restStartedAt, restTargetSeconds]);
 
   // Keep the active person's slice (`byPerson[id].lastTab`) in sync with whichever tab they're
   // on, so switching to someone else and back resumes on the same tab too.
@@ -160,7 +188,7 @@ export default function AppShell() {
         </ErrorBoundary>
       </div>
 
-      <RestTimerBar />
+      <SessionBar />
       <Toast />
       <PRCelebration />
       <ConfirmDialog />

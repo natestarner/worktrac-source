@@ -160,18 +160,51 @@
   --elevation-hairline: none; /* dark mode only; see below */
 
   /* --- Stacking --------------------------------------------------------
-     Only the two layers with a HARD ordering constraint on each other are
-     tokenised. The rest of the app's overlays (rest timer 18, toast 40,
-     celebration 50, modal 100, SW updater 1000) never overlap one another,
-     so they stay as local values.
+     Only the layers with a HARD ordering constraint on each other are
+     tokenised. The rest of the app's overlays (toast 40, celebration 50,
+     modal 100, SW updater 1000) never overlap one another, so they stay as
+     local values.
 
-     The constraint: the account dropdown hangs out of the header, which sits
+     Constraint 1: the account dropdown hangs out of the header, which sits
      ABOVE the sticky chrome in the document but must paint BELOW it while
      scrolling past. Same stacking context, so an equal z-index is resolved by
      DOM order and the chrome wins -- which is what silently swallowed clicks
-     on the menu (7 e2e specs) when the header moved out of the chrome. */
+     on the menu (7 e2e specs) when the header moved out of the chrome.
+
+     Constraint 2: the fixed session bar sits at the bottom of the same
+     stacking context and must paint above ordinary tab content, but BELOW the
+     toast and the modal scrim -- the toast used to land at the same
+     coordinates as the old floating rest timer and blank it for 3.2s, and a
+     bottom sheet's scrim has to cover "End workout" while the sheet is open. */
   --z-app-chrome: 10;
   --z-header-menu: 12;
+  --z-bottom-bar: 20;
+
+  /* --- Bottom bar geometry ---------------------------------------------
+     The session bar's content row. `--bottom-bar-height` is the RESERVED
+     counterpart: 0 by default, and set to the height above on
+     document.documentElement by AppShell only while the bar is actually
+     mounted. Three things read it -- .app-shell's padding, the toast and the
+     service-worker updater -- and the last of those is rendered outside
+     .app-shell, which is why the value is set on the root element rather than
+     scoped to a class on the shell. */
+  --session-bar-height: 52px;
+  --bottom-bar-height: 0px;
+
+  /* --- Rest ring -------------------------------------------------------
+     The unfilled remainder of a person pill's rest ring. Two values because
+     one ring has to work on two grounds: an inactive pill is --color-surface,
+     while the ACTIVE pill is solid --color-accent-strong. The filled arc uses
+     --color-accent / --color-accent-contrast respectively (chosen in
+     PersonPillBar, which is the only place that knows which pill is active).
+
+     The ring never turns green in any state. Green on a pill already means
+     "this person has a live session" (the dot beside the name), and a green
+     ring settling 8px from a green dot reads as one escalating state rather
+     than two independent facts. Completion is carried by the ring being FULL,
+     plus a brief pulse -- not by a hue change. */
+  --rest-ring-track: rgba(28, 27, 25, 0.16);
+  --rest-ring-track-on-accent: rgba(255, 255, 255, 0.35);
 
   /* --- Motion ----------------------------------------------------------
      Durations are short on purpose: this is a tool used mid-set, and anything
@@ -218,6 +251,8 @@
     --color-danger: #e07a5f; /* 6.13 bg / 5.56 surface; 1.23 vs pr-text */
     --color-danger-bg: #3a1f17;
     --color-danger-border: #5a2f22;
+
+    --rest-ring-track: rgba(241, 239, 234, 0.2);
 
     --color-warning-bg: #3a2f0c;
     --color-warning-border: #5c4a14;
@@ -777,8 +812,13 @@ input[type='search']::-webkit-search-results-decoration {
   }
 }
 
+/* The bottom padding is what keeps the fixed session bar from covering the end of a tab --
+   most importantly the full-width "Log set" button, the most-clicked control in the e2e suite.
+   --bottom-bar-height is 0 unless the bar is actually mounted, and growing padding-bottom moves
+   nothing on screen (it only extends the scroll range), so the bar appearing causes no jump --
+   which is the whole point of moving the session banner out of the top of the tab. */
 .app-shell {
-  padding-bottom: calc(var(--space-10) + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--bottom-bar-height) + var(--space-10) + env(safe-area-inset-bottom));
 }
 
 /* Shared width cap for every tab's content (Log, History, PRs, Routines, Trends,
@@ -1098,6 +1138,148 @@ input[type='search']::-webkit-search-results-decoration {
   display: none;
 }
 
+/* --- The session bar (SessionBar.jsx) --------------------------------------
+   ONE fixed box at the bottom whose CONTENTS vary, never a stack of fixed siblings. That is
+   .app-chrome's rule pointed the other way: siblings cannot know each other's height, and no CSS
+   token can supply it. It replaces two things at once -- the in-flow "Session in progress" card
+   that used to mount at the TOP of the Log tab (~66px, pushing the primary button out from under
+   the thumb at the exact moment a set was logged) and the floating rest-timer pill that hovered
+   over whatever was at the bottom of the scroll.
+
+   `fixed`, not `sticky`: sticky-to-bottom only works for an element in flow at the end of a scroll
+   container, and this one has to hold its place over every tab. Its height does NOT change when the
+   rest timer starts -- a bar that grew would just move the same jump from the top of the screen to
+   the bottom, and desync the padding .app-shell reserves for it. */
+.session-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-bottom-bar);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  /* Paired with the hairline: a black shadow alone is invisible on a dark surface. */
+  box-shadow: var(--shadow-3), var(--elevation-hairline);
+  /* Clears the home indicator on a standalone-display PWA; resolves to 0 anywhere without an
+     inset. The bar this replaces was the one piece of fixed chrome in the app that omitted it. */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Matches .tab-panel's cap so the bar's contents line up with the column above them on a desktop,
+   rather than sprawling to the window edges under a 840px-wide page. */
+.session-bar-row {
+  max-width: 840px;
+  margin: 0 auto;
+  height: var(--session-bar-height);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+}
+
+/* Rest progress, as a determinate fill on the bar's TOP edge. Deliberately the same 3px as
+   .refresh-indicator-slot on the sticky chrome's BOTTOM edge -- opposite edges, and only the
+   refresh one moves (indeterminate sweep vs. a fill that measures something real). Costs zero
+   height, which is what lets the rest timer join this bar without growing it.
+
+   The transition smooths the once-per-second step; it is not the timer. */
+.session-bar-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: var(--color-accent);
+  transition: width var(--dur-base) linear;
+  pointer-events: none;
+}
+
+/* Truncates rather than wraps: the bar is a fixed height, so a second line would be clipped
+   instead of shown. At 390px this row is genuinely tight, which is also why there is no green dot
+   in here -- it would sit immediately beside the words "Session in progress" and add nothing to
+   them. The per-person dot on the pill is a different signal and stays. */
+.session-bar-status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.session-bar-rest {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+/* Past target. --color-danger is contrast-tuned as TEXT in both themes (it is a light salmon in
+   dark mode, not the light-mode brick), so it is legible on --color-surface either way. The minus
+   sign carries the meaning on its own -- colour is reinforcement here, not the signal. */
+.session-bar-over {
+  color: var(--color-danger);
+}
+
+/* --- The person pill's rest ring (PersonPillBar.jsx) -----------------------
+   A ring around the 26px initials circle, filling elapsed/target. A CIRCLE is the one shape where
+   the cheap implementation (conic-gradient) is also the geometrically correct one: a ring around
+   the pill's rounded-rect OUTLINE would need an SVG stroke sized per-pill via ResizeObserver,
+   because a conic gradient sweeps by angle and so runs visibly fast along a wide rect's short ends.
+
+   It is `inset: -3px` on an absolutely-positioned overlay, so it paints into the padding the pill
+   already has and costs ZERO layout -- the pill does not resize when someone starts resting.
+
+   The mask is load-bearing, not decoration: the ACTIVE pill's initials circle is a translucent
+   rgba(255,255,255,0.25), so without a genuinely transparent centre the conic disc would show
+   through it. `closest-side` makes 100% resolve to half the square box, so the ring is exactly
+   --pill-ring-width thick regardless of the box's size. */
+.pill-rest-ring {
+  --pill-ring-width: 3px;
+  position: absolute;
+  inset: calc(-1 * var(--pill-ring-width));
+  border-radius: var(--radius-full);
+  background: conic-gradient(
+    var(--rest-ring-fill) calc(var(--rest-progress, 0) * 360deg),
+    var(--rest-ring-track) 0
+  );
+  -webkit-mask: radial-gradient(
+    circle closest-side,
+    transparent calc(100% - var(--pill-ring-width)),
+    #000 calc(100% - var(--pill-ring-width))
+  );
+  mask: radial-gradient(
+    circle closest-side,
+    transparent calc(100% - var(--pill-ring-width)),
+    #000 calc(100% - var(--pill-ring-width))
+  );
+  pointer-events: none;
+}
+
+/* Pulse ~6s at completion, then settle. Pulse briefly and whoever was mid-set misses it -- the
+   exact failure this redesign exists to fix. Pulse forever and three people give you a permanently
+   animating chrome. So the announcement is the motion and the STATE is the full ring: the global
+   prefers-reduced-motion block collapses this animation to nothing, and a reduced-motion user must
+   still be left with a signal. */
+.pill-rest-ring-done {
+  animation: restRingPulse 1.2s var(--ease-in-out) 5;
+}
+
+@keyframes restRingPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.14);
+    opacity: 0.7;
+  }
+}
+
 @media (orientation: landscape) and (max-height: 900px) {
   .header-bar {
     padding-top: var(--space-1);
@@ -1115,7 +1297,17 @@ input[type='search']::-webkit-search-results-decoration {
   }
 
   .app-shell {
-    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--bottom-bar-height) + var(--space-4) + env(safe-area-inset-bottom));
+  }
+
+  /* Landscape on a phone is where permanent chrome hurts most -- see the .app-chrome comment.
+     The bar loses 8px, and its row widens to match .tab-panel's landscape cap below. */
+  :root {
+    --session-bar-height: 44px;
+  }
+
+  .session-bar-row {
+    max-width: 1120px;
   }
 
   .tab-panel {

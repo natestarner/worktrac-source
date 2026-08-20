@@ -18,6 +18,7 @@ import {
 } from '../../lib/queryClient';
 import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
 import { comparableValue, computePrefillDraft, isPrSet } from '../../utils/formulas';
+import { resolveRestTargetSeconds } from '../../utils/restTarget';
 import { deriveExerciseSummaryFromHistory, mergeBestWithLocalSets } from '../../utils/exerciseSummaryFromHistory';
 import { formatDateLabel, formatRestTime, MIN_HOLD_SECONDS, toLocalDateStr } from '../../utils/datetime';
 import { formatSetSpaced } from '../../utils/formatSet';
@@ -62,6 +63,7 @@ export default function ExerciseDetail({
     draftSource,
     setDraft,
     setHoldStartedAt,
+    setRestTimer,
   } = useAppState();
   // holdTimers is defaulted because it is read during RENDER: a context missing it would throw
   // mid-render, and a render-time throw has to be contained rather than allowed to white-screen the
@@ -614,6 +616,10 @@ export default function ExerciseDetail({
     // Persisted synchronously (localStorage) so swUpdate's silent post-deploy reload resumes the
     // hold instead of destroying it mid-effort -- see AppStateContext's holdStartedAt.
     setHoldStartedAt(startedAt);
+    // startHoldTimer already drops this person's IN-MEMORY rest timer (they have visibly stopped
+    // resting, and two competing clocks on screen is nonsense). The persisted copy has to go in the
+    // same step, or a reload mid-hold resurrects the rest timer that was just cleared.
+    setRestTimer({});
     startHoldTimer(personId, startedAt);
   }
 
@@ -655,7 +661,20 @@ export default function ExerciseDetail({
     }
     if (holdStartedAt) setHoldStartedAt(null);
     // Rest timer starts immediately for the "instant" feel; it's a live-only concept.
-    if (!editingSessionId) startRestTimer(personId, 90);
+    //
+    // The target is resolved ONCE, here, and snapshotted into the timer -- never re-derived from
+    // whatever exercise happens to be selected later. Both values are also persisted synchronously
+    // (localStorage) so the timer survives swUpdate's silent post-deploy reload, exactly as the hold
+    // timer's start does; AppShell resumes from them on mount.
+    if (!editingSessionId) {
+      const restStartedAt = Date.now();
+      const restTargetSeconds = resolveRestTargetSeconds({
+        personExercise: exercise,
+        person: people.find((p) => p.id === personId),
+      });
+      startRestTimer(personId, restTargetSeconds, restStartedAt);
+      setRestTimer({ startedAt: restStartedAt, targetSeconds: restTargetSeconds });
+    }
     const tempId = `optimistic-${newId()}`;
     // Button's pending window ends as soon as the optimistic write lands (onMutate, above),
     // not once the server responds -- onMutate has no network dependency, so this resolves

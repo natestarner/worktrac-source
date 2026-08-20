@@ -174,3 +174,16 @@ export const IconDumbbell = (props) => (
     <path d="m14 21 7-7" />
   </Icon>
 );
+
+// Rest timer readout in the session bar. Lucide's "timer": the stopwatch crown, the dial, and a
+// hand pointing UP-and-in from centre -- which matches the count-UP model rather than a countdown.
+// The bar's number is deliberately bare digits (no "Rest" label) because Playwright's getByText is
+// a case-insensitive substring and would collide with the Settings "Rest timer" toggle, so this
+// glyph is what carries the meaning visually; the accessible name lives on the wrapping element.
+export const IconTimer = (props) => (
+  <Icon {...props}>
+    <line x1="10" y1="2" x2="14" y2="2" />
+    <line x1="12" y1="14" x2="15" y2="11" />
+    <circle cx="12" cy="14" r="8" />
+  </Icon>
+);
