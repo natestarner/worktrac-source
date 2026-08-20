@@ -680,3 +680,77 @@ viewport, orientation and the metric's label, so no static rule gets it right �
 measures the mounted panel and nudges it back on screen. jsdom computes no layout, so this is
 invisible to every unit test; a bounding-box assertion in `trends.spec.ts` is the only guard, and
 it exists because the clipped panel showed up in a screenshot rather than in a test.
+
+## Update — 2026-08-19: the rest timer and the session banner become one bottom bar
+
+Two pieces of chrome were each in the wrong place, and they turned out to be the same piece of
+chrome.
+
+The rest timer was a `position: fixed` pill at `bottom: 32`, centred, that hovered over whatever
+happened to be at the bottom of the scroll — including the full-width `Log set` button on a short
+viewport. That had already been worked around once rather than fixed: `Next exercise` was moved to
+the *top* of the Log tab specifically so the floating bar could not cover it. Meanwhile the
+"Session in progress" card mounted **in flow at the top of the tab** the instant a set was logged,
+costing ~66px that pushed the primary button down out from under the thumb that had just pressed
+it. #181 deferred that deliberately and recorded the agreed fix as fixed bottom chrome "that will
+later also host the rest timer". This is that follow-up.
+
+**This supersedes part of the 2026-08-16 stacking entry above.** That entry said the app's other
+overlays — "rest timer, toast, celebration, modal, SW updater" — never overlap one another and so
+stay as local z-index values, and that tokenising them "would imply an ordering that does not
+exist". The rest-timer overlay is now gone, and the bar that replaced it *does* have a hard
+ordering constraint: the toast and the service-worker updater both have to paint above it, and a
+bottom sheet's scrim has to cover `End workout` while the sheet is open. So there are now three
+tokenised layers, not two (`--z-bottom-bar`). The reasoning in that entry was right; the premise
+it rested on stopped being true.
+
+Two live defects were retired on the way, both of which the old placement guaranteed rather than
+risked. The toast sat at `bottom: 32` *at the same coordinates* as the rest timer and at a higher
+z-index, so every set-saved toast blanked the countdown for its full 3.2s — and z-index could
+never have fixed that, because the toast genuinely does belong on top; the fix is positional, and
+both the toast and the SW updater now offset by `--bottom-bar-height`. And the rest timer was the
+only `position: fixed` element in the app with no `env(safe-area-inset-bottom)`, so in the
+installed PWA it sat under the home indicator.
+
+**The timer had to change shape, not just move.** It now counts **up** toward a snapshotted target
+instead of down to zero. A full ring is a stable "you're ready" state that holds indefinitely,
+where a drained one at zero is empty — visually identical to "not resting" — and self-destructing
+at zero destroyed the **overrun** entirely, collapsing "went at 0:90" and "sat there for five
+minutes" into the same blank. `workout_sets.rest_seconds` has always recorded that difference; now
+the readout does too, as a red negative term past target. `+30s` and `Skip` were dropped: `+30s`
+negotiates with a deadline that has no authority over anyone, and `Skip` duplicates what logging
+the next set already does.
+
+**The ring on every person's pill is the point, not a flourish.** The device sits in front of
+whoever is lifting, so before this the only person who could see a rest timer was the one who
+didn't need to look it up — while "is anyone else ready to go?" is the actual question during a
+traded-off household session. The pill's existing green live-session dot **stays**: someone
+mid-*set* has an open session and no ring, rest is transient where a session is an hour, and a
+person with their rest timer switched off never gets a ring at all. Neither signal subsumes the
+other. The ring is therefore accent in every state and **never green** — a green ring settling 8px
+from a green dot reads as one escalating state rather than two independent facts.
+
+**Two things went wrong here that are worth keeping.**
+
+The first was a test that guarded nothing. The reserved-space spec asserted that `Log set` clears
+the bar, and it passed with the reserved padding deleted — `Log set` sits *mid*-page, so scrolling
+to the bottom moves it off the **top**, not under the bar. Rewritten to measure `.tab-panel`'s
+bottom edge against the bar's top on a page long enough to scroll, it fails by 13–29px under that
+mutation. A stronger assertion was then tried and **removed**, because it failed against *correct*
+code: a fixed bottom bar necessarily overlaps mid-document content at some scroll position. What
+reserved padding can promise is that the **end of the document** is reachable, and asserting more
+than that encodes a claim no implementation could satisfy.
+
+The second shipped. The rest-timer resume ran for the **active person only**, because
+`AppStateContext` exposed only the active person's slice — so reloading with two people in the
+household blanked the *other* person's ring, and it came back only if you clicked onto them, which
+restored their timer as a side effect of them becoming active. The one person the ring was
+guaranteed to fail for was the person it exists for. It was written into the plan as a "known gap,
+matching the hold timer" and shipped on that basis, which was the wrong call: the hold timer is a
+single-person concern, so inheriting its limitation made no sense for a household feature. The
+comparison sounded principled and wasn't. `selectRestTimersByPerson` is now the one projection
+that reads across `byPerson`, and `SET_REST_TIMER` takes a `personId` — because *starting* a timer
+is always the active person, but *discarding an expired one on boot* runs for the whole household
+at once and would otherwise have cleared the wrong person's. **A one-person household cannot
+reproduce this class of bug**, which is why it got through; anything touching per-person state
+needs a two-person test to mean anything.
