@@ -172,6 +172,51 @@ collections the server wholly owns:
 If yes, forcing a refetch destroys it. That trade is the whole reason this is a per-key list and
 not a blanket "invalidate everything after hydrate".
 
+#### The same rule, outside the warm: never AWAIT an invalidation of a key holding an optimistic row
+
+`refreshAfterRestore` is one way to destroy an unsent optimistic row; a plain
+`await invalidateQueries(...)` at a call site is another, and the table above does not stop it.
+`LogTab.handleExerciseCreated` awaited a refetch of `exercises` + `personExercises` and *then*
+selected the exercise `insertOptimisticExercise` had just written into those very keys — so online
+the row was evicted milliseconds before it was named, and the person landed back on the picker.
+
+- **Read the optimistic row first, refetch never.** The write's own `onSettled` already invalidates
+  the keys it touched, at the only moment a refetch can return the real row. A second invalidation
+  at the call site is redundant *and* racing it.
+- **This is also how a bug hides in all three degraded modes.** `invalidateQueries` on a *paused*
+  query resolves immediately without fetching, and a lie-fi refetch fails while keeping its `data`
+  — so the eviction only happens when the network actually answers. Offline "working" is not
+  evidence; it can mean the request that breaks things never ran.
+- **Selection restored from an earlier world needs a catch-up, not just a subscription.** LogTab's
+  MutationCache subscriber only sees mappings recorded from the moment it subscribes, so it also
+  resolves through `resolveExerciseId` *before* subscribing — a create that synced while the
+  component was unmounted (another tab, during boot) otherwise leaves a temp id selected forever.
+
+- **An optimistic write may PATCH a query entry; it must never BUILD one.** `setQueryData` calls
+  `queryCache.build()`, so writing to a key with no entry *creates* it -- holding whatever that one
+  updater returned, stamped `dataUpdatedAt = Date.now()`. A create replayed from the outbox has no
+  component behind it and the cache it was queued against may be gone (cleared on an auth change,
+  or dropped by the 24h `maxAge` / `buster` the outbox deliberately does not share), so this is a
+  reachable state, not a hypothetical. The result is a catalog whose only member is that one
+  exercise: online the following invalidation repairs it in a round trip, but a replay can land on
+  any tab, and with no observer to refetch -- or offline before it lands -- that stands as the
+  person's entire library. **Return `undefined` from the updater when `rows === undefined`**;
+  TanStack then skips the write entirely. Applies to `CREATE_EXERCISE`'s `onSettled` and to
+  `AddEditExerciseModal`'s open-an-existing-exercise favorite alike.
+- **Reaching the screen sooner means the temp->real swap now happens WHILE someone is using it, so
+  the swap must reconcile from the response.** `CREATE_EXERCISE`'s `onSettled` replaces the
+  optimistic row with the server's row in both keys *before* invalidating. Invalidating alone only
+  marks them stale: the real row lands a round trip later, and LogTab's selection has already moved
+  to the real id -- so for that whole window neither id is in either list, `selectedExercise` is
+  `null`, and `ExerciseDetail` unmounts back to the picker. It ate the first tap on a just-created
+  timed exercise's Time field. Same rule, and the same `data`-is-defined inertness argument, as
+  `LOG_SET`'s reconciliation. Keep the per-person overlay (`isFavorite`/`tags`) when swapping --
+  `ExerciseDto` doesn't carry it, and a blind overwrite drops the exercise out of the picker for the
+  same round trip.
+
+`docs/incidents/2026-08-19-exercise-create-navigation-lost-online.md`; guarded by
+`parity-exercise-create.spec.ts` (all four modes) and `LogTab.test.jsx`'s never-settling refetch.
+
 ### A value the CLIENT invented has no honest `dataUpdatedAt` at all
 
 Stronger than the case above, and it needs the opposite fix. `setQueryData` stamps

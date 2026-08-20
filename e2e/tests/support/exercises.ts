@@ -18,6 +18,14 @@ export async function addExerciseToRoutine(page: Page, name: string) {
   await page.getByRole('button', { name, exact: true }).click();
 }
 
+// Back to the Log picker from an exercise's detail screen. NOT the "Log" tab link: routing to
+// /app/log is a no-op when you are already there, and the picker only renders while
+// `selectedExerciseId` is null -- so the tab link leaves you on the exercise you were already on.
+export async function backToPicker(page: Page) {
+  await page.getByRole('button', { name: /All exercises/ }).click();
+  await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+}
+
 // Create a custom exercise via the always-present "+ Add your own exercise" button (on the Log
 // picker or the routine modal). Creating it auto-favorites it and opens its detail screen.
 export async function addOwnExercise(page: Page, name: string) {
@@ -193,4 +201,15 @@ export async function addOwnTimedExercise(page: Page, name: string) {
   await page.getByPlaceholder('Exercise name').fill(name);
   await page.getByRole('dialog').getByRole('button', { name: 'Time', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).last().click();
+}
+
+// The duplicate path through the SAME modal: when the typed name and measure already exist, the
+// primary button becomes "Open <name>" and no exercise is created. Deliberately a separate helper
+// rather than a flag on addOwnExercise -- a spec asserting the duplicate behaviour should fail
+// loudly if the button never changed, instead of silently falling back to creating a second row.
+export async function openExistingViaAddOwn(page: Page, name: string, measure: 'Reps' | 'Time' = 'Reps') {
+  await page.getByRole('button', { name: '+ Add your own exercise' }).click();
+  await page.getByPlaceholder('Exercise name').fill(name);
+  await page.getByRole('dialog').getByRole('button', { name: measure, exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: `Open ${name}`, exact: true }).click();
 }

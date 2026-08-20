@@ -410,6 +410,37 @@ readout there with nothing but the pills to act on.
 None of this is a connectivity branch — routine position is pure client state — so it does not
 belong on `resilience.md`'s register.
 
+## Creating an exercise selects it SYNCHRONOUSLY -- never behind an awaited refetch
+
+`handleExerciseCreated` receives an **optimistic temp row** (`AddEditExerciseModal` always takes the
+durable outbox path for the Log tab, even while genuinely online). `insertOptimisticExercise` has
+already written that row into `queryKeys.exercises()` **and** `queryKeys.personExercises()`, so it
+is selectable and searchable the moment the modal closes.
+
+- **Do not refetch either key here.** Awaiting an invalidation of the two keys holding the row
+  evicts it milliseconds before `selectExercise` names it -- `selectedExercise` resolves to `null`
+  and `LogTab` falls back to the picker. `CREATE_EXERCISE`'s own `onSettled` already invalidates
+  both, at the only moment a refetch can return the real row.
+- **It reproduced ONLY while online**, because `invalidateQueries` on a paused query resolves
+  immediately without fetching and a lie-fi refetch keeps its `data`. Every spec that created an
+  exercise ran in a mode where it works, so it shipped and survived ten PRs. `assert` in
+  `parity-exercise-create.spec.ts` now covers all four modes, and `LogTab.test.jsx` drives the
+  create with never-settling refetch mocks -- restoring the await fails both.
+- **The temp->real remapper needs a catch-up, not just its MutationCache subscription.** The
+  subscription only sees mappings recorded from the moment it subscribes, so the effect also
+  resolves `selectedExerciseId` through `resolveExerciseId` *before* subscribing -- a create that
+  synced while `LogTab` was unmounted (another tab, during boot) otherwise strands a temp id
+  forever. Don't move that resolution into the `selectedExercise` lookup: the id map is a mutable
+  module singleton that triggers no re-render.
+
+- **Because the screen is now reached before the create has synced, the temp->real swap happens
+  under someone's thumb.** `CREATE_EXERCISE`'s `onSettled` therefore seeds the server's row into
+  both exercise keys before invalidating; without that, `selectedExercise` is `null` for a full
+  round trip and this screen unmounts mid-interaction. Don't reduce it back to an invalidation.
+
+Mechanism and the general form of the rule: `.claude/rules/offline-internals.md`. Post-mortem:
+`docs/incidents/2026-08-19-exercise-create-navigation-lost-online.md`.
+
 ## Editable temp rows
 
 `editableTempIds` is what gives a paused/retrying/errored row its Edit and Delete controls

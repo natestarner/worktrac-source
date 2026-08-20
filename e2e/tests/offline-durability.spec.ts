@@ -146,13 +146,11 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     const faults = await failNetwork(page, API_ONLY);
     await addOwnExercise(page, 'Reload Regression Press');
     await expect(outboxCountText(page, 1)).toBeVisible();
-    // Navigating to the new exercise's detail screen (LogTab's handleExerciseCreated) awaits a
-    // catalog/picker refetch first, which under lie-fi only settles after its own retry backoff.
-    // Must wait for that to actually finish (the "Log set" button appearing) before going
-    // genuinely offline below: flipping offline while that refetch is still mid-retry pauses it
-    // indefinitely (same networkMode as a write), hanging navigation instead of taking a few
-    // seconds.
-    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible({ timeout: 15000 });
+    // Navigation is synchronous now, off the optimistic row the modal writes into the cache --
+    // handleExerciseCreated no longer awaits a catalog/picker refetch, so this needs no generous
+    // timeout and there is no in-flight refetch left to be stranded by the setOffline below. The
+    // wait stays because the set logged next targets this screen.
+    await expect(page.getByRole('button', { name: /Log set/ })).toBeVisible();
 
     // Genuinely offline for the dependent set -- submitted after the create, landing in the
     // opposite (paused) cohort if the create's own retry hasn't also flipped to paused yet.

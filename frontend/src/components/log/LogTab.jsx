@@ -10,6 +10,7 @@ import { useRoutines } from '../../hooks/useRoutines';
 import { useLiveSession } from '../../hooks/useLiveSession';
 import { useHistory } from '../../hooks/useHistory';
 import { useSessionEntries } from '../../hooks/useSessionEntries';
+import { isTempExerciseId, resolveExerciseId } from '../../lib/exerciseIdMap';
 import { editSession } from '../../api/sessions';
 import { localDateTimeToIso, toLocalDateStr, toLocalTimeStr } from '../../utils/datetime';
 import ExercisePicker from './ExercisePicker';
@@ -137,6 +138,16 @@ export default function LogTab() {
   // falling back to the picker when the temp row disappears from the refreshed catalog. Subscribes to
   // the app's singleton mutation cache (the outbox lives there), so no query-context dependency here.
   useEffect(() => {
+    // Catch-up before subscribing: the subscription below only ever sees mappings recorded from
+    // NOW on, and a create can sync while this component is unmounted -- another tab, or during
+    // boot before this effect runs -- so a temp selection restored from persisted state may
+    // already have a real id waiting in the map. Resolving here rather than in the
+    // `selectedExercise` lookup above is deliberate: the map is a mutable module singleton that
+    // triggers no re-render, so reading it during render would paint a stale answer.
+    if (isTempExerciseId(selectedExerciseId)) {
+      const resolved = resolveExerciseId(selectedExerciseId);
+      if (resolved !== selectedExerciseId) selectExercise(resolved);
+    }
     return queryClient.getMutationCache().subscribe((event) => {
       const mutation = event?.mutation;
       if (!mutation || mutation.options.mutationKey?.[0] !== CREATE_EXERCISE_MUTATION_KEY[0]) return;
@@ -149,12 +160,27 @@ export default function LogTab() {
     });
   }, [queryClient, selectedExerciseId, selectExercise]);
 
-  async function handleExerciseCreated(created) {
+  // Select the new exercise SYNCHRONOUSLY, off the optimistic row the modal just wrote. There is
+  // deliberately no refetch here, and re-adding one is the bug:
+  //
+  //   - It is redundant. insertOptimisticExercise (AddEditExerciseModal) has already written the
+  //     new exercise into BOTH queryKeys.exercises() and queryKeys.personExercises(), so it is
+  //     selectable and searchable immediately; and CREATE_EXERCISE's onSettled (queryClient.js)
+  //     invalidates those same two keys once the server confirms -- the only moment a refetch can
+  //     actually return the real row.
+  //   - It is destructive. Awaiting an invalidation of the very keys holding the optimistic row
+  //     evicts that row milliseconds before this line names it, so selectedExercise resolves to
+  //     null and the person lands back on the picker. See the cache-warming table in
+  //     .claude/rules/offline-internals.md ("refetching deletes it from the picker mid-flight") --
+  //     same invariant, different call site -- and
+  //     docs/incidents/2026-08-19-exercise-create-navigation-lost-online.md.
+  //
+  // Staying synchronous is also what makes this behave identically in every connectivity mode: the
+  // await only ever resolved instantly while paused offline, which is why the bug was online-only
+  // and why it hung for the full retry backoff under lie-fi.
+  function handleExerciseCreated(created) {
     setAddExerciseName(null);
     setExerciseSearch('');
-    // Refresh both the person's picker list AND the shared catalog, so the new exercise also shows
-    // up in search (the catalog has a long staleTime and won't refetch on its own for a while).
-    await Promise.all([refetchPersonExercises(), refetchCatalog()]);
     if (created?.id) selectExercise(created.id);
   }
 
