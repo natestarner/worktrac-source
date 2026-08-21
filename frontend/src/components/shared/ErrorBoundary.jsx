@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import Button from './Button';
+import { recordClientError } from '../../lib/lastClientError';
 
 // The app had no error boundary anywhere, so any render-time throw took the whole screen white --
 // which is exactly how docs/incidents/2026-08-08-trends-hover-blank-page.md presented: a persisted
@@ -12,9 +13,17 @@ import Button from './Button';
 // render. The contract says a failure degrades to something usable; a white screen is the one
 // outcome that is never acceptable, especially mid-workout on an iPad with no other recourse.
 //
-// Deliberately NOT wired to any reporting service: there is no client error pipeline in this app,
-// and inventing one here would be a second mechanism nobody asked for. It logs to the console (so
-// a real stack survives in dev and in a shared browser session) and gives the person a way out.
+// Deliberately NOT wired to any reporting service: there is still no client error pipeline in this
+// app, and inventing one here would be a second mechanism nobody asked for. It logs to the console
+// (so a real stack survives in dev and in a shared browser session) and gives the person a way out.
+//
+// It now ALSO stashes the error locally, via lib/lastClientError.js, for the Contact Us form to
+// offer. That is not the reporting service ruled out above and does not reopen the question:
+// nothing is transmitted, in the background or otherwise. The value sits in localStorage and leaves
+// the device only if a person opens Contact Us, sees it listed in that form's "What gets sent"
+// disclosure, and chooses to send it. The reason it earns its place is that a render-time throw is
+// caught here and reaches Azure in no form whatsoever -- so for a bug report about a blanked
+// screen, this stash is frequently the only record the failure ever happened.
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -27,6 +36,9 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('ErrorBoundary caught a render error', error, info);
+    // Swallows its own failures -- see lib/lastClientError.js. Capturing diagnostics must never be
+    // able to turn a contained render error into an uncontained one.
+    recordClientError(error, info);
   }
 
   // Clears a previous screen's error when `resetKey` changes (callers pass the current route), so

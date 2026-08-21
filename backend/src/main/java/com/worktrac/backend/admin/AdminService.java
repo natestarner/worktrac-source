@@ -2,6 +2,7 @@ package com.worktrac.backend.admin;
 
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
+import com.worktrac.backend.contact.ContactMessageService;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.registrationaudit.RegistrationAlertSettings;
@@ -41,6 +42,7 @@ public class AdminService {
     private final PendingRegistrationRepository pendingRegistrationRepository;
     private final RegistrationEventRepository registrationEventRepository;
     private final RegistrationAlertSettingsService registrationAlertSettingsService;
+    private final ContactMessageService contactMessageService;
     private final Clock clock;
 
     // The subset of RegistrationEventType that represents a known email send/delivery outcome
@@ -60,7 +62,8 @@ public class AdminService {
                          WorkoutSetRepository workoutSetRepository,
                          PendingRegistrationRepository pendingRegistrationRepository,
                          RegistrationEventRepository registrationEventRepository,
-                         RegistrationAlertSettingsService registrationAlertSettingsService, Clock clock) {
+                         RegistrationAlertSettingsService registrationAlertSettingsService,
+                         ContactMessageService contactMessageService, Clock clock) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
@@ -69,6 +72,7 @@ public class AdminService {
         this.pendingRegistrationRepository = pendingRegistrationRepository;
         this.registrationEventRepository = registrationEventRepository;
         this.registrationAlertSettingsService = registrationAlertSettingsService;
+        this.contactMessageService = contactMessageService;
         this.clock = clock;
     }
 
@@ -161,15 +165,24 @@ public class AdminService {
             AdminRegistrationAlertSettingsDto request) {
         RegistrationAlertSettings updated = registrationAlertSettingsService.update(
                 request.alertOnRegistrationConfirmed(), request.alertOnSendFailure(),
-                request.alertOnDeliveryFailure());
+                request.alertOnDeliveryFailure(), request.alertOnContactMessage());
         return toAlertSettingsDto(updated);
+    }
+
+    // Read-only, like everything else here. There is deliberately no mark-read/archive/delete
+    // action: /api/admin/** mutates app data in exactly two sanctioned places, and a third needs
+    // its own explicit decision rather than arriving as a side effect of a new feature.
+    @Transactional(readOnly = true)
+    public List<AdminContactMessageDto> contactMessages() {
+        return contactMessageService.listRecent().stream().map(AdminContactMessageDto::from).toList();
     }
 
     private AdminRegistrationAlertSettingsDto toAlertSettingsDto(RegistrationAlertSettings settings) {
         return new AdminRegistrationAlertSettingsDto(
                 settings.isAlertOnRegistrationConfirmed(),
                 settings.isAlertOnSendFailure(),
-                settings.isAlertOnDeliveryFailure());
+                settings.isAlertOnDeliveryFailure(),
+                settings.isAlertOnContactMessage());
     }
 
     private AdminPendingRegistrationDto toAdminPendingRegistrationDto(PendingRegistration pending, Instant now) {

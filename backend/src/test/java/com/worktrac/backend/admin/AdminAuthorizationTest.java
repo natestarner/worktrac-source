@@ -54,7 +54,8 @@ class AdminAuthorizationTest extends AbstractIntegrationTest {
     private static final String[] ADMIN_ROUTES = {
             "/api/admin/overview", "/api/admin/accounts", "/api/admin/people",
             "/api/admin/pending-registrations", "/api/admin/health",
-            "/api/admin/registration-events", "/api/admin/registration-alert-settings"
+            "/api/admin/registration-events", "/api/admin/registration-alert-settings",
+            "/api/admin/contact-messages"
     };
 
     // Real EmailService constructor builds a live Azure EmailClient -- mocked out so
@@ -231,7 +232,8 @@ class AdminAuthorizationTest extends AbstractIntegrationTest {
         String updateBody = objectMapper.writeValueAsString(Map.of(
                 "alertOnRegistrationConfirmed", true,
                 "alertOnSendFailure", false,
-                "alertOnDeliveryFailure", true));
+                "alertOnDeliveryFailure", true,
+                "alertOnContactMessage", false));
 
         mockMvc.perform(put("/api/admin/registration-alert-settings")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -255,13 +257,15 @@ class AdminAuthorizationTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.alertOnRegistrationConfirmed").value(true))
                 .andExpect(jsonPath("$.alertOnSendFailure").value(false))
-                .andExpect(jsonPath("$.alertOnDeliveryFailure").value(true));
+                .andExpect(jsonPath("$.alertOnDeliveryFailure").value(true))
+                .andExpect(jsonPath("$.alertOnContactMessage").value(false));
 
         mockMvc.perform(get("/api/admin/registration-alert-settings").header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.alertOnRegistrationConfirmed").value(true))
                 .andExpect(jsonPath("$.alertOnSendFailure").value(false))
-                .andExpect(jsonPath("$.alertOnDeliveryFailure").value(true));
+                .andExpect(jsonPath("$.alertOnDeliveryFailure").value(true))
+                .andExpect(jsonPath("$.alertOnContactMessage").value(false));
     }
 
     @Test

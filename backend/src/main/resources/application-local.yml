@@ -72,7 +72,12 @@ app:
     # e2e/tests/support/auth.ts's registerHousehold generates; livewiretest addresses
     # (live-email-canary.spec.ts) deliberately don't match, so that one spec still sends for
     # real. Single-quoted so YAML doesn't try to interpret the backslashes.
-    e2e-noop-recipient-pattern: '^huddle\+e2e-.*@starner\.co$'
+    # Also matches the local ADMIN_EMAILS default below, because the Contact Us alert
+    # (ContactEmailEventListener) mails the ADMIN address rather than the submitter -- so without
+    # this, every local e2e run of contact.spec.ts would send a real ACS message. The registration
+    # admin alerts route through the same sendAdminAlert and are no-op'd locally for the same
+    # reason. If you override ADMIN_EMAILS locally, widen this too or expect real mail.
+    e2e-noop-recipient-pattern: '^(huddle\+e2e-.*|nate\+huddleadmin)@starner\.co$'
   rate-limit:
     # Rate limiting defends a deployed, internet-facing environment against abuse -- that's
     # not the threat model for a single developer or an automated test suite hitting
@@ -101,6 +106,14 @@ app:
     # reach rather than one that merely looks generous.
     per-ip-per-hour: 100000
     global-email-sends-per-hour: 100000
+    # Same reasoning as the two above: @SpringBootTest classes share one Spring context and
+    # therefore one set of stateful buckets across every test method in the file, so the
+    # production-sane defaults would start 429ing unrelated tests partway through a class purely
+    # because earlier ones spent the quota. ContactRateLimitTest overrides these back down via its
+    # own property source, which gives it an isolated context.
+    contact-per-user-per-hour: 100000
+    contact-per-ip-per-hour: 100000
+    contact-global-per-hour: 100000
   admin:
     emails: ${ADMIN_EMAILS:nate+huddleadmin@starner.co}
   email-delivery-webhook:

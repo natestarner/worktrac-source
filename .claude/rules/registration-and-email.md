@@ -45,6 +45,31 @@ This whole section exists because a real registration vanished with zero trace. 
   failed alert would recurse.
 - Password-reset emails get identical SENT/FAILED audit coverage to registration emails.
 
+- `ContactEmailEventListener` follows the same shape for Contact Us submissions, but records the
+  outcome **on the `contact_messages` row itself** (`alert_status` / `alert_message_id` /
+  `alert_detail`) rather than as a separate audit event — the row already exists and is what the
+  admin reads, so "was I actually told about this?" is answerable without correlating two tables.
+  `alert_status` is inserted as **`PENDING`**, which is what keeps "the listener never ran" visibly
+  distinct from "it ran and succeeded". Its status write goes through `ContactAlertStatusService`,
+  which is `REQUIRES_NEW` for the same reason `RegistrationAuditService.record` is.
+- **`sendAdminAlert` is plain-text only, and that is load-bearing now that a contact body embeds
+  text a household member typed** — with no HTML part there is nothing for markup in that text to
+  inject into. Do not give it a template. The subject is stripped of CR/LF before it reaches the
+  mail API, because a subject line is an email *header*.
+- **The Contact Us alert mails `ADMIN_EMAILS`, not the submitter**, so `e2eNoopRecipientPattern`
+  must cover the admin address or every e2e run sends real mail. Both `application-local.yml` and
+  `application-lower.yml` therefore match `nate+huddleadmin@starner.co` as well as the
+  `huddle+e2e-` households. Production sets no pattern at all, so it still mails for real.
+  - ⚠️ **That admin literal is a third independently-maintained copy**, alongside
+    `worktrac-deploy`'s `config/{lower,production}/backend-env.json` and its two deploy workflows.
+    If `ADMIN_EMAILS` ever changes, these patterns must change with it — otherwise e2e silently
+    starts sending real mail again. `EmailServiceE2eNoopTest` pins the deployed regex against both
+    addresses, and against `huddle+livewiretest-` still falling *outside* it (widening the pattern
+    must never swallow `live-email-canary.spec.ts`'s deliberate real send).
+  - Widening lower's pattern also silences lower's registration send/delivery **failure** alert
+    emails, which share `sendAdminAlert`. Deliberate: the no-op skips only the ACS call, so every
+    `RegistrationEvent` row is still written and the Activity tab still shows the failure.
+
 **General rule:** an async dispatch mechanism must never have a code path where "the task didn't
 run" and "the task ran and nothing went wrong" are indistinguishable from the outside.
 

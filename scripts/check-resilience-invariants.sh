@@ -198,7 +198,14 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 # "there is no restorable UI state", identical to a first-ever boot. None can hide a lost write:
 # the write path reports failure through saveAppState's return value, which the migration checks
 # before dropping the legacy copy.
-EXPECTED_LIB_SWALLOWS=35
+# 2026-08-21: 35 -> 39. The Contact Us feature's two diagnostics modules. correlationId.js has one
+# (the localStorage read/create); lastClientError.js has three (record, read, clear). All four are
+# storage-availability guards -- private mode, quota, storage disabled -- and all four degrade to
+# the same benign outcome: no correlation id that survives reload, or no stashed error to offer on
+# the contact form. Neither module carries a write, queues anything, or sits on any path a write
+# takes, so none of them can hide a lost write the way an outbox swallow could. Diagnostics
+# plumbing must never be able to break the app it is diagnosing.
+EXPECTED_LIB_SWALLOWS=39
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

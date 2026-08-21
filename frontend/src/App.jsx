@@ -30,12 +30,14 @@ import RoutinesTab from './components/routines/RoutinesTab';
 import TrendsTab from './components/trends/TrendsTab';
 import AppSettingsTab from './components/settings/AppSettingsTab';
 import ProfileTab from './components/profile/ProfileTab';
+import ContactTab from './components/contact/ContactTab';
 import AdminShell from './routes/admin/AdminShell';
 import AdminOverview from './routes/admin/AdminOverview';
 import AdminAccounts from './routes/admin/AdminAccounts';
 import AdminPeople from './routes/admin/AdminPeople';
 import AdminPending from './routes/admin/AdminPending';
 import AdminActivity from './routes/admin/AdminActivity';
+import AdminContact from './routes/admin/AdminContact';
 
 export default function App() {
   useEffect(() => {
@@ -103,6 +105,7 @@ export default function App() {
                 <Route path="trends" element={<TrendsTab />} />
                 <Route path="settings" element={<AppSettingsTab />} />
                 <Route path="profile" element={<ProfileTab />} />
+                <Route path="contact" element={<ContactTab />} />
               </Route>
             </Route>
             <Route element={<AdminRoute />}>
@@ -112,6 +115,7 @@ export default function App() {
                 <Route path="people" element={<AdminPeople />} />
                 <Route path="pending" element={<AdminPending />} />
                 <Route path="activity" element={<AdminActivity />} />
+                <Route path="contact" element={<AdminContact />} />
               </Route>
             </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

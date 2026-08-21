@@ -33,4 +33,44 @@ public class RateLimitProperties {
     public void setGlobalEmailSendsPerHour(int globalEmailSendsPerHour) {
         this.globalEmailSendsPerHour = globalEmailSendsPerHour;
     }
+
+    // Contact-form limits (ContactRateLimiter). Separate buckets from the registration ones above
+    // so a burst of contact messages can't lock anyone out of registering, and vice versa.
+    //
+    // Sized far tighter than the registration limits because the endpoint is authenticated: 5/hour
+    // is generous for a real person reporting a bug and implausible for anything else. A household
+    // member who legitimately hits it can still write again an hour later, and nothing they typed
+    // is lost -- the draft survives the 429.
+    private int contactPerUserPerHour = 5;
+
+    private int contactPerIpPerHour = 10;
+
+    // Bounds total admin-alert email spend, the same job globalEmailSendsPerHour does for
+    // verification sends. Higher than the per-user cap so a genuinely busy day never silently
+    // swallows the third person's report.
+    private int contactGlobalPerHour = 20;
+
+    public int getContactPerUserPerHour() {
+        return contactPerUserPerHour;
+    }
+
+    public void setContactPerUserPerHour(int contactPerUserPerHour) {
+        this.contactPerUserPerHour = contactPerUserPerHour;
+    }
+
+    public int getContactPerIpPerHour() {
+        return contactPerIpPerHour;
+    }
+
+    public void setContactPerIpPerHour(int contactPerIpPerHour) {
+        this.contactPerIpPerHour = contactPerIpPerHour;
+    }
+
+    public int getContactGlobalPerHour() {
+        return contactGlobalPerHour;
+    }
+
+    public void setContactGlobalPerHour(int contactGlobalPerHour) {
+        this.contactGlobalPerHour = contactGlobalPerHour;
+    }
 }

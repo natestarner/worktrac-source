@@ -20,6 +20,10 @@ export function listRegistrationEvents() {
   return apiClient.get('/api/admin/registration-events');
 }
 
+export function listContactMessages() {
+  return apiClient.get('/api/admin/contact-messages');
+}
+
 export function getRegistrationAlertSettings() {
   return apiClient.get('/api/admin/registration-alert-settings');
 }

@@ -66,6 +66,11 @@ public class AdminController {
         return adminService.updateRegistrationAlertSettings(request);
     }
 
+    @GetMapping("/contact-messages")
+    public List<AdminContactMessageDto> contactMessages() {
+        return adminService.contactMessages();
+    }
+
     @GetMapping("/health")
     public AdminHealthDto health() {
         String status = healthEndpoint.health().getStatus().getCode();

@@ -9,6 +9,7 @@ const TABS = [
   { path: '/admin/people', label: 'People' },
   { path: '/admin/pending', label: 'Pending' },
   { path: '/admin/activity', label: 'Activity' },
+  { path: '/admin/contact', label: 'Contact' },
 ];
 
 // Deliberately its own standalone layout, not the workout app's AppShell/Header/TabsNav --

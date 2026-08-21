@@ -48,6 +48,13 @@ const pwaPlugin = VitePWA({
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), ...(isTest ? [] : [pwaPlugin])],
+  // Stamped into the bundle at build time and attached to Contact Us submissions, so a bug report
+  // says WHICH build it came from. There is no version in package.json worth reading (it is
+  // "0.0.0") and no git SHA available here -- that would have to come from the deploy repo -- so
+  // the build instant is the honest answer to "which deploy is this".
+  define: {
+    __APP_BUILD__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')),
+  },
   // No explicit JSX runtime config needed: @vitejs/plugin-react sets the automatic runtime
   // itself (via its own internal oxc config) for dev, build, AND the Vitest transform alike --
   // which is what lets the app's components (and its tests) never import React. An earlier

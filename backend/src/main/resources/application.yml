@@ -37,6 +37,20 @@ server:
   # address instead of the real client IP.
   forward-headers-strategy: framework
 
+# Emits the MDC values RequestDiagnosticsFilter and JwtAuthenticationFilter set, so every log line
+# a request produces carries the browser's correlation id and (once authenticated) the user id.
+# That is what makes a Contact Us submission traceable to its actual request trail in Log Analytics
+# instead of correlatable only by timestamp -- see RequestDiagnosticsFilter for the full reasoning,
+# and docs/azure-read-only-access.md for the KQL query that uses it.
+#
+# `logging.pattern.level` is Spring Boot's supported hook for extending the default console pattern,
+# which is why there is no logback-spring.xml in this project. Anyone adding one must carry these
+# two keys across, or every log line silently loses its correlation id. The `:-` defaults keep
+# unauthenticated and untagged requests (health checks, the Event Grid webhook) readable.
+logging:
+  pattern:
+    level: "%5p [cid=%X{cid:-none}] [uid=%X{uid:-anon}]"
+
 management:
   endpoints:
     web:
@@ -66,6 +80,11 @@ app:
   rate-limit:
     per-ip-per-hour: ${APP_RATE_LIMIT_PER_IP_PER_HOUR:10}
     global-email-sends-per-hour: ${APP_RATE_LIMIT_GLOBAL_EMAIL_SENDS_PER_HOUR:30}
+    # Contact Us form (ContactRateLimiter). Tighter than the registration limits above because
+    # that endpoint is authenticated -- see RateLimitProperties for the sizing reasoning.
+    contact-per-user-per-hour: ${APP_RATE_LIMIT_CONTACT_PER_USER_PER_HOUR:5}
+    contact-per-ip-per-hour: ${APP_RATE_LIMIT_CONTACT_PER_IP_PER_HOUR:10}
+    contact-global-per-hour: ${APP_RATE_LIMIT_CONTACT_GLOBAL_PER_HOUR:20}
   admin:
     # Comma-separated allowlist of admin email addresses -- the real source of truth for
     # who can reach /api/admin/**. Empty by default so an environment with no ADMIN_EMAILS

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { queryClient } from '../../lib/queryClient';
 import { getUnsyncedWriteCount } from '../../hooks/useOutboxCount';
@@ -22,6 +22,7 @@ import { getUnsyncedWriteCount } from '../../hooks/useOutboxCount';
 export default function UserMenu({ booting = false }) {
   const { people, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [pendingLogoutCount, setPendingLogoutCount] = useState(0);
   const containerRef = useRef(null);
@@ -54,7 +55,10 @@ export default function UserMenu({ booting = false }) {
 
   function go(path) {
     setOpen(false);
-    navigate(path);
+    // Carries where they were when they opened the menu. Only Contact Us reads it (to record which
+    // screen a bug report came from), but passing it for every item keeps one code path -- and a
+    // route that ignores `state` is unaffected by its presence.
+    navigate(path, { state: { from: location.pathname } });
   }
 
   function handleLogout() {
@@ -129,6 +133,11 @@ export default function UserMenu({ booting = false }) {
         >
           <MenuItem label="Profile" onClick={() => go('/app/profile')} />
           <MenuItem label="App Settings" onClick={() => go('/app/settings')} />
+          {/* "Contact Us" deliberately shares no substring with Profile / App Settings /
+              Admin Portal / Logout / Log out anyway / Cancel -- Playwright matches accessible
+              names as a case-insensitive substring, so an overlapping label here breaks specs
+              elsewhere on this screen. */}
+          <MenuItem label="Contact Us" onClick={() => go('/app/contact')} />
           {isAdmin && (
             <>
               <div style={{ borderTop: '1px solid var(--color-border)' }} />

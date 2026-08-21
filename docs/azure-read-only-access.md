@@ -106,6 +106,33 @@ az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a 
    | take 100" -o table
 ```
 
+### Tracing one person's session (the Contact Us triage path)
+
+Every log line carries `[cid=…] [uid=…]` — the browser's per-install correlation id and the
+authenticated user id, put into the MDC by `RequestDiagnosticsFilter` and emitted by
+`logging.pattern.level` in `application.yml`. A Contact Us submission stores the same `cid`, and
+the Admin Portal's **Contact** tab shows it beside the message.
+
+So triage is: read the submission, copy its correlation id, and ask for that session's whole
+request trail — including the errors the person hit *before* they decided to write in.
+
+```bash
+az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a   --analytics-query   "ContainerAppConsoleLogs_CL
+   | where ContainerAppName_s == 'worktrac-backend-production'
+   | where Log_s contains 'cid=<correlation-id>'
+   | project TimeGenerated, Log_s
+   | order by TimeGenerated asc
+   | take 500" -o table
+```
+
+Two things this cannot answer, by design:
+
+- **The email listeners' lines have no `cid`.** MDC is thread-local and does not propagate into
+  `@Async` tasks; correlate those through `contact_messages.alert_message_id` instead.
+- **The submission row itself is not readable from here.** RBAC grants no data-plane access to
+  Azure SQL (see "What stays out of reach" above), so read submissions in the Admin Portal, not
+  via `az`.
+
 `ContainerAppSystemLogs_CL` holds platform events (revision starts, probe failures, scaling)
 and is the table to check when the app never came up at all.
 

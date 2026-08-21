@@ -101,9 +101,17 @@ public class EmailService {
 
     // Plain-text only (no template) -- this goes to the app's own admins, not end users, in
     // response to a registration event they've opted into via the alert-settings toggle.
-    public void sendAdminAlert(Collection<String> toEmails, String subject, String body) {
-        if (toEmails.isEmpty()) return;
-        send(toEmails.toArray(new String[0]), subject, body, null);
+    //
+    // The plain-text-ness is load-bearing for the contact-form alert, whose body embeds text a
+    // household member typed: with no HTML part there is nothing for markup in that text to inject
+    // into. Do not give this an HTML template.
+    //
+    // Returns the ACS messageId, or null when there are no admins configured. Callers that only
+    // fire-and-forget (AdminAlertEventListener) ignore it; ContactEmailEventListener stores it on
+    // the message row so a send can later be correlated with its Event Grid delivery report.
+    public String sendAdminAlert(Collection<String> toEmails, String subject, String body) {
+        if (toEmails.isEmpty()) return null;
+        return send(toEmails.toArray(new String[0]), subject, body, null);
     }
 
     // Email clients need a real, absolute image URL (inline <svg> and data: URIs are both
