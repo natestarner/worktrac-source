@@ -1,5 +1,6 @@
 import { getApiUrl } from '../config';
 import { reachabilityMonitor } from '../lib/reachabilityMonitor';
+import { getCorrelationId } from '../lib/correlationId';
 
 const TOKEN_STORAGE_KEY = 'workout-tracker-token';
 
@@ -61,6 +62,10 @@ async function request(path, { method = 'GET', body, isFormData = false, timeout
   if (!isFormData) headers['Content-Type'] = 'application/json';
   const hadToken = Boolean(token);
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  // Unconditional -- this is not a connectivity branch and must not become one. The backend puts
+  // it in the MDC so every log line a request produces is attributable, which is what makes a
+  // Contact Us bug report traceable to what actually happened. See lib/correlationId.js.
+  headers['X-Correlation-Id'] = getCorrelationId();
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -126,6 +131,9 @@ export const apiClient = {
   getRaw: async (path) => {
     const headers = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    // Same header as `request` -- an export that fails is exactly the kind of thing someone writes
+    // in about, so it must be correlatable too.
+    headers['X-Correlation-Id'] = getCorrelationId();
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), EXPORT_TIMEOUT_MS);

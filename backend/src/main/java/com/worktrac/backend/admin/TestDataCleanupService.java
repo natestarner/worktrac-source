@@ -1,6 +1,7 @@
 package com.worktrac.backend.admin;
 
 import com.worktrac.backend.account.AccountRepository;
+import com.worktrac.backend.contact.ContactMessageRepository;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.registrationaudit.RegistrationEventRepository;
@@ -74,12 +75,14 @@ public class TestDataCleanupService {
     private final AccountRepository accountRepository;
     private final RegistrationEventRepository registrationEventRepository;
     private final PendingRegistrationRepository pendingRegistrationRepository;
+    private final ContactMessageRepository contactMessageRepository;
 
     public TestDataCleanupService(UserRepository userRepository, PersonRepository personRepository,
                                    ExerciseRepository exerciseRepository, TagRepository tagRepository,
                                    AccountRepository accountRepository,
                                    RegistrationEventRepository registrationEventRepository,
-                                   PendingRegistrationRepository pendingRegistrationRepository) {
+                                   PendingRegistrationRepository pendingRegistrationRepository,
+                                   ContactMessageRepository contactMessageRepository) {
         this.userRepository = userRepository;
         this.personRepository = personRepository;
         this.exerciseRepository = exerciseRepository;
@@ -87,6 +90,7 @@ public class TestDataCleanupService {
         this.accountRepository = accountRepository;
         this.registrationEventRepository = registrationEventRepository;
         this.pendingRegistrationRepository = pendingRegistrationRepository;
+        this.contactMessageRepository = contactMessageRepository;
     }
 
     @Transactional(readOnly = true)
@@ -104,6 +108,12 @@ public class TestDataCleanupService {
         long pendingCount = countAcrossPatterns(pendingRegistrationRepository::countByEmailLike);
 
         if (!accountIds.isEmpty()) {
+            // FIRST: contact_messages holds FKs to accounts, users AND people, so anything below
+            // this line fails with a constraint violation while a submission is still around. It
+            // surfaced as the teardown returning 503 (DataAccessException) after contact.spec.ts
+            // ran -- and because cleanup never fails the run, it would have quietly stopped
+            // deleting anything at all.
+            contactMessageRepository.deleteByAccountIdIn(accountIds);
             personRepository.deleteByAccountIdIn(accountIds);
             exerciseRepository.deleteByAccountIdIn(accountIds);
             tagRepository.deleteByAccountIdIn(accountIds);

@@ -30,6 +30,12 @@ public class RegistrationAlertSettings {
     @Column(name = "alert_on_delivery_failure", nullable = false)
     private boolean alertOnDeliveryFailure;
 
+    // Contact Us submissions (V52). Defaults ON, unlike alertOnRegistrationConfirmed: a contact
+    // message is a deliberate, rate-limited action by an authenticated household member, so the
+    // volume is inherently low and every one of them is worth hearing about.
+    @Column(name = "alert_on_contact_message", nullable = false)
+    private boolean alertOnContactMessage;
+
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
@@ -63,6 +69,14 @@ public class RegistrationAlertSettings {
 
     public void setAlertOnDeliveryFailure(boolean alertOnDeliveryFailure) {
         this.alertOnDeliveryFailure = alertOnDeliveryFailure;
+    }
+
+    public boolean isAlertOnContactMessage() {
+        return alertOnContactMessage;
+    }
+
+    public void setAlertOnContactMessage(boolean alertOnContactMessage) {
+        this.alertOnContactMessage = alertOnContactMessage;
     }
 
     public Instant getUpdatedAt() {

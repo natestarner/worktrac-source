@@ -3,6 +3,7 @@ package com.worktrac.backend.config;
 import com.worktrac.backend.security.AuthRequestLoggingFilter;
 import com.worktrac.backend.security.JwtAuthenticationFilter;
 import com.worktrac.backend.security.JwtService;
+import com.worktrac.backend.security.RequestDiagnosticsFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -64,8 +65,13 @@ public class SecurityConfig {
                 // before anything can be positioned relative to it -- registering
                 // AuthRequestLoggingFilter first would throw "does not have a registered order"
                 // (confirmed by a real BeanCreationException without this ordering).
+                // RequestDiagnosticsFilter goes ahead of both, so a request rejected before it ever
+                // reaches a controller is still tagged with its correlation id in the logs. Same
+                // "must be positioned relative to an already-registered filter" constraint as
+                // above, hence relative to AuthRequestLoggingFilter rather than to the chain head.
                 .addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(new AuthRequestLoggingFilter(), JwtAuthenticationFilter.class);
+                .addFilterBefore(new AuthRequestLoggingFilter(), JwtAuthenticationFilter.class)
+                .addFilterBefore(new RequestDiagnosticsFilter(), AuthRequestLoggingFilter.class);
         return http.build();
     }
 }

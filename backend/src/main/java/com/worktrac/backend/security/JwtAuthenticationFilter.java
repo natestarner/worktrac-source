@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -32,6 +33,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + principal.role()));
                 var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                // Adds the user id to the log context now that a principal actually exists.
+                // RequestDiagnosticsFilter (registered ahead of this one) owns the correlation id
+                // and clears BOTH keys in its finally -- filters nest, so its cleanup runs after
+                // this one returns. Split this way because each filter only writes what it knows:
+                // the correlation id is available from a header on every request, the user id only
+                // once a token has been parsed.
+                MDC.put(RequestDiagnosticsFilter.USER_ID_MDC_KEY, String.valueOf(principal.userId()));
             });
         }
         filterChain.doFilter(request, response);

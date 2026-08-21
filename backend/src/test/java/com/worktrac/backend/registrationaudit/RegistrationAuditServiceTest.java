@@ -294,7 +294,8 @@ class RegistrationAuditServiceTest extends AbstractIntegrationTest {
     @Test
     @Order(100)
     void disablingSendFailureAlertsSuppressesTheAdminEmail() throws Exception {
-        alertSettingsService.update(false, false, true);
+        // Fourth flag is alertOnContactMessage; irrelevant here, left at its V52 default.
+        alertSettingsService.update(false, false, true, true);
 
         String email = uniqueEmail("audit-sendfail-muted");
         doThrow(new RuntimeException("ACS send did not succeed: status=FAILED code=Throttled"))

@@ -68,6 +68,17 @@ const PERSON_DEFAULTS = {
   // state, deliberately cleared on a person switch -- see useExerciseFilter), a sort is a
   // standing preference, so it persists and survives switching away and back.
   prsSort: 'recent', // see PR_SORTS in utils/prSort.js
+  // An in-progress Contact Us message: { category, subject, message }, or null.
+  //
+  // Per person for the obvious reason -- a half-written message must not appear on someone else's
+  // screen when they switch in. Persisted (rather than plain component state) because the two
+  // moments a bug report is most likely to be interrupted are the two this slice is built to
+  // survive: the app misbehaving, and swUpdate.js's silent post-deploy reload. This slice is
+  // written to localStorage SYNCHRONOUSLY, so the draft is durable the instant it changes.
+  //
+  // Cleared only on a successful send -- never on a failed one, since "the send failed and your
+  // text is gone" is precisely the silently-lost outcome the degraded-conditions contract forbids.
+  contactDraft: null,
 };
 
 const initialState = {
@@ -237,6 +248,10 @@ export function reducer(state, action) {
       return updateActive(state, { editingSession: action.session });
     case 'DONE_EDITING_SESSION':
       return updateActive(state, { editingSession: null, selectedExerciseId: null });
+    case 'SET_CONTACT_DRAFT':
+      return updateActive(state, { contactDraft: action.draft });
+    case 'CLEAR_CONTACT_DRAFT':
+      return updateActive(state, { contactDraft: null });
     default:
       return state;
   }
@@ -333,6 +348,8 @@ export function AppStateProvider({ children }) {
       startEditingSession: (session) => dispatch({ type: 'START_EDITING_SESSION', session }),
       updateEditingSession: (session) => dispatch({ type: 'UPDATE_EDITING_SESSION', session }),
       doneEditingSession: () => dispatch({ type: 'DONE_EDITING_SESSION' }),
+      setContactDraft: (draft) => dispatch({ type: 'SET_CONTACT_DRAFT', draft }),
+      clearContactDraft: () => dispatch({ type: 'CLEAR_CONTACT_DRAFT' }),
     }),
     [],
   );

@@ -203,6 +203,15 @@ function AlertSettingsPanel() {
         />
         An email bounces, is filtered as spam, or otherwise fails to deliver
       </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+        <input
+          type="checkbox"
+          checked={settings.alertOnContactMessage}
+          disabled={saving}
+          onChange={(e) => handleToggle('alertOnContactMessage', e.target.checked)}
+        />
+        Someone sends a message from the Contact Us page
+      </label>
     </div>
   );
 }

@@ -93,7 +93,24 @@ describe('UserMenu', () => {
     const adminItem = screen.getByRole('menuitem', { name: 'Admin Portal' });
     fireEvent.click(adminItem);
 
-    expect(mockNavigate).toHaveBeenCalledWith('/admin');
+    // Every menu item now carries the originating route as navigation state, so Contact Us can
+    // record which screen a bug report came from. Asserted explicitly rather than loosened to
+    // `expect.anything()` -- the state is behaviour this menu is responsible for.
+    expect(mockNavigate).toHaveBeenCalledWith('/admin', { state: { from: '/' } });
+  });
+
+  it('offers Contact Us above Logout and navigates with the originating screen', () => {
+    useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false });
+    renderMenu();
+    openMenu();
+
+    const items = screen.getAllByRole('menuitem').map((el) => el.textContent);
+    expect(items).toContain('Contact Us');
+    expect(items.indexOf('Contact Us')).toBeLessThan(items.indexOf('Logout'));
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Contact Us' }));
+    // The `from` is what lets a bug report say which screen it came from.
+    expect(mockNavigate).toHaveBeenCalledWith('/app/contact', { state: { from: '/' } });
   });
 
   it('logs out immediately when there are no unsynced changes', () => {

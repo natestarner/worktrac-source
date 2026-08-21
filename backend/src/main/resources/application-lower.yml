@@ -25,7 +25,19 @@ app:
     # Same pattern/reasoning as application-local.yml -- not sensitive, safe to commit as a
     # fixed literal. Lower is the other profile e2e actually runs against (the deploy-lower.yml
     # CI job), so it needs this too, not just local.
-    e2e-noop-recipient-pattern: '^huddle\+e2e-.*@starner\.co$'
+    #
+    # The second alternative is this environment's ADMIN_EMAILS (worktrac-deploy's
+    # config/lower/backend-env.json and deploy-lower.yml both set nate+huddleadmin@starner.co --
+    # production sets the same address, but this pattern is empty there, so production still mails
+    # for real). It is here because the Contact Us alert mails the ADMIN, not the submitter, so
+    # without it contact.spec.ts would send a real ACS message on every deploy's e2e run.
+    #
+    # SIDE EFFECT, accepted deliberately: this also silences lower's registration send/delivery
+    # FAILURE alert emails, since they route through the same sendAdminAlert. Nothing diagnostic is
+    # actually lost -- the no-op skips only the ACS network call, so every RegistrationEvent row is
+    # still written and the Activity tab still shows the failure. Lower is a test environment whose
+    # e2e run registers ~107 households per deploy; alert mail from it is noise, not signal.
+    e2e-noop-recipient-pattern: '^(huddle\+e2e-.*|nate\+huddleadmin)@starner\.co$'
   rate-limit:
     # application.yml's production-sane defaults (10/hour per-IP, 30/hour global) are sized
     # for real internet-facing abuse resistance, not for the e2e-tests CI job, and Playwright's
@@ -54,3 +66,9 @@ app:
     # lower is genuinely internet-facing.
     per-ip-per-hour: 500
     global-email-sends-per-hour: 1000
+    # Raised over the production defaults for the same reason as the two above: the e2e suite runs
+    # against lower from one source IP, and Playwright's CI retry policy multiplies every attempt.
+    # The contact spec submits far fewer times than registration, so these need far less headroom.
+    contact-per-user-per-hour: 200
+    contact-per-ip-per-hour: 500
+    contact-global-per-hour: 500

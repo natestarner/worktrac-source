@@ -462,9 +462,30 @@ describe('selectRestTimersByPerson', () => {
     // after the deploy.
     expect(restored.byPerson[1].restStartedAt).toBeNull();
     expect(restored.byPerson[1].restTargetSeconds).toBeNull();
+    // contactDraft is the newest such field. It must hydrate as null, not undefined: ContactTab
+    // reads `contactDraft?.subject ?? ''` on mount, and an undefined there would make the field
+    // uncontrolled on every existing install's first boot after the deploy -- React then warns and
+    // the subsequent controlled render throws away whatever was typed in between.
+    expect(restored.byPerson[1].contactDraft).toBeNull();
     // Backfilling must not clobber what WAS persisted.
     expect(restored.byPerson[1].selectedExerciseId).toBe(7);
     expect(restored.byPerson[1].weightDraft).toBe(225);
+  });
+
+  // Per-person isolation for the draft specifically: a half-written bug report is exactly the kind
+  // of thing that must not appear on someone else's screen when they switch in.
+  it('keeps every contact draft scoped to its own person', () => {
+    let state = withPerson(1);
+    state = reducer(state, { type: 'SET_CONTACT_DRAFT', draft: { category: 'BUG', subject: 'A', message: 'B' } });
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
+    expect(active(state).contactDraft).toBeNull();
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
+    expect(active(state).contactDraft).toEqual({ category: 'BUG', subject: 'A', message: 'B' });
+
+    state = reducer(state, { type: 'CLEAR_CONTACT_DRAFT' });
+    expect(active(state).contactDraft).toBeNull();
   });
 
   it('HYDRATE backfills defaults on the resetTab path too', () => {

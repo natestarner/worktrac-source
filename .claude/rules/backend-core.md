@@ -22,6 +22,27 @@ Applies to all backend production code. Subsystem-specific rules load alongside 
   what makes `rest_seconds`, session staleness, and rate limiting deterministically testable with
   `MutableClock`.
 
+## Request correlation — the MDC keys are load-bearing
+
+`RequestDiagnosticsFilter` (registered **first** in the chain) puts the browser's per-install
+`X-Correlation-Id` into the SLF4J MDC as `cid`; `JwtAuthenticationFilter` adds `uid` once it has
+resolved a principal. `application.yml`'s **`logging.pattern.level`** is what emits them.
+
+- **There is no `logback-spring.xml` in this project, on purpose.** Adding one overrides Boot's
+  default console pattern and silently drops both keys — every log line keeps printing, just
+  without the ids, so nothing fails and correlation is simply gone. Carry the keys across if you
+  ever add one.
+- **The filter must clear the MDC in a `finally`.** Request threads are pooled, and a leaked id
+  points triage confidently at the *wrong* session — worse than having none.
+- **The id is untrusted input.** It reaches log lines, so the filter sanitizes to
+  `[A-Za-z0-9_-]{1,64}` and drops anything else rather than letting an attacker forge log entries.
+- **MDC does not propagate into `@Async` tasks.** The email listeners' lines carry no `cid`; they
+  correlate through `contact_messages.alert_message_id` instead. That absence is expected.
+
+This exists because nothing outside `/api/auth/**` logged anything identifying the caller, so a
+Contact Us bug report could only be matched to the container logs by timestamp. Triage query:
+`docs/azure-read-only-access.md`.
+
 ## Configuration rules
 
 - CORS is configured globally in `CorsConfig.java` — **do not** add `@CrossOrigin` to individual

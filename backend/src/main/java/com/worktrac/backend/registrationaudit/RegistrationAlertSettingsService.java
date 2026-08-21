@@ -28,11 +28,12 @@ public class RegistrationAlertSettingsService {
 
     @Transactional
     public RegistrationAlertSettings update(boolean alertOnRegistrationConfirmed, boolean alertOnSendFailure,
-                                             boolean alertOnDeliveryFailure) {
+                                             boolean alertOnDeliveryFailure, boolean alertOnContactMessage) {
         RegistrationAlertSettings settings = get();
         settings.setAlertOnRegistrationConfirmed(alertOnRegistrationConfirmed);
         settings.setAlertOnSendFailure(alertOnSendFailure);
         settings.setAlertOnDeliveryFailure(alertOnDeliveryFailure);
+        settings.setAlertOnContactMessage(alertOnContactMessage);
         settings.setUpdatedAt(clock.instant());
         return repository.save(settings);
     }

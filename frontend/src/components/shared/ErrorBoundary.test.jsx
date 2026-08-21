@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import ErrorBoundary from './ErrorBoundary';
+import { readClientError } from '../../lib/lastClientError';
 
 // React logs caught render errors to console.error regardless of the boundary; silence it so a
 // deliberate throw doesn't look like a failing test.
@@ -105,5 +106,36 @@ describe('ErrorBoundary', () => {
     );
 
     expect(mounted).toHaveBeenCalledTimes(1);
+  });
+
+  // The stash exists so a render-time throw -- which reaches Azure in NO form -- can still be
+  // attached to a bug report. It is a local stash, not a reporting pipeline: nothing is
+  // transmitted here, and it leaves the device only if the person sends a Contact Us message.
+  it('stashes the caught error for the contact form to offer', () => {
+    localStorage.clear();
+    render(
+      <ErrorBoundary>
+        <Boom shouldThrow />
+      </ErrorBoundary>,
+    );
+
+    const stashed = readClientError();
+    expect(stashed.message).toContain('render exploded');
+    expect(stashed.at).toBeTruthy();
+  });
+
+  it('still renders its fallback when the stash cannot be written', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+
+    render(
+      <ErrorBoundary>
+        <Boom shouldThrow />
+      </ErrorBoundary>,
+    );
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    vi.restoreAllMocks();
   });
 });

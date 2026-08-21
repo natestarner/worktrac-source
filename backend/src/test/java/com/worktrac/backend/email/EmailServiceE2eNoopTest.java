@@ -42,6 +42,33 @@ class EmailServiceE2eNoopTest {
         assertTrue(messageId.startsWith("noop-"));
     }
 
+    // The literal application-local.yml and application-lower.yml actually carry. It is load-bearing
+    // for TWO addresses now, not one: the e2e households AND this environment's ADMIN_EMAILS
+    // (nate+huddleadmin@starner.co, per worktrac-deploy's config/{lower,production}/backend-env.json).
+    // The admin one matters because the Contact Us alert mails the ADMIN rather than the submitter,
+    // so a pattern that misses it sends real ACS mail on every e2e run. Pinned here because the two
+    // yml files hold independently-maintained copies of this regex.
+    private static final String DEPLOYED_NOOP_PATTERN = "^(huddle\\+e2e-.*|nate\\+huddleadmin)@starner\\.co$";
+
+    @Test
+    void theConfiguredPatternCoversBothAnE2eHouseholdAndTheAdminAlertRecipient() {
+        EmailService emailService = new EmailService(properties(DEPLOYED_NOOP_PATTERN));
+
+        assertTrue(emailService.sendVerificationCode("huddle+e2e-123-abc@starner.co", "123456").startsWith("noop-"));
+        assertTrue(emailService.sendAdminAlert(java.util.Set.of("nate+huddleadmin@starner.co"), "subj", "body")
+                .startsWith("noop-"), "the Contact Us alert recipient must be no-op'd, or e2e sends real mail");
+    }
+
+    // live-email-canary.spec.ts depends on its address falling OUTSIDE the pattern, so widening it
+    // for the admin address must not accidentally swallow that one too.
+    @Test
+    void theCanaryAddressStillFallsOutsideThePattern() {
+        EmailService emailService = new EmailService(properties(DEPLOYED_NOOP_PATTERN));
+
+        assertTrue(assertThrowsAnything(
+                () -> emailService.sendVerificationCode("huddle+livewiretest-1@starner.co", "123456")));
+    }
+
     @Test
     void aBlankPatternMeansNoOpIsNeverEligible() {
         EmailService emailService = new EmailService(properties(""));

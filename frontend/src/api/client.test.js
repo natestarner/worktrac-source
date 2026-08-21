@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCorrelationId } from '../lib/correlationId';
 import { apiClient, getAuthToken, isOfflineError, setAuthToken, setUnauthorizedHandler } from './client';
 import { __resetReachabilityForTests, reachabilityMonitor } from '../lib/reachabilityMonitor';
 
@@ -39,6 +40,32 @@ describe('apiClient', () => {
 
     const [, options] = global.fetch.mock.calls[0];
     expect(options.headers['Authorization']).toBeUndefined();
+  });
+
+  // Unconditional, and on EVERY request -- an unauthenticated one included. It is what lets a
+  // Contact Us submission be traced to the person's actual request trail in Log Analytics rather
+  // than correlated by timestamp alone. See lib/correlationId.js and RequestDiagnosticsFilter.
+  it('attaches the correlation id to every request, authenticated or not', async () => {
+    global.fetch.mockReturnValue(jsonResponse({ ok: true }));
+
+    await apiClient.get('/api/public');
+
+    const [, options] = global.fetch.mock.calls[0];
+    expect(options.headers['X-Correlation-Id']).toBe(getCorrelationId());
+    // The backend drops anything outside this set, so an id it would reject means no correlation.
+    expect(options.headers['X-Correlation-Id']).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+  });
+
+  it('sends the same correlation id on the next request', async () => {
+    // A fresh Response per call -- a single mocked object can only have its body read once.
+    global.fetch.mockImplementation(() => jsonResponse({ ok: true }));
+
+    await apiClient.get('/api/one');
+    await apiClient.get('/api/two');
+
+    const first = global.fetch.mock.calls[0][1].headers['X-Correlation-Id'];
+    const second = global.fetch.mock.calls[1][1].headers['X-Correlation-Id'];
+    expect(second).toBe(first);
   });
 
   it('clears the token and invokes the unauthorized handler on a 401 for an authenticated request', async () => {
