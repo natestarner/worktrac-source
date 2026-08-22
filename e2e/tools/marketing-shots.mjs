@@ -42,20 +42,36 @@ async function unstick() {
 
 // maxHeight crops a tall panel to its interesting top instead of trailing off into a long
 // table -- a marketing image, not a full-page capture.
-async function shot(name, locator, maxHeight) {
+// offsetTop skips a band at the top of the element -- used to drop a filter/sort bar that is
+// honest UI but a poor first impression in a marketing crop.
+async function shot(name, locator, maxHeight, offsetTop = 0) {
   const target = !locator ? page : typeof locator === 'string' ? page.locator(locator).first() : locator;
   await target.scrollIntoViewIfNeeded().catch(() => {});
   await unstick();
   await page.waitForTimeout(700);
 
   if (maxHeight) {
-    const box = await target.boundingBox();
+    // Pull the element's TOP to the top of the viewport first. scrollIntoViewIfNeeded centres a
+    // tall element, which leaves its top above the viewport and a negative boundingBox().y --
+    // clipping from there silently lopped the header off the line chart.
+    await target.evaluate((el) => el.scrollIntoView({ block: 'start', behavior: 'instant' }));
+    await unstick();
+    await page.waitForTimeout(500);
+
+    let box = await target.boundingBox();
+    if (box && box.y < 0) {
+      await page.evaluate((dy) => window.scrollBy(0, dy), box.y);
+      await page.waitForTimeout(300);
+      box = await target.boundingBox();
+    }
     if (box) {
+      const top = Math.max(0, box.y) + offsetTop;
+      const height = Math.min(box.height - offsetTop, maxHeight, page.viewportSize().height - top);
       await page.screenshot({
         path: `${OUT}/${name}${sfx}.png`,
-        clip: { x: box.x, y: box.y, width: box.width, height: Math.min(box.height, maxHeight) },
+        clip: { x: box.x, y: top, width: box.width, height },
       });
-      console.log('  captured', name + sfx, `(cropped to ${maxHeight}px)`);
+      console.log('  captured', name + sfx, `(${Math.round(height)}px of ${Math.round(box.height)}px)`);
       return;
     }
   }
@@ -86,11 +102,16 @@ for (const close of await page.getByRole('button', { name: /dismiss|close/i }).a
   await close.click().catch(() => {});
 }
 await page.waitForTimeout(400);
-const bench = page.getByText('Barbell Bench Press', { exact: true }).first();
-if (await bench.isVisible().catch(() => false)) {
-  await bench.click();
-  await page.waitForTimeout(1800);
+// Open the exercise from the PICKER, not by first text match. Once a session is live the
+// exercise name also appears in the "Session exercises" card at the top, and .first() matched
+// that instead -- leaving the capture on the picker screen rather than the log screen.
+const benchChip = page.getByRole('button', { name: 'Barbell Bench Press' }).last();
+if (await benchChip.isVisible().catch(() => false)) {
+  await benchChip.click();
+} else {
+  await page.getByText('Barbell Bench Press', { exact: true }).last().click().catch(() => {});
 }
+await page.waitForTimeout(1800);
 await shot('app-log', '.tab-panel', 900);
 
 // The person bar on its own: three names, one device -- the household story in one strip.
@@ -100,7 +121,9 @@ await shot('app-people', page.getByText('+ Add person').first().locator('xpath=.
 // ---------------------------------------------------------------- PRs
 await page.goto(`${FRONTEND}/app/prs`);
 await page.waitForTimeout(2000);
-await shot('app-prs', '.tab-panel', 760);
+// Skip the sort + search bar: honest UI, but it should not be the first thing a visitor
+// sees of the PRs board.
+await shot('app-prs', '.tab-panel', 700, 150);
 
 // ---------------------------------------------------------------- trends
 await page.goto(`${FRONTEND}/app/trends`);
@@ -148,6 +171,19 @@ await page.waitForTimeout(500);
 await page.screenshot({ path: `${OUT}/app-offline${sfx}.png`, clip: { x: 0, y: 0, width: 1000, height: 560 } });
 console.log('  captured app-offline' + sfx);
 await ctx.setOffline(false);
+
+// End the session this script started. Without it the live session survives into the next run
+// and changes what the Log tab opens to, which silently turned app-log into a picker
+// screenshot once already.
+await page.waitForTimeout(2500); // let the queued sets drain first
+const endWorkout = page.getByRole('button', { name: /end workout/i }).first();
+if (await endWorkout.isVisible().catch(() => false)) {
+  await endWorkout.click().catch(() => {});
+  await page.waitForTimeout(800);
+  const confirm = page.getByRole('button', { name: /^end workout$|^end$|confirm/i }).last();
+  await confirm.click().catch(() => {});
+  await page.waitForTimeout(1200);
+}
 
 await browser.close();
 console.log('done');

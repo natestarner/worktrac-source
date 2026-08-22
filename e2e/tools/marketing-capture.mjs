@@ -53,7 +53,29 @@ const PEOPLE = [
 ];
 
 const WEEKS = 15;
-const SESSION_DAYS = [0, 2, 4]; // Mon / Wed / Fri
+
+// Which weekdays each week's sessions land on (0 = Monday). Written out rather than generated
+// because the point is that it should NOT look generated: real training is 3 a week most of the
+// time, 2 when life happens, 4 in a good stretch, 5 rarely -- and the days move around. A fixed
+// Mon/Wed/Fri produced a consistency grid with three perfectly straight stripes and a workouts-
+// per-week chart that was flat at 3, which read as fake at a glance.
+const WEEK_DAYS = [
+  [0, 2, 4],       // 3
+  [1, 4],          // 2
+  [0, 2, 3, 5],    // 4
+  [1, 3, 5],       // 3
+  [0, 2, 4],       // 3
+  [0, 1, 3, 4, 6], // 5
+  [2, 5],          // 2
+  [0, 1, 3, 5],    // 4
+  [1, 3, 4],       // 3
+  [0, 2, 5],       // 3
+  [1, 2, 4, 6],    // 4
+  [0, 3],          // 2
+  [1, 3, 5],       // 3
+  [0, 2, 4, 5],    // 4
+  [1, 2, 4],       // 3
+];
 
 function weightFor(lift, week) {
   // Stall at week 8, deload at 11 -- real progression is not a ramp.
@@ -114,23 +136,52 @@ function findExercise(name) {
 }
 
 // ---------------------------------------------------------------- seed history
+// Monday of the current calendar week -- every session is placed relative to this.
+const thisMonday = new Date(now);
+thisMonday.setHours(0, 0, 0, 0);
+thisMonday.setDate(thisMonday.getDate() - ((thisMonday.getDay() + 6) % 7));
+
 let sets = 0;
+let personIndex = -1;
 for (const spec of PEOPLE) {
+  personIndex++;
   const person = people.find((p) => p.name === spec.name);
   const lifts = spec.lifts.map((l) => ({ ...l, ex: findExercise(l.exercise) }));
 
+  // Rotates across sessions rather than across weekdays, so every lift keeps a dense enough
+  // line to chart even though the number of sessions per week now varies.
+  let sessionIndex = 0;
+
   for (let week = 0; week < WEEKS; week++) {
-    for (let d = 0; d < SESSION_DAYS.length; d++) {
-      const daysAgo = (WEEKS - 1 - week) * 7 + (6 - SESSION_DAYS[d]);
-      if (daysAgo < 0) continue;
-      const startedAt = new Date(now - daysAgo * DAY - 18 * 3600_000).toISOString();
+    // Each person walks the pattern from a different starting point, so the three of them
+    // don't light up identical squares -- without shifting weekdays, which would push a
+    // Sunday session into the next calendar week and blur the counts.
+    const days = WEEK_DAYS[(week + personIndex * 5) % WEEK_DAYS.length];
+
+    for (let d = 0; d < days.length; d++) {
+      // Anchor to the real Monday of that calendar week. Counting back in rolling 7-day
+      // blocks from "now" does NOT line up with the Mon-Sun weeks the workouts-per-week chart
+      // bins by, so sessions bled across boundaries and the intended 2/3/4/5 distribution
+      // came out as a nearly flat 3-4.
+      const weekMonday = new Date(thisMonday);
+      weekMonday.setDate(thisMonday.getDate() - (WEEKS - 1 - week) * 7);
+      const sessionDate = new Date(weekMonday);
+      sessionDate.setDate(weekMonday.getDate() + days[d]);
+      // Vary the hour so sessions don't all start on the same minute.
+      sessionDate.setHours(17 + ((week + d) % 4), (d * 17) % 60, 0, 0);
+      if (sessionDate.getTime() > now) continue;
+      const startedAt = sessionDate.toISOString();
 
       const res = await api.post(`/api/people/${person.id}/sessions`, { startedAt });
       const session = await res.json();
 
-      // Two lifts a session, rotating, so each has a dense-enough line to chart.
-      const todays = lifts.filter((_, i) => i % SESSION_DAYS.length === d % SESSION_DAYS.length);
-      for (const lift of todays.length ? todays : [lifts[0]]) {
+      // Two lifts a session, rotating through the person's programme.
+      const a = lifts[sessionIndex % lifts.length];
+      const b = lifts[(sessionIndex + 1) % lifts.length];
+      sessionIndex++;
+      const todays = lifts.length > 1 ? [a, b] : [a];
+
+      for (const lift of todays) {
         const w = weightFor(lift, week);
         for (let s = 0; s < lift.reps.length; s++) {
           await api.post(`/api/sessions/${session.id}/sets`, {

@@ -183,8 +183,9 @@ Two scripts in `e2e/tools/` do it, and they need this worktree's stack up:
 bash scripts/up.sh
 
 cd e2e && npm ci
-# 1. Seed a household -- 3 people, 15 weeks, ~450 sets, with a stall week and a deload so
-#    the trend lines look like training rather than a ramp. Prints the login it created.
+# 1. Seed a household -- 3 people, 15 weeks, ~850 sets. Sessions-per-week varies (mostly 3,
+#    some 2 and 4, one 5) on shifting weekdays, and the weights stall once and deload once,
+#    so the charts look like training rather than a generated ramp. Prints the login.
 FRONTEND=http://localhost:3003 node tools/marketing-capture.mjs
 
 # 2. Screenshot the running app, light and dark.
@@ -206,6 +207,12 @@ Things that cost a round trip when they were learned:
   `.tab-panel`.
 - **Seed before the app loads, not after.** `offlineCacheWarm` caches whatever it finds, so data
   inserted behind a running app's back leaves sections blank for about a minute.
+- **Anchor sessions to real Mondays, not to rolling 7-day blocks counted back from now.** The
+  workouts-per-week chart bins by calendar week, so rolling blocks bleed across boundaries and
+  flatten the intended 2/3/4/5 distribution into a near-constant 3.
+- **End the session the script starts.** The offline step leaves a live session behind; on the
+  next run the Log tab then opens to the picker instead of the exercise, which silently turned
+  the hero's log screenshot into a picture of the exercise list.
 
 Each shot is captured at `deviceScaleFactor: 2` and downscaled by the `width`/`height`
 attributes on the `<img>`, so it stays sharp on a retina display. Light and dark are separate
