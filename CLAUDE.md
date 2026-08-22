@@ -14,7 +14,9 @@ during workouts.
 - Hosting: Azure Container Apps (backend), Azure Static Web Apps (frontend)
 
 ## Key Directories
-- `frontend/` — React application
+- `frontend/` — React application (the app, at `app.huddle.fitness`)
+- `marketing/` — static landing page at `huddle.fitness`; no build step, its own SWA
+  (`docs/marketing-site.md`)
 - `backend/` — Spring Boot application
 - `backend/src/main/resources/db/migration/` — Flyway SQL migrations
 - `e2e/` — Playwright end-to-end tests

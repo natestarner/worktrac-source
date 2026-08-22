@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <title>Huddle — one iPad, everyone's workouts</title>
+  <meta name="description" content="A workout log built for a household sharing one device. Separate history for every person, and it keeps working with no signal. Free for everyone in the house." />
+  <link rel="canonical" href="https://huddle.fitness/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://huddle.fitness/" />
+  <meta property="og:title" content="Huddle — one iPad, everyone's workouts" />
+  <meta property="og:description" content="A workout log built for a household sharing one device. Separate history for every person, and it keeps working with no signal." />
+  <meta property="og:image" content="https://huddle.fitness/assets/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Huddle — one iPad, everyone's workouts" />
+  <meta name="twitter:description" content="A workout log built for a household sharing one device. Separate history for every person, and it keeps working with no signal." />
+  <meta name="twitter:image" content="https://huddle.fitness/assets/og-image.png" />
+
+  <meta name="theme-color" content="#faf9f7" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#171614" media="(prefers-color-scheme: dark)" />
+
+  <link rel="icon" href="/assets/favicon.ico" sizes="any" />
+  <link rel="icon" href="/assets/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Huddle home">
+      <svg class="brand__mark" width="34" height="34" viewBox="126 92 200 200" aria-hidden="true" focusable="false">
+        <circle cx="200" cy="175" r="34" fill="#d4673e" />
+        <circle cx="258" cy="168" r="29" fill="#f2a65a" />
+        <circle cx="198" cy="221" r="25" fill="#f2ede1" />
+        <circle cx="250" cy="219" r="19" fill="#b5542d" />
+      </svg>
+      <span class="brand__word">Huddle</span>
+    </a>
+    <nav class="site-nav" aria-label="Main">
+      <a class="site-nav__link site-nav__link--optional" href="#features">Features</a>
+      <a class="site-nav__link site-nav__link--optional" href="#pricing">Pricing</a>
+      <a class="site-nav__link site-nav__link--optional" href="#faq">FAQ</a>
+      <a class="site-nav__link site-nav__link--strong" href="https://app.huddle.fitness/login">Log in</a>
+      <a class="btn btn--primary btn--small" href="https://app.huddle.fitness/register">Start free</a>
+    </nav>
+  </header>
+
+  <main id="main">
+
+    <!-- ================= HERO ================= -->
+    <section class="section hero">
+      <div class="container split">
+        <div class="split__text">
+          <p class="eyebrow-pill"><span class="eyebrow-pill__dot"></span>Free for your whole household</p>
+          <h1 class="hero__title">One iPad.<br />Everyone's workouts.</h1>
+          <p class="hero__lead">Separate history for every person in the house, on one shared device. And it keeps working when the signal doesn't.</p>
+          <div class="hero__actions">
+            <a class="btn btn--primary" href="https://app.huddle.fitness/register">Start free</a>
+            <a class="btn btn--secondary" href="#features">See how it works
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>
+            </a>
+          </div>
+          <p class="hero__trust">No credit card. 163 exercises built in. Works offline.</p>
+        </div>
+
+        <div class="split__media hero__media">
+          <div class="mock" role="img" aria-label="The Huddle log screen: Miles, Nate and Eli as switchable people, Barbell Bench Press with last session's sets, weight and reps steppers, and a Log set button.">
+            <div class="mock__bar">
+              <svg width="22" height="22" viewBox="126 92 200 200" aria-hidden="true" focusable="false">
+                <circle cx="200" cy="175" r="34" fill="#d4673e" /><circle cx="258" cy="168" r="29" fill="#f2a65a" /><circle cx="198" cy="221" r="25" fill="#f2ede1" /><circle cx="250" cy="219" r="19" fill="#b5542d" />
+              </svg>
+              <span>Huddle</span>
+            </div>
+            <div class="mock__people">
+              <span class="person-pill person-pill--active"><span class="person-pill__avatar">M</span>Miles</span>
+              <span class="person-pill"><span class="person-pill__avatar">N</span>Nate<span class="person-pill__dot"></span></span>
+              <span class="person-pill"><span class="person-pill__avatar">E</span>Eli</span>
+            </div>
+            <div class="mock__body">
+              <div class="mock__exercise">
+                <span>Barbell Bench Press</span>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#d4673e" stroke="#d4673e" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 2.9 5.9 6.1.9-4.5 4.3 1.1 6.4L12 17.5 6.4 20.5l1.1-6.4L3 9.8l6.1-.9z" /></svg>
+              </div>
+              <div class="mock__lasttime">
+                <p class="mock__label">Last time &middot; Tue Aug 12</p>
+                <div class="set-pills">
+                  <span class="set-pill">135 &times; 8</span>
+                  <span class="set-pill">135 &times; 8</span>
+                  <span class="set-pill">145 &times; 6</span>
+                </div>
+              </div>
+              <div class="mock__steppers">
+                <div>
+                  <p class="mock__label">Weight</p>
+                  <div class="stepper"><span class="stepper__key">&minus;</span><span class="stepper__value">145</span><span class="stepper__key">+</span></div>
+                </div>
+                <div>
+                  <p class="mock__label">Reps</p>
+                  <div class="stepper"><span class="stepper__key">&minus;</span><span class="stepper__value">7</span><span class="stepper__key">+</span></div>
+                </div>
+              </div>
+              <div class="mock__cta">Log set for Miles</div>
+              <div class="mock__pr"><span>145 &times; 7 &middot; est. 1RM 178 lb</span><span class="pr-badge">PR</span></div>
+            </div>
+            <div class="mock__session">
+              <span>Session &middot; 24:18</span>
+              <strong>Rest 1:12</strong>
+              <span>End workout</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= FACT STRIP ================= -->
+    <section class="facts" aria-label="At a glance">
+      <div class="fact"><span class="fact__value">163</span><span class="fact__label">exercises built in</span></div>
+      <div class="fact"><span class="fact__value">Unlimited</span><span class="fact__label">people, free</span></div>
+      <div class="fact"><span class="fact__value">Zero bars</span><span class="fact__label">still logs fine</span></div>
+      <div class="fact"><span class="fact__value">No ads</span><span class="fact__label">nothing sold, ever</span></div>
+    </section>
+
+    <!-- ================= PILLARS ================= -->
+    <section class="section" id="features">
+      <h2 class="visually-hidden">What makes Huddle different</h2>
+      <div class="container pillars">
+        <div class="pillar">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d4673e" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+          <h3 class="pillar__title">Everyone, on one device</h3>
+          <p class="pillar__body">Tap a name to switch. Separate exercises, history, PRs and rest timers &mdash; no logins to juggle, nothing bleeding between people. Add as many people as you want, free.</p>
+        </div>
+        <div class="pillar">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d4673e" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20h.01" /><path d="M8.5 16.4a5 5 0 0 1 7 0" /><path d="M5 12.9a10 10 0 0 1 5.2-2.7" /><path d="M1.4 9.4a15 15 0 0 1 5-3.2" /><path d="m2 2 20 20" /><path d="M16.8 10.6a10 10 0 0 1 2.2 1.4" /><path d="M22.6 9.4a15 15 0 0 0-6.7-3.9" /></svg>
+          <h3 class="pillar__title">No signal, no problem</h3>
+          <p class="pillar__body">Log the whole session underground. Sets, edits, notes and new exercises save on the device and sync the moment you're back &mdash; and you can see exactly what's still waiting.</p>
+        </div>
+        <div class="pillar">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d4673e" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="2" width="14" height="20" rx="2.5" /><path d="M12 18h.01" /></svg>
+          <h3 class="pillar__title">Built for gym hands</h3>
+          <p class="pillar__body">Big targets, no accidental taps, no zooming when you tap a field. Timers stay right when the screen locks, and it never reloads itself mid-set.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= FEATURE: LOG SCREEN ================= -->
+    <section class="section section--tight">
+      <div class="container split">
+        <div class="split__text">
+          <p class="eyebrow">The log screen</p>
+          <h2 class="section__title">Log a set in two taps</h2>
+          <p class="prose">Weight and reps prefill from last time, so most sets are one tap and go. What you did last session sits right there on the screen &mdash; no digging through history to remember whether you hit eight or six.</p>
+          <p class="prose">Beat your best and you'll know about it.</p>
+        </div>
+        <div class="split__media">
+          <div class="panel">
+            <div class="row">
+              <span class="row__meta">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="color: var(--color-muted)"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                <span class="row__muted">Prefilled from Tue Aug 12</span>
+              </span>
+            </div>
+            <div class="row"><span class="row__muted">Weight</span><span class="row__value">145 lb</span></div>
+            <div class="row"><span class="row__muted">Reps</span><span class="row__value">7</span></div>
+            <div class="mock__cta" style="margin-bottom: 0">Log set for Miles</div>
+            <div class="mock__pr">
+              <span class="row__meta">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 2.9 5.9 6.1.9-4.5 4.3 1.1 6.4L12 17.5 6.4 20.5l1.1-6.4L3 9.8l6.1-.9z" /></svg>
+                New PR &mdash; est. 1RM 178 lb
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= FEATURE: HOUSEHOLD ================= -->
+    <section class="section section--tight section--subtle">
+      <div class="container split">
+        <div class="split__media">
+          <div class="panel">
+            <p class="mock__label">In the huddle</p>
+            <div class="row row--accent">
+              <span class="row__meta"><span class="avatar-lg">M</span><span style="font-weight: 600">Miles</span></span>
+              <span class="row__muted">Rest 1:12</span>
+            </div>
+            <div class="row">
+              <span class="row__meta"><span class="avatar-lg">N</span><span style="font-weight: 600">Nate</span><span class="person-pill__dot"></span></span>
+              <span class="row__muted">Working out</span>
+            </div>
+            <div class="row">
+              <span class="row__meta"><span class="avatar-lg">E</span><span style="font-weight: 600">Eli</span></span>
+              <span class="row__muted">Ready</span>
+            </div>
+          </div>
+        </div>
+        <div class="split__text">
+          <p class="eyebrow">The household</p>
+          <h2 class="section__title">Everyone's in the huddle</h2>
+          <p class="prose">A green dot means someone has a workout going. A ring around a name means their rest timer is still running &mdash; so you can see who's ready to go without asking.</p>
+          <p class="prose">Built a routine that works? Copy it to a kid in one tap, and it becomes theirs to change.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= OFFLINE BAND ================= -->
+    <section class="section band-teal">
+      <div class="container split">
+        <div class="split__text">
+          <p class="eyebrow">Offline, properly</p>
+          <h2 class="section__title">The basement gym test</h2>
+          <p class="prose">Most apps show a spinner and lose the set. Huddle writes every set, edit, note and new exercise to the device first, then syncs when the signal comes back &mdash; in order, and without ever double-logging.</p>
+          <p class="prose">Your history, PRs and routines stay readable the whole time, for everyone in the house.</p>
+          <p class="prose prose--quiet">Setup changes &mdash; adding people, editing routines, managing tags &mdash; do need a connection, and the app says so plainly instead of failing quietly.</p>
+        </div>
+        <div class="split__media">
+          <div class="outbox">
+            <p class="outbox__banner">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20h.01" /><path d="M8.5 16.4a5 5 0 0 1 7 0" /><path d="M5 12.9a10 10 0 0 1 5.2-2.7" /><path d="m2 2 20 20" /><path d="M22.6 9.4a15 15 0 0 0-6.7-3.9" /></svg>
+              3 changes waiting to sync
+            </p>
+            <p class="outbox__item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>Logged 145 &times; 7 &mdash; Bench Press</p>
+            <p class="outbox__item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>Logged 145 &times; 6 &mdash; Bench Press</p>
+            <p class="outbox__item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>Session note added</p>
+            <p class="prose prose--quiet">Tap the banner and it tells you exactly what's queued, in plain English.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= FEATURE: TRENDS ================= -->
+    <section class="section section--tight">
+      <div class="container split">
+        <div class="split__text">
+          <p class="eyebrow">Trends &amp; records</p>
+          <h2 class="section__title">See the work add up</h2>
+          <p class="prose">A week-by-week consistency grid, volume and set counts over time, and an estimated 1RM line for any exercise you've ever logged. Personal records are recomputed from your actual sets, so fixing an old entry corrects the record too.</p>
+          <p class="prose">Every chart has a plain-English explainer, because &ldquo;tonnage&rdquo; shouldn't need a search.</p>
+        </div>
+        <div class="split__media">
+          <div class="panel">
+            <div class="stat-tiles">
+              <div class="stat-tile"><span class="stat-tile__value">14</span><span class="stat-tile__label">week streak</span></div>
+              <div class="stat-tile"><span class="stat-tile__value">4</span><span class="stat-tile__label">this week</span></div>
+              <div class="stat-tile"><span class="stat-tile__value stat-tile__value--up">+12%</span><span class="stat-tile__label">volume, 30d</span></div>
+            </div>
+            <div>
+              <p class="mock__label">Consistency</p>
+              <div class="heatmap" role="img" aria-label="A six-month consistency grid showing workouts most weeks.">
+                <span style="background: var(--chart-heat-0)"></span><span style="background: var(--chart-heat-1)"></span><span style="background: var(--chart-heat-3)"></span><span style="background: var(--chart-heat-0)"></span><span style="background: var(--chart-heat-2)"></span><span style="background: var(--chart-heat-4)"></span><span style="background: var(--chart-heat-0)"></span><span style="background: var(--chart-heat-1)"></span><span style="background: var(--chart-heat-3)"></span><span style="background: var(--chart-heat-2)"></span><span style="background: var(--chart-heat-0)"></span><span style="background: var(--chart-heat-4)"></span><span style="background: var(--chart-heat-3)"></span><span style="background: var(--chart-heat-1)"></span>
+              </div>
+            </div>
+            <div>
+              <p class="mock__label">Bench press &middot; est. 1RM</p>
+              <div class="bars" role="img" aria-label="Estimated one-rep max trending upward across nine sessions.">
+                <span style="height: 42%; background: var(--chart-heat-1)"></span><span style="height: 50%; background: var(--chart-heat-1)"></span><span style="height: 47%; background: var(--chart-heat-1)"></span><span style="height: 61%; background: var(--chart-heat-2)"></span><span style="height: 68%; background: var(--chart-heat-2)"></span><span style="height: 64%; background: var(--chart-heat-2)"></span><span style="height: 79%; background: var(--chart-heat-3)"></span><span style="height: 88%; background: var(--chart-heat-3)"></span><span style="height: 100%; background: var(--chart-heat-4)"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PRICING ================= -->
+    <section class="section section--subtle" id="pricing">
+      <div class="pricing-head">
+        <p class="eyebrow">Pricing</p>
+        <h2 class="section__title">The whole family, free</h2>
+        <p class="prose">Everybody in the house gets their own log, at no cost. Pay only when you want your whole history back &mdash; and out.</p>
+      </div>
+
+      <div class="container--pricing">
+        <div class="plans">
+          <div class="plan">
+            <div class="plan__head">
+              <p class="plan__name">Free</p>
+              <p class="plan__price"><span class="plan__amount">$0</span></p>
+              <p class="plan__blurb">Everything you need to train.</p>
+            </div>
+            <ul class="plan__features">
+              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>Unlimited workouts, sets and exercises</li>
+              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>Unlimited people in your household</li>
+              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>Full offline logging and sync</li>
+              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>PRs, routines, rest timer, trends</li>
+              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>The last <strong>90 days</strong> of history</li>
+            </ul>
+            <a class="btn btn--secondary btn--full" href="https://app.huddle.fitness/register">Start free</a>
+          </div>
+
+          <div class="plan plan--featured">
+            <p class="plan__flag">Save 39% yearly</p>
+            <div class="plan__head">
+              <p class="plan__name">Pro</p>
+              <p class="plan__price"><span class="plan__amount">$29</span><span class="plan__period">/ year</span></p>
+              <p class="plan__blurb">or $3.99 a month. Everything in Free, plus your whole history.</p>
+            </div>
+            <ul class="plan__features">
+              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-strong)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg><span><strong>Lifetime history</strong> &mdash; every workout, forever</span></li>
+              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-strong)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>All-time records and full-range trends</li>
+              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-strong)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg><span><strong>Export everything</strong> to CSV, any time</span></li>
+              <li class="is-pending"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-faint)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg><span>Import past workouts <span class="soon-badge">Coming soon</span></span></li>
+              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-strong)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>Keeps a one-person shop building it</li>
+            </ul>
+            <a class="btn btn--primary btn--full" href="https://app.huddle.fitness/register?plan=pro">Go Pro</a>
+          </div>
+        </div>
+
+        <div class="compare-wrap">
+          <table class="compare">
+            <caption>Compare plans</caption>
+            <thead>
+              <tr><th scope="col">Feature</th><th scope="col">Free</th><th scope="col">Pro</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">People in your household</th><td>Unlimited</td><td>Unlimited</td></tr>
+              <tr><th scope="row">Workouts, sets and exercises</th><td>Unlimited</td><td>Unlimited</td></tr>
+              <tr>
+                <th scope="row">Offline logging and sync</th>
+                <td><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Included"><path d="M20 6 9 17l-5-5" /></svg></td>
+                <td><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Included"><path d="M20 6 9 17l-5-5" /></svg></td>
+              </tr>
+              <tr>
+                <th scope="row">PRs, routines, rest timer</th>
+                <td><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Included"><path d="M20 6 9 17l-5-5" /></svg></td>
+                <td><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Included"><path d="M20 6 9 17l-5-5" /></svg></td>
+              </tr>
+              <tr class="is-highlight"><th scope="row">History you can see</th><td>Last 90 days</td><td>Lifetime</td></tr>
+              <tr>
+                <th scope="row">All-time records and trend ranges</th>
+                <td>90 days</td>
+                <td><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Included"><path d="M20 6 9 17l-5-5" /></svg></td>
+              </tr>
+              <tr>
+                <th scope="row">Export all data to CSV</th>
+                <td><span class="dash" role="img" aria-label="Not included"></span></td>
+                <td><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Included"><path d="M20 6 9 17l-5-5" /></svg></td>
+              </tr>
+              <tr>
+                <th scope="row">Import past workouts <span class="soon-badge">Coming soon</span></th>
+                <td><span class="dash" role="img" aria-label="Not included"></span></td>
+                <td><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-faint)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Planned"><path d="M20 6 9 17l-5-5" /></svg></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" style="color: var(--color-muted)"><circle cx="12" cy="12" r="9" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
+          <p>Your workouts are never deleted on Free. Older sessions are simply hidden until you upgrade &mdash; and they come straight back the moment you do.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= FAQ ================= -->
+    <section class="section" id="faq">
+      <h2 class="section__title" style="text-align: center; margin-bottom: 48px">Questions worth asking</h2>
+      <div class="container--narrow faq-grid">
+        <div class="faq__item">
+          <h3 class="faq__q">Do my kids need their own logins?</h3>
+          <p class="prose">No. One login for the household &mdash; everyone else is a profile you tap to switch. Their data stays completely separate from yours.</p>
+        </div>
+        <div class="faq__item">
+          <h3 class="faq__q">Does it really work without signal?</h3>
+          <p class="prose">Yes, for logging &mdash; sets, edits, notes, favourites, new exercises. Setup changes like routines, tags and adding people need a connection, and the app tells you so.</p>
+        </div>
+        <div class="faq__item">
+          <h3 class="faq__q">Is there an app to install?</h3>
+          <p class="prose">Add it to your home screen and it runs full-screen like any other app, offline included. No app store, no updates to chase.</p>
+        </div>
+        <div class="faq__item">
+          <h3 class="faq__q">What happens to my older workouts on Free?</h3>
+          <p class="prose">Nothing is deleted, ever. Free shows the last 90 days; Pro shows all of it. Subscribe and your full history is back instantly.</p>
+        </div>
+        <div class="faq__item">
+          <h3 class="faq__q">Pounds or kilos?</h3>
+          <p class="prose">Either. Set a default for new sets; sets you've already logged keep the unit you recorded them in, and mixed histories are normalised before anything gets ranked.</p>
+        </div>
+        <div class="faq__item">
+          <h3 class="faq__q">Who is this actually for?</h3>
+          <p class="prose">It was built for a dad and his sons sharing one iPad in a garage. If that sounds like your house, it will fit.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= FINAL CTA ================= -->
+    <section class="section section--tight band-teal">
+      <div class="cta-final">
+        <h2 class="section__title">Get everyone logging tonight</h2>
+        <p class="prose">Sign up with an email, confirm the code, add the people you train with. You'll be logging your first set in about two minutes.</p>
+        <a class="btn btn--on-teal" href="https://app.huddle.fitness/register">Start free</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="site-footer__brand">
+      <svg width="26" height="26" viewBox="126 92 200 200" aria-hidden="true" focusable="false">
+        <circle cx="200" cy="175" r="34" fill="#d4673e" /><circle cx="258" cy="168" r="29" fill="#f2a65a" /><circle cx="198" cy="221" r="25" fill="#f2ede1" /><circle cx="250" cy="219" r="19" fill="#b5542d" />
+      </svg>
+      <span class="brand__word" style="font-size: 17px">Huddle</span>
+      <span class="site-footer__tagline">Track workouts, sets and reps for the whole household.</span>
+    </div>
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="#pricing">Pricing</a>
+      <a href="https://app.huddle.fitness/login">Log in</a>
+      <a href="https://app.huddle.fitness/register">Start free</a>
+    </nav>
+  </footer>
+
+  <script src="/app-links.js"></script>
+</body>
+</html>

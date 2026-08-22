@@ -1,0 +1,21 @@
+{
+  "routes": [
+    { "route": "/index.html", "headers": { "Cache-Control": "no-cache" } },
+    { "route": "/", "headers": { "Cache-Control": "no-cache" } },
+    { "route": "/styles.css", "headers": { "Cache-Control": "public, max-age=3600" } },
+    { "route": "/app-links.js", "headers": { "Cache-Control": "public, max-age=3600" } },
+    { "route": "/assets/*", "headers": { "Cache-Control": "public, max-age=604800" } }
+  ],
+  "globalHeaders": {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains"
+  },
+  "responseOverrides": {
+    "404": { "rewrite": "/index.html", "statusCode": 200 }
+  },
+  "mimeTypes": {
+    ".webmanifest": "application/manifest+json",
+    ".svg": "image/svg+xml"
+  }
+}

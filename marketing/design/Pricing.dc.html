@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    .page {
+      --bg: #faf9f7; --surface: #ffffff; --subtle: #f1efea;
+      --ink: #1c1b19; --muted: #6f6b62; --faint: #8a857b; --border: #e7e3dc;
+      --accent: #d4673e; --accent-strong: #b8552f; --accent-text: #a8532c;
+      --teal: #163b3e;
+      --shadow-2: 0 4px 12px rgba(28,27,25,0.08);
+      --shadow-3: 0 8px 24px rgba(28,27,25,0.12);
+      --hairline: none;
+      background: var(--bg); color: var(--ink);
+      font-family: 'Barlow', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page.dark {
+      --bg: #171614; --surface: #221f1c; --subtle: #2a2723;
+      --ink: #f1efea; --muted: #a39d92; --faint: #807a70; --border: #35322c;
+      --accent-text: #e07a52;
+      --shadow-2: 0 4px 12px rgba(0,0,0,0.5);
+      --shadow-3: 0 8px 24px rgba(0,0,0,0.6);
+      --hairline: inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+    a { color: var(--accent-text); text-decoration: none; }
+    a:hover { color: var(--accent); }
+    h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -0.02em; }
+    p { margin: 0; text-wrap: pretty; }
+  </style>
+</helmet>
+<div class="{{themeClass}}" style="width: 960px; padding: 56px 48px;">
+
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 44px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text);">Pricing</span>
+    <h2 style="font-size: 44px; line-height: 1.06; text-align: center; color: var(--ink);">The whole family, free</h2>
+    <p style="font-size: 18px; line-height: 1.55; text-align: center; color: var(--muted); max-width: 54ch;">Everybody in the house gets their own log, at no cost. Pay only when you want your whole history back &mdash; and out.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-bottom: 40px;">
+    <!-- FREE -->
+    <div style="display: flex; flex-direction: column; gap: 20px; padding: 32px; border-radius: 20px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-2), var(--hairline);">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);">Free</span>
+        <span style="font-size: 50px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; color: var(--ink);">$0</span>
+        <span style="font-size: 16px; color: var(--muted);">Everything you need to train.</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 11px;">
+        <div style="display: flex; align-items: flex-start; gap: 10px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 16px; line-height: 1.45; color: var(--ink);">Unlimited workouts, sets and exercises</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 10px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 16px; line-height: 1.45; color: var(--ink);">Unlimited people in your household</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 10px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 16px; line-height: 1.45; color: var(--ink);">Full offline logging and sync</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 10px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 16px; line-height: 1.45; color: var(--ink);">PRs, routines, rest timer, trends</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 10px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 16px; line-height: 1.45; color: var(--ink);">The last <strong style="font-weight: 700;">90 days</strong> of history</span></div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; height: 52px; border-radius: 12px; border: 1.5px solid var(--border); color: var(--ink); font-size: 17px; font-weight: 600; margin-top: auto;">Start free</div>
+    </div>
+
+    <!-- PRO -->
+    <div style="position: relative; display: flex; flex-direction: column; gap: 20px; padding: 32px; border-radius: 20px; background: var(--surface); border: 2px solid var(--accent); box-shadow: var(--shadow-3), var(--hairline);">
+      <span style="position: absolute; top: -12px; left: 32px; padding: 4px 12px; border-radius: 999px; background: var(--accent-strong); color: #ffffff; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;">Save 39% yearly</span>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text);">Pro</span>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span style="font-size: 50px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; color: var(--ink);">$29</span>
+          <span style="font-size: 18px; color: var(--muted);">/ year</span>
+        </div>
+        <span style="font-size: 16px; color: var(--muted);">or $3.99 a month. Everything in Free, plus your whole history.</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 11px;">
+        <div style="display: flex; align-items: flex-start; gap: 10px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b8552f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 16px; line-height: 1.45; color: var(--ink);"><strong style="font-weight: 700;">Lifetime history</strong> &mdash; every workout, forever</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 10px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b8552f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 16px; line-height: 1.45; color: var(--ink);">All-time records and full-range trends</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 10px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b8552f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 16px; line-height: 1.45; color: var(--ink);"><strong style="font-weight: 700;">Export everything</strong> to CSV, any time</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 10px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8a857b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 16px; line-height: 1.45; color: var(--muted);">Import past workouts <span style="display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--subtle); border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--muted);">Coming soon</span></span></div>
+        <div style="display: flex; align-items: flex-start; gap: 10px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b8552f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 16px; line-height: 1.45; color: var(--ink);">Keeps a one-person shop building it</span></div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; height: 52px; border-radius: 12px; background: var(--accent-strong); color: #ffffff; font-size: 17px; font-weight: 600; margin-top: auto;">Go Pro</div>
+    </div>
+  </div>
+
+  <!-- COMPARISON TABLE -->
+  <div style="border-radius: 20px; background: var(--surface); border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow-2), var(--hairline);">
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; padding: 16px 28px; background: var(--subtle); border-bottom: 1px solid var(--border);">
+      <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);">Compare</span>
+      <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); text-align: center;">Free</span>
+      <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); text-align: center;">Pro</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; padding: 15px 28px; border-bottom: 1px solid var(--border);">
+      <span style="font-size: 16px; color: var(--ink);">People in your household</span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--ink); text-align: center;">Unlimited</span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--ink); text-align: center;">Unlimited</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; padding: 15px 28px; border-bottom: 1px solid var(--border);">
+      <span style="font-size: 16px; color: var(--ink);">Workouts, sets and exercises</span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--ink); text-align: center;">Unlimited</span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--ink); text-align: center;">Unlimited</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; padding: 15px 28px; border-bottom: 1px solid var(--border);">
+      <span style="font-size: 16px; color: var(--ink);">Offline logging and sync</span>
+      <span style="display: flex; justify-content: center;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span>
+      <span style="display: flex; justify-content: center;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span>
+    </div>
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; padding: 15px 28px; border-bottom: 1px solid var(--border);">
+      <span style="font-size: 16px; color: var(--ink);">PRs, routines, rest timer</span>
+      <span style="display: flex; justify-content: center;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span>
+      <span style="display: flex; justify-content: center;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span>
+    </div>
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; padding: 15px 28px; border-bottom: 1px solid var(--border); background: rgba(212,103,62,0.05);">
+      <span style="font-size: 16px; font-weight: 600; color: var(--ink);">History you can see</span>
+      <span style="font-size: 16px; font-weight: 600; color: var(--muted); text-align: center;">Last 90 days</span>
+      <span style="font-size: 16px; font-weight: 700; color: var(--accent-text); text-align: center;">Lifetime</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; padding: 15px 28px; border-bottom: 1px solid var(--border);">
+      <span style="font-size: 16px; color: var(--ink);">All-time records and trend ranges</span>
+      <span style="font-size: 16px; color: var(--faint); text-align: center;">90 days</span>
+      <span style="display: flex; justify-content: center;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span>
+    </div>
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; padding: 15px 28px; border-bottom: 1px solid var(--border);">
+      <span style="font-size: 16px; color: var(--ink);">Export all data to CSV</span>
+      <span style="display: flex; justify-content: center;"><span style="width: 14px; height: 2px; border-radius: 2px; background: #8a857b;"></span></span>
+      <span style="display: flex; justify-content: center;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span>
+    </div>
+    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; padding: 15px 28px;">
+      <span style="font-size: 16px; color: var(--ink);">Import past workouts <span style="display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--subtle); border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--muted);">Coming soon</span></span>
+      <span style="display: flex; justify-content: center;"><span style="width: 14px; height: 2px; border-radius: 2px; background: #8a857b;"></span></span>
+      <span style="display: flex; justify-content: center;"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#8a857b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: flex-start; gap: 10px; margin-top: 24px; padding: 16px 20px; border-radius: 12px; background: var(--subtle); border: 1px solid var(--border);">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6f6b62" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+    <p style="font-size: 16px; line-height: 1.55; color: var(--muted);">Your workouts are never deleted on Free. Older sessions are simply hidden until you upgrade &mdash; and they come straight back the moment you do.</p>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: this.props.dark ? 'page dark' : 'page' };
+  }
+}
+</script>
+</body>
+</html>

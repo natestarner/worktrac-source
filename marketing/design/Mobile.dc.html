@@ -1,0 +1,213 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    .page {
+      --bg: #faf9f7; --surface: #ffffff; --subtle: #f1efea;
+      --ink: #1c1b19; --muted: #6f6b62; --faint: #8a857b; --border: #e7e3dc;
+      --accent: #d4673e; --accent-strong: #b8552f; --accent-text: #a8532c;
+      --teal: #163b3e;
+      --shadow-2: 0 4px 12px rgba(28,27,25,0.08);
+      --shadow-3: 0 8px 24px rgba(28,27,25,0.12);
+      --hairline: none;
+      background: var(--bg); color: var(--ink);
+      font-family: 'Barlow', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page.dark {
+      --bg: #171614; --surface: #221f1c; --subtle: #2a2723;
+      --ink: #f1efea; --muted: #a39d92; --faint: #807a70; --border: #35322c;
+      --accent-text: #e07a52; --teal: #10292b;
+      --shadow-2: 0 4px 12px rgba(0,0,0,0.5);
+      --shadow-3: 0 8px 24px rgba(0,0,0,0.6);
+      --hairline: inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+    a { color: var(--accent-text); text-decoration: none; }
+    a:hover { color: var(--accent); }
+    h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+    p { margin: 0; text-wrap: pretty; }
+  </style>
+</helmet>
+<div class="{{themeClass}}" style="width: 390px;">
+
+  <!-- NAV -->
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border);">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <svg width="28" height="28" viewBox="126 92 200 200" aria-hidden="true"><circle cx="200" cy="175" r="34" fill="#d4673e"></circle><circle cx="258" cy="168" r="29" fill="#f2a65a"></circle><circle cx="198" cy="221" r="25" fill="#f2ede1"></circle><circle cx="250" cy="219" r="19" fill="#b5542d"></circle></svg>
+      <span style="font-size: 21px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink);">Huddle</span>
+    </div>
+    <a href="#start" style="display: inline-flex; align-items: center; height: 44px; padding: 0 18px; border-radius: 12px; background: var(--accent-strong); color: #ffffff; font-size: 15px; font-weight: 600;">Start free</a>
+  </div>
+
+  <!-- HERO -->
+  <div style="display: flex; flex-direction: column; gap: 20px; padding: 40px 20px 44px;">
+    <div style="display: inline-flex; align-self: flex-start; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; background: var(--subtle); border: 1px solid var(--border);">
+      <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--accent);"></span>
+      <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-text);">Free for your household</span>
+    </div>
+    <h1 style="font-size: 44px; line-height: 1.04; letter-spacing: -0.03em; color: var(--ink);">One iPad. Everyone's workouts.</h1>
+    <p style="font-size: 18px; line-height: 1.5; color: var(--muted);">Separate history for every person in the house, on one shared device. And it keeps working when the signal doesn't.</p>
+    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px;">
+      <a href="#start" style="display: flex; align-items: center; justify-content: center; height: 54px; border-radius: 12px; background: var(--accent-strong); color: #ffffff; font-size: 17px; font-weight: 600;">Start free</a>
+      <a href="#features" style="display: flex; align-items: center; justify-content: center; height: 54px; border-radius: 12px; border: 1.5px solid var(--border); color: var(--ink); font-size: 17px; font-weight: 600;">See how it works</a>
+    </div>
+    <p style="font-size: 14px; color: var(--faint);">No credit card. 163 exercises built in. Works offline.</p>
+  </div>
+
+  <!-- APP MOCKUP -->
+  <div style="padding: 0 20px 44px;">
+    <div style="border-radius: 20px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-3), var(--hairline); overflow: hidden;">
+      <div style="display: flex; gap: 6px; padding: 12px; border-bottom: 1px solid var(--border);">
+        <div style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 7px; border-radius: 999px; background: var(--accent-strong);">
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 21px; height: 21px; border-radius: 999px; background: rgba(255,255,255,0.22); font-size: 10px; font-weight: 700; color: #ffffff;">M</span>
+          <span style="font-size: 13px; font-weight: 600; color: #ffffff;">Miles</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 7px; border-radius: 999px; border: 1px solid var(--border);">
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 21px; height: 21px; border-radius: 999px; background: var(--subtle); font-size: 10px; font-weight: 700; color: var(--muted);">N</span>
+          <span style="font-size: 13px; font-weight: 600; color: var(--ink);">Nate</span>
+          <span style="width: 6px; height: 6px; border-radius: 999px; background: #147038;"></span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 7px; border-radius: 999px; border: 1px solid var(--border);">
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 21px; height: 21px; border-radius: 999px; background: var(--subtle); font-size: 10px; font-weight: 700; color: var(--muted);">E</span>
+          <span style="font-size: 13px; font-weight: 600; color: var(--ink);">Eli</span>
+        </div>
+      </div>
+      <div style="padding: 16px 14px;">
+        <div style="font-size: 20px; font-weight: 700; color: var(--ink); margin-bottom: 12px;">Barbell Bench Press</div>
+        <div style="padding: 10px 12px; border-radius: 12px; background: var(--subtle); margin-bottom: 14px;">
+          <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px;">Last time &middot; Tue Aug 12</div>
+          <div style="display: flex; gap: 6px;">
+            <span style="padding: 4px 9px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--ink);">135 &times; 8</span>
+            <span style="padding: 4px 9px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--ink);">135 &times; 8</span>
+            <span style="padding: 4px 9px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--ink);">145 &times; 6</span>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 8px; border-radius: 12px; border: 1px solid var(--border);">
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; background: var(--subtle); font-size: 18px; font-weight: 600; color: var(--ink);">&minus;</span>
+            <span style="font-size: 22px; font-weight: 700; color: var(--ink);">145</span>
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; background: var(--subtle); font-size: 18px; font-weight: 600; color: var(--ink);">+</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 8px; border-radius: 12px; border: 1px solid var(--border);">
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; background: var(--subtle); font-size: 18px; font-weight: 600; color: var(--ink);">&minus;</span>
+            <span style="font-size: 22px; font-weight: 700; color: var(--ink);">7</span>
+            <span style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 10px; background: var(--subtle); font-size: 18px; font-weight: 600; color: var(--ink);">+</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: center; height: 52px; border-radius: 12px; background: var(--accent-strong); color: #ffffff; font-size: 17px; font-weight: 600;">Log set for Miles</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PILLARS -->
+  <div id="features" style="display: flex; flex-direction: column; gap: 36px; padding: 0 20px 48px;">
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#d4673e" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+      <h3 style="font-size: 22px; line-height: 1.25; color: var(--ink);">Everyone, on one device</h3>
+      <p style="font-size: 17px; line-height: 1.6; color: var(--muted);">Tap a name to switch. Separate exercises, history, PRs and rest timers &mdash; no logins to juggle. Add as many people as you want, free.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#d4673e" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"></path><path d="M8.5 16.4a5 5 0 0 1 7 0"></path><path d="M5 12.9a10 10 0 0 1 5.2-2.7"></path><path d="M1.4 9.4a15 15 0 0 1 5-3.2"></path><path d="m2 2 20 20"></path><path d="M22.6 9.4a15 15 0 0 0-6.7-3.9"></path></svg>
+      <h3 style="font-size: 22px; line-height: 1.25; color: var(--ink);">No signal, no problem</h3>
+      <p style="font-size: 17px; line-height: 1.6; color: var(--muted);">Log the whole session underground. Sets, edits and notes save on the device and sync the moment you're back &mdash; and you can see what's still waiting.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#d4673e" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5"></rect><path d="M12 18h.01"></path></svg>
+      <h3 style="font-size: 22px; line-height: 1.25; color: var(--ink);">Built for gym hands</h3>
+      <p style="font-size: 17px; line-height: 1.6; color: var(--muted);">Big targets, no accidental taps, no zooming when you tap a field. Timers stay right when the screen locks, and it never reloads mid-set.</p>
+    </div>
+  </div>
+
+  <!-- OFFLINE BAND -->
+  <div style="display: flex; flex-direction: column; gap: 16px; padding: 48px 20px; background: var(--teal);">
+    <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #f2a65a;">Offline, properly</span>
+    <h2 style="font-size: 34px; line-height: 1.1; color: #f2ede1;">The basement gym test</h2>
+    <p style="font-size: 17px; line-height: 1.6; color: rgba(242,237,225,0.78);">Most apps show a spinner and lose the set. Huddle writes every set to the device first, then syncs when the signal comes back &mdash; in order, without ever double-logging.</p>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 12px; background: rgba(242,166,90,0.14); border: 1px solid rgba(242,166,90,0.3); margin-top: 4px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f2a65a" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"></path><path d="M8.5 16.4a5 5 0 0 1 7 0"></path><path d="m2 2 20 20"></path><path d="M22.6 9.4a15 15 0 0 0-6.7-3.9"></path></svg>
+      <span style="font-size: 15px; font-weight: 600; color: #f2a65a;">3 changes waiting to sync</span>
+    </div>
+  </div>
+
+  <!-- PRICING -->
+  <div id="pricing" style="display: flex; flex-direction: column; gap: 18px; padding: 48px 20px; background: var(--subtle);">
+    <div style="display: flex; flex-direction: column; gap: 10px; align-items: center; margin-bottom: 6px;">
+      <span style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text);">Pricing</span>
+      <h2 style="font-size: 34px; line-height: 1.1; text-align: center; color: var(--ink);">The whole family, free</h2>
+      <p style="font-size: 17px; line-height: 1.55; text-align: center; color: var(--muted);">Pay only when you want your whole history back &mdash; and out.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 26px; border-radius: 20px; background: var(--surface); border: 1px solid var(--border);">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <span style="font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);">Free</span>
+        <span style="font-size: 42px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; color: var(--ink);">$0</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 9px;">
+        <div style="display: flex; align-items: flex-start; gap: 9px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 15px; line-height: 1.45; color: var(--ink);">Unlimited workouts, sets and people</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 9px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 15px; line-height: 1.45; color: var(--ink);">Full offline logging and sync</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 9px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 15px; line-height: 1.45; color: var(--ink);">PRs, routines, rest timer, trends</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 9px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#147038" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 15px; line-height: 1.45; color: var(--ink);">The last <strong style="font-weight: 700;">90 days</strong> of history</span></div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; height: 50px; border-radius: 12px; border: 1.5px solid var(--border); color: var(--ink); font-size: 16px; font-weight: 600;">Start free</div>
+    </div>
+    <div style="position: relative; display: flex; flex-direction: column; gap: 16px; padding: 26px; border-radius: 20px; background: var(--surface); border: 2px solid var(--accent);">
+      <span style="position: absolute; top: -12px; left: 26px; padding: 4px 11px; border-radius: 999px; background: var(--accent-strong); color: #ffffff; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;">Save 39% yearly</span>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <span style="font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text);">Pro</span>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 42px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; color: var(--ink);">$29</span>
+          <span style="font-size: 16px; color: var(--muted);">/ year</span>
+        </div>
+        <span style="font-size: 15px; color: var(--muted);">or $3.99 a month</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 9px;">
+        <div style="display: flex; align-items: flex-start; gap: 9px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#b8552f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 15px; line-height: 1.45; color: var(--ink);"><strong style="font-weight: 700;">Lifetime history</strong> &mdash; every workout, forever</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 9px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#b8552f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 15px; line-height: 1.45; color: var(--ink);">All-time records and full-range trends</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 9px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#b8552f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 15px; line-height: 1.45; color: var(--ink);"><strong style="font-weight: 700;">Export everything</strong> to CSV</span></div>
+        <div style="display: flex; align-items: flex-start; gap: 9px;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8a857b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size: 15px; line-height: 1.45; color: var(--muted);">Import past workouts <span style="display: inline-block; padding: 1px 7px; border-radius: 999px; background: var(--subtle); border: 1px solid var(--border); font-size: 11px; font-weight: 600;">Coming soon</span></span></div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; height: 50px; border-radius: 12px; background: var(--accent-strong); color: #ffffff; font-size: 16px; font-weight: 600;">Go Pro</div>
+    </div>
+    <p style="font-size: 14px; line-height: 1.55; color: var(--muted); text-align: center;">Your workouts are never deleted on Free &mdash; older sessions are just hidden until you upgrade.</p>
+  </div>
+
+  <!-- FINAL CTA -->
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 48px 20px; background: var(--teal);">
+    <h2 style="font-size: 32px; line-height: 1.1; text-align: center; color: #f2ede1;">Get everyone logging tonight</h2>
+    <p style="font-size: 17px; line-height: 1.55; text-align: center; color: rgba(242,237,225,0.75);">Sign up, confirm the code, add the people you train with. First set logged in about two minutes.</p>
+    <a href="#start" style="display: flex; align-items: center; justify-content: center; height: 54px; width: 100%; border-radius: 12px; background: #d4673e; color: #ffffff; font-size: 17px; font-weight: 600; margin-top: 4px;">Start free</a>
+  </div>
+
+  <!-- FOOTER -->
+  <div style="display: flex; flex-direction: column; gap: 14px; padding: 28px 20px; border-top: 1px solid var(--border);">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <svg width="24" height="24" viewBox="126 92 200 200" aria-hidden="true"><circle cx="200" cy="175" r="34" fill="#d4673e"></circle><circle cx="258" cy="168" r="29" fill="#f2a65a"></circle><circle cx="198" cy="221" r="25" fill="#f2ede1"></circle><circle cx="250" cy="219" r="19" fill="#b5542d"></circle></svg>
+      <span style="font-size: 16px; font-weight: 700; color: var(--ink);">Huddle</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 20px;">
+      <a href="#pricing" style="font-size: 14px; color: var(--muted);">Pricing</a>
+      <a href="#login" style="font-size: 14px; color: var(--muted);">Log in</a>
+      <a href="#contact" style="font-size: 14px; color: var(--muted);">Contact</a>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: this.props.dark ? 'page dark' : 'page' };
+  }
+}
+</script>
+</body>
+</html>
