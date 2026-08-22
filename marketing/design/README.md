@@ -38,6 +38,14 @@ node "<design skill base dir>/seed-canvas.mjs" \
 Then republish that file to the existing artifact URL so the link stays stable.
 The seeded output is gitignored — it is ~2 MB of editor payload.
 
+Before re-seeding, check that no artboard outgrew its `canvas.json` frame — a
+frame smaller than its content clips, and it is the only sizing mistake that
+actually breaks the canvas:
+
+```bash
+cd e2e && npm ci && node tools/marketing-artboards.mjs
+```
+
 If someone has edited the canvas in the browser since, pull their changes back
 down first with `seed-canvas.mjs --extract <saved page> --to <empty dir>`,
 otherwise re-seeding overwrites their work.
