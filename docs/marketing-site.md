@@ -170,6 +170,48 @@ config/production/marketing-robots.txt   →  User-agent: *
                                             Sitemap: https://huddle.fitness/sitemap.xml
 ```
 
+## The product screenshots are real, and regenerating them is scripted
+
+Every product image under `marketing/assets/shots/` is a screenshot of the app actually
+running — no mockups, no drawn approximations. That is a deliberate constraint: a hand-drawn
+"screenshot" drifts from the product the moment either changes, and it always looks like
+what it is.
+
+Two scripts in `e2e/tools/` do it, and they need this worktree's stack up:
+
+```bash
+bash scripts/up.sh
+
+cd e2e && npm ci
+# 1. Seed a household -- 3 people, 15 weeks, ~450 sets, with a stall week and a deload so
+#    the trend lines look like training rather than a ramp. Prints the login it created.
+FRONTEND=http://localhost:3003 node tools/marketing-capture.mjs
+
+# 2. Screenshot the running app, light and dark.
+FRONTEND=http://localhost:3003 EMAIL=<email from step 1> node tools/marketing-shots.mjs ../marketing/assets/shots
+SCHEME=dark FRONTEND=http://localhost:3003 EMAIL=<same> node tools/marketing-shots.mjs ../marketing/assets/shots
+```
+
+Things that cost a round trip when they were learned:
+
+- **The Trends charts are not built on the shared `Card` primitive** — each is a plain div with
+  inline surface/border/radius styles. `marketing-shots.mjs` anchors on the heading text and
+  walks up two levels rather than looking for `.card`.
+- **Sticky chrome paints over an element screenshot** of anything taller than the viewport:
+  Playwright scrolls the element into view and the sticky layer follows it down. The script
+  demotes `sticky`/`fixed` to `static` for the capture.
+- **The offline shot is genuinely offline** — the script cuts the network, logs two real sets,
+  and captures the app's own "2 changes waiting to sync" banner. It is deliberately a viewport
+  capture rather than an element crop, because that banner lives in the chrome above
+  `.tab-panel`.
+- **Seed before the app loads, not after.** `offlineCacheWarm` caches whatever it finds, so data
+  inserted behind a running app's back leaves sections blank for about a minute.
+
+Each shot is captured at `deviceScaleFactor: 2` and downscaled by the `width`/`height`
+attributes on the `<img>`, so it stays sharp on a retina display. Light and dark are separate
+files, swapped with `<picture><source media="(prefers-color-scheme: dark)">` — the same
+mechanism the app uses for its logo.
+
 ## Checking it locally
 
 ```bash

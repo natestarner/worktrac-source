@@ -11,7 +11,11 @@ test.describe('marketing landing page', () => {
   test('renders the hero and both calls to action', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { level: 1 })).toContainText("Everyone's workouts");
+    // Both halves of the promise: the shared-screen claim and the emotional one. They are the
+    // page's whole positioning, so losing either in an edit should fail here.
+    const h1 = page.getByRole('heading', { level: 1 });
+    await expect(h1).toContainText("whole family's workout");
+    await expect(h1).toContainText('Celebrate your PRs together');
     // Two "Start free" CTAs above the fold on desktop (nav + hero); more further down.
     await expect(page.getByRole('link', { name: 'Start free' }).first()).toBeVisible();
     await expect(page).toHaveTitle(/Huddle/);

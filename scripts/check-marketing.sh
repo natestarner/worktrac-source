@@ -52,7 +52,7 @@ if [ ! -f "$INDEX" ]; then
 fi
 
 # --- 2. Local references resolve --------------------------------------------
-# Root-relative refs only (href="/..." / src="/..."); external URLs and in-page
+# Root-relative refs only (href/src/srcset="/..."); external URLs and in-page
 # anchors are skipped.
 missing_refs=0
 while IFS= read -r ref; do
@@ -66,7 +66,7 @@ while IFS= read -r ref; do
     fail "referenced file does not exist: $ref"
     missing_refs=$((missing_refs + 1))
   fi
-done < <(grep -oE '(href|src)="/[^"#]*"' "$INDEX" | sed -E 's/^(href|src)="//; s/"$//' | sort -u)
+done < <(grep -oE '(href|src|srcset)="/[^"#]*"' "$INDEX" | sed -E 's/^(href|src|srcset)="//; s/"$//' | sort -u)
 
 if [ "$missing_refs" -eq 0 ]; then
   pass "all local references resolve"
