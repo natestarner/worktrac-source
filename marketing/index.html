@@ -70,25 +70,24 @@
         <p class="hero__trust">No credit card. Add your whole family.</p>
       </div>
 
-      <!-- Real screenshots of the running app, cropped inside rounded cards. -->
-      <div class="hero__shots">
-        <div class="shot-card shot-card--side">
-          <picture>
-            <source srcset="/assets/shots/app-prs-dark.png" media="(prefers-color-scheme: dark)" />
-            <img src="/assets/shots/app-prs.png" width="840" height="364" alt="The PRs screen listing personal records for the deadlift, back squat and bench press." />
-          </picture>
+      <!-- Real screenshots of the running app, at real device viewports, in CSS device
+           frames. The bottom fades into the page rather than stopping at a hard edge. -->
+      <div class="hero__devices">
+        <div class="device device--tablet">
+          <div class="device__screen">
+            <picture>
+              <source srcset="/assets/shots/device-ipad-dark.png" media="(prefers-color-scheme: dark)" />
+              <img src="/assets/shots/device-ipad.png" width="1194" height="834" fetchpriority="high" alt="Huddle on an iPad: Nate, Miles and Eli along the top, Barbell Bench Press open, and three sets logged this session, each marked as a personal record." />
+            </picture>
+          </div>
         </div>
-        <div class="shot-card shot-card--main">
-          <picture>
-            <source srcset="/assets/shots/app-log-dark.png" media="(prefers-color-scheme: dark)" />
-            <img src="/assets/shots/app-log.png" width="840" height="473" fetchpriority="high" alt="The Huddle log screen showing Barbell Bench Press with last session's sets, weight and reps steppers, and a Log set button." />
-          </picture>
-        </div>
-        <div class="shot-card shot-card--side">
-          <picture>
-            <source srcset="/assets/shots/app-linechart-dark.png" media="(prefers-color-scheme: dark)" />
-            <img src="/assets/shots/app-linechart.png" width="792" height="480" alt="A line chart of estimated one-rep max for the bench press, climbing across three months." />
-          </picture>
+        <div class="device device--phone">
+          <div class="device__screen">
+            <picture>
+              <source srcset="/assets/shots/device-iphone-dark.png" media="(prefers-color-scheme: dark)" />
+              <img src="/assets/shots/device-iphone.png" width="393" height="852" alt="Huddle on an iPhone showing the personal records screen: bench press 209 lb, Arnold press 130.5 lb, back squat 285.8 lb and deadlift 332.5 lb." />
+            </picture>
+          </div>
         </div>
       </div>
     </section>

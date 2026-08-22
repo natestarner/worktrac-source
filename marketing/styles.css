@@ -498,47 +498,115 @@ img {
   color: var(--color-muted);
 }
 
-/* Three fully-rounded cards, each a window onto a screenshot cropped from its top.
-   The previous version clipped the row with overflow:hidden and lifted each card
-   with a large upward glow to suggest "continues below the fold" -- but a glow
-   spreading out of a shape whose bottom corners are square reads as a gradient
-   smear fighting the rounded top corners. Cropping INSIDE a fully-rounded card
-   keeps every corner consistent and drops the halo entirely. */
-.hero__shots {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(14px, 1.8vw, 24px);
-  margin-top: clamp(36px, 4.5vw, 64px);
+/* A tablet with a phone leaning on it, fading out at the bottom so the pair reads
+   as rising out of the page instead of stopping at a hard edge. The mask is what
+   does that -- an earlier version used a large upward glow and a hard overflow
+   clip, which produced a halo fighting the rounded corners. */
+.hero__devices {
+  position: relative;
+  width: min(820px, 100%);
+  margin: clamp(36px, 4.5vw, 64px) auto 0;
+  /* Room for the phone to hang below the tablet before the fade takes over. */
+  padding-bottom: clamp(28px, 5vw, 64px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
 }
 
-.shot-card {
-  flex-shrink: 0;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-3), var(--elevation-hairline);
+/* ============================================================================
+   Device frames — pure CSS bezels, no chrome images
+   ========================================================================= */
+
+.device {
+  background: linear-gradient(160deg, #33302b, #14130f);
+  box-shadow: var(--shadow-4), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.device__screen {
   overflow: hidden;
+  background: var(--color-bg);
+  line-height: 0; /* no descender gap under the screenshot */
 }
 
-/* Scale to the card's width and let height follow, rather than object-fit:cover
-   into a fixed box. These screenshots are much wider than they are tall, so
-   cover cropped them horizontally -- and since a PR row puts the exercise name
-   hard left and the weight hard right, the surviving middle was empty space.
-   The three cards end up different heights, which is what align-items:center
-   above turns into a deliberate stagger. */
-.shot-card img {
+.device__screen img {
   width: 100%;
   height: auto;
 }
 
-.shot-card--side {
-  width: clamp(230px, 25vw, 330px);
+.device--tablet {
+  border-radius: clamp(20px, 3.2vw, 40px);
+  padding: clamp(7px, 1.2vw, 14px);
 }
 
-.shot-card--main {
-  width: clamp(300px, 34vw, 430px);
-  box-shadow: var(--shadow-4), var(--elevation-hairline);
+.device--tablet .device__screen {
+  border-radius: clamp(13px, 2.1vw, 27px);
+}
+
+/* Sized off the tablet, not the viewport: a phone is roughly a fifth of an iPad's
+   landscape width, and holding that ratio is what keeps the pair reading as two
+   real objects rather than two screenshots at arbitrary scales. */
+.device--phone {
+  position: absolute;
+  right: 3%;
+  bottom: -2%;
+  width: 21%;
+  border-radius: clamp(16px, 2.2vw, 26px);
+  padding: clamp(3px, 0.6vw, 7px);
+  z-index: 2;
+}
+
+/* A status-bar band above the screenshot, in the app's own header colour, so the
+   island has somewhere to sit. Without it the island landed on top of the app's
+   logo -- a browser screenshot starts at the page content, not below a status
+   bar, so the space has to be added here. */
+.device--phone .device__screen {
+  border-radius: clamp(14px, 2vw, 23px);
+  padding-top: clamp(11px, 1.6vw, 19px);
+  background: var(--color-surface);
+}
+
+/* The dynamic island. Drawn, not captured -- a browser screenshot can't contain
+   one. Decoration on a picture of a phone, which is honest enough. */
+.device--phone::after {
+  content: '';
+  position: absolute;
+  top: clamp(6px, 0.95vw, 11px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(26px, 3.6vw, 44px);
+  height: clamp(7px, 0.9vw, 11px);
+  border-radius: var(--radius-full);
+  background: #14130f;
+  z-index: 3;
+}
+
+/* Below this width the pair no longer fits, and the phone is the one to keep: a
+   tablet screenshot scaled to 390px is unreadable, while a phone screenshot at
+   phone size is exactly what a visitor on a phone is being sold. */
+@media (max-width: 700px) {
+  .device--tablet {
+    display: none;
+  }
+
+  .device--phone {
+    position: relative; /* keep the island anchored once it stops being absolute */
+    right: auto;
+    bottom: auto;
+    width: min(260px, 66%);
+    margin: 0 auto;
+    border-radius: 34px;
+    padding: 8px;
+  }
+
+  .device--phone .device__screen {
+    border-radius: 27px;
+    padding-top: 20px;
+  }
+
+  .device--phone::after {
+    top: 12px;
+    width: 58px;
+    height: 15px;
+  }
 }
 
 /* Below the desktop breakpoint the three-card row stops fitting; keep the one
@@ -595,12 +663,16 @@ img {
    Product figures — real screenshots of the running app
    ========================================================================= */
 
+/* Deliberately deeper than the app's own card elevation. In the app a card sits
+   ON the page; here it is a photograph OF the app being held up, and the flatter
+   shadow made these read as pasted-on rectangles. Device frames are kept for the
+   hero alone so that moment stays distinct. */
 .figure {
   margin: 0;
   border-radius: var(--radius-xl);
   border: 1px solid var(--color-border);
   background: var(--color-surface);
-  box-shadow: var(--shadow-3), var(--elevation-hairline);
+  box-shadow: var(--shadow-4), var(--elevation-hairline);
   overflow: hidden;
 }
 
@@ -609,7 +681,7 @@ img {
 }
 
 .figure--quiet {
-  box-shadow: var(--shadow-2), var(--elevation-hairline);
+  box-shadow: var(--shadow-3), var(--elevation-hairline);
 }
 
 .figure-stack {

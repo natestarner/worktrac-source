@@ -219,6 +219,32 @@ attributes on the `<img>`, so it stays sharp on a retina display. Light and dark
 files, swapped with `<picture><source media="(prefers-color-scheme: dark)">` — the same
 mechanism the app uses for its logo.
 
+### The hero's device frames
+
+`device-ipad.png` and `device-iphone.png` are captured at **real device viewports** (iPad Pro
+11" landscape, iPhone 14 Pro portrait) rather than cropped out of a desktop capture, because the
+app's layout genuinely differs at those widths — the log screen goes two-column on a tablet, the
+tab bar reflows on a phone. A desktop crop squeezed into a tablet bezel looks like exactly what
+it is.
+
+The bezels themselves are **pure CSS** (`.device` in `styles.css`) — no chrome images to keep in
+sync. Two things about them:
+
+- The tablet capture logs three real sets first. Without them the bottom half of an 834px-tall
+  viewport is empty, which reads as an empty app rather than one mid-workout.
+- The phone frame adds a **status-bar band** above the screenshot, in the app's own header
+  colour, for the dynamic island to sit in. A browser screenshot starts at the page content, so
+  without that band the island lands on top of the app's logo.
+
+Below 700px the hero drops the tablet and keeps the phone: a tablet screenshot scaled to 390px
+is unreadable, while a phone screenshot at phone size is exactly what a visitor on a phone is
+being sold.
+
+`DEVICES_ONLY=1` re-runs just these two. The full run drives three browser contexts hard, and
+this worktree's Vite has the load-dependent habit of dying under exactly that
+(`.claude/rules/dev-stack.md`) — it died twice during this work, both times with the documented
+`rc=127` at comfortable memory. Restart with `bash scripts/up.sh` and re-run.
+
 ## Checking it locally
 
 ```bash

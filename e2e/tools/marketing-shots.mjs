@@ -18,6 +18,12 @@ const SCHEME = process.env.SCHEME === 'dark' ? 'dark' : 'light';
 if (!EMAIL) throw new Error('EMAIL=<seeded household email> is required');
 mkdirSync(OUT, { recursive: true });
 
+// DEVICES_ONLY=1 skips straight to the tablet/phone captures. The full run opens three browser
+// contexts and drives them hard, and this worktree's Vite has a known load-dependent habit of
+// dying under exactly that (see .claude/rules/dev-stack.md) -- so when only the device shots
+// need refreshing, keep the window short.
+const DEVICES_ONLY = process.env.DEVICES_ONLY === '1';
+
 const browser = await chromium.launch();
 const ctx = await browser.newContext({
   viewport: { width: 1000, height: 1100 },
@@ -85,105 +91,160 @@ async function shot(name, locator, maxHeight, offsetTop = 0) {
 // exactly one chart with its own border and radius intact, rather than a guessed bounding box.
 const cardWith = (text) => page.getByText(text, { exact: false }).first().locator('xpath=../..');
 
-await page.goto(`${FRONTEND}/login`);
-await page.getByPlaceholder('Email').fill(EMAIL);
-await page.getByPlaceholder('Password').fill('password123');
-await page.getByRole('button', { name: /log in|sign in/i }).click();
-await page.waitForURL(/\/app\//, { timeout: 20_000 });
-await page.waitForTimeout(3000); // let the offline cache warm against seeded data
+if (!DEVICES_ONLY) {
+  await page.goto(`${FRONTEND}/login`);
+  await page.getByPlaceholder('Email').fill(EMAIL);
+  await page.getByPlaceholder('Password').fill('password123');
+  await page.getByRole('button', { name: /log in|sign in/i }).click();
+  await page.waitForURL(/\/app\//, { timeout: 20_000 });
+  await page.waitForTimeout(3000); // let the offline cache warm against seeded data
 
-// ---------------------------------------------------------------- log screen
-await page.goto(`${FRONTEND}/app/log`);
-await page.waitForTimeout(1500);
+  // ---------------------------------------------------------------- log screen
+  await page.goto(`${FRONTEND}/app/log`);
+  await page.waitForTimeout(1500);
 
-// Dismiss the "create a routine" nudge -- it is a first-run tip, not part of the product
-// story these images are telling.
-for (const close of await page.getByRole('button', { name: /dismiss|close/i }).all()) {
-  await close.click().catch(() => {});
-}
-await page.waitForTimeout(400);
-// Open the exercise from the PICKER, not by first text match. Once a session is live the
-// exercise name also appears in the "Session exercises" card at the top, and .first() matched
-// that instead -- leaving the capture on the picker screen rather than the log screen.
-const benchChip = page.getByRole('button', { name: 'Barbell Bench Press' }).last();
-if (await benchChip.isVisible().catch(() => false)) {
-  await benchChip.click();
-} else {
-  await page.getByText('Barbell Bench Press', { exact: true }).last().click().catch(() => {});
-}
-await page.waitForTimeout(1800);
-await shot('app-log', '.tab-panel', 900);
-
-// The person bar on its own: three names, one device -- the household story in one strip.
-// Anchored on "+ Add person" and walked up to the row that holds all the pills.
-await shot('app-people', page.getByText('+ Add person').first().locator('xpath=..'));
-
-// ---------------------------------------------------------------- PRs
-await page.goto(`${FRONTEND}/app/prs`);
-await page.waitForTimeout(2000);
-// Skip the sort + search bar: honest UI, but it should not be the first thing a visitor
-// sees of the PRs board.
-await shot('app-prs', '.tab-panel', 700, 150);
-
-// ---------------------------------------------------------------- trends
-await page.goto(`${FRONTEND}/app/trends`);
-await page.waitForTimeout(2800);
-
-await shot('app-heatmap', cardWith('Consistency'));
-await shot('app-weekly', cardWith('Workouts per week'));
-
-// The line chart -- pick a recognisable lift rather than whatever sorts first.
-const picker = page.locator('select').last();
-for (const want of ['Barbell Bench Press', 'Barbell Back Squat', 'Barbell Deadlift']) {
-  const options = await picker.locator('option').allTextContents();
-  if (options.some((o) => o.trim() === want)) {
-    await picker.selectOption({ label: want });
-    break;
+  // Dismiss the "create a routine" nudge -- it is a first-run tip, not part of the product
+  // story these images are telling.
+  for (const close of await page.getByRole('button', { name: /dismiss|close/i }).all()) {
+    await close.click().catch(() => {});
   }
-}
-await page.waitForTimeout(2200); // Recharts enter animation
-await shot('app-linechart', cardWith('Exercise progress'), 480);
+  await page.waitForTimeout(400);
+  // Open the exercise from the PICKER, not by first text match. Once a session is live the
+  // exercise name also appears in the "Session exercises" card at the top, and .first() matched
+  // that instead -- leaving the capture on the picker screen rather than the log screen.
+  const benchChip = page.getByRole('button', { name: 'Barbell Bench Press' }).last();
+  if (await benchChip.isVisible().catch(() => false)) {
+    await benchChip.click();
+  } else {
+    await page.getByText('Barbell Bench Press', { exact: true }).last().click().catch(() => {});
+  }
+  await page.waitForTimeout(1800);
+  await shot('app-log', '.tab-panel', 900);
 
-// ---------------------------------------------------------------- offline
-// A genuine offline capture: cut the network, log a real set, and screenshot the outbox
-// banner the app actually shows. This is the one claim on the landing page that would be
-// embarrassing to illustrate with a mockup.
-await page.goto(`${FRONTEND}/app/log`);
-await page.waitForTimeout(1500);
-await ctx.setOffline(true);
+  // The person bar on its own: three names, one device -- the household story in one strip.
+  // Anchored on "+ Add person" and walked up to the row that holds all the pills.
+  await shot('app-people', page.getByText('+ Add person').first().locator('xpath=..'));
 
-const benchAgain = page.getByText('Barbell Bench Press', { exact: true }).first();
-if (await benchAgain.isVisible().catch(() => false)) {
-  await benchAgain.click();
-  await page.waitForTimeout(1200);
-  const logBtn = page.getByRole('button', { name: /^Log set for/ }).first();
-  if (await logBtn.isVisible().catch(() => false)) {
-    await logBtn.click();
+  // ---------------------------------------------------------------- PRs
+  await page.goto(`${FRONTEND}/app/prs`);
+  await page.waitForTimeout(2000);
+  // Skip the sort + search bar: honest UI, but it should not be the first thing a visitor
+  // sees of the PRs board.
+  await shot('app-prs', '.tab-panel', 700, 150);
+
+  // ---------------------------------------------------------------- trends
+  await page.goto(`${FRONTEND}/app/trends`);
+  await page.waitForTimeout(2800);
+
+  await shot('app-heatmap', cardWith('Consistency'));
+  await shot('app-weekly', cardWith('Workouts per week'));
+
+  // The line chart -- pick a recognisable lift rather than whatever sorts first.
+  const picker = page.locator('select').last();
+  for (const want of ['Barbell Bench Press', 'Barbell Back Squat', 'Barbell Deadlift']) {
+    const options = await picker.locator('option').allTextContents();
+    if (options.some((o) => o.trim() === want)) {
+      await picker.selectOption({ label: want });
+      break;
+    }
+  }
+  await page.waitForTimeout(2200); // Recharts enter animation
+  await shot('app-linechart', cardWith('Exercise progress'), 480);
+
+  // ---------------------------------------------------------------- offline
+  // A genuine offline capture: cut the network, log a real set, and screenshot the outbox
+  // banner the app actually shows. This is the one claim on the landing page that would be
+  // embarrassing to illustrate with a mockup.
+  await page.goto(`${FRONTEND}/app/log`);
+  await page.waitForTimeout(1500);
+  await ctx.setOffline(true);
+
+  const benchAgain = page.getByText('Barbell Bench Press', { exact: true }).first();
+  if (await benchAgain.isVisible().catch(() => false)) {
+    await benchAgain.click();
     await page.waitForTimeout(1200);
-    await logBtn.click();
-    await page.waitForTimeout(1800);
+    const logBtn = page.getByRole('button', { name: /^Log set for/ }).first();
+    if (await logBtn.isVisible().catch(() => false)) {
+      await logBtn.click();
+      await page.waitForTimeout(1200);
+      await logBtn.click();
+      await page.waitForTimeout(1800);
+    }
+  }
+  // Deliberately NOT an element crop: the "changes waiting to sync" banner lives in the app
+  // chrome above .tab-panel, and the banner is the whole point of this image.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/app-offline${sfx}.png`, clip: { x: 0, y: 0, width: 1000, height: 560 } });
+  console.log('  captured app-offline' + sfx);
+  await ctx.setOffline(false);
+
+  // End the session this script started. Without it the live session survives into the next run
+  // and changes what the Log tab opens to, which silently turned app-log into a picker
+  // screenshot once already.
+  await page.waitForTimeout(2500); // let the queued sets drain first
+  const endWorkout = page.getByRole('button', { name: /end workout/i }).first();
+  if (await endWorkout.isVisible().catch(() => false)) {
+    await endWorkout.click().catch(() => {});
+    await page.waitForTimeout(800);
+    const confirm = page.getByRole('button', { name: /^end workout$|^end$|confirm/i }).last();
+    await confirm.click().catch(() => {});
+    await page.waitForTimeout(1200);
   }
 }
-// Deliberately NOT an element crop: the "changes waiting to sync" banner lives in the app
-// chrome above .tab-panel, and the banner is the whole point of this image.
-await page.evaluate(() => window.scrollTo(0, 0));
-await page.waitForTimeout(500);
-await page.screenshot({ path: `${OUT}/app-offline${sfx}.png`, clip: { x: 0, y: 0, width: 1000, height: 560 } });
-console.log('  captured app-offline' + sfx);
-await ctx.setOffline(false);
 
-// End the session this script started. Without it the live session survives into the next run
-// and changes what the Log tab opens to, which silently turned app-log into a picker
-// screenshot once already.
-await page.waitForTimeout(2500); // let the queued sets drain first
-const endWorkout = page.getByRole('button', { name: /end workout/i }).first();
-if (await endWorkout.isVisible().catch(() => false)) {
-  await endWorkout.click().catch(() => {});
-  await page.waitForTimeout(800);
-  const confirm = page.getByRole('button', { name: /^end workout$|^end$|confirm/i }).last();
-  await confirm.click().catch(() => {});
-  await page.waitForTimeout(1200);
+// ---------------------------------------------------------------- device-shaped captures
+// The landing page shows these inside CSS device frames, so they must be captured at real
+// device viewports rather than cropped out of a desktop one -- the app's layout genuinely
+// differs at these widths (the person bar only sticks at 2+ people, the tab bar reflows), and
+// a desktop crop squeezed into a tablet bezel looks like exactly what it is.
+async function captureDevice({ name, width, height, scale, route, open, logSets = 0 }) {
+  const dctx = await browser.newContext({
+    viewport: { width, height },
+    deviceScaleFactor: scale,
+    colorScheme: SCHEME,
+    hasTouch: true,
+  });
+  const dp = await dctx.newPage();
+
+  await dp.goto(`${FRONTEND}/login`);
+  await dp.getByPlaceholder('Email').fill(EMAIL);
+  await dp.getByPlaceholder('Password').fill('password123');
+  await dp.getByRole('button', { name: /log in|sign in/i }).click();
+  await dp.waitForURL(/\/app\//, { timeout: 20_000 });
+  await dp.waitForTimeout(3000);
+
+  await dp.goto(`${FRONTEND}/app/${route}`);
+  await dp.waitForTimeout(1800);
+  for (const close of await dp.getByRole('button', { name: /dismiss|close/i }).all()) {
+    await close.click().catch(() => {});
+  }
+  if (open) {
+    const chip = dp.getByRole('button', { name: open }).last();
+    if (await chip.isVisible().catch(() => false)) await chip.click();
+    await dp.waitForTimeout(1800);
+  }
+
+  // A log screen with nothing logged yet leaves the bottom half of a tablet empty, which
+  // reads as an empty app rather than one mid-workout. Logging a few real sets fills the
+  // "This session" list -- and the PR pills on it are the point of the page's headline.
+  for (let i = 0; i < logSets; i++) {
+    const logBtn = dp.getByRole('button', { name: /^Log set for/ }).first();
+    if (!(await logBtn.isVisible().catch(() => false))) break;
+    await logBtn.click();
+    await dp.waitForTimeout(1400);
+  }
+  await dp.waitForTimeout(800);
+
+  // Viewport shot, not fullPage: a device frame shows one screenful.
+  await dp.screenshot({ path: `${OUT}/${name}${sfx}.png` });
+  console.log('  captured', name + sfx, `(${width}x${height} @${scale}x)`);
+  await dctx.close();
 }
+
+// iPad Pro 11" landscape, and iPhone 14 Pro portrait.
+await captureDevice({ name: 'device-ipad', width: 1194, height: 834, scale: 2, route: 'log', open: 'Barbell Bench Press', logSets: 3 });
+await captureDevice({ name: 'device-iphone', width: 393, height: 852, scale: 3, route: 'prs' });
 
 await browser.close();
 console.log('done');
