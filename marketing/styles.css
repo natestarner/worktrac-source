@@ -142,8 +142,26 @@ html {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* Shrinking duration/delay above is NOT enough by itself: a fill-forwards
+     animation this short can land between two rendered frames and never
+     visibly reach its `to` keyframe, leaving the element stuck at its
+     pre-animation state -- opacity:0 for .reveal, plain ink for the hero's
+     accent word. Confirmed live (not theoretical): every .reveal section
+     rendered permanently invisible under reduced motion before this was
+     added. Force the resting state directly instead of trusting the timing
+     trick to get there. */
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .hero__title em {
+    color: var(--color-accent-text) !important;
   }
 }
 
@@ -151,9 +169,9 @@ html {
    Scroll motion — a tasteful fade-and-rise as a section enters the viewport.
    The base rule plays once on load (so nothing is ever stuck invisible on a
    browser without scroll-linked animations); @supports upgrades it to a real
-   scroll-linked reveal. prefers-reduced-motion above already caps every
-   animation-duration to 0.01ms, so this reduces to an instant appearance
-   there for free -- no separate opt-out needed.
+   scroll-linked reveal. prefers-reduced-motion gets an explicit opacity/
+   transform override above, not just a shrunk duration -- see the comment
+   there for why the duration trick alone isn't reliable.
    ========================================================================= */
 
 .reveal {
@@ -506,10 +524,26 @@ img {
 /* One phrase carries the accent color inline -- same emphasis pattern used in
    eyebrows, links and PR highlights elsewhere on the page -- so the headline
    isn't a flat block of ink. Deliberately NOT display:block: that was the old
-   forced second line, and re-adding it would undo the whitespace trim. */
+   forced second line, and re-adding it would undo the whitespace trim.
+
+   Italic for shape contrast against the roman weight around it -- still
+   Barlow, no second typeface introduced. The color starts as plain ink and
+   settles into the accent a beat after the page paints, so the emphasis
+   reads as arriving rather than just being printed that way.
+   prefers-reduced-motion (above) zeroes both animation-duration AND
+   animation-delay sitewide -- duration alone isn't enough here, since a
+   0.01ms transition still sits at the wrong starting color for the full
+   500ms delay otherwise. */
 .hero__title em {
-  font-style: normal;
-  color: var(--color-accent-text);
+  font-style: italic;
+  color: var(--color-text);
+  animation: hero-accent-in 700ms 500ms var(--ease-out) both;
+}
+
+@keyframes hero-accent-in {
+  to {
+    color: var(--color-accent-text);
+  }
 }
 
 .hero__lead {
