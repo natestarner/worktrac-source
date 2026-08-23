@@ -12,10 +12,13 @@ test.describe('marketing landing page', () => {
     await page.goto('/');
 
     // Both halves of the promise: the shared-screen claim and the emotional one. They are the
-    // page's whole positioning, so losing either in an edit should fail here.
+    // page's whole positioning, so losing either in an edit should fail here. The emotional half
+    // moved from a second h1 line into the lead paragraph (2026-08-23) -- the old h1 line
+    // duplicated it rather than adding to it, so it was cut, not relocated as-is; assert each
+    // where it actually lives now.
     const h1 = page.getByRole('heading', { level: 1 });
     await expect(h1).toContainText("whole family's workout");
-    await expect(h1).toContainText('Celebrate your PRs together');
+    await expect(page.locator('.hero__lead')).toContainText('celebrate your PRs together');
     // Two "Start free" CTAs above the fold on desktop (nav + hero); more further down.
     await expect(page.getByRole('link', { name: 'Start free' }).first()).toBeVisible();
     await expect(page).toHaveTitle(/Huddle/);
@@ -83,5 +86,56 @@ test.describe('marketing landing page', () => {
 
     expect(errors).toEqual([]);
     expect(failed).toEqual([]);
+  });
+
+  // Regression test for a real bug (2026-08-23, not theoretical): capping animation-duration to
+  // 0.01ms for prefers-reduced-motion does NOT reliably land a fill-mode:both animation on its
+  // `to` keyframe in Chromium -- every .reveal section rendered permanently at opacity:0, i.e.
+  // the whole page below the hero was blank for anyone with that OS setting on. Fixed with an
+  // explicit resting-state override; this asserts it stays fixed.
+  test('every scroll-reveal section is visible under prefers-reduced-motion', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+
+    const revealed = page.locator('.reveal');
+    const count = await revealed.count();
+    expect(count).toBeGreaterThan(0);
+
+    const opacities = await revealed.evaluateAll((els) => els.map((el) => getComputedStyle(el).opacity));
+    expect(opacities).toEqual(new Array(count).fill('1'));
+
+    // Same failure mode hit the hero's accent word (a color transition, not opacity) --
+    // separately overridden, so covered separately rather than assumed to follow from the above.
+    const accentColor = await page.locator('.hero__title em').evaluate((el) => getComputedStyle(el).color);
+    expect(accentColor).not.toBe('rgb(28, 27, 25)'); // --color-text: never stuck on the pre-animation ink color
+  });
+
+  test('the household clip loads only once scrolled near, and never under reduced motion', async ({ page }) => {
+    const video = page.locator('video.js-lazy-video');
+
+    // Reduced motion: the clip must never be fetched -- the poster frame is the whole experience.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+    const clipRequests: string[] = [];
+    page.on('request', (r) => r.url().includes('app-household.webm') && clipRequests.push(r.url()));
+    await video.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+    expect(clipRequests).toEqual([]);
+    await expect(video).toHaveAttribute('poster', /app-household-poster\.jpg/);
+
+    // Normal motion: nothing fetched before the section is in view, something fetched after.
+    // A fresh goto (not reload) so the scroll position from the reduced-motion check above --
+    // which deliberately scrolled the video into view -- doesn't carry over and pre-empt this.
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto('/');
+    const beforeScroll: string[] = [];
+    page.on('request', (r) => r.url().includes('app-household.webm') && beforeScroll.push(r.url()));
+    await page.waitForTimeout(300);
+    expect(beforeScroll).toEqual([]);
+
+    await video.scrollIntoViewIfNeeded();
+    await expect
+      .poll(async () => video.evaluate((v: HTMLVideoElement) => v.currentSrc), { timeout: 5000 })
+      .toContain('app-household.webm');
   });
 });

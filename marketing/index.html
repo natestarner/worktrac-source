@@ -29,7 +29,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,700&display=swap" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -59,8 +59,8 @@
     <!-- ================= HERO ================= -->
     <section class="hero">
       <div class="hero__inner">
-        <h1 class="hero__title">One screen, the whole family's workout.<em>Celebrate your PRs together.</em></h1>
-        <p class="hero__lead">Separate workout tracking for every person in the house, on one shared device.</p>
+        <h1 class="hero__title">One screen, the <em>whole family's</em> workout.</h1>
+        <p class="hero__lead">Track and celebrate your PRs together.</p>
         <div class="hero__actions">
           <a class="btn btn--primary" href="https://app.huddle.fitness/register">Start free</a>
           <a class="btn btn--secondary" href="#features">See how it works
@@ -75,18 +75,12 @@
       <div class="hero__devices">
         <div class="device device--tablet">
           <div class="device__screen">
-            <picture>
-              <source srcset="/assets/shots/device-ipad-dark.png" media="(prefers-color-scheme: dark)" />
-              <img src="/assets/shots/device-ipad.png" width="1194" height="834" fetchpriority="high" alt="Huddle on an iPad: Nate, Miles and Eli along the top, Barbell Bench Press open, and three sets logged this session, each marked as a personal record." />
-            </picture>
+            <img src="/assets/shots/device-ipad.jpg" width="1400" height="692" fetchpriority="high" alt="Huddle on an iPad: Nate, Beckett and Uriah along the top, Barbell Back Squat open, and three sets logged this session." />
           </div>
         </div>
         <div class="device device--phone">
           <div class="device__screen">
-            <picture>
-              <source srcset="/assets/shots/device-iphone-dark.png" media="(prefers-color-scheme: dark)" />
-              <img src="/assets/shots/device-iphone.png" width="393" height="852" alt="Huddle on an iPhone showing the personal records screen: bench press 209 lb, Arnold press 130.5 lb, back squat 285.8 lb and deadlift 332.5 lb." />
-            </picture>
+            <img src="/assets/shots/device-iphone.jpg" width="800" height="1657" alt="Huddle on an iPhone showing personal records: Rope Ab Curl 161 lb, Bilateral Independent Machine Bicep Curls 49 lb, A90 Pull-up 15 reps and Barbell Back Squat 357.6 lb." />
           </div>
         </div>
       </div>
@@ -95,7 +89,7 @@
     <!-- ================= PILLARS ================= -->
     <section class="section" id="features">
       <h2 class="visually-hidden">What makes Huddle different</h2>
-      <div class="container pillars">
+      <div class="container pillars reveal">
         <div class="pillar">
           <span class="pillar__icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
@@ -122,7 +116,7 @@
 
     <!-- ================= FEATURE: LOG ================= -->
     <section class="section section--tight section--subtle">
-      <div class="container split">
+      <div class="container split reveal">
         <div class="split__text">
           <p class="eyebrow">The log screen</p>
           <h2 class="section__title">Log a set in two taps</h2>
@@ -131,10 +125,7 @@
         </div>
         <div class="split__media">
           <figure class="figure">
-            <picture>
-              <source srcset="/assets/shots/app-log-dark.png" media="(prefers-color-scheme: dark)" />
-              <img src="/assets/shots/app-log.png" width="840" height="473" loading="lazy" alt="Barbell Bench Press in Huddle: last time was 165 lb for 8, 8 and 6 reps; best estimated one-rep max 209 lb; weight and reps steppers set to 165 and 8 above a Log set for Nate button." />
-            </picture>
+            <img src="/assets/shots/app-log.jpg" width="1000" height="1018" loading="lazy" alt="Dumbbell Bench Press in Huddle mid-routine: last time was 90 lb for 8, 8, 8 and 9 reps; weight and reps steppers set to 90 and 8 above a Log set for Nate button; Set 1 already logged at 90 lb x 8." />
           </figure>
         </div>
       </div>
@@ -142,22 +133,22 @@
 
     <!-- ================= FEATURE: HOUSEHOLD ================= -->
     <section class="section section--tight">
-      <div class="container split">
+      <div class="container split reveal">
         <div class="split__media">
-          <div class="figure-stack">
-            <figure class="figure figure--quiet">
-              <picture>
-                <source srcset="/assets/shots/app-people-dark.png" media="(prefers-color-scheme: dark)" />
-                <img src="/assets/shots/app-people.png" width="1000" height="69" loading="lazy" alt="Huddle's person bar: Nate selected, with Miles, Eli and an Add person button beside him." />
-              </picture>
-            </figure>
-            <figure class="figure figure--quiet">
-              <picture>
-                <source srcset="/assets/shots/app-prs-dark.png" media="(prefers-color-scheme: dark)" />
-                <img src="/assets/shots/app-prs.png" width="840" height="364" loading="lazy" alt="The PRs screen: Barbell Deadlift 332.5 lb, Barbell Back Squat 285.8 lb, Arnold Press 130.5 lb and Barbell Bench Press 209 lb, each with the set behind it." />
-              </picture>
-            </figure>
-          </div>
+          <!-- A real screen recording: switching from Nate to Beckett and logging a new
+               PR. Nothing loads until this scrolls near the viewport (lazy-video.js), and
+               visitors who prefer reduced motion get the poster frame only, no video bytes
+               fetched at all. -->
+          <figure class="figure">
+            <video
+              class="js-lazy-video"
+              width="640" height="761"
+              poster="/assets/shots/app-household-poster.jpg"
+              muted loop playsinline preload="none"
+              aria-label="Huddle switching from Nate to Beckett mid-workout, then celebrating a new Barbell Bench Press PR for Beckett with a confetti burst.">
+              <source data-src="/assets/shots/app-household.webm" type="video/webm" />
+            </video>
+          </figure>
         </div>
         <div class="split__text">
           <p class="eyebrow">The household</p>
@@ -170,38 +161,24 @@
 
     <!-- ================= FEATURE: TRENDS ================= -->
     <section class="section section--subtle">
-      <div class="section__head">
+      <div class="section__head reveal">
         <p class="eyebrow">Trends &amp; records</p>
         <h2 class="section__title">Watch it add up, week after week</h2>
         <p class="prose prose--lead">Every set feeds a picture of where each person is heading. Personal records are recomputed from your actual sets, so correcting an old entry corrects the record too.</p>
       </div>
-      <div class="container--narrow figure-stack">
+      <div class="figure-stack figure-stack--trends reveal">
         <figure class="figure">
-          <picture>
-            <source srcset="/assets/shots/app-linechart-dark.png" media="(prefers-color-scheme: dark)" />
-            <img src="/assets/shots/app-linechart.png" width="792" height="480" loading="lazy" alt="Exercise progress for Barbell Bench Press: estimated one-rep max rising from 183.7 to 209 lb between June and August, with personal records marked in green, and the sets behind them listed below." />
-          </picture>
+          <img src="/assets/shots/app-trends-main.jpg" width="900" height="1118" loading="lazy" alt="Exercise progress for Barbell Deadlift: estimated one-rep max rising to 449.7 lb, with personal records marked, and the sets behind them listed below." />
         </figure>
-        <div class="split">
-          <figure class="figure figure--quiet">
-            <picture>
-              <source srcset="/assets/shots/app-heatmap-dark.png" media="(prefers-color-scheme: dark)" />
-              <img src="/assets/shots/app-heatmap.png" width="792" height="217" loading="lazy" alt="A six-month consistency grid showing 45 active days, three workouts most weeks." />
-            </picture>
-          </figure>
-          <figure class="figure figure--quiet">
-            <picture>
-              <source srcset="/assets/shots/app-weekly-dark.png" media="(prefers-color-scheme: dark)" />
-              <img src="/assets/shots/app-weekly.png" width="792" height="227" loading="lazy" alt="A bar chart of workouts per week, steady at three a week from June through August." />
-            </picture>
-          </figure>
-        </div>
+        <figure class="figure figure--quiet">
+          <img src="/assets/shots/app-trends-secondary.jpg" width="900" height="1111" loading="lazy" alt="A streak of 7 weeks, 3 workouts this week, volume up 163% versus last month, a six-month consistency grid, and workouts-per-week and volume-per-week bar charts." />
+        </figure>
       </div>
     </section>
 
     <!-- ================= FEATURE: OFFLINE ================= -->
     <section class="section section--tight">
-      <div class="container split">
+      <div class="container split reveal">
         <div class="split__text">
           <p class="eyebrow">Offline, properly</p>
           <h2 class="section__title">The basement gym test</h2>
@@ -221,13 +198,13 @@
 
     <!-- ================= PRICING ================= -->
     <section class="section section--subtle" id="pricing">
-      <div class="section__head">
+      <div class="section__head reveal">
         <p class="eyebrow">Pricing</p>
-        <h2 class="section__title">The whole family, free</h2>
+        <h2 class="section__title">The whole family</h2>
         <p class="prose prose--lead">Everybody in the house gets their own log, at no cost. Pay only when you want your whole history back — and out.</p>
       </div>
 
-      <div class="container--pricing">
+      <div class="container--pricing reveal">
         <div class="plans">
           <div class="plan">
             <div class="plan__head">
@@ -314,7 +291,7 @@
       <div class="section__head">
         <h2 class="section__title">Questions worth asking</h2>
       </div>
-      <div class="container--narrow faq-grid">
+      <div class="container--narrow faq-grid reveal">
         <div class="faq__item">
           <h3 class="faq__q">Do my kids need their own logins?</h3>
           <p class="prose">No. One login for the household — everyone else is a profile you tap to switch. Their data stays completely separate from yours.</p>
@@ -344,7 +321,7 @@
 
     <!-- ================= FINAL CTA ================= -->
     <section class="section section--tight band-inverse">
-      <div class="cta-final">
+      <div class="cta-final reveal">
         <h2 class="section__title">Get everyone logging tonight</h2>
         <p class="prose">Sign up with an email, confirm the code, add the people you train with. You'll be logging your first set in about two minutes.</p>
         <a class="btn btn--on-dark" href="https://app.huddle.fitness/register">Start free</a>
@@ -368,5 +345,6 @@
   </footer>
 
   <script src="/app-links.js"></script>
+  <script src="/lazy-video.js" defer></script>
 </body>
 </html>
