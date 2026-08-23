@@ -34,6 +34,24 @@ Don't trust "the duration is basically zero, so it'll look instant" without chec
 which uses the same duration-only pattern; that's a separate app-side fix, not covered by this
 rule's `marketing/**` scope, but worth knowing before assuming either one is safe.
 
+## `<video>` needs its own `height: auto` — the base `img` rule doesn't cover it
+
+`styles.css`'s base rule is `img { max-width: 100%; height: auto; }`. `<video>` isn't an `<img>`,
+so that rule never applies to it — and unlike `<img>`, an unstyled `<video>`'s `height` HTML
+attribute applies as a real, literal CSS height (a low-specificity presentational hint) that
+`width: 100%` alone does **not** override. Ship a `<video>` with `width`/`height` attributes
+sized for its native resolution and only a `width: 100%` rule, and the box keeps that literal
+height regardless of how far the width shrinks — barely visible at a wide column (~10% too
+tall, letterboxed by the browser's own `object-fit: contain` default), badly broken at a phone
+width (nearly 2x too tall, most of the card blank). Found on the deployed lower site, 2026-08-24,
+after shipping to `main` with only a desktop-and-mid-width check.
+
+Any `<video>` (or a selector that's meant to style both `img` and `video` together, like
+`.figure`'s) needs an **explicit** `height: auto` alongside `width: 100%` — don't assume parity
+with `<img>`'s styling just because the two look similar in markup. Verify at a genuinely narrow
+width (390px), not just desktop: the distortion scales with how much the width shrinks, so a
+desktop-only check can look "close enough" while a phone-width check is unmistakably broken.
+
 ## Product screenshots: real captures, with two documented manual exceptions
 
 `marketing/assets/shots/` is meant to be fully reproducible via

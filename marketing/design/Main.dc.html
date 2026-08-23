@@ -53,7 +53,7 @@
        so content is never stuck invisible. */
     .reveal { opacity: 0; transform: translateY(28px); animation: revealUp 640ms cubic-bezier(0.2,0,0,1) both; }
     @supports (animation-timeline: view()) {
-      .reveal.motion-on { animation: revealUp linear both; animation-timeline: view(); animation-range: entry 0% cover 42%; }
+      .reveal.motion-on { animation: revealUp linear both; animation-timeline: view(); animation-range: entry 0% entry 35%; }
     }
     .reveal.motion-off { opacity: 1; transform: none; animation: none; }
     @keyframes revealUp { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: translateY(0); } }
@@ -105,7 +105,7 @@
       </div>
       <div class="device device--phone">
         <div class="device__screen">
-          <img src="hero-iphone.jpg" width="620" height="1284" alt="Huddle on an iPhone showing personal records: Rope Ab Curl 161 lb, Bilateral Independent Machine Bicep Curls 49 lb, A90 Pull-up 15 reps and Barbell Back Squat 357.6 lb.">
+          <img src="hero-iphone.jpg" width="620" height="1187" alt="Huddle on an iPhone: Barbell Back Squat open, last time 298 lb for four sets of 6, weight and reps steppers set to 298 and 6 above a Log set for Nate button.">
         </div>
       </div>
     </div>

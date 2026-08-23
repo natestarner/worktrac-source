@@ -172,7 +172,16 @@ html {
    scroll-linked reveal. prefers-reduced-motion gets an explicit opacity/
    transform override above, not just a shrunk duration -- see the comment
    there for why the duration trick alone isn't reliable.
-   ========================================================================= */
+
+   animation-range is "entry" at both ends, not "cover": cover's 100% is the
+   element's entire on-screen lifetime (first pixel visible to last), which
+   scales with the element's own height -- for anything taller than the
+   viewport (several of these sections are) that stretched the fade over a
+   large chunk of normal reading scroll, so content low in the viewport
+   stayed part-transparent and hard to read. "entry" is capped at roughly one
+   viewport-height of scroll regardless of the element's height, so the fade
+   now resolves quickly and consistently no matter how tall the section is.
+   Found on the deployed lower site, 2026-08-24. */
 
 .reveal {
   opacity: 0;
@@ -184,7 +193,7 @@ html {
   .reveal {
     animation: reveal-up linear both;
     animation-timeline: view();
-    animation-range: entry 0% cover 42%;
+    animation-range: entry 0% entry 35%;
   }
 }
 
@@ -754,9 +763,17 @@ img {
   overflow: hidden;
 }
 
+/* height:auto matters for video in a way it doesn't for img: the base `img { height: auto }`
+   rule up top covers images, but video has no such base rule, and its `height` HTML attribute
+   applies as a real (low-specificity) height unless something overrides it. Without this,
+   width:100% shrinks the box's width but the attribute pins height at its literal pixel value
+   regardless -- harmless-looking on desktop (a modest ~10% too tall, letterboxed), badly broken
+   on a narrow phone column (width shrinks much further, height doesn't move: nearly 2x too
+   tall, most of the card empty). Found on the deployed lower site, 2026-08-24. */
 .figure img,
 .figure video {
   width: 100%;
+  height: auto;
   display: block;
 }
 
