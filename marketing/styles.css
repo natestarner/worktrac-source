@@ -527,16 +527,19 @@ img {
    forced second line, and re-adding it would undo the whitespace trim.
 
    Italic for shape contrast against the roman weight around it -- still
-   Barlow, no second typeface introduced. The color starts as plain ink and
-   settles into the accent a beat after the page paints, so the emphasis
-   reads as arriving rather than just being printed that way.
+   Barlow, no second typeface introduced. The color starts on the brighter
+   --color-accent (also used for buttons/dots, ~3.4:1 against the page bg --
+   passes AA-large, and this is a transitional state anyway) and settles into
+   the deeper, text-safe --color-accent-text a beat after the page paints, so
+   the emphasis reads as arriving rather than just being printed that way --
+   orange to orange, not ink to orange.
    prefers-reduced-motion (above) zeroes both animation-duration AND
    animation-delay sitewide -- duration alone isn't enough here, since a
    0.01ms transition still sits at the wrong starting color for the full
    500ms delay otherwise. */
 .hero__title em {
   font-style: italic;
-  color: var(--color-text);
+  color: var(--color-accent);
   animation: hero-accent-in 700ms 500ms var(--ease-out) both;
 }
 
@@ -569,15 +572,22 @@ img {
 /* A tablet with a phone leaning on it, fading out at the bottom so the pair reads
    as rising out of the page instead of stopping at a hard edge. The mask is what
    does that -- an earlier version used a large upward glow and a hard overflow
-   clip, which produced a halo fighting the rounded corners. */
+   clip, which produced a halo fighting the rounded corners.
+
+   device-ipad.jpg is now cropped tight to its real content (no dead space below
+   the "Log set" button), so the fade has to start much later than it used to --
+   58% was tuned against a taller screenshot with blank space under the button;
+   against the tighter crop it washed the button itself out to ~60% opacity.
+   78% keeps everything the visitor can actually read fully solid and confines
+   the fade to the padding-bottom reserve where the phone hangs off. */
 .hero__devices {
   position: relative;
   width: min(820px, 100%);
   margin: clamp(20px, 2.8vw, 40px) auto 0;
   /* Room for the phone to hang below the tablet before the fade takes over. */
   padding-bottom: clamp(20px, 3.5vw, 44px);
-  -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
 }
 
 /* ============================================================================
