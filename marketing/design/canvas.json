@@ -1,6 +1,6 @@
 {
   "artboards": [
-    { "file": "Main.dc.html", "title": "Landing page — desktop", "x": 0, "y": 0, "w": 1440, "h": 5900 },
+    { "file": "Main.dc.html", "title": "Landing page — desktop", "x": 0, "y": 0, "w": 1440, "h": 8600 },
     { "file": "Mobile.dc.html", "title": "Landing page — mobile (dark)", "x": 1560, "y": 0, "w": 390, "h": 3600 },
     { "file": "Pricing.dc.html", "title": "Pricing infographic", "x": 2070, "y": 0, "w": 960, "h": 1400 },
     { "file": "HeroSplit.dc.html", "title": "Hero — Direction A, product-first", "x": 2070, "y": 1560, "w": 1440, "h": 720 },
@@ -12,7 +12,7 @@
       "x": 0,
       "y": -230,
       "w": 620,
-      "text": "Huddle marketing landing page.\n\nBuilt on the app's own design system — same terracotta, same type ramp, same 4px grid and radii — so the site and the product read as one thing. Barlow is added for headlines because the wordmark is already Barlow.\n\nEvery artboard has a dark tweak above it. Desktop is showing light, mobile is showing dark.\n\nNo testimonials or logo walls anywhere: there are no users to quote yet, so the trust row uses facts that are actually true instead."
+      "text": "Huddle marketing landing page.\n\nBuilt on the app's own design system — same terracotta, same type ramp, same 4px grid and radii — so the site and the product read as one thing. Barlow is added for headlines because the wordmark is already Barlow.\n\nMain (desktop) now runs on real product screenshots — retaken from the app, status bars trimmed — so it no longer carries a dark tweak (the shots are light-mode only). It has a Scroll reveal tweak instead (on by default): a tasteful fade-and-rise as each section enters view; browsers without scroll-linked animations fall back to a one-time fade on load. Mobile/Pricing/HeroSplit/HeroStatement are unchanged and still each carry a dark tweak.\n\nNo testimonials or logo walls anywhere: there are no users to quote yet, so the trust row uses facts that are actually true instead."
     },
     {
       "id": "pricing-note",

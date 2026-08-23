@@ -147,6 +147,40 @@ html {
   }
 }
 
+/* ============================================================================
+   Scroll motion — a tasteful fade-and-rise as a section enters the viewport.
+   The base rule plays once on load (so nothing is ever stuck invisible on a
+   browser without scroll-linked animations); @supports upgrades it to a real
+   scroll-linked reveal. prefers-reduced-motion above already caps every
+   animation-duration to 0.01ms, so this reduces to an instant appearance
+   there for free -- no separate opt-out needed.
+   ========================================================================= */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  animation: reveal-up 640ms var(--ease-out) both;
+}
+
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: reveal-up linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 42%;
+  }
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 body {
   margin: 0;
   background: var(--color-bg);
@@ -399,7 +433,7 @@ img {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-5) clamp(20px, 5vw, 72px);
+  padding: var(--space-4) clamp(20px, 5vw, 72px);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -448,7 +482,7 @@ img {
    ========================================================================= */
 
 .hero {
-  padding: clamp(44px, 5.5vw, 84px) clamp(20px, 5vw, 72px) 0;
+  padding: clamp(24px, 3vw, 44px) clamp(20px, 5vw, 72px) 0;
   overflow: hidden;
 }
 
@@ -456,7 +490,7 @@ img {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(16px, 1.8vw, 22px);
+  gap: clamp(12px, 1.4vw, 18px);
   text-align: center;
   max-width: 1000px;
   margin: 0 auto;
@@ -467,15 +501,6 @@ img {
   line-height: 1;
   letter-spacing: -0.035em;
   max-width: 18ch;
-}
-
-/* The second half of the headline, deliberately in the accent: it is the
-   emotional half of the promise and should not read as body copy. */
-.hero__title em {
-  display: block;
-  font-style: normal;
-  color: var(--color-accent-text);
-  margin-top: 0.14em;
 }
 
 .hero__lead {
@@ -505,9 +530,9 @@ img {
 .hero__devices {
   position: relative;
   width: min(820px, 100%);
-  margin: clamp(36px, 4.5vw, 64px) auto 0;
+  margin: clamp(20px, 2.8vw, 40px) auto 0;
   /* Room for the phone to hang below the tablet before the fade takes over. */
-  padding-bottom: clamp(28px, 5vw, 64px);
+  padding-bottom: clamp(20px, 3.5vw, 44px);
   -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
 }
@@ -688,6 +713,14 @@ img {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+/* The trends figures are now full real screenshots (tall, portrait) rather than
+   cropped chart-only elements, so the stack is capped narrower than
+   .container--narrow or it dwarfs the rest of the page. */
+.figure-stack--trends {
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 /* ============================================================================

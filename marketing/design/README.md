@@ -1,11 +1,13 @@
 # Design canvas source
 
-> **Status: superseded by the shipped page.** These artboards captured the first
-> direction and the A/B hero decision. The live page has since moved on —
-> different hero, warm-paper palette with the teal demoted to an accent, and real
-> app screenshots in place of drawn mockups. Read them as the record of how the
-> design was chosen, not as the current design. Re-seed from the shipped page if
-> you want the visual editor to match again.
+> **Status: `Main.dc.html` tracks the shipped page again** (re-seeded from
+> `index.html`/`styles.css` after the hero copy, screenshot and scroll-motion
+> update below). `Mobile.dc.html`, `Pricing.dc.html`, `HeroSplit.dc.html` and
+> `HeroStatement.dc.html` are still superseded — they captured the first
+> direction and the A/B hero decision, and the live page has since moved on.
+> Read those four as the record of how the design was chosen, not as the
+> current design. Re-seed any of them from the shipped page if you want the
+> visual editor to match again.
 
 These `.dc.html` files are the **design** for the marketing site, not the site
 itself. The site that ships is `marketing/index.html` + `marketing/styles.css`.
