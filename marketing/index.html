@@ -59,7 +59,7 @@
     <!-- ================= HERO ================= -->
     <section class="hero">
       <div class="hero__inner">
-        <h1 class="hero__title">One screen, the whole family's workout.</h1>
+        <h1 class="hero__title">One screen, the <em>whole family's</em> workout.</h1>
         <p class="hero__lead">Track and celebrate your PRs together.</p>
         <div class="hero__actions">
           <a class="btn btn--primary" href="https://app.huddle.fitness/register">Start free</a>
@@ -135,8 +135,19 @@
     <section class="section section--tight">
       <div class="container split reveal">
         <div class="split__media">
+          <!-- A real screen recording: switching from Nate to Beckett and logging a new
+               PR. Nothing loads until this scrolls near the viewport (lazy-video.js), and
+               visitors who prefer reduced motion get the poster frame only, no video bytes
+               fetched at all. -->
           <figure class="figure">
-            <img src="/assets/shots/app-household.jpg" width="1000" height="1406" loading="lazy" alt="Huddle's PRs screen with the person bar above it: Nate selected next to Beckett and Uriah, and personal records including Rope Ab Curl 161 lb and Barbell Back Squat 357.6 lb." />
+            <video
+              class="js-lazy-video"
+              width="640" height="901"
+              poster="/assets/shots/app-household-poster.jpg"
+              muted loop playsinline preload="none"
+              aria-label="Huddle switching from Nate to Beckett mid-workout, then celebrating a new Barbell Bench Press PR for Beckett with a confetti burst.">
+              <source data-src="/assets/shots/app-household.webm" type="video/webm" />
+            </video>
           </figure>
         </div>
         <div class="split__text">
@@ -334,5 +345,6 @@
   </footer>
 
   <script src="/app-links.js"></script>
+  <script src="/lazy-video.js" defer></script>
 </body>
 </html>

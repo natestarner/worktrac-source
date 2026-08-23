@@ -503,6 +503,15 @@ img {
   max-width: 18ch;
 }
 
+/* One phrase carries the accent color inline -- same emphasis pattern used in
+   eyebrows, links and PR highlights elsewhere on the page -- so the headline
+   isn't a flat block of ink. Deliberately NOT display:block: that was the old
+   forced second line, and re-adding it would undo the whitespace trim. */
+.hero__title em {
+  font-style: normal;
+  color: var(--color-accent-text);
+}
+
 .hero__lead {
   font-size: var(--text-lead);
   line-height: 1.5;
@@ -701,8 +710,10 @@ img {
   overflow: hidden;
 }
 
-.figure img {
+.figure img,
+.figure video {
   width: 100%;
+  display: block;
 }
 
 .figure--quiet {

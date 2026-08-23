@@ -177,16 +177,26 @@ running — no mockups, no drawn approximations. That is a deliberate constraint
 "screenshot" drifts from the product the moment either changes, and it always looks like
 what it is.
 
-> **`device-ipad.jpg`, `device-iphone.jpg`, `app-log.jpg`, `app-household.jpg`,
-> `app-trends-main.jpg` and `app-trends-secondary.jpg` are currently a manual exception.** They
-> were retaken directly on-device (one from a screen recording) rather than through this
-> pipeline, are JPEG instead of PNG, and — because no dark capture was retaken alongside them —
-> have no `-dark` counterpart, so their `<img>` tags in `index.html` no longer use the
+> **`device-ipad.jpg`, `device-iphone.jpg`, `app-log.jpg`, `app-trends-main.jpg` and
+> `app-trends-secondary.jpg` are currently a manual exception.** They were retaken directly
+> on-device (one from a screen recording) rather than through this pipeline, are JPEG instead of
+> PNG, and — because no dark capture was retaken alongside them — have no `-dark` counterpart, so
+> their `<img>` tags in `index.html` no longer use the
 > `<picture><source media="(prefers-color-scheme: dark)">` pattern; they show the same light
 > screenshot in dark mode. `marketing-shots.mjs` still only knows how to produce the old
-> filenames/crops it's documented for below, so running it will NOT regenerate these six — it
+> filenames/crops it's documented for below, so running it will NOT regenerate these five — it
 > needs updating first (new anchors, JPEG output, dark captures) before this exception can close.
 > `app-offline.png`/`app-offline-dark.png` are unaffected and still follow the scripted flow.
+>
+> **The household section (`app-household.webm` + `app-household-poster.jpg`) is a bigger
+> exception: it's video, not a screenshot**, and nothing in this pipeline produces video.
+> It's a ~14s trimmed, cropped, re-encoded (VP9/WebM, canvas `captureStream` +
+> `MediaRecorder`, no external ffmpeg — the one bundled with Playwright can't decode the
+> source H.264 MP4) clip of the same source recording `app-log.jpg`'s frame came from. It's
+> loaded and played by `marketing/lazy-video.js`: nothing is fetched until the section scrolls
+> near the viewport, and a visitor with `prefers-reduced-motion` never fetches it at all — the
+> `poster` frame stands in as a plain still image for them. There is no dark variant and no
+> regeneration script for this one; redoing it means repeating the manual capture.
 
 Two scripts in `e2e/tools/` do it, and they need this worktree's stack up:
 
