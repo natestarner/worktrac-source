@@ -26,7 +26,12 @@ import java.util.zip.ZipOutputStream;
 public class CsvExportService {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneOffset.UTC);
-    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneOffset.UTC);
+    // Seconds are part of the contract, not decoration: without them two sets logged in the same
+    // minute are indistinguishable on the way back in, so an import cannot tell a genuine second
+    // set from a duplicate of the first. See docs/architecture/import-export.md.
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter SESSION_START_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC);
 
     private final PersonService personService;
     private final WorkoutRowProjection workoutRowProjection;
@@ -50,6 +55,10 @@ public class CsvExportService {
     // formatted in UTC (not the viewer's local time) since this is a server-generated
     // file with no per-request timezone signal -- a deliberate, documented divergence
     // from the prototype's client-local-time formatting.
+    //
+    // Session Start carries the session's own startedAt so a re-import can reconstruct exactly
+    // which sets belonged to which workout. Without it an importer has to fall back to "one
+    // session per day", which silently merges two workouts done on the same date.
     @Transactional(readOnly = true)
     public CsvExport export(Long accountId, Long personId) {
         Person person = personService.requireOwnedPerson(personId, accountId);
@@ -60,15 +69,16 @@ public class CsvExportService {
         // Rest (sec) is blank for the same reason whenever it wasn't computed at all (see
         // WorkoutSet.restSeconds): a session's first set of an exercise, or anything logged
         // through the retroactive "past workout" editor.
-        rows.add(List.of("Date", "Time", "Session Type", "Exercise", "Tags", "Favorite", "Custom Fields",
-                "Exercise Note", "Session Note", "Set #", "Weight", "Unit", "Reps", "Duration (sec)",
-                "Rest (sec)", "Est. 1RM"));
+        rows.add(List.of("Date", "Time", "Session Start", "Session Type", "Exercise", "Tags", "Favorite",
+                "Custom Fields", "Exercise Note", "Session Note", "Set #", "Weight", "Unit", "Reps",
+                "Duration (sec)", "Rest (sec)", "Est. 1RM"));
 
         for (ExportRow row : workoutRowProjection.project(person)) {
             boolean hold = row.isHold();
             rows.add(List.of(
                     DATE_FMT.format(row.createdAt()),
                     TIME_FMT.format(row.createdAt()),
+                    SESSION_START_FMT.format(row.sessionStartedAt()),
                     row.manual() ? "Logged Later" : "Live",
                     row.exerciseName(),
                     formatTags(row),

@@ -219,8 +219,8 @@ class EnduranceExerciseTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
 
         String[] lines = csv.split("\n");
-        assertEquals("Date,Time,Session Type,Exercise,Tags,Favorite,Custom Fields,Exercise Note,Session Note,"
-                + "Set #,Weight,Unit,Reps,Duration (sec),Rest (sec),Est. 1RM", lines[0].trim());
+        assertEquals("Date,Time,Session Start,Session Type,Exercise,Tags,Favorite,Custom Fields,"
+                + "Exercise Note,Session Note,Set #,Weight,Unit,Reps,Duration (sec),Rest (sec),Est. 1RM", lines[0].trim());
 
         String holdRow = null;
         String liftRow = null;
