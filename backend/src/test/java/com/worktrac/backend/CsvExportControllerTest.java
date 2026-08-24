@@ -27,6 +27,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -186,10 +187,16 @@ class CsvExportControllerTest extends AbstractIntegrationTest {
         assertEquals(secondCreatedAt.substring(11, 16), row2[1],
                 "Time must be the SECOND set's own created_at, not identical to the first set's (the bug this fixes)");
 
-        // Rest (sec): blank for the session's first set of this exercise, exactly 90 for the
-        // second (the MutableClock advance above, with no real-wall-clock jitter to absorb).
+        // Rest (sec): blank for the session's first set of this exercise, ~90 for the second.
+        // Not an exact match -- computeRestSeconds diffs an in-memory Instant against the FIRST
+        // set's value as read back from SQL Server's datetime2 column, and that round trip can
+        // land it a hair either side of the exact second boundary (same reasoning as
+        // LiveSessionClientLoggedAtStartedAtTest's tolerance: seen locally as an exact 90,
+        // seen on the CI runner as 89 for the identical 90s MutableClock advance).
         assertEquals("", row1[14]);
-        assertEquals("90", row2[14]);
+        int restSeconds = Integer.parseInt(row2[14]);
+        assertTrue(restSeconds == 89 || restSeconds == 90,
+                "expected ~90s of MutableClock advance to show up (89 or 90 to absorb DB round-trip rounding), was " + restSeconds);
 
         // Both sets went through the live-session endpoint.
         assertEquals("Live", row1[2]);
