@@ -132,6 +132,14 @@
 
 html {
   scroll-behavior: smooth;
+  /* Mobile Safari can boost font-size on narrow, text-heavy columns (its
+     "text autosizing" heuristic) independently of the viewport meta tag. That
+     inflation is applied per-element, not to the whole page uniformly, so it
+     can make one paragraph wrap differently than its siblings even though
+     nothing in this stylesheet targets it. Not reproducible in Chromium, so
+     this is prophylactic rather than a verified fix for any specific element. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -588,6 +596,11 @@ img {
 .hero__trust {
   font-size: var(--text-sm);
   color: var(--color-muted);
+  /* Explicit rather than relying on .hero__cta's inherited text-align: center --
+     this is the one piece of hero copy reported as showing up left-aligned on a
+     real device, not reproduced here in Chromium at any width tested. Making it
+     explicit costs nothing and rules out inheritance as the cause either way. */
+  text-align: center;
 }
 
 /* A tablet with a phone leaning on it, fading out at the bottom so the pair reads
@@ -1047,6 +1060,114 @@ img {
   border-radius: 2px;
   background: var(--color-faint);
   vertical-align: middle;
+}
+
+/* Below this width the table's real column count (520px min-width, tuned for the
+   longest row label) no longer fits without horizontal scrolling. Rather than
+   scale text/padding down to force a fit, the table restacks into one card per
+   feature, each showing "Free" and "Pro" as labelled rows -- the same
+   information, read top-to-bottom instead of side-to-side. Column headers move
+   into generated content on each cell (data-label) rather than disappearing:
+   the <thead> stays in the DOM (visually hidden, not display:none) so the
+   Free/Pro column association a screen reader gets from the table markup on
+   wider screens isn't lost here, it's just carried differently. */
+@media (max-width: 620px) {
+  .compare-wrap {
+    overflow-x: visible;
+  }
+
+  .compare {
+    min-width: 0;
+  }
+
+  .compare,
+  .compare tbody,
+  .compare tr {
+    display: block;
+    width: 100%;
+  }
+
+  .compare thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .compare tbody tr {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .compare tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .compare th,
+  .compare td {
+    display: block;
+    width: auto;
+    padding: 0;
+    border-bottom: 0;
+    text-align: left;
+    background: transparent;
+  }
+
+  /* .compare td:not(:first-child) (above, unscoped -- it also sets the desktop
+     column widths) outranks a plain ".compare td" on specificity regardless of
+     source order, so without this the value column stays pinned at the desktop
+     20%/center rules and every value wraps into a ~60px sliver. Match its
+     selector to win the cascade instead of fighting it with !important. */
+  .compare td:not(:first-child) {
+    width: auto;
+    text-align: left;
+  }
+
+  .compare tbody th {
+    padding-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .compare td {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: 7px 0;
+    font-size: 15px;
+  }
+
+  .compare td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  /* The value itself -- text wrapped in .compare__value, or the bare svg/.dash
+     cells that were already a single child element. margin-left: auto pushes it
+     to the row's right edge without giving it flex-grow, which matters for the
+     icon cells: growing an <svg> flex item stretches its box past its 19x19
+     attributes and distorts the checkmark. Text values keep their natural
+     (shrink-to-fit) width and wrap right-aligned, so a multi-word value like
+     "Your whole family" reads as one tidy block instead of the ragged,
+     inconsistently-indented lines a bare wrapping text node produces as a flex
+     item with no width of its own. */
+  .compare td > * {
+    margin-left: auto;
+    text-align: right;
+  }
+
+  .compare .is-highlight {
+    background: rgba(212, 103, 62, 0.05);
+  }
 }
 
 /* ============================================================================
