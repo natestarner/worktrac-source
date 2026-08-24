@@ -48,6 +48,13 @@ public class WorkoutSession {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    // Set only when a CSV/Excel import created this row (V54/V55). Null for everything logged in
+    // the app, which is the honest answer rather than "unknown": the column exists so an import
+    // can be undone and so imported data stays identifiable. Set once at creation by
+    // csvimport/CsvImportService and never changed afterwards.
+    @Column(name = "import_batch_id")
+    private Long importBatchId;
+
     protected WorkoutSession() {
     }
 
@@ -63,6 +70,14 @@ public class WorkoutSession {
         if (createdAt == null) {
             createdAt = Instant.now();
         }
+    }
+
+    public Long getImportBatchId() {
+        return importBatchId;
+    }
+
+    public void setImportBatchId(Long importBatchId) {
+        this.importBatchId = importBatchId;
     }
 
     public Long getId() {
