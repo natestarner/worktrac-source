@@ -82,22 +82,15 @@
   </div>
 
   <!-- ============ HERO ============ -->
-  <div style="padding: 40px 72px 0; overflow: hidden;">
+  <div style="padding: 40px 72px 56px; overflow: hidden;">
     <div style="display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; max-width: 1000px; margin: 0 auto;">
       <h1 style="font-size: 72px; line-height: 1; letter-spacing: -0.035em; max-width: 18ch; color: var(--ink);">One screen, the <em style="font-style: italic; color: var(--accent-text);">whole family's</em> workout.</h1>
       <p style="font-size: 20px; line-height: 1.5; color: var(--muted); max-width: 48ch;">Track and celebrate your PRs together.</p>
-      <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 4px;">
-        <a href="#start" style="display: inline-flex; align-items: center; justify-content: center; min-height: 54px; padding: 0 30px; border-radius: 12px; background: var(--accent-strong); color: var(--accent-contrast); font-size: 18px; font-weight: 600;">Start free</a>
-        <a href="#features" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 54px; padding: 0 30px; border-radius: 12px; background: transparent; border: 1.5px solid var(--border); color: var(--ink); font-size: 18px; font-weight: 600;">See how it works
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m13 6 6 6-6 6"></path></svg>
-        </a>
-      </div>
-      <p style="font-size: 15px; color: var(--muted);">No credit card. Add your whole family.</p>
     </div>
 
     <!-- Real screenshots of the running app (retaken from the actual product, status
          bars trimmed), in the same pure-CSS device frames the shipped page uses. -->
-    <div style="position: relative; width: 820px; margin: 40px auto 0; padding-bottom: 40px; -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%); mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);">
+    <div style="position: relative; width: 820px; margin: 40px auto 0; padding-bottom: 40px; -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%); mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);">
       <div class="device device--tablet">
         <div class="device__screen">
           <img src="hero-ipad.jpg" width="1200" height="806" alt="Huddle on an iPad: Nate, Beckett and Uriah along the top, Barbell Back Squat open, three sets logged this session.">
@@ -108,6 +101,17 @@
           <img src="hero-iphone.jpg" width="620" height="1187" alt="Huddle on an iPhone: Barbell Back Squat open, last time 298 lb for four sets of 6, weight and reps steppers set to 298 and 6 above a Log set for Nate button.">
         </div>
       </div>
+    </div>
+
+    <!-- CTA sits after the product shot, not before it -- see index.html. -->
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; margin-top: 24px;">
+      <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 12px;">
+        <a href="#start" style="display: inline-flex; align-items: center; justify-content: center; min-height: 54px; padding: 0 30px; border-radius: 12px; background: var(--accent-strong); color: var(--accent-contrast); font-size: 18px; font-weight: 600;">Start free</a>
+        <a href="#features" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 54px; padding: 0 30px; border-radius: 12px; background: transparent; border: 1.5px solid var(--border); color: var(--ink); font-size: 18px; font-weight: 600;">See how it works
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m13 6 6 6-6 6"></path></svg>
+        </a>
+      </div>
+      <p style="font-size: 15px; color: var(--muted);">No credit card. Add your whole family.</p>
     </div>
   </div>
 
