@@ -138,4 +138,29 @@ test.describe('marketing landing page', () => {
       .poll(async () => video.evaluate((v: HTMLVideoElement) => v.currentSrc), { timeout: 5000 })
       .toContain('app-household.webm');
   });
+
+  // Regression test for a real bug (2026-08-24, found on the deployed lower site): the base
+  // `img { height: auto }` rule doesn't cover <video>, so the household clip's `height="761"`
+  // HTML attribute applied as a literal CSS height regardless of how far width:100% shrank the
+  // box -- barely visible on desktop (~10% too tall), badly broken on a phone-width column
+  // (nearly 2x too tall, most of the card empty). Assert the rendered box keeps the video's own
+  // aspect ratio at both a phone and a desktop width, rather than assuming a fix at one width
+  // implies the other.
+  test('the household clip keeps its own aspect ratio at both a phone and a desktop width', async ({ page }) => {
+    for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+      const context = await page.context().browser()!.newContext({ viewport });
+      const p = await context.newPage();
+      await p.goto('/');
+      const video = p.locator('video.js-lazy-video');
+      await video.scrollIntoViewIfNeeded();
+      const ratios = await video.evaluate((v: HTMLVideoElement) => ({
+        rendered: v.clientWidth / v.clientHeight,
+        // videoWidth/videoHeight report the clip's real intrinsic resolution once metadata
+        // loads; falling back to the width/height HTML attributes covers a slow/blocked load.
+        natural: (v.videoWidth || Number(v.getAttribute('width'))) / (v.videoHeight || Number(v.getAttribute('height'))),
+      }));
+      expect(ratios.rendered, `at ${viewport.width}px wide`).toBeCloseTo(ratios.natural, 1);
+      await context.close();
+    }
+  });
 });
