@@ -264,17 +264,64 @@ so there is one parser on the server, one set of round-trip tests, and no backen
 converter is a format adapter, not a second importer. `.xlsx` only — not the old binary `.xls`. A
 `.csv` saved *from* Excel already works: the parser handles a UTF-8 BOM and CRLF for exactly that.
 
-**`read-excel-file` is loaded lazily**, only once someone picks an `.xlsx`, so it lands in its own
-~39 kB chunk and never enters the main bundle or the offline app shell. Import is online-gated
-anyway.
+The workbook is read directly — **`fflate`** (~8 kB, zero dependencies, browser-first) to unzip,
+and the platform's own `DOMParser` for the XML. It is loaded lazily, only once someone picks an
+`.xlsx`, so it lands in its own ~3.8 kB chunk and never enters the main bundle or the offline app
+shell. Import is online-gated anyway.
 
-> ⚠️ **Do not reach for `xlsx` (SheetJS).** The last version published to npm is `0.18.5`, which
-> carries CVE-2023-30533; the fix ships only on the maintainers' own CDN.
+### ⚠️ Why there is no xlsx library here
+
+Both obvious choices are unavailable, and the first one cost a day to rule out.
+
+**`read-excel-file` kills the Vite dev server.** With a dynamic `import('read-excel-file')` anywhere
+in the source graph, the server was taken down partway through every full e2e run — five runs, five
+deaths, at 3, 4, 43, 51 and 74 tests in, always with **no `[[frontend exited rc=...]]` marker**,
+which is the signature of the whole process tree going down rather than Vite exiting on its own.
+The trigger is that package's Node-oriented dependency graph (`unzipper`, `@xmldom/xmldom`), which
+it carries even though its browser entry only needs `fflate`. `optimizeDeps.exclude` does **not**
+fix it, so pre-bundling is not the mechanism.
+
+Measured on one stack:
+
+| | |
+|---|---|
+| `main`'s frontend | 170 passed, server intact |
+| this feature, that one import removed | 176 passed, server intact |
+| this feature, `import('fflate')` in its place | 176 passed, server intact |
+| this feature with `read-excel-file` | died, 5 for 5 |
+
+**`xlsx` (SheetJS) is not the alternative.** The last version published to npm is `0.18.5`, which
+carries CVE-2023-30533; the fix ships only on the maintainers' own CDN.
+
+**The lesson worth keeping is about attribution, not the library.** The absence of the exit marker
+was read as proof that application code could not be responsible — the wrapper had died too, and
+only something external can do that — and `deaths.sh` showed 26 prior occurrences of this death on
+unrelated branches, including `main`. Both statements were true. Neither was evidence. A coherent
+theory that fits every piece of static evidence is exactly what
+`docs/incidents/2026-08-14-cold-boot-offline-spec-measured-liefi.md` warns about; only the control
+run against `main` settled it. **Control-run before attributing a dev-server death to the
+environment.**
 
 **The conversion must stay value-aware.** A naive cell-to-string dump breaks duplicate detection
-silently, because a spreadsheet reformats exactly the columns identity is built from: `2026-08-20`
-comes back as a `Date` displayed `8/20/2026`, `09:14:32` as `9:14:32 AM`. Date cells are re-formatted
-to the canonical UTC strings. The server's date parsing is deliberately tolerant of the common
-spreadsheet renderings too, but that is a second line of defence, not a substitute.
+silently, because a spreadsheet stores exactly the columns identity is built from as **numbers**:
+`2026-08-20` is the serial `46254`, and `09:14:32` is a fraction of a day. Whether a numeric cell is
+a date is knowable *only* from its style's number format, which is why `xl/styles.xml` is read at
+all — built-in formats 14–22 and 45–47, or a custom `formatCode` carrying date tokens outside its
+quoted literals. Serials are converted against 1899-12-30 and formatted in **UTC**, because Excel
+serials carry no timezone and the exporter writes UTC; reading them in the viewer's local zone would
+shift every instant and break dedup against the very file this app produced. The server's tolerant
+date parsing is a second line of defence, not a substitute.
+
+Two more details the format forces, both of which silently corrupt data if missed:
+
+- **Sheets are resolved through `xl/_rels/workbook.xml.rels`**, not by assuming sheet order matches
+  `sheetN.xml` numbering — it does not reliably.
+- **Cells are placed by their column letter**, because rows omit empty cells entirely. Appending in
+  document order instead would shift every column after a blank one position left, landing values
+  under the wrong heading.
 
 A workbook's first sheet carrying the required columns is the one read, and the preview names it.
+
+`workbookToCsv.test.js` builds **real `.xlsx` bytes** with `zipSync` rather than mocking a reader,
+since the format itself is the entire risk here. That caught a five-day error in its own expected
+serial on the first run.
