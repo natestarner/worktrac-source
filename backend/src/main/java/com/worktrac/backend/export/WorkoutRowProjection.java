@@ -47,7 +47,7 @@ public class WorkoutRowProjection {
 
     @Transactional(readOnly = true)
     public List<ExportRow> project(Person person) {
-        List<WorkoutSet> allSets = workoutSetRepository.findByPerson_IdOrderByCreatedAtAsc(person.getId());
+        List<WorkoutSet> allSets = workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId());
         Map<Long, List<WorkoutSet>> setsBySession = new LinkedHashMap<>();
         for (WorkoutSet s : allSets) {
             setsBySession.computeIfAbsent(s.getSession().getId(), k -> new ArrayList<>()).add(s);
@@ -92,6 +92,7 @@ public class WorkoutRowProjection {
                 int setNumber = countsByExercise.merge(exerciseId, 1, Integer::sum);
                 PersonExercise pe = personExerciseByExercise.get(exerciseId);
                 rows.add(new ExportRow(
+                        session.getId(),
                         session.getStartedAt(),
                         session.isManual(),
                         set.getCreatedAt(),

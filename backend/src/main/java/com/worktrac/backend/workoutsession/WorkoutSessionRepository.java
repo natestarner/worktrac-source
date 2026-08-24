@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.Modifying;
 
 public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, Long> {
 
@@ -30,4 +31,13 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
 
     @Query("SELECT COUNT(DISTINCT ws.person.account.id) FROM WorkoutSession ws WHERE ws.startedAt >= :cutoff")
     long countDistinctActiveAccountsSince(@Param("cutoff") Instant cutoff);
+
+    // Only sessions this import CREATED (an appended-to one is never stamped) and only once they
+    // are empty -- a set logged by hand into an imported workout keeps that workout alive. Scoped
+    // by owner as well as batch, for the reason in ImportUndoService.
+    @Modifying
+    @Query("DELETE FROM WorkoutSession s WHERE s.importBatchId = :batchId AND s.person.id = :personId "
+            + "AND NOT EXISTS (SELECT 1 FROM WorkoutSet w WHERE w.session = s)")
+    int deleteEmptyByImportBatchIdForPerson(@Param("batchId") Long batchId, @Param("personId") Long personId);
+
 }

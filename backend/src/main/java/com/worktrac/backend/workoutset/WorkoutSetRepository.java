@@ -6,6 +6,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.Modifying;
 
 public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
 
@@ -25,7 +26,12 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     // WorkoutSetService.logLiveSet.
     Optional<WorkoutSet> findFirstBySession_IdAndExercise_IdOrderByCreatedAtDesc(Long sessionId, Long exerciseId);
 
-    List<WorkoutSet> findByPerson_IdOrderByCreatedAtAsc(Long personId);
+    // Ordered by id as well as created_at, so the order is TOTAL rather than merely mostly-sorted.
+    // Two sets can share a created_at -- the column is a datetime2, but a CSV round trip only
+    // carries seconds, so an imported pair genuinely lands on the same instant -- and without a
+    // tiebreaker SQL Server is free to return those two in either order. That made an export
+    // non-deterministic for exactly the data an import produces.
+    List<WorkoutSet> findByPerson_IdOrderByCreatedAtAscIdAsc(Long personId);
 
     Optional<WorkoutSet> findByIdAndPerson_Id(Long id, Long personId);
 
@@ -42,4 +48,12 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     // Admin-only: [accountId, count] pairs across ALL accounts, consumed only by AdminService.
     @Query("SELECT ws.session.person.account.id, COUNT(ws) FROM WorkoutSet ws GROUP BY ws.session.person.account.id")
     List<Object[]> countGroupedByAccount();
+
+    // Undo, scoped by BOTH the batch and its owner. The person predicate is not redundant defence
+    // in depth for its own sake: "every set stamped with this batch belongs to this person" is an
+    // app-layer invariant the schema does not enforce, and this is a delete. See ImportUndoService.
+    @Modifying
+    @Query("DELETE FROM WorkoutSet s WHERE s.importBatchId = :batchId AND s.person.id = :personId")
+    int deleteByImportBatchIdForPerson(@Param("batchId") Long batchId, @Param("personId") Long personId);
+
 }

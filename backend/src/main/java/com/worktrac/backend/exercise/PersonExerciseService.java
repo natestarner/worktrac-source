@@ -9,12 +9,14 @@ import com.worktrac.backend.workoutset.WorkoutSetRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 // Everything that is "this person's relationship to an exercise": their Log-picker list
 // (favorites UNION logged), favoriting, filing into their own categories, and the custom
@@ -121,6 +123,67 @@ public class PersonExerciseService {
         String trimmed = note == null ? "" : note.trim();
         pe.setNote(trimmed.isEmpty() ? null : trimmed);
         return PersonExerciseDto.of(exercise, pe);
+    }
+
+    // Additive personalization, for the CSV/Excel importer (called with an already-resolved,
+    // already-owned person/exercise).
+    //
+    // ⚠️ This exists BECAUSE setTags above replaces the whole tag set. An import must never remove
+    // a tag, a note or a favorite the person already has: the file may be months old, and the only
+    // thing it can honestly claim is what it does contain, never the absence of anything. So:
+    // tags are unioned, a note is written only where there is none, and favorite is only ever
+    // turned on. Anything already there wins, and the preview reports what was left alone.
+    //
+    // Returns what was actually applied, so the import summary can distinguish "we set your note"
+    // from "you already had one".
+    @Transactional
+    public PersonalizationApplied applyImportedPersonalization(Long accountId, Person person, Exercise exercise,
+                                                                String note, boolean favorite, List<String> tagNames) {
+        PersonExercise pe = getOrCreate(person, exercise);
+
+        boolean noteApplied = false;
+        boolean noteSkipped = false;
+        if (note != null && !note.isBlank()) {
+            if (pe.getNote() == null || pe.getNote().isBlank()) {
+                pe.setNote(note.trim());
+                noteApplied = true;
+            } else {
+                noteSkipped = true;
+            }
+        }
+
+        boolean favoriteApplied = false;
+        if (favorite && !pe.isFavorite()) {
+            pe.setFavorite(true);
+            favoriteApplied = true;
+        }
+
+        int tagsAdded = 0;
+        List<String> newTagNames = new ArrayList<>();
+        if (tagNames != null) {
+            Set<String> existing = pe.getTags().stream()
+                    .map(t -> t.getName().toLowerCase(java.util.Locale.ROOT))
+                    .collect(Collectors.toSet());
+            for (String name : tagNames) {
+                if (name == null || name.isBlank() || existing.contains(name.trim().toLowerCase(java.util.Locale.ROOT))) {
+                    continue;
+                }
+                boolean isNewToAccount = tagService.find(accountId, name.trim()).isEmpty();
+                Tag tag = tagService.getOrCreate(accountId, name.trim());
+                pe.getTags().add(tag);
+                existing.add(tag.getName().toLowerCase(java.util.Locale.ROOT));
+                tagsAdded++;
+                if (isNewToAccount) {
+                    newTagNames.add(tag.getName());
+                }
+            }
+        }
+
+        return new PersonalizationApplied(noteApplied, noteSkipped, favoriteApplied, tagsAdded, newTagNames);
+    }
+
+    public record PersonalizationApplied(boolean noteApplied, boolean noteSkipped, boolean favoriteApplied,
+                                          int tagsAdded, List<String> newTagNames) {
     }
 
     // Auto-favorite hook for when an exercise is added to a routine (called from

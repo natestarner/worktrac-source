@@ -106,7 +106,7 @@ public class StatsService {
     @Transactional(readOnly = true)
     public List<PrRowDto> getPrList(Long accountId, Long personId) {
         Person person = personService.requireOwnedPerson(personId, accountId);
-        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdOrderByCreatedAtAsc(person.getId());
+        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId());
 
         Map<Long, List<WorkoutSet>> byExercise = new LinkedHashMap<>();
         for (WorkoutSet s : all) {
@@ -206,7 +206,7 @@ public class StatsService {
         LocalDate currentWeekStart = today.with(DayOfWeek.MONDAY);
         LocalDate rangeStart = currentWeekStart.minusWeeks(effectiveWeeks - 1L);
 
-        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdOrderByCreatedAtAsc(person.getId());
+        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId());
 
         // Collapse to one entry per session (not per set) so a session with many sets only
         // counts once toward workoutCount, while still summing every set's volume.
