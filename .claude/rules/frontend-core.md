@@ -258,7 +258,7 @@ happily on a key nothing observes, which is exactly the failure mode.
 | Feature | Offline? |
 |---|---|
 | Log/edit/delete a set, session start/end, session note, favorite/unfavorite, create a custom exercise | ✅ durable outbox |
-| Add person, routine CRUD, tags, default unit, rest-timer preference, exercise rename/tags/custom fields, log a past workout, export, delete account, edit person, **send a Contact Us message** | ❌ gated — needs a connection |
+| Add person, routine CRUD, tags, default unit, rest-timer preference, exercise rename/tags/custom fields, log a past workout, export, **import data and undo an import**, delete account, edit person, **send a Contact Us message** | ❌ gated — needs a connection |
 
 - Offline-capable writes go through `useDurableMutation`. Tier-3 writes are gated because some
   (e.g. `createPastSession`) are **not idempotent** and would duplicate on replay.
@@ -276,6 +276,11 @@ happily on a key nothing observes, which is exactly the failure mode.
   or failing outright, never costs the person what they typed. Any future gated write over
   free text needs the same pairing; a gate without a preserved draft *is* the silently-lost
   outcome the contract forbids.
+- **`ImportDataModal` answers that rule differently, and deliberately.** A `File` cannot go in
+  localStorage, and a multi-megabyte CSV would blow the quota `appStatePersistence` and
+  `outboxSequence` depend on. Instead the modal **stays open on failure** with the file, the person
+  and the preview intact — re-picking a file still sitting on the person's disk is not the same
+  loss as re-typing a bug report. If you change that, the gate becomes lossy.
 - `useRequireOnline` (wraps a handler, calm toast) and `OfflineDisabledWrap` (greys out an
   entry-point button) are still the gate itself, and `OfflineDisabledWrap` is still how you
   disable the control up front. Both read `useOnlineStatus` only, so they deliberately do **not**
