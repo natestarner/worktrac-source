@@ -746,6 +746,18 @@ img {
   .pillars {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* .hero's bottom padding and this section's own top padding both apply at
+     this boundary, same as at every section-to-section transition on the
+     page -- but every other transition has a visible eyebrow/heading near the
+     top that visually "catches" the gap. This section's <h2> is
+     visually-hidden, so the same numeric spacing that reads as a normal
+     breathing pause elsewhere reads as a chasm here. Trimmed for this one
+     transition only, via the adjacent-sibling selector rather than a class,
+     so no other section boundary is affected. */
+  .hero + .section {
+    padding-top: clamp(24px, 5vw, 56px);
+  }
 }
 
 .pillar {
@@ -769,6 +781,29 @@ img {
 .pillar__title {
   font-size: var(--text-h3);
   line-height: 1.25;
+}
+
+/* Placed after the base .pillar rule (not inside the .pillars media query
+   above) deliberately: an equal-specificity ".pillar" declared later in the
+   file wins regardless of which one sits inside a matching media query, so a
+   copy of this made the mistake of living above the base rule was silently
+   overridden by it at every width. */
+@media (max-width: 900px) {
+  /* Icon-above-heading reads as a compact card in the 3-column desktop grid;
+     stacked in a single full-width mobile column it reads as an unrelated
+     icon floating over an unrelated headline. Icon and heading share a row
+     instead, with the paragraph spanning full width below both. */
+  .pillar {
+    display: grid;
+    grid-template-columns: 46px 1fr;
+    column-gap: var(--space-4);
+    row-gap: var(--space-2);
+    align-items: center;
+  }
+
+  .pillar .prose {
+    grid-column: 1 / -1;
+  }
 }
 
 /* ============================================================================
