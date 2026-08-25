@@ -141,7 +141,7 @@ public class WorkoutSessionService {
     @Transactional(readOnly = true)
     public List<HistorySessionDto> getHistory(Long accountId, Long personId) {
         Person person = personService.requireOwnedPerson(personId, accountId);
-        List<WorkoutSet> allSets = workoutSetRepository.findByPerson_IdOrderByCreatedAtAsc(person.getId());
+        List<WorkoutSet> allSets = workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId());
 
         Map<Long, List<WorkoutSet>> setsBySession = new LinkedHashMap<>();
         for (WorkoutSet s : allSets) {

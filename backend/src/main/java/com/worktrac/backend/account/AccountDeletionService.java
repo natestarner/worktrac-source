@@ -1,5 +1,6 @@
 package com.worktrac.backend.account;
 
+import com.worktrac.backend.csvimport.ImportBatchCleanup;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.tag.TagRepository;
@@ -8,6 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 // Permanently erases an account and everything under it. Order matters: people must go
 // first so the existing DB cascades (routines/routine_exercises, workout_sessions/
@@ -21,15 +24,18 @@ public class AccountDeletionService {
 
     private static final Logger log = LoggerFactory.getLogger(AccountDeletionService.class);
 
+    private final ImportBatchCleanup importBatchCleanup;
     private final PersonRepository personRepository;
     private final ExerciseRepository exerciseRepository;
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
 
-    public AccountDeletionService(PersonRepository personRepository, ExerciseRepository exerciseRepository,
+    public AccountDeletionService(ImportBatchCleanup importBatchCleanup, PersonRepository personRepository,
+                                   ExerciseRepository exerciseRepository,
                                    TagRepository tagRepository, UserRepository userRepository,
                                    AccountRepository accountRepository) {
+        this.importBatchCleanup = importBatchCleanup;
         this.personRepository = personRepository;
         this.exerciseRepository = exerciseRepository;
         this.tagRepository = tagRepository;
@@ -39,6 +45,10 @@ public class AccountDeletionService {
 
     @Transactional
     public void deleteAccount(Long accountId) {
+        // Before people: import_batches has a non-cascading FK to people, and the workout rows
+        // it stamped are cleared rather than deleted here. ImportBatchCleanup explains why that
+        // is the only order the constraints allow.
+        importBatchCleanup.deleteForAccounts(List.of(accountId));
         personRepository.deleteByAccount_Id(accountId);
         exerciseRepository.deleteByAccount_Id(accountId);
         tagRepository.deleteByAccount_Id(accountId);

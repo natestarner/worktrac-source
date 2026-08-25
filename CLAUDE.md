@@ -163,6 +163,7 @@ touch matching files — you don't need to open them manually. Full narratives a
 | **Degraded-conditions contract (all code)** | `resilience.md` | `docs/architecture/resilience.md` |
 | Backend-wide (person scoping, `Clock`, error handling) | `backend-core.md` | — |
 | Workout data model (`rest_seconds`, idempotency, notes, picker) | `workout-data-model.md` | `docs/architecture/data-model.md` |
+| CSV/Excel import & export (round trip, dedup, undo) | `workout-data-model.md` | `docs/architecture/import-export.md` |
 | Registration, auth & the async email pipeline | `registration-and-email.md` | `docs/architecture/admin-portal.md` |
 | Admin portal | `admin-portal.md` | `docs/architecture/admin-portal.md` |
 | Flyway migrations | `flyway-tsql.md` | — |

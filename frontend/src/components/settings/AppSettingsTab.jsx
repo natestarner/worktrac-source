@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
@@ -7,6 +8,8 @@ import { updateDefaultUnit } from '../../api/account';
 import { setRestTimerPreference } from '../../api/people';
 import { createTag, deleteTag } from '../../api/tags';
 import { downloadAllPeopleZip } from '../../api/export';
+import { listImports, undoImport } from '../../api/dataImport';
+import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import { useOfflinePin } from '../../hooks/useOfflinePin';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { pinOffline, unpinOffline } from '../../lib/offlineMode';
@@ -14,6 +17,8 @@ import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
 import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import ImportDataModal from './ImportDataModal';
+import { invalidateAfterImport } from '../../lib/queryClient';
 
 // Every setting here is household-wide -- nothing is scoped to whichever person happens to be
 // active. Units and the shared tag vocabulary are account-level; the rest timer is a per-person
@@ -34,6 +39,57 @@ export default function AppSettingsTab() {
   const [tagNameError, setTagNameError] = useState(false);
   const [pendingUnit, setPendingUnit] = useState(null);
   const [pendingRestPerson, setPendingRestPerson] = useState(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [imports, setImports] = useState([]);
+
+  const queryClient = useQueryClient();
+
+  // One request per person rather than one for the account, because listing imports is
+  // person-scoped on the server and that is the property worth keeping -- an import belongs to
+  // exactly one person. Household size is a handful, so the fan-out is cheap, and showing every
+  // person at once matches how the rest-timer toggles already work on this screen.
+  const refreshImports = useCallback(async () => {
+    const results = await Promise.all(
+      people.map(async (person) => {
+        try {
+          const batches = await listImports(person.id);
+          return batches.map((batch) => ({ ...batch, personId: person.id, personName: person.name }));
+        } catch {
+          // A settings screen that can't reach the server still has every other setting to show,
+          // so this degrades to "nothing to undo here" rather than to a broken page.
+          return [];
+        }
+      }),
+    );
+    setImports(results.flat().sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  }, [people]);
+
+  useEffect(() => {
+    refreshImports();
+  }, [refreshImports]);
+
+  const guardedUndoImport = run(
+    async (batch) => {
+      await undoImport(batch.personId, batch.id);
+      invalidateAfterImport(queryClient, batch.personId);
+      await refreshImports();
+    },
+    {
+      offlineMessage: 'You need a connection to undo an import.',
+      errorMessage: "Couldn't undo that import.",
+    },
+  );
+
+  // Says what it removes AND what it leaves, rather than letting "undo" imply more than it means.
+  function confirmUndoImport(batch) {
+    const sets = `${batch.setCount} ${batch.setCount === 1 ? 'set' : 'sets'}`;
+    const workouts = `${batch.sessionCount} ${batch.sessionCount === 1 ? 'workout' : 'workouts'}`;
+    openConfirm(
+      `Remove the ${sets} and ${workouts} this import added to ${batch.personName}'s history? `
+        + 'Exercises, tags and notes it created stay.',
+      () => guardedUndoImport(batch),
+    );
+  }
 
   async function handleRestTimerToggle(personId, value) {
     setPendingRestPerson(personId);
@@ -279,10 +335,66 @@ export default function AppSettingsTab() {
             Export all data
           </Button>
         </OfflineDisabledWrap>
+
+        <div style={{ fontSize: 14, color: 'var(--color-muted)', margin: '18px 0 12px' }}>
+          Bring workouts in from a CSV or Excel file &mdash; one this app exported, or a spreadsheet of your
+          own. You choose who it belongs to, and see exactly what will be added before anything is saved.
+        </div>
+        <OfflineDisabledWrap message="Importing needs a connection.">
+          <Button onClick={() => setShowImportModal(true)} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            Import data
+          </Button>
+        </OfflineDisabledWrap>
+
+        {imports.length > 0 && (
+          <div style={{ marginTop: 20, borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', marginBottom: 10 }}>
+              Recent imports
+            </div>
+            {imports.map((batch) => (
+              <div key={batch.id} style={importRowStyle}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {batch.filename || 'Imported file'}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+                    {batch.personName} &middot; {formatDateLabel(toLocalDateStr(batch.createdAt))} &middot;{' '}
+                    {batch.setCount} {batch.setCount === 1 ? 'set' : 'sets'}
+                    {batch.undoneAt ? ' \u00b7 undone' : ''}
+                  </div>
+                </div>
+                {!batch.undoneAt && (
+                  <OfflineDisabledWrap message="Undoing an import needs a connection.">
+                    <Button onClick={() => confirmUndoImport(batch)} variant="ghost" size="sm">
+                      Undo
+                    </Button>
+                  </OfflineDisabledWrap>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {showImportModal && (
+        <ImportDataModal
+          onClose={() => {
+            setShowImportModal(false);
+            refreshImports();
+          }}
+        />
+      )}
     </div>
   );
 }
+
+const importRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  padding: '8px 0',
+};
 
 const backButtonStyle = {
   background: 'none',

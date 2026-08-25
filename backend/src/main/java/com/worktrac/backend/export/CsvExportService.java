@@ -1,17 +1,9 @@
 package com.worktrac.backend.export;
 
-import com.worktrac.backend.exercise.PersonExercise;
-import com.worktrac.backend.exercise.PersonExerciseRepository;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonDto;
 import com.worktrac.backend.person.PersonService;
-import com.worktrac.backend.sessionexercisenote.SessionExerciseNote;
-import com.worktrac.backend.sessionexercisenote.SessionExerciseNoteRepository;
 import com.worktrac.backend.stats.EpleyCalculator;
-import com.worktrac.backend.workoutsession.WorkoutSession;
-import com.worktrac.backend.workoutsession.WorkoutSessionRepository;
-import com.worktrac.backend.workoutset.WorkoutSet;
-import com.worktrac.backend.workoutset.WorkoutSetRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,12 +15,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -38,25 +26,21 @@ import java.util.zip.ZipOutputStream;
 public class CsvExportService {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneOffset.UTC);
-    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneOffset.UTC);
+    // Seconds are part of the contract, not decoration: without them two sets logged in the same
+    // minute are indistinguishable on the way back in, so an import cannot tell a genuine second
+    // set from a duplicate of the first. See docs/architecture/import-export.md.
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter SESSION_START_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC);
 
     private final PersonService personService;
-    private final WorkoutSessionRepository workoutSessionRepository;
-    private final WorkoutSetRepository workoutSetRepository;
-    private final PersonExerciseRepository personExerciseRepository;
-    private final SessionExerciseNoteRepository sessionExerciseNoteRepository;
+    private final WorkoutRowProjection workoutRowProjection;
     private final EpleyCalculator epleyCalculator;
 
-    public CsvExportService(PersonService personService, WorkoutSessionRepository workoutSessionRepository,
-                             WorkoutSetRepository workoutSetRepository,
-                             PersonExerciseRepository personExerciseRepository,
-                             SessionExerciseNoteRepository sessionExerciseNoteRepository,
+    public CsvExportService(PersonService personService, WorkoutRowProjection workoutRowProjection,
                              EpleyCalculator epleyCalculator) {
         this.personService = personService;
-        this.workoutSessionRepository = workoutSessionRepository;
-        this.workoutSetRepository = workoutSetRepository;
-        this.personExerciseRepository = personExerciseRepository;
-        this.sessionExerciseNoteRepository = sessionExerciseNoteRepository;
+        this.workoutRowProjection = workoutRowProjection;
         this.epleyCalculator = epleyCalculator;
     }
 
@@ -71,40 +55,13 @@ public class CsvExportService {
     // formatted in UTC (not the viewer's local time) since this is a server-generated
     // file with no per-request timezone signal -- a deliberate, documented divergence
     // from the prototype's client-local-time formatting.
+    //
+    // Session Start carries the session's own startedAt so a re-import can reconstruct exactly
+    // which sets belonged to which workout. Without it an importer has to fall back to "one
+    // session per day", which silently merges two workouts done on the same date.
     @Transactional(readOnly = true)
     public CsvExport export(Long accountId, Long personId) {
         Person person = personService.requireOwnedPerson(personId, accountId);
-
-        List<WorkoutSet> allSets = workoutSetRepository.findByPerson_IdOrderByCreatedAtAsc(person.getId());
-        Map<Long, List<WorkoutSet>> setsBySession = new LinkedHashMap<>();
-        for (WorkoutSet s : allSets) {
-            setsBySession.computeIfAbsent(s.getSession().getId(), k -> new ArrayList<>()).add(s);
-        }
-
-        List<WorkoutSession> sessionsAscending = workoutSessionRepository.findByPerson_IdOrderByStartedAtDesc(person.getId())
-                .stream()
-                .sorted(Comparator.comparing(WorkoutSession::getStartedAt))
-                .toList();
-
-        // This person's personalization of each exercise -- tags, favorite, custom fields, the
-        // standing note -- keyed by exercise id so every row for that exercise can carry it. All
-        // four are per-(person, exercise), same granularity as Tags always was, so they repeat
-        // across every row that exercise appears in, exactly like Tags already does.
-        Map<Long, PersonExercise> personExerciseByExercise = new HashMap<>();
-        for (PersonExercise pe : personExerciseRepository.findByPerson_Id(person.getId())) {
-            personExerciseByExercise.put(pe.getExercise().getId(), pe);
-        }
-
-        // Session notes are scoped to (session, exercise), so a nested lookup -- mirrors
-        // WorkoutSessionService.getHistory's bulk-then-group-in-memory approach rather than
-        // querying per session/exercise.
-        Map<Long, Map<Long, String>> sessionNoteByExerciseBySession = new HashMap<>();
-        List<Long> sessionIds = sessionsAscending.stream().map(WorkoutSession::getId).toList();
-        for (SessionExerciseNote note : sessionExerciseNoteRepository.findBySession_IdIn(sessionIds)) {
-            sessionNoteByExerciseBySession
-                    .computeIfAbsent(note.getSession().getId(), k -> new HashMap<>())
-                    .put(note.getExercise().getId(), note.getNote());
-        }
 
         List<List<String>> rows = new ArrayList<>();
         // Duration (sec) is blank for a strength set and Est. 1RM is blank for a hold -- an empty
@@ -112,41 +69,30 @@ public class CsvExportService {
         // Rest (sec) is blank for the same reason whenever it wasn't computed at all (see
         // WorkoutSet.restSeconds): a session's first set of an exercise, or anything logged
         // through the retroactive "past workout" editor.
-        rows.add(List.of("Date", "Time", "Session Type", "Exercise", "Tags", "Favorite", "Custom Fields",
-                "Exercise Note", "Session Note", "Set #", "Weight", "Unit", "Reps", "Duration (sec)",
-                "Rest (sec)", "Est. 1RM"));
+        rows.add(List.of("Date", "Time", "Session Start", "Session Type", "Exercise", "Tags", "Favorite",
+                "Custom Fields", "Exercise Note", "Session Note", "Set #", "Weight", "Unit", "Reps",
+                "Duration (sec)", "Rest (sec)", "Est. 1RM"));
 
-        for (WorkoutSession session : sessionsAscending) {
-            List<WorkoutSet> sets = setsBySession.get(session.getId());
-            if (sets == null) {
-                continue;
-            }
-            String sessionType = session.isManual() ? "Logged Later" : "Live";
-            Map<Long, String> sessionNotesByExercise = sessionNoteByExerciseBySession.getOrDefault(session.getId(), Map.of());
-            Map<Long, Integer> countsByExercise = new HashMap<>();
-            for (WorkoutSet set : sets) {
-                Long exerciseId = set.getExercise().getId();
-                int setNumber = countsByExercise.merge(exerciseId, 1, Integer::sum);
-                boolean hold = set.getDurationSeconds() != null;
-                PersonExercise pe = personExerciseByExercise.get(exerciseId);
-                rows.add(List.of(
-                        DATE_FMT.format(set.getCreatedAt()),
-                        TIME_FMT.format(set.getCreatedAt()),
-                        sessionType,
-                        set.getExercise().getName(),
-                        formatTags(pe),
-                        pe != null && pe.isFavorite() ? "Yes" : "No",
-                        formatCustomFields(pe),
-                        pe != null && pe.getNote() != null ? pe.getNote() : "",
-                        sessionNotesByExercise.getOrDefault(exerciseId, ""),
-                        String.valueOf(setNumber),
-                        set.getWeight().toPlainString(),
-                        set.getUnit(),
-                        hold ? "" : String.valueOf(set.getReps()),
-                        hold ? String.valueOf(set.getDurationSeconds()) : "",
-                        set.getRestSeconds() != null ? String.valueOf(set.getRestSeconds()) : "",
-                        hold ? "" : epleyCalculator.estimate1RM(set.getWeight(), set.getReps()).toPlainString()));
-            }
+        for (ExportRow row : workoutRowProjection.project(person)) {
+            boolean hold = row.isHold();
+            rows.add(List.of(
+                    DATE_FMT.format(row.createdAt()),
+                    TIME_FMT.format(row.createdAt()),
+                    SESSION_START_FMT.format(row.sessionStartedAt()),
+                    row.manual() ? "Logged Later" : "Live",
+                    row.exerciseName(),
+                    formatTags(row),
+                    row.favorite() ? "Yes" : "No",
+                    formatCustomFields(row),
+                    row.exerciseNote() != null ? row.exerciseNote() : "",
+                    row.sessionNote() != null ? row.sessionNote() : "",
+                    String.valueOf(row.setNumber()),
+                    row.weight().toPlainString(),
+                    row.unit(),
+                    hold ? "" : String.valueOf(row.reps()),
+                    hold ? String.valueOf(row.durationSeconds()) : "",
+                    row.restSeconds() != null ? String.valueOf(row.restSeconds()) : "",
+                    hold ? "" : epleyCalculator.estimate1RM(row.weight(), row.reps()).toPlainString()));
         }
 
         String csv = rows.stream()
@@ -154,7 +100,7 @@ public class CsvExportService {
                 .reduce((a, b) -> a + "\n" + b)
                 .orElse("");
 
-        String today = DATE_FMT.format(java.time.Instant.now());
+        String today = DATE_FMT.format(Instant.now());
         String filename = person.getName().replaceAll("\\s+", "-") + "-workout-data-" + today + ".csv";
         return new CsvExport(filename, csv);
     }
@@ -192,26 +138,17 @@ public class CsvExportService {
         return new ZipExport(filename, buffer.toByteArray());
     }
 
-    private String formatTags(PersonExercise pe) {
-        if (pe == null || pe.getTags().isEmpty()) {
-            return "";
-        }
-        return pe.getTags().stream()
-                .map(t -> t.getName())
-                .sorted(String.CASE_INSENSITIVE_ORDER)
-                .collect(Collectors.joining("; "));
+    private String formatTags(ExportRow row) {
+        return String.join("; ", row.tags());
     }
 
     // "Name: Value" pairs in the person's own sort order, matching how they appear in the
     // Configure Exercise sheet. A field with no value recorded yet shows just its name.
-    private String formatCustomFields(PersonExercise pe) {
-        if (pe == null || pe.getCustomFields().isEmpty()) {
-            return "";
-        }
-        return pe.getCustomFields().stream()
-                .map(f -> f.getValue() != null && !f.getValue().isBlank()
-                        ? f.getName() + ": " + f.getValue()
-                        : f.getName())
+    private String formatCustomFields(ExportRow row) {
+        return row.customFields().stream()
+                .map(f -> f.value() != null && !f.value().isBlank()
+                        ? f.name() + ": " + f.value()
+                        : f.name())
                 .collect(Collectors.joining("; "));
     }
 

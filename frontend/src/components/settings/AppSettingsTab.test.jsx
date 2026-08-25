@@ -1,4 +1,4 @@
-import { onlineManager } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppSettingsTab from './AppSettingsTab';
@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
 import { __resetOfflineModeForTests, isOfflinePinned } from '../../lib/offlineMode';
+import { listImports } from '../../api/dataImport';
 
 // Every setting here is household-wide -- no dependence on which person is active. The rest timer
 // is per-person but shown for everyone at once, persisted account-side (not localStorage).
@@ -21,16 +22,29 @@ vi.mock('../../api/tags', () => ({
 }));
 vi.mock('../../api/account', () => ({ updateDefaultUnit: vi.fn() }));
 vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
+vi.mock('../../api/dataImport', () => ({ listImports: vi.fn(), undoImport: vi.fn() }));
 vi.mock('../../api/people', () => ({ setRestTimerPreference: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 vi.mock('../../hooks/useTags', () => ({ useTags: vi.fn() }));
+
+// The Data card participates in the query cache (an undo invalidates everything derived from
+// sets), so the component needs a provider. One helper rather than a wrapper repeated per test.
+function renderTab() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <AppSettingsTab />
+    </QueryClientProvider>,
+  );
+}
 
 describe('AppSettingsTab tag management', () => {
   let refetchTags;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    listImports.mockResolvedValue([]);
     onlineManager.setOnline(true);
     createTag.mockResolvedValue({ id: 1, name: 'Legs' });
     refetchTags = vi.fn().mockResolvedValue();
@@ -41,7 +55,7 @@ describe('AppSettingsTab tag management', () => {
   afterEach(() => onlineManager.setOnline(true));
 
   it('shows an error and does not add a tag when the name is blank', async () => {
-    render(<AppSettingsTab />);
+    renderTab();
 
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
 
@@ -53,7 +67,7 @@ describe('AppSettingsTab tag management', () => {
   });
 
   it('creates a tag once a name is provided', async () => {
-    render(<AppSettingsTab />);
+    renderTab();
 
     fireEvent.change(screen.getByPlaceholderText('New tag name'), { target: { value: 'Legs' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -63,7 +77,7 @@ describe('AppSettingsTab tag management', () => {
   });
 
   it('no longer renders an exercises section', () => {
-    render(<AppSettingsTab />);
+    renderTab();
     expect(screen.queryByRole('button', { name: '+ Add exercise' })).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Search all exercises to add')).not.toBeInTheDocument();
   });
@@ -74,6 +88,7 @@ describe('AppSettingsTab rest timer toggle', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    listImports.mockResolvedValue([]);
     onlineManager.setOnline(true);
     refreshPeople = vi.fn().mockResolvedValue();
     setRestTimerPreference.mockResolvedValue({});
@@ -91,7 +106,7 @@ describe('AppSettingsTab rest timer toggle', () => {
   afterEach(() => onlineManager.setOnline(true));
 
   it('renders a toggle for every person and configures each independently', async () => {
-    render(<AppSettingsTab />);
+    renderTab();
 
     // A per-person toggle for each household member, all shown at once.
     expect(screen.getByRole('button', { name: 'Rest timer Off for Nate' })).toBeInTheDocument();
@@ -108,6 +123,7 @@ describe('AppSettingsTab rest timer toggle', () => {
 describe('AppSettingsTab offline mode toggle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listImports.mockResolvedValue([]);
     onlineManager.setOnline(true);
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [], refreshPeople: vi.fn() });
     useUI.mockReturnValue({ openConfirm: vi.fn(), showToast: vi.fn() });
@@ -120,13 +136,13 @@ describe('AppSettingsTab offline mode toggle', () => {
   });
 
   it('is a device-wide setting, not scoped to any person', () => {
-    render(<AppSettingsTab />);
+    renderTab();
     expect(screen.getByRole('button', { name: 'Offline mode Off' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Offline mode On' })).toBeInTheDocument();
   });
 
   it('pins the app offline when switched on, and back on when switched off', () => {
-    render(<AppSettingsTab />);
+    renderTab();
 
     fireEvent.click(screen.getByRole('button', { name: 'Offline mode On' }));
     expect(isOfflinePinned()).toBe(true);
@@ -139,6 +155,7 @@ describe('AppSettingsTab offline mode toggle', () => {
 describe('AppSettingsTab offline gating', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    listImports.mockResolvedValue([]);
     onlineManager.setOnline(false);
     useAuth.mockReturnValue({
       account: { defaultUnit: 'lb' },
@@ -152,7 +169,7 @@ describe('AppSettingsTab offline gating', () => {
   afterEach(() => onlineManager.setOnline(true));
 
   it('disables the unit, rest-timer, and tag controls but leaves the Offline Mode toggle itself enabled', () => {
-    render(<AppSettingsTab />);
+    renderTab();
 
     expect(screen.getByRole('button', { name: 'lb' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Rest timer On for Nate' })).toBeDisabled();
@@ -165,7 +182,7 @@ describe('AppSettingsTab offline gating', () => {
   });
 
   it('does not call the API when clicking a disabled unit button', () => {
-    render(<AppSettingsTab />);
+    renderTab();
 
     fireEvent.click(screen.getByRole('button', { name: 'lb' }));
 

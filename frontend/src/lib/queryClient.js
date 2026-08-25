@@ -157,6 +157,28 @@ function invalidateTrends(client, personId) {
   client.invalidateQueries({ queryKey: queryKeys.exerciseRecordsForPerson(personId) });
 }
 
+// A bulk import (or its undo) rewrites more of a person's history in one go than any other write
+// in the app -- new sets, new workouts, sometimes new exercises and tags -- so everything derived
+// from sets has to be marked stale, not just the keys a single log-set touches.
+//
+// Undo calls this too: it changes exactly the same set of views, in the other direction.
+//
+// The list is the same one reconcileSetChange answers for, plus the two account-shared catalogs an
+// import can add to. If you add a read derived from logged sets, it belongs in both places -- ask
+// "if someone imports a file and opens this view five seconds later, is it right?"
+export function invalidateAfterImport(client, personId) {
+  client.invalidateQueries({ queryKey: queryKeys.history(personId) });
+  client.invalidateQueries({ queryKey: queryKeys.prs(personId) });
+  client.invalidateQueries({ queryKey: queryKeys.personExercises(personId) });
+  client.invalidateQueries({ queryKey: queryKeys.exercises() });
+  client.invalidateQueries({ queryKey: queryKeys.tags() });
+  // Session-scoped keys carry a session id this caller cannot know (an import writes many), so
+  // they're invalidated by prefix rather than by exact key.
+  client.invalidateQueries({ queryKey: ['session-sets'] });
+  client.invalidateQueries({ queryKey: ['exercise-summary', personId] });
+  invalidateTrends(client, personId);
+}
+
 export function registerOfflineMutationDefaults(client, { retry } = {}) {
   client.setMutationDefaults(LOG_SET_MUTATION_KEY, {
     // One shared scope => queued writes replay STRICTLY SERIALLY in enqueue order (hardening #2), so

@@ -31,6 +31,13 @@ How long a person rested before a given set. Rule lives in `WorkoutSetService`
 - **Immutable after insert** — `WorkoutSet.restSeconds` has no setter. `editSet` must never touch
   it; deleting/editing a neighbour never recomputes it.
 - Computed from the injected `Clock`, never `Instant.now()` (see `RestSecondsTest`).
+- **CSV import is a third writer, and it is not an exception to the rule above — it is outside it.**
+  `CsvImportService` sets `restSeconds` straight from the file's `Rest (sec)` column via the
+  `WorkoutSet` constructor. It neither computes nor recomputes anything: it *restores* a recorded
+  fact, exactly as it restores `created_at`. The rule forbids a non-live path *deriving* the value,
+  which would be a fabrication; replaying one the app itself wrote is the opposite.
+  `unit` is imported the same way — from the row, not `account.defaultUnit` — so a `kg` set stays
+  `kg` on an `lb` account. Full reasoning: `docs/architecture/import-export.md`.
 
 ## Duration-tracked exercises (`exercises.tracking_type`, `workout_sets.duration_seconds`, V46-V50)
 
@@ -57,6 +64,12 @@ V46 replaced the never-used `'cardio'` reservation with it.
 `shouldRetryWrite` treats any 4xx outside `{408, 429}` as **terminal**, so every rejection in
 `WorkoutSetService#resolveMeasure` permanently discards a set that may have sat in the durable
 outbox through an entire outage. Only genuinely impossible payloads are refused.
+
+**This reasoning does not transfer to CSV import**, and `CsvImportParser` is deliberately stricter.
+The rule exists because a 400 permanently discards a durably-queued write; a synchronous import
+rejecting a row costs nothing, because the person still has the file and the preview names the line
+it could not read. A per-row error report is strictly better there than lenient coercion. Don't
+"align" the two.
 
 One recoverable shape is **accepted**: a duration exercise receiving `reps > 0` with no
 `durationSeconds` stores the reps as the duration. That is what a client sends when its cached
@@ -105,6 +118,27 @@ Same-name-different-measure is a *different exercise*, and only the name is disa
 rename the existing one to match: it already has sets and PRs against it, and rename is an
 online-only write. `V50__convert_seconds_exercises_to_duration.sql` made the same call.
 
+## The import stamp (`import_batch_id`, V53-V55)
+
+`workout_sets`, `workout_sessions` and `session_exercise_notes` each carry a nullable
+`import_batch_id`. Null means "logged in the app", which is the honest answer rather than
+"unknown". Preserve all of:
+
+- **Only a session the import CREATED is stamped**, never one it appended rows to. Undo deletes
+  stamped-and-now-empty sessions, so stamping an appended-to session would delete a workout that
+  was already there.
+- **Every undo query is scoped by person AND batch.** "Rows with this stamp belong to this person"
+  is an app-layer invariant nothing in the schema enforces, and these are deletes. `ImportUndoTest`
+  forges the invariant on purpose and requires the delete to refuse anyway.
+- **The foreign keys are `NO ACTION` and must stay so.** `workout_sets` already reaches `people` by
+  two routes (directly, and via `workout_sessions ON DELETE CASCADE`); a third cascading path is
+  the multiple-cascade-path configuration SQL Server rejects outright.
+- **That makes the deletion order circular** — sets before batches, batches before people, but
+  deleting people is what deletes the sets. `ImportBatchCleanup` resolves it by clearing the stamps
+  first and deleting batches second. `AccountDeletionService` **and** `TestDataCleanupService` both
+  go through it; the latter runs after every local e2e run, so missing it breaks the whole suite's
+  teardown rather than anything that looks like import.
+
 ## Exercise notes — two independent features, don't conflate
 
 - **Persistent note** (`person_exercise.note`, V35) — standing per-person reminder, every session.
@@ -112,6 +146,18 @@ online-only write. `V50__convert_seconds_exercises_to_duration.sql` made the sam
   `(session_id, exercise_id)`. Two write paths mirror the live/session split above.
 - **Both: a blank/whitespace-only save deletes the row** rather than storing an empty string, so
   "has a note" is testable by row presence alone. Don't special-case empty strings downstream.
+
+## Two tag writers, and they must keep disagreeing
+
+`PersonExerciseService.setTags` **replaces** a person's whole tag set for an exercise — correct for
+the tag editor, where the list on screen is the intended end state.
+`applyImportedPersonalization` **unions** instead, and likewise writes a note only where there is
+none and never clears a favorite.
+
+An import must never remove personalization it didn't put there: the file may be months old, and
+the only thing it can honestly claim is what it *contains*, never the absence of anything. Two
+writers with different semantics on one relation is exactly what gets "simplified" into one — this
+one is deliberate.
 
 ## Picker membership — `PersonExerciseService.listForPerson`
 

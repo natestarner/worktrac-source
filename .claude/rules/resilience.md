@@ -92,8 +92,9 @@ is added here with a reason** — and none of these may be "simplified" away.
 | `LogTab.jsx`'s MutationCache subscriber | Calls a state setter inline, unlike the three hooks | Deliberately left alone; see `offline-internals.md` |
 | DB-down, backend-up | A *pinned* user can't unpin (health 503); an *unpinned* user stays "online" (a 503 is a fulfilled response, so lie-fi never trips) | Both degrade correctly by different routes. Do **not** "fix" one to match the other |
 | `AddEditExerciseModal` | Three save paths: rename → gated, `requireSyncedExercise` → gated, everything else → durable outbox | Routines sends the new exercise's id straight into a non-idempotent `createRoutine`, which cannot replay against a temp id. All three now share **one** gate/error mechanism; only the branch itself is local |
+| `ImportDataModal` | Branches on **file type** (`.xlsx` → lazy converter, else `file.text()`), never on connectivity | Not a connectivity branch at all; listed only so the `await import(...)` beside a gated write doesn't read as one |
 | `SessionSummary` remove | The deletes are durable, but the entry point stays `OfflineDisabledWrap`ped | Enumerating which rows to delete needs a live `listSessionSets` read. The *write* is no longer the limitation — the *read* is |
-| `getRaw` (export) | 60s timeout vs `request`'s 15s | A full-history export is legitimately slow; aborting a working download would be worse. Bounded is the point, not the number |
+| `getRaw` (export) and `IMPORT_TIMEOUT_MS` (import) | 60s timeout vs `request`'s 15s | A full-history export — and an import of one, with thousands of inserts behind it — is legitimately slow; aborting a working transfer would be worse. Bounded is the point, not the number |
 
 ## Prove it, don't argue it
 

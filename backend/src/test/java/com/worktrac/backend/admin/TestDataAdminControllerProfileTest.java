@@ -69,5 +69,7 @@ class TestDataAdminControllerProfileTest {
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.user.PendingRegistrationRepository.class));
         context.registerBean(com.worktrac.backend.contact.ContactMessageRepository.class,
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.contact.ContactMessageRepository.class));
+        context.registerBean(com.worktrac.backend.csvimport.ImportBatchCleanup.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.csvimport.ImportBatchCleanup.class));
     }
 }

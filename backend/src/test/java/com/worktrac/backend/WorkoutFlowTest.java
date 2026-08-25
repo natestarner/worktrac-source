@@ -309,8 +309,8 @@ class WorkoutFlowTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         String[] lines = csvResponse.split("\n");
-        assertEquals("Date,Time,Session Type,Exercise,Tags,Favorite,Custom Fields,Exercise Note,Session Note,"
-                + "Set #,Weight,Unit,Reps,Duration (sec),Rest (sec),Est. 1RM", lines[0]);
+        assertEquals("Date,Time,Session Start,Session Type,Exercise,Tags,Favorite,Custom Fields,"
+                + "Exercise Note,Session Note,Set #,Weight,Unit,Reps,Duration (sec),Rest (sec),Est. 1RM", lines[0]);
         assertEquals(2, lines.length, "header + one set row");
         assertTrue(lines[1].contains("200"));
     }

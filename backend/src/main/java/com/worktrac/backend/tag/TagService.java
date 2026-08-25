@@ -54,6 +54,17 @@ public class TagService {
         tagRepository.delete(tag);
     }
 
+    // Whether this account already has a tag by this name, matched exactly the way getOrCreate
+    // matches. The importer asks so it can report which tags it is about to ADD to the household
+    // vocabulary -- "5 tags applied" and "2 of them are new to your account" are different facts.
+    @Transactional(readOnly = true)
+    public java.util.Optional<Tag> find(Long accountId, String name) {
+        if (name == null || name.trim().isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        return tagRepository.findByAccount_IdAndName(accountId, name.trim());
+    }
+
     // Find an existing tag by name (case-insensitively, per DB collation) or create one. This
     // is what makes free-text tagging create-on-the-fly without spawning "chest"/"Chest" dupes.
     @Transactional

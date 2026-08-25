@@ -2,6 +2,7 @@ package com.worktrac.backend.admin;
 
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.contact.ContactMessageRepository;
+import com.worktrac.backend.csvimport.ImportBatchCleanup;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.registrationaudit.RegistrationEventRepository;
@@ -68,6 +69,7 @@ public class TestDataCleanupService {
     static final String LEGACY_EMAIL_PATTERN = "e2e-%@example.com";
     private static final List<String> EMAIL_PATTERNS = List.of(CURRENT_EMAIL_PATTERN, LEGACY_EMAIL_PATTERN);
 
+    private final ImportBatchCleanup importBatchCleanup;
     private final UserRepository userRepository;
     private final PersonRepository personRepository;
     private final ExerciseRepository exerciseRepository;
@@ -77,12 +79,14 @@ public class TestDataCleanupService {
     private final PendingRegistrationRepository pendingRegistrationRepository;
     private final ContactMessageRepository contactMessageRepository;
 
-    public TestDataCleanupService(UserRepository userRepository, PersonRepository personRepository,
+    public TestDataCleanupService(ImportBatchCleanup importBatchCleanup, UserRepository userRepository,
+                                   PersonRepository personRepository,
                                    ExerciseRepository exerciseRepository, TagRepository tagRepository,
                                    AccountRepository accountRepository,
                                    RegistrationEventRepository registrationEventRepository,
                                    PendingRegistrationRepository pendingRegistrationRepository,
                                    ContactMessageRepository contactMessageRepository) {
+        this.importBatchCleanup = importBatchCleanup;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
         this.exerciseRepository = exerciseRepository;
@@ -114,6 +118,11 @@ public class TestDataCleanupService {
             // ran -- and because cleanup never fails the run, it would have quietly stopped
             // deleting anything at all.
             contactMessageRepository.deleteByAccountIdIn(accountIds);
+            // Also before people, and for the same class of reason as contact_messages above:
+            // import_batches points at people with a non-cascading FK. It clears the stamps off the
+            // workout rows rather than deleting them -- see ImportBatchCleanup for why nothing else
+            // satisfies the constraints.
+            importBatchCleanup.deleteForAccounts(accountIds);
             personRepository.deleteByAccountIdIn(accountIds);
             exerciseRepository.deleteByAccountIdIn(accountIds);
             tagRepository.deleteByAccountIdIn(accountIds);

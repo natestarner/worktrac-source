@@ -15,6 +15,11 @@ const REQUEST_TIMEOUT_MS = 15000;
 // get their own, longer bound rather than either sharing the 15s one or (as before) having none.
 const EXPORT_TIMEOUT_MS = 60000;
 
+// Import is the same shape of work in the other direction -- a whole history in one request, this
+// time thousands of inserts behind it -- so it takes the same bound for the same reason. Bounded is
+// the point, not the number; see the divergence row in .claude/rules/resilience.md.
+const IMPORT_TIMEOUT_MS = 60000;
+
 let token = localStorage.getItem(TOKEN_STORAGE_KEY) || null;
 let onUnauthorized = null;
 
@@ -115,7 +120,9 @@ async function request(path, { method = 'GET', body, isFormData = false, timeout
 
 export const apiClient = {
   get: (path) => request(path),
-  post: (path, body) => request(path, { method: 'POST', body }),
+  // Takes options for the same reason `delete` already does: `request` supports a per-call
+  // timeoutMs, and nothing exported could reach it. Import needs the longer bound below.
+  post: (path, body, options) => request(path, { method: 'POST', body, ...options }),
   put: (path, body) => request(path, { method: 'PUT', body }),
   patch: (path, body) => request(path, { method: 'PATCH', body }),
   delete: (path, body, options) => request(path, { method: 'DELETE', body, ...options }),
@@ -159,4 +166,4 @@ export const apiClient = {
   },
 };
 
-export { ApiError };
+export { ApiError, IMPORT_TIMEOUT_MS };
