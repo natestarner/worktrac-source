@@ -70,6 +70,32 @@ Ensure the change is summarized where it belongs before shipping:
   - Only touch `CLAUDE.md` itself if the change affects a rule that applies to **every** task.
     **Never paste subsystem detail back into it** — it loads on every request, and it reached
     84 KB exactly this way.
+- **Review the end-user handbook** (`frontend/src/components/help/HelpTab.jsx`, reached from the
+  account menu). Everything above documents the change for *us*; this is the one surface that
+  documents it for the **people using the app**, and it is the only one that can be actively
+  wrong rather than merely absent — a user who acts on stale help files a bug that isn't one.
+
+  Ask two questions and answer both explicitly in the PR body:
+
+  1. **Does this change contradict something the handbook states?** `.claude/rules/user-facing-help.md`
+     carries the table of what it asserts and which files invalidate each claim (Epley, the
+     8-hour auto-close, the rest-timer target, what a chart dot means, the offline/online split,
+     the import column contract, duplicate-exercise handling). That rule auto-loads when you
+     touch those files, so if it never fired during this change, the answer here is very likely
+     "no" — say so and move on.
+  2. **Is this a user-visible feature or flow the handbook doesn't mention yet?** New tab, new
+     control, new gesture, a behavior someone would otherwise have to discover. If yes, draft the
+     addition — match the existing voice: second person, plain words, and a "worth knowing" aside
+     for anything that looks obvious but isn't.
+
+  **Suggest, don't silently rewrite.** Propose the edit in your report and apply it in this PR
+  once it's clearly right; if it's a judgement call about wording or scope, surface it and let
+  the user decide. A handbook edit never blocks the deploy — if it's substantial enough to want
+  its own review, say so and ship the code change without it rather than holding the pipeline.
+
+  Two things not to do: don't paste per-metric Trends copy in (it renders from
+  `EXERCISE_METRICS`/`WEEKLY_METRICS` so the in-app `?` and the handbook cannot disagree), and
+  don't rename a section id — chart help panels deep-link to `/app/help#<section>`.
 - Draft the PR body now (what changed + why + how verified) — reuse it in step 9.
 
 ### 2. Add / update tests (including e2e)

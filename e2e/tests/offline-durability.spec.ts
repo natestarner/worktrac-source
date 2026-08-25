@@ -36,6 +36,37 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     await page.context().setOffline(false);
   });
 
+  test('the handbook cold-loads with no network, which is why it is a route and not a marketing link', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Ferreira');
+    await expect(page).toHaveURL(/\/app\/log/);
+
+    await page.reload();
+    await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, { timeout: 20000 });
+
+    // Land ON the handbook, then cold-boot the app there with no network at all. This is the
+    // claim that decided the whole design: huddle.fitness is a separate origin with no service
+    // worker, so a help page hosted there is a dead tap in a basement. As a route it rides the
+    // precached shell like every other tab -- and because it is eagerly imported rather than
+    // lazy, there is no chunk fetch that could fail here either.
+    // A plain relative goto against the config's baseURL. An earlier cut derived this from
+    // page.url() with a regex, which silently no-ops (leaving you on /app/log, where the handbook
+    // heading does not exist) any time the current URL isn't the shape the pattern assumed.
+    await page.goto('/app/help');
+    await expect(page.getByRole('heading', { name: 'Huddle Handbook' })).toBeVisible();
+
+    await page.context().setOffline(true);
+    await keepHardOfflineAcrossReload(page);
+    await page.reload();
+
+    await expect(page).toHaveURL(/\/app\/help/);
+    await expect(page.getByRole('heading', { name: 'Huddle Handbook' })).toBeVisible();
+    // Content from the far end of the page, proving the whole document came from cache rather
+    // than just the shell painting an empty route.
+    await expect(page.getByRole('heading', { name: 'Losing the connection' })).toBeVisible();
+
+    await page.context().setOffline(false);
+  });
+
   test('a queued set survives a reload while still offline, then syncs on reconnect', async ({ page, request }) => {
     await registerHousehold(page, request, 'Morgan');
     await pickExercise(page, 'Barbell Bench Press');

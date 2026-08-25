@@ -113,6 +113,35 @@ describe('UserMenu', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/app/contact', { state: { from: '/' } });
   });
 
+  it('offers Help directly above Contact Us, so self-serve comes before asking a human', () => {
+    useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false });
+    renderMenu();
+    openMenu();
+
+    const items = screen.getAllByRole('menuitem').map((el) => el.textContent);
+    // Adjacency, not just order: the two belong together as an escalation ladder, and a new
+    // item slipped between them would break that reading without failing a looser assertion.
+    expect(items.indexOf('Contact Us') - items.indexOf('Help')).toBe(1);
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Help' }));
+    expect(mockNavigate).toHaveBeenCalledWith('/app/help', { state: { from: '/' } });
+  });
+
+  it('keeps every menu label mutually non-containing, so Playwright substring matching stays unambiguous', () => {
+    useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: true });
+    renderMenu();
+    openMenu();
+
+    // Playwright's getByRole(name:) is a case-insensitive SUBSTRING match, so one label
+    // containing another makes a selector on the shorter one ambiguous across this whole
+    // screen. "Help" was added under that constraint; this is what keeps the next label honest.
+    const labels = screen.getAllByRole('menuitem').map((el) => el.textContent.toLowerCase());
+    for (const a of labels) {
+      const containedBy = labels.filter((b) => b !== a && b.includes(a));
+      expect(containedBy, `"${a}" is a substring of ${JSON.stringify(containedBy)}`).toEqual([]);
+    }
+  });
+
   it('logs out immediately when there are no unsynced changes', () => {
     const logout = vi.fn();
     useAuth.mockReturnValue({ people: [], logout, isAdmin: false });

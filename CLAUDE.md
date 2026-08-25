@@ -172,6 +172,7 @@ touch matching files — you don't need to open them manually. Full narratives a
 | Offline mode & the durable outbox | `offline-internals.md` | `docs/architecture/offline-mode.md` |
 | Log screen (`ExerciseDetail.jsx`) | `log-screen.md` | — |
 | Trends & stats (bodyweight lifts, ranges, chart rules) | `trends.md` | `docs/architecture/trends.md` |
+| End-user handbook (what the in-app help page asserts) | `user-facing-help.md` | — |
 | Backend / frontend / e2e testing | `backend-tests.md`, `frontend-tests.md`, `e2e-tests.md` | `docs/architecture/testing.md` |
 
 Past bugs that were expensive to find — read the relevant one before changing that area:

@@ -1558,3 +1558,358 @@ input[type='search']::-webkit-search-results-decoration {
     opacity: 0;
   }
 }
+
+/* --- The end-user handbook (help/HelpTab.jsx) ------------------------------
+   A long-form reading surface inside an app otherwise made of cards and controls,
+   so it carries real prose typography: a measure cap, a type scale, section rules.
+   It stays inside .tab-panel's 840px cap -- the standalone version of this page had
+   a sticky side rail, which does not fit that width, so the contents list sits
+   inline at the top instead.
+
+   Every colour here is an existing token; this block introduces none. Note the
+   labels use --color-muted rather than --color-faint: faint is furniture only
+   (see .claude/rules/frontend-core.md), and these are read.
+   --------------------------------------------------------------------------- */
+
+.help {
+  padding-bottom: var(--space-10);
+}
+
+.help-title {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  margin: 0 0 var(--space-2);
+}
+
+.help-standfirst {
+  font-size: var(--text-lg);
+  color: var(--color-muted);
+  line-height: 1.5;
+  margin: 0 0 var(--space-6);
+  max-width: 44ch;
+}
+
+/* Four one-line orientations above the fold. auto-fit rather than a fixed column count,
+   so the shape follows the width with no second breakpoint.
+
+   150px, not 180px: at 180 a 390px phone (≈340px of usable width) fits only ONE column,
+   which stacked all four into ~310px of pure preamble above the first section. 150 gets
+   two columns there and halves that, while still giving four across on a tablet. */
+.help-orient {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: var(--space-6);
+}
+
+.help-orient-cell {
+  background: var(--color-surface);
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.help-orient-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: var(--space-1);
+}
+
+/* The contents collapses on a phone and is always open from 880px up -- see HelpTab.jsx's
+   Contents(). The tinted ground lives on the wrapper so it covers the summary too when
+   collapsed, rather than the list snapping a background in and out on toggle. */
+.help-contents-wrap {
+  background: var(--color-subtle-bg);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-8);
+  scroll-margin-top: 132px;
+}
+
+.help-contents-summary {
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-accent-text);
+  cursor: pointer;
+  /* Comfortably past the 44px touch target this app is built around. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+/* From 880px the list is three columns and fits, so the toggle would only add a tap. The
+   `open` attribute is forced true at this width by the media listener in Contents(), so
+   hiding the summary can never strand the list closed. */
+@media (min-width: 880px) {
+  .help-contents-summary {
+    display: none;
+  }
+}
+
+.help-contents {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-5);
+  padding: var(--space-5);
+}
+
+/* Collapsed, the summary alone carries the padding; expanded, the list adds its own below it. */
+.help-contents-wrap[open] .help-contents {
+  padding-top: 0;
+}
+
+@media (min-width: 880px) {
+  .help-contents-wrap[open] .help-contents {
+    padding-top: var(--space-5);
+  }
+}
+
+/* The way back to the contents from the end of a section. Right-aligned so it reads as
+   furniture at the end of the column rather than as the next thing to read. */
+.help-back {
+  display: inline-block;
+  margin-top: var(--space-5);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-accent-text);
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .help-back:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+.help-contents-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: var(--space-2);
+}
+
+.help-contents-link {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-accent-text);
+  text-decoration: none;
+  padding: var(--space-1) 0;
+}
+
+@media (hover: hover) {
+  .help-contents-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+.help-section {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-8);
+  margin-top: var(--space-8);
+  /* Clears the sticky .app-chrome so an anchored section's heading isn't parked
+     underneath the tab bar. Deliberately generous rather than exact: the chrome's
+     height varies with whether the person bar is showing (one person vs. several),
+     and overshooting costs a little whitespace where undershooting hides a heading. */
+  scroll-margin-top: 132px;
+}
+
+.help-h2 {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  margin: 0 0 var(--space-4);
+}
+
+.help-h3 {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  margin: var(--space-6) 0 var(--space-2);
+}
+
+.help p,
+.help li {
+  font-size: var(--text-base);
+  line-height: 1.6;
+  max-width: 68ch;
+}
+
+.help p {
+  margin: 0 0 var(--space-4);
+}
+
+.help ul,
+.help ol {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-5);
+}
+
+.help li {
+  margin-bottom: var(--space-2);
+}
+
+/* (0,2,0) beats `.help p` at (0,1,1), so this needs no !important. */
+.help .help-lede {
+  font-size: var(--text-lg);
+  color: var(--color-muted);
+  margin-bottom: var(--space-5);
+}
+
+.help-steps {
+  list-style: decimal;
+}
+
+/* A control's name, so it reads as a thing on screen rather than as emphasis. */
+.help-term {
+  font-weight: var(--weight-semibold);
+  background: var(--color-subtle-bg);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.help-inline-link {
+  color: var(--color-accent-text);
+  font-weight: var(--weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* The rules that look obvious and aren't. A tinted ground rather than an accent
+   rail: there are a dozen of these, and a coloured bar on each would stripe the
+   whole page. */
+.help-note {
+  background: var(--color-subtle-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  margin: var(--space-5) 0;
+}
+
+.help-note-title {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-text);
+  margin-bottom: var(--space-2);
+}
+
+.help-note p:last-child,
+.help-note ul:last-child {
+  margin-bottom: 0;
+}
+
+.help-formula {
+  font-weight: var(--weight-semibold);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Whether an action survives a dead connection -- the one structural fact this page
+   repeats often enough to earn a recurring form. Semantic colours, not the accent. */
+.help-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.help-chip::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+
+.help-chip-go {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.help-chip-wait {
+  color: var(--color-warning-text);
+  background: var(--color-warning-bg);
+}
+
+.help-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+.help-split-head {
+  margin-bottom: var(--space-2);
+}
+
+.help-split ul {
+  margin: 0;
+}
+
+/* Tables carry the reference material (metric meanings, the import contract, the
+   troubleshooting list). They scroll inside their own box so the tab itself never
+   scrolls sideways on a phone. */
+.help-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: var(--space-5);
+}
+
+.help-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 420px;
+}
+
+.help-table th {
+  text-align: left;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  padding: 0 var(--space-4) var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.help-table td {
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  padding: var(--space-3) var(--space-4) var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.help-table td:first-child {
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.help-table tr:last-child td {
+  border-bottom: 0;
+}

@@ -31,6 +31,11 @@ import TrendsTab from './components/trends/TrendsTab';
 import AppSettingsTab from './components/settings/AppSettingsTab';
 import ProfileTab from './components/profile/ProfileTab';
 import ContactTab from './components/contact/ContactTab';
+// Eagerly imported like every other route. React.lazy would trim ~6KB gzipped and add the app's
+// only Suspense boundary plus a second route-loading mechanism -- and in an app whose whole point
+// is working with no signal, a route that has to fetch a chunk is a worse failure shape than one
+// that doesn't. See the header comment in HelpTab.jsx.
+import HelpTab from './components/help/HelpTab';
 import AdminShell from './routes/admin/AdminShell';
 import AdminOverview from './routes/admin/AdminOverview';
 import AdminAccounts from './routes/admin/AdminAccounts';
@@ -105,6 +110,7 @@ export default function App() {
                 <Route path="trends" element={<TrendsTab />} />
                 <Route path="settings" element={<AppSettingsTab />} />
                 <Route path="profile" element={<ProfileTab />} />
+                <Route path="help" element={<HelpTab />} />
                 <Route path="contact" element={<ContactTab />} />
               </Route>
             </Route>

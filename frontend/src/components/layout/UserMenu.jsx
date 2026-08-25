@@ -133,10 +133,14 @@ export default function UserMenu({ booting = false }) {
         >
           <MenuItem label="Profile" onClick={() => go('/app/profile')} />
           <MenuItem label="App Settings" onClick={() => go('/app/settings')} />
-          {/* "Contact Us" deliberately shares no substring with Profile / App Settings /
-              Admin Portal / Logout / Log out anyway / Cancel -- Playwright matches accessible
-              names as a case-insensitive substring, so an overlapping label here breaks specs
-              elsewhere on this screen. */}
+          {/* Help sits directly above Contact Us so the menu reads as an escalation ladder:
+              answer it yourself, then ask a human. Both labels deliberately share no substring
+              with Profile / App Settings / Admin Portal / Logout / Log out anyway / Cancel --
+              Playwright matches accessible names as a case-insensitive substring, so an
+              overlapping label here breaks specs elsewhere on this screen. "Help" is also
+              checked against the Trends "?" buttons, whose names are full sentences
+              ("What the consistency grid shows") and contain no "help". */}
+          <MenuItem label="Help" onClick={() => go('/app/help')} />
           <MenuItem label="Contact Us" onClick={() => go('/app/contact')} />
           {isAdmin && (
             <>
