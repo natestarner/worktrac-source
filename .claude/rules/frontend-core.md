@@ -326,6 +326,40 @@ session-independent cache (`history`), or read it straight from the mutation's o
 `useMutationState` (filtered by `mutationKey` + the relevant ids, excluding `status === 'success'`
 and definitive-4xx failures). Cache invalidation alone is a no-op while paused offline.
 
+## Three error boundaries, and the outermost one must stay outermost
+
+`App.jsx` renders **two**, `AppShell` a third, and their nesting is the whole point:
+
+| Boundary | Wraps | Catches |
+|---|---|---|
+| **Boot** (`App.jsx`, outermost) | `PersistQueryClientProvider` and everything under it | A throw while the providers restore persisted state |
+| Route (`App.jsx`, inside the providers) | `<Routes>` | A throw outside any tab — the shell, an unauthenticated route |
+| Tab (`AppShell.jsx`) | The tab panel, with `resetKey={pathname}` | A throw in one tab, keeping navigation alive |
+
+The boot boundary exists because the other two sit **inside** `AuthProvider` /
+`AppStateProvider` / `UIProvider`, so a throw during hydration had nothing above it and blanked
+the screen — the one outcome `resilience.md` forbids outright, and the exact shape axis D
+produces (a slice predating a schema change, a cache entry that survived one, an identity
+snapshot from an older build). It presents as **"the app paints, then goes white"**: the shell
+renders, hydration throws a beat later, React unmounts everything.
+
+- **Don't move it inside the providers, and don't merge it with the route boundary.** Those are
+  the same position, and it is the position that failed.
+- **It must never depend on what it protects.** `ErrorBoundary` is a class component with no
+  hooks or context, and its fallback's only child (`Button` → `Spinner`) imports no context — so
+  it still renders when every provider below has thrown. A fallback that read `useAuth()` would
+  throw inside the boundary and white-screen anyway.
+- **No `resetKey` on this one**, unlike the tab boundary's. It would need `useLocation()` in
+  `App`, re-rendering the entire provider tree on every navigation to reset an error that isn't
+  route-scoped.
+- The diagnostic half matters as much as the screen: `componentDidCatch` stashes the error via
+  `lib/lastClientError.js`, so **after recovering, Contact Us offers it**. A boot throw previously
+  reached us in no form whatsoever, which is why the first real occurrence could only be
+  described as "it went white."
+
+`App.bootBoundary.test.jsx` pins it by mocking `AuthProvider` to throw. Verified non-vacuous:
+without the boundary all three of its cases fail with the raw error propagating out of `render`.
+
 ## Boot chrome renders for real, but must not be interactive
 
 `ProtectedRoute` shows `AppShellSkeleton` until auth resolves *and* the persisted state rehydrates,
