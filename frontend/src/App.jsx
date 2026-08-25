@@ -69,6 +69,29 @@ export default function App() {
   }, []);
 
   return (
+    // BOOT boundary -- outermost, above the providers. The other two boundaries (the one around
+    // <Routes> below, and AppShell's around the tab panel) both sit INSIDE AuthProvider /
+    // AppStateProvider / UIProvider, so a throw while any of those restores persisted state was
+    // uncontained and blanked the screen. That is the one outcome .claude/rules/resilience.md
+    // forbids outright, and axis D (state restored from an earlier world) is exactly where this
+    // class of throw comes from: a slice predating a schema change, a cache entry that survived
+    // one, an identity snapshot from an older build.
+    //
+    // It presents as "the app paints, then goes white" -- the shell renders, hydration throws a
+    // beat later, and React unmounts the whole tree with nothing above it to catch.
+    //
+    // Safe to wrap everything because the fallback depends on NOTHING it is protecting: it is a
+    // class component with no hooks or context, and its only child component (Button -> Spinner)
+    // imports no context either. So it still renders when every provider below has thrown.
+    //
+    // Deliberately NO `resetKey` here, unlike AppShell's. resetKey would need useLocation() in
+    // this component, which re-renders the entire provider tree on every navigation -- a real cost
+    // paid on every route change to reset an error that is not route-scoped in the first place.
+    //
+    // The diagnostic payoff matters as much as the screen: componentDidCatch stashes the error via
+    // lib/lastClientError.js, so after recovering, Contact Us offers it in "What gets sent". A boot
+    // throw previously reached us in no form whatsoever.
+    <ErrorBoundary title="Huddle couldn’t finish starting up">
     <PersistQueryClientProvider
       client={queryClient}
       persistOptions={persistOptions}
@@ -131,5 +154,6 @@ export default function App() {
         </AppStateProvider>
       </AuthProvider>
     </PersistQueryClientProvider>
+    </ErrorBoundary>
   );
 }
