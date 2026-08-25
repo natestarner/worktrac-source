@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Spinner from './Spinner';
 
 // The minimum time to keep showing the spinner once triggered, even if the underlying
@@ -36,6 +36,16 @@ export default function Button({
   ...rest
 }) {
   const [pending, setPending] = useState(false);
+  // The MIN_PENDING_MS timer below outlives the click that started it by design, so it can also
+  // outlive the COMPONENT -- tap a button whose action resolves quickly, navigate away inside the
+  // remaining ~400ms, and it fires into a tree that is gone. React itself makes that a harmless
+  // no-op, which is why it went unnoticed; what is not harmless is a timer firing after the whole
+  // environment is torn down, where React's scheduler reaches for `window` and throws
+  // `ReferenceError: window is not defined`. That surfaced as an intermittently red frontend-ci --
+  // all 978 tests passing, one unhandled error, exit 1 -- attributed to whichever test file
+  // happened to be running when the stray timer landed.
+  const pendingTimerRef = useRef(null);
+  useEffect(() => () => clearTimeout(pendingTimerRef.current), []);
 
   const handleClick = useCallback(
     (event) => {
@@ -46,7 +56,7 @@ export default function Button({
         const startedAt = Date.now();
         const stopPending = () => {
           const remaining = MIN_PENDING_MS - (Date.now() - startedAt);
-          if (remaining > 0) setTimeout(() => setPending(false), remaining);
+          if (remaining > 0) pendingTimerRef.current = setTimeout(() => setPending(false), remaining);
           else setPending(false);
         };
         // Swallow a rejection here -- callers (e.g. a mutation's onError) are responsible for
