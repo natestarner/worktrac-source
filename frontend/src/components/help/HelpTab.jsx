@@ -775,6 +775,10 @@ export default function HelpTab() {
               'Forgotten password',
               '“Forgot password” on the login screen emails you a reset code.',
             ],
+            [
+              'The app shows an error instead of loading',
+              'Tap “Try again”. If it comes back, log out and in again — and then send it from Contact Us, which attaches what went wrong automatically. Nothing you logged is lost either way; it is saved on the device.',
+            ],
           ]}
         />
 
