@@ -53,6 +53,10 @@
   --shadow-4: 0 24px 48px rgba(28, 27, 25, 0.2);
   --elevation-hairline: none;
 
+  /* --- Marketing-only elevation (not mirrored -- the app has no product screenshots
+     floating over its own background) --- */
+  --contact-shadow: rgba(20, 19, 15, 0.45);
+
   /* --- Space (mirrored, 4px grid) ---------------------------------- */
   --space-1: 4px;
   --space-2: 8px;
@@ -117,6 +121,11 @@
     --shadow-3: 0 8px 24px rgba(0, 0, 0, 0.6);
     --shadow-4: 0 24px 48px rgba(0, 0, 0, 0.7);
     --elevation-hairline: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+    /* Pure black rather than the light-mode warm tone, and stronger -- same reasoning as
+       --shadow-4's own light->dark jump (0.2 -> 0.7 opacity): --color-bg is much darker here,
+       so the shadow needs more contrast just to register against it at all. */
+    --contact-shadow: rgba(0, 0, 0, 0.65);
   }
 }
 
@@ -603,25 +612,37 @@ img {
   text-align: center;
 }
 
-/* A tablet with a phone leaning on it, fading out at the bottom so the pair reads
-   as rising out of the page instead of stopping at a hard edge. The mask is what
-   does that -- an earlier version used a large upward glow and a hard overflow
-   clip, which produced a halo fighting the rounded corners.
-
-   device-ipad.jpg is now cropped tight to its real content (no dead space below
-   the "Log set" button), so the fade has to start much later than it used to --
-   58% was tuned against a taller screenshot with blank space under the button;
-   against the tighter crop it washed the button itself out to ~60% opacity.
-   78% keeps everything the visitor can actually read fully solid and confines
-   the fade to the padding-bottom reserve where the phone hangs off. */
+/* A tablet with a phone leaning on it, grounded by an ordinary drop shadow rather than
+   fading into the page. An earlier version faded the bottom out with a CSS mask, but a mask
+   clips everything painted for the element, shadow included -- it was quietly swallowing
+   each .device's own box-shadow (below) along with the pixels, so the pair read as
+   dissolving rather than sitting above the page. device-ipad.jpg is cropped tight to its
+   real content now anyway (no dead space below the "Log set" button), so there's nothing
+   left worth fading past. */
 .hero__devices {
   position: relative;
+  z-index: 0; /* contains the ::after contact shadow's negative z-index to this element */
   width: min(820px, 100%);
   margin: clamp(20px, 2.8vw, 40px) auto 0;
-  /* Room for the phone to hang below the tablet before the fade takes over. */
+  /* Room for the phone to hang below the tablet without crowding the CTA under it. */
   padding-bottom: clamp(20px, 3.5vw, 44px);
-  -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+}
+
+/* A dedicated contact shadow under the pair, on top of each .device's own --shadow-4 below.
+   --shadow-4 alone reads fine up close but washes out to nearly nothing at full hero width --
+   diffuse ambient shadows do that, they're subtle by design. This is a second, tighter, darker
+   shadow concentrated right under the devices specifically, which is what actually reads as
+   "resting on the page" at a glance instead of on close inspection. */
+.hero__devices::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 8%;
+  right: 8%;
+  bottom: 2px;
+  height: clamp(26px, 4vw, 50px);
+  background: radial-gradient(ellipse at center, var(--contact-shadow), transparent 72%);
+  filter: blur(10px);
 }
 
 /* ============================================================================
@@ -630,7 +651,14 @@ img {
 
 .device {
   background: linear-gradient(160deg, #33302b, #14130f);
-  box-shadow: var(--shadow-4), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* --shadow-4 is what grounds the hero pair now that .hero__devices no longer masks it
+     away -- the same token the plan cards and compare table use, so the page's sense of
+     "this is floating above the surface" reads consistently everywhere it appears. In dark
+     mode a shadow alone doesn't do it: it's a near-black bezel cast onto a near-black page
+     (--color-bg), so the shadow all but disappears exactly where the fade used to hide that
+     same low contrast. The outer ring reuses the inset rim's own white tone to trace the
+     bezel's edge regardless of how little the shadow shows against the page behind it. */
+  box-shadow: var(--shadow-4), 0 0 0 1px rgba(255, 255, 255, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .device__screen {
@@ -819,7 +847,14 @@ img {
   border-radius: var(--radius-xl);
   border: 1px solid var(--color-border);
   background: var(--color-surface);
-  box-shadow: var(--shadow-4), var(--elevation-hairline);
+  /* The same contact shadow the hero's device pair uses (--contact-shadow), layered under
+     --shadow-4's own softer, more diffuse spread -- shadow-4 alone reads fine up close but
+     washes out at a glance, same issue the hero had. A pseudo-element ellipse (the hero's
+     approach) can't work here: it would need to sit partly outside this box, and overflow:
+     hidden below (required to clip the screenshot to these rounded corners) would cut it off.
+     A second box-shadow layer isn't subject to that -- an element's own shadow is decoration
+     on its border-box, not content, so its own overflow never clips it. */
+  box-shadow: 0 18px 30px var(--contact-shadow), var(--shadow-4), var(--elevation-hairline);
   overflow: hidden;
 }
 
@@ -838,7 +873,7 @@ img {
 }
 
 .figure--quiet {
-  box-shadow: var(--shadow-3), var(--elevation-hairline);
+  box-shadow: 0 12px 20px var(--contact-shadow), var(--shadow-3), var(--elevation-hairline);
 }
 
 .figure-stack {

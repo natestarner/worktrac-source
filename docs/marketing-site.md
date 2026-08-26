@@ -177,26 +177,43 @@ running — no mockups, no drawn approximations. That is a deliberate constraint
 "screenshot" drifts from the product the moment either changes, and it always looks like
 what it is.
 
-> **`device-ipad.jpg`, `device-iphone.jpg`, `app-log.jpg`, `app-trends-main.jpg` and
-> `app-trends-secondary.jpg` are currently a manual exception.** They were retaken directly
+> **`device-iphone.jpg` and `app-log.jpg` are a manual exception.** They were retaken directly
 > on-device (one from a screen recording) rather than through this pipeline, are JPEG instead of
 > PNG, and — because no dark capture was retaken alongside them — have no `-dark` counterpart, so
-> their `<img>` tags in `index.html` no longer use the
+> their `<img>` tags in `index.html` don't use the
 > `<picture><source media="(prefers-color-scheme: dark)">` pattern; they show the same light
 > screenshot in dark mode. `marketing-shots.mjs` still only knows how to produce the old
-> filenames/crops it's documented for below, so running it will NOT regenerate these five — it
+> filenames/crops it's documented for below, so running it will NOT regenerate these two — it
 > needs updating first (new anchors, JPEG output, dark captures) before this exception can close.
 > `app-offline.png`/`app-offline-dark.png` are unaffected and still follow the scripted flow.
 >
+> **`device-ipad.jpg`, `app-trends-main.jpg` and `app-trends-secondary.jpg` were re-sourced
+> 2026-08-26 from a fresh batch of real on-device iPad captures** (not the scripted pipeline
+> either, but a different manual source than the first three). `app-trends-main.jpg`/
+> `-secondary.jpg` are still content-tight crops, same convention as before, just higher
+> fidelity. `device-ipad.jpg` is different in kind, not just quality: it used to be a
+> content-tight crop too, but that made sense only as a plain screenshot — wrapped in the hero's
+> `.device` CSS bezel, a content-tight crop's aspect ratio *is* the apparent device shape, and
+> tight-cropped it was nowhere near a real iPad's (~2:1 rather than ~1.4:1). It's now the real
+> device's full screenshot, status bar included, at its native ~1.44:1 aspect ratio, cropped only
+> for file size. **Any future device-framed screenshot (as opposed to a plain `.figure` card)
+> needs the same treatment** — see `.claude/rules/marketing.md`.
+>
 > **The household section (`app-household.webm` + `app-household-poster.jpg`) is a bigger
-> exception: it's video, not a screenshot**, and nothing in this pipeline produces video.
-> It's a ~14s trimmed, cropped, re-encoded (VP9/WebM, canvas `captureStream` +
-> `MediaRecorder`, no external ffmpeg — the one bundled with Playwright can't decode the
-> source H.264 MP4) clip of the same source recording `app-log.jpg`'s frame came from. It's
-> loaded and played by `marketing/lazy-video.js`: nothing is fetched until the section scrolls
-> near the viewport, and a visitor with `prefers-reduced-motion` never fetches it at all — the
-> `poster` frame stands in as a plain still image for them. There is no dark variant and no
-> regeneration script for this one; redoing it means repeating the manual capture.
+> exception: it's video, not a screenshot**, and nothing in this pipeline produces video. It's a
+> 14s trimmed, cropped, re-encoded (VP9/WebM) clip of the same source recording `app-log.jpg`'s
+> frame came from, re-cut 2026-08-26 from that same source. **The source is HEVC (`hvc1`), not
+> H.264** — this doc previously said H.264, which was wrong; the real obstacle is that Chromium
+> (including Playwright's bundled build) cannot decode HEVC at all, so a `<video>` element never
+> fires `loadedmetadata` against it. There's no system `ffmpeg` on the machine this was last done
+> on and `choco install` needs admin rights this environment doesn't have, but a portable static
+> build (`ffmpeg-release-essentials.zip` from `gyan.dev`, no install, just unzip and call the
+> `.exe` by path) handles the whole job — probing, scanning content via a contact-sheet, trimming,
+> cropping and the final VP9 encode — with no Chromium/canvas involvement at all. It's loaded and
+> played by `marketing/lazy-video.js`: nothing is fetched until the section scrolls near the
+> viewport, and a visitor with `prefers-reduced-motion` never fetches it at all — the `poster`
+> frame stands in as a plain still image for them. There is still no dark variant and no
+> regeneration *script* for this one; redoing it means repeating the manual ffmpeg pass above.
 
 Two scripts in `e2e/tools/` do it, and they need this worktree's stack up:
 
@@ -242,11 +259,16 @@ mechanism the app uses for its logo.
 
 ### The hero's device frames
 
-`device-ipad.png` and `device-iphone.png` are captured at **real device viewports** (iPad Pro
-11" landscape, iPhone 14 Pro portrait) rather than cropped out of a desktop capture, because the
-app's layout genuinely differs at those widths — the log screen goes two-column on a tablet, the
-tab bar reflows on a phone. A desktop crop squeezed into a tablet bezel looks like exactly what
-it is.
+This section describes the original intent (`device-ipad.png`/`device-iphone.png`, captured at
+a real device *viewport* via browser automation); the shipped files are `.jpg` and, as of
+2026-08-26, `device-ipad.jpg` is a real on-device photo rather than a simulated-viewport capture
+— see the manual-exceptions blockquote above for what actually ships today.
+
+The underlying reasoning still holds regardless of capture method: **real device proportions**
+(iPad Pro 11" landscape, iPhone 14 Pro portrait, or whatever real device did the capturing)
+rather than cropped out of a desktop capture, because the app's layout genuinely differs at
+those widths — the log screen goes two-column on a tablet, the tab bar reflows on a phone. A
+desktop crop squeezed into a tablet bezel looks like exactly what it is.
 
 The bezels themselves are **pure CSS** (`.device` in `styles.css`) — no chrome images to keep in
 sync. Two things about them:
