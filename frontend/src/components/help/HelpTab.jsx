@@ -73,9 +73,9 @@ export default function HelpTab() {
         </p>
         <ol className="help-steps">
           <li>
-            Tap <T>Create household</T> and enter your name, your email and a password of at least 8
+            Tap <T>Register</T> and enter your name, your email and a password of at least 8
             characters. The household name is optional &mdash; leave it blank and it becomes
-            &ldquo;Your Name&rsquo;s Household&rdquo;.
+            &ldquo;Your Name&rsquo;s Household&rdquo;. Then tap <T>Create household</T>
           </li>
           <li>Check your email for a six-digit code and enter it on the confirmation screen.</li>
           <li>Add the people you train with, and start logging.</li>
@@ -88,9 +88,9 @@ export default function HelpTab() {
         <h3 className="help-h3">Put it on your home screen</h3>
         <p>
           Huddle is a website, so there is no app store. Open <strong>app.huddle.fitness</strong> in
-          your phone or tablet browser and use <T>Add to Home Screen</T>. It then opens full-screen
-          like any other app, and &mdash; importantly &mdash; keeps working when there&rsquo;s no
-          signal.
+          your phone or tablet browser and from your browser's settings, tap{' '}
+          <T>Add to Home Screen</T>. It then opens full-screen like any other app, and &mdash;
+          importantly &mdash; keeps working when there&rsquo;s no signal.
         </p>
       </Section>
 
