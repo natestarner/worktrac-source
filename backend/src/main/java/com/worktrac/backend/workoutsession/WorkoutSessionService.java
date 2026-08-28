@@ -1,5 +1,6 @@
 package com.worktrac.backend.workoutsession;
 
+import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
@@ -33,15 +34,17 @@ public class WorkoutSessionService {
     private final WorkoutSetRepository workoutSetRepository;
     private final SessionExerciseNoteRepository sessionExerciseNoteRepository;
     private final PersonService personService;
+    private final SubscriptionService subscriptionService;
     private final Clock clock;
 
     public WorkoutSessionService(WorkoutSessionRepository workoutSessionRepository, WorkoutSetRepository workoutSetRepository,
                                   SessionExerciseNoteRepository sessionExerciseNoteRepository, PersonService personService,
-                                  Clock clock) {
+                                  SubscriptionService subscriptionService, Clock clock) {
         this.workoutSessionRepository = workoutSessionRepository;
         this.workoutSetRepository = workoutSetRepository;
         this.sessionExerciseNoteRepository = sessionExerciseNoteRepository;
         this.personService = personService;
+        this.subscriptionService = subscriptionService;
         this.clock = clock;
     }
 
@@ -158,7 +161,13 @@ public class WorkoutSessionService {
                     .put(n.getExercise().getId(), n.getNote());
         }
 
+        // The Free-tier window. A READ FILTER and nothing else -- every row above was loaded and
+        // every row stays in the database, which is what makes "nothing is deleted, ever" true and
+        // makes re-subscribing restore the full history in a single round trip.
+        Instant floor = subscriptionService.historyFloor(accountId);
+
         return workoutSessionRepository.findByPerson_IdOrderByStartedAtDesc(person.getId()).stream()
+                .filter(session -> SubscriptionService.isVisible(floor, session.getStartedAt()))
                 .filter(session -> setsBySession.containsKey(session.getId()))
                 .map(session -> toHistorySessionDto(session, setsBySession.get(session.getId()),
                         notesBySessionThenExercise.getOrDefault(session.getId(), Map.of())))

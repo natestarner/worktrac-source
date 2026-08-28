@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.support.MutableClock;
+import com.worktrac.backend.billing.SubscriptionRepository;
+import com.worktrac.backend.support.BillingTestSupport;
 import com.worktrac.backend.support.RegistrationTestSupport;
 import com.worktrac.backend.user.TestCodeCache;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +59,9 @@ class TrendsControllerTest extends AbstractIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired
+    private SubscriptionRepository subscriptionRepository;
+
+    @Autowired
     private MutableClock clock;
 
     @Autowired
@@ -82,6 +87,11 @@ class TrendsControllerTest extends AbstractIntegrationTest {
         JsonNode registerJson = RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Nate");
         token = registerJson.get("token").asText();
         personId = registerJson.get("person").get("id").asLong();
+        // Several cases here deliberately seed sessions months back -- to prove the heatmap window
+        // is independent of the range toggle, and that hasAnyHistory tells a brand-new person from
+        // a lapsed one. Both are Pro behaviours now, so the plan is stated rather than assumed.
+        // The Free-tier window has its own coverage in FreeTierHistoryWindowTest.
+        BillingTestSupport.makePro(subscriptionRepository, registerJson.get("account").get("id").asLong());
 
         String exercisesResponse = mockMvc.perform(get("/api/exercises").header("Authorization", "Bearer " + token))
                 .andReturn().getResponse().getContentAsString();

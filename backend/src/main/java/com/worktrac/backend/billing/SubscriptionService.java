@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.Optional;
@@ -68,6 +69,28 @@ public class SubscriptionService {
         return subscription.getStatus() == SubscriptionStatus.CANCELED
                 && subscription.getCurrentPeriodEnd() != null
                 && subscription.getCurrentPeriodEnd().isAfter(clock.instant());
+    }
+
+    // How far back a household may SEE. Pro sees everything (null floor); Free sees the trailing
+    // window. THE ROWS ARE NEVER TOUCHED -- this is a read filter and nothing else, which is what
+    // makes the marketing promise ("Your workouts are never deleted on Free") literally true and
+    // what makes re-subscribing restore everything instantly. See .claude/rules/billing.md.
+    //
+    // Server-side on purpose. The client's copy of the plan drives chrome only, so an unreachable
+    // server can never clamp anyone -- and offlineCacheWarm caches whatever the server already
+    // filtered, which makes a Free household's history look identical online and off with no
+    // second code path.
+    public static final Duration FREE_HISTORY_WINDOW = Duration.ofDays(90);
+
+    public Instant historyFloor(Long accountId) {
+        return isPro(accountId) ? null : clock.instant().minus(FREE_HISTORY_WINDOW);
+    }
+
+    // True when `moment` is visible to this household. Null floor (Pro) admits everything, and a
+    // null moment is admitted too -- a row with no timestamp is a data problem, not something to
+    // silently hide behind a paywall.
+    public static boolean isVisible(Instant floor, Instant moment) {
+        return floor == null || moment == null || !moment.isBefore(floor);
     }
 
     public BillingPlan planFor(Long accountId) {

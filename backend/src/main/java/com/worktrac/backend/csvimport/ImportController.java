@@ -1,5 +1,7 @@
 package com.worktrac.backend.csvimport;
 
+import com.worktrac.backend.billing.SubscriptionService;
+import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -27,23 +29,27 @@ public class ImportController {
     private final CsvImportService csvImportService;
     private final ImportUndoService importUndoService;
     private final CurrentUser currentUser;
+    private final SubscriptionService subscriptionService;
 
     public ImportController(CsvImportService csvImportService, ImportUndoService importUndoService,
-                             CurrentUser currentUser) {
+                             CurrentUser currentUser, SubscriptionService subscriptionService) {
         this.csvImportService = csvImportService;
         this.importUndoService = importUndoService;
         this.currentUser = currentUser;
+        this.subscriptionService = subscriptionService;
     }
 
     // Writes nothing. Answers "what would this file do", including which rows are already present
     // and which optional columns were defaulted.
     @PostMapping("/api/people/{personId}/import/preview")
     public ImportPreviewDto preview(@PathVariable Long personId, @Valid @RequestBody ImportRequest request) {
+        requirePro();
         return csvImportService.preview(currentUser.accountId(), personId, request);
     }
 
     @PostMapping("/api/people/{personId}/import")
     public ImportPreviewDto commit(@PathVariable Long personId, @Valid @RequestBody ImportRequest request) {
+        requirePro();
         return csvImportService.commit(currentUser.accountId(), currentUser.userId(), personId, request);
     }
 
@@ -55,5 +61,18 @@ public class ImportController {
     @DeleteMapping("/api/people/{personId}/imports/{batchId}")
     public ResponseEntity<ImportBatchDto> undo(@PathVariable Long personId, @PathVariable Long batchId) {
         return ResponseEntity.ok(importUndoService.undo(currentUser.accountId(), personId, batchId));
+    }
+
+    // Importing is a Pro feature. Note which routes DON'T call this: `list` and `undo` stay open to
+    // everyone on purpose. A household that imported while Pro and then let it lapse must still be
+    // able to see what they brought in and take it back out -- gating the exit would strand their
+    // own data behind a paywall, which is the opposite of what the Free tier promises.
+    //
+    // Exporting is not gated at all, on either plan, for the same reason: every household can
+    // always take its complete data out. See .claude/rules/billing.md.
+    private void requirePro() {
+        if (!subscriptionService.isPro(currentUser.accountId())) {
+            throw new ForbiddenException("Importing past workouts is a Pro feature.");
+        }
     }
 }
