@@ -1,6 +1,7 @@
 package com.worktrac.backend.account;
 
 import com.worktrac.backend.billing.BillingEventRepository;
+import com.worktrac.backend.billing.StripeSubscriptionCanceller;
 import com.worktrac.backend.billing.SubscriptionRepository;
 import com.worktrac.backend.csvimport.ImportBatchCleanup;
 import com.worktrac.backend.exercise.ExerciseRepository;
@@ -26,6 +27,7 @@ public class AccountDeletionService {
 
     private static final Logger log = LoggerFactory.getLogger(AccountDeletionService.class);
 
+    private final StripeSubscriptionCanceller stripeSubscriptionCanceller;
     private final SubscriptionRepository subscriptionRepository;
     private final BillingEventRepository billingEventRepository;
     private final ImportBatchCleanup importBatchCleanup;
@@ -35,12 +37,14 @@ public class AccountDeletionService {
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
 
-    public AccountDeletionService(SubscriptionRepository subscriptionRepository,
+    public AccountDeletionService(StripeSubscriptionCanceller stripeSubscriptionCanceller,
+                                   SubscriptionRepository subscriptionRepository,
                                    BillingEventRepository billingEventRepository,
                                    ImportBatchCleanup importBatchCleanup, PersonRepository personRepository,
                                    ExerciseRepository exerciseRepository,
                                    TagRepository tagRepository, UserRepository userRepository,
                                    AccountRepository accountRepository) {
+        this.stripeSubscriptionCanceller = stripeSubscriptionCanceller;
         this.subscriptionRepository = subscriptionRepository;
         this.billingEventRepository = billingEventRepository;
         this.importBatchCleanup = importBatchCleanup;
@@ -56,8 +60,11 @@ public class AccountDeletionService {
         // Billing first: subscriptions has a NO ACTION FK to accounts (see V56), so it must go
         // before the account it points at. billing_events carries a plain account_id column with
         // no FK, but goes here for the same reason -- an erased household leaves nothing behind.
-        // Cancelling the subscription at Stripe is handled alongside this once StripeService
-        // exists, so a deleted household also stops being charged.
+        //
+        // Stop the money BEFORE the row naming the subscription is gone. Best-effort by design
+        // (see StripeSubscriptionCanceller): a Stripe outage must not be able to block someone
+        // from deleting their account, which is a right rather than a convenience.
+        stripeSubscriptionCanceller.cancelForAccount(accountId);
         subscriptionRepository.deleteByAccountIdIn(List.of(accountId));
         billingEventRepository.deleteByAccountIdIn(List.of(accountId));
         // Before people: import_batches has a non-cascading FK to people, and the workout rows

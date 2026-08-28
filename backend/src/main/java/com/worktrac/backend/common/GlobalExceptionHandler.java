@@ -113,6 +113,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(400, "Invalid request parameter"));
     }
 
+    // A dependency this endpoint needs is unconfigured or unreachable -- e.g. billing in an
+    // environment with no Stripe keys. Deliberately the same 503 the DB-outage branch answers with:
+    // from the client's point of view both mean "the server cannot serve this right now", which is
+    // the signal the frontend degrades on. It must never surface as a 4xx (the request was fine) or
+    // escape to the container's /error dispatch (which would become a 401 and sign the user out).
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ApiError> handleServiceUnavailable(ServiceUnavailableException ex) {
+        log.warn("Service unavailable: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiError.of(503, ex.getMessage()));
+    }
+
     // The database is unreachable/erroring (e.g. connection pool exhausted, outage). This is
     // transient from the client's point of view -- the frontend's offline mode treats any 5xx as
     // "server unreachable" and queues/retries the write rather than treating it as a rejection.

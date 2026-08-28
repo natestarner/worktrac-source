@@ -45,6 +45,11 @@ public class SecurityConfig {
                         // Server-to-server (Azure Event Grid), no JWT possible -- gated instead
                         // by EmailDeliveryWebhookController's own query-param shared secret.
                         .requestMatchers("/api/webhooks/email-delivery").permitAll()
+                        // Server-to-server (Stripe), no JWT possible -- gated instead by Stripe's
+                        // own request signature, verified against the raw body in
+                        // StripeWebhookController. An environment with no webhook secret rejects
+                        // every call rather than defaulting open.
+                        .requestMatchers("/api/webhooks/stripe").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 // setStatus, not sendError: sendError triggers the servlet container's internal
