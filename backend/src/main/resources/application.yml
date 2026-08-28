@@ -91,6 +91,13 @@ app:
     # set simply has no admin, rather than defaulting open. Set per-environment in the
     # deploy repo's Container App env vars, never hardcoded here.
     emails: ${ADMIN_EMAILS:}
+  billing:
+    # Founding households that keep Pro free, by email. Deliberately an env var rather than a
+    # Flyway migration: these are other people's personal addresses and have no business in git
+    # history, and comping someone later should be a config change rather than a new migration.
+    # Set from a deploy SECRET, not a plaintext workflow value. Empty by default -- an environment
+    # that sets nothing simply has no comped households.
+    comped-emails: ${COMPED_EMAILS:}
   stripe:
     # Every value empty by default: an environment with no Stripe configuration rejects billing
     # requests outright rather than defaulting open (see StripeProperties). Set per-environment in

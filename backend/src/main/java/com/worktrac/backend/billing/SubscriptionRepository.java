@@ -23,6 +23,10 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     List<Subscription> findByStatusInAndCurrentPeriodEndLessThan(
             List<SubscriptionStatus> statuses, Instant cutoff);
 
+    // CompBootstrap's drift check: households comped in the database, to compare against the
+    // configured list. Small by nature -- a handful of founding accounts.
+    List<Subscription> findByCompedTrue();
+
     // Bulk, not entity-at-a-time: AccountDeletionService and TestDataCleanupService both need this
     // and the latter deletes whole cohorts. The FK to accounts is NO ACTION (see V56), so these
     // rows must go before the accounts they point at.
