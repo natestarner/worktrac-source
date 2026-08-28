@@ -47,7 +47,10 @@ export default function EmbeddedCheckout({ clientSecret, publishableKey, onCompl
           return;
         }
 
-        checkout = await stripe.initEmbeddedCheckout({
+        // createEmbeddedCheckoutPage, NOT initEmbeddedCheckout -- Stripe renamed it on 2026-03-25
+        // and the old name now throws an IntegrationError rather than warning. Pure rename: the
+        // options and the returned object (mount/destroy) are unchanged.
+        checkout = await stripe.createEmbeddedCheckoutPage({
           clientSecret,
           onComplete: () => onCompleteRef.current?.(),
         });
