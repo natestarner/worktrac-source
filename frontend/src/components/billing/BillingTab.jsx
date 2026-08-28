@@ -1,16 +1,24 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
-import { getSubscription } from '../../api/billing';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
+import {
+  createCheckoutSession,
+  createPortalSession,
+  getSubscription,
+  reconcileCheckout,
+} from '../../api/billing';
 import { queryKeys } from '../../api/queryKeys';
 import { formatDate } from '../../utils/datetime';
 import Button from '../shared/Button';
+import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import PlanChooser from './PlanChooser';
+import EmbeddedCheckout from './EmbeddedCheckout';
 import { PRO_BENEFITS } from './planCopy';
 
-// The household's plan, and where an upgrade starts.
+// The household's plan, and where an upgrade happens.
 //
 // Reads the plan from TWO places on purpose, and they answer different questions:
 //   - `account.plan` (AuthContext, carried in the auth snapshot) is the DERIVED entitlement. It is
@@ -23,16 +31,23 @@ import { PRO_BENEFITS } from './planCopy';
 // That split is what keeps this screen honest while degraded: a household that cannot reach the
 // server still sees the right plan, because the answer never depended on the request succeeding.
 export default function BillingTab() {
-  const { account } = useAuth();
-  const { releaseOnboarding } = useUI();
+  const { account, refreshPeople } = useAuth();
+  const { releaseOnboarding, showToast } = useUI();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [interval, setInterval] = useState('YEAR');
+  const [checkout, setCheckout] = useState(null);
+
+  // `online` is deliberately not destructured: OfflineDisabledWrap reads useOnlineStatus
+  // itself, and a second copy of that answer here is the kind of duplicate the
+  // mechanism table exists to prevent.
+  const { pending, run } = useGatedMutation();
 
   // Releasing on UNMOUNT covers every way the billing decision can resolve without a second
   // mechanism: paying and moving on, tapping "Start with Free", or simply leaving via a tab. All
   // three end with this screen gone, which is exactly the moment the first-run welcome modal
-  // should be allowed to appear. Once checkout exists it also releases explicitly on a successful
-  // reconcile, so the modal lands over the success screen rather than waiting for them to leave.
+  // should be allowed to appear.
   //
   // A ref, not releaseOnboarding directly, so the cleanup does not re-run whenever UIContext's
   // value identity changes -- releasing mid-session would let the modal appear over this screen,
@@ -53,25 +68,120 @@ export default function BillingTab() {
   // the "unreachable server downgrades you" failure the contract forbids.
   const isPro = plan === 'PRO' || subscription?.pro === true;
 
+  // Stripe returns the browser to /app/billing?checkout=cs_... The backend reads that session
+  // directly and applies it, so the upgrade is visible immediately rather than waiting on a
+  // webhook -- which is what avoids the classic "I paid and I'm still on Free" ticket.
+  const checkoutParam = searchParams.get('checkout');
+  const reconciledRef = useRef(null);
+  useEffect(() => {
+    if (!checkoutParam || reconciledRef.current === checkoutParam) return;
+    reconciledRef.current = checkoutParam;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        await reconcileCheckout(checkoutParam);
+        if (cancelled) return;
+        // /me is what carries the derived plan into the auth snapshot, so the header badge and
+        // every other consumer update from the same source rather than a second copy of the truth.
+        await refreshPeople();
+        queryClient.invalidateQueries({ queryKey: queryKeys.subscription() });
+        // The welcome modal may now appear over the success state, which is the intended order:
+        // the tour comes AFTER the money decision.
+        releaseRef.current();
+      } catch {
+        // The webhook is the backstop, so a failed reconcile is a delay rather than a lost payment.
+        // Saying so beats a spinner that resolves into nothing.
+        if (!cancelled) {
+          showToast('Payment received — your plan will update shortly.', { tone: 'info' });
+        }
+      } finally {
+        if (!cancelled) {
+          // Strip the param so a reload or a shared link cannot replay it.
+          setCheckout(null);
+          const next = new URLSearchParams(searchParams);
+          next.delete('checkout');
+          setSearchParams(next, { replace: true });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkoutParam]);
+
+  const handleUpgrade = run(
+    async () => {
+      const { clientSecret, publishableKey } = await createCheckoutSession(interval);
+      setCheckout({ clientSecret, publishableKey });
+    },
+    {
+      offlineMessage: 'Upgrading needs a connection.',
+      errorMessage: "Couldn't start checkout. Try again in a moment.",
+    },
+  );
+
+  const handleManageBilling = run(
+    async () => {
+      const { url } = await createPortalSession();
+      // A NEW TAB, not a navigation. Stripe's Customer Portal is redirect-only (no embedded
+      // variant exists), and replacing this document would hand an installed PWA's session to
+      // Safari with no reliable way back.
+      window.open(url, '_blank', 'noopener,noreferrer');
+    },
+    {
+      offlineMessage: 'Managing your plan needs a connection.',
+      errorMessage: "Couldn't open billing management. Try again in a moment.",
+    },
+  );
+
+  const handleCheckoutFailed = useCallback(() => {
+    setCheckout(null);
+    showToast("Couldn't load the payment form. Try again in a moment.", { tone: 'error' });
+  }, [showToast]);
+
   return (
     <div>
       <button onClick={() => navigate(-1)} style={backButtonStyle}>
         &larr; Back
       </button>
 
-      {isPro ? (
-        <ProSummary subscription={subscription} />
+      {checkout ? (
+        <>
+          <div style={sectionLabelStyle}>Payment</div>
+          <div style={cardStyle}>
+            <EmbeddedCheckout
+              clientSecret={checkout.clientSecret}
+              publishableKey={checkout.publishableKey}
+              onError={handleCheckoutFailed}
+            />
+          </div>
+          <Button variant="ghost" fullWidth onClick={() => setCheckout(null)}>
+            Back to plans
+          </Button>
+        </>
+      ) : isPro ? (
+        <ProSummary subscription={subscription} pending={pending} onManage={handleManageBilling} />
       ) : (
-        <FreeSummary interval={interval} onIntervalChange={setInterval} />
+        <FreeSummary
+          interval={interval}
+          onIntervalChange={setInterval}
+          pending={pending}
+          onUpgrade={handleUpgrade}
+          onStartFree={() => navigate('/app/log')}
+        />
       )}
     </div>
   );
 }
 
-function ProSummary({ subscription }) {
+function ProSummary({ subscription, pending, onManage }) {
   const cancelling = subscription?.cancelAtPeriodEnd === true;
   const periodEnd = subscription?.currentPeriodEnd;
   const comped = subscription?.comped === true;
+  const pastDue = subscription?.status === 'PAST_DUE';
 
   return (
     <>
@@ -83,12 +193,27 @@ function ProSummary({ subscription }) {
             ? 'Your household has Pro on the house — with our thanks for being here early.'
             : renewalLine(cancelling, periodEnd)}
         </p>
+        {/* Access continues through Stripe's retry window, so this is a nudge rather than a
+            lockout -- see SubscriptionService.isPro for why cutting access mid-dunning is wrong. */}
+        {pastDue && (
+          <p style={warningLineStyle}>
+            We couldn&rsquo;t take your last payment. Update your card to keep Pro.
+          </p>
+        )}
       </div>
 
       <div style={sectionLabelStyle}>What Pro includes</div>
       <div style={cardStyle}>
         <BenefitList />
       </div>
+
+      {!comped && (
+        <OfflineDisabledWrap message="Managing your plan needs a connection.">
+          <Button variant="secondary" fullWidth onClick={onManage} disabled={pending}>
+            Manage billing
+          </Button>
+        </OfflineDisabledWrap>
+      )}
     </>
   );
 }
@@ -102,7 +227,7 @@ function renewalLine(cancelling, periodEnd) {
     : `Renews ${formatDate(periodEnd)}.`;
 }
 
-function FreeSummary({ interval, onIntervalChange }) {
+function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFree }) {
   return (
     <>
       <div style={sectionLabelStyle}>Your plan</div>
@@ -117,16 +242,24 @@ function FreeSummary({ interval, onIntervalChange }) {
       <div style={cardStyle}>
         <PlanChooser value={interval} onChange={onIntervalChange} />
         <BenefitList />
-        {/* The one variant="primary" on this screen. The header's own control is a quiet
-            outlined badge labelled "Go Pro" precisely so it does not compete with this, and so
-            the two never share an accessible name. */}
-        <Button variant="primary" size="lg" fullWidth disabled>
-          Upgrade to Pro
-        </Button>
-        <p style={finetPrintStyle}>
+        {/* The one variant="primary" on this screen. The header's own control is a quiet outlined
+            badge labelled "Go Pro" precisely so it does not compete with this, and so the two
+            never share an accessible name. */}
+        <OfflineDisabledWrap message="Upgrading needs a connection.">
+          <Button variant="primary" size="lg" fullWidth onClick={onUpgrade} disabled={pending}>
+            Upgrade to Pro
+          </Button>
+        </OfflineDisabledWrap>
+        <p style={finePrintStyle}>
           Cancel any time. Your workouts are never deleted — see Terms and Privacy.
         </p>
       </div>
+
+      {/* Equal-weight, not fine print. Someone who arrived from marketing's "Go Pro" was routed
+          straight here, and Free is permanent -- deferring costs them nothing. */}
+      <Button variant="ghost" fullWidth onClick={onStartFree}>
+        Start with Free — decide later
+      </Button>
     </>
   );
 }
@@ -184,6 +317,15 @@ const mutedLineStyle = {
   margin: 0,
 };
 
+const warningLineStyle = {
+  color: 'var(--color-warning-text)',
+  background: 'var(--color-warning-bg)',
+  border: '1px solid var(--color-warning-border)',
+  borderRadius: 'var(--radius-sm)',
+  padding: 'var(--space-3)',
+  margin: 'var(--space-3) 0 0 0',
+};
+
 const benefitListStyle = {
   listStyle: 'none',
   padding: 0,
@@ -196,7 +338,7 @@ const benefitItemStyle = {
   color: 'var(--color-text)',
 };
 
-const finetPrintStyle = {
+const finePrintStyle = {
   fontSize: 'var(--text-sm)',
   color: 'var(--color-muted)',
   margin: 'var(--space-3) 0 0 0',

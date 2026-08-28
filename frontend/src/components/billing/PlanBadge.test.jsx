@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 
-function renderBadge(account) {
+function renderBadge() {
   return render(
     <MemoryRouter>
       <PlanBadge />
