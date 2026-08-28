@@ -172,6 +172,7 @@ touch matching files — you don't need to open them manually. Full narratives a
 | Offline mode & the durable outbox | `offline-internals.md` | `docs/architecture/offline-mode.md` |
 | Log screen (`ExerciseDetail.jsx`) | `log-screen.md` | — |
 | Trends & stats (bodyweight lifts, ranges, chart rules) | `trends.md` | `docs/architecture/trends.md` |
+| Billing, plans & entitlement (Stripe, the Free/Pro split) | `billing.md` | `docs/architecture/billing.md` |
 | End-user handbook (what the in-app help page asserts) | `user-facing-help.md` | — |
 | First-run guided tour & welcome modal | `onboarding.md` | — |
 | Backend / frontend / e2e testing | `backend-tests.md`, `frontend-tests.md`, `e2e-tests.md` | `docs/architecture/testing.md` |

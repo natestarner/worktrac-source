@@ -409,6 +409,41 @@ describe('AppShell welcome modal', () => {
     expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
   });
 
+  // The billing deferral. A household that registered via marketing's "Go Pro" is routed straight
+  // to /app/billing, and the welcome modal must not interrupt them mid-purchase -- the tour comes
+  // AFTER the money decision. The durable flag (lib/onboardingPending.js) is deliberately NOT
+  // touched by any of this: it still says "this account has never been onboarded", which stays
+  // true the whole time.
+  it('does not render while onboarding is deferred, even with the flag set', () => {
+    useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn(), account: { id: 1 } });
+    useUI.mockReturnValue(baseUI({ onboardingDeferred: true }));
+    markOnboardingPending(1);
+
+    renderShell();
+
+    expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
+    // Deferred, not consumed: the flag has to survive so the modal can still appear once the
+    // billing decision resolves. Clearing it here would cost that household the tour entirely.
+    expect(isOnboardingPending(1)).toBe(true);
+  });
+
+  it('renders as soon as the deferral is released', () => {
+    useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn(), account: { id: 1 } });
+    useUI.mockReturnValue(baseUI({ onboardingDeferred: true }));
+    markOnboardingPending(1);
+
+    const { rerenderApp } = renderShell();
+    expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
+
+    // BillingTab releases on unmount (and, once checkout exists, on a successful reconcile). The
+    // gate is in AppShell's effect dependencies, so the modal appears on that flip with no further
+    // plumbing -- this asserts that wiring, not just the suppressed state.
+    useUI.mockReturnValue(baseUI({ onboardingDeferred: false }));
+    rerenderApp();
+
+    expect(screen.getByTestId('welcome-modal')).toBeInTheDocument();
+  });
+
   it("does not render a DIFFERENT account's pending flag onto the active account", () => {
     useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn(), account: { id: 2 } });
     markOnboardingPending(1); // a different account entirely, e.g. a shared device

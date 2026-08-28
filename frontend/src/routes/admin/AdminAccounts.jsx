@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { listAccounts } from '../../api/admin';
 import { useAdminData } from '../../hooks/useAdminData';
-import { formatDateTime } from '../../utils/datetime';
+import { formatDate, formatDateTime } from '../../utils/datetime';
 import AdminTable from '../../components/admin/AdminTable';
 import Skeleton from '../../components/shared/Skeleton';
 
@@ -26,6 +26,41 @@ const COLUMNS = [
         {row.role}
       </span>
     ),
+  },
+  {
+    // Both plan AND status, because they answer different questions: `plan` is the derived
+    // entitlement (what this household can do), `subscriptionStatus` is Stripe's own view (why).
+    // A household showing PRO / PAST_DUE is mid-dunning and still entitled -- collapsing the two
+    // would hide exactly the state worth noticing during support.
+    key: 'plan',
+    label: 'Plan',
+    render: (row) => (
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          padding: '2px 8px',
+          borderRadius: 6,
+          background: row.plan === 'PRO' ? 'var(--color-pr-bg)' : 'var(--color-subtle-bg)',
+          color: row.plan === 'PRO' ? 'var(--color-pr-text)' : 'var(--color-muted)',
+        }}
+        title={row.comped ? 'Comped -- no Stripe subscription behind this' : row.stripeCustomerId || ''}
+      >
+        {row.plan}
+        {row.comped ? ' (comp)' : ''}
+      </span>
+    ),
+  },
+  {
+    key: 'subscriptionStatus',
+    label: 'Billing',
+    render: (row) => {
+      if (row.subscriptionStatus === 'FREE') return '—';
+      const suffix = row.currentPeriodEnd
+        ? ` ${row.cancelAtPeriodEnd ? 'ends' : 'renews'} ${formatDate(row.currentPeriodEnd)}`
+        : '';
+      return `${row.subscriptionStatus}${suffix}`;
+    },
   },
   { key: 'peopleCount', label: 'People' },
   { key: 'defaultUnit', label: 'Unit' },

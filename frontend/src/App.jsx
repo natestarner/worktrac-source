@@ -35,6 +35,7 @@ import ContactTab from './components/contact/ContactTab';
 // only Suspense boundary plus a second route-loading mechanism -- and in an app whose whole point
 // is working with no signal, a route that has to fetch a chunk is a worse failure shape than one
 // that doesn't. See the header comment in HelpTab.jsx.
+import BillingTab from './components/billing/BillingTab';
 import HelpTab from './components/help/HelpTab';
 import AdminShell from './routes/admin/AdminShell';
 import AdminOverview from './routes/admin/AdminOverview';
@@ -133,6 +134,7 @@ export default function App() {
                 <Route path="trends" element={<TrendsTab />} />
                 <Route path="settings" element={<AppSettingsTab />} />
                 <Route path="profile" element={<ProfileTab />} />
+                <Route path="billing" element={<BillingTab />} />
                 <Route path="help" element={<HelpTab />} />
                 <Route path="contact" element={<ContactTab />} />
               </Route>

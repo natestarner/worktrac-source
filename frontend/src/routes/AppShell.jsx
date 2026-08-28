@@ -28,7 +28,7 @@ export default function AppShell() {
   const { people, refreshPeople, account } = useAuth();
   const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId, restTimersByPerson, setRestTimer } =
     useAppState();
-  const { restTimers, startRestTimer, tour, startTour } = useUI();
+  const { restTimers, startRestTimer, tour, startTour, onboardingDeferred } = useUI();
   const [showWelcome, setShowWelcome] = useState(false);
   const accountId = account?.id;
 
@@ -37,8 +37,14 @@ export default function AppShell() {
   // whenever the active account changes, so a shared device switching between two households
   // shows each account's own first-run welcome exactly once, never the other's.
   useEffect(() => {
+    // onboardingDeferred is set when a household registers via marketing's "Go Pro" and is routed
+    // straight to /app/billing -- the tour must not interrupt a purchase. BillingTab releases it
+    // once that decision resolves (paid, or "Start with Free", or simply leaving the screen), and
+    // listing it as a dependency is what makes the modal appear at that moment with no further
+    // plumbing. See UIContext for why the gate is in memory rather than persisted.
+    if (onboardingDeferred) return;
     if (isOnboardingPending(accountId)) setShowWelcome(true);
-  }, [accountId]);
+  }, [accountId, onboardingDeferred]);
 
   function handleAcceptWelcome() {
     clearOnboardingPending(accountId);

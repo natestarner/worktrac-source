@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.email.EmailService;
+import com.worktrac.backend.billing.BillingPlan;
+import com.worktrac.backend.billing.SubscriptionRepository;
+import com.worktrac.backend.billing.SubscriptionStatus;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.support.RegistrationTestSupport;
@@ -62,6 +65,9 @@ class AccountDeletionTest extends AbstractIntegrationTest {
 
     @Autowired
     private ExerciseRepository exerciseRepository;
+
+    @Autowired
+    private SubscriptionRepository subscriptionRepository;
 
     // EmailService's real constructor builds a live Azure EmailClient from
     // app.email.connection-string, which is empty in the "local" test profile (no real ACS
@@ -142,6 +148,30 @@ class AccountDeletionTest extends AbstractIntegrationTest {
         assertTrue(personRepository.findByAccount_IdOrderByCreatedAtAsc(accountId).isEmpty());
         assertFalse(userRepository.existsByEmail(email));
         assertTrue(accountRepository.findById(accountId).isEmpty());
+        // subscriptions has a NO ACTION FK to accounts (V56), so this row is not merely tidy-up:
+        // if AccountDeletionService stops clearing it, the account delete above fails outright with
+        // a constraint violation rather than leaving an orphan.
+        assertTrue(subscriptionRepository.findByAccountId(accountId).isEmpty());
+    }
+
+    // Registration is the single insertion point for a household's subscription row, so "every
+    // account has exactly one" is true from the moment it exists rather than only for households
+    // that reach billing. A missing row resolves to FREE anyway (SubscriptionService), but that is
+    // a safety net, not the design.
+    @Test
+    void confirmingRegistrationCreatesAFreeSubscription() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        JsonNode registration = register("newsub-" + suffix + "@example.com", "Alex");
+        long accountId = registration.get("account").get("id").asLong();
+
+        var subscription = subscriptionRepository.findByAccountId(accountId);
+
+        assertTrue(subscription.isPresent());
+        assertEquals(BillingPlan.FREE, subscription.get().getPlan());
+        assertEquals(SubscriptionStatus.FREE, subscription.get().getStatus());
+        assertFalse(subscription.get().isComped());
+        // And the derived entitlement reaches the client on the very response that created it.
+        assertEquals("FREE", registration.get("account").get("plan").asText());
     }
 
     @Test

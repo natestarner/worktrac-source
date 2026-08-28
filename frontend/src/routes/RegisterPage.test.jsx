@@ -11,9 +11,9 @@ vi.mock('react-router-dom', async (importOriginal) => {
 });
 vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }));
 
-function renderPage() {
+function renderPage(initialEntry = '/register') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <RegisterPage />
     </MemoryRouter>,
   );
@@ -64,7 +64,42 @@ describe('RegisterPage validation', () => {
         personName: 'Alex',
       }),
     );
-    expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', { state: { email: 'alex@example.com' } });
+    expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
+      state: { email: 'alex@example.com', wantsPro: false },
+    });
+  });
+
+  // marketing/index.html's "Go Pro" button links to /register?plan=pro. The parameter is a hint
+  // about where to land after confirming an email -- it grants nothing, so anything other than the
+  // exact value is ignored rather than treated as intent.
+  it('carries ?plan=pro through to confirm-email so the household lands on billing', async () => {
+    renderPage('/register?plan=pro');
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Alex' } });
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'alex@example.com' } });
+    fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create household' }));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
+        state: { email: 'alex@example.com', wantsPro: true },
+      }),
+    );
+  });
+
+  it('ignores a plan parameter that is not exactly "pro"', async () => {
+    renderPage('/register?plan=PRO&plan=enterprise');
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Alex' } });
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'alex@example.com' } });
+    fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create household' }));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
+        state: { email: 'alex@example.com', wantsPro: false },
+      }),
+    );
   });
 
   it('shows the server error banner and does not navigate when register fails', async () => {

@@ -1,0 +1,129 @@
+# Billing: plans, entitlement, and Stripe
+
+Invariants: `.claude/rules/billing.md`. This file is the reasoning behind them.
+
+## What Pro is
+
+`huddle.fitness` sells Pro at $3.99/month or $29/year. Pro buys two things:
+
+- **History, PRs and trends with no 90-day window.**
+- **Importing past workouts.**
+
+Everything else is free forever, **including full data export on both plans**. That last one is a
+deliberate reversal of an earlier draft, and it removed more than it added: no self-serve
+GDPR/CCPA gap, no admin export endpoint to make a privacy-policy commitment keepable, and no second
+entitlement predicate (`canExport`) diverging from `isPro`. Export mainly appeals to people who
+intend to leave, and gating the exit is the weakest thing to charge for. It also resolved a latent
+contradiction — `HelpTab.jsx` already tells people to "export your data first" before deleting an
+account, advice that would have been impossible to follow for exactly the Free users most likely to
+be deleting.
+
+## Why entitlement is derived rather than stored
+
+The obvious design is an `is_pro` column. It is wrong in four separate ways, and the derivation in
+`SubscriptionService.isPro` gets all four right in one expression — see the rule file for the
+enumeration. The short version: entitlement is a function of *status and time*, and any stored copy
+of it is stale the moment the clock moves.
+
+The most consequential of the four is that **expiry happens by the clock, not by a webhook**. A
+cancelled household stops being Pro when its paid period ends whether or not Stripe's
+`subscription.deleted` ever arrives. That removes an entire class of "the webhook was missed and
+now the data is wrong" bug — for cancellations. It does *not* cover an `ACTIVE` subscription whose
+deletion event never arrives, which is why `SubscriptionReconciliationWatchdog` exists: the same
+"an async mechanism must never make 'it didn't run' indistinguishable from 'it ran fine'" rule the
+email pipeline already follows (`.claude/rules/registration-and-email.md`).
+
+`billing_plan` on the row is a materialized cache of the derivation, written only by
+`applyStripeState`. It exists so the admin list and `AccountDto` do not each recompute across every
+account; it is never the authority.
+
+## Why the Stripe Customer is created lazily, at first checkout
+
+Not at registration. A Stripe outage during signup would be catastrophic and completely outside the
+user's control; the same outage during an upgrade is a visible, retryable error on a gated write.
+`RegistrationService.createAccountUserPerson` therefore writes a local FREE subscription row and
+talks to nobody. It also runs inside `confirmEmail`'s `@Transactional(noRollbackFor = ...)`, which
+is another reason to keep a network call out of it.
+
+## Why the success screen does not wait for the webhook
+
+Stripe's embedded Checkout returns the browser to `/app/billing?checkout=cs_...`. The backend reads
+*that session* from Stripe directly and reconciles synchronously, so the upgrade is visible
+immediately. The webhook is the backstop, not the critical path — which avoids the classic "I paid
+and I'm still on Free" support ticket entirely.
+
+Both paths call the same `applyStripeState`. Two callers, one writer, so the immediate path and the
+asynchronous one cannot disagree about what a given Stripe state means.
+
+## Why webhooks re-fetch instead of applying their payload
+
+**Stripe does not guarantee event ordering.** `customer.subscription.updated` can arrive before
+`customer.subscription.created`, so applying delivered payloads directly lets a stale event
+overwrite newer state — a bug that would appear only under load and only sometimes. Re-fetching the
+subscription by id and writing the current state makes ordering irrelevant, and makes a missed event
+self-heal on the next one. This is the highest-value correctness decision in the integration.
+
+Idempotency comes from V57's filtered unique index on `stripe_event_id` rather than a
+check-then-insert: Stripe redelivers routinely, and the constraint violation *is* the "already seen"
+signal, with no race of its own.
+
+## Why embedded Checkout rather than a redirect
+
+Both are Stripe-hosted and both keep the integration in PCI SAQ-A — no card data reaches this code.
+The deciding factor is that Huddle is an **installed PWA** on iPhone and iPad, where a cross-origin
+`window.location` out of a standalone app can hand the user to Safari and not reliably hand them
+back. Someone tapping "Upgrade" mid-workout could end up stranded outside the app they just paid
+for. Embedded Checkout renders in an iframe on `app.huddle.fitness`, inside the app's own chrome.
+
+The hosted **Customer Portal** (cancel, update card, invoices, switch interval) is redirect-only —
+no embedded variant exists — so it opens in a new tab, leaving the PWA's document alive behind it.
+
+`loadStripe()` is called lazily inside the gated action rather than at module scope, so an offline
+household never requests `js.stripe.com` and the app keeps no third-party dependency on its boot
+path.
+
+## The degraded-conditions story
+
+Billing writes are Tier-3: `useGatedMutation` + `OfflineDisabledWrap`, never the durable outbox.
+That is the *existing* register row in `.claude/rules/resilience.md` — a payment is not idempotent,
+and a queued one replayed across an outage is precisely what the outbox must never hold.
+
+The **read** is the harder half, and it is answered structurally rather than defensively:
+
+- **Clamping happens server-side.** The client's `account.plan` drives chrome only. A household
+  that cannot reach the server still sees the right plan, because the answer never depended on the
+  request succeeding — and `offlineCacheWarm` warms whatever the server already clamped, so a Free
+  household's cached history looks identical online and off.
+- **A former Pro who downgrades keeps a fuller cache until it refetches.** That is leniency in the
+  safe direction. Do not add a cache purge on downgrade: stale-toward-Pro costs nothing, while
+  stale-toward-Free locks someone out of what they paid for — the exact "degraded ⇒ blank" outcome
+  the contract forbids.
+- **An unknown plan renders nothing**, rather than guessing Free. See `PlanBadge`.
+
+## The welcome-modal deferral
+
+A household arriving from marketing's "Go Pro" is routed to `/app/billing` after confirming their
+email, and the first-run welcome modal is suppressed until that decision resolves — a tour
+interrupting someone mid-purchase is the wrong order.
+
+The durable flag (`lib/onboardingPending.js`) is untouched. It answers "has this account been
+onboarded yet" — durable, one-shot, account-scoped. The deferral answers "not right now", which is a
+different question with a different lifetime, so it lives in `UIContext` beside `tour`, in memory.
+
+Losing it to a reload is deliberate: the modal then appears on the next boot, whereas persisting the
+deferral risks a stale one suppressing the welcome modal permanently. `ProductTour.jsx` gives the
+same reasoning for refusing to persist its own `stepIndex`.
+
+`BillingTab` releases on unmount, which covers every exit — paying, "Start with Free", or simply
+leaving via a tab — with one mechanism rather than three call sites.
+
+## Existing households when the window lands
+
+Clipped like everyone else, except a comped list set by a one-time migration. `comped` ships in V56
+so grandfathering needs no schema change later.
+
+Rejected: Stripe 100%-off promotion codes. They work (`duration: forever` plus
+`payment_method_collection: 'if_required'` so a $0 total does not demand a card), but for a handful
+of known households they are strictly more moving parts — a code to distribute, a checkout to
+complete, and an expiry to forget. Also rejected: a "comp this account" admin button, which would be
+a third sanctioned write action in a deliberately read-only portal.

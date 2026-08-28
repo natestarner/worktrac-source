@@ -1,5 +1,7 @@
 package com.worktrac.backend.account;
 
+import com.worktrac.backend.billing.BillingEventRepository;
+import com.worktrac.backend.billing.SubscriptionRepository;
 import com.worktrac.backend.csvimport.ImportBatchCleanup;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.PersonRepository;
@@ -24,6 +26,8 @@ public class AccountDeletionService {
 
     private static final Logger log = LoggerFactory.getLogger(AccountDeletionService.class);
 
+    private final SubscriptionRepository subscriptionRepository;
+    private final BillingEventRepository billingEventRepository;
     private final ImportBatchCleanup importBatchCleanup;
     private final PersonRepository personRepository;
     private final ExerciseRepository exerciseRepository;
@@ -31,10 +35,14 @@ public class AccountDeletionService {
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
 
-    public AccountDeletionService(ImportBatchCleanup importBatchCleanup, PersonRepository personRepository,
+    public AccountDeletionService(SubscriptionRepository subscriptionRepository,
+                                   BillingEventRepository billingEventRepository,
+                                   ImportBatchCleanup importBatchCleanup, PersonRepository personRepository,
                                    ExerciseRepository exerciseRepository,
                                    TagRepository tagRepository, UserRepository userRepository,
                                    AccountRepository accountRepository) {
+        this.subscriptionRepository = subscriptionRepository;
+        this.billingEventRepository = billingEventRepository;
         this.importBatchCleanup = importBatchCleanup;
         this.personRepository = personRepository;
         this.exerciseRepository = exerciseRepository;
@@ -45,6 +53,13 @@ public class AccountDeletionService {
 
     @Transactional
     public void deleteAccount(Long accountId) {
+        // Billing first: subscriptions has a NO ACTION FK to accounts (see V56), so it must go
+        // before the account it points at. billing_events carries a plain account_id column with
+        // no FK, but goes here for the same reason -- an erased household leaves nothing behind.
+        // Cancelling the subscription at Stripe is handled alongside this once StripeService
+        // exists, so a deleted household also stops being charged.
+        subscriptionRepository.deleteByAccountIdIn(List.of(accountId));
+        billingEventRepository.deleteByAccountIdIn(List.of(accountId));
         // Before people: import_batches has a non-cascading FK to people, and the workout rows
         // it stamped are cleared rather than deleted here. ImportBatchCleanup explains why that
         // is the only order the constraints allow.

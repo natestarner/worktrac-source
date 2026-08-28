@@ -1,6 +1,8 @@
 package com.worktrac.backend.admin;
 
 import com.worktrac.backend.account.AccountRepository;
+import com.worktrac.backend.billing.BillingEventRepository;
+import com.worktrac.backend.billing.SubscriptionRepository;
 import com.worktrac.backend.contact.ContactMessageRepository;
 import com.worktrac.backend.csvimport.ImportBatchCleanup;
 import com.worktrac.backend.exercise.ExerciseRepository;
@@ -78,6 +80,8 @@ public class TestDataCleanupService {
     private final RegistrationEventRepository registrationEventRepository;
     private final PendingRegistrationRepository pendingRegistrationRepository;
     private final ContactMessageRepository contactMessageRepository;
+    private final SubscriptionRepository subscriptionRepository;
+    private final BillingEventRepository billingEventRepository;
 
     public TestDataCleanupService(ImportBatchCleanup importBatchCleanup, UserRepository userRepository,
                                    PersonRepository personRepository,
@@ -85,7 +89,9 @@ public class TestDataCleanupService {
                                    AccountRepository accountRepository,
                                    RegistrationEventRepository registrationEventRepository,
                                    PendingRegistrationRepository pendingRegistrationRepository,
-                                   ContactMessageRepository contactMessageRepository) {
+                                   ContactMessageRepository contactMessageRepository,
+                                   SubscriptionRepository subscriptionRepository,
+                                   BillingEventRepository billingEventRepository) {
         this.importBatchCleanup = importBatchCleanup;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
@@ -95,6 +101,8 @@ public class TestDataCleanupService {
         this.registrationEventRepository = registrationEventRepository;
         this.pendingRegistrationRepository = pendingRegistrationRepository;
         this.contactMessageRepository = contactMessageRepository;
+        this.subscriptionRepository = subscriptionRepository;
+        this.billingEventRepository = billingEventRepository;
     }
 
     @Transactional(readOnly = true)
@@ -118,6 +126,13 @@ public class TestDataCleanupService {
             // ran -- and because cleanup never fails the run, it would have quietly stopped
             // deleting anything at all.
             contactMessageRepository.deleteByAccountIdIn(accountIds);
+            // Billing rows, for the same FK reason: subscriptions points at accounts with a
+            // NO ACTION constraint (V56). billing_events has no FK but is cleared alongside it so
+            // an e2e run leaves no billing noise in the admin views either. Both are bulk
+            // statements, like everything else here -- see this class's header for why a
+            // per-account loop is what this endpoint exists to avoid.
+            subscriptionRepository.deleteByAccountIdIn(accountIds);
+            billingEventRepository.deleteByAccountIdIn(accountIds);
             // Also before people, and for the same class of reason as contact_messages above:
             // import_batches points at people with a non-cascading FK. It clears the stamps off the
             // workout rows rather than deleting them -- see ImportBatchCleanup for why nothing else

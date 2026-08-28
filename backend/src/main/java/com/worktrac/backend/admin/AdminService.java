@@ -2,6 +2,11 @@ package com.worktrac.backend.admin;
 
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
+import com.worktrac.backend.billing.BillingPlan;
+import com.worktrac.backend.billing.Subscription;
+import com.worktrac.backend.billing.SubscriptionRepository;
+import com.worktrac.backend.billing.SubscriptionService;
+import com.worktrac.backend.billing.SubscriptionStatus;
 import com.worktrac.backend.contact.ContactMessageService;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonRepository;
@@ -25,6 +30,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.Optional;
 import java.util.Set;
 
@@ -43,6 +49,8 @@ public class AdminService {
     private final RegistrationEventRepository registrationEventRepository;
     private final RegistrationAlertSettingsService registrationAlertSettingsService;
     private final ContactMessageService contactMessageService;
+    private final SubscriptionRepository subscriptionRepository;
+    private final SubscriptionService subscriptionService;
     private final Clock clock;
 
     // The subset of RegistrationEventType that represents a known email send/delivery outcome
@@ -63,7 +71,9 @@ public class AdminService {
                          PendingRegistrationRepository pendingRegistrationRepository,
                          RegistrationEventRepository registrationEventRepository,
                          RegistrationAlertSettingsService registrationAlertSettingsService,
-                         ContactMessageService contactMessageService, Clock clock) {
+                         ContactMessageService contactMessageService,
+                         SubscriptionRepository subscriptionRepository,
+                         SubscriptionService subscriptionService, Clock clock) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
@@ -73,6 +83,8 @@ public class AdminService {
         this.registrationEventRepository = registrationEventRepository;
         this.registrationAlertSettingsService = registrationAlertSettingsService;
         this.contactMessageService = contactMessageService;
+        this.subscriptionRepository = subscriptionRepository;
+        this.subscriptionService = subscriptionService;
         this.clock = clock;
     }
 
@@ -105,6 +117,11 @@ public class AdminService {
         Map<Long, Long> setCountByAccount = toLongMap(workoutSetRepository.countGroupedByAccount());
         Map<Long, Instant> lastActivityByAccount = toInstantMap(
                 workoutSessionRepository.lastActivityGroupedByAccount());
+        // One query for every subscription rather than a lookup per account -- this list already
+        // fans out across every account in the database, and a per-row findByAccountId would make
+        // it N+1 in the one place that deliberately reads across all tenants.
+        Map<Long, Subscription> subscriptionByAccount = subscriptionRepository.findAll().stream()
+                .collect(Collectors.toMap(s -> s.getAccount().getId(), s -> s, (a, b) -> a));
 
         return accountRepository.findAll().stream()
                 .sorted(Comparator.comparing(Account::getCreatedAt).reversed())
@@ -119,8 +136,29 @@ public class AdminService {
                         peopleCountByAccount.getOrDefault(account.getId(), 0L),
                         sessionCountByAccount.getOrDefault(account.getId(), 0L),
                         setCountByAccount.getOrDefault(account.getId(), 0L),
-                        lastActivityByAccount.get(account.getId())))
+                        lastActivityByAccount.get(account.getId()),
+                        // Derived entitlement, not the stored `plan` column: subscriptionService
+                        // is the one place that question is answered, and a cancelled household
+                        // still inside its paid period is Pro here for the same reason it is
+                        // everywhere else.
+                        subscriptionService.isPro(subscriptionByAccount.get(account.getId()))
+                                ? BillingPlan.PRO : BillingPlan.FREE,
+                        subscriptionField(subscriptionByAccount, account, Subscription::getStatus,
+                                SubscriptionStatus.FREE),
+                        subscriptionField(subscriptionByAccount, account, Subscription::getBillingInterval, null),
+                        subscriptionField(subscriptionByAccount, account, Subscription::getCurrentPeriodEnd, null),
+                        subscriptionField(subscriptionByAccount, account, Subscription::isCancelAtPeriodEnd, false),
+                        subscriptionField(subscriptionByAccount, account, Subscription::isComped, false),
+                        subscriptionField(subscriptionByAccount, account, Subscription::getStripeCustomerId, null)))
                 .toList();
+    }
+
+    // An account with no subscription row should be impossible (registration creates one, V56
+    // backfilled the rest) but the admin list is the last place that should 500 over it.
+    private <T> T subscriptionField(Map<Long, Subscription> byAccount, Account account,
+                                     java.util.function.Function<Subscription, T> field, T fallback) {
+        Subscription subscription = byAccount.get(account.getId());
+        return subscription == null ? fallback : field.apply(subscription);
     }
 
     @Transactional(readOnly = true)
