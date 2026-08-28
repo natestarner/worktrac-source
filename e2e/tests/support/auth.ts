@@ -77,6 +77,30 @@ export async function registerHousehold(
   return email;
 }
 
+// Puts a household on Pro (or back on Free) without Stripe existing at all -- the same escape
+// hatch e2eNoopRecipientPattern provides for real email sends, and the reason this suite needs no
+// Stripe credentials in any environment.
+//
+// The backend writes `comped`, so a household set Pro here is entitled through the SAME single
+// derivation a paying one uses (SubscriptionService.isPro). A spec that passes against this is
+// exercising the real entitlement path rather than a fixture built for tests.
+export async function setBillingPlan(
+  request: APIRequestContext,
+  email: string,
+  plan: 'FREE' | 'PRO',
+): Promise<void> {
+  const configResponse = await request.get('/config.json');
+  const { apiUrl } = await configResponse.json();
+  const response = await request.post(
+    `${apiUrl}/api/auth/test/billing-plan?email=${encodeURIComponent(email)}&plan=${plan}`,
+    { headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' } },
+  );
+  // 404 is what this endpoint returns for a wrong/missing key as well as an unknown email, so a
+  // misconfigured E2E_TEST_SUPPORT_KEY surfaces here rather than as a confusing assertion failure
+  // three lines later in whatever spec called this.
+  expect(response.status(), `setBillingPlan failed -- check E2E_TEST_SUPPORT_KEY`).toBe(204);
+}
+
 // TestCodeCache (see TestCodeCache.java) is a plain in-memory map inside the running
 // container -- register() only returns after writing to it, so a lookup immediately after
 // should always find it. It's occasionally missing anyway: the lower backend scales to zero

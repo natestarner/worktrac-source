@@ -39,11 +39,19 @@ class TestSupportControllerProfileTest {
     }
 
     // TestSupportController (not @Profile-gated itself -- only relevant under local, where the
-    // controller bean it's a dependency of actually gets constructed) still needs this
-    // dependency satisfied for the context to refresh at all; this test only cares about the
-    // controller's registration, so a plain Mockito mock is enough.
+    // controller bean it's a dependency of actually gets constructed) still needs these
+    // dependencies satisfied for the context to refresh at all; this test only cares about the
+    // controller's registration, so plain Mockito mocks are enough.
     private void registerMockRegistrationEventRepository(AnnotationConfigApplicationContext context) {
         context.registerBean(RegistrationEventRepository.class,
                 () -> org.mockito.Mockito.mock(RegistrationEventRepository.class));
+        // Added with the e2e billing-plan route, which needs to resolve a household from an email
+        // and set its plan.
+        context.registerBean(UserRepository.class,
+                () -> org.mockito.Mockito.mock(UserRepository.class));
+        context.registerBean(com.worktrac.backend.billing.SubscriptionRepository.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.billing.SubscriptionRepository.class));
+        context.registerBean(com.worktrac.backend.billing.SubscriptionService.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.billing.SubscriptionService.class));
     }
 }

@@ -40,7 +40,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/confirm-email",
                                 "/api/auth/resend-code", "/api/auth/forgot-password", "/api/auth/reset-password",
                                 "/api/auth/resend-reset-code", "/api/auth/test/pending-code",
-                                "/api/auth/test/email-outcome").permitAll()
+                                "/api/auth/test/email-outcome",
+                                "/api/auth/test/billing-plan").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         // Server-to-server (Azure Event Grid), no JWT possible -- gated instead
                         // by EmailDeliveryWebhookController's own query-param shared secret.
