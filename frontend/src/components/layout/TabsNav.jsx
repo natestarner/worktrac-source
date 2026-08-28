@@ -1,7 +1,10 @@
 import { NavLink } from 'react-router-dom';
+import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 const TABS = [
-  { path: '/app/log', label: 'Log' },
+  // tourAnchor is undefined on every tab but Log -- spread as data-tour-anchor={tab.tourAnchor}
+  // below, so `undefined` simply renders no attribute at all and no per-tab branch is needed.
+  { path: '/app/log', label: 'Log', tourAnchor: TOUR_ANCHORS.LOG_TAB },
   { path: '/app/history', label: 'History' },
   { path: '/app/prs', label: 'PRs' },
   { path: '/app/routines', label: 'Routines' },
@@ -21,6 +24,7 @@ export default function TabsNav() {
           <NavLink
             key={tab.path}
             to={tab.path}
+            data-tour-anchor={tab.tourAnchor}
             className={({ isActive }) => ['seg-item', isActive && 'is-active', 'pressable'].filter(Boolean).join(' ')}
           >
             {tab.label}

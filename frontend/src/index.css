@@ -162,8 +162,10 @@
   /* --- Stacking --------------------------------------------------------
      Only the layers with a HARD ordering constraint on each other are
      tokenised. The rest of the app's overlays (toast 40, celebration 50,
-     modal 100, SW updater 1000) never overlap one another, so they stay as
-     local values.
+     the onboarding tour 60, modal 100, SW updater 1000) never overlap one
+     another, so they stay as local values -- .tour-layer's z-index: 60 in
+     particular is deliberately a local constant rather than added here; see
+     its own comment.
 
      Constraint 1: the account dropdown hangs out of the header, which sits
      ABOVE the sticky chrome in the document but must paint BELOW it while
@@ -1378,6 +1380,83 @@ input[type='search']::-webkit-search-results-decoration {
     overscroll-behavior: contain;
   }
 }
+
+/* ===========================================================================
+   Onboarding tour (components/onboarding/ProductTour.jsx)
+
+   Classes, not inline style objects like Modal/PRCelebration/ChartHelp: this overlay needs a
+   `transition`, and a documented reduced-motion stance neither of which an inline object can
+   carry. Only the computed numbers (top/left/width/height, from tourPosition.js) are passed
+   inline -- the same split RefreshIndicator/.refresh-indicator-bar already uses.
+   =========================================================================== */
+
+/* Portal to document.body, full-viewport, click-blocking (no onClick of its own -- see
+   ProductTour.jsx for why the scrim is inert). z-index is a LOCAL CONSTANT, not a token -- see
+   the comment on the stacking block above. For the record: 60 sits above .app-chrome (10), the
+   header dropdown (--z-header-menu, 12), the bottom bar (--z-bottom-bar, 20), the toast (40) and
+   PR celebration (50) -- all of which the tour must be able to dim or point at -- and below the
+   modal (100, so replaying the tour from Help can never fight a real dialog) and the
+   service-worker updater (1000, so an available update stays takeable even mid-tour). */
+.tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  /* The chrome term only -- not .app-shell's extra --space-10 breathing room -- so the tour's own
+     bottomInset can read this computed style directly and can never drift from what SessionBar
+     actually reserves. */
+  padding-bottom: calc(var(--bottom-bar-height) + env(safe-area-inset-bottom));
+  animation: fadeIn var(--dur-base) var(--ease-out);
+}
+
+/* The hole. One transparent box whose box-shadow paints the dimming everywhere ELSE, rather than
+   four separate dimming panels -- which would leave the hole a genuine gap: tap "Log set" at
+   step 6 through an undimmed hole and the tour logs a set out from under itself. An SVG mask
+   paints the same picture with more moving parts (a useId'd mask, a <defs>, an even-odd path) for
+   no behavioural difference. pointer-events: none because blocking clicks is .tour-layer's job --
+   the hole must not be poked through by a click landing exactly on it. */
+.tour-spotlight {
+  position: fixed;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 9999px rgba(28, 27, 25, 0.55);
+  pointer-events: none;
+  transition:
+    top var(--dur-slow) var(--ease-out),
+    left var(--dur-slow) var(--ease-out),
+    width var(--dur-slow) var(--ease-out),
+    height var(--dur-slow) var(--ease-out);
+}
+
+.tour-card {
+  position: fixed;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-4), var(--elevation-hairline);
+  padding: var(--space-5);
+  /* Never needs to grow past 360px -- a wider card on a desktop monitor is a worse read, not a
+     better one, so the horizontal clamp in tourPosition.js never actually bites there. 288px on a
+     320px phone. */
+  width: min(360px, calc(100vw - 2 * var(--space-4)));
+  /* ProductTour.jsx sets max-height imperatively (it has to measure the sticky chrome and the
+     bottom bar first, both JS-only values with no CSS custom property of their own) -- this is
+     just the matching overflow behaviour, the same pairing Modal.jsx's own maxHeight/overflowY
+     uses, so a step whose copy runs long on a short landscape phone scrolls its own content
+     instead of the card overflowing a viewport no placement could fit it into. */
+  overflow-y: auto;
+  /* Focused programmatically on mount and on every step change (see ProductTour.jsx) -- suppress
+     the default focus ring the same way Modal's own dialog does, rather than drawing a box around
+     the whole card every time a step advances. */
+  outline: none;
+  animation: fadeIn var(--dur-base) var(--ease-out);
+}
+
+/* Three one-shot animations altogether -- this cross-fade, the layer's fadeIn above, and the
+   spotlight's own `transition` on top/left/width/height -- each collapsing to exactly the state
+   you want to see. The blanket prefers-reduced-motion rule near the top of this file is correct
+   here as-is: DO NOT add a reduced-motion override for any of the three.
+   Explicitly forbidden, for the same reason: a pulsing ring on the spotlight. An INFINITE
+   animation on a dimmed screen is the one shape here that would actually need an override, and it
+   would loop forever for someone with the OS setting on. */
 
 /* ===========================================================================
    Animations

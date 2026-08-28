@@ -6,6 +6,7 @@ import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useLiveSession } from '../../hooks/useLiveSession';
 import { useRestTimerPreference } from '../../hooks/useRestTimerPreference';
+import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
@@ -156,5 +157,21 @@ describe('PersonPillBar rest ring', () => {
     render(<PersonPillBar />);
 
     expect(screen.getByRole('button', { name: /Alex/ })).toBeInTheDocument();
+  });
+});
+
+// Cheap and high-value: it's what stops a refactor silently deleting an attribute nothing else in
+// this file references. Asserted at BOTH household sizes because the bar changes DOM position
+// between them (AppShell.jsx) -- the attribute has to survive that move.
+describe('PersonPillBar tour anchor', () => {
+  it('anchors the whole bar for a two-person household', () => {
+    const { container } = render(<PersonPillBar />);
+    expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.PEOPLE_BAR}"]`)).not.toBeNull();
+  });
+
+  it('anchors the whole bar for a one-person household too', () => {
+    useAuth.mockReturnValue({ people: [people[0]] });
+    const { container } = render(<PersonPillBar />);
+    expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.PEOPLE_BAR}"]`)).not.toBeNull();
   });
 });

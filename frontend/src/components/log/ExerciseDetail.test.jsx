@@ -13,6 +13,7 @@ import { getExerciseSummary } from '../../api/stats';
 import { editSet, listSessionSets, logLiveSet, logSetIntoSession } from '../../api/sets';
 import { getSessionExerciseNote, saveLiveExerciseNote, saveSessionExerciseNote } from '../../api/notes';
 import { getHistory } from '../../api/sessions';
+import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 // ExerciseDetail's handleLogSet only starts the 90s rest timer for a LIVE set --
 // never for a set logged while editing a past/retroactive session. This is the one
@@ -132,6 +133,29 @@ describe('ExerciseDetail rest-timer live-vs-retroactive gating', () => {
       expect(logSetIntoSession).toHaveBeenCalledWith(55, expect.objectContaining({ exerciseId: 1, weight: 135, reps: 8 })),
     );
     expect(startRestTimer).not.toHaveBeenCalled();
+  });
+});
+
+// Cheap and high-value: stops a refactor silently deleting an attribute nothing else in this file
+// references. All three anchors render unconditionally (not gated on `ready`), so no async wait
+// is needed here.
+describe('ExerciseDetail tour anchors', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useAppState.mockReturnValue(typedDraft());
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+  });
+
+  it('anchors the stepper pair, the Log-set button and the Customize button', () => {
+    const { container } = renderExerciseDetail();
+
+    expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.SET_ENTRY}"]`)).not.toBeNull();
+    expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.LOG_SET}"]`)).not.toBeNull();
+    expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.CUSTOMIZE_EXERCISE}"]`)).not.toBeNull();
   });
 });
 

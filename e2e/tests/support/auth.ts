@@ -25,12 +25,22 @@ import { APIRequestContext, Page, expect } from '@playwright/test';
 // emailOverride lets a caller supply its own address instead of the default e2e-noop'd pattern
 // -- used only by live-email-canary.spec.ts, which needs an address that deliberately does NOT
 // match the no-op pattern so it triggers a real send.
+//
+// keepWelcome skips the unconditional dismissal below -- used only by
+// onboarding-tour.spec.ts, which needs the welcome modal still on screen to test it. Every other
+// spec goes through this function not caring that the modal ever existed, which is the point.
+export interface RegisterHouseholdOptions {
+  emailOverride?: string;
+  keepWelcome?: boolean;
+}
+
 export async function registerHousehold(
   page: Page,
   request: APIRequestContext,
   personName: string,
-  emailOverride?: string,
+  options: RegisterHouseholdOptions = {},
 ): Promise<string> {
+  const { emailOverride, keepWelcome = false } = options;
   const email = emailOverride ?? `huddle+e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
 
   await page.goto('/register');
@@ -47,6 +57,22 @@ export async function registerHousehold(
   await page.getByPlaceholder('123456').fill(code);
   await page.getByRole('button', { name: 'Confirm' }).click();
   await expect(page).toHaveURL(/\/app\/log/);
+
+  // Every fresh registration arms the first-run welcome modal, so it lands in front of every one
+  // of this helper's ~149 call sites. Dismissed UNCONDITIONALLY, never behind an
+  // `if (await modal.isVisible())` -- isVisible() has NO auto-waiting, and "right now" is the
+  // instant the URL assertion above passed, which is before the modal has necessarily mounted
+  // (ProtectedRoute gates on rehydrate, AppShell returns null until activePersonId resolves, and
+  // the flag itself is read in an effect). That is a coin flip baked into every spec that runs
+  // through this helper, and losing it leaves the modal to eat the spec's NEXT click and fail
+  // elsewhere with "intercepts pointer events" -- the exact signature frontend-core.md records
+  // twice already. click() carries Playwright's own actionability wait, so the unconditional
+  // version is the deterministic one, and it encodes the invariant rather than merely working
+  // around it.
+  if (!keepWelcome) {
+    await page.getByRole('button', { name: 'Not now' }).click();
+    await expect(page.getByRole('dialog', { name: 'Welcome to Huddle' })).toBeHidden();
+  }
 
   return email;
 }

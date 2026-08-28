@@ -205,7 +205,13 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 # the contact form. Neither module carries a write, queues anything, or sits on any path a write
 # takes, so none of them can hide a lost write the way an outbox swallow could. Diagnostics
 # plumbing must never be able to break the app it is diagnosing.
-EXPECTED_LIB_SWALLOWS=39
+# 2026-08-27: 39 -> 42. The first-run onboarding tour's one-shot flag, lib/onboardingPending.js
+# (mark/is/clear), same shape as endedSessions.js / authSnapshot.js. All three are a
+# storage-availability guard -- private mode, quota, storage disabled -- degrading to "no welcome
+# modal for this account", never to a lost write: the flag carries no queued work and sits on no
+# write's path, and the module it gates (AuthContext.confirmEmail) must keep authenticating the
+# account whether or not the flag itself could be written.
+EXPECTED_LIB_SWALLOWS=42
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

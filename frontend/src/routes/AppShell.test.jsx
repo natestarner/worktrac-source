@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +9,7 @@ import { useAppState } from '../context/AppStateContext';
 import { useUI } from '../context/UIContext';
 import { migrateLegacyRestTimerPrefs } from '../lib/restTimerMigration';
 import { tryForceUpdate } from '../lib/swUpdate';
+import { isOnboardingPending, markOnboardingPending } from '../lib/onboardingPending';
 import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator';
 
 vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }));
@@ -31,6 +32,18 @@ vi.mock('../components/layout/SessionBar', () => ({ default: () => null }));
 vi.mock('../components/shared/OfflineBanner', () => ({ default: () => null }));
 vi.mock('../components/shared/ConnectionTroubleBanner', () => ({ default: () => null }));
 vi.mock('../components/shared/OfflineRecoveryPrompt', () => ({ default: () => null }));
+// ProductTour's own dependency graph (two catalog hooks, react-router's navigate, focus/scroll
+// management) is covered by ProductTour.test.jsx -- here only WHEN it mounts matters, so it's
+// stubbed to a marker like the chrome bars above.
+vi.mock('../components/onboarding/ProductTour', () => ({ default: () => <div data-testid="product-tour" /> }));
+vi.mock('../components/onboarding/WelcomeModal', () => ({
+  default: ({ onAccept, onDismiss }) => (
+    <div data-testid="welcome-modal">
+      <button onClick={onAccept}>mock-accept</button>
+      <button onClick={onDismiss}>mock-dismiss</button>
+    </div>
+  ),
+}));
 
 function baseAppState(overrides = {}) {
   return {
@@ -357,5 +370,106 @@ describe('AppShell rest timer resume', () => {
 
     expect(startRestTimer).not.toHaveBeenCalled();
     expect(setRestTimer).not.toHaveBeenCalled();
+  });
+});
+
+// The first-run welcome modal. New registrations only -- the flag is armed by
+// AuthContext.confirmEmail, never by an ordinary login, and it's account-scoped so a shared
+// device with more than one household never shows the wrong one's welcome modal.
+describe('AppShell welcome modal', () => {
+  const solo = [{ id: 7, name: 'Nate', isPrimary: true }];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    useAppState.mockReturnValue(baseAppState());
+    useUI.mockReturnValue(baseUI());
+    migrateLegacyRestTimerPrefs.mockResolvedValue(false);
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it('renders when the flag is set for the current account', () => {
+    useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn(), account: { id: 1 } });
+    markOnboardingPending(1);
+
+    renderShell();
+
+    expect(screen.getByTestId('welcome-modal')).toBeInTheDocument();
+  });
+
+  it('does not render when nothing is pending for this account', () => {
+    useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn(), account: { id: 1 } });
+
+    renderShell();
+
+    expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
+  });
+
+  it("does not render a DIFFERENT account's pending flag onto the active account", () => {
+    useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn(), account: { id: 2 } });
+    markOnboardingPending(1); // a different account entirely, e.g. a shared device
+
+    renderShell();
+
+    expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
+  });
+
+  it('"Show me around" clears the flag and starts the tour', () => {
+    const startTour = vi.fn();
+    useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn(), account: { id: 1 } });
+    useUI.mockReturnValue(baseUI({ startTour }));
+    markOnboardingPending(1);
+
+    renderShell();
+    fireEvent.click(screen.getByText('mock-accept'));
+
+    expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
+    expect(startTour).toHaveBeenCalledTimes(1);
+    expect(isOnboardingPending(1)).toBe(false);
+  });
+
+  it('"Not now" clears the flag WITHOUT starting the tour', () => {
+    const startTour = vi.fn();
+    useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn(), account: { id: 1 } });
+    useUI.mockReturnValue(baseUI({ startTour }));
+    markOnboardingPending(1);
+
+    renderShell();
+    fireEvent.click(screen.getByText('mock-dismiss'));
+
+    expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
+    expect(startTour).not.toHaveBeenCalled();
+    expect(isOnboardingPending(1)).toBe(false);
+  });
+});
+
+describe('AppShell product tour mounting', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate', isPrimary: true }], refreshPeople: vi.fn() });
+    useAppState.mockReturnValue(baseAppState());
+    migrateLegacyRestTimerPrefs.mockResolvedValue(false);
+  });
+
+  it('does not mount ProductTour while no tour is running', () => {
+    useUI.mockReturnValue(baseUI());
+    renderShell();
+
+    expect(screen.queryByTestId('product-tour')).not.toBeInTheDocument();
+  });
+
+  it('mounts ProductTour once a tour starts', () => {
+    useUI.mockReturnValue(baseUI());
+    const { rerenderApp } = renderShell();
+    expect(screen.queryByTestId('product-tour')).not.toBeInTheDocument();
+
+    useUI.mockReturnValue(baseUI({ tour: { stepIndex: 0 } }));
+    rerenderApp();
+
+    expect(screen.getByTestId('product-tour')).toBeInTheDocument();
   });
 });

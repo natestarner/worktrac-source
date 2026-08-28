@@ -6,6 +6,7 @@ import { confirmEmail as apiConfirmEmail, login as apiLogin, me as apiMe, regist
 import { getAuthToken, setAuthToken } from '../api/client';
 import { clearOutboxMutations, flushOutbox } from '../lib/queryClient';
 import { __resetOutboxAccountForTests, setOutboxAccountId } from '../lib/outboxPersistence';
+import { isOnboardingPending } from '../lib/onboardingPending';
 
 vi.mock('../api/auth', () => ({
   login: vi.fn(),
@@ -59,9 +60,13 @@ describe('AuthContext register/confirmEmail split', () => {
     vi.clearAllMocks();
     getAuthToken.mockReturnValue(null);
     __resetOutboxAccountForTests();
+    localStorage.clear();
   });
 
-  afterEach(() => __resetOutboxAccountForTests());
+  afterEach(() => {
+    __resetOutboxAccountForTests();
+    localStorage.clear();
+  });
 
   it('register starts the pending registration but does not store a token or authenticate', async () => {
     apiRegister.mockResolvedValue({ email: 'alex@example.com' });
@@ -98,6 +103,20 @@ describe('AuthContext register/confirmEmail split', () => {
     expect(setAuthToken).toHaveBeenCalledWith('tok-123');
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'));
   });
+
+  // The welcome modal's whole trigger. confirmEmail is the only path where the account is
+  // provably created in this same request -- see the comment on the call site.
+  it('confirmEmail arms the welcome modal for the newly-created account', async () => {
+    apiConfirmEmail.mockResolvedValue({ token: 'tok-123' });
+    apiMe.mockResolvedValue({ user: { email: 'alex@example.com' }, account: { id: 1 }, people: [{ id: 1 }] });
+    renderHarness();
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
+
+    fireEvent.click(screen.getByText('confirm'));
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'));
+    expect(isOnboardingPending(1)).toBe(true);
+  });
 });
 
 describe('AuthContext login outbox account adoption', () => {
@@ -105,11 +124,27 @@ describe('AuthContext login outbox account adoption', () => {
     vi.clearAllMocks();
     getAuthToken.mockReturnValue(null);
     __resetOutboxAccountForTests();
+    localStorage.clear();
     apiLogin.mockResolvedValue({ token: 'tok-456' });
     apiMe.mockResolvedValue({ user: { email: 'alex@example.com' }, account: { id: 5 }, people: [{ id: 1 }] });
   });
 
-  afterEach(() => __resetOutboxAccountForTests());
+  afterEach(() => {
+    __resetOutboxAccountForTests();
+    localStorage.clear();
+  });
+
+  // login() runs on every ordinary sign-in an account will ever do, including years later, so
+  // unlike confirmEmail it can never be the moment "this account was just created".
+  it('an ordinary login does not arm the welcome modal', async () => {
+    renderHarness();
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
+
+    fireEvent.click(screen.getByText('login'));
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'));
+    expect(isOnboardingPending(5)).toBe(false);
+  });
 
   it('the SAME account logging back in (e.g. after a 401) does not evict the live outbox', async () => {
     setOutboxAccountId(5); // this account already owns whatever's in the live mutation cache

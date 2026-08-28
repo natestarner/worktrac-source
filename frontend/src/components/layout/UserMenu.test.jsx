@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { queryClient, LOG_SET_MUTATION_KEY } from '../../lib/queryClient';
 import { getQueuedWriteCount } from '../../hooks/useOutboxCount';
 import { logLiveSet } from '../../api/sets';
+import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -75,6 +76,14 @@ describe('UserMenu', () => {
     // Drop the paused mutation WITHOUT resuming it (resuming would fire a real request in jsdom).
     queryClient.getMutationCache().clear();
     onlineManager.setOnline(true);
+  });
+
+  // Cheap and high-value: stops a refactor silently deleting an attribute nothing else in this
+  // file references. Checked on the trigger itself, not the (unrelated) menu content.
+  it('anchors the trigger button for the onboarding tour', () => {
+    useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false });
+    const { container } = renderMenu();
+    expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.ACCOUNT_MENU}"]`)).not.toBeNull();
   });
 
   it('does not show the Admin Portal item for a non-admin user', () => {

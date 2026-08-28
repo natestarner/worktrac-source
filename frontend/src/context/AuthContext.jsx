@@ -16,6 +16,7 @@ import { queryClient, resetQueryCache, clearOutboxMutations, flushOutbox } from 
 import { clearOutbox, getOutboxAccountId, restoreOutbox, setOutboxAccountId } from '../lib/outboxPersistence';
 import { clearAuthSnapshot, loadAuthSnapshot, saveAuthSnapshot } from '../lib/authSnapshot';
 import { requestPersistentStorage } from '../lib/durableStorage';
+import { markOnboardingPending } from '../lib/onboardingPending';
 
 const AuthContext = createContext(null);
 
@@ -210,6 +211,12 @@ export function AuthProvider({ children }) {
     setAuthToken(token);
     const data = await apiMe();
     saveAuthSnapshot(data);
+    // Arms the first-run welcome modal for this account. Here, and NOT in login(): this is the
+    // only path where the account is provably created in this same request -- confirmEmail is
+    // what turns a pending registration into a real account, so an account reaching this line has
+    // just been created, full stop. login() runs on every ordinary sign-in an account will ever
+    // do, including years later, so it can never carry that guarantee.
+    markOnboardingPending(data.account?.id);
     // A brand-new account has no queued writes of its own, but a PREVIOUS household's outbox may
     // still be sitting in memory on this shared device -- same protection as login() above.
     const switchedAccount = adoptOutboxAccount(data.account?.id);

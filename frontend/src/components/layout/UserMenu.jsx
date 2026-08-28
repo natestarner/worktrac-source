@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { queryClient } from '../../lib/queryClient';
 import { getUnsyncedWriteCount } from '../../hooks/useOutboxCount';
+import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 // `booting` is passed by AppShellSkeleton only. That skeleton renders a REAL Header so the
 // boot paint matches the loaded one pixel-for-pixel -- but the tree it renders is guaranteed to
@@ -94,6 +95,7 @@ export default function UserMenu({ booting = false }) {
         disabled={booting}
         aria-expanded={open}
         aria-haspopup="menu"
+        data-tour-anchor={TOUR_ANCHORS.ACCOUNT_MENU}
         style={{
           display: 'flex',
           alignItems: 'center',

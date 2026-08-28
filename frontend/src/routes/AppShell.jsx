@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -7,6 +7,7 @@ import { useUI } from '../context/UIContext';
 import { DEFAULT_REST_TARGET_SECONDS, isRestTimerExpired } from '../utils/restTarget';
 import { migrateLegacyRestTimerPrefs } from '../lib/restTimerMigration';
 import { tryForceUpdate } from '../lib/swUpdate';
+import { clearOnboardingPending, isOnboardingPending } from '../lib/onboardingPending';
 import { useOfflineCacheWarming } from '../hooks/useOfflineCacheWarming';
 import Header from '../components/layout/Header';
 import PersonPillBar from '../components/layout/PersonPillBar';
@@ -20,12 +21,35 @@ import ConnectionTroubleBanner from '../components/shared/ConnectionTroubleBanne
 import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
 import ErrorBoundary from '../components/shared/ErrorBoundary';
 import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator';
+import WelcomeModal from '../components/onboarding/WelcomeModal';
+import ProductTour from '../components/onboarding/ProductTour';
 
 export default function AppShell() {
-  const { people, refreshPeople } = useAuth();
+  const { people, refreshPeople, account } = useAuth();
   const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId, restTimersByPerson, setRestTimer } =
     useAppState();
-  const { restTimers, startRestTimer } = useUI();
+  const { restTimers, startRestTimer, tour, startTour } = useUI();
+  const [showWelcome, setShowWelcome] = useState(false);
+  const accountId = account?.id;
+
+  // New-registrations-only, one-shot: the flag is armed at email confirmation
+  // (AuthContext.confirmEmail / lib/onboardingPending.js), never by an ordinary login. Re-checked
+  // whenever the active account changes, so a shared device switching between two households
+  // shows each account's own first-run welcome exactly once, never the other's.
+  useEffect(() => {
+    if (isOnboardingPending(accountId)) setShowWelcome(true);
+  }, [accountId]);
+
+  function handleAcceptWelcome() {
+    clearOnboardingPending(accountId);
+    setShowWelcome(false);
+    startTour();
+  }
+
+  function handleDismissWelcome() {
+    clearOnboardingPending(accountId);
+    setShowWelcome(false);
+  }
   // Mirrors restTimers so the resume effect can ask "is this one already running?" without taking
   // the map as a dependency -- it changes identity every tick, which would re-run the effect once a
   // second for the whole rest period.
@@ -201,6 +225,13 @@ export default function AppShell() {
       <Toast />
       <PRCelebration />
       <ConfirmDialog />
+      {/* Conditional AT THE CALL SITE, unlike Toast/PRCelebration/ConfirmDialog (which mount
+          unconditionally and self-guard) -- ProductTour mounts two catalog hooks of its own (see
+          its header comment), and gating here is what keeps them alive for only the life of an
+          actual tour instead of becoming a permanent observer History/PRs/Trends never asked
+          for. */}
+      {showWelcome && <WelcomeModal onAccept={handleAcceptWelcome} onDismiss={handleDismissWelcome} />}
+      {tour && <ProductTour />}
     </div>
   );
 }

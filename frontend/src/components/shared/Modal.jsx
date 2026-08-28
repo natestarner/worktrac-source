@@ -2,6 +2,8 @@ import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import IconButton from './IconButton';
 import { IconClose } from './icons';
+import { FOCUSABLE, installFocusTrap } from '../../lib/focusTrap';
+import { lockBodyScroll } from '../../lib/bodyScrollLock';
 
 // Generic overlay shell reused by every modal (Add Person, Add/Edit Exercise, Routine
 // form, Past Session, Edit Set, Setup Field Editor, End Workout Confirm).
@@ -24,10 +26,9 @@ import { IconClose } from './icons';
 // matter what z-index it asked for. The portal
 // makes placement in the tree irrelevant, which is also why PersonPillBar no longer needs
 // to render AddPersonModal outside its own sticky wrapper.
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-// Same set minus the header's X -- see the autofocus note below for why it is excluded there
-// but not from the Tab cycle.
+// FOCUSABLE itself now lives in lib/focusTrap.js, shared with the onboarding tour's card -- see
+// that module's header comment. Same set minus the header's X -- see the autofocus note below for
+// why it is excluded there but not from the Tab cycle.
 const FOCUSABLE_NOT_CLOSE = FOCUSABLE.split(', ')
   .map((selector) => `${selector}:not([data-modal-close])`)
   .join(', ');
@@ -62,41 +63,20 @@ export default function Modal({ width = 320, onClose, title, children, align = '
       if (event.key === 'Escape' && onCloseRef.current) {
         event.stopPropagation();
         onCloseRef.current();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      // Focus trap: without it, tabbing past the last control walks into the page behind
-      // the scrim, where everything is visually obscured but still reachable.
-      const items = Array.from(dialog.querySelectorAll(FOCUSABLE)).filter((el) => el.offsetParent !== null);
-      if (items.length === 0) return;
-      const firstItem = items[0];
-      const lastItem = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === firstItem) {
-        event.preventDefault();
-        lastItem.focus();
-      } else if (!event.shiftKey && document.activeElement === lastItem) {
-        event.preventDefault();
-        firstItem.focus();
       }
     }
-
     dialog.addEventListener('keydown', onKeyDown);
-
-    // The page behind a modal must not scroll under it -- but hiding the overflow also removes
-    // the scrollbar, and on a platform with classic (space-taking) scrollbars that widens the
-    // viewport by ~15px. Everything behind the scrim then jumps sideways as the modal opens and
-    // jumps back as it closes; it's most obvious on right-aligned chrome like the header's
-    // account menu. Replacing the scrollbar's width with padding keeps the layout still.
-    const previousOverflow = document.body.style.overflow;
-    const previousPaddingRight = document.body.style.paddingRight;
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-    document.body.style.overflow = 'hidden';
-    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+    // Without this, tabbing past the last control walks into the page behind the scrim, where
+    // everything is visually obscured but still reachable. See lib/focusTrap.js.
+    const uninstallFocusTrap = installFocusTrap(dialog);
+    // The page behind a modal must not scroll under it. See lib/bodyScrollLock.js -- most
+    // noticeable, before this existed, on right-aligned chrome like the header's account menu.
+    const unlockBodyScroll = lockBodyScroll();
 
     return () => {
       dialog.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = previousOverflow;
-      document.body.style.paddingRight = previousPaddingRight;
+      uninstallFocusTrap();
+      unlockBodyScroll();
       // Return focus to whatever opened the modal, so keyboard position isn't lost.
       if (restoreFocusRef.current instanceof HTMLElement) restoreFocusRef.current.focus({ preventScroll: true });
     };
