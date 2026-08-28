@@ -1,6 +1,14 @@
 import { expect, test } from '@playwright/test';
 import { registerHousehold, setBillingPlan } from './support/auth';
 
+// The account dropdown is reached by scoping to .header-bar rather than matching the account
+// holder's name, which varies per test -- the same idiom admin.spec.ts uses, and for the same
+// reason. Note PlanBadge now also lives in that bar: on Free it renders a LINK and on Pro a plain
+// span, so the "only button in the header" assumption those specs rely on still holds.
+async function openAccountMenu(page) {
+  await page.locator('.header-bar').getByRole('button').click();
+}
+
 // The plan screen, both sides of it.
 //
 // STRIPE IS DELIBERATELY ABSENT from this suite. Plans are set through the test-support endpoint,
@@ -11,7 +19,7 @@ test.describe('billing', () => {
   test('a Free household is offered Pro, with yearly leading', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
 
-    await page.getByRole('button', { name: /Account|Nate/ }).click();
+    await openAccountMenu(page);
     await page.getByRole('menuitem', { name: 'Plan & billing' }).click();
 
     await expect(page).toHaveURL(/\/app\/billing/);

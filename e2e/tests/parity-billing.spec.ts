@@ -3,6 +3,14 @@ import { registerHousehold, setBillingPlan } from './support/auth';
 import { goHardOffline } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
+// The account dropdown is reached by scoping to .header-bar rather than matching the account
+// holder's name, which varies per test -- the same idiom admin.spec.ts uses, and for the same
+// reason. Note PlanBadge now also lives in that bar: on Free it renders a LINK and on Pro a plain
+// span, so the "only button in the header" assumption those specs rely on still holds.
+async function openAccountMenu(page) {
+  await page.locator('.header-bar').getByRole('button').click();
+}
+
 // The claim: a household sees its own plan identically in every connectivity mode.
 //
 // This is the assertion that proves clamping SERVER-SIDE was the right call. The plan reaches the
@@ -26,7 +34,7 @@ forEachConnectivityMode<{ email: string }>('a Pro household reads as Pro', {
   navigate: async (page) => {
     // Client-side routing, not page.goto -- a real navigation would need the service worker, and
     // this is exercising the app rather than the SW (that lives in offline-durability.spec.ts).
-    await page.getByRole('button', { name: /Account|Nate/ }).click();
+    await openAccountMenu(page);
     await page.getByRole('menuitem', { name: 'Plan & billing' }).click();
   },
   act: async () => {
@@ -50,7 +58,7 @@ forEachConnectivityMode<{ email: string }>('a Free household reads as Free', {
     return { email };
   },
   navigate: async (page) => {
-    await page.getByRole('button', { name: /Account|Nate/ }).click();
+    await openAccountMenu(page);
     await page.getByRole('menuitem', { name: 'Plan & billing' }).click();
   },
   act: async () => {},
@@ -72,7 +80,7 @@ forEachConnectivityMode<{ email: string }>('a Free household reads as Free', {
 // failing after the fact.
 test('upgrading refuses offline rather than queueing a payment', async ({ page, request }) => {
   await registerHousehold(page, request, 'Nate');
-  await page.getByRole('button', { name: /Account|Nate/ }).click();
+  await openAccountMenu(page);
   await page.getByRole('menuitem', { name: 'Plan & billing' }).click();
 
   const upgrade = page.getByRole('button', { name: 'Upgrade to Pro' });

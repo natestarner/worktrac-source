@@ -44,17 +44,17 @@ export default function BillingTab() {
   // mechanism table exists to prevent.
   const { pending, run } = useGatedMutation();
 
-  // Releasing on UNMOUNT covers every way the billing decision can resolve without a second
-  // mechanism: paying and moving on, tapping "Start with Free", or simply leaving via a tab. All
-  // three end with this screen gone, which is exactly the moment the first-run welcome modal
-  // should be allowed to appear.
+  // NOTE: leaving this screen is NOT what releases the deferral -- AppShell does that, keyed on the
+  // route. An unmount cleanup here was the obvious implementation and it is wrong: StrictMode
+  // double-invokes effects (mount -> cleanup -> mount), so the cleanup fired immediately while the
+  // billing screen was still on screen, and the welcome modal appeared over it. Unit tests missed
+  // it because RTL does not wrap in StrictMode; the e2e caught it as an "intercepts pointer
+  // events" failure, which is this codebase's usual signature for an unexpected overlay.
   //
-  // A ref, not releaseOnboarding directly, so the cleanup does not re-run whenever UIContext's
-  // value identity changes -- releasing mid-session would let the modal appear over this screen,
-  // which is the thing being prevented.
+  // What DOES belong here is the release after a successful payment (below), because the modal
+  // should land over the success screen rather than waiting for the person to navigate away.
   const releaseRef = useRef(releaseOnboarding);
   releaseRef.current = releaseOnboarding;
-  useEffect(() => () => releaseRef.current(), []);
 
   const subscriptionQuery = useQuery({
     queryKey: queryKeys.subscription(),
