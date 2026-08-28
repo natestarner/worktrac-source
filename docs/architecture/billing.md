@@ -119,11 +119,77 @@ leaving via a tab — with one mechanism rather than three call sites.
 
 ## Existing households when the window lands
 
-Clipped like everyone else, except a comped list set by a one-time migration. `comped` ships in V56
-so grandfathering needs no schema change later.
+Clipped like everyone else, except a comped list. `comped` ships as a column in V56, but the list
+itself is **`COMPED_EMAILS`, not a migration** — reusing the `ADMIN_EMAILS` mechanism exactly
+(typed properties plus an `ApplicationRunner`) rather than inventing a second way to grant
+something from a configured list.
+
+Two reasons it is not a migration, and the first is the important one:
+
+- **These are other people's personal email addresses.** A migration writes them into git history
+  permanently, in a repository that has no business holding them. An env var sourced from a deploy
+  secret keeps them out of both repos.
+- Comping someone later would otherwise need a new migration each time. This makes it a config
+  change, which is what it actually is.
+
+`CompBootstrap` is **promote-only**, and that asymmetry is deliberate. `AuthService.login` both
+promotes and demotes admins because losing an admin role costs someone a menu item. Losing a comp
+costs them their entire training history behind a paywall, with no warning and no purchase to point
+at — far too consequential to happen as a side effect of an edited environment variable, or of a
+deploy where the secret was momentarily unset. A household that drops off the list is **logged, not
+revoked**.
 
 Rejected: Stripe 100%-off promotion codes. They work (`duration: forever` plus
 `payment_method_collection: 'if_required'` so a $0 total does not demand a card), but for a handful
 of known households they are strictly more moving parts — a code to distribute, a checkout to
 complete, and an expiry to forget. Also rejected: a "comp this account" admin button, which would be
 a third sanctioned write action in a deliberately read-only portal.
+
+
+## Deploying it: the environment variables
+
+All of these live in the separate **`worktrac-deploy`** repo, never here. Three places have to
+agree, which is the same shape `ADMIN_EMAILS` and `ACS_EMAIL_CONNECTION_STRING` already have:
+
+1. **Repo secrets** on `natestarner/worktrac-deploy`.
+2. The **`az containerapp update --set-env-vars`** block in `deploy-lower.yml` and
+   `deploy-prod.yml`.
+3. **`config/{lower,production}/backend-env.json`** — the documentation mirror, using the existing
+   `"SET_VIA_SECRET"` marker.
+
+| Variable | Notes |
+|---|---|
+| `STRIPE_SECRET_KEY` | `sk_test_` in lower, `sk_live_` in prod. A real credential in both |
+| `STRIPE_PUBLISHABLE_KEY` | Not secret — it is handed to the browser — but kept alongside the rest |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_` from the **Dashboard endpoint** for that environment. Local development uses the different one `stripe listen` mints |
+| `STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_YEARLY` | Price ids differ between sandbox and live |
+| `STRIPE_RETURN_URL` | `https://app.dev.huddle.fitness/app/billing` / `https://app.huddle.fitness/app/billing` |
+| `COMPED_EMAILS` | Comma-separated. **Set it as a SECRET, not a plaintext workflow value** — these are other people's personal addresses, unlike `ADMIN_EMAILS`' single team address |
+
+```bash
+gh secret set STRIPE_SECRET_KEY_LOWER      --repo natestarner/worktrac-deploy
+gh secret set STRIPE_PUBLISHABLE_KEY_LOWER --repo natestarner/worktrac-deploy
+gh secret set STRIPE_WEBHOOK_SECRET_LOWER  --repo natestarner/worktrac-deploy
+gh secret set STRIPE_PRICE_MONTHLY_LOWER   --repo natestarner/worktrac-deploy
+gh secret set STRIPE_PRICE_YEARLY_LOWER    --repo natestarner/worktrac-deploy
+gh secret set COMPED_EMAILS                --repo natestarner/worktrac-deploy
+# ...and the _PROD counterparts when production is ready.
+```
+
+**Nothing changes in `worktrac-source`'s `ci.yml`.** The Playwright suite needs no Stripe
+credentials in any environment — see `TestSupportController`'s billing-plan route for why.
+
+### Order of operations, and the one way to get it wrong
+
+Merging to `main` deploys to **lower** automatically; production is a separate, manual push to the
+deploy repo's `production` branch. That asymmetry is what makes the sequencing safe — but it also
+makes exactly one mistake possible:
+
+> **Never promote to production before the prod Stripe configuration is live there.** The gates and
+> the billing screen ship together, so a production deploy with Stripe unconfigured leaves real
+> households clipped to 90 days with a billing screen that answers 503. Set the prod secrets,
+> create the live-mode product, prices, portal and webhook endpoint, and only then promote.
+
+An unconfigured environment fails safe in the sense that matters — it refuses rather than granting
+Pro to everyone — but "fails safe" is not the same as "is fine", and this is the one combination
+worth checking by hand before pushing to `production`.
