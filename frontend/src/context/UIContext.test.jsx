@@ -3,6 +3,94 @@ import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UIProvider, useUI } from './UIContext';
 
+// The onboarding tour's runtime state -- see ProductTour.jsx and tourSteps.js for what actually
+// consumes this. Structurally identical to toast/confirmDialog/celebration: one overlay, in
+// memory, discarded on reload, and it belongs to the account rather than to whichever person
+// happens to be active (frontend-core.md's three named exceptions to per-person state).
+function TourHarness() {
+  const { tour, startTour, nextTourStep, prevTourStep, endTour } = useUI();
+  return (
+    <div>
+      <span data-testid="tour-step">{tour ? tour.stepIndex : 'none'}</span>
+      <button onClick={startTour}>tour-start</button>
+      <button onClick={nextTourStep}>tour-next</button>
+      <button onClick={prevTourStep}>tour-prev</button>
+      <button onClick={endTour}>tour-end</button>
+    </div>
+  );
+}
+
+describe('UIContext onboarding tour', () => {
+  it('is null until startTour is called', () => {
+    render(
+      <UIProvider>
+        <TourHarness />
+      </UIProvider>,
+    );
+    expect(screen.getByTestId('tour-step').textContent).toBe('none');
+  });
+
+  it('startTour always begins at step 0, taking no arguments', () => {
+    render(
+      <UIProvider>
+        <TourHarness />
+      </UIProvider>,
+    );
+    act(() => screen.getByText('tour-start').click());
+    expect(screen.getByTestId('tour-step').textContent).toBe('0');
+  });
+
+  it('nextTourStep advances the step index', () => {
+    render(
+      <UIProvider>
+        <TourHarness />
+      </UIProvider>,
+    );
+    act(() => screen.getByText('tour-start').click());
+    act(() => screen.getByText('tour-next').click());
+    act(() => screen.getByText('tour-next').click());
+    expect(screen.getByTestId('tour-step').textContent).toBe('2');
+  });
+
+  it('prevTourStep steps back but never below 0', () => {
+    render(
+      <UIProvider>
+        <TourHarness />
+      </UIProvider>,
+    );
+    act(() => screen.getByText('tour-start').click());
+    act(() => screen.getByText('tour-next').click());
+    act(() => screen.getByText('tour-prev').click());
+    expect(screen.getByTestId('tour-step').textContent).toBe('0');
+
+    act(() => screen.getByText('tour-prev').click());
+    expect(screen.getByTestId('tour-step').textContent).toBe('0');
+  });
+
+  it('endTour clears the tour back to null', () => {
+    render(
+      <UIProvider>
+        <TourHarness />
+      </UIProvider>,
+    );
+    act(() => screen.getByText('tour-start').click());
+    act(() => screen.getByText('tour-end').click());
+    expect(screen.getByTestId('tour-step').textContent).toBe('none');
+  });
+
+  it('is a no-op to advance/retreat/end a tour that never started', () => {
+    render(
+      <UIProvider>
+        <TourHarness />
+      </UIProvider>,
+    );
+    act(() => screen.getByText('tour-next').click());
+    act(() => screen.getByText('tour-prev').click());
+    act(() => screen.getByText('tour-end').click());
+    expect(screen.getByTestId('tour-step').textContent).toBe('none');
+  });
+});
+
 // People trade off sets while working out together, so each person needs their own independent
 // rest timer -- starting one person's must never reset or destroy another's, and each keeps
 // running in the background regardless of who's currently active.

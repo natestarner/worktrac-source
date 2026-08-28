@@ -12,6 +12,7 @@ import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
 import { usePersonExercises } from '../../hooks/usePersonExercises';
 import { useRoutines } from '../../hooks/useRoutines';
+import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
@@ -54,6 +55,13 @@ describe('RoutinesTab offline', () => {
     expect(screen.getByRole('button', { name: 'Copy to…' })).not.toBeDisabled();
     expect(screen.getByRole('button', { name: 'Delete' })).not.toBeDisabled();
     expect(screen.queryByText(/Offline/)).not.toBeInTheDocument();
+  });
+
+  // Cheap and high-value: stops a refactor silently deleting an attribute nothing else in this
+  // file references. OfflineDisabledWrap clones its child in place, which must preserve it.
+  it('anchors "+ New routine" for the onboarding tour', () => {
+    const { container } = renderWithQuery(<MemoryRouter><RoutinesTab /></MemoryRouter>);
+    expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.NEW_ROUTINE}"]`)).not.toBeNull();
   });
 
   it('disables New/Edit/Copy/Delete and shows the offline data notice while offline', () => {

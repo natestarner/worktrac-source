@@ -35,6 +35,7 @@ import { IconMore, IconNote, IconPencil, IconPin, IconStar, IconStarFilled, Icon
 import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
 import { tagChipStyle } from '../shared/tagChipStyle';
+import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 export default function ExerciseDetail({
   exercise,
@@ -812,6 +813,7 @@ export default function ExerciseDetail({
               label="Customize this exercise"
               icon={IconMore}
               disabled={isTempExerciseId(exercise.id)}
+              data-tour-anchor={TOUR_ANCHORS.CUSTOMIZE_EXERCISE}
             />
           </div>
           {exercise.tags?.length > 0 && (
@@ -919,7 +921,7 @@ export default function ExerciseDetail({
               marginBottom: 'var(--space-4)',
             }}
           >
-            <div className="stepper-pair">
+            <div className="stepper-pair" data-tour-anchor={TOUR_ANCHORS.SET_ENTRY}>
               <WeightRepsStepper
                 label={`Weight (${defaultUnit})`}
                 // Null, not 0: "we have no history for this exercise" and "you are lifting
@@ -973,7 +975,7 @@ export default function ExerciseDetail({
                 brand accent rather than the darker --color-accent-strong the smaller
                 filled buttons need. It's also the easiest thing on the page to hit
                 mid-set, which is the whole point. */}
-            <Button onClick={handleLogSet} variant="primary" size="lg" fullWidth>
+            <Button onClick={handleLogSet} variant="primary" size="lg" fullWidth data-tour-anchor={TOUR_ANCHORS.LOG_SET}>
               <span
                 style={{
                   display: 'block',

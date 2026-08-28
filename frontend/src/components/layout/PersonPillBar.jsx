@@ -7,6 +7,7 @@ import { useRestTimerPreference } from '../../hooks/useRestTimerPreference';
 import { DEFAULT_REST_TARGET_SECONDS } from '../../utils/restTarget';
 import AddPersonModal from '../shared/AddPersonModal';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 function initials(name) {
   return name.trim().slice(0, 1).toUpperCase();
@@ -125,6 +126,12 @@ export default function PersonPillBar() {
     <>
       <div
         className="person-pill-bar"
+        // Anchors the WHOLE bar, not just "+ Add person" -- tour step 2's copy covers adding AND
+        // switching, and this makes the step render identically for a one-person household (a
+        // single always-active pill) and a five-person one. Also survives the bar's own move in
+        // the DOM between the two household-size positions (AppShell.jsx): a plain attribute is
+        // remount-safe where a ref registry would need re-registering. See tourSteps.js.
+        data-tour-anchor={TOUR_ANCHORS.PEOPLE_BAR}
         style={{
           display: 'flex',
           alignItems: 'center',

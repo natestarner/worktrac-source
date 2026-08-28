@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ExercisePicker from './ExercisePicker';
 import { useAppState } from '../../context/AppStateContext';
+import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 // ExercisePicker reads the person's exercise-search draft from AppStateContext; mock it so
 // these tests control the "searching vs default view" branch directly.
@@ -48,5 +49,20 @@ describe('ExercisePicker empty state', () => {
 
     expect(screen.queryByText(/No favorite exercises yet/)).not.toBeInTheDocument();
     expect(screen.getByText('Bench Press')).toBeInTheDocument();
+  });
+});
+
+// Cheap and high-value: stops a refactor silently deleting an attribute nothing else in this file
+// references.
+describe('ExercisePicker tour anchors', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch: vi.fn() });
+  });
+
+  it('anchors the search input and the "Add your own exercise" button', () => {
+    const { container } = renderPicker();
+    expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.EXERCISE_SEARCH}"]`)).not.toBeNull();
+    expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.ADD_EXERCISE}"]`)).not.toBeNull();
   });
 });

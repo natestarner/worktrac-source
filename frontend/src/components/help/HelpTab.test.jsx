@@ -1,10 +1,16 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HelpTab from './HelpTab';
 import { EXERCISE_METRICS } from '../trends/exerciseMetrics';
 import { WEEKLY_METRICS } from '../trends/weeklyMetrics';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
+import { useUI } from '../../context/UIContext';
+
+// "Take the tour" is the only thing on this page that reaches into UIContext -- mocked rather
+// than wrapped in the real provider, matching the convention every other component test here
+// uses (see AddPersonModal.test.jsx).
+vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 
 function renderHelp() {
   return render(
@@ -36,6 +42,20 @@ const SECTION_IDS = [
 ];
 
 describe('HelpTab', () => {
+  beforeEach(() => {
+    useUI.mockReturnValue({ startTour: vi.fn() });
+  });
+
+  it('offers "Take the tour", which replays the onboarding tour', () => {
+    const startTour = vi.fn();
+    useUI.mockReturnValue({ startTour });
+    renderHelp();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Take the tour' }));
+
+    expect(startTour).toHaveBeenCalledTimes(1);
+  });
+
   it('renders every section at its published anchor', () => {
     const { container } = renderHelp();
     for (const id of SECTION_IDS) {

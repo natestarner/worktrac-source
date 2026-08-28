@@ -14,6 +14,7 @@ import Skeleton from '../shared/Skeleton';
 import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 export default function RoutinesTab() {
   const navigate = useNavigate();
@@ -49,7 +50,7 @@ export default function RoutinesTab() {
   return (
     <div>
       <OfflineDisabledWrap message="Creating a routine needs a connection.">
-        <button onClick={() => setModalRoutine(null)} style={newRoutineButtonStyle}>
+        <button onClick={() => setModalRoutine(null)} data-tour-anchor={TOUR_ANCHORS.NEW_ROUTINE} style={newRoutineButtonStyle}>
           + New routine
         </button>
       </OfflineDisabledWrap>

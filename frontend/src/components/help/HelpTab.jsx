@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { EXERCISE_METRICS } from '../trends/exerciseMetrics';
 import { WEEKLY_METRICS } from '../trends/weeklyMetrics';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
+import { useUI } from '../../context/UIContext';
+import Button from '../shared/Button';
 
 // The end-user handbook. Invariants + what invalidates them: `.claude/rules/user-facing-help.md`.
 //
@@ -44,6 +46,7 @@ const restCeilingMinutes = REST_CEILING_SECONDS / 60;
 
 export default function HelpTab() {
   const navigate = useNavigate();
+  const { startTour } = useUI();
 
   return (
     <div className="help">
@@ -62,6 +65,17 @@ export default function HelpTab() {
         <Orient label="Separate logs" text="Everyone is a profile you tap. Nobody's numbers mix." />
         <Orient label="No start button" text="Logging a set starts the workout for you." />
         <Orient label="Signal optional" text="Logging works with no internet and syncs later." />
+      </div>
+
+      {/* Replays the same nine-step tour a brand-new account sees on its first login (see
+          components/onboarding/). Not inside a <Section> -- section ids are API
+          (/app/help#<id> deep links), pinned as a literal in HelpTab.test.jsx, and this button
+          isn't one of them. The tour's own arrange-effect navigates to /app/log for step 1; its
+          snapshot is what returns here on finish or skip. */}
+      <div style={{ marginBottom: 'var(--space-6)' }}>
+        <Button onClick={startTour} variant="secondary" fullWidth>
+          Take the tour
+        </Button>
       </div>
 
       <Contents />

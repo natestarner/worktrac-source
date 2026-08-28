@@ -2,11 +2,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../utils/restTarget';
 
 // Cross-cutting overlays that live above the tab content: toast, the destructive-action
-// confirm dialog, and the PR celebration -- plus the two workout timers. Toast/confirm/
-// celebration are genuinely global (a one-shot notification tied to whatever the active
-// person just did). The rest timer is NOT -- people trade off sets while working out
-// together, so each person needs their own independent timer that keeps running in
-// the background while someone else is active; see restTimers below.
+// confirm dialog, the PR celebration, and the onboarding tour -- plus the two workout timers.
+// Toast/confirm/celebration/tour are genuinely global (a one-shot notification/overlay, discarded
+// on reload, only ever one on screen at a time -- frontend-core.md names exactly this trio as the
+// exceptions to "every person has their own independent client-side state", and the tour is
+// structurally identical: onboarding belongs to the ACCOUNT, not to whichever person happens to be
+// active, and it must never persist or fork per person -- see ProductTour.jsx's own header
+// comment). The rest timer is NOT -- people trade off sets while working out together, so each
+// person needs their own independent timer that keeps running in the background while someone
+// else is active; see restTimers below.
 
 const UIContext = createContext(null);
 
@@ -18,6 +22,10 @@ export function UIProvider({ children }) {
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [celebration, setCelebration] = useState(null);
+  // The onboarding tour's own runtime state -- null while no tour is running, else
+  // { stepIndex }. See ProductTour.jsx for the overlay this drives and tourSteps.js for what a
+  // stepIndex resolves to.
+  const [tour, setTour] = useState(null);
   // Counts UP toward targetSeconds rather than down to zero, and both halves of that matter:
   // a FULL ring is a stable "you're ready" state that holds indefinitely, where a drained one at
   // zero is empty -- visually identical to "not resting" -- and counting up preserves OVERRUN,
@@ -176,6 +184,18 @@ export function UIProvider({ children }) {
     setCelebration(null);
   }, []);
 
+  // startTour takes no arguments -- ProductTour snapshots whatever it's about to disturb on its
+  // own first render (see its header comment), so neither entry point (the welcome modal's "Show
+  // me around", Help's "Take the tour") needs to know what that is.
+  const startTour = useCallback(() => setTour({ stepIndex: 0 }), []);
+  // Bounds-free on purpose: whether stepIndex+1 is still a real step is TOUR_STEPS.length's
+  // business, not UIContext's -- ProductTour is what renders "Got it" instead of "Continue" on the
+  // last step and calls endTour() there rather than nextTourStep(). Keeping this file free of a
+  // components/onboarding import keeps the runtime-state/step-data split clean.
+  const nextTourStep = useCallback(() => setTour((t) => (t ? { stepIndex: t.stepIndex + 1 } : t)), []);
+  const prevTourStep = useCallback(() => setTour((t) => (t ? { stepIndex: Math.max(0, t.stepIndex - 1) } : t)), []);
+  const endTour = useCallback(() => setTour(null), []);
+
   // `targetSeconds` is SNAPSHOTTED here and never re-derived. The natural implementation looks the
   // target up from whatever exercise is selected, but that is what the person is LOOKING AT, not
   // what they last logged -- browse from bench to curls without logging and the ring would jump.
@@ -253,6 +273,11 @@ export function UIProvider({ children }) {
       celebration,
       showCelebration,
       dismissCelebration,
+      tour,
+      startTour,
+      nextTourStep,
+      prevTourStep,
+      endTour,
       restTimers,
       startRestTimer,
       clearRestTimer,
@@ -260,7 +285,28 @@ export function UIProvider({ children }) {
       startHoldTimer,
       stopHoldTimer,
     }),
-    [toast, confirmDialog, celebration, restTimers, holdTimers, showToast, openConfirm, closeConfirm, runConfirm, showCelebration, dismissCelebration, startRestTimer, clearRestTimer, startHoldTimer, stopHoldTimer],
+    [
+      toast,
+      confirmDialog,
+      celebration,
+      tour,
+      restTimers,
+      holdTimers,
+      showToast,
+      openConfirm,
+      closeConfirm,
+      runConfirm,
+      showCelebration,
+      dismissCelebration,
+      startTour,
+      nextTourStep,
+      prevTourStep,
+      endTour,
+      startRestTimer,
+      clearRestTimer,
+      startHoldTimer,
+      stopHoldTimer,
+    ],
   );
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

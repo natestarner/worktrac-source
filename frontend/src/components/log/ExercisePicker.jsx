@@ -3,6 +3,7 @@ import { useAppState } from '../../context/AppStateContext';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import Skeleton from '../shared/Skeleton';
 import { searchExercises } from '../../utils/exerciseSearch';
+import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 // The Log picker. By default it shows only this person's list -- the exercises they've
 // favorited or logged a set for -- split into two headings: "Favorites" and "Other Previously
@@ -73,6 +74,7 @@ export default function ExercisePicker({
 
       <input
         ref={searchInputRef}
+        data-tour-anchor={TOUR_ANCHORS.EXERCISE_SEARCH}
         value={exerciseSearch}
         onChange={(e) => setExerciseSearch(e.target.value)}
         // On mobile, the keyboard covers roughly the bottom half of the screen -- scrolling
@@ -145,7 +147,11 @@ export default function ExercisePicker({
       )}
 
       {!loading && (
-        <button onClick={() => onAddExercise(exerciseSearch)} style={addOwnButtonStyle}>
+        <button
+          onClick={() => onAddExercise(exerciseSearch)}
+          data-tour-anchor={TOUR_ANCHORS.ADD_EXERCISE}
+          style={addOwnButtonStyle}
+        >
           + Add your own exercise
         </button>
       )}
