@@ -37,6 +37,7 @@ const SECTIONS = [
   { id: 'trends', title: 'Trends', group: 'Looking back' },
   { id: 'personal', title: 'Notes, tags and favorites', group: 'Making it yours' },
   { id: 'settings', title: 'Settings', group: 'Making it yours' },
+  { id: 'plan', title: 'Free and Pro', group: 'Making it yours' },
   { id: 'data', title: 'Import and export', group: 'Making it yours' },
   { id: 'offline', title: 'Losing the connection', group: 'When things go wrong' },
   { id: 'trouble', title: 'Getting help', group: 'When things go wrong' },
@@ -385,6 +386,10 @@ export default function HelpTab() {
           Workouts are listed newest first, each with its date, its time (or a start&ndash;end range),
           every exercise and every set. Personal records are badged where they happened.
         </p>
+        <p>
+          On <T>Free</T> this shows the last 90 days. Older workouts are hidden rather than deleted
+          &mdash; see <a href="#plan">Free and Pro</a>.
+        </p>
 
         <h3 className="help-h3">Finding something</h3>
         <ul>
@@ -425,11 +430,16 @@ export default function HelpTab() {
       </Section>
 
       <Section id="prs" title="PRs">
-        <p className="help-lede">Your all-time best for every exercise you&rsquo;ve done, on one board.</p>
+        <p className="help-lede">Your best for every exercise you&rsquo;ve done, on one board.</p>
         <p>
           Records are recomputed from your actual logged sets rather than stored when they happen
           &mdash; so correcting a wrong entry corrects the record, and deleting a set that
           shouldn&rsquo;t have counted removes it from the board.
+        </p>
+        <p>
+          On <T>Free</T> the board covers the last 90 days; <T>Pro</T> makes it all-time. Either
+          way, a set is only badged as a PR if it beats <strong>everything</strong> you have logged
+          &mdash; see <a href="#plan">Free and Pro</a>.
         </p>
         <p>
           Sort three ways: <strong>Most recent</strong> (the default &mdash; what got better lately),{' '}
@@ -504,6 +514,10 @@ export default function HelpTab() {
             columns wide and look broken; five years would be unreadable on a phone. The shading also
             uses fixed thresholds rather than scaling to your own history, so a dark square means the
             same thing for you in March as it does for your son in August.
+          </p>
+          <p>
+            On <T>Free</T> the grid still spans six months, but only the last 90 days can be filled
+            in &mdash; that is as far back as Free shows. See <a href="#plan">Free and Pro</a>.
           </p>
         </Note>
 
@@ -619,6 +633,57 @@ export default function HelpTab() {
         </p>
       </Section>
 
+      <Section id="plan" title="Free and Pro">
+        <p className="help-lede">
+          Free is free for good &mdash; not a trial that runs out. Pro adds your whole history and
+          the ability to bring old workouts in.
+        </p>
+
+        <HelpTable
+          head={['', 'Free', 'Pro']}
+          rows={[
+            ['People in your household', 'Everyone', 'Everyone'],
+            ['Workouts, sets and exercises', 'Unlimited', 'Unlimited'],
+            ['Logging with no signal', 'Yes', 'Yes'],
+            ['PRs, routines, rest timer', 'Yes', 'Yes'],
+            ['Export all your data', 'Yes', 'Yes'],
+            ['History, PRs and trends', 'Last 90 days', 'Everything'],
+            ['Import past workouts', 'No', 'Yes'],
+          ]}
+        />
+
+        <Note title="Nothing you log is ever deleted">
+          <p>
+            On Free, workouts older than 90 days are <strong>hidden, not removed</strong>. Every set
+            stays exactly where it was, and the moment you subscribe your whole history is back. If
+            you later cancel, you keep Pro until the period you paid for ends, and then the same
+            thing happens in reverse &mdash; hidden, never lost.
+          </p>
+        </Note>
+
+        <h3 className="help-h3">Personal records still know the truth</h3>
+        <p>
+          A record is measured against <strong>everything you have ever logged</strong>, not just
+          what Free can show. So on Free you won&rsquo;t be congratulated for beating a 90-day best
+          that isn&rsquo;t really your best &mdash; if the app says it&rsquo;s a PR, it is one.
+        </p>
+
+        <h3 className="help-h3">Getting your data out is always free</h3>
+        <p>
+          Export works on both plans, always. Your workouts are yours, and taking them with you is
+          not something you should ever have to pay for.
+        </p>
+
+        <h3 className="help-h3">Changing your plan</h3>
+        <p>
+          Your account menu &rarr; <T>Plan &amp; billing</T> shows what you&rsquo;re on. Pro is
+          $3.99 a month or $29 a year. Payments are handled by Stripe &mdash; the app never sees
+          your card. <T>Manage billing</T> opens Stripe in a new tab to change a card, download
+          receipts, switch between monthly and yearly, or cancel.
+        </p>
+        <p>Changing your plan needs a connection.</p>
+      </Section>
+
       <Section id="data" title="Import and export">
         <p className="help-lede">
           Your workouts are yours. They go out as an ordinary spreadsheet and come back in the same
@@ -633,13 +698,17 @@ export default function HelpTab() {
             file each, zipped together.
           </li>
         </ul>
-        <p>Both need a connection.</p>
+        <p>
+          Both need a connection. <strong>Exporting is free on both plans</strong> &mdash; getting
+          your own data out is never something you have to pay for.
+        </p>
 
         <h3 className="help-h3">Bringing data in</h3>
         <p>
           <T>App Settings</T> &rarr; <T>Import data</T> takes a CSV or Excel file &mdash; one Huddle
           exported, or a spreadsheet you kept yourself. You choose whose workouts it is, and you see
-          exactly what will be added before anything is saved.
+          exactly what will be added before anything is saved. Importing is part of{' '}
+          <T>Pro</T> (see <a href="#plan">Free and Pro</a>).
         </p>
         <p>Three columns are required:</p>
         <HelpTable
@@ -715,6 +784,7 @@ export default function HelpTab() {
               <li>Changing units or the rest-timer setting</li>
               <li>Logging a past workout</li>
               <li>Import and export</li>
+              <li>Changing your plan or managing billing</li>
               <li>Deleting your account</li>
             </ul>
           </div>
