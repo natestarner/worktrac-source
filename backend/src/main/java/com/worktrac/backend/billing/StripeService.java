@@ -188,7 +188,10 @@ public class StripeService {
         return Webhook.constructEvent(rawBody, signatureHeader, properties.getWebhookSecret());
     }
 
-    private StripeSubscriptionState toState(Subscription subscription) {
+    // Package-private for StripeSubscriptionStateTest, which pins the cancellation mapping. That
+    // mapping reads a field Stripe has deprecated alongside its replacement, which is precisely the
+    // kind of thing that rots silently -- a test is the only thing that will notice.
+    StripeSubscriptionState toState(Subscription subscription) {
         String priceId = null;
         BillingInterval billingInterval = null;
         if (subscription.getItems() != null && !subscription.getItems().getData().isEmpty()) {
@@ -205,14 +208,32 @@ public class StripeService {
         Long periodEnd = subscription.getItems() != null && !subscription.getItems().getData().isEmpty()
                 ? subscription.getItems().getData().get(0).getCurrentPeriodEnd()
                 : null;
+
+        // ⚠️ READ BOTH CANCELLATION SIGNALS. `cancel_at_period_end` is deprecated: Stripe replaced
+        // it with `cancel_at`, a timestamp, and the Customer Portal now sets THAT. Reading only the
+        // boolean meant a household could cancel in the portal, see "Cancels Aug 28" there, and
+        // still be told "Renews Aug 28" by us -- found by doing exactly that against the sandbox.
+        //
+        // Same migration that already moved `current_period_end` off the subscription and onto its
+        // items (see above). Keep both readings: the boolean still arrives from older integrations
+        // and from the API, and a subscription that is ending should read as ending either way.
+        Long cancelAt = subscription.getCancelAt();
+        boolean cancelling = Boolean.TRUE.equals(subscription.getCancelAtPeriodEnd()) || cancelAt != null;
+
+        // When Stripe names an explicit cancellation moment, THAT is when service ends -- so it is
+        // what the screen should show, not the billing period end. For an ordinary period-end
+        // cancellation the two are the same value; with the newer flexible cancellation they need
+        // not be, and the person cares about the date their access actually stops.
+        Long endsAt = cancelAt != null ? cancelAt : periodEnd;
+
         return new StripeSubscriptionState(
                 subscription.getCustomer(),
                 subscription.getId(),
                 priceId,
                 mapStatus(subscription.getStatus()),
                 billingInterval,
-                periodEnd == null ? null : Instant.ofEpochSecond(periodEnd),
-                Boolean.TRUE.equals(subscription.getCancelAtPeriodEnd()));
+                endsAt == null ? null : Instant.ofEpochSecond(endsAt),
+                cancelling);
     }
 
     // What a completed checkout tells us. `accountId` comes from Stripe's own metadata copy, which
