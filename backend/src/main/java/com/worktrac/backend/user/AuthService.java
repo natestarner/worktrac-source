@@ -3,6 +3,7 @@ package com.worktrac.backend.user;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountDto;
 import com.worktrac.backend.account.AccountRepository;
+import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.config.AdminProperties;
 import com.worktrac.backend.person.Person;
@@ -30,16 +31,19 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AdminProperties adminProperties;
+    private final SubscriptionService subscriptionService;
 
     public AuthService(AccountRepository accountRepository, UserRepository userRepository,
                         PersonRepository personRepository, PasswordEncoder passwordEncoder,
-                        JwtService jwtService, AdminProperties adminProperties) {
+                        JwtService jwtService, AdminProperties adminProperties,
+                        SubscriptionService subscriptionService) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.adminProperties = adminProperties;
+        this.subscriptionService = subscriptionService;
     }
 
     @Transactional
@@ -58,7 +62,9 @@ public class AuthService {
                 .orElseThrow(() -> new IllegalStateException("Account has no primary person: " + account.getId()));
 
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole());
-        return new AuthResponse(token, UserDto.from(user), AccountDto.from(account), PersonDto.from(primaryPerson));
+        return new AuthResponse(token, UserDto.from(user),
+                AccountDto.from(account, subscriptionService.planFor(account.getId())),
+                PersonDto.from(primaryPerson));
     }
 
     // ADMIN_EMAILS is the real source of truth for who's an admin; the `role` column is
@@ -83,6 +89,7 @@ public class AuthService {
         List<PersonDto> people = personRepository.findByAccount_IdOrderByCreatedAtAsc(accountId).stream()
                 .map(PersonDto::from)
                 .toList();
-        return new MeResponse(UserDto.from(user), AccountDto.from(account), people);
+        return new MeResponse(UserDto.from(user),
+                AccountDto.from(account, subscriptionService.planFor(accountId)), people);
     }
 }

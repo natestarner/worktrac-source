@@ -12,6 +12,9 @@ export const queryKeys = {
   // Account-shared (no personId).
   exercises: () => ['exercises'],
   tags: () => ['tags'],
+  // Billing belongs to the household, not to whoever is currently selected -- one subscription
+  // per account, so this is one of the few reads that legitimately has no personId.
+  subscription: () => ['subscription'],
 
   // Per-person.
   liveSession: (personId) => ['live-session', personId],

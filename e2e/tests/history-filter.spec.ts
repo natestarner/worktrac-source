@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { registerHousehold } from './support/auth';
+import { registerHousehold, setBillingPlan } from './support/auth';
 import { pickExercise, logSetAt } from './support/exercises';
 
 // Tags an exercise via its Customize modal, one tag at a time. Submits via the "New tag"
@@ -180,7 +180,12 @@ test.describe('PRs board sorting', () => {
   //   names                              =>  A-Z:     Squat("Back"), Bench, Deadlift
   //   est 1RM  247.5 / 336 / 234.3       =>  1RM:     Deadlift, Squat, Bench
   test('orders by most recent PR, name, or estimated 1RM', async ({ page, request }) => {
-    await registerHousehold(page, request, 'Nate');
+    // Pro, because the dates below are chosen months apart to make the three sorts differ -- and
+    // months apart is outside the Free tier's 90-day window, which would correctly hide all three
+    // and leave nothing to sort. The sort is what this spec is about, not the window.
+    const email = await registerHousehold(page, request, 'Nate');
+    await setBillingPlan(request, email, 'PRO');
+    await page.reload();
 
     await logPastPr(page, '2026-01-10', 'Barbell Back Squat', 225, 3); // 225 * (1 + 3/30) = 247.5
     await logPastPr(page, '2026-01-20', 'Barbell Deadlift', 315, 2); //   315 * (1 + 2/30) = 336

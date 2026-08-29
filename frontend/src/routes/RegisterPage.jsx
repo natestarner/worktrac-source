@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { errorBannerStyle, inputStyle, primaryButtonStyle } from './LoginPage';
 import Spinner from '../components/shared/Spinner';
@@ -9,6 +9,13 @@ import logoDark from '../assets/huddle-lockup-barlow-dark.svg';
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  // marketing/index.html's "Go Pro" button links here as /register?plan=pro. Carrying that intent
+  // through registration is what lets a household who arrived wanting to pay land on the billing
+  // screen after confirming their email, rather than on Log with no idea where to go next.
+  // Anything other than the exact value is ignored -- this is a hint from a URL, not a
+  // capability, and it grants nothing.
+  const [searchParams] = useSearchParams();
+  const wantsPro = searchParams.get('plan') === 'pro';
   const [personName, setPersonName] = useState('');
   const [accountName, setAccountName] = useState('');
   const [email, setEmail] = useState('');
@@ -43,7 +50,7 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       await register({ accountName, email: trimmedEmail, password, personName: trimmedPersonName });
-      navigate('/confirm-email', { state: { email: trimmedEmail } });
+      navigate('/confirm-email', { state: { email: trimmedEmail, wantsPro } });
     } catch (err) {
       setError(err.message || 'Could not register');
     } finally {

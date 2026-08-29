@@ -13,7 +13,16 @@ import { listImports } from '../../api/dataImport';
 
 // Every setting here is household-wide -- no dependence on which person is active. The rest timer
 // is per-person but shown for everyone at once, persisted account-side (not localStorage).
-vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
+// Link is needed now that the Free-tier import prompt offers a route to the billing screen. A
+// plain anchor keeps this mock as thin as it was -- the test asserts the href, not routing.
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+  Link: ({ to, children, ...rest }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('../../api/tags', () => ({
   createTag: vi.fn(),
   deleteTag: vi.fn(),
@@ -187,5 +196,62 @@ describe('AppSettingsTab offline gating', () => {
     fireEvent.click(screen.getByRole('button', { name: 'lb' }));
 
     expect(updateDefaultUnit).not.toHaveBeenCalled();
+  });
+
+  // Importing is a Pro feature and the backend answers 403, so a Free household must get the
+  // explanation INSTEAD of a control -- offering a button that cannot work is the "spinner over a
+  // request that will never succeed" shape the degraded-conditions contract forbids.
+  describe('the import entry point', () => {
+    it('offers Pro instead of a button on a Free household', () => {
+      useAuth.mockReturnValue({
+        account: { defaultUnit: 'lb', plan: 'FREE' },
+        people: [],
+        refreshPeople: vi.fn(),
+      });
+      renderTab();
+
+      expect(screen.queryByRole('button', { name: 'Import data' })).not.toBeInTheDocument();
+      expect(screen.getByText(/Importing past workouts is part of Pro/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'See Pro' })).toHaveAttribute('href', '/app/billing');
+    });
+
+    it('offers the real control on a Pro household', () => {
+      useAuth.mockReturnValue({
+        account: { defaultUnit: 'lb', plan: 'PRO' },
+        people: [],
+        refreshPeople: vi.fn(),
+      });
+      renderTab();
+
+      expect(screen.getByRole('button', { name: 'Import data' })).toBeInTheDocument();
+      expect(screen.queryByText(/part of Pro/)).not.toBeInTheDocument();
+    });
+
+    // EXPORTING IS NOT GATED, on either plan. This is the assertion that stops someone "tidying"
+    // the two controls into one gate later: a household must always be able to take its own data
+    // out, and the privacy policy's self-serve data rights depend on it.
+    it('never gates exporting, even on Free', () => {
+      useAuth.mockReturnValue({
+        account: { defaultUnit: 'lb', plan: 'FREE' },
+        people: [],
+        refreshPeople: vi.fn(),
+      });
+      renderTab();
+
+      expect(screen.getByRole('button', { name: 'Export all data' })).toBeInTheDocument();
+    });
+
+    // An auth snapshot written before billing shipped carries no plan. Showing the real control
+    // and letting the server answer beats telling a paying household its import is unavailable.
+    it('shows the control when the plan is unknown', () => {
+      useAuth.mockReturnValue({
+        account: { defaultUnit: 'lb' },
+        people: [],
+        refreshPeople: vi.fn(),
+      });
+      renderTab();
+
+      expect(screen.getByRole('button', { name: 'Import data' })).toBeInTheDocument();
+    });
   });
 });

@@ -135,6 +135,12 @@ export default function UserMenu({ booting = false }) {
         >
           <MenuItem label="Profile" onClick={() => go('/app/profile')} />
           <MenuItem label="App Settings" onClick={() => go('/app/settings')} />
+          {/* "Plan & billing" -- checked against every other label on this screen for the
+              substring rule below. It shares none, and crucially it is NOT "Upgrade to Pro":
+              that string is the billing screen's own primary button, and a Free household
+              standing on /app/billing would then have two controls with the same accessible
+              name. The header badge is "Go Pro" for the same reason. */}
+          <MenuItem label="Plan & billing" onClick={() => go('/app/billing')} />
           {/* Help sits directly above Contact Us so the menu reads as an escalation ladder:
               answer it yourself, then ask a human. Both labels deliberately share no substring
               with Profile / App Settings / Admin Portal / Logout / Log out anyway / Cancel --

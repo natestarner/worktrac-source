@@ -1,5 +1,6 @@
 package com.worktrac.backend.stats;
 
+import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.exercise.Exercise;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
@@ -13,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.DateTimeException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -44,15 +46,18 @@ public class StatsService {
     private final PersonService personService;
     private final EpleyCalculator epleyCalculator;
     private final UnitConverter unitConverter;
+    private final SubscriptionService subscriptionService;
     private final Clock clock;
 
     public StatsService(WorkoutSetRepository workoutSetRepository, SessionExerciseNoteRepository sessionExerciseNoteRepository,
-                         PersonService personService, EpleyCalculator epleyCalculator, UnitConverter unitConverter, Clock clock) {
+                         PersonService personService, EpleyCalculator epleyCalculator, UnitConverter unitConverter,
+                         SubscriptionService subscriptionService, Clock clock) {
         this.workoutSetRepository = workoutSetRepository;
         this.sessionExerciseNoteRepository = sessionExerciseNoteRepository;
         this.personService = personService;
         this.epleyCalculator = epleyCalculator;
         this.unitConverter = unitConverter;
+        this.subscriptionService = subscriptionService;
         this.clock = clock;
     }
 
@@ -108,8 +113,16 @@ public class StatsService {
         Person person = personService.requireOwnedPerson(personId, accountId);
         List<WorkoutSet> all = workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId());
 
+        // The Free-tier window, applied to what is DISPLAYED. Note this is deliberately NOT applied
+        // to getBestComparableValue below, which is what WorkoutSetService asks when deciding
+        // whether a new set is a PR: detection reads the person's whole history, so a Free
+        // household is never congratulated for beating a 90-day best that is not their real best.
+        // Telling someone they set a record they did not set is worse than withholding one.
+        Instant floor = subscriptionService.historyFloor(accountId);
+
         Map<Long, List<WorkoutSet>> byExercise = new LinkedHashMap<>();
         for (WorkoutSet s : all) {
+            if (!SubscriptionService.isVisible(floor, s.getSession().getStartedAt())) continue;
             byExercise.computeIfAbsent(s.getExercise().getId(), k -> new java.util.ArrayList<>()).add(s);
         }
 
@@ -196,6 +209,20 @@ public class StatsService {
         }
     }
 
+    // Applies the Free-tier window to a set list before any aggregation. Filtering ONCE at the
+    // source is what stops the weekly buckets, the consistency grid and the range totals from ever
+    // disagreeing about which sessions count -- three aggregates derived from one filtered list
+    // cannot drift, whereas three separate clamps could.
+    //
+    // Every row is still loaded and every row still exists: this is a read filter, never a delete.
+    private List<WorkoutSet> visibleTo(Long accountId, List<WorkoutSet> sets) {
+        Instant floor = subscriptionService.historyFloor(accountId);
+        if (floor == null) return sets;
+        return sets.stream()
+                .filter(set -> SubscriptionService.isVisible(floor, set.getSession().getStartedAt()))
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public TrendsOverviewDto getOverview(Long accountId, Long personId, int weeks, String zone) {
         Person person = personService.requireOwnedPerson(personId, accountId);
@@ -206,7 +233,8 @@ public class StatsService {
         LocalDate currentWeekStart = today.with(DayOfWeek.MONDAY);
         LocalDate rangeStart = currentWeekStart.minusWeeks(effectiveWeeks - 1L);
 
-        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId());
+        List<WorkoutSet> all = visibleTo(accountId,
+                workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId()));
 
         // Collapse to one entry per session (not per set) so a session with many sets only
         // counts once toward workoutCount, while still summing every set's volume.
@@ -328,6 +356,18 @@ public class StatsService {
         LocalDate today = LocalDate.ofInstant(clock.instant(), zoneId);
         LocalDate rangeStart = today.with(DayOfWeek.MONDAY).minusWeeks(effectiveWeeks - 1L);
 
+        // The Free-tier window pulls rangeStart FORWARD -- it clamps the range, deliberately not
+        // the set list. Filtering the list instead would starve the running-best seeding below of
+        // everything older than the window, so a Free household's lesser set would be re-flagged
+        // as a PR on the chart. Same rule as getPrList: detection reads the whole history, only
+        // what is DISPLAYED is clamped. Telling someone they set a record they did not set is
+        // worse than withholding one.
+        Instant floor = subscriptionService.historyFloor(accountId);
+        if (floor != null) {
+            LocalDate floorDate = LocalDate.ofInstant(floor, zoneId);
+            if (floorDate.isAfter(rangeStart)) rangeStart = floorDate;
+        }
+
         List<WorkoutSet> all = workoutSetRepository.findByPerson_IdAndExercise_Id(person.getId(), exerciseId);
 
         // Seed the running best from everything before the window so a PR from outside the
@@ -415,7 +455,8 @@ public class StatsService {
     public ExerciseRecordsDto getExerciseRecords(Long accountId, Long personId, Long exerciseId, String zone) {
         Person person = personService.requireOwnedPerson(personId, accountId);
         ZoneId zoneId = resolveZone(zone);
-        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdAndExercise_Id(person.getId(), exerciseId);
+        List<WorkoutSet> all = visibleTo(accountId,
+                workoutSetRepository.findByPerson_IdAndExercise_Id(person.getId(), exerciseId));
         if (all.isEmpty()) {
             return new ExerciseRecordsDto(null, null, null, null, null, null, null, 0, 0, 0,
                     BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP), false, false);

@@ -58,8 +58,39 @@ test.describe('marketing landing page', () => {
     await expect(pricing.getByText(/90 days/).first()).toBeVisible();
     await expect(pricing.getByText(/never deleted on Free/)).toBeVisible();
 
-    // Import does not exist yet and must stay badged as such.
-    await expect(pricing.getByText('Coming soon').first()).toBeVisible();
+    // Import SHIPPED (PR #200) and is now gated on Pro, so the "Coming soon" badge that used to
+    // be asserted here is gone. What replaces it is the stronger claim: the page must contain no
+    // future-tense hedging at all, because every row on it is now enforced in the product.
+    await expect(pricing.getByText('Coming soon')).toHaveCount(0);
+
+    // Export is free on BOTH plans -- it is the one thing a household must never have to pay to
+    // get back, and the compare row says so on the Free side too.
+    // exact:true throughout -- Playwright matches accessible names as a case-insensitive
+    // SUBSTRING, and "Not included" contains "Included". Without it every tick assertion silently
+    // counts the dashes too, which is how this was first written and why it failed.
+    const exportRow = pricing.locator('tr', { hasText: 'Export all data to CSV' });
+    await expect(exportRow.getByRole('img', { name: 'Included', exact: true })).toHaveCount(2);
+    await expect(exportRow.getByRole('img', { name: 'Not included', exact: true })).toHaveCount(0);
+
+    // Import is the Pro line: one tick, on the Pro side only.
+    const importRow = pricing.locator('tr', { hasText: 'Import past workouts' });
+    await expect(importRow.getByRole('img', { name: 'Included', exact: true })).toHaveCount(1);
+    await expect(importRow.getByRole('img', { name: 'Not included', exact: true })).toHaveCount(1);
+  });
+
+  test('the hero offers both plans, and the legal pages are reachable', async ({ page }) => {
+    await page.goto('/');
+
+    // "Go Pro" appears twice on the page (hero and pricing card), so this is scoped to the hero
+    // rather than matched globally -- an unscoped getByRole would be a strict-mode violation.
+    const hero = page.locator('.hero');
+    await expect(hero.getByRole('link', { name: 'Start free' })).toBeVisible();
+    await expect(hero.getByRole('link', { name: 'Go Pro' })).toBeVisible();
+
+    // Taking payment without these is not something to discover in production.
+    const footer = page.locator('.site-footer');
+    await expect(footer.getByRole('link', { name: 'Terms' })).toBeVisible();
+    await expect(footer.getByRole('link', { name: 'Privacy' })).toBeVisible();
   });
 
   test('does not scroll horizontally', async ({ page }) => {

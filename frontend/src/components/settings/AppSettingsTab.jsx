@@ -18,6 +18,7 @@ import Spinner from '../shared/Spinner';
 import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import ImportDataModal from './ImportDataModal';
+import ProUpsell from '../shared/ProUpsell';
 import { invalidateAfterImport } from '../../lib/queryClient';
 
 // Every setting here is household-wide -- nothing is scoped to whichever person happens to be
@@ -27,6 +28,13 @@ import { invalidateAfterImport } from '../../lib/queryClient';
 export default function AppSettingsTab() {
   const navigate = useNavigate();
   const { account, people, refreshPeople } = useAuth();
+  // The derived entitlement, carried in the auth snapshot -- so this reads correctly on a cold
+  // offline boot rather than depending on a request that may not have come back. An UNKNOWN plan
+  // (a snapshot written before billing shipped) is treated as Pro here on purpose: showing the
+  // real control and letting the server answer is far better than telling a paying household its
+  // own import is unavailable.
+  const plan = account?.plan;
+  const isPro = plan !== 'FREE';
   const { openConfirm } = useUI();
   const offlinePinned = useOfflinePin();
   // Settings writes are Tier-3. They had the online gate but no error path -- a failed unit change
@@ -340,11 +348,18 @@ export default function AppSettingsTab() {
           Bring workouts in from a CSV or Excel file &mdash; one this app exported, or a spreadsheet of your
           own. You choose who it belongs to, and see exactly what will be added before anything is saved.
         </div>
-        <OfflineDisabledWrap message="Importing needs a connection.">
-          <Button onClick={() => setShowImportModal(true)} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-            Import data
-          </Button>
-        </OfflineDisabledWrap>
+        {/* Importing is a Pro feature, so a Free household gets the explanation INSTEAD of a
+            button that would 403. Exporting above is deliberately not gated on either plan --
+            every household can always take its own data out. */}
+        {isPro ? (
+          <OfflineDisabledWrap message="Importing needs a connection.">
+            <Button onClick={() => setShowImportModal(true)} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+              Import data
+            </Button>
+          </OfflineDisabledWrap>
+        ) : (
+          <ProUpsell plan={plan}>Importing past workouts is part of Pro.</ProUpsell>
+        )}
 
         {imports.length > 0 && (
           <div style={{ marginTop: 20, borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.support.AbstractIntegrationTest;
+import com.worktrac.backend.billing.SubscriptionRepository;
+import com.worktrac.backend.support.BillingTestSupport;
 import com.worktrac.backend.support.RegistrationTestSupport;
 import com.worktrac.backend.user.TestCodeCache;
 import com.worktrac.backend.workoutset.WorkoutSet;
@@ -45,6 +47,9 @@ class ImportUndoTest extends AbstractIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired
+    private SubscriptionRepository subscriptionRepository;
+
+    @Autowired
     private TestCodeCache testCodeCache;
 
     @Autowired
@@ -67,6 +72,9 @@ class ImportUndoTest extends AbstractIntegrationTest {
         JsonNode registerJson = RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Nate");
         token = registerJson.get("token").asText();
         personId = registerJson.get("person").get("id").asLong();
+        // Importing is a Pro feature. These tests are about the import itself, so the plan is
+        // stated out loud rather than left as an assumption the gate would now break.
+        BillingTestSupport.makePro(subscriptionRepository, registerJson.get("account").get("id").asLong());
     }
 
     // ── What undo does ─────────────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { registerHousehold } from './support/auth';
+import { registerHousehold, setBillingPlan } from './support/auth';
 import { pickExercise } from './support/exercises';
 
 // Full "Log a past workout" round trip: create a retroactive session, add and remove
@@ -7,7 +7,17 @@ import { pickExercise } from './support/exercises';
 // past session" banner, then Done back to History and confirm it landed correctly.
 test.describe('Log a past workout', () => {
   test('create a retroactive session, edit its sets and date, and see it in History', async ({ page, request }) => {
-    await registerHousehold(page, request, 'Jamie');
+    // Pro, because the retroactive date below is months back -- outside the Free tier's 90-day
+    // window, which would correctly hide the session this spec then asserts is in History. The
+    // round trip is what is being tested, not the window.
+    //
+    // ⚠️ That combination is a real product gap, not just a test detail: a Free household can
+    // complete this whole flow and land back on History with nothing there. Flagged for a
+    // follow-up decision (warn, clamp the date picker, or accept) rather than silently changed
+    // here.
+    const email = await registerHousehold(page, request, 'Jamie');
+    await setBillingPlan(request, email, 'PRO');
+    await page.reload();
 
     await page.getByRole('link', { name: 'History' }).click();
     await page.getByRole('button', { name: '+ Log a past workout' }).click();

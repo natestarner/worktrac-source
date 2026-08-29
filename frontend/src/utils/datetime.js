@@ -80,6 +80,18 @@ export function parseDuration(raw) {
 // activity dates) -- formatDateLabel's "Today"/"Yesterday" relative framing only makes
 // sense for recent workout activity. Handles null (e.g. an account with no sessions yet
 // has no lastActivityAt).
+// Date with no time of day, for things measured in days rather than minutes -- a subscription
+// renewal or end date. Lives here rather than as an inline toLocaleDateString at the call site so
+// every date the app renders keeps going through this module.
+export function formatDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 export function formatDateTime(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('en-US', {

@@ -168,12 +168,31 @@ _open_log() {
 _open_log backend.log
 _open_log frontend.log
 
+# Stripe is passed THROUGH from the developer's shell, never stored in the repo -- a sandbox
+# secret key is still a real credential, so application-local.yml deliberately has no value for
+# it (unlike the placeholder ACS/JWT values there, which are inert). Export these before running
+# this script to exercise billing:
+#
+#   export STRIPE_SECRET_KEY=sk_test_...   STRIPE_PUBLISHABLE_KEY=pk_test_...
+#   export STRIPE_PRICE_MONTHLY=price_...  STRIPE_PRICE_YEARLY=price_...
+#   export STRIPE_WEBHOOK_SECRET=whsec_... # printed by `stripe listen`, NOT the Dashboard one
+#
+# With none set, billing degrades to "unavailable" (an honest 503) and everything else runs
+# normally -- the right default for worktrees that do not care about billing. STRIPE_RETURN_URL
+# defaults to THIS worktree's frontend port, so the post-checkout return lands on the stack you
+# are actually running rather than the primary worktree's :3000.
 echo "Starting backend..."
 cd "$REPO_ROOT/backend"
 SPRING_DATASOURCE_URL="$SPRING_DATASOURCE_URL" \
 SERVER_PORT="$BACKEND_PORT" \
 CORS_ALLOWED_ORIGINS="$CORS_ALLOWED_ORIGINS" \
 APP_EMAIL_APP_URL="$APP_EMAIL_APP_URL" \
+STRIPE_SECRET_KEY="${STRIPE_SECRET_KEY:-}" \
+STRIPE_PUBLISHABLE_KEY="${STRIPE_PUBLISHABLE_KEY:-}" \
+STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-}" \
+STRIPE_PRICE_MONTHLY="${STRIPE_PRICE_MONTHLY:-}" \
+STRIPE_PRICE_YEARLY="${STRIPE_PRICE_YEARLY:-}" \
+STRIPE_RETURN_URL="${STRIPE_RETURN_URL:-http://localhost:$FRONTEND_PORT/app/billing}" \
   _detach bash -c "$(_record_exit 'mvn spring-boot:run -Dspring-boot.run.profiles=local' 'backend')" \
   >> "$LOG_DIR/backend.log" 2>&1 &
 disown

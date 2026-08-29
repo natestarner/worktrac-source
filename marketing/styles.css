@@ -602,6 +602,26 @@ img {
   gap: var(--space-3);
 }
 
+/* The hero's tertiary action. Demoted from a third button when "Go Pro" joined "Start free":
+   three buttons compete with each other, and at 390px they stack into most of the fold. A text
+   link keeps the scroll cue without pretending to be a peer of the two real CTAs.
+
+   No animation here on purpose -- anything animated needs an explicit prefers-reduced-motion
+   override forcing the resting state, not just a duration cap (see .claude/rules/marketing.md). */
+.hero__more {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  color: var(--color-accent-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.hero__more:hover {
+  text-decoration: underline;
+}
+
 .hero__trust {
   font-size: var(--text-sm);
   color: var(--color-muted);
@@ -1331,4 +1351,33 @@ img {
 .site-footer__links a {
   font-size: var(--text-sm);
   color: var(--color-muted);
+}
+
+
+/* Terms and Privacy. Long-form prose rather than marketing sections, so headings need their own
+   rhythm -- the section styles here are built for one heading per screen, not a dozen. */
+.legal h2 {
+  font-size: var(--text-xl, 1.25rem);
+  margin-top: var(--space-8);
+  margin-bottom: var(--space-3);
+}
+
+.legal .prose + .prose,
+.legal ul.prose {
+  margin-top: var(--space-3);
+}
+
+.legal ul.prose {
+  padding-left: 1.25em;
+  list-style: disc;
+}
+
+.legal ul.prose li + li {
+  margin-top: var(--space-2);
+}
+
+.legal__meta {
+  color: var(--color-muted);
+  font-size: var(--text-sm, 0.9rem);
+  margin-bottom: var(--space-6);
 }

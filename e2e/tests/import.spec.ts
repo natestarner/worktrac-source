@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { registerHousehold } from './support/auth';
+import { registerHousehold, setBillingPlan } from './support/auth';
 import { pickExercise, logSetAt } from './support/exercises';
 
 // Import through the real UI: pick a person, pick a file, confirm what it says, and check the data
@@ -8,6 +8,17 @@ import { pickExercise, logSetAt } from './support/exercises';
 // Files are supplied in-memory rather than from a fixtures directory. The suite has no fixture
 // convention, and a spec that carries its own CSV inline says what it is testing without a second
 // file to open.
+
+// Importing is a Pro feature. Every case in this file is about the import itself rather than
+// about billing, so the plan is stated once here instead of being an assumption each spec would
+// silently depend on. setBillingPlan writes the same `comped` flag a founding household uses, so
+// these still run through the real entitlement derivation.
+async function registerAsPro(page, request, name: string) {
+  const email = await registerHousehold(page, request, name);
+  await setBillingPlan(request, email, 'PRO');
+  await page.reload();
+  return email;
+}
 
 async function openImportModal(page) {
   await page.locator('.header-bar').getByRole('button').click();
@@ -38,7 +49,7 @@ async function addPerson(page, name: string) {
 
 test.describe('CSV import', () => {
   test('a person\'s export imports into a different person, and leaves the first alone', async ({ page, request }) => {
-    await registerHousehold(page, request, 'Casey');
+    await registerAsPro(page, request, 'Casey');
 
     await pickExercise(page, 'Barbell Bench Press');
     await logSetAt(page, 135, 8);
@@ -81,7 +92,7 @@ test.describe('CSV import', () => {
   // The same-day rule as a test result rather than a comment: a hand-built file with no Session
   // Start column groups one workout per date.
   test('a hand-built file with no Session Start becomes one workout per day', async ({ page, request }) => {
-    await registerHousehold(page, request, 'Casey');
+    await registerAsPro(page, request, 'Casey');
 
     await openImportModal(page);
     await chooseCsv(
@@ -103,7 +114,7 @@ test.describe('CSV import', () => {
   });
 
   test('an import can be undone from Settings, and History goes back to what it was', async ({ page, request }) => {
-    await registerHousehold(page, request, 'Casey');
+    await registerAsPro(page, request, 'Casey');
 
     await openImportModal(page);
     await chooseCsv(page, 'undo-me.csv', ['Exercise,Date,Reps', 'Pull-up,2026-08-20,8'].join('\n'));
@@ -122,7 +133,7 @@ test.describe('CSV import', () => {
   // Re-importing the same file must be a no-op, and must SAY it is one rather than offering a
   // button that would do nothing.
   test('re-importing the same file offers nothing to do', async ({ page, request }) => {
-    await registerHousehold(page, request, 'Casey');
+    await registerAsPro(page, request, 'Casey');
     const csv = ['Exercise,Date,Reps', 'Pull-up,2026-08-20,8'].join('\n');
 
     await openImportModal(page);
@@ -139,7 +150,7 @@ test.describe('CSV import', () => {
   });
 
   test('the entry point refuses offline, in the offline-gating idiom', async ({ page, request, context }) => {
-    await registerHousehold(page, request, 'Casey');
+    await registerAsPro(page, request, 'Casey');
     await page.locator('.header-bar').getByRole('button').click();
     await page.getByRole('menuitem', { name: 'App Settings' }).click();
 

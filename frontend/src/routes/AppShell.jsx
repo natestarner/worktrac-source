@@ -28,7 +28,7 @@ export default function AppShell() {
   const { people, refreshPeople, account } = useAuth();
   const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId, restTimersByPerson, setRestTimer } =
     useAppState();
-  const { restTimers, startRestTimer, tour, startTour } = useUI();
+  const { restTimers, startRestTimer, tour, startTour, onboardingDeferred, releaseOnboarding } = useUI();
   const [showWelcome, setShowWelcome] = useState(false);
   const accountId = account?.id;
 
@@ -37,8 +37,15 @@ export default function AppShell() {
   // whenever the active account changes, so a shared device switching between two households
   // shows each account's own first-run welcome exactly once, never the other's.
   useEffect(() => {
+    // onboardingDeferred is set when a household registers via marketing's "Go Pro" and is routed
+    // straight to /app/billing -- the tour must not interrupt a purchase. BillingTab releases it
+    // once that decision resolves (paid, or "Start with Free", or simply leaving the screen), and
+    // listing it as a dependency is what makes the modal appear at that moment with no further
+    // plumbing. See UIContext for why the gate is in memory rather than persisted.
+    if (onboardingDeferred) return;
     if (isOnboardingPending(accountId)) setShowWelcome(true);
-  }, [accountId]);
+  }, [accountId, onboardingDeferred]);
+
 
   function handleAcceptWelcome() {
     clearOnboardingPending(accountId);
@@ -112,6 +119,19 @@ export default function AppShell() {
       startRestTimer(personId, persisted.targetSeconds ?? DEFAULT_REST_TARGET_SECONDS, persisted.startedAt);
     }
   }, [restTimersByPerson, setRestTimer, startRestTimer]);
+
+  // The deferral lifts once the household is no longer ON the billing screen. Keyed on the ROUTE
+  // rather than BillingTab's unmount: StrictMode double-invokes effects (mount -> cleanup ->
+  // mount), so an unmount cleanup fires while the screen is still up and lets the welcome modal
+  // appear over the very decision it exists to protect. Route state is what is actually true at
+  // any moment, so it cannot be fooled by a lifecycle replay.
+  //
+  // Covers every exit that isn't a payment -- "Start with Free", a tab tap, the back button --
+  // with one condition rather than a handler on each. Paying releases it explicitly in BillingTab,
+  // so the modal lands over the success screen instead of waiting for them to navigate away.
+  useEffect(() => {
+    if (onboardingDeferred && location.pathname !== '/app/billing') releaseOnboarding();
+  }, [location.pathname, onboardingDeferred, releaseOnboarding]);
 
   // Keep the active person's slice (`byPerson[id].lastTab`) in sync with whichever tab they're
   // on, so switching to someone else and back resumes on the same tab too.

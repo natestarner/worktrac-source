@@ -26,6 +26,24 @@ export function UIProvider({ children }) {
   // { stepIndex }. See ProductTour.jsx for the overlay this drives and tourSteps.js for what a
   // stepIndex resolves to.
   const [tour, setTour] = useState(null);
+
+  // Suppresses the first-run welcome modal while a brand-new household is parked on the billing
+  // screen, having arrived from marketing's "Go Pro". A modal interrupting someone who came here
+  // intending to pay is the wrong order: the tour goes AFTER the money decision, whichever way it
+  // resolves.
+  //
+  // This is a transient DISPLAY gate, deliberately separate from lib/onboardingPending.js. That
+  // flag answers "has this account been onboarded yet" -- durable, one-shot, account-scoped -- and
+  // is untouched by any of this. This one only answers "not right now", which is a different
+  // question with a different lifetime.
+  //
+  // In memory, so a reload loses it and the modal appears on the next boot. That is the correct
+  // failure direction: persisting it risks a stale deferral suppressing the welcome modal
+  // permanently, which is strictly worse than showing it slightly early. Same reasoning
+  // ProductTour.jsx gives for refusing to persist its own stepIndex.
+  const [onboardingDeferred, setOnboardingDeferred] = useState(false);
+  const deferOnboarding = useCallback(() => setOnboardingDeferred(true), []);
+  const releaseOnboarding = useCallback(() => setOnboardingDeferred(false), []);
   // Counts UP toward targetSeconds rather than down to zero, and both halves of that matter:
   // a FULL ring is a stable "you're ready" state that holds indefinitely, where a drained one at
   // zero is empty -- visually identical to "not resting" -- and counting up preserves OVERRUN,
@@ -278,6 +296,9 @@ export function UIProvider({ children }) {
       nextTourStep,
       prevTourStep,
       endTour,
+      onboardingDeferred,
+      deferOnboarding,
+      releaseOnboarding,
       restTimers,
       startRestTimer,
       clearRestTimer,
@@ -290,6 +311,7 @@ export function UIProvider({ children }) {
       confirmDialog,
       celebration,
       tour,
+      onboardingDeferred,
       restTimers,
       holdTimers,
       showToast,
@@ -302,6 +324,8 @@ export function UIProvider({ children }) {
       nextTourStep,
       prevTourStep,
       endTour,
+      deferOnboarding,
+      releaseOnboarding,
       startRestTimer,
       clearRestTimer,
       startHoldTimer,

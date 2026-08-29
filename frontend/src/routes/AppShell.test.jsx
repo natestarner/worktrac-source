@@ -59,7 +59,7 @@ function baseAppState(overrides = {}) {
 }
 
 function baseUI(overrides = {}) {
-  return { restTimers: {}, startRestTimer: vi.fn(), ...overrides };
+  return { restTimers: {}, startRestTimer: vi.fn(), releaseOnboarding: vi.fn(), ...overrides };
 }
 
 // Exposes react-router's navigate() to the test so a "section switch" can be driven the same way
@@ -95,6 +95,8 @@ function renderShell({ initialPath = '/app/log' } = {}) {
           <Routes>
             <Route path="/app/log" element={<AppShell />} />
             <Route path="/app/history" element={<AppShell />} />
+            {/* The billing route matters here: the onboarding deferral is keyed on being ON it. */}
+            <Route path="/app/billing" element={<AppShell />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>
@@ -407,6 +409,58 @@ describe('AppShell welcome modal', () => {
     renderShell();
 
     expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
+  });
+
+  // The billing deferral. A household that registered via marketing's "Go Pro" is routed straight
+  // to /app/billing, and the welcome modal must not interrupt them mid-purchase -- the tour comes
+  // AFTER the money decision. The durable flag (lib/onboardingPending.js) is deliberately NOT
+  // touched by any of this: it still says "this account has never been onboarded", which stays
+  // true the whole time.
+  it('does not render while deferred and still on the billing screen', () => {
+    const releaseOnboarding = vi.fn();
+    useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn(), account: { id: 1 } });
+    useUI.mockReturnValue(baseUI({ onboardingDeferred: true, releaseOnboarding }));
+    markOnboardingPending(1);
+
+    renderShell({ initialPath: '/app/billing' });
+
+    expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
+    // Still ON the decision, so the gate must stay closed.
+    expect(releaseOnboarding).not.toHaveBeenCalled();
+    // Deferred, not consumed: the flag has to survive so the modal can still appear once the
+    // billing decision resolves. Clearing it here would cost that household the tour entirely.
+    expect(isOnboardingPending(1)).toBe(true);
+  });
+
+  // The release is keyed on the ROUTE, not on BillingTab unmounting. StrictMode double-invokes
+  // effects (mount -> cleanup -> mount), so an unmount cleanup fired while the billing screen was
+  // still up and let the modal appear over the very decision it exists to protect. RTL does not
+  // wrap in StrictMode, so only the e2e caught that -- as an "intercepts pointer events" failure.
+  it('releases the deferral once the household is no longer on billing', () => {
+    const releaseOnboarding = vi.fn();
+    useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn(), account: { id: 1 } });
+    useUI.mockReturnValue(baseUI({ onboardingDeferred: true, releaseOnboarding }));
+    markOnboardingPending(1);
+
+    renderShell({ initialPath: '/app/log' });
+
+    expect(releaseOnboarding).toHaveBeenCalled();
+  });
+
+  it('renders as soon as the deferral is released', () => {
+    useAuth.mockReturnValue({ people: solo, refreshPeople: vi.fn(), account: { id: 1 } });
+    useUI.mockReturnValue(baseUI({ onboardingDeferred: true }));
+    markOnboardingPending(1);
+
+    const { rerenderApp } = renderShell({ initialPath: '/app/billing' });
+    expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
+
+    // The gate is in AppShell's effect dependencies, so the modal appears on that flip with no
+    // further plumbing -- this asserts that wiring, not just the suppressed state.
+    useUI.mockReturnValue(baseUI({ onboardingDeferred: false }));
+    rerenderApp();
+
+    expect(screen.getByTestId('welcome-modal')).toBeInTheDocument();
   });
 
   it("does not render a DIFFERENT account's pending flag onto the active account", () => {

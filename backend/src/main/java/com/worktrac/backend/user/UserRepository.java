@@ -13,6 +13,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
+    // Every account has exactly one User today (the primary/registering login) -- see V2's comment
+    // and emailGroupedByAccount below. Used by billing to put a real address on the Stripe Customer
+    // so receipts and dunning mail reach the household.
+    Optional<User> findByAccount_Id(Long accountId);
+
     boolean existsByEmail(String email);
 
     void deleteByAccount_Id(Long accountId);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useUI } from '../context/UIContext';
 import { errorBannerStyle, inputStyle, primaryButtonStyle } from './LoginPage';
 import Spinner from '../components/shared/Spinner';
 
@@ -8,9 +9,13 @@ const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function ConfirmEmailPage() {
   const { confirmEmail, resendCode } = useAuth();
+  const { deferOnboarding } = useUI();
   const navigate = useNavigate();
   const location = useLocation();
   const email = location.state?.email;
+  // Set when this registration came from marketing's "Go Pro" (see RegisterPage). It changes two
+  // things and nothing else: where they land, and whether the first-run welcome modal waits.
+  const wantsPro = location.state?.wantsPro === true;
 
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState(false);
@@ -45,7 +50,15 @@ export default function ConfirmEmailPage() {
     setSubmitting(true);
     try {
       await confirmEmail({ email, code: trimmedCode });
-      navigate('/app/log');
+      if (wantsPro) {
+        // Defer BEFORE navigating: AppShell reads the gate in an effect keyed on the account, and
+        // that effect runs as soon as the shell mounts. Setting it after the navigation would race
+        // the modal it exists to suppress.
+        deferOnboarding();
+        navigate('/app/billing');
+      } else {
+        navigate('/app/log');
+      }
     } catch (err) {
       setError(err.message || 'Could not confirm this code');
     } finally {

@@ -91,6 +91,26 @@ app:
     # set simply has no admin, rather than defaulting open. Set per-environment in the
     # deploy repo's Container App env vars, never hardcoded here.
     emails: ${ADMIN_EMAILS:}
+  billing:
+    # Founding households that keep Pro free, by email. Deliberately an env var rather than a
+    # Flyway migration: these are other people's personal addresses and have no business in git
+    # history, and comping someone later should be a config change rather than a new migration.
+    # Set from a deploy SECRET, not a plaintext workflow value. Empty by default -- an environment
+    # that sets nothing simply has no comped households.
+    comped-emails: ${COMPED_EMAILS:}
+  stripe:
+    # Every value empty by default: an environment with no Stripe configuration rejects billing
+    # requests outright rather than defaulting open (see StripeProperties). Set per-environment in
+    # the deploy repo's Container App env vars, never here -- and note keys, price ids and the
+    # webhook secret all DIFFER between the Stripe sandbox and the live account.
+    secret-key: ${STRIPE_SECRET_KEY:}
+    publishable-key: ${STRIPE_PUBLISHABLE_KEY:}
+    # Local development uses the secret `stripe listen` mints, NOT the one from the Dashboard --
+    # a Dashboard endpoint cannot reach localhost.
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    price-monthly: ${STRIPE_PRICE_MONTHLY:}
+    price-yearly: ${STRIPE_PRICE_YEARLY:}
+    return-url: ${STRIPE_RETURN_URL:http://localhost:3000/app/billing}
   email-delivery-webhook:
     # Shared-secret query-param key gating the public Event Grid delivery-report webhook (see
     # EmailDeliveryWebhookController) -- empty by default so an environment with no key set

@@ -3,6 +3,8 @@ package com.worktrac.backend.user;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountDto;
 import com.worktrac.backend.account.AccountRepository;
+import com.worktrac.backend.billing.BillingPlan;
+import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.ConflictException;
 import com.worktrac.backend.common.ExpiredException;
 import com.worktrac.backend.common.LockedException;
@@ -62,6 +64,7 @@ public class RegistrationService {
     private final Optional<TestCodeCache> testCodeCache;
     private final Clock clock;
     private final RegistrationAuditService auditService;
+    private final SubscriptionService subscriptionService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public RegistrationService(AccountRepository accountRepository, UserRepository userRepository,
@@ -70,7 +73,8 @@ public class RegistrationService {
                                 PasswordEncoder passwordEncoder, JwtService jwtService,
                                 ApplicationEventPublisher eventPublisher, EmailProperties emailProperties,
                                 RegistrationRateLimiter rateLimiter, Optional<TestCodeCache> testCodeCache,
-                                Clock clock, RegistrationAuditService auditService) {
+                                Clock clock, RegistrationAuditService auditService,
+                                SubscriptionService subscriptionService) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
@@ -83,6 +87,7 @@ public class RegistrationService {
         this.testCodeCache = testCodeCache;
         this.clock = clock;
         this.auditService = auditService;
+        this.subscriptionService = subscriptionService;
     }
 
     @Transactional
@@ -258,8 +263,14 @@ public class RegistrationService {
         Account account = accountRepository.save(new Account(accountName));
         User user = userRepository.save(new User(account, email, passwordHash));
         Person person = personRepository.save(new Person(account, personName, true));
+        // Every account owns exactly one subscription row from the moment it exists, so "one row
+        // per account" is true from here on rather than only for households that reach billing.
+        // Nothing here talks to Stripe: a Stripe outage must never be able to break registration,
+        // and the Stripe Customer is created lazily at first checkout instead.
+        subscriptionService.createFreeSubscription(account);
 
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole());
-        return new AuthResponse(token, UserDto.from(user), AccountDto.from(account), PersonDto.from(person));
+        return new AuthResponse(token, UserDto.from(user), AccountDto.from(account, BillingPlan.FREE),
+                PersonDto.from(person));
     }
 }
