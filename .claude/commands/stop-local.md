@@ -21,7 +21,14 @@ same way `/run-local` derives them) and stops it by PID. It never touches anothe
 processes, and it never stops the shared `worktrac-sqlserver` container — other worktrees may
 still be using it.
 
-### 3. Confirm
+### 3. Stop the Stripe webhook listener, if `/run-local` started one
+```bash
+cd "$REPO_ROOT" && bash scripts/stripe-listen-stop.sh
+```
+Independent of `down.sh` (it isn't found by port — `stripe listen` doesn't bind one locally), so
+it needs its own step, by the PID `scripts/stripe-listen.sh` recorded. A no-op if none is running.
+
+### 4. Confirm
 Report that this worktree's stack is stopped. If the user wants the shared database container
 stopped too (rare — it's shared infrastructure other worktrees may depend on), confirm with
 them explicitly before running `docker stop worktrac-sqlserver`.

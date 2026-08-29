@@ -95,7 +95,26 @@ forgotten bracket from the same error.
   the outbox must never hold. `loadStripe()` is called lazily inside the gated action so an offline
   household never requests `js.stripe.com` and the app keeps no third-party boot dependency.
 - **`PlanBadge`'s Free control is NOT `OfflineDisabledWrap`ped** — it is a navigation, not a write.
-  Client-side routing works offline; the gate belongs on the checkout button it leads to.
+  Client-side routing works offline; the gate belongs on the checkout button it leads to. Both
+  plan states are links now (Pro badge included, since paying earns a piece of chrome that
+  actually goes somewhere) — neither is `OfflineDisabledWrap`ped, same reasoning either way.
+- **`BillingTab`'s checkout-reconcile effect (`?checkout=cs_...`) must NOT use a `cancelled` flag
+  from a cleanup closure to guard its success path.** React.StrictMode double-invokes this effect
+  (mount → cleanup → mount) in local dev, and a real network round trip always outlasts that
+  synchronous cycle — so a `cancelled` flag set by the first invocation's cleanup is **already
+  true** by the time that same invocation's `reconcileCheckout()` resolves, silently discarding
+  `refreshPeople`/`invalidateQueries`/the celebration/the URL cleanup on every single real
+  checkout in local dev. The reconcile itself still lands and gets applied server-side (confirmed
+  against `billing_events` — a genuine `CHECKOUT_RECONCILED` row with nothing shown for it), which
+  is what makes this read as "the upgrade worked, no celebration" rather than an outright
+  failure — costly to trace back to StrictMode for exactly that reason. `reconciledRef` already
+  fully owns "should a new reconcile dispatch" (set synchronously before the async call), so there
+  is nothing left for a second cancellation guard to protect against; removing it is the fix, not
+  a workaround. **Not reproducible in Vitest/jsdom** — measured directly that RTL's render does not
+  reproduce React's real double-invoke timing for this effect regardless of how the mock's promise
+  is scheduled (tried a real `setTimeout`-deferred mock explicitly wrapped in `<StrictMode>`; only
+  one invocation ever fired). The regression guard lives in `e2e/tests/billing.spec.ts` instead,
+  against the real dev server.
 
 ## Deleting an account must stop the money
 

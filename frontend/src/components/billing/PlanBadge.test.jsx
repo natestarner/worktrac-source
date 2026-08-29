@@ -36,14 +36,15 @@ describe('PlanBadge', () => {
     expect(screen.getByText('Pro', { exact: true })).toBeInTheDocument();
   });
 
-  it('does not make the Pro badge tappable', () => {
+  it('links the Pro badge to the billing screen too', () => {
     withAccount({ id: 1, plan: 'PRO' });
     renderBadge();
 
-    // Managing a subscription happens through the account menu; a Pro member has nothing to do
-    // here, so it must not look or behave like a control.
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    // exact:true for the same reason as above -- "Pro" is also a substring of "Go Pro"/
+    // "Upgrade to Pro", neither of which can ever be on screen at the same time as this (Free and
+    // Pro are mutually exclusive).
+    const link = screen.getByRole('link', { name: 'Pro', exact: true });
+    expect(link).toHaveAttribute('href', '/app/billing');
   });
 
   // THE case this component exists to get right. An auth snapshot written before billing shipped

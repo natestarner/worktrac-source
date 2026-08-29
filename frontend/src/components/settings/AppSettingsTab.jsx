@@ -19,6 +19,7 @@ import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import ImportDataModal from './ImportDataModal';
 import ProUpsell from '../shared/ProUpsell';
+import LegalLinks from '../shared/LegalLinks';
 import { invalidateAfterImport } from '../../lib/queryClient';
 
 // Every setting here is household-wide -- nothing is scoped to whichever person happens to be
@@ -399,6 +400,11 @@ export default function AppSettingsTab() {
           }}
         />
       )}
+
+      <div style={sectionLabelStyle}>Legal</div>
+      <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 24 }}>
+        <LegalLinks />
+      </div>
     </div>
   );
 }

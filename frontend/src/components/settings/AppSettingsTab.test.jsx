@@ -90,6 +90,17 @@ describe('AppSettingsTab tag management', () => {
     expect(screen.queryByRole('button', { name: '+ Add exercise' })).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Search all exercises to add')).not.toBeInTheDocument();
   });
+
+  // Settings is the one place these are reachable any time, not just at signup or checkout.
+  it('links to Terms and Privacy Policy', () => {
+    renderTab();
+
+    expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', 'https://huddle.fitness/terms.html');
+    expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
+      'href',
+      'https://huddle.fitness/privacy.html',
+    );
+  });
 });
 
 describe('AppSettingsTab rest timer toggle', () => {

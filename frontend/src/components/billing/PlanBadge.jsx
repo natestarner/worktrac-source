@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { IconStar } from '../shared/icons';
+import HuddleMark from '../shared/HuddleMark';
 
 // The household's plan, in the header, immediately left of the account menu.
 //
@@ -34,18 +36,45 @@ export default function PlanBadge() {
   }
 
   if (plan === 'FREE') {
+    // Outline star, echoing the same glyph the favourite toggle uses for "not yet" -- aspirational,
+    // not achieved. IconStar is aria-hidden (icons.jsx), so it never touches the "Go Pro" name below.
     return (
       <Link
         to="/app/billing"
         className="pressable plan-badge plan-badge--upgrade"
         aria-label="Go Pro"
       >
+        <IconStar size={12} />
         Go Pro
       </Link>
     );
   }
 
-  // Static, not a link: managing a subscription happens through the account menu's Plan & billing
-  // item, and a Pro member has nothing to do here. It must not look tappable.
-  return <span className="plan-badge plan-badge--pro">Pro</span>;
+  // A link to /app/billing, same as "Go Pro" above -- it used to be a static span on the reasoning
+  // that the account menu's "Plan & billing" item already goes there and a Pro member has nothing
+  // to DO here. That held while this was quiet chrome; now that it's a deliberately prominent,
+  // branded badge, a tap that goes nowhere reads as broken rather than as "nothing to do".
+  // "Pro" is a substring of "Profile" (UserMenu's first item) and of "Upgrade to Pro"
+  // (FreeSummary's button), but neither shares this control's ROLE -- Playwright/RTL role queries
+  // filter by role before matching name, and a Free household never sees this link at all (Pro and
+  // Free are mutually exclusive), so there is no state in which two same-named links coexist.
+  //
+  // The actual mark, not a generic icon -- paying for Huddle earns Huddle's own identity, not just
+  // a colour swap on the same star. It's already proven legible this small: public/icon.svg is the
+  // same four circles rendered as the browser tab favicon. HuddleMark is aria-hidden and no text
+  // was split into spans, so getByText('Pro', { exact: true }) is unmoved.
+  //
+  // paleFill/paleStroke pinned to fixed light values: this pill's own background is a fixed light
+  // colour regardless of theme (see .plan-badge--pro's comment), and the mark's pale circle
+  // otherwise pulls dark mode's dark --color-surface/--color-border, tuned to blend into a DARK
+  // card -- exactly wrong here.
+  //
+  // NOT wrapped in OfflineDisabledWrap, same reasoning as "Go Pro": this is a navigation, not a
+  // write, and client-side routing works offline.
+  return (
+    <Link to="/app/billing" className="pressable plan-badge plan-badge--pro" aria-label="Pro">
+      <HuddleMark size={14} paleFill="#ffffff" paleStroke="#e7e3dc" />
+      Pro
+    </Link>
+  );
 }

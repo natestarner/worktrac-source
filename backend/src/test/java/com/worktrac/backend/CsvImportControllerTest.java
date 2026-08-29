@@ -367,6 +367,21 @@ class CsvImportControllerTest extends AbstractIntegrationTest {
                 "an Excel round trip must not shift the instant");
     }
 
+    // Regression: our own export always zero-pads the hour (CsvExportService's TIME_FMT is
+    // "HH:mm:ss"), but a spreadsheet round trip commonly hands it back without the leading zero
+    // while keeping minutes/seconds padded -- e.g. "1:50:18" rather than "01:50:18". These rows
+    // used to be flatly rejected as "Couldn't read the time".
+    @Test
+    void aNonZeroPaddedTwentyFourHourTimeStillParses() throws Exception {
+        String csv = """
+                Exercise,Date,Time,Reps
+                Barbell Bench Press,8/20/2026,1:50:18,8
+                """;
+        assertEquals(1, commitImport(personId, csv).get("setCount").asInt());
+        assertTrue(exportCsv(personId).split("\n")[1].startsWith("2026-08-20,01:50:18,"),
+                "a bare, non-zero-padded hour must still resolve to the right instant");
+    }
+
     @Test
     void aFileWithABomAndCrlfStillReads() throws Exception {
         String csv = "﻿Exercise,Date,Reps\r\nBarbell Bench Press,2026-08-20,8\r\n";
