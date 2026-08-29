@@ -9,7 +9,7 @@
         <artifactId>spring-boot-starter-parent</artifactId>
         <!-- NOTE: verify this is still the latest stable (non-SNAPSHOT/RC) version at
              https://start.spring.io before your first build -->
-        <version>4.1.0</version>
+        <version>4.1.1</version>
         <relativePath/>
     </parent>
 
@@ -35,7 +35,7 @@
              is on Java 25); do not use the bucket4j_jdk8-core artifact. -->
         <bucket4j.version>8.19.0</bucket4j.version>
         <caffeine.version>3.2.4</caffeine.version>
-        <azure-communication-email.version>1.1.4</azure-communication-email.version>
+        <azure-communication-email.version>1.1.5</azure-communication-email.version>
         <!-- Latest STABLE at time of writing; 33.5.0-beta.1 exists and is deliberately not used.
              The Stripe API version itself is pinned separately via app.stripe.api-version, so an
              SDK bump cannot silently change request/response shapes. -->
@@ -182,7 +182,7 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
-                <version>2.22.1</version>
+                <version>2.22.2</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
