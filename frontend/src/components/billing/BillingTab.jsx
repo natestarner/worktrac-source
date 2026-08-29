@@ -14,6 +14,7 @@ import { queryKeys } from '../../api/queryKeys';
 import { formatDate } from '../../utils/datetime';
 import Button from '../shared/Button';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import HuddleMark from '../shared/HuddleMark';
 import PlanChooser from './PlanChooser';
 import EmbeddedCheckout from './EmbeddedCheckout';
 import { PRO_BENEFITS } from './planCopy';
@@ -187,7 +188,13 @@ function ProSummary({ subscription, pending, onManage }) {
     <>
       <div style={sectionLabelStyle}>Your plan</div>
       <div style={cardStyle}>
-        <div style={planHeadingStyle}>Huddle Pro</div>
+        {/* The mark, not the wordmark: "Huddle Pro" is already spelled out beside it, and the
+            horizontal lockup would repeat the word. aria-hidden inside HuddleMark, so a screen
+            reader hears the heading once rather than twice. */}
+        <div style={planTitleRowStyle}>
+          <HuddleMark size={40} />
+          <div style={planHeadingStyle}>Huddle Pro</div>
+        </div>
         <p style={mutedLineStyle}>
           {comped
             ? 'Your household has Pro on the house — with our thanks for being here early.'
@@ -264,12 +271,39 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
   );
 }
 
+// Deliberately the same treatment as the marketing site's pricing card -- an accent tick per
+// benefit -- so the page someone read before signing up and the screen they upgrade on feel like
+// one product rather than two.
+//
+// --color-accent is the right token here: it fails AA as small TEXT, but icons, borders and the
+// focus ring are exactly what it is for (see .claude/rules/frontend-core.md).
+function BenefitCheck() {
+  return (
+    <svg
+      width="19"
+      height="19"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="var(--color-accent)"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      style={{ flexShrink: 0, marginTop: 2 }}
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
 function BenefitList() {
   return (
     <ul style={benefitListStyle}>
       {PRO_BENEFITS.map((benefit) => (
         <li key={benefit.id} style={benefitItemStyle}>
-          {benefit.label}
+          <BenefitCheck />
+          <span>{benefit.label}</span>
         </li>
       ))}
     </ul>
@@ -306,10 +340,16 @@ const cardStyle = {
   marginBottom: 24,
 };
 
+const planTitleRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 'var(--space-3)',
+  marginBottom: 'var(--space-2)',
+};
+
 const planHeadingStyle = {
   fontSize: 'var(--text-xl)',
   fontWeight: 800,
-  marginBottom: 'var(--space-2)',
 };
 
 const mutedLineStyle = {
@@ -336,6 +376,10 @@ const benefitListStyle = {
 
 const benefitItemStyle = {
   color: 'var(--color-text)',
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 'var(--space-3)',
+  lineHeight: 1.45,
 };
 
 const finePrintStyle = {
