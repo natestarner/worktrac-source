@@ -6,7 +6,12 @@ import BillingTab from './BillingTab';
 import { renderWithQuery } from '../../test/queryWrapper';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
-import { createCheckoutSession, createPortalSession, getSubscription } from '../../api/billing';
+import {
+  createCheckoutSession,
+  createPortalSession,
+  getSubscription,
+  reconcileCheckout,
+} from '../../api/billing';
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
@@ -51,6 +56,19 @@ describe('BillingTab', () => {
     // change shape between the page they just read and the screen they pay on.
     expect(screen.getByRole('radio', { name: /Yearly/ })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Monthly/ })).not.toBeChecked();
+  });
+
+  // The fine print used to name Terms/Privacy without linking to them -- someone deciding
+  // whether to pay had no way to actually read what they were agreeing to.
+  it('links "Terms" and "Privacy Policy" in the fine print to the marketing site', async () => {
+    render({ id: 1, plan: 'FREE' });
+    await screen.findByRole('button', { name: 'Upgrade to Pro' });
+
+    expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', 'https://huddle.fitness/terms.html');
+    expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
+      'href',
+      'https://huddle.fitness/privacy.html',
+    );
   });
 
   // Free is permanent, so deferring costs nothing -- this is an equal-weight escape, not fine
@@ -162,5 +180,64 @@ describe('BillingTab', () => {
 
     expect(await screen.findByTestId('stripe-embedded-checkout')).toBeInTheDocument();
     expect(createCheckoutSession).toHaveBeenCalledWith('YEAR');
+  });
+
+  // The moment a checkout actually lands. releaseOnboarding must wait for the celebration to be
+  // dismissed -- releasing it the instant reconcile resolves would let the welcome tour stack a
+  // second overlay on top of a celebration nobody asked to see behind it yet.
+  it('celebrates a successful checkout, then releases onboarding only once dismissed', async () => {
+    const releaseOnboarding = vi.fn();
+    useUI.mockReturnValue({ releaseOnboarding, showToast: vi.fn() });
+    useAuth.mockReturnValue({ account: { id: 1, plan: 'PRO' }, refreshPeople: vi.fn().mockResolvedValue() });
+    getSubscription.mockResolvedValue({ plan: 'PRO', status: 'ACTIVE', pro: true });
+    reconcileCheckout.mockResolvedValue({});
+
+    renderWithQuery(
+      <MemoryRouter initialEntries={['/app/billing?checkout=cs_test123']}>
+        <BillingTab />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Welcome to Huddle Pro')).toBeInTheDocument();
+    expect(reconcileCheckout).toHaveBeenCalledWith('cs_test123');
+    expect(releaseOnboarding).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Welcome to Huddle Pro'));
+
+    expect(releaseOnboarding).toHaveBeenCalled();
+    expect(screen.queryByText('Welcome to Huddle Pro')).not.toBeInTheDocument();
+  });
+
+  // A real StrictMode double-invoke race (mount -> cleanup -> mount racing an in-flight
+  // reconcileCheckout()) is what actually caused a real, confirmed local-dev bug here -- see
+  // BillingTab.jsx's own comment above this effect. It is deliberately NOT covered by a test in
+  // this file: measured directly that jsdom/RTL does not reproduce React's real double-invoke
+  // timing for this effect no matter how the mock's promise is scheduled (tried a real
+  // setTimeout-deferred mock, wrapped in <StrictMode> explicitly -- only one invocation ever
+  // fired). A unit test asserting this would pass on both the buggy and the fixed code, which is
+  // worse than no test, since it reads as coverage that isn't there. The real regression guard is
+  // in e2e (billing.spec.ts), which runs against an actual browser and the actual dev server.
+
+  // The webhook is the backstop for a reconcile that fails to reach the server -- this must stay
+  // a delay, never a lost payment, and certainly never a celebration for a plan change that hasn't
+  // actually landed yet.
+  it('does not celebrate when the reconcile itself fails', async () => {
+    const showToast = vi.fn();
+    useUI.mockReturnValue({ releaseOnboarding: vi.fn(), showToast });
+    useAuth.mockReturnValue({ account: { id: 1, plan: 'FREE' }, refreshPeople: vi.fn().mockResolvedValue() });
+    getSubscription.mockResolvedValue(null);
+    reconcileCheckout.mockRejectedValue(new Error('network'));
+
+    renderWithQuery(
+      <MemoryRouter initialEntries={['/app/billing?checkout=cs_test456']}>
+        <BillingTab />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith(
+      'Payment received — your plan will update shortly.',
+      { tone: 'info' },
+    ));
+    expect(screen.queryByText('Welcome to Huddle Pro')).not.toBeInTheDocument();
   });
 });

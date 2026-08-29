@@ -102,6 +102,21 @@ describe('RegisterPage validation', () => {
     );
   });
 
+  // Registration previously made no mention of Terms/Privacy at all -- the point someone most
+  // needs them, since it's the moment they're agreeing to something.
+  it('links to Terms and Privacy Policy, each opening in a new tab', () => {
+    renderPage();
+
+    const terms = screen.getByRole('link', { name: 'Terms' });
+    expect(terms).toHaveAttribute('href', 'https://huddle.fitness/terms.html');
+    expect(terms).toHaveAttribute('target', '_blank');
+
+    expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
+      'href',
+      'https://huddle.fitness/privacy.html',
+    );
+  });
+
   it('shows the server error banner and does not navigate when register fails', async () => {
     register.mockRejectedValue(new Error('An account with that email already exists'));
     renderPage();

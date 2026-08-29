@@ -15,8 +15,10 @@ import { formatDate } from '../../utils/datetime';
 import Button from '../shared/Button';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import HuddleMark from '../shared/HuddleMark';
+import LegalLinks from '../shared/LegalLinks';
 import PlanChooser from './PlanChooser';
 import EmbeddedCheckout from './EmbeddedCheckout';
+import ProCelebration from './ProCelebration';
 import { PRO_BENEFITS } from './planCopy';
 
 // The household's plan, and where an upgrade happens.
@@ -39,6 +41,7 @@ export default function BillingTab() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [interval, setInterval] = useState('YEAR');
   const [checkout, setCheckout] = useState(null);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   // `online` is deliberately not destructured: OfflineDisabledWrap reads useOnlineStatus
   // itself, and a second copy of that answer here is the kind of duplicate the
@@ -52,8 +55,10 @@ export default function BillingTab() {
   // it because RTL does not wrap in StrictMode; the e2e caught it as an "intercepts pointer
   // events" failure, which is this codebase's usual signature for an unexpected overlay.
   //
-  // What DOES belong here is the release after a successful payment (below), because the modal
-  // should land over the success screen rather than waiting for the person to navigate away.
+  // What DOES belong here is the release after a successful payment (below) -- specifically once
+  // ProCelebration is dismissed, not the instant the reconcile resolves. The tour comes after the
+  // money decision AND after the celebration of it; releasing any earlier would let the welcome
+  // modal stack a second overlay on top of a celebration nobody asked to see behind it yet.
   const releaseRef = useRef(releaseOnboarding);
   releaseRef.current = releaseOnboarding;
 
@@ -72,44 +77,50 @@ export default function BillingTab() {
   // Stripe returns the browser to /app/billing?checkout=cs_... The backend reads that session
   // directly and applies it, so the upgrade is visible immediately rather than waiting on a
   // webhook -- which is what avoids the classic "I paid and I'm still on Free" ticket.
+  //
+  // Deliberately NO cancellation-flag cleanup here, even though that is the reflexive pattern for
+  // an async effect. StrictMode double-invokes this effect (mount -> cleanup -> mount), and a real
+  // network round trip always takes longer than that synchronous cycle -- so a `cancelled` flag
+  // set by the first invocation's cleanup is ALWAYS true by the time its own reconcileCheckout()
+  // resolves, discarding refreshPeople/invalidateQueries/setShowCelebration on every single run in
+  // local dev, silently. Measured directly: the reconcile call still lands and gets applied
+  // server-side (confirmed against the real billing_events audit trail -- CHECKOUT_RECONCILED
+  // recorded, status=ACTIVE), so the payment was never at risk; only this effect's own follow-up
+  // was. `reconciledRef` already fully owns "should this dispatch a NEW reconcile call" -- once
+  // set, the second StrictMode invocation's guard correctly no-ops, so there is nothing left for a
+  // second guard to protect against.
+  //
+  // Regression coverage is in e2e (billing.spec.ts), not here: measured directly that jsdom/RTL
+  // does not reproduce React's real double-invoke timing for this effect regardless of how the
+  // mock's promise is scheduled (checked with a real setTimeout-deferred mock, wrapped in
+  // <StrictMode> explicitly -- only one invocation ever fired). A unit test asserting this would
+  // pass on both the buggy and fixed code, which is worse than no test at all.
   const checkoutParam = searchParams.get('checkout');
   const reconciledRef = useRef(null);
   useEffect(() => {
     if (!checkoutParam || reconciledRef.current === checkoutParam) return;
     reconciledRef.current = checkoutParam;
 
-    let cancelled = false;
     (async () => {
       try {
         await reconcileCheckout(checkoutParam);
-        if (cancelled) return;
         // /me is what carries the derived plan into the auth snapshot, so the header badge and
         // every other consumer update from the same source rather than a second copy of the truth.
         await refreshPeople();
         queryClient.invalidateQueries({ queryKey: queryKeys.subscription() });
-        // The welcome modal may now appear over the success state, which is the intended order:
-        // the tour comes AFTER the money decision.
-        releaseRef.current();
+        setShowCelebration(true);
       } catch {
         // The webhook is the backstop, so a failed reconcile is a delay rather than a lost payment.
         // Saying so beats a spinner that resolves into nothing.
-        if (!cancelled) {
-          showToast('Payment received — your plan will update shortly.', { tone: 'info' });
-        }
+        showToast('Payment received — your plan will update shortly.', { tone: 'info' });
       } finally {
-        if (!cancelled) {
-          // Strip the param so a reload or a shared link cannot replay it.
-          setCheckout(null);
-          const next = new URLSearchParams(searchParams);
-          next.delete('checkout');
-          setSearchParams(next, { replace: true });
-        }
+        // Strip the param so a reload or a shared link cannot replay it.
+        setCheckout(null);
+        const next = new URLSearchParams(searchParams);
+        next.delete('checkout');
+        setSearchParams(next, { replace: true });
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkoutParam]);
 
@@ -143,6 +154,11 @@ export default function BillingTab() {
     showToast("Couldn't load the payment form. Try again in a moment.", { tone: 'error' });
   }, [showToast]);
 
+  function handleDismissCelebration() {
+    setShowCelebration(false);
+    releaseRef.current();
+  }
+
   return (
     <div>
       <button onClick={() => navigate(-1)} style={backButtonStyle}>
@@ -174,6 +190,8 @@ export default function BillingTab() {
           onStartFree={() => navigate('/app/log')}
         />
       )}
+
+      {showCelebration && <ProCelebration onDismiss={handleDismissCelebration} />}
     </div>
   );
 }
@@ -258,7 +276,7 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
           </Button>
         </OfflineDisabledWrap>
         <p style={finePrintStyle}>
-          Cancel any time. Your workouts are never deleted — see Terms and Privacy.
+          Cancel any time. Your workouts are never deleted — see <LegalLinks />.
         </p>
       </div>
 

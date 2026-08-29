@@ -5,8 +5,8 @@ import { forEachConnectivityMode } from './support/parity';
 
 // The account dropdown is reached by scoping to .header-bar rather than matching the account
 // holder's name, which varies per test -- the same idiom admin.spec.ts uses, and for the same
-// reason. Note PlanBadge now also lives in that bar: on Free it renders a LINK and on Pro a plain
-// span, so the "only button in the header" assumption those specs rely on still holds.
+// reason. Note PlanBadge now also lives in that bar: on both Free and Pro it renders a LINK (not
+// a button), so the "only button in the header" assumption those specs rely on still holds.
 async function openAccountMenu(page) {
   await page.locator('.header-bar').getByRole('button').click();
 }

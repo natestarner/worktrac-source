@@ -5,6 +5,7 @@ import { errorBannerStyle, inputStyle, primaryButtonStyle } from './LoginPage';
 import Spinner from '../components/shared/Spinner';
 import logoLight from '../assets/huddle-lockup-barlow-light.svg';
 import logoDark from '../assets/huddle-lockup-barlow-dark.svg';
+import LegalLinks from '../components/shared/LegalLinks';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -161,6 +162,10 @@ export default function RegisterPage() {
             </span>
           )}
         </button>
+
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', marginTop: 'var(--space-4)', textAlign: 'center' }}>
+          By creating a household, you agree to our <LegalLinks />.
+        </div>
 
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-5)', textAlign: 'center' }}>
           Already have an account? <Link to="/login" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>Log in</Link>

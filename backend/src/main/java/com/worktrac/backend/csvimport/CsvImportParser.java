@@ -67,23 +67,31 @@ public class CsvImportParser {
             DateTimeFormatter.ofPattern("M/d/yyyy", Locale.US),
             DateTimeFormatter.ofPattern("yyyy/M/d", Locale.US));
 
+    // "H" (not "HH"): a width-1 hour field still parses a zero-padded "01" fine, but a width-2 "HH"
+    // REJECTS a bare "1" outright -- pattern letter count fixes the parse width, not just the
+    // format width. Our own export always zero-pads (CsvExportService's TIME_FMT is "HH:mm:ss"),
+    // but a round trip through Excel/Numbers commonly hands the hour back without the leading zero
+    // (its locale short-time format drops it) while keeping minutes/seconds padded -- exactly the
+    // shape of the rows this used to reject: "1:50:18", "6:42:29". Minutes/seconds stay "mm"/"ss";
+    // in practice a spreadsheet never strips their leading zero, only the hour's.
     private static final List<DateTimeFormatter> TIME_FORMATS = List.of(
-            DateTimeFormatter.ofPattern("HH:mm:ss", Locale.US),
-            DateTimeFormatter.ofPattern("HH:mm", Locale.US),
+            DateTimeFormatter.ofPattern("H:mm:ss", Locale.US),
+            DateTimeFormatter.ofPattern("H:mm", Locale.US),
             DateTimeFormatter.ofPattern("h:mm:ss a", Locale.US),
             DateTimeFormatter.ofPattern("h:mm a", Locale.US));
 
     // Excel is happy to hand back a date and a time in one cell, and to reformat both on the way.
     // Accepting those shapes here costs nothing and is what keeps a spreadsheet round trip from
-    // failing duplicate detection on a cell that merely looks different.
+    // failing duplicate detection on a cell that merely looks different. Same "H" vs "HH" reasoning
+    // as TIME_FORMATS above for the embedded-time half of these.
     private static final List<DateTimeFormatter> DATE_TIME_FORMATS = List.of(
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US),
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss", Locale.US),
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.US),
-            DateTimeFormatter.ofPattern("M/d/yyyy HH:mm:ss", Locale.US),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd H:mm:ss", Locale.US),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'H:mm:ss", Locale.US),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd H:mm", Locale.US),
+            DateTimeFormatter.ofPattern("M/d/yyyy H:mm:ss", Locale.US),
             DateTimeFormatter.ofPattern("M/d/yyyy h:mm:ss a", Locale.US),
             DateTimeFormatter.ofPattern("M/d/yyyy h:mm a", Locale.US),
-            DateTimeFormatter.ofPattern("M/d/yyyy HH:mm", Locale.US));
+            DateTimeFormatter.ofPattern("M/d/yyyy H:mm", Locale.US));
 
     public ParsedImport parse(String csv, String accountDefaultUnit) {
         if (csv == null || csv.isBlank()) {

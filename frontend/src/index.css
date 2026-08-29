@@ -420,6 +420,22 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Inline text link to an external page (currently just Terms/Privacy on huddle.fitness --
+   components/shared/LegalLinks.jsx). Same shape as .help-back/.help-contents-link: no underline
+   at rest, hover-only per the touch-device guard above, so a tap doesn't leave it stuck underlined. */
+.legal-link {
+  color: var(--color-accent-text);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .legal-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
 /* ===========================================================================
    Component layer.
 
@@ -759,6 +775,7 @@ input[type='search']::-webkit-search-results-decoration {
 .plan-badge {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1);
   border-radius: var(--radius-full);
   font-size: var(--text-xs);
   font-weight: 700;
@@ -782,11 +799,32 @@ input[type='search']::-webkit-search-results-decoration {
   }
 }
 
+/* A dark fill couldn't get brighter without either failing AA behind "Pro" (--color-accent alone
+   is 3.44:1 and fails at this size -- frontend-core.md) or burying HuddleMark's own colours in a
+   same-toned background. So this pill flips the approach entirely and keeps its own FIXED bright
+   identity colours regardless of theme -- literals, not tokens, the same deliberate exception
+   HuddleMark's three brand-accent circles already are ("a logo keeps its own colours regardless
+   of theme"). A paid badge reads closer to a wax seal or an enamel pin than to ordinary chrome.
+   That also fixes the mark getting lost: it's the same near-white card surface HuddleMark already
+   sits on in BillingTab, so its four colours pop exactly as they do there and as they do at
+   favicon size (public/icon.svg is the same artwork).
+   Text is the LIGHT-MODE hex of --color-accent-text, pinned rather than left as the token (dark
+   mode's variant is tuned for a dark background, which this deliberately never is) -- 5.33:1
+   against white, the same already-documented number that token carries against --color-surface. */
 .plan-badge--pro {
-  color: var(--color-accent-contrast);
-  background: var(--color-accent-strong);
-  border: 1px solid var(--color-accent-strong);
+  color: #a8532c;
+  background: linear-gradient(135deg, #ffffff 0%, #fdf1e6 100%);
+  border: 1px solid var(--color-accent);
+  /* rgba() spells out --color-accent's own RGB (212, 103, 62) to add a translucent glow -- no
+     rgba-with-alpha version of that token exists to reach for instead. */
+  box-shadow: 0 0 0 1px rgba(212, 103, 62, 0.18), var(--shadow-2);
+  text-decoration: none;
 }
+
+/* No bespoke :hover rule needed here the way .plan-badge--upgrade has one -- that pill's
+   background is transparent, so .pressable's default `filter: brightness(0.97)` (index.css's
+   Interaction states block) would have nothing to dim. This one has a real fill, so the generic
+   rule already gives it visible hover/press feedback for free. */
 
 .person-pill-bar {
   padding: var(--space-3) var(--space-6);
