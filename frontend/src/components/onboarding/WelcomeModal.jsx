@@ -28,7 +28,7 @@ export default function WelcomeModal({ onAccept, onDismiss }) {
           lineHeight: 'var(--leading-normal)',
         }}
       >
-        A quick, nine-step walk through the real screens — picking an exercise, logging a set,
+        A quick, nine-step walk through the real screens: picking an exercise, logging a set,
         adding the people you train with. About a minute, and you can start it again any time from{' '}
         <strong>Help</strong> in the account menu.
       </p>

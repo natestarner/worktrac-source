@@ -128,7 +128,7 @@ function PRsTabContent() {
         ))}
 
       {!loading && prs.length === 0 && (
-        <div style={emptyStyle}>No PRs yet for {activePersonName} &mdash; log a set to start the board.</div>
+        <div style={emptyStyle}>No PRs yet for {activePersonName}. Log a set to start the board.</div>
       )}
 
       {!loading && prs.length > 0 && filteredPrs.length === 0 && (

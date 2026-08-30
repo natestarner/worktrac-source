@@ -235,7 +235,7 @@ describe('BillingTab', () => {
     );
 
     await waitFor(() => expect(showToast).toHaveBeenCalledWith(
-      'Payment received — your plan will update shortly.',
+      'Payment received. Your plan will update shortly.',
       { tone: 'info' },
     ));
     expect(screen.queryByText('Welcome to Huddle Pro')).not.toBeInTheDocument();

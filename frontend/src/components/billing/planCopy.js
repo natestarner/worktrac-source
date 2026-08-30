@@ -32,7 +32,7 @@ export const INTERVAL_ORDER = ['YEAR', 'MONTH'];
 // What Pro buys. Export is deliberately NOT here -- it is free on both plans, and listing it as a
 // Pro benefit would be false at the point of sale.
 export const PRO_BENEFITS = [
-  { id: 'history', label: 'Your whole history — every workout, for as long as you keep it' },
+  { id: 'history', label: 'Your whole history: every workout, for as long as you keep it' },
   { id: 'records', label: 'All-time records and trends over any range' },
   { id: 'import', label: 'Import past workouts from a spreadsheet or another app' },
 ];

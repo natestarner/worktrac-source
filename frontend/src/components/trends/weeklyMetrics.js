@@ -30,7 +30,7 @@ export const WEEKLY_METRICS = {
     label: 'Reps',
     dataKey: 'totalReps',
     isWeight: false,
-    barMeaning: 'Every rep you logged that week, added up. A timed hold counts as 0 reps — it is measured in seconds.',
+    barMeaning: 'Every rep you logged that week, added up. A timed hold counts as 0 reps. It is measured in seconds.',
   },
 };
 

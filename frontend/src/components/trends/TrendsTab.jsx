@@ -104,8 +104,8 @@ export default function TrendsTab() {
         </div>
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--color-faint)', fontSize: 15 }}>
           {overview.hasAnyHistory
-            ? `No workouts in the ${rangeEmptyLabel(trendsRangeWeeks)} — try a wider range.`
-            : 'No workouts logged yet — trends will show up here once a few sessions are in the books.'}
+            ? `No workouts in the ${rangeEmptyLabel(trendsRangeWeeks)}. Try a wider range.`
+            : 'No workouts logged yet. Trends will show up here once a few sessions are in the books.'}
         </div>
       </div>
     );

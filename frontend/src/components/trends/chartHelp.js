@@ -37,7 +37,7 @@ export const WORKOUT_FREQUENCY_HELP = {
   title: 'Workouts per week',
   lines: [
     'One bar per week, starting Monday.',
-    'The bar counts separate workout sessions — not exercises and not sets. Two sessions in the same day count as two.',
+    'The bar counts separate workout sessions, not exercises and not sets. Two sessions in the same day count as two.',
   ],
 };
 
@@ -56,7 +56,7 @@ export function exerciseTrendHelp(metric) {
     label: 'What the progress chart shows',
     title: 'Exercise progress',
     lines: [
-      'One dot per workout session that included this exercise — not one per day. Two sessions in the same day give you two dots.',
+      'One dot per workout session that included this exercise, not one per day. Two sessions in the same day give you two dots.',
       spec.dotMeaning,
       // Deliberately NOT "a new best estimated 1RM". PR marking runs through
       // StatsService#comparableValue, which ranks a bodyweight set by its rep count and a hold by
@@ -64,7 +64,7 @@ export function exerciseTrendHelp(metric) {
       // mistake .claude/rules/trends.md exists to prevent, and it would be wrong on every metric,
       // not just this one. What the reader actually needs from this line is why a green dot is
       // sometimes not the highest point on the chart in front of them.
-      'A larger green dot is a personal record — a new best for this exercise as of that session. ' +
+      'A larger green dot is a personal record: a new best for this exercise as of that session. ' +
         'PRs are judged the same way whatever this chart is showing: estimated 1RM for a loaded ' +
         'lift, rep count for a bodyweight exercise, time for a hold. So a green dot is not always ' +
         'the highest point on this chart.',

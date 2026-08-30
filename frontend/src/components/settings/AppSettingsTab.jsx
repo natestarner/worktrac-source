@@ -151,7 +151,7 @@ export default function AppSettingsTab() {
       <div style={sectionLabelStyle}>Units</div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
-          Default unit for new sets entered from now on. Sets already logged keep the unit they were recorded in &mdash; changing this never rewrites past numbers.
+          Default unit for new sets entered from now on. Sets already logged keep the unit they were recorded in. Changing this never rewrites past numbers.
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-1)', background: 'var(--color-subtle-bg)', borderRadius: 'var(--radius-md)', padding: 'var(--space-1)', maxWidth: 220 }}>
           {['lb', 'kg'].map((unit) => {
@@ -196,7 +196,7 @@ export default function AppSettingsTab() {
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
           Turn this on if you&rsquo;re somewhere with a bad connection. The app stops trying to reach
-          the server &mdash; everything you log is saved on this device and syncs automatically once
+          the server. Everything you log is saved on this device and syncs automatically once
           you turn it back off.
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-1)', background: 'var(--color-subtle-bg)', borderRadius: 'var(--radius-md)', padding: 'var(--space-1)', maxWidth: 220 }}>
@@ -337,7 +337,7 @@ export default function AppSettingsTab() {
       <div style={sectionLabelStyle}>Data</div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
-          Download a CSV of every set ever logged, for every person on this account &mdash; one file per person, zipped together.
+          Download a CSV of every set ever logged, for every person on this account. One file per person, zipped together.
         </div>
         <OfflineDisabledWrap message="Exporting needs a connection.">
           <Button onClick={downloadAllPeopleZip} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
@@ -346,7 +346,7 @@ export default function AppSettingsTab() {
         </OfflineDisabledWrap>
 
         <div style={{ fontSize: 14, color: 'var(--color-muted)', margin: '18px 0 12px' }}>
-          Bring workouts in from a CSV or Excel file &mdash; one this app exported, or a spreadsheet of your
+          Bring workouts in from a CSV or Excel file: one this app exported, or a spreadsheet of your
           own. You choose who it belongs to, and see exactly what will be added before anything is saved.
         </div>
         {/* Importing is a Pro feature, so a Free household gets the explanation INSTEAD of a

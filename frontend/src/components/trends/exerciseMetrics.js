@@ -20,7 +20,7 @@ export const EXERCISE_METRICS = {
     isWeight: true,
     title: 'est. 1RM',
     dotMeaning:
-      'Each dot is that session’s best single set, scored by estimated 1RM — one number that ' +
+      'Each dot is that session’s best single set, scored by estimated 1RM: one number that ' +
       'combines the weight and the reps. A bodyweight exercise has no weight to estimate from, ' +
       'so it shows your rep count instead.',
   },
@@ -31,7 +31,7 @@ export const EXERCISE_METRICS = {
     title: 'heaviest weight',
     dotMeaning:
       'Each dot is the heaviest weight you touched that session. This is often a different set ' +
-      'than your best estimated 1RM — a heavy single tops the bar but loses to a lighter set ' +
+      'than your best estimated 1RM: a heavy single tops the bar but loses to a lighter set ' +
       'done for more reps once reps are counted.',
   },
   sessionVolume: {

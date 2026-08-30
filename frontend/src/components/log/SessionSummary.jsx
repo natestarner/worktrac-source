@@ -66,7 +66,7 @@ export default function SessionSummary({ entries, loading, sessionId, personId, 
   if (entries.length === 0) {
     return (
       <div style={{ marginBottom: 16, padding: '16px 20px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, color: 'var(--color-muted)', fontSize: 14 }}>
-        No exercises logged yet &mdash; add one below.
+        No exercises logged yet. Add one below.
       </div>
     );
   }

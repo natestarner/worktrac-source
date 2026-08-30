@@ -93,7 +93,7 @@ export default class ErrorBoundary extends Component {
             marginBottom: 'var(--space-4)',
           }}
         >
-          Anything you&rsquo;ve logged is still saved on this device and will sync — nothing is lost.
+          Anything you&rsquo;ve logged is still saved on this device and will sync. Nothing is lost.
         </div>
         <Button variant="primary" onClick={this.handleRetry}>
           Try again

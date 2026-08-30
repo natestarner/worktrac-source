@@ -41,7 +41,7 @@ export default function PlanChooser({ value, onChange }) {
             />
             <span style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
               <span style={{ fontWeight: 'var(--weight-semibold)' }}>
-                {option.label} — {option.price}
+                {option.label}: {option.price}
               </span>
               {option.equivalent && (
                 <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)' }}>
