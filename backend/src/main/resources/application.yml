@@ -77,14 +77,39 @@ app:
     # Empty by default -- see EmailProperties.e2eNoopRecipientPattern. Only local/lower ever
     # set this to a real value.
     e2e-noop-recipient-pattern: ${APP_EMAIL_E2E_NOOP_RECIPIENT_PATTERN:}
+  request-limits:
+    # Caps on request-body bytes -- see RequestLimitProperties. Nothing bounded these before, so an
+    # unauthenticated POST could read an arbitrarily large body straight into the heap.
+    # 1 MB default clears the largest real payload (a Contact Us submission, ~10 KB) by ~100x and
+    # also clears an Azure Event Grid batch, which that service documents as up to 1 MB.
+    default-max-bytes: ${APP_REQUEST_DEFAULT_MAX_BYTES:1048576}
+    # Import carries a whole CSV as a JSON string; CsvImportParser.MAX_BYTES is 5 MB, and escaping
+    # plus the JSON envelope needs headroom above the raw file size.
+    import-max-bytes: ${APP_REQUEST_IMPORT_MAX_BYTES:6291456}
   rate-limit:
     per-ip-per-hour: ${APP_RATE_LIMIT_PER_IP_PER_HOUR:10}
     global-email-sends-per-hour: ${APP_RATE_LIMIT_GLOBAL_EMAIL_SENDS_PER_HOUR:30}
+    # Login (LoginRateLimiter). /api/auth/login had no throttle at all before this -- see
+    # RateLimitProperties for why these are looser than the contact limits.
+    login-per-ip-per-hour: ${APP_RATE_LIMIT_LOGIN_PER_IP_PER_HOUR:60}
+    login-global-per-hour: ${APP_RATE_LIMIT_LOGIN_GLOBAL_PER_HOUR:2000}
     # Contact Us form (ContactRateLimiter). Tighter than the registration limits above because
     # that endpoint is authenticated -- see RateLimitProperties for the sizing reasoning.
     contact-per-user-per-hour: ${APP_RATE_LIMIT_CONTACT_PER_USER_PER_HOUR:5}
     contact-per-ip-per-hour: ${APP_RATE_LIMIT_CONTACT_PER_IP_PER_HOUR:10}
     contact-global-per-hour: ${APP_RATE_LIMIT_CONTACT_GLOBAL_PER_HOUR:20}
+  quota:
+    # Per-household ceilings -- see QuotaProperties. Every one is set an order of magnitude or two
+    # above real use: these exist to stop one account growing the shared database without bound
+    # (Azure SQL Basic has a hard size ceiling, so that degrades EVERY household), not to shape
+    # anyone's normal use. QuotaService warns at 80% as well as refusing at 100%, so a household
+    # approaching one is visible before they hit it.
+    people-per-account: ${APP_QUOTA_PEOPLE_PER_ACCOUNT:20}
+    exercises-per-account: ${APP_QUOTA_EXERCISES_PER_ACCOUNT:1000}
+    tags-per-account: ${APP_QUOTA_TAGS_PER_ACCOUNT:200}
+    routines-per-person: ${APP_QUOTA_ROUTINES_PER_PERSON:100}
+    custom-fields-per-exercise: ${APP_QUOTA_CUSTOM_FIELDS_PER_EXERCISE:20}
+    sets-per-account: ${APP_QUOTA_SETS_PER_ACCOUNT:500000}
   admin:
     # Comma-separated allowlist of admin email addresses -- the real source of truth for
     # who can reach /api/admin/**. Empty by default so an environment with no ADMIN_EMAILS

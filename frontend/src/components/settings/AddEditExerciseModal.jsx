@@ -6,10 +6,12 @@ import { CREATE_EXERCISE_MUTATION_KEY, FAVORITE_MUTATION_KEY } from '../../lib/q
 import { isTempExerciseId, newTempExerciseId, resolveExerciseId } from '../../lib/exerciseIdMap';
 import { newId } from '../../utils/id';
 import { MAX_EXERCISE_NAME_LENGTH, MEASURE_OPTIONS, measureLabel, resolveExerciseCreate } from '../../utils/exerciseDuplicates';
+import { FIELD_LIMITS } from '../../utils/fieldLimits';
 import { useDurableMutation } from '../../hooks/useDurableMutation';
 import { useExercises } from '../../hooks/useExercises';
 import { usePersonExercises } from '../../hooks/usePersonExercises';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
+import { useUI } from '../../context/UIContext';
 import Modal from '../shared/Modal';
 import SegmentedToggle from '../shared/SegmentedToggle';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
@@ -46,7 +48,12 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   // entries rather than fetching again -- and neither is ever awaited here, so a stale or failing
   // background refetch can't block or hang the modal in any connectivity mode.
   const { exercises: catalog } = useExercises();
+  const { showToast } = useUI();
   const { exercises: personExercises } = usePersonExercises(personId);
+
+  // Own exercises only, mirroring the server's countByAccount_IdAndDeletedFalse: the preloaded
+  // global catalog is shared and costs the household nothing against its ceiling.
+  const ownExerciseCount = (catalog || []).filter((e) => !e.isGlobal).length;
 
   // Derived during render, not in an effect, so the note, the button label and handleSave below all
   // read the same answer. Skipped entirely while editing -- rename is a different question, and
@@ -167,6 +174,21 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
     // created.
     const resolved = resolveExerciseCreate({ catalog, name: trimmed, trackingType });
     if (resolved.kind === 'open') return openExisting(resolved.exercise);
+
+    // Checked HERE, before dispatching, and only on the branch that would genuinely add a row.
+    //
+    // The server enforces the same ceiling, but this create is a DURABLE write: a 403 arriving on
+    // sync is terminal, so the outbox would discard it silently -- possibly after it sat queued
+    // through an entire outage, and taking every set logged against its temp id with it. Refusing
+    // up front, while the person is looking at the modal, is the difference between "you have
+    // reached a limit" and their workout quietly disappearing.
+    //
+    // Counts the account's OWN exercises only, matching countByAccount_IdAndDeletedFalse -- the
+    // preloaded global catalog is shared and costs the household nothing.
+    if (ownExerciseCount >= FIELD_LIMITS.maxOwnExercises) {
+      showToast(`You've reached the limit of ${FIELD_LIMITS.maxOwnExercises} of your own exercises.`);
+      return;
+    }
     // Suffixed when the same name already exists with the OTHER measure, else the name as typed.
     const finalName = resolved.name;
 

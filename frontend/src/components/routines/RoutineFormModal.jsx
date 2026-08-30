@@ -7,6 +7,7 @@ import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import { searchExercises } from '../../utils/exerciseSearch';
+import { FIELD_LIMITS } from '../../utils/fieldLimits';
 
 // Same favorites/logged-first-then-search model as the Log picker: the "Add exercise to
 // routine" pool defaults to the person's own list (personExercises); typing a search reveals
@@ -116,6 +117,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
           if (nameError) setNameError(false);
         }}
         placeholder="Routine name (e.g. Push Day)"
+        maxLength={FIELD_LIMITS.routineName}
         style={{
           width: '100%',
           boxSizing: 'border-box',

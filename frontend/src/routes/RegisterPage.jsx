@@ -6,6 +6,7 @@ import Spinner from '../components/shared/Spinner';
 import logoLight from '../assets/huddle-lockup-barlow-light.svg';
 import logoDark from '../assets/huddle-lockup-barlow-dark.svg';
 import LegalLinks from '../components/shared/LegalLinks';
+import { FIELD_LIMITS } from '../utils/fieldLimits';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -105,6 +106,7 @@ export default function RegisterPage() {
         <label style={labelStyle}>Your name</label>
         <input
           placeholder="e.g. Alex"
+          maxLength={FIELD_LIMITS.personName}
           value={personName}
           onChange={(e) => {
             setPersonName(e.target.value);
@@ -118,6 +120,7 @@ export default function RegisterPage() {
         <input
           placeholder="Defaults to “{name}'s Household”"
           value={accountName}
+          maxLength={FIELD_LIMITS.accountName}
           onChange={(e) => setAccountName(e.target.value)}
           className="input" style={inputStyle}
         />
@@ -145,6 +148,7 @@ export default function RegisterPage() {
           name="new-password"
           autoComplete="new-password"
           placeholder="At least 8 characters"
+          maxLength={FIELD_LIMITS.password}
           value={password}
           onChange={(e) => {
             setPassword(e.target.value);

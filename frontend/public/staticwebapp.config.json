@@ -3,6 +3,14 @@
     "rewrite": "/index.html",
     "exclude": ["/config.json", "/favicon.ico", "/icons.svg", "/og-image.png", "/assets/*", "/email/*", "/apple-touch-icon.png", "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest", "/sw.js", "/workbox-*.js", "/registerSW.js"]
   },
+  "globalHeaders": {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(self)",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.stripe.com; font-src 'self' data:; connect-src 'self' https://*.azurecontainerapps.io https://api.stripe.com; frame-src https://js.stripe.com https://hooks.stripe.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+  },
   "routes": [
     { "route": "/index.html", "headers": { "Cache-Control": "no-cache" } },
     { "route": "/sw.js", "headers": { "Cache-Control": "no-cache" } },

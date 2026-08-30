@@ -627,7 +627,8 @@ export default function HelpTab() {
         <p>
           The <T>Profile</T> screen holds your account details, the list of people, and account
           deletion. Deleting an account is permanent, so export your data first. The
-          confirmation dialog offers exactly that.
+          confirmation dialog offers exactly that. It also asks you to type <T>DELETE</T> and to
+          enter your password, so a device someone left signed in can&rsquo;t erase the household.
         </p>
       </Section>
 
@@ -856,6 +857,10 @@ export default function HelpTab() {
             [
               'Forgotten password',
               '“Forgot password” on the login screen emails you a reset code.',
+            ],
+            [
+              'Too many wrong passwords',
+              'Sign-in locks for about 15 minutes. It lifts on its own, or use “Forgot password”, which gets you straight back in.',
             ],
             [
               'The app shows an error instead of loading',

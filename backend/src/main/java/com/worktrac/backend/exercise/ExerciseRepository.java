@@ -10,6 +10,12 @@ import java.util.Optional;
 
 public interface ExerciseRepository extends JpaRepository<Exercise, Long> {
 
+    // Quota enforcement (QuotaService). Own, live exercises only: the preloaded global catalog has
+    // a null account and must not count against anyone, and a soft-deleted row is not something
+    // the household still holds.
+    long countByAccount_IdAndDeletedFalse(Long accountId);
+
+
     // Every global (shared) exercise, plus this account's own exercises.
     @Query("SELECT e FROM Exercise e WHERE e.deleted = false AND ("
             + "e.account IS NULL OR e.account.id = :accountId) ORDER BY e.name ASC")

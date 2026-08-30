@@ -32,7 +32,7 @@ class JwtServiceTest {
     void tokenRoundTripsRoleClaim() {
         JwtService jwtService = newJwtService();
 
-        String token = jwtService.generateToken(1L, 2L, "admin@example.com", "ADMIN");
+        String token = jwtService.generateToken(1L, 2L, "admin@example.com", "ADMIN", 0);
         Optional<AccountPrincipal> parsed = jwtService.parseToken(token);
 
         assertTrue(parsed.isPresent());

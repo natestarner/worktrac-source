@@ -10,6 +10,13 @@ import org.springframework.data.jpa.repository.Modifying;
 
 public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
 
+    // Quota enforcement (QuotaService), used ONLY by the importer -- see requireSetCapacity for why
+    // logging a set deliberately does not consult this. A count over a whole account is not
+    // something to put on a per-set write path.
+    @Query("SELECT COUNT(ws) FROM WorkoutSet ws WHERE ws.session.person.account.id = :accountId")
+    long countByAccountId(@Param("accountId") Long accountId);
+
+
     List<WorkoutSet> findByPerson_IdAndExercise_Id(Long personId, Long exerciseId);
 
     // The "has a logged set" half of a person's Log picker: every exercise they've ever

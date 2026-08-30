@@ -7,6 +7,10 @@ import java.util.Optional;
 
 public interface RoutineRepository extends JpaRepository<Routine, Long> {
 
+    // Quota enforcement (QuotaService).
+    long countByPerson_Id(Long personId);
+
+
     List<Routine> findByPerson_IdOrderByCreatedAtAsc(Long personId);
 
     Optional<Routine> findByIdAndPerson_Id(Long id, Long personId);

@@ -78,6 +78,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.LOCKED).body(ApiError.of(423, ex.getMessage()));
     }
 
+    // The request body exceeded RequestSizeLimitFilter's cap for its route. 413 rather than 400 so
+    // the client can tell "too big" from "malformed", and terminal-by-design: shouldRetryWrite
+    // treats a 4xx outside {408, 429} as final, which is right -- an oversized body cannot become
+    // acceptable by being retried.
+    @ExceptionHandler(PayloadTooLargeException.class)
+    public ResponseEntity<ApiError> handlePayloadTooLarge(PayloadTooLargeException ex) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(ApiError.of(413, "That request is too large."));
+    }
+
     @ExceptionHandler(TooManyRequestsException.class)
     public ResponseEntity<ApiError> handleTooManyRequests(TooManyRequestsException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(ApiError.of(429, ex.getMessage()));
@@ -103,8 +112,27 @@ public class GlobalExceptionHandler {
     // handler method runs. This is the exact trigger that used to collapse into a 401 logout.
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiError> handleMalformedRequest(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        // A chunked request carries no Content-Length, so RequestSizeLimitFilter can only catch it
+        // mid-read -- and that throw happens INSIDE Jackson, which wraps it as a "malformed body".
+        // Unwrap it back into an honest 413; reporting "your JSON is malformed" for a body that was
+        // simply too big sends anyone debugging it in entirely the wrong direction.
+        if (rootCauseIsPayloadTooLarge(ex)) {
+            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(ApiError.of(413, "That request is too large."));
+        }
         recordIfRegistrationRoute(request, "Malformed request body");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(400, "Malformed request body"));
+    }
+
+    private boolean rootCauseIsPayloadTooLarge(Throwable ex) {
+        for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+            if (cause instanceof PayloadTooLargeException) {
+                return true;
+            }
+            if (cause.getCause() == cause) {
+                return false;
+            }
+        }
+        return false;
     }
 
     // A path/query param that doesn't match its declared type (e.g. a non-numeric id).

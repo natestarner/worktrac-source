@@ -4,6 +4,7 @@ import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.common.ConflictException;
 import com.worktrac.backend.common.NotFoundException;
+import com.worktrac.backend.quota.QuotaService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,10 +15,13 @@ public class PersonService {
 
     private final PersonRepository personRepository;
     private final AccountRepository accountRepository;
+    private final QuotaService quotaService;
 
-    public PersonService(PersonRepository personRepository, AccountRepository accountRepository) {
+    public PersonService(PersonRepository personRepository, AccountRepository accountRepository,
+                          QuotaService quotaService) {
         this.personRepository = personRepository;
         this.accountRepository = accountRepository;
+        this.quotaService = quotaService;
     }
 
     // The account-scoping guard every other service that takes a personId path variable
@@ -38,6 +42,7 @@ public class PersonService {
 
     @Transactional
     public PersonDto add(Long accountId, String name) {
+        quotaService.requirePersonCapacity(accountId, personRepository.countByAccount_Id(accountId));
         Account account = accountRepository.getReferenceById(accountId);
         Person person = personRepository.save(new Person(account, name.trim(), false));
         return PersonDto.from(person);

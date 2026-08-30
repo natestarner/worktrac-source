@@ -54,7 +54,7 @@ public class PersonExerciseController {
 
     @PutMapping("/{exerciseId}/tags")
     public PersonExerciseDto setTags(@PathVariable Long personId, @PathVariable Long exerciseId,
-                                     @RequestBody ExerciseTagsRequest request) {
+                                     @Valid @RequestBody ExerciseTagsRequest request) {
         return personExerciseService.setTags(currentUser.accountId(), personId, exerciseId, request.tagsOrEmpty());
     }
 
@@ -65,14 +65,14 @@ public class PersonExerciseController {
 
     @PostMapping("/{exerciseId}/custom-fields")
     public PersonExerciseFieldDto addCustomField(@PathVariable Long personId, @PathVariable Long exerciseId,
-                                                  @RequestBody PersonExerciseFieldRequest request) {
+                                                  @Valid @RequestBody PersonExerciseFieldRequest request) {
         return personExerciseService.addCustomField(currentUser.accountId(), personId, exerciseId, request.name());
     }
 
     @PutMapping("/{exerciseId}/custom-fields/{fieldId}")
     public PersonExerciseFieldDto updateCustomField(@PathVariable Long personId, @PathVariable Long exerciseId,
                                                      @PathVariable Long fieldId,
-                                                     @RequestBody PersonExerciseFieldRequest request) {
+                                                     @Valid @RequestBody PersonExerciseFieldRequest request) {
         return personExerciseService.updateCustomField(currentUser.accountId(), personId, exerciseId, fieldId,
                 request.name(), request.value());
     }

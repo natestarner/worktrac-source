@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { errorBannerStyle, inputStyle, primaryButtonStyle } from './LoginPage';
 import Spinner from '../components/shared/Spinner';
+import { FIELD_LIMITS } from '../utils/fieldLimits';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -142,6 +143,7 @@ export default function ResetPasswordPage() {
           name="new-password"
           autoComplete="new-password"
           placeholder="At least 8 characters"
+          maxLength={FIELD_LIMITS.password}
           value={password}
           onChange={(e) => {
             setPassword(e.target.value);
