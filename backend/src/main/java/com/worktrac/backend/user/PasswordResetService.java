@@ -121,6 +121,11 @@ public class PasswordResetService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UnauthorizedException("Invalid or expired code"));
         user.updatePasswordHash(passwordEncoder.encode(request.password()));
+        // Clears any login lockout too. This is what makes the lockout acceptable on a shared
+        // household login: being locked out looks exactly like having forgotten the password, so
+        // the instinctive response -- resetting it -- must let them straight back in rather than
+        // leaving them locked out holding a password that now works.
+        user.clearLoginLockout();
         userRepository.save(user);
         passwordResetCodeRepository.deleteByEmail(email);
 

@@ -67,9 +67,12 @@ public class AuthController {
         passwordResetService.resendResetCode(request, servletRequest.getRemoteAddr());
     }
 
+    // getRemoteAddr is the real client IP because server.forward-headers-strategy is `framework`
+    // -- without it every external caller would share the Azure ingress hop as one rate-limit
+    // bucket, exactly as the registration and contact routes already note.
     @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
-        return authService.login(request);
+    public AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
+        return authService.login(request, servletRequest.getRemoteAddr());
     }
 
     @GetMapping("/me")

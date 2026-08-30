@@ -89,6 +89,10 @@ app:
   rate-limit:
     per-ip-per-hour: ${APP_RATE_LIMIT_PER_IP_PER_HOUR:10}
     global-email-sends-per-hour: ${APP_RATE_LIMIT_GLOBAL_EMAIL_SENDS_PER_HOUR:30}
+    # Login (LoginRateLimiter). /api/auth/login had no throttle at all before this -- see
+    # RateLimitProperties for why these are looser than the contact limits.
+    login-per-ip-per-hour: ${APP_RATE_LIMIT_LOGIN_PER_IP_PER_HOUR:60}
+    login-global-per-hour: ${APP_RATE_LIMIT_LOGIN_GLOBAL_PER_HOUR:2000}
     # Contact Us form (ContactRateLimiter). Tighter than the registration limits above because
     # that endpoint is authenticated -- see RateLimitProperties for the sizing reasoning.
     contact-per-user-per-hour: ${APP_RATE_LIMIT_CONTACT_PER_USER_PER_HOUR:5}

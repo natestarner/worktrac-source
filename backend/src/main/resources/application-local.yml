@@ -111,6 +111,14 @@ app:
     # production-sane defaults would start 429ing unrelated tests partway through a class purely
     # because earlier ones spent the quota. ContactRateLimitTest overrides these back down via its
     # own property source, which gives it an isolated context.
+    # Same reasoning as everything else in this block: there is no abuse to defend against on
+    # localhost, and @SpringBootTest classes share one Spring context (and therefore one set of
+    # stateful buckets) across every test method in a file, so production-sane values would start
+    # 429ing unrelated tests partway through a class purely because earlier ones spent the quota.
+    # Login is the worst case for that -- nearly every integration test authenticates at least
+    # once, and the e2e suite authenticates in every one of its ~109 tests.
+    login-per-ip-per-hour: 100000
+    login-global-per-hour: 100000
     contact-per-user-per-hour: 100000
     contact-per-ip-per-hour: 100000
     contact-global-per-hour: 100000
