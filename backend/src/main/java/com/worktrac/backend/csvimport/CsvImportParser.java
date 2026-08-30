@@ -1,5 +1,6 @@
 package com.worktrac.backend.csvimport;
 
+import com.worktrac.backend.export.CsvExportService;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -214,7 +215,7 @@ public class CsvImportParser {
     }
 
     private RawRow readRow(List<String> row, Map<String, Integer> columns, int line, String accountDefaultUnit) {
-        String exerciseName = cell(row, columns, EXERCISE);
+        String exerciseName = stripFormulaGuard(cell(row, columns, EXERCISE));
         if (exerciseName == null || exerciseName.isBlank()) {
             throw new RowRejected("No exercise name.");
         }
@@ -327,11 +328,11 @@ public class CsvImportParser {
             }
         }
 
-        String exerciseNote = trimToNull(cell(row, columns, EXERCISE_NOTE));
+        String exerciseNote = trimToNull(stripFormulaGuard(cell(row, columns, EXERCISE_NOTE)));
         if (exerciseNote != null && exerciseNote.length() > 1000) {
             throw new RowRejected("Exercise note is longer than 1000 characters.");
         }
-        String sessionNote = trimToNull(cell(row, columns, SESSION_NOTE));
+        String sessionNote = trimToNull(stripFormulaGuard(cell(row, columns, SESSION_NOTE)));
         if (sessionNote != null && sessionNote.length() > 1000) {
             throw new RowRejected("Session note is longer than 1000 characters.");
         }
@@ -471,12 +472,31 @@ public class CsvImportParser {
         List<String> values = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         for (String part : cell.split(";")) {
-            String trimmed = part.trim();
+            // Per entry, not on the whole cell: the exporter joins tags with "; " AFTER guarding,
+            // so the apostrophe (if any) sits on the individual tag, not the joined string.
+            String trimmed = stripFormulaGuard(part.trim());
             if (!trimmed.isEmpty() && seen.add(trimmed.toLowerCase(Locale.ROOT))) {
                 values.add(trimmed);
             }
         }
         return values;
+    }
+
+    // Undoes the leading apostrophe CsvExportService adds to any value starting = + - @ (or a
+    // tab/CR) to stop spreadsheets evaluating it as a formula.
+    //
+    // Without this the round trip stops being a round trip: an exercise genuinely named "-Squat"
+    // exports as "'-Squat" and would re-import under that different name, so duplicate detection
+    // -- which matches on exact row identity -- would no longer recognise it and a re-import
+    // would silently create a second exercise and a full set of duplicate rows.
+    //
+    // Only stripped when what FOLLOWS is itself a trigger character, so an apostrophe someone
+    // actually typed ("'til failure") survives untouched.
+    private String stripFormulaGuard(String cell) {
+        if (cell == null || cell.length() < 2 || cell.charAt(0) != 0x27) {
+            return cell;
+        }
+        return CsvExportService.FORMULA_TRIGGERS.indexOf(cell.charAt(1)) >= 0 ? cell.substring(1) : cell;
     }
 
     private String trimToNull(String cell) {

