@@ -30,19 +30,35 @@ access — which is why the framing and content-type guards are not merely hygie
 
 ## Content-Security-Policy
 
-Not yet set. When it is added, three things will break it if they are missed:
+Set on the app origin. Each directive below is load-bearing; the three marked ⚠️ are the ones that
+break the app rather than merely loosening it.
 
-- **`worker-src 'self'`** — `vite-plugin-pwa` registers `/sw.js`. Without it the app loses offline
-  mode entirely, which is the exact failure `resilience.md` exists to prevent.
-- **`style-src` needs `'unsafe-inline'`** — Recharts and React inject inline `style` attributes.
-  `script-src` must **not** have it.
-- **`connect-src` must include the backend API origin**, which differs per environment, so it
-  needs the same per-environment treatment the deploy repo already applies to `config.json`.
+| Directive | Why |
+|---|---|
+| `frame-ancestors 'none'` | The modern clickjacking control. `X-Frame-Options: DENY` stays alongside it for older browsers. |
+| `script-src 'self' https://js.stripe.com` | Stripe's embedded checkout loads its script from there. **No `'unsafe-inline'`** — that would give away most of what the policy buys. |
+| ⚠️ `style-src 'self' 'unsafe-inline'` | Recharts and React inject inline `style` attributes. Without `'unsafe-inline'` every chart and most of the layout loses its styling. |
+| ⚠️ `worker-src 'self'` | `vite-plugin-pwa` registers `/sw.js`. Without it the app loses offline mode entirely — the exact failure `resilience.md` exists to prevent. |
+| ⚠️ `connect-src` incl. `https://*.azurecontainerapps.io` | The API origin is read at runtime from `/config.json` and **differs per environment**, so it cannot be a literal here. The wildcard covers both deployed backends. **If the API ever gets a custom domain, add it or every request fails.** |
+| `frame-src https://js.stripe.com https://hooks.stripe.com` | Embedded checkout runs in an iframe from those origins. |
+| `img-src` incl. `data:` and `blob:` | `data:` for inline icons; `blob:` because CSV/ZIP export builds an object URL. |
+| `form-action 'self'`, `base-uri 'self'`, `object-src 'none'` | Standard hardening with no cost here — the app has no cross-origin form posts, no `<base>`, no plugins. |
 
-The only external origins the app references are Stripe (`js.stripe.com`, `api.stripe.com`,
-`hooks.stripe.com`, and `billing.stripe.com` for the portal redirect). There are no web fonts and
-no CDN assets — keep it that way, or the policy grows.
+The Customer Portal is a **redirect** to `billing.stripe.com` opened in a new tab, not a frame, so
+it needs no `frame-src` entry — top-level navigation is not governed by these directives.
 
-**A CSP change must be verified against a deployed environment**, with the full e2e suite plus
-`npm run test:pwa` and a real Stripe checkout. One that passes local dev and breaks checkout in
-production is the specific risk.
+### Verifying a CSP change
+
+It can white-screen the app, and local dev does not exercise the deployed origin split, so this
+must be checked against a **deployed** environment:
+
+1. Load the app with devtools open and confirm **zero** CSP violations across Log, Trends,
+   History, Settings and Help.
+2. Complete a **real Stripe checkout** — the embedded iframe and its script are the most likely
+   thing to be blocked, and it is the one flow that costs money when it breaks.
+3. **Cold-boot offline** and confirm the service worker still registers and `/app/help` resolves.
+   `npm run test:pwa` covers the mechanics; the deployed check covers the policy.
+4. Run the full e2e suite.
+
+Ship a CSP change on its own, never bundled with unrelated work — otherwise a white screen is
+ambiguous between the policy and everything else in the deploy.
