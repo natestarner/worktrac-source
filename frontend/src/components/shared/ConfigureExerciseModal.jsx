@@ -5,6 +5,7 @@ import { useGatedMutation } from '../../hooks/useGatedMutation';
 import Modal from './Modal';
 import OfflineNotice from './OfflineNotice';
 import { cancelButtonStyle } from './ConfirmDialog';
+import { FIELD_LIMITS } from '../../utils/fieldLimits';
 
 // One place to personalize an exercise: rename/delete (your own exercises only), which of the
 // account's tags are applied to it (for this person), and the custom setup fields they've added.
@@ -142,6 +143,7 @@ export default function ConfigureExerciseModal({
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
+              maxLength={FIELD_LIMITS.exerciseName}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
@@ -170,7 +172,7 @@ export default function ConfigureExerciseModal({
         onChange={(e) => setNote(e.target.value)}
         onBlur={guardedSaveNote}
         disabled={locked}
-        maxLength={1000}
+        maxLength={FIELD_LIMITS.note}
         rows={2}
         placeholder="e.g. Keep elbows tucked, bad knee -- go light"
         style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit', marginBottom: 20, opacity: locked ? 0.6 : 1 }}
@@ -210,6 +212,7 @@ export default function ConfigureExerciseModal({
         <input
           value={newTagName}
           onChange={(e) => setNewTagName(e.target.value)}
+          maxLength={FIELD_LIMITS.tagName}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
@@ -236,6 +239,7 @@ export default function ConfigureExerciseModal({
             <input
               defaultValue={field.name}
               onBlur={(e) => guardedRenameField(field, e.target.value)}
+              maxLength={FIELD_LIMITS.customFieldName}
               disabled={locked}
               style={{ ...inputStyle, flex: 1, opacity: locked ? 0.6 : 1 }}
             />
@@ -257,6 +261,7 @@ export default function ConfigureExerciseModal({
         <input
           value={newFieldName}
           onChange={(e) => setNewFieldName(e.target.value)}
+          maxLength={FIELD_LIMITS.customFieldName}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();

@@ -5,6 +5,7 @@ import { useGatedMutation } from '../../hooks/useGatedMutation';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
+import { FIELD_LIMITS } from '../../utils/fieldLimits';
 
 export default function EditPersonModal({ person, onClose }) {
   const { refreshPeople } = useAuth();
@@ -39,6 +40,7 @@ export default function EditPersonModal({ person, onClose }) {
           if (nameError) setNameError(false);
         }}
         placeholder="Name"
+        maxLength={FIELD_LIMITS.personName}
         style={{
           width: '100%',
           boxSizing: 'border-box',

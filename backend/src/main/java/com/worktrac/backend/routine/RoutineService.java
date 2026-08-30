@@ -10,7 +10,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class RoutineService {
@@ -97,13 +99,28 @@ public class RoutineService {
         exercises.forEach(exercise -> personExerciseService.ensureFavorite(person, exercise));
     }
 
+    // ONE query for the whole list, not one per id. This used to loop findById, so a routine
+    // request carrying N exercise ids issued N selects inside a single transaction -- and with no
+    // cap on the list (now @Size(max = 100) on RoutineRequest) that was an easy way for one
+    // authenticated request to hold a connection from a pool of 10 while it ran thousands of
+    // statements. A saturated pool makes every OTHER household's requests queue past the client's
+    // 15s abort, which an aborted fetch reports as lie-fi -- so one abuser degraded everyone.
+    //
+    // Semantics are deliberately unchanged: any id that is unknown OR belongs to another account
+    // is still an indistinguishable 404, and the caller's ORDER is preserved (it defines the order
+    // a routine is stepped through), which is why this maps over the requested ids rather than
+    // returning whatever order the database handed back.
     private List<Exercise> resolveVisibleExercises(Long accountId, List<Long> exerciseIds) {
+        Map<Long, Exercise> visibleById = new HashMap<>();
+        for (Exercise exercise : exerciseRepository.findAllById(exerciseIds)) {
+            if (exercise.isGlobal() || exercise.getAccount().getId().equals(accountId)) {
+                visibleById.put(exercise.getId(), exercise);
+            }
+        }
         List<Exercise> resolved = new ArrayList<>();
         for (Long exerciseId : exerciseIds) {
-            Exercise exercise = exerciseRepository.findById(exerciseId)
-                    .orElseThrow(() -> new NotFoundException("No such exercise"));
-            boolean visible = exercise.isGlobal() || exercise.getAccount().getId().equals(accountId);
-            if (!visible) {
+            Exercise exercise = visibleById.get(exerciseId);
+            if (exercise == null) {
                 throw new NotFoundException("No such exercise");
             }
             resolved.add(exercise);
