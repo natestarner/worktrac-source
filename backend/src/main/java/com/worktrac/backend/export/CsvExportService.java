@@ -95,10 +95,7 @@ public class CsvExportService {
                     hold ? "" : epleyCalculator.estimate1RM(row.weight(), row.reps()).toPlainString()));
         }
 
-        String csv = rows.stream()
-                .map(row -> row.stream().map(this::csvEscape).reduce((a, b) -> a + "," + b).orElse(""))
-                .reduce((a, b) -> a + "\n" + b)
-                .orElse("");
+        String csv = join(rows);
 
         String today = DATE_FMT.format(Instant.now());
         String filename = person.getName().replaceAll("\\s+", "-") + "-workout-data-" + today + ".csv";
@@ -136,6 +133,36 @@ public class CsvExportService {
         String today = DATE_FMT.format(Instant.now());
         String filename = "workout-data-all-people-" + today + ".zip";
         return new ZipExport(filename, buffer.toByteArray());
+    }
+
+    // A StringBuilder, NOT stream().reduce((a, b) -> a + "\n" + b).
+    //
+    // That reduce was quadratic: string concatenation copies the whole accumulated result once
+    // per row, so a full history cost O(n^2) in bytes moved. At 20,000 sets -- one import file's
+    // worth, and a household can hold far more -- producing a ~3 MB file moved tens of gigabytes
+    // through memory and pinned a CPU for the duration. Export is deliberately NOT Pro-gated
+    // (every household can always take its data out), so this was reachable on Free, and getRaw
+    // allows it 60 seconds, so the client waits rather than aborting. Repeated calls were a
+    // straightforward way for one account to burn the container's CPU.
+    //
+    // Output is byte-for-byte identical, which CsvExportControllerTest pins -- the import side
+    // matches on exact row identity, so a single separator moving would silently turn a re-import
+    // into a pile of duplicates.
+    private String join(List<List<String>> rows) {
+        StringBuilder csv = new StringBuilder(rows.size() * 96);
+        for (int i = 0; i < rows.size(); i++) {
+            if (i > 0) {
+                csv.append('\n');
+            }
+            List<String> row = rows.get(i);
+            for (int column = 0; column < row.size(); column++) {
+                if (column > 0) {
+                    csv.append(',');
+                }
+                csv.append(csvEscape(row.get(column)));
+            }
+        }
+        return csv.toString();
     }
 
     private String formatTags(ExportRow row) {
