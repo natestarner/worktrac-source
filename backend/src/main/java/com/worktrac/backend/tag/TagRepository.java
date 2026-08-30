@@ -23,6 +23,9 @@ public interface TagRepository extends JpaRepository<Tag, Long> {
     // Genuine single-statement bulk delete for TestDataCleanupService -- see
     // PersonRepository.deleteByAccountIdIn's comment for why this is safe and preferred over the
     // derived, entity-at-a-time deleteByAccount_Id above for that specific caller.
+    // Quota enforcement (QuotaService).
+    long countByAccount_Id(Long accountId);
+
     @Modifying
     @Query("DELETE FROM Tag t WHERE t.account.id IN :accountIds")
     void deleteByAccountIdIn(@Param("accountIds") List<Long> accountIds);

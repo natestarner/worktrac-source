@@ -152,6 +152,43 @@ az extension add --name log-analytics
 It installs into the `AZURE_CONFIG_DIR` above, so it's per-profile — installing it in the
 default profile does not make it available to Claude's, or vice versa.
 
+## Reading quota activity
+
+Per-household ceilings (`QuotaService`) are enforced silently from the caller's point of view --
+they just get a 403 -- so the logs are where you find out a household is running into one. Two
+kinds of line, and you want both.
+
+**Who has actually been refused:**
+
+```kql
+ContainerAppConsoleLogs_CL
+| where Log_s contains "Quota exceeded:"
+| parse Log_s with * "quota=" quota " accountId=" accountId " " *
+| summarize refusals = count(), lastSeen = max(TimeGenerated) by quota, accountId
+| order by refusals desc
+```
+
+**Who is about to be** — `QuotaService` warns once an hour per household per quota from 80%
+onwards, which is the line that turns a ceiling from a support surprise into something you see
+coming:
+
+```kql
+ContainerAppConsoleLogs_CL
+| where Log_s contains "Quota approaching:"
+| parse Log_s with * "quota=" quota " accountId=" accountId " current=" current " limit=" limit " " *
+| summarize arg_max(TimeGenerated, current, limit) by quota, accountId
+| order by TimeGenerated desc
+```
+
+Both carry `cid` and `uid` in the log prefix like every other line (see `logging.pattern.level`),
+so once you have an `accountId` worth looking at, the correlation queries above will give you that
+session's whole request trail.
+
+**A real household hitting a ceiling means the number is wrong, not that they did something
+wrong.** Every quota is deliberately set one to two orders of magnitude above real use, so a
+genuine refusal is a signal to raise the limit -- each one is an env var
+(`APP_QUOTA_*`, see `application.yml`) so that is a config change, not a deploy of new code.
+
 ## Scope note
 
 `Reader` is assigned at **subscription** scope, so it also sees the unrelated

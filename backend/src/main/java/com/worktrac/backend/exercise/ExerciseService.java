@@ -4,6 +4,7 @@ import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.common.NotFoundException;
+import com.worktrac.backend.quota.QuotaService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,10 +16,13 @@ public class ExerciseService {
 
     private final ExerciseRepository exerciseRepository;
     private final AccountRepository accountRepository;
+    private final QuotaService quotaService;
 
-    public ExerciseService(ExerciseRepository exerciseRepository, AccountRepository accountRepository) {
+    public ExerciseService(ExerciseRepository exerciseRepository, AccountRepository accountRepository,
+                            QuotaService quotaService) {
         this.exerciseRepository = exerciseRepository;
         this.accountRepository = accountRepository;
+        this.quotaService = quotaService;
     }
 
     // The full catalog visible to this account, used for search. Grouping/favoriting is now
@@ -75,6 +79,13 @@ public class ExerciseService {
         if (!sameNameAndMeasure.isEmpty()) {
             return ExerciseDto.from(sameNameAndMeasure.get(0));
         }
+
+        // Deliberately here, AFTER both dedup branches above. A create that resolves to an
+        // existing row adds nothing and must never be refused -- and this is a DURABLE write, so
+        // a 403 discards it permanently along with every set queued behind its temp id. Only a
+        // create that would genuinely add a row consults the ceiling.
+        quotaService.requireExerciseCapacity(accountId,
+                exerciseRepository.countByAccount_IdAndDeletedFalse(accountId));
 
         Account account = accountRepository.getReferenceById(accountId);
         Exercise exercise = new Exercise(account, name, deduped ? clientKey : null, trackingType);

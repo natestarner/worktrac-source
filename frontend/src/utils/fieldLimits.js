@@ -28,4 +28,10 @@ export const FIELD_LIMITS = {
   customFieldValue: 200, // person_exercise_fields.value
   note: 1000, // person_exercise.note and session_exercise_notes.note
   password: 200, // not a column width -- BCrypt only reads the first 72 bytes anyway
+
+  // Not a length: the per-household ceiling on the account's OWN exercises, mirroring
+  // app.quota.exercises-per-account. Checked client-side before dispatching because creating an
+  // exercise is a durable write, so the server's 403 would arrive at sync time and be discarded
+  // silently along with anything queued behind its temp id.
+  maxOwnExercises: 1000,
 };

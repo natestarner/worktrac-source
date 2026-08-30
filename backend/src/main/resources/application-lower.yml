@@ -85,3 +85,14 @@ app:
     contact-per-user-per-hour: 200
     contact-per-ip-per-hour: 500
     contact-global-per-hour: 500
+
+  quota:
+    # Raised well clear of what one e2e run produces, same reasoning as the rate limits above.
+    # Lower is internet-facing but has no real users, so these stay real bounds while never
+    # being reachable by the suite.
+    people-per-account: 200
+    exercises-per-account: 20000
+    tags-per-account: 20000
+    routines-per-person: 20000
+    custom-fields-per-exercise: 500
+    sets-per-account: 100000000

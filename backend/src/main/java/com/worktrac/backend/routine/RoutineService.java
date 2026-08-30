@@ -6,6 +6,7 @@ import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.exercise.PersonExerciseService;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
+import com.worktrac.backend.quota.QuotaService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,13 +22,16 @@ public class RoutineService {
     private final ExerciseRepository exerciseRepository;
     private final PersonService personService;
     private final PersonExerciseService personExerciseService;
+    private final QuotaService quotaService;
 
     public RoutineService(RoutineRepository routineRepository, ExerciseRepository exerciseRepository,
-                           PersonService personService, PersonExerciseService personExerciseService) {
+                           PersonService personService, PersonExerciseService personExerciseService,
+                           QuotaService quotaService) {
         this.routineRepository = routineRepository;
         this.exerciseRepository = exerciseRepository;
         this.personService = personService;
         this.personExerciseService = personExerciseService;
+        this.quotaService = quotaService;
     }
 
     @Transactional(readOnly = true)
@@ -41,6 +45,8 @@ public class RoutineService {
     @Transactional
     public RoutineDto create(Long accountId, Long personId, RoutineRequest request) {
         Person person = personService.requireOwnedPerson(personId, accountId);
+        quotaService.requireRoutineCapacity(accountId, person.getId(),
+                routineRepository.countByPerson_Id(person.getId()));
         Routine routine = new Routine(person, request.name().trim());
         applyExercises(accountId, person, routine, request.exerciseIds());
         return RoutineDto.from(routineRepository.save(routine));

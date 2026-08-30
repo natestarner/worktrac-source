@@ -12,6 +12,10 @@ public interface PersonRepository extends JpaRepository<Person, Long> {
 
     List<Person> findByAccount_IdOrderByCreatedAtAsc(Long accountId);
 
+    // Quota enforcement (QuotaService). A COUNT rather than list().size() so the row data
+    // never crosses the wire just to be measured.
+    long countByAccount_Id(Long accountId);
+
     Optional<Person> findByIdAndAccount_Id(Long id, Long accountId);
 
     void deleteByAccount_Id(Long accountId);

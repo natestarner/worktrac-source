@@ -3,6 +3,7 @@ package com.worktrac.backend.exercise;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
+import com.worktrac.backend.quota.QuotaService;
 import com.worktrac.backend.tag.Tag;
 import com.worktrac.backend.tag.TagService;
 import com.worktrac.backend.workoutset.WorkoutSetRepository;
@@ -30,19 +31,22 @@ public class PersonExerciseService {
     private final ExerciseRepository exerciseRepository;
     private final WorkoutSetRepository workoutSetRepository;
     private final PersonService personService;
+    private final QuotaService quotaService;
 
     public PersonExerciseService(PersonExerciseRepository personExerciseRepository,
                                   PersonExerciseFieldRepository personExerciseFieldRepository,
                                   TagService tagService,
                                   ExerciseRepository exerciseRepository,
                                   WorkoutSetRepository workoutSetRepository,
-                                  PersonService personService) {
+                                  PersonService personService,
+                                  QuotaService quotaService) {
         this.personExerciseRepository = personExerciseRepository;
         this.personExerciseFieldRepository = personExerciseFieldRepository;
         this.tagService = tagService;
         this.exerciseRepository = exerciseRepository;
         this.workoutSetRepository = workoutSetRepository;
         this.personService = personService;
+        this.quotaService = quotaService;
     }
 
     // The person's Log picker: every exercise they've favorited, logged a set for, left a
@@ -215,6 +219,8 @@ public class PersonExerciseService {
         Person person = personService.requireOwnedPerson(personId, accountId);
         Exercise exercise = requireVisibleExercise(accountId, exerciseId);
         PersonExercise pe = getOrCreate(person, exercise);
+        quotaService.requireCustomFieldCapacity(accountId,
+                personExerciseFieldRepository.countByPersonExercise_Id(pe.getId()));
         int nextOrder = personExerciseFieldRepository.findByPersonExercise_IdOrderBySortOrderAsc(pe.getId()).size();
         PersonExerciseField field = personExerciseFieldRepository.save(new PersonExerciseField(pe, name.trim(), nextOrder));
         return PersonExerciseFieldDto.from(field);
