@@ -79,7 +79,7 @@ export default function ContactTab() {
         invalid = true;
       }
       if (trimmedMessage.length < MESSAGE_MIN) {
-        setMessageError(`Tell us a little more — at least ${MESSAGE_MIN} characters.`);
+        setMessageError(`Tell us a little more: at least ${MESSAGE_MIN} characters.`);
         invalid = true;
       }
       if (invalid) return;
@@ -103,7 +103,7 @@ export default function ContactTab() {
       clearContactDraft();
       clearClientError();
       setSent(true);
-      showToast('Thanks — your message is on its way.');
+      showToast('Thanks. Your message is on its way.');
     },
     {
       offlineMessage: 'Sending a message needs a connection.',

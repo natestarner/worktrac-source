@@ -53,7 +53,7 @@ export default function OfflineDataNotice({ updatedAt }) {
     >
       {/* One flat run of text nodes on purpose -- RTL's getByText only concatenates DIRECT text
           children, and four tab tests match this string with /Offline.*data as of/. */}
-      Offline &mdash; data as of {formatDateTime(updatedAt)}
+      Offline: data as of {formatDateTime(updatedAt)}
       {unsynced}
     </div>
   );

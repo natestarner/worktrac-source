@@ -65,9 +65,9 @@ export default function OfflineBanner() {
           }}
         />
         {online && <span>Syncing&hellip; </span>}
-        {!online && queued > 0 && <span>Offline &mdash; </span>}
+        {!online && queued > 0 && <span>Offline: </span>}
         {!online && queued === 0 && (
-          <span>Offline &mdash; your changes are saved on this device and will sync when you reconnect.</span>
+          <span>Offline. Your changes are saved on this device and will sync when you reconnect.</span>
         )}
         {queued > 0 && (
           <button
@@ -106,7 +106,7 @@ export default function OfflineBanner() {
           </Button>
         )}
         {pinned && checkFailed && (
-          <span>Still can&rsquo;t reach the server &mdash; staying offline.</span>
+          <span>Still can&rsquo;t reach the server: staying offline.</span>
         )}
       </div>
       {showOutbox && <OutboxModalContainer onClose={() => setShowOutbox(false)} />}

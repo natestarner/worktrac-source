@@ -50,12 +50,12 @@ describe('ConsistencyHeatmap', () => {
 
   it('names every square so the grid is readable without color', () => {
     render(<ConsistencyHeatmap workoutDays={[{ date: '2026-07-15', sessionCount: 1, setCount: 12 }]} />);
-    expect(screen.getByTestId('heat-2026-07-15')).toHaveAccessibleName('Wed, Jul 15 — 12 sets across 1 workout');
+    expect(screen.getByTestId('heat-2026-07-15')).toHaveAccessibleName('Wed, Jul 15: 12 sets across 1 workout');
   });
 
   it('pluralises a two-a-day correctly', () => {
     render(<ConsistencyHeatmap workoutDays={[{ date: '2026-07-15', sessionCount: 2, setCount: 1 }]} />);
-    expect(screen.getByTestId('heat-2026-07-15')).toHaveAccessibleName('Wed, Jul 15 — 1 set across 2 workouts');
+    expect(screen.getByTestId('heat-2026-07-15')).toHaveAccessibleName('Wed, Jul 15: 1 set across 2 workouts');
   });
 
   it('shows a readout on hover and clears it on leave', () => {
@@ -63,15 +63,15 @@ describe('ConsistencyHeatmap', () => {
     const cell = screen.getByTestId('heat-2026-07-15');
 
     fireEvent.mouseEnter(cell);
-    expect(screen.getByText('Wed, Jul 15 — 8 sets across 1 workout')).toBeInTheDocument();
+    expect(screen.getByText('Wed, Jul 15: 8 sets across 1 workout')).toBeInTheDocument();
 
     fireEvent.mouseLeave(cell);
-    expect(screen.queryByText('Wed, Jul 15 — 8 sets across 1 workout')).not.toBeInTheDocument();
+    expect(screen.queryByText('Wed, Jul 15: 8 sets across 1 workout')).not.toBeInTheDocument();
   });
 
   it('also opens the readout on tap, since a touch device never hovers', () => {
     render(<ConsistencyHeatmap workoutDays={[{ date: '2026-07-15', sessionCount: 1, setCount: 8 }]} />);
     fireEvent.click(screen.getByTestId('heat-2026-07-15'));
-    expect(screen.getByText('Wed, Jul 15 — 8 sets across 1 workout')).toBeInTheDocument();
+    expect(screen.getByText('Wed, Jul 15: 8 sets across 1 workout')).toBeInTheDocument();
   });
 });

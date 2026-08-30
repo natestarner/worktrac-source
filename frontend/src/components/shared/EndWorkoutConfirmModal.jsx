@@ -34,7 +34,7 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
   return (
     <Modal width={320} onClose={onClose} title="End this workout?">
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 20 }}>
-        You can keep going any time &mdash; logging another set later will simply start a new workout.
+        You can keep going any time. Logging another set later will simply start a new workout.
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
         <button onClick={onClose} style={cancelButtonStyle}>

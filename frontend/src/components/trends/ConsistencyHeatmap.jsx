@@ -23,11 +23,11 @@ function levelColor(level) {
 
 function describe(cell) {
   const date = cell.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  if (cell.future) return `${date} — upcoming`;
-  if (!cell.setCount) return `${date} — rest day`;
+  if (cell.future) return `${date}, upcoming`;
+  if (!cell.setCount) return `${date}, rest day`;
   const sets = `${cell.setCount} set${cell.setCount === 1 ? '' : 's'}`;
   const workouts = cell.sessionCount === 1 ? '1 workout' : `${cell.sessionCount} workouts`;
-  return `${date} — ${sets} across ${workouts}`;
+  return `${date}: ${sets} across ${workouts}`;
 }
 
 function Legend() {

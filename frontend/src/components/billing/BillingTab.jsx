@@ -112,7 +112,7 @@ export default function BillingTab() {
       } catch {
         // The webhook is the backstop, so a failed reconcile is a delay rather than a lost payment.
         // Saying so beats a spinner that resolves into nothing.
-        showToast('Payment received — your plan will update shortly.', { tone: 'info' });
+        showToast('Payment received. Your plan will update shortly.', { tone: 'info' });
       } finally {
         // Strip the param so a reload or a shared link cannot replay it.
         setCheckout(null);
@@ -215,7 +215,7 @@ function ProSummary({ subscription, pending, onManage }) {
         </div>
         <p style={mutedLineStyle}>
           {comped
-            ? 'Your household has Pro on the house — with our thanks for being here early.'
+            ? 'Your household has Pro on the house, with our thanks for being here early.'
             : renewalLine(cancelling, periodEnd)}
         </p>
         {/* Access continues through Stripe's retry window, so this is a nudge rather than a
@@ -248,7 +248,7 @@ function ProSummary({ subscription, pending, onManage }) {
 function renewalLine(cancelling, periodEnd) {
   if (!periodEnd) return 'Everything in Huddle, with no limits.';
   return cancelling
-    ? `Pro until ${formatDate(periodEnd)} — you keep everything until then.`
+    ? `Pro until ${formatDate(periodEnd)}: you keep everything until then.`
     : `Renews ${formatDate(periodEnd)}.`;
 }
 
@@ -259,7 +259,7 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
       <div style={cardStyle}>
         <div style={planHeadingStyle}>Free</div>
         <p style={mutedLineStyle}>
-          Everyone in your household, unlimited workouts, and your full data export — always.
+          Everyone in your household, unlimited workouts, and your full data export. Always.
         </p>
       </div>
 
@@ -276,14 +276,14 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
           </Button>
         </OfflineDisabledWrap>
         <p style={finePrintStyle}>
-          Cancel any time. Your workouts are never deleted — see <LegalLinks />.
+          Cancel any time. Your workouts are never deleted. See <LegalLinks />.
         </p>
       </div>
 
       {/* Equal-weight, not fine print. Someone who arrived from marketing's "Go Pro" was routed
           straight here, and Free is permanent -- deferring costs them nothing. */}
       <Button variant="ghost" fullWidth onClick={onStartFree}>
-        Start with Free — decide later
+        Start with Free, decide later
       </Button>
     </>
   );

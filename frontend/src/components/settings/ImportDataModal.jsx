@@ -195,7 +195,7 @@ export default function ImportDataModal({ onClose }) {
             <div style={{ fontSize: 14, color: 'var(--color-text)', marginBottom: 'var(--space-3)' }}>
               {nothingToDo ? (
                 <>
-                  Nothing to import &mdash; all {preview.skippedDuplicateCount}{' '}
+                  Nothing to import. All {preview.skippedDuplicateCount}{' '}
                   {preview.skippedDuplicateCount === 1 ? 'row is' : 'rows are'} already in {targetName}
                   &rsquo;s history.
                 </>

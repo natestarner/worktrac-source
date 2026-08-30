@@ -57,7 +57,7 @@ export default function HelpTab() {
 
       <h1 className="help-title">Huddle Handbook</h1>
       <p className="help-standfirst">
-        Everything worth knowing about tracking your household&rsquo;s workouts &mdash; including the
+        Everything worth knowing about tracking your household&rsquo;s workouts. That includes the
         handful of things that look obvious and aren&rsquo;t.
       </p>
 
@@ -89,23 +89,23 @@ export default function HelpTab() {
         <ol className="help-steps">
           <li>
             Tap <T>Register</T> and enter your name, your email and a password of at least 8
-            characters. The household name is optional &mdash; leave it blank and it becomes
+            characters. The household name is optional. Leave it blank and it becomes
             &ldquo;Your Name&rsquo;s Household&rdquo;. Then tap <T>Create household</T>
           </li>
           <li>Check your email for a six-digit code and enter it on the confirmation screen.</li>
           <li>Add the people you train with, and start logging.</li>
         </ol>
         <p>
-          That&rsquo;s the whole setup. There is nothing to configure before your first set &mdash;
-          units, rest timers and routines all have working defaults and can wait until you want them.
+          That&rsquo;s the whole setup. There is nothing to configure before your first set. Units,
+          rest timers and routines all have working defaults, and can wait until you want them.
         </p>
 
         <h3 className="help-h3">Put it on your home screen</h3>
         <p>
           Huddle is a website, so there is no app store. Open <strong>app.huddle.fitness</strong> in
           your phone or tablet browser and from your browser's settings, tap{' '}
-          <T>Add to Home Screen</T>. It then opens full-screen like any other app, and &mdash;
-          importantly &mdash; keeps working when there&rsquo;s no signal.
+          <T>Add to Home Screen</T>. It then opens full-screen like any other app. Importantly, it
+          keeps working when there&rsquo;s no signal.
         </p>
       </Section>
 
@@ -128,7 +128,7 @@ export default function HelpTab() {
           head={["On a person's name", 'Means']}
           rows={[
             ['Green dot', 'They have a workout in progress right now.'],
-            ['Ring around the name', "Their rest timer is still running — they aren't ready yet."],
+            ['Ring around the name', "Their rest timer is still running. They aren't ready yet."],
             ['Filled ring', "Their rest is up. They're ready to go."],
           ]}
         />
@@ -141,8 +141,8 @@ export default function HelpTab() {
           <p>
             Switching to your son and back doesn&rsquo;t disturb anything of yours. Each person keeps
             their own open tab, their own exercise screen, their own half-typed search box and their
-            own running rest timer &mdash; timers keep counting in the background while someone else
-            is on screen.
+            own running rest timer. Timers keep counting in the background while someone else is on
+            screen.
           </p>
         </Note>
       </Section>
@@ -156,18 +156,18 @@ export default function HelpTab() {
         <h3 className="help-h3">Finding the exercise</h3>
         <p>The <T>Log</T> tab opens on your own short list, not the full library:</p>
         <ul>
-          <li><strong>Favorites</strong> &mdash; the ones you starred.</li>
-          <li><strong>Other Previously Logged</strong> &mdash; everything else you&rsquo;ve actually done.</li>
+          <li><strong>Favorites:</strong> the ones you starred.</li>
+          <li><strong>Other Previously Logged:</strong> everything else you&rsquo;ve actually done.</li>
         </ul>
         <p>
           Type in the search box to reach the full library. Search is forgiving about word order, so
-          &ldquo;barbell squat&rdquo; finds <strong>Barbell Back Squat</strong> &mdash; you don&rsquo;t
-          have to guess the exact name.
+          &ldquo;barbell squat&rdquo; finds <strong>Barbell Back Squat</strong>. You don&rsquo;t have
+          to guess the exact name.
         </p>
 
         <h3 className="help-h3">Logging</h3>
         <p>
-          Open an exercise and you get two steppers &mdash; weight and reps &mdash; and one big{' '}
+          Open an exercise and you get two steppers, weight and reps, and one big{' '}
           <T>Log set for&hellip;</T> button with the active person&rsquo;s name on it. The steppers
           prefill from what you did last time, so a repeat set really is one tap.
         </p>
@@ -181,8 +181,8 @@ export default function HelpTab() {
         <Note title="A weight of 0 means bodyweight">
           <p>
             It isn&rsquo;t a blank you forgot to fill in. Pull-ups, push-ups and dips are logged at 0,
-            and Huddle treats that as a real value &mdash; those exercises get ranked by reps rather
-            than by weight everywhere it matters.
+            and Huddle treats that as a real value. Those exercises get ranked by reps rather than
+            by weight everywhere it matters.
           </p>
         </Note>
 
@@ -208,7 +208,7 @@ export default function HelpTab() {
         <h3 className="help-h3">Fixing a mistake</h3>
         <p>
           Every row under <T>This session</T> has edit and delete controls. Corrections flow everywhere
-          automatically &mdash; personal records are recomputed from your actual sets, so fixing a
+          automatically. Personal records are recomputed from your actual sets, so fixing a
           fat-fingered 225 that should have been 125 also fixes the record it wrongly set.
         </p>
         <p>To fix something from an earlier day, see <Jump to="history">History</Jump>.</p>
@@ -226,7 +226,7 @@ export default function HelpTab() {
         </p>
         <ul>
           <li>Every person has their own timer, running independently in the background.</li>
-          <li>It stops climbing at {restCeilingMinutes} minutes &mdash; long past any real rest interval.</li>
+          <li>It stops climbing at {restCeilingMinutes} minutes, long past any real rest interval.</li>
           <li>Ending the workout clears that person&rsquo;s timer.</li>
         </ul>
         <p>
@@ -255,8 +255,7 @@ export default function HelpTab() {
         </p>
         <p>
           On a timed exercise the second stepper reads <T>Time</T> instead of <T>Reps</T> and shows
-          minutes and seconds. Everything else &mdash; the layout, the one big button, the set list
-          &mdash; is exactly the same.
+          minutes and seconds. The layout, the one big button and the set list are exactly the same.
         </p>
 
         <h3 className="help-h3">Two ways to fill in the time</h3>
@@ -267,7 +266,7 @@ export default function HelpTab() {
           </li>
           <li>
             <strong>Use the built-in timer.</strong> Tap <T>Start timer</T>, hold, then <T>Stop</T>.
-            Stopping writes the elapsed seconds into the field &mdash; it does not log the set. Tap{' '}
+            Stopping writes the elapsed seconds into the field. It does not log the set. Tap{' '}
             <T>Log set</T> when you&rsquo;re ready.
           </li>
         </ul>
@@ -280,8 +279,8 @@ export default function HelpTab() {
         <Note title="Holds are ranked on seconds alone">
           <p>
             A 60-second plank ties another 60-second plank whether or not you wore a weight vest.
-            Added load is kept as a <strong>separate</strong> record &mdash; &ldquo;heaviest load
-            held&rdquo; &mdash; because combining the two would need your bodyweight, which Huddle
+            Added load is kept as a <strong>separate</strong> record, called &ldquo;heaviest load
+            held,&rdquo; because combining the two would need your bodyweight, which Huddle
             doesn&rsquo;t store. Put vest weight in the ordinary Weight field; there&rsquo;s no extra
             box for it.
           </p>
@@ -311,7 +310,7 @@ export default function HelpTab() {
 
         <Note title="You can't accidentally end up with two of the same thing">
           <p>
-            If an exercise by that name already exists &mdash; yours or a built-in one &mdash; Huddle
+            If an exercise by that name already exists, yours or a built-in one, Huddle
             tells you <strong>before</strong> you commit, then opens the one you already have instead
             of creating a duplicate.
           </p>
@@ -325,7 +324,7 @@ export default function HelpTab() {
 
       <Section id="routines" title="Routines">
         <p className="help-lede">
-          A routine is a saved running order of exercises &mdash; the list, in sequence, so
+          A routine is a saved running order of exercises. It&rsquo;s the list, in sequence, so
           you&rsquo;re not hunting through the picker between sets.
         </p>
         <p>
@@ -337,8 +336,8 @@ export default function HelpTab() {
 
         <h3 className="help-h3">Building one</h3>
         <p>
-          <T>Routines</T> tab &rarr; <T>+ New routine</T>. Name it &mdash; Push Day, Legs, Warm-up
-          &mdash; and add exercises from your library in the order you&rsquo;ll do them. An exercise
+          <T>Routines</T> tab &rarr; <T>+ New routine</T>. Name it (Push Day, Legs, Warm-up) and add
+          exercises from your library in the order you&rsquo;ll do them. An exercise
           can appear more than once; each position is its own step, so a routine that opens and closes
           with the same movement works fine. <ChipWait />
         </p>
@@ -350,7 +349,7 @@ export default function HelpTab() {
         </p>
         <p>
           A card appears at the top of the Log tab with the routine&rsquo;s name, your position
-          (&ldquo;3 of 6&rdquo;) and a strip of pills &mdash; the current exercise highlighted,
+          (&ldquo;3 of 6&rdquo;), and a strip of pills, with the current exercise highlighted and
           finished ones green. Tap <T>Next exercise</T> to advance; on the final step the button reads{' '}
           <T>Finish routine</T>. Tap any pill to jump straight to that exercise.
         </p>
@@ -359,7 +358,7 @@ export default function HelpTab() {
         <ul>
           <li>
             <strong>Something else came up.</strong> Back out to the picker and log any exercise you
-            like. Your routine position is untouched &mdash; carry on where you left off.
+            like. Your routine position is untouched. Carry on where you left off.
           </li>
           <li>
             <strong>Cutting it short.</strong> Tap <T>End routine</T>. Nothing you logged is affected;
@@ -368,7 +367,7 @@ export default function HelpTab() {
           <li><strong>The machine was taken.</strong> Tap a later pill, do that one, then tap back.</li>
         </ul>
         <p>
-          A running routine survives closing the app or reloading the page &mdash; it resumes at the
+          A running routine survives closing the app or reloading the page. It resumes at the
           same position.
         </p>
 
@@ -387,8 +386,8 @@ export default function HelpTab() {
           every exercise and every set. Personal records are badged where they happened.
         </p>
         <p>
-          On <T>Free</T> this shows the last 90 days. Older workouts are hidden rather than deleted
-          &mdash; see <a href="#plan">Free and Pro</a>.
+          On <T>Free</T> this shows the last 90 days. Older workouts are hidden rather than deleted.
+          See <a href="#plan">Free and Pro</a>.
         </p>
 
         <h3 className="help-h3">Finding something</h3>
@@ -417,7 +416,7 @@ export default function HelpTab() {
         <Note title="Backfilled sets have no rest times">
           <p>
             Huddle records rest between sets by watching the clock while you actually train. A workout
-            typed in afterwards &mdash; or a set added to an old session &mdash; honestly has no rest
+            typed in afterwards, or a set added to an old session, honestly has no rest
             time to record, so it&rsquo;s left blank rather than invented. It has no effect on your
             records or your volume.
           </p>
@@ -432,17 +431,17 @@ export default function HelpTab() {
       <Section id="prs" title="PRs">
         <p className="help-lede">Your best for every exercise you&rsquo;ve done, on one board.</p>
         <p>
-          Records are recomputed from your actual logged sets rather than stored when they happen
-          &mdash; so correcting a wrong entry corrects the record, and deleting a set that
+          Records are recomputed from your actual logged sets rather than stored when they happen.
+          So correcting a wrong entry corrects the record, and deleting a set that
           shouldn&rsquo;t have counted removes it from the board.
         </p>
         <p>
           On <T>Free</T> the board covers the last 90 days; <T>Pro</T> makes it all-time. Either
-          way, a set is only badged as a PR if it beats <strong>everything</strong> you have logged
-          &mdash; see <a href="#plan">Free and Pro</a>.
+          way, a set is only badged as a PR if it beats <strong>everything</strong> you have logged.
+          See <a href="#plan">Free and Pro</a>.
         </p>
         <p>
-          Sort three ways: <strong>Most recent</strong> (the default &mdash; what got better lately),{' '}
+          Sort three ways: <strong>Most recent</strong> (the default: what got better lately),{' '}
           <strong>Name A&ndash;Z</strong>, or <strong>Best est. 1RM</strong>. Tap a row to see that
           record&rsquo;s workout in History. The same search and tag filters from History work here too.
         </p>
@@ -453,7 +452,7 @@ export default function HelpTab() {
             <li><strong>A loaded lift</strong> is ranked by estimated 1RM, which combines weight and reps.</li>
             <li>
               <strong>A bodyweight exercise</strong> has no weight to estimate from, so it&rsquo;s
-              ranked by reps &mdash; which is why those rows show a rep count rather than a weight.
+              ranked by reps. That&rsquo;s why those rows show a rep count rather than a weight.
             </li>
             <li><strong>A hold</strong> is ranked by seconds.</li>
           </ul>
@@ -465,7 +464,7 @@ export default function HelpTab() {
           <strong>best estimated 1RM</strong>, and they often name different sets. 185&nbsp;lb for 8
           estimates to about 234&nbsp;lb and outranks a 225&nbsp;lb single. One is the most you have
           lifted; the other is the most the estimate thinks you could. Both are worth knowing, so both
-          are shown &mdash; and the estimate always names the set behind it.
+          are shown, and the estimate always names the set behind it.
         </p>
 
         <Note title="How the estimate is calculated">
@@ -479,14 +478,14 @@ export default function HelpTab() {
           <p>
             It&rsquo;s an estimate, not a measurement, and like every 1RM formula it drifts optimistic
             at very high rep counts. Other apps and calculators may use Brzycki or Lombardi instead and
-            give a different number for the same set &mdash; none of them is wrong, they simply
+            give a different number for the same set. None of them is wrong. They simply
             disagree. What matters is that Huddle applies one formula consistently, so your numbers are
             always comparable to your own past numbers.
           </p>
           <p>
             Two sets never go through it at all: a <strong>bodyweight</strong> set, because Epley
-            multiplies the weight and any weight of 0 stays 0 no matter the reps &mdash; those rank on
-            reps instead; and a <strong>hold</strong>, which has no rep count to estimate from and ranks
+            multiplies the weight and any weight of 0 stays 0 no matter the reps, so those rank on
+            reps instead. And a <strong>hold</strong> has no rep count to estimate from, and ranks
             on seconds.
           </p>
         </Note>
@@ -499,8 +498,8 @@ export default function HelpTab() {
         </p>
         <p>
           The <strong>4wk / 12wk / All</strong> buttons at the top set the range for the charts. Every
-          chart also carries a <strong>?</strong> that explains its own marks in plain English &mdash;
-          tap it whenever a chart surprises you.
+          chart also carries a <strong>?</strong> that explains its own marks in plain English. Tap
+          it whenever a chart surprises you.
         </p>
 
         <h3 className="help-h3">The consistency grid</h3>
@@ -517,13 +516,13 @@ export default function HelpTab() {
           </p>
           <p>
             On <T>Free</T> the grid still spans six months, but only the last 90 days can be filled
-            in &mdash; that is as far back as Free shows. See <a href="#plan">Free and Pro</a>.
+            in. That is as far back as Free shows. See <a href="#plan">Free and Pro</a>.
           </p>
         </Note>
 
         <h3 className="help-h3">Workouts per week</h3>
         <p>
-          One bar per week, starting Monday. It counts <strong>sessions</strong> &mdash; not exercises
+          One bar per week, starting Monday. It counts <strong>sessions</strong>, not exercises
           and not sets. Two workouts in one day count as two.
         </p>
 
@@ -552,7 +551,7 @@ export default function HelpTab() {
               dots on the same date label.
             </li>
             <li>
-              <strong>A green dot is a personal record</strong> &mdash; judged by the rules in the{' '}
+              <strong>A green dot is a personal record</strong>, judged by the rules in the{' '}
               <Jump to="prs">PRs</Jump> section, whatever metric you&rsquo;re currently viewing. So a
               green dot is not always the highest point on the chart in front of you.
             </li>
@@ -566,7 +565,7 @@ export default function HelpTab() {
 
       <Section id="personal" title="Notes, tags and favorites">
         <p className="help-lede">
-          Five ways to make an exercise yours. All of them are per person &mdash; your setup for the
+          Five ways to make an exercise yours. All of them are per person. Your setup for the
           leg press has nothing to do with your son&rsquo;s.
         </p>
         <p>
@@ -584,12 +583,12 @@ export default function HelpTab() {
             ],
             [
               'Standing note',
-              'A permanent reminder shown every time you do this exercise — “keep elbows tucked”, “bad knee, go light”.',
+              'A permanent reminder shown every time you do this exercise: “keep elbows tucked”, “bad knee, go light”.',
               <ChipWait key="n" short />,
             ],
             [
               'Tags',
-              'Your own categories — Push, Pull, Legs, Rehab. Filter History and PRs by them.',
+              'Your own categories: Push, Pull, Legs, Rehab. Filter History and PRs by them.',
               <ChipWait key="t" short />,
             ],
             [
@@ -600,9 +599,8 @@ export default function HelpTab() {
           ]}
         />
         <p>
-          Setup values appear as small pills on the exercise screen &mdash;{' '}
-          <strong>Seat height: 4</strong> &mdash; and tapping one changes it. To clear any note, save
-          it empty.
+          Setup values appear as small pills on the exercise screen (<strong>Seat height: 4</strong>)
+          and tapping one changes it. To clear any note, save it empty.
         </p>
       </Section>
 
@@ -623,12 +621,12 @@ export default function HelpTab() {
         <Note title="Changing units never rewrites your history">
           <p>
             Sets already logged keep the unit they were recorded in. Switching to kg won&rsquo;t
-            reinterpret last year&rsquo;s numbers as kilos &mdash; it only affects what you enter next.
+            reinterpret last year&rsquo;s numbers as kilos. It only affects what you enter next.
           </p>
         </Note>
         <p>
           The <T>Profile</T> screen holds your account details, the list of people, and account
-          deletion. Deleting an account is permanent, so export your data first &mdash; the
+          deletion. Deleting an account is permanent, so export your data first. The
           confirmation dialog offers exactly that. It also asks you to type <T>DELETE</T> and to
           enter your password, so a device someone left signed in can&rsquo;t erase the household.
         </p>
@@ -636,7 +634,7 @@ export default function HelpTab() {
 
       <Section id="plan" title="Free and Pro">
         <p className="help-lede">
-          Free is free for good &mdash; not a trial that runs out. Pro adds your whole history and
+          Free is free for good. Not a trial that runs out. Pro adds your whole history and
           the ability to bring old workouts in.
         </p>
 
@@ -658,7 +656,7 @@ export default function HelpTab() {
             On Free, workouts older than 90 days are <strong>hidden, not removed</strong>. Every set
             stays exactly where it was, and the moment you subscribe your whole history is back. If
             you later cancel, you keep Pro until the period you paid for ends, and then the same
-            thing happens in reverse &mdash; hidden, never lost.
+            thing happens in reverse: hidden, never lost.
           </p>
         </Note>
 
@@ -666,7 +664,7 @@ export default function HelpTab() {
         <p>
           A record is measured against <strong>everything you have ever logged</strong>, not just
           what Free can show. So on Free you won&rsquo;t be congratulated for beating a 90-day best
-          that isn&rsquo;t really your best &mdash; if the app says it&rsquo;s a PR, it is one.
+          that isn&rsquo;t really your best. If the app says it&rsquo;s a PR, it is one.
         </p>
 
         <h3 className="help-h3">Getting your data out is always free</h3>
@@ -678,7 +676,7 @@ export default function HelpTab() {
         <h3 className="help-h3">Changing your plan</h3>
         <p>
           Your account menu &rarr; <T>Plan &amp; billing</T> shows what you&rsquo;re on. Pro is
-          $3.99 a month or $29 a year. Payments are handled by Stripe &mdash; the app never sees
+          $3.99 a month or $29 a year. Payments are handled by Stripe. The app never sees
           your card. <T>Manage billing</T> opens Stripe in a new tab to change a card, download
           receipts, switch between monthly and yearly, or cancel.
         </p>
@@ -693,20 +691,20 @@ export default function HelpTab() {
 
         <h3 className="help-h3">Getting your data out</h3>
         <ul>
-          <li><T>History</T> &rarr; <T>Export data</T> &mdash; a CSV for the person you&rsquo;re viewing.</li>
+          <li><T>History</T> &rarr; <T>Export data</T>: a CSV for the person you&rsquo;re viewing.</li>
           <li>
-            <T>App Settings</T> &rarr; <T>Export all data</T> &mdash; every person on the account, one
+            <T>App Settings</T> &rarr; <T>Export all data</T>: every person on the account, one
             file each, zipped together.
           </li>
         </ul>
         <p>
-          Both need a connection. <strong>Exporting is free on both plans</strong> &mdash; getting
+          Both need a connection. <strong>Exporting is free on both plans</strong>. Getting
           your own data out is never something you have to pay for.
         </p>
 
         <h3 className="help-h3">Bringing data in</h3>
         <p>
-          <T>App Settings</T> &rarr; <T>Import data</T> takes a CSV or Excel file &mdash; one Huddle
+          <T>App Settings</T> &rarr; <T>Import data</T> takes a CSV or Excel file: one Huddle
           exported, or a spreadsheet you kept yourself. You choose whose workouts it is, and you see
           exactly what will be added before anything is saved. Importing is part of{' '}
           <T>Pro</T> (see <a href="#plan">Free and Pro</a>).
@@ -731,7 +729,7 @@ export default function HelpTab() {
           matched by name, so their order in the file doesn&rsquo;t matter.
         </p>
         <p>
-          Every default that actually got used is listed in the preview before you commit &mdash; you
+          Every default that actually got used is listed in the preview before you commit. You
           find out from the screen, not from a surprise in your history afterwards.
         </p>
 
@@ -757,8 +755,8 @@ export default function HelpTab() {
         </p>
         <p>
           Everything you do in the middle of a workout is saved to your device first and synced
-          afterwards, in order, without ever logging anything twice. Setup tasks &mdash; the ones you
-          do sitting on the couch, not mid-set &mdash; wait for a connection and say so plainly.
+          afterwards, in order, without ever logging anything twice. Setup tasks (the ones you
+          do sitting on the couch, not mid-set) wait for a connection and say so plainly.
         </p>
 
         <div className="help-split">
@@ -793,7 +791,7 @@ export default function HelpTab() {
 
         <h3 className="help-h3">What you&rsquo;ll see</h3>
         <p>
-          A banner tells you you&rsquo;re offline and counts what&rsquo;s waiting &mdash; &ldquo;3
+          A banner tells you you&rsquo;re offline and counts what&rsquo;s waiting: &ldquo;3
           changes waiting to sync&rdquo;. Sets you log while offline appear in your list immediately
           and can be edited and deleted like any other; they aren&rsquo;t stuck behind a spinner. When
           the connection returns, everything sends in the order you did it.
@@ -801,7 +799,7 @@ export default function HelpTab() {
 
         <h3 className="help-h3">When the signal is bad rather than absent</h3>
         <p>
-          The worst case isn&rsquo;t no signal &mdash; it&rsquo;s a connection that claims to work and
+          The worst case isn&rsquo;t no signal. It&rsquo;s a connection that claims to work and
           doesn&rsquo;t. After a few failed attempts Huddle notices and offers a <T>Go offline</T>{' '}
           button. Taking it stops the app fighting a dead connection and switches it into the same
           reliable save-locally mode.
@@ -815,8 +813,8 @@ export default function HelpTab() {
 
         <Note title="One thing that does lose data: logging out">
           <p>
-            If you log out while changes are still waiting to sync, those changes are discarded &mdash;
-            a different household might sign in on this device next, so they can&rsquo;t be carried
+            If you log out while changes are still waiting to sync, those changes are discarded.
+            A different household might sign in on this device next, so they can&rsquo;t be carried
             over. Huddle warns you and tells you how many are at stake. Get back in range and let it
             sync first.
           </p>
@@ -838,7 +836,7 @@ export default function HelpTab() {
             ],
             [
               "An exercise isn't in the picker",
-              "The picker shows only what you've favorited or logged. Search for it — the full library is behind the search box.",
+              "The picker shows only what you've favorited or logged. Search for it. The full library is behind the search box.",
             ],
             [
               'Yesterday’s workout is still in progress',
@@ -850,7 +848,7 @@ export default function HelpTab() {
             ],
             [
               "A chart isn't saying what you expect",
-              'Tap the ? on that chart — it explains what one mark actually represents.',
+              'Tap the ? on that chart. It explains what one mark actually represents.',
             ],
             [
               'A button is greyed out',
@@ -862,11 +860,11 @@ export default function HelpTab() {
             ],
             [
               'Too many wrong passwords',
-              'Sign-in locks for about 15 minutes. It lifts on its own — or use “Forgot password”, which gets you straight back in.',
+              'Sign-in locks for about 15 minutes. It lifts on its own, or use “Forgot password”, which gets you straight back in.',
             ],
             [
               'The app shows an error instead of loading',
-              'Tap “Try again”. If it comes back, log out and in again — and then send it from Contact Us, which attaches what went wrong automatically. Nothing you logged is lost either way; it is saved on the device.',
+              'Tap “Try again”. If it comes back, log out and in again, then send it from Contact Us, which attaches what went wrong automatically. Nothing you logged is lost either way; it is saved on the device.',
             ],
           ]}
         />
@@ -874,8 +872,8 @@ export default function HelpTab() {
         <h3 className="help-h3">Reporting something</h3>
         <p>
           Account menu &rarr; <T>Contact Us</T>. The form shows you exactly what it sends along with
-          your message &mdash; which screen you were on, whether you were online, and whether anything
-          was waiting to sync &mdash; so there are no surprises.
+          your message: which screen you were on, whether you were online, and whether anything
+          was waiting to sync. So there are no surprises.
         </p>
         <p>
           You can write a report while offline; it&rsquo;s kept safely on your device, and you send it
