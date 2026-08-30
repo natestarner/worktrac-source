@@ -159,7 +159,12 @@ class AccountDeletionTest extends AbstractIntegrationTest {
     }
 
     private String deleteAccountBody(String confirmationText) throws Exception {
-        return objectMapper.writeValueAsString(Map.of("confirmationText", confirmationText));
+        return deleteAccountBody(confirmationText, RegistrationTestSupport.PASSWORD);
+    }
+
+    private String deleteAccountBody(String confirmationText, String password) throws Exception {
+        return objectMapper.writeValueAsString(
+                Map.of("confirmationText", confirmationText, "password", password));
     }
 
     @Test
@@ -380,5 +385,29 @@ class AccountDeletionTest extends AbstractIntegrationTest {
         assertTrue(billingEventRepository.findByAccountIdOrderByCreatedAtDesc(accountId).stream()
                         .anyMatch(event -> event.getEventType() == BillingEventType.CANCELED_ON_ACCOUNT_DELETION),
                 "the cancellation audit row must outlive the account it refers to");
+    }
+
+    // The mirror of wrongConfirmationTextDoesNotDeleteAccount: typing DELETE proves intent, but the
+    // password is what proves identity. Without it the whole action rested on a bearer token that
+    // is valid for 30 days and cannot be revoked -- a family tablet left signed in was enough to
+    // erase everyone's history permanently.
+    @Test
+    void wrongPasswordDoesNotDeleteAccount() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String email = "wrongpw-" + suffix + "@example.com";
+        JsonNode registration = register(email, "Kit");
+        String token = registration.get("token").asText();
+        long accountId = registration.get("account").get("id").asLong();
+        long personId = registration.get("person").get("id").asLong();
+        seedAccountData(token, personId);
+
+        mockMvc.perform(delete("/api/account")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteAccountBody("DELETE", "not-the-right-password")))
+                .andExpect(status().isUnauthorized());
+
+        assertTrue(accountRepository.findById(accountId).isPresent(), "the account must still be here");
+        assertTrue(personRepository.findById(personId).isPresent());
     }
 }

@@ -4,13 +4,16 @@ import com.worktrac.backend.billing.BillingEventRepository;
 import com.worktrac.backend.billing.StripeSubscriptionCanceller;
 import com.worktrac.backend.billing.SubscriptionRepository;
 import com.worktrac.backend.contact.ContactMessageRepository;
+import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.csvimport.ImportBatchCleanup;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.tag.TagRepository;
+import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -40,6 +43,7 @@ public class AccountDeletionService {
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public AccountDeletionService(StripeSubscriptionCanceller stripeSubscriptionCanceller,
                                    SubscriptionRepository subscriptionRepository,
@@ -48,7 +52,7 @@ public class AccountDeletionService {
                                    ImportBatchCleanup importBatchCleanup, PersonRepository personRepository,
                                    ExerciseRepository exerciseRepository,
                                    TagRepository tagRepository, UserRepository userRepository,
-                                   AccountRepository accountRepository) {
+                                   AccountRepository accountRepository, PasswordEncoder passwordEncoder) {
         this.stripeSubscriptionCanceller = stripeSubscriptionCanceller;
         this.subscriptionRepository = subscriptionRepository;
         this.billingEventRepository = billingEventRepository;
@@ -59,10 +63,25 @@ public class AccountDeletionService {
         this.tagRepository = tagRepository;
         this.userRepository = userRepository;
         this.accountRepository = accountRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
-    public void deleteAccount(Long accountId) {
+    public void deleteAccount(Long accountId, Long userId, String password) {
+        // Re-authenticate before erasing anything. Typing DELETE proves intent, but only the
+        // password proves the person at the keyboard is the account holder -- and the bearer
+        // token that got them here is valid for 30 days with no revocation, so on its own it is
+        // a weak thing to hang an irreversible, unrecoverable action on.
+        //
+        // 401 rather than 403: the request is well-formed and the caller is allowed to delete
+        // their own account, they just have not proved who they are.
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("User no longer exists"));
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+            log.warn("Refused account deletion for account {}: incorrect password", accountId);
+            throw new UnauthorizedException("That password is not correct.");
+        }
+
         // Read the subscription id while its row still exists; the Stripe call itself happens
         // after this transaction commits (see the afterCommit hook below, and
         // StripeSubscriptionCanceller for why that ordering is load-bearing).
