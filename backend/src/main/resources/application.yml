@@ -77,6 +77,15 @@ app:
     # Empty by default -- see EmailProperties.e2eNoopRecipientPattern. Only local/lower ever
     # set this to a real value.
     e2e-noop-recipient-pattern: ${APP_EMAIL_E2E_NOOP_RECIPIENT_PATTERN:}
+  request-limits:
+    # Caps on request-body bytes -- see RequestLimitProperties. Nothing bounded these before, so an
+    # unauthenticated POST could read an arbitrarily large body straight into the heap.
+    # 1 MB default clears the largest real payload (a Contact Us submission, ~10 KB) by ~100x and
+    # also clears an Azure Event Grid batch, which that service documents as up to 1 MB.
+    default-max-bytes: ${APP_REQUEST_DEFAULT_MAX_BYTES:1048576}
+    # Import carries a whole CSV as a JSON string; CsvImportParser.MAX_BYTES is 5 MB, and escaping
+    # plus the JSON envelope needs headroom above the raw file size.
+    import-max-bytes: ${APP_REQUEST_IMPORT_MAX_BYTES:6291456}
   rate-limit:
     per-ip-per-hour: ${APP_RATE_LIMIT_PER_IP_PER_HOUR:10}
     global-email-sends-per-hour: ${APP_RATE_LIMIT_GLOBAL_EMAIL_SENDS_PER_HOUR:30}
