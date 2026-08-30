@@ -31,7 +31,7 @@ public class AccountController {
 
     @DeleteMapping
     public ResponseEntity<Void> deleteAccount(@Valid @RequestBody DeleteAccountRequest request) {
-        accountDeletionService.deleteAccount(currentUser.accountId());
+        accountDeletionService.deleteAccount(currentUser.accountId(), currentUser.userId(), request.password());
         return ResponseEntity.noContent().build();
     }
 }

@@ -69,6 +69,30 @@ app:
     # Raised over the production defaults for the same reason as the two above: the e2e suite runs
     # against lower from one source IP, and Playwright's CI retry policy multiplies every attempt.
     # The contact spec submits far fewer times than registration, so these need far less headroom.
+    # ⚠️ KEEP THESE AHEAD OF THE SUITE SIZE, for exactly the reason the per-ip-per-hour comment
+    # above spells out. The e2e suite is ~109 tests, EVERY one of which authenticates, and
+    # forward-headers-strategy resolves all of them to the single CI runner IP -- so one run spends
+    # ~109 tokens from one bucket before Playwright's 2-retries-per-failure policy multiplies it.
+    # A cap below that fails whichever arbitrary specs happen to run after the bucket empties: a
+    # different set every time, which reads as CI-runner flakiness and gets "fixed" by re-running
+    # (which registers few enough to slip under the cap, hiding the cause). Same mechanism as
+    # docs/incidents/2026-08-13-e2e-parallel-flakiness.md.
+    #
+    # 1000/5000 fits several full runs an hour including retries, while staying a real bound --
+    # lower is genuinely internet-facing, unlike local.
+    login-per-ip-per-hour: 1000
+    login-global-per-hour: 5000
     contact-per-user-per-hour: 200
     contact-per-ip-per-hour: 500
     contact-global-per-hour: 500
+
+  quota:
+    # Raised well clear of what one e2e run produces, same reasoning as the rate limits above.
+    # Lower is internet-facing but has no real users, so these stay real bounds while never
+    # being reachable by the suite.
+    people-per-account: 200
+    exercises-per-account: 20000
+    tags-per-account: 20000
+    routines-per-person: 20000
+    custom-fields-per-exercise: 500
+    sets-per-account: 100000000

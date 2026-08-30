@@ -5,6 +5,7 @@ import Modal from './Modal';
 import OfflineNotice from './OfflineNotice';
 import { cancelButtonStyle } from './ConfirmDialog';
 import Button from './Button';
+import { FIELD_LIMITS } from '../../utils/fieldLimits';
 
 // Sets the per-person value of a custom setup field (adding/renaming/removing fields lives in
 // the Configure modal). The value is stored on the overlay row, so this never touches the
@@ -33,6 +34,7 @@ export default function CustomFieldEditorModal({ personId, exerciseId, field, on
         onChange={(e) => setValue(e.target.value)}
         disabled={!online}
         placeholder="e.g. 5"
+        maxLength={FIELD_LIMITS.customFieldValue}
         style={{
           width: '100%',
           boxSizing: 'border-box',

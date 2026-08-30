@@ -20,6 +20,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // /api/auth/register directly in their setup.
 public final class RegistrationTestSupport {
 
+    // The password every test household is registered with. A constant rather than a literal
+    // repeated per call site, so a test that needs to log in again (LoginLockoutTest) can use
+    // the same value the registration actually used.
+    public static final String PASSWORD = "password123";
+
     private RegistrationTestSupport() {
     }
 
@@ -27,7 +32,7 @@ public final class RegistrationTestSupport {
                                                String email, String personName) throws Exception {
         String normalizedEmail = email.trim().toLowerCase();
         String registerBody = objectMapper.writeValueAsString(Map.of(
-                "email", email, "password", "password123", "personName", personName));
+                "email", email, "password", PASSWORD, "personName", personName));
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registerBody))

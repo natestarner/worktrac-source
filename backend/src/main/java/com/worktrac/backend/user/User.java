@@ -40,6 +40,22 @@ public class User {
     @Column(nullable = false, length = 20)
     private String role = "USER";
 
+    // Temporary lockout after repeated wrong passwords (V58). Persisted rather than held in
+    // memory because an in-process counter resets on restart and every replica would keep its own,
+    // handing an attacker a fresh allowance from whichever instance answers.
+    // Bumped to invalidate every JWT issued before now (V59). See JwtAuthenticationFilter.
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion;
+
+    @Column(name = "failed_login_attempts", nullable = false)
+    private int failedLoginAttempts;
+
+    // A timestamp, not a flag: the lockout expires by the clock on its own, so there is no unlock
+    // endpoint to build and secure and no support path for a family member who mistyped.
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -78,6 +94,46 @@ public class User {
 
     public void updatePasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public int getTokenVersion() {
+        return tokenVersion;
+    }
+
+    // Invalidates every token issued before this call, everywhere, at once.
+    public void bumpTokenVersion() {
+        tokenVersion++;
+    }
+
+    public int getFailedLoginAttempts() {
+        return failedLoginAttempts;
+    }
+
+    public Instant getLockedUntil() {
+        return lockedUntil;
+    }
+
+    public boolean isLockedAt(Instant now) {
+        return lockedUntil != null && lockedUntil.isAfter(now);
+    }
+
+    public void recordFailedLogin(int maxAttempts, Instant now, java.time.Duration lockoutDuration) {
+        failedLoginAttempts++;
+        if (failedLoginAttempts >= maxAttempts) {
+            lockedUntil = now.plus(lockoutDuration);
+            // Reset rather than leave it at the cap, so the next wrong password after the lockout
+            // expires starts a fresh count instead of re-locking on a single attempt.
+            failedLoginAttempts = 0;
+        }
+    }
+
+    // Called on a successful login AND on a successful password reset. The reset case is what
+    // makes lockout acceptable on a shared household login: the instinctive response to being
+    // locked out is to reset the password, and that must let them straight back in rather than
+    // leaving them locked out holding a password that now works.
+    public void clearLoginLockout() {
+        failedLoginAttempts = 0;
+        lockedUntil = null;
     }
 
     public String getRole() {

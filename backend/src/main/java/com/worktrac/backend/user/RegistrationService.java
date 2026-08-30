@@ -269,7 +269,7 @@ public class RegistrationService {
         // and the Stripe Customer is created lazily at first checkout instead.
         subscriptionService.createFreeSubscription(account);
 
-        String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole());
+        String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole(), user.getTokenVersion());
         return new AuthResponse(token, UserDto.from(user), AccountDto.from(account, BillingPlan.FREE),
                 PersonDto.from(person));
     }

@@ -2,6 +2,7 @@ package com.worktrac.backend.tag;
 
 import com.worktrac.backend.common.ConflictException;
 import com.worktrac.backend.common.NotFoundException;
+import com.worktrac.backend.quota.QuotaService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,10 +19,13 @@ public class TagService {
 
     private final TagRepository tagRepository;
     private final AccountRepository accountRepository;
+    private final QuotaService quotaService;
 
-    public TagService(TagRepository tagRepository, AccountRepository accountRepository) {
+    public TagService(TagRepository tagRepository, AccountRepository accountRepository,
+                       QuotaService quotaService) {
         this.tagRepository = tagRepository;
         this.accountRepository = accountRepository;
+        this.quotaService = quotaService;
     }
 
     @Transactional(readOnly = true)
@@ -71,7 +75,13 @@ public class TagService {
     public Tag getOrCreate(Long accountId, String name) {
         String trimmed = requireName(name);
         return tagRepository.findByAccount_IdAndName(accountId, trimmed)
-                .orElseGet(() -> tagRepository.save(new Tag(accountRepository.getReferenceById(accountId), trimmed)));
+                .orElseGet(() -> {
+                    // Checked only on the CREATE branch: finding an existing tag must never be
+                    // refused, or a household at its ceiling could no longer re-apply tags it
+                    // already has.
+                    quotaService.requireTagCapacity(accountId, tagRepository.countByAccount_Id(accountId));
+                    return tagRepository.save(new Tag(accountRepository.getReferenceById(accountId), trimmed));
+                });
     }
 
     private String requireName(String name) {

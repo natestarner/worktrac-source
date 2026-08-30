@@ -1,4 +1,5 @@
 import { isTempExerciseId } from '../lib/exerciseIdMap';
+import { FIELD_LIMITS } from './fieldLimits';
 
 // What a set of an exercise measures. THE source for both the "Measured in" toggle in
 // AddEditExerciseModal and the disambiguating suffix below, so the two can never drift: whatever
@@ -10,11 +11,17 @@ export const MEASURE_OPTIONS = [
 
 const DEFAULT_TRACKING_TYPE = 'strength';
 
-// exercises.name is NVARCHAR(200) and ExerciseRequest carries no @Size, so an over-long name is a
-// database error -> 500 -> shouldRetryWrite retries FOREVER, head-of-line-blocking the one serial
-// outbox scope. The suffix below must therefore never be the thing that pushes a name over: see
+// exercises.name is NVARCHAR(200). ExerciseRequest now carries a matching @Size, so an over-long
+// name is an honest 400 rather than what it used to be: a database error -> 503 ->
+// shouldRetryWrite retries FOREVER, head-of-line-blocking the one serial outbox scope. That server
+// cap is the backstop; this constant is still what keeps a real person from ever producing such a
+// value, because a 400 on a durable write is DISCARDED and discarding is not much better than
+// retrying forever. The suffix below must never be the thing that pushes a name over: see
 // resolveExerciseCreate, which drops it rather than risk that. Also the input's maxLength.
-export const MAX_EXERCISE_NAME_LENGTH = 200;
+// One source of truth with every other field cap, and with the backend's @Size on
+// ExerciseRequest.name. Re-exported under its original name so the call sites that already
+// import it from here keep working.
+export const MAX_EXERCISE_NAME_LENGTH = FIELD_LIMITS.exerciseName;
 
 export function measureLabel(trackingType) {
   const option = MEASURE_OPTIONS.find((o) => o.value === trackingType);

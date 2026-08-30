@@ -9,6 +9,7 @@ import com.worktrac.backend.export.ExportRow;
 import com.worktrac.backend.export.WorkoutRowProjection;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
+import com.worktrac.backend.quota.QuotaService;
 import com.worktrac.backend.sessionexercisenote.SessionExerciseNote;
 import com.worktrac.backend.sessionexercisenote.SessionExerciseNoteRepository;
 import com.worktrac.backend.user.User;
@@ -82,6 +83,7 @@ public class CsvImportService {
     private final SessionExerciseNoteRepository sessionExerciseNoteRepository;
     private final PersonExerciseService personExerciseService;
     private final ImportBatchRepository importBatchRepository;
+    private final QuotaService quotaService;
     private final Clock clock;
 
     public CsvImportService(PersonService personService, CsvImportParser csvImportParser,
@@ -91,7 +93,7 @@ public class CsvImportService {
                              WorkoutSetRepository workoutSetRepository,
                              SessionExerciseNoteRepository sessionExerciseNoteRepository,
                              PersonExerciseService personExerciseService,
-                             ImportBatchRepository importBatchRepository, Clock clock) {
+                             ImportBatchRepository importBatchRepository, QuotaService quotaService, Clock clock) {
         this.personService = personService;
         this.csvImportParser = csvImportParser;
         this.workoutRowProjection = workoutRowProjection;
@@ -103,6 +105,7 @@ public class CsvImportService {
         this.sessionExerciseNoteRepository = sessionExerciseNoteRepository;
         this.personExerciseService = personExerciseService;
         this.importBatchRepository = importBatchRepository;
+        this.quotaService = quotaService;
         this.clock = clock;
     }
 
@@ -126,6 +129,14 @@ public class CsvImportService {
             // person's import history.
             return plan.summarize(null, 0, 0, 0, 0, List.of(), 0);
         }
+
+        // Import is the only vector that can add rows in bulk, so it is the only place the
+        // per-account sets ceiling is enforced -- logging a set by hand is bounded by physiology,
+        // and refusing one would discard a durable write recording a workout somebody actually
+        // did. Checked against the whole planned batch, so one file cannot vault the ceiling in a
+        // single transaction.
+        quotaService.requireSetCapacity(accountId, workoutSetRepository.countByAccountId(accountId),
+                plan.totalSets());
 
         User user = userRepository.getReferenceById(userId);
         ImportBatch batch = importBatchRepository.save(new ImportBatch(person, user, request.filename(),

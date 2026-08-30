@@ -1,6 +1,7 @@
 package com.worktrac.backend.exercise;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 // Adding/renaming an exercise. "Add your own" needs only a name; the person tags it afterward
 // from the household's shared tag vocabulary, and adds setup fields per-person from the
@@ -14,7 +15,7 @@ import jakarta.validation.constraints.NotBlank;
 // 'strength'. It is ignored on rename because Exercise deliberately has no setter for it: flipping
 // it would reinterpret every set already logged against the exercise.
 public record ExerciseRequest(
-        @NotBlank String name,
+        @NotBlank @Size(max = 200, message = "must be 200 characters or fewer") String name,
         String idempotencyKey,
         String trackingType
 ) {

@@ -14,12 +14,13 @@ export default function DeleteAccountModal({ onClose }) {
   const { people, logout } = useAuth();
   const navigate = useNavigate();
   const [confirmText, setConfirmText] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   async function handleDelete() {
     setError('');
     try {
-      await deleteAccount(CONFIRMATION_WORD);
+      await deleteAccount(CONFIRMATION_WORD, password);
       logout();
       navigate('/login');
     } catch (err) {
@@ -91,11 +92,36 @@ export default function DeleteAccountModal({ onClose }) {
         }}
       />
 
+      {/* Typing DELETE proves intent; the password proves identity. The token that got them this
+          far is valid for 30 days with no revocation, which is a weak thing to hang an
+          irreversible, unrecoverable action on -- a family tablet left signed in is enough. */}
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Enter your password</div>
+      <input
+        type="password"
+        autoComplete="current-password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Your password"
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          padding: 14,
+          border: '1px solid var(--color-border)',
+          borderRadius: 10,
+          fontSize: 16,
+          marginBottom: 16,
+        }}
+      />
+
       <div style={{ display: 'flex', gap: 10 }}>
         <button onClick={onClose} style={cancelButtonStyle}>
           Cancel
         </button>
-        <Button onClick={handleDelete} disabled={confirmText !== CONFIRMATION_WORD} style={deleteButtonStyle}>
+        <Button
+          onClick={handleDelete}
+          disabled={confirmText !== CONFIRMATION_WORD || !password}
+          style={deleteButtonStyle}
+        >
           Delete account
         </Button>
       </div>

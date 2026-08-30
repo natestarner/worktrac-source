@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
 import Button from './Button';
+import { FIELD_LIMITS } from '../../utils/fieldLimits';
 
 // Shared editor for both exercise note types (see ExerciseDetail.jsx): the standing
 // per-person note and the per-session note. A blank save clears the note. Centered, like
@@ -32,7 +33,7 @@ export default function ExerciseNoteModal({ title, subtitle, initialNote, onClos
         autoFocus
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        maxLength={1000}
+        maxLength={FIELD_LIMITS.note}
         rows={4}
         placeholder="Write a note..."
         // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.

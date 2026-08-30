@@ -2,6 +2,8 @@ package com.worktrac.backend.csvimport;
 
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.ForbiddenException;
+import com.worktrac.backend.common.TooManyRequestsException;
+import com.worktrac.backend.ratelimit.ImportRateLimiter;
 import com.worktrac.backend.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -30,13 +32,16 @@ public class ImportController {
     private final ImportUndoService importUndoService;
     private final CurrentUser currentUser;
     private final SubscriptionService subscriptionService;
+    private final ImportRateLimiter rateLimiter;
 
     public ImportController(CsvImportService csvImportService, ImportUndoService importUndoService,
-                             CurrentUser currentUser, SubscriptionService subscriptionService) {
+                             CurrentUser currentUser, SubscriptionService subscriptionService,
+                             ImportRateLimiter rateLimiter) {
         this.csvImportService = csvImportService;
         this.importUndoService = importUndoService;
         this.currentUser = currentUser;
         this.subscriptionService = subscriptionService;
+        this.rateLimiter = rateLimiter;
     }
 
     // Writes nothing. Answers "what would this file do", including which rows are already present
@@ -50,6 +55,13 @@ public class ImportController {
     @PostMapping("/api/people/{personId}/import")
     public ImportPreviewDto commit(@PathVariable Long personId, @Valid @RequestBody ImportRequest request) {
         requirePro();
+        // Only the commit is throttled, not the preview: preview writes nothing, and making
+        // someone spend an import token to find out what a file WOULD do is the opposite of what
+        // the preview exists for.
+        if (!rateLimiter.tryConsumePerAccount(currentUser.accountId())) {
+            throw new TooManyRequestsException(
+                    "That's a lot of imports in a short time -- please try again a little later.");
+        }
         return csvImportService.commit(currentUser.accountId(), currentUser.userId(), personId, request);
     }
 

@@ -6,6 +6,7 @@ import { useAppState } from '../../context/AppStateContext';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
 import Button from './Button';
+import { FIELD_LIMITS } from '../../utils/fieldLimits';
 
 export default function AddPersonModal({ onClose }) {
   const { refreshPeople } = useAuth();
@@ -44,6 +45,7 @@ export default function AddPersonModal({ onClose }) {
           if (nameError) setNameError(false);
         }}
         placeholder="Name"
+        maxLength={FIELD_LIMITS.personName}
         style={{
           width: '100%',
           boxSizing: 'border-box',
