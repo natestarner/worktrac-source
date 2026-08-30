@@ -6,8 +6,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.billing.BillingPlan;
+import com.worktrac.backend.billing.BillingEventRepository;
+import com.worktrac.backend.billing.BillingEventType;
+import com.worktrac.backend.billing.StripeService;
+import com.worktrac.backend.billing.Subscription;
 import com.worktrac.backend.billing.SubscriptionRepository;
 import com.worktrac.backend.billing.SubscriptionStatus;
+import com.worktrac.backend.contact.ContactMessageRepository;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.support.RegistrationTestSupport;
@@ -69,6 +74,18 @@ class AccountDeletionTest extends AbstractIntegrationTest {
     @Autowired
     private SubscriptionRepository subscriptionRepository;
 
+    @Autowired
+    private ContactMessageRepository contactMessageRepository;
+
+    @Autowired
+    private BillingEventRepository billingEventRepository;
+
+    // Stripe is unconfigured in the test profile, so the cancel-on-deletion path would never
+    // run at all without this. Mocked rather than skipped because the ORDERING of that call
+    // relative to the deletes is the thing worth pinning.
+    @MockitoBean
+    private StripeService stripeService;
+
     // EmailService's real constructor builds a live Azure EmailClient from
     // app.email.connection-string, which is empty in the "local" test profile (no real ACS
     // resource in CI) -- @MockitoBean replaces the bean entirely so that constructor never runs.
@@ -122,6 +139,23 @@ class AccountDeletionTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(routineBody))
                 .andExpect(status().isOk());
+
+        // A Contact Us submission, with personId set. This belongs in the standard blast radius
+        // and not in one special-case test: contact_messages holds NO ACTION FKs to accounts,
+        // users AND people, so every delete in AccountDeletionService failed with a constraint
+        // violation while one was around -- meaning any household that had ever written in could
+        // not delete its account, and got a 503 from an irreversible action they had confirmed.
+        // Seeding it here means every deletion test below exercises those three constraints.
+        String contactBody = objectMapper.writeValueAsString(Map.of(
+                "category", "BUG",
+                "subject", "Something looked wrong",
+                "message", "Writing in about a thing that did not work as I expected.",
+                "personId", personId));
+        mockMvc.perform(post("/api/contact")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(contactBody))
+                .andExpect(status().isAccepted());
     }
 
     private String deleteAccountBody(String confirmationText) throws Exception {
@@ -285,5 +319,66 @@ class AccountDeletionTest extends AbstractIntegrationTest {
             if (item.get("name").asText().equals(name)) return true;
         }
         return false;
+    }
+
+    @Test
+    void deletingAccountRemovesItsContactMessages() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String email = "deletecontact-" + suffix + "@example.com";
+        JsonNode registration = register(email, "Robin");
+        String token = registration.get("token").asText();
+        long accountId = registration.get("account").get("id").asLong();
+        long personId = registration.get("person").get("id").asLong();
+        seedAccountData(token, personId);
+
+        assertEquals(1, contactMessageRepository.countByAccount_Id(accountId),
+                "the seed should have left a contact message to delete");
+
+        mockMvc.perform(delete("/api/account")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteAccountBody("DELETE")))
+                .andExpect(status().isNoContent());
+
+        assertEquals(0, contactMessageRepository.countByAccount_Id(accountId));
+        assertTrue(accountRepository.findById(accountId).isEmpty());
+    }
+
+    // Two things at once, because they share one cause: the Stripe cancellation must happen AFTER
+    // the transaction commits.
+    //
+    //   - Cancelling is an external side effect that cannot roll back. Done before the deletes,
+    //     any failure below left the household with their subscription cancelled and their account
+    //     intact -- Pro gone, data kept, told the operation failed.
+    //   - The canceller records its outcome as a BillingEvent, described in its own comments as
+    //     the only remaining record of what needs cancelling by hand. AccountDeletionService
+    //     clears billing_events, so an event written beforehand was deleted by the very
+    //     transaction it was recording.
+    @Test
+    void stripeCancellationHappensAfterCommitAndItsAuditRowSurvives() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String email = "deletestripe-" + suffix + "@example.com";
+        JsonNode registration = register(email, "Sam");
+        String token = registration.get("token").asText();
+        long accountId = registration.get("account").get("id").asLong();
+
+        org.mockito.Mockito.when(stripeService.isConfigured()).thenReturn(true);
+        Subscription subscription = subscriptionRepository.findByAccountId(accountId).orElseThrow();
+        subscription.setStripeSubscriptionId("sub_test_" + suffix);
+        subscriptionRepository.saveAndFlush(subscription);
+
+        mockMvc.perform(delete("/api/account")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(deleteAccountBody("DELETE")))
+                .andExpect(status().isNoContent());
+
+        org.mockito.Mockito.verify(stripeService).cancelSubscription("sub_test_" + suffix);
+
+        // Written by the afterCommit hook, i.e. after billing_events was cleared -- so it is still
+        // here. Before this fix the row was recorded and then deleted moments later.
+        assertTrue(billingEventRepository.findByAccountIdOrderByCreatedAtDesc(accountId).stream()
+                        .anyMatch(event -> event.getEventType() == BillingEventType.CANCELED_ON_ACCOUNT_DELETION),
+                "the cancellation audit row must outlive the account it refers to");
     }
 }

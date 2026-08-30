@@ -3,6 +3,7 @@ package com.worktrac.backend.account;
 import com.worktrac.backend.billing.BillingEventRepository;
 import com.worktrac.backend.billing.StripeSubscriptionCanceller;
 import com.worktrac.backend.billing.SubscriptionRepository;
+import com.worktrac.backend.contact.ContactMessageRepository;
 import com.worktrac.backend.csvimport.ImportBatchCleanup;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.PersonRepository;
@@ -12,6 +13,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 
@@ -30,6 +33,7 @@ public class AccountDeletionService {
     private final StripeSubscriptionCanceller stripeSubscriptionCanceller;
     private final SubscriptionRepository subscriptionRepository;
     private final BillingEventRepository billingEventRepository;
+    private final ContactMessageRepository contactMessageRepository;
     private final ImportBatchCleanup importBatchCleanup;
     private final PersonRepository personRepository;
     private final ExerciseRepository exerciseRepository;
@@ -40,6 +44,7 @@ public class AccountDeletionService {
     public AccountDeletionService(StripeSubscriptionCanceller stripeSubscriptionCanceller,
                                    SubscriptionRepository subscriptionRepository,
                                    BillingEventRepository billingEventRepository,
+                                   ContactMessageRepository contactMessageRepository,
                                    ImportBatchCleanup importBatchCleanup, PersonRepository personRepository,
                                    ExerciseRepository exerciseRepository,
                                    TagRepository tagRepository, UserRepository userRepository,
@@ -47,6 +52,7 @@ public class AccountDeletionService {
         this.stripeSubscriptionCanceller = stripeSubscriptionCanceller;
         this.subscriptionRepository = subscriptionRepository;
         this.billingEventRepository = billingEventRepository;
+        this.contactMessageRepository = contactMessageRepository;
         this.importBatchCleanup = importBatchCleanup;
         this.personRepository = personRepository;
         this.exerciseRepository = exerciseRepository;
@@ -57,14 +63,24 @@ public class AccountDeletionService {
 
     @Transactional
     public void deleteAccount(Long accountId) {
-        // Billing first: subscriptions has a NO ACTION FK to accounts (see V56), so it must go
+        // Read the subscription id while its row still exists; the Stripe call itself happens
+        // after this transaction commits (see the afterCommit hook below, and
+        // StripeSubscriptionCanceller for why that ordering is load-bearing).
+        String stripeSubscriptionId = stripeSubscriptionCanceller.pendingCancellation(accountId);
+
+        // FIRST: contact_messages holds NO ACTION FKs to accounts, users AND people, so every
+        // delete below this line fails with a constraint violation while a submission is still
+        // around -- which meant any household that had ever used Contact Us could not delete its
+        // account at all. It surfaced as a 503 (DataAccessException) from an irreversible action
+        // the person had already confirmed, with no path forward.
+        //
+        // TestDataCleanupService hit the identical constraint in e2e teardown and already clears
+        // this table first; that fix was never carried across to the user-facing path. The two
+        // orderings must stay in step.
+        contactMessageRepository.deleteByAccountIdIn(List.of(accountId));
+        // Billing next: subscriptions has a NO ACTION FK to accounts (see V56), so it must go
         // before the account it points at. billing_events carries a plain account_id column with
         // no FK, but goes here for the same reason -- an erased household leaves nothing behind.
-        //
-        // Stop the money BEFORE the row naming the subscription is gone. Best-effort by design
-        // (see StripeSubscriptionCanceller): a Stripe outage must not be able to block someone
-        // from deleting their account, which is a right rather than a convenience.
-        stripeSubscriptionCanceller.cancelForAccount(accountId);
         subscriptionRepository.deleteByAccountIdIn(List.of(accountId));
         billingEventRepository.deleteByAccountIdIn(List.of(accountId));
         // Before people: import_batches has a non-cascading FK to people, and the workout rows
@@ -77,5 +93,37 @@ public class AccountDeletionService {
         userRepository.deleteByAccount_Id(accountId);
         accountRepository.deleteById(accountId);
         log.info("Deleted account {}", accountId);
+
+        cancelAtStripeAfterCommit(accountId, stripeSubscriptionId);
+    }
+
+    // Stopping the money is deliberately the LAST thing, and it happens outside this transaction.
+    //
+    // Cancelling at Stripe is an external side effect that cannot roll back. Done before the
+    // deletes, any failure further down left the household with their subscription cancelled and
+    // their account fully intact -- they lost the Pro they were paying for and kept the data they
+    // asked to erase, having been told the operation failed. Running it on afterCommit means it
+    // only ever fires for an account that actually went away.
+    //
+    // It also has to run after billing_events has been cleared: the canceller records its own
+    // failure as a BillingEvent, described in its comments as the only remaining record of what
+    // needs cancelling by hand, and clearing that table afterwards deleted exactly that row.
+    private void cancelAtStripeAfterCommit(Long accountId, String stripeSubscriptionId) {
+        if (stripeSubscriptionId == null) {
+            return;
+        }
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            // No surrounding transaction to hang the callback off (a direct call outside Spring's
+            // transaction management). Nothing has been rolled back in that case either, so
+            // running it inline is still correct.
+            stripeSubscriptionCanceller.cancel(accountId, stripeSubscriptionId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                stripeSubscriptionCanceller.cancel(accountId, stripeSubscriptionId);
+            }
+        });
     }
 }
