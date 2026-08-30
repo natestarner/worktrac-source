@@ -6,6 +6,7 @@ import com.worktrac.backend.common.TooManyRequestsException;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.config.EmailProperties;
 import com.worktrac.backend.ratelimit.RegistrationRateLimiter;
+import com.worktrac.backend.security.TokenVersionService;
 import com.worktrac.backend.user.dto.ForgotPasswordRequest;
 import com.worktrac.backend.user.dto.ResendResetCodeRequest;
 import com.worktrac.backend.user.dto.ResetPasswordRequest;
@@ -40,6 +41,7 @@ public class PasswordResetService {
     private final ApplicationEventPublisher eventPublisher;
     private final EmailProperties emailProperties;
     private final RegistrationRateLimiter rateLimiter;
+    private final TokenVersionService tokenVersionService;
     private final Optional<TestCodeCache> testCodeCache;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -50,6 +52,7 @@ public class PasswordResetService {
                                  ApplicationEventPublisher eventPublisher,
                                  EmailProperties emailProperties,
                                  RegistrationRateLimiter rateLimiter,
+                                 TokenVersionService tokenVersionService,
                                  Optional<TestCodeCache> testCodeCache,
                                  Clock clock) {
         this.userRepository = userRepository;
@@ -58,6 +61,7 @@ public class PasswordResetService {
         this.eventPublisher = eventPublisher;
         this.emailProperties = emailProperties;
         this.rateLimiter = rateLimiter;
+        this.tokenVersionService = tokenVersionService;
         this.testCodeCache = testCodeCache;
         this.clock = clock;
     }
@@ -126,7 +130,12 @@ public class PasswordResetService {
         // the instinctive response -- resetting it -- must let them straight back in rather than
         // leaving them locked out holding a password that now works.
         user.clearLoginLockout();
+        // Signs out every OTHER session. A reset is very often prompted by the suspicion that
+        // someone else has access, and until this the answer was that they kept it for up to
+        // thirty more days -- on a screen implying the opposite.
+        user.bumpTokenVersion();
         userRepository.save(user);
+        tokenVersionService.invalidate(user.getId());
         passwordResetCodeRepository.deleteByEmail(email);
 
         eventPublisher.publishEvent(new PasswordResetConfirmedEvent(email));

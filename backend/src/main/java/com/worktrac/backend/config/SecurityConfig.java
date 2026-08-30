@@ -4,6 +4,7 @@ import com.worktrac.backend.security.AuthRequestLoggingFilter;
 import com.worktrac.backend.security.JwtAuthenticationFilter;
 import com.worktrac.backend.security.JwtService;
 import com.worktrac.backend.security.RequestDiagnosticsFilter;
+import com.worktrac.backend.security.TokenVersionService;
 import com.worktrac.backend.security.RequestSizeLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,7 +29,9 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService,
                                                      CorsConfigurationSource corsConfigurationSource,
-                                                     RequestLimitProperties requestLimitProperties) throws Exception {
+                                                     RequestLimitProperties requestLimitProperties,
+                                                     TokenVersionService tokenVersionService,
+                                                     AdminProperties adminProperties) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 // CSRF protection defends session-cookie auth from forged cross-site requests
@@ -77,7 +80,8 @@ public class SecurityConfig {
                 // reaches a controller is still tagged with its correlation id in the logs. Same
                 // "must be positioned relative to an already-registered filter" constraint as
                 // above, hence relative to AuthRequestLoggingFilter rather than to the chain head.
-                .addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new JwtAuthenticationFilter(jwtService, tokenVersionService, adminProperties),
+                        UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new AuthRequestLoggingFilter(), JwtAuthenticationFilter.class)
                 .addFilterBefore(new RequestDiagnosticsFilter(), AuthRequestLoggingFilter.class)
                 // Ahead of everything: an oversized body must be refused before anything reads it.

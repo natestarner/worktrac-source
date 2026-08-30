@@ -43,6 +43,10 @@ public class User {
     // Temporary lockout after repeated wrong passwords (V58). Persisted rather than held in
     // memory because an in-process counter resets on restart and every replica would keep its own,
     // handing an attacker a fresh allowance from whichever instance answers.
+    // Bumped to invalidate every JWT issued before now (V59). See JwtAuthenticationFilter.
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion;
+
     @Column(name = "failed_login_attempts", nullable = false)
     private int failedLoginAttempts;
 
@@ -90,6 +94,15 @@ public class User {
 
     public void updatePasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public int getTokenVersion() {
+        return tokenVersion;
+    }
+
+    // Invalidates every token issued before this call, everywhere, at once.
+    public void bumpTokenVersion() {
+        tokenVersion++;
     }
 
     public int getFailedLoginAttempts() {

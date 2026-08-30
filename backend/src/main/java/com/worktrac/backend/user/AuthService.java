@@ -125,7 +125,7 @@ public class AuthService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("Account has no primary person: " + account.getId()));
 
-        String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole());
+        String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole(), user.getTokenVersion());
         return new AuthResponse(token, UserDto.from(user),
                 AccountDto.from(account, subscriptionService.planFor(account.getId())),
                 PersonDto.from(primaryPerson));
