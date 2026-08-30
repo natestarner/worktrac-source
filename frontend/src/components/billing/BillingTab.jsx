@@ -248,7 +248,7 @@ function ProSummary({ subscription, pending, onManage }) {
 function renewalLine(cancelling, periodEnd) {
   if (!periodEnd) return 'Everything in Huddle, with no limits.';
   return cancelling
-    ? `Pro until ${formatDate(periodEnd)}. You keep everything until then.`
+    ? `Pro until ${formatDate(periodEnd)}: you keep everything until then.`
     : `Renews ${formatDate(periodEnd)}.`;
 }
 
