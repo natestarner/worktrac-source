@@ -176,6 +176,82 @@ every detail in the original report, but "plausible and consistent" is not the s
 the axis-A/B/C/D reproductions elsewhere in this document, and should be labeled as such if this
 is revisited.
 
+## Second follow-up (2026-09-01): a faithful reproduction of the real transition, still negative
+
+Despite PR #216 shipping, the user reported the identical shape recurring on the very next deploy
+(mobile, Brave browser — WebKit-based on iOS, Chromium-based elsewhere; not tested either way, no
+Brave binary available in this environment) — and, critically, offered a sharper diagnostic than
+before: **"seems to only happen when the service worker reloads."** Every round up to this point
+(1–7 in the first follow-up, plus three more below) had used `page.reload()` or `page.goto()`
+against a service worker that was *already* controlling and up to date — none had exercised a
+genuine **old-SW → new-SW handoff** (`skipWaiting` → `activate` → `controllerchange` →
+`updateSW(true)`'s `location.reload()`), which is a real state transition an ordinary reload never
+goes through.
+
+**Rounds 8–10** (this file's diagnostic specs, all deleted after use) individually hung the
+`/config.json` request, the main JS bundle, and `/api/auth/me` via `context.route`, plus a
+Slow-3G-like CDP throttle across a full reload. All recovered cleanly — notably, hanging the main
+JS bundle for 8s produced **zero** network hits, confirming directly what the user asked about:
+the service worker's precached shell *is* served instantly regardless of network, exactly as
+designed. None of these reproduced the recurrence, and none exercised the real cross-version
+transition either.
+
+**Rounds 11–13 tried to force a genuine update detection and failed for tooling reasons, not
+product ones.** Serving a byte-modified `/sw.js` via `context.route`, dispatching a synthetic
+`controllerchange` event, and issuing Chrome DevTools Protocol's `ServiceWorker.updateRegistration`
+command directly all failed to make Playwright observe or influence `registration.update()`'s own
+network request — confirmed separately that `context.route` **does** intercept a service worker's
+*initial* registration fetch, so this is specific to the update-check path, which appears to run at
+a layer neither page-level nor context-level request interception can reach, by any technique
+tried.
+
+**Round 14 sidestepped the tooling gap entirely, using a persistent on-disk browser profile
+instead of Playwright's usual ephemeral context** — this is what finally worked. Two sessions
+against the *same* real Chrome user-data directory: session A installed a deliberately
+byte-modified copy of the real `/sw.js` (faking the install is fine; only the update-check itself
+was unreachable) and logged in with real data; session B relaunched against that same profile with
+**no interception at all** and called `registration.update()` — since the genuinely live
+`/sw.js` now differed for real from what was cached on disk, the browser's own, completely
+unforced comparison found a real difference and drove a real install → waiting → `onNeedRefresh`
+→ banner sequence. This is the first reproduction in the whole investigation of the actual
+mechanism the user pointed at.
+
+With that real transition running, the network was degraded at the exact instant of clicking the
+real "Reload" button in the real `ServiceWorkerUpdater` banner: `/config.json` hung 6s, then
+`/api/auth/me` and five other endpoints hung 8s each, overlapping. **The app recovered cleanly.**
+`#root` stayed empty for ~5.5s (matching `config.js`'s 5s bound), then painted; real session data
+(a logged set, the favorited exercise) was visible by ~14.7s despite the ongoing API hangs; the
+boot-watchdog fallback never fired.
+
+**This is a genuine, faithful reproduction of the reported trigger mechanism, and it did not
+reproduce the bug.** Combined with the first follow-up's seven rounds, this investigation has now
+tested every axis it has the tooling to test — cold/hanging backend, Chromium and WebKit engines,
+a clean `/config.json` hang, a real cold (503) backend hit live twice, a Slow-3G throttle, and now
+a genuine cross-version service-worker transition with the network degraded at the exact moment of
+reload — and none of them produce a white screen against the current deployed code.
+
+### What remains unexplained
+
+- **Brave specifically.** Every report has been on Brave (the user confirmed this directly), whose
+  Shields and privacy features sit on top of Chromium's (or, on iOS, WebKit's) networking stack in
+  ways this investigation had no way to test — no Brave binary is available in this environment,
+  and Playwright does not ship one.
+- **A real device's actual conditions may simply be harsher than anything simulated here.** Every
+  network-degradation technique used (`context.route` hangs, CDP throttling) still delivers a
+  clean, deterministic outcome at a known instant; a real flaky mobile radio can behave more
+  chaotically (partial transfers, connection resets, inconsistent DNS) in ways a scripted hang
+  does not capture.
+- **The margin is still thin regardless of cause.** `CONFIG_FETCH_TIMEOUT_MS` (5s) leaves only 2s
+  of headroom against `boot-watchdog.js`'s `GRACE_MS` (7s) for anything else — JS parse time on a
+  slower device, real SW activation overhead. Proposed as a low-risk hardening step (shorten the
+  config timeout now that its fallback is safe post-#216; lengthen the watchdog grace) but
+  **deliberately not shipped** — the user asked for a confirmed root cause first, not a
+  margin-widening guess, and that request stands.
+
+If this recurs again, the single highest-value next artifact is the real device's own DevTools
+console/network output captured at the moment it happens — this investigation has now exhausted
+what simulation from outside the device can tell us.
+
 ## Also found, not yet fixed
 
 `AppShell`'s chrome — `Header` (which now renders the Pro/billing badge), `PersonPillBar`,
