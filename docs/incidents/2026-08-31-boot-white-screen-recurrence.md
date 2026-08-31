@@ -92,6 +92,90 @@ See `.claude/rules/frontend-core.md`'s "Three error boundaries" section for the 
 and 2 sit alongside, and `boot-watchdog.js`'s / `config.js`'s own headers for the full reasoning
 behind each.
 
+## Follow-up (same day): live-tested against lower, and a real root cause found
+
+Playwright access to lower was granted specifically to chase this further (see this doc's own
+note above: "blocked by this environment's own action-permission classifier"). Seven rounds of
+live testing followed, against the deployed lower environment rather than a local simulation.
+
+**Rounds 1-4 (simulating a cold/hanging backend, staggered recovery, Chromium and WebKit/mobile
+emulation, `page.reload()`) never reproduced anything.** The app handled every shape of
+cold-backend hang gracefully — cached data stayed visible, the outbox queued correctly, no
+fallback ever fired. This ruled out both "the backend being cold" and "the browser engine" as the
+trigger on their own.
+
+**Round 5's theory, read directly out of `config.js`, was that item 3 above (the 5s
+`/config.json` timeout) doesn't just avoid a hang — its *fallback* is the actual bug.**
+`loadConfig()`'s catch block set `config = { apiUrl: '' }`. `getApiUrl()` treats an empty
+`apiUrl` as "use relative paths" — correct in local dev, where the Vite proxy makes
+`/api/...` resolve to the real backend. **In every deployed environment there is no such proxy**
+(`staticwebapp.config.json` has no backend link at all — only the absolute `apiUrl` this very
+fetch is trying to read). So once this fallback fires, every subsequent API call for the rest of
+that page's life — login included — targets the frontend's *own* static-hosting origin instead of
+the backend, which has no `/api/*` route and answers with a real, fulfilled 404/405. That's not an
+offline-shaped failure (`isOfflineError()` only classifies no-status-or-5xx that way), so **none**
+of the app's degraded-conditions machinery — the outbox, `AuthContext`'s snapshot fallback,
+`isOfflineError` — ever engages. It just fails, quietly, against the wrong host, until the person
+happens to get a fully successful reload.
+
+Testing this directly took two false starts before it actually proved anything, both worth
+recording because the same trap is easy to fall into again:
+
+- **`page.route('**/config.json', hang)` looked like it disproved the theory** (rounds 5-6): every
+  subsequent request still hit the correct backend origin, even with `/config.json` forced to hang
+  past its 5s timeout. The reason wasn't that the app was fine — it was that **`page.route` does
+  not intercept a service worker's own internal `fetch()` calls**, only requests the page's JS
+  issues directly. Once a service worker is installed and controlling (true for anything but a
+  literal first-ever navigation), workbox's `NetworkFirst` strategy runs *inside the SW's own
+  execution context*, invisible to page-level routing — so the "hang" silently no-opped on every
+  navigation after the very first.
+- **Round 7 switched to `context.route`**, which does cover service-worker-mediated requests, and
+  re-ran the first-ever-load scenario. This time `configHits` was `1` (proving the interception
+  was real) and the result flipped completely: a login form submitted on the same, still-loaded
+  page sent its `POST` to `https://app.dev.huddle.fitness/api/auth/login` — the frontend's *own*
+  origin — and got back a `405`. **Confirmed, reproducible, live**: the theory was right, the
+  first test of it was a false negative from a Playwright tooling gap, not evidence against it.
+
+This explains both halves of this report. The initial crash: a service-worker-triggered reload is
+by definition the device's first navigation under the *new* SW version, and if `/config.json`'s
+fetch is slow or fails for any reason during that one window (plausible on the mobile connection
+this was reported on), the fallback poisons the rest of that page's life, and whatever the app's
+bootstrap `/api/auth/me` call gets back from the wrong origin is not a shape any code downstream
+expects. The "logged in but no data" half: clicking the crash screen's "Go to login" link is a
+real, hard navigation (`CriticalErrorFallback` uses `<a href>`, not client-side routing — see
+`frontend-core.md`), so it gets its own fresh `/config.json` attempt; if the same degraded
+connection caused a second failure there too, login itself would 404 rather than merely showing no
+data afterward — so the two halves are likely the *same* mechanism catching the device on two
+separate, nearby moments of a connection that was bad for more than an instant, not one mechanism
+explaining both symptoms end to end. That residual gap is honest, not resolved — see below.
+
+### The fix
+
+`config.js` now remembers the last successfully-fetched `apiUrl` in `localStorage`
+(`worktrac-last-known-api-url`) and falls back to *that* on any failure — a rejection, a timeout,
+or a non-2xx response — rather than to an empty/relative one. For a returning user (i.e. anyone
+who has loaded the app successfully even once before, which is everyone this bug was reported
+against), that value is correct with effective certainty: it changes only if this environment's
+backend is redeployed to a new hostname, which has never happened and would itself ship alongside
+a new frontend deploy. Only a device that has *genuinely* never loaded the app before still falls
+through to the empty/relative fallback — the same behavior local dev's own `config.json`
+(`apiUrl: ""`) already relies on.
+
+Verified non-vacuous: reverting the fallback to the old `{ apiUrl: '' }` while keeping the new
+tests fails exactly the two tests that assert the last-known-apiUrl behavior, confirming they'd
+catch a regression back to this bug.
+
+### What's still open
+
+The connection-quality trigger itself — *why* `/config.json` failed on the specific device/moment
+this was reported from — is still not something this pass reproduced from first principles; it
+was reproduced by deliberately forcing the failure, not by finding what caused a real one. A
+mobile connection degrading for a few seconds right after a fresh deploy (exactly when a
+service-worker update prompt appears) remains the leading, plausible explanation, consistent with
+every detail in the original report, but "plausible and consistent" is not the same standard as
+the axis-A/B/C/D reproductions elsewhere in this document, and should be labeled as such if this
+is revisited.
+
 ## Also found, not yet fixed
 
 `AppShell`'s chrome — `Header` (which now renders the Pro/billing badge), `PersonPillBar`,
