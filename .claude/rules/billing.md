@@ -118,11 +118,17 @@ forgotten bracket from the same error.
 
 ## Deleting an account must stop the money
 
-`AccountDeletionService` clears `billing_events` then `subscriptions` **before** `accounts` — the FK
-is NO ACTION (V56), so a missed step fails the delete outright rather than orphaning a row. It must
-also cancel the subscription at Stripe, or a deleted household keeps being charged.
-`TestDataCleanupService` needs the same two tables in its bulk delete, or e2e cleanup starts failing
-on constraint violations.
+`AccountDeletionService` clears `contact_messages`, then `subscriptions`, then `billing_events`
+**before** `accounts` — `contact_messages` and `subscriptions` both hold NO ACTION FKs (V56), so a
+missed step fails the delete outright rather than orphaning a row. `TestDataCleanupService` needs
+the same tables in its bulk delete, or e2e cleanup starts failing on constraint violations.
+
+Cancelling the subscription at Stripe is **not** inline in this method — `StripeSubscriptionCanceller`
+reads the pending subscription id before the deletes, then cancels in an `afterCommit` hook, after
+`billing_events` is already gone. That ordering is load-bearing (a cancellation failure is recorded
+as a `BillingEvent`, and clearing that table first would delete the only record of a needed manual
+cleanup) — see the comments on `AccountDeletionService` and `StripeSubscriptionCanceller` for the
+full reasoning; don't move it back in front of the deletes.
 
 ## Label collisions this feature creates
 
