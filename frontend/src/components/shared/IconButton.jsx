@@ -9,10 +9,15 @@
 // adding a NEW control whose label contains an existing one ("Edit note for this
 // session" alongside "Edit") on the same screen will break a toHaveCount assertion
 // elsewhere. Keep labels on one screen mutually non-containing.
-export default function IconButton({ icon: Icon, label, tone = 'default', size = 18, className = '', ...rest }) {
+//
+// `ref` (React 19 -- no forwardRef needed) reaches the underlying <button>. dnd-kit's
+// `setActivatorNodeRef` is the first caller (RoutineFormModal's drag handle); anything else
+// that needs to measure or focus the DOM node directly can use it the same way.
+export default function IconButton({ icon: Icon, label, tone = 'default', size = 18, className = '', ref, ...rest }) {
   const toneClass = tone === 'accent' ? 'icon-btn-accent' : tone === 'danger' ? 'icon-btn-danger' : '';
   return (
     <button
+      ref={ref}
       type="button"
       aria-label={label}
       title={label}

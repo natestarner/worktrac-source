@@ -96,6 +96,50 @@ test.describe('Routines', () => {
     await expect(page.getByText('Routine complete!')).toBeVisible();
   });
 
+  // The grip handle's arrow-key path is covered in RoutineFormModal.test.jsx -- jsdom never lays
+  // out real geometry, so it can't drive dnd-kit's PointerSensor. This is the one place an actual
+  // pointer drag is exercised, in a real browser with real layout.
+  test('drag a grip handle to reorder exercises, and the new order survives the save', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Avery');
+
+    await page.getByRole('link', { name: 'Routines' }).click();
+    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Drag Day');
+
+    await addExerciseToRoutine(page, 'Barbell Bench Press');
+    await addExerciseToRoutine(page, 'Dumbbell Overhead Press');
+    await addExerciseToRoutine(page, 'Barbell Back Squat');
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', { name: 'Remove: Barbell Bench Press (1 of 3)' })).toBeVisible();
+
+    // Drag the first row's handle down onto the third row -- past the second row on the way,
+    // which is the point: dnd-kit only commits a reorder on drop, so passing over row 2 en route
+    // must not leave it there.
+    const sourceHandle = dialog.getByRole('button', { name: 'Reorder: Barbell Bench Press (1 of 3)' });
+    const targetHandle = dialog.getByRole('button', { name: 'Reorder: Barbell Back Squat (3 of 3)' });
+    const sourceBox = await sourceHandle.boundingBox();
+    const targetBox = await targetHandle.boundingBox();
+    if (!sourceBox || !targetBox) throw new Error('Grip handle has no layout box');
+
+    await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 12 });
+    await page.mouse.up();
+    // A real drag ends with a real hand lifting off and moving elsewhere before the next tap --
+    // Playwright's scripted mouse.up() -> click() has no equivalent pause. Give the page one
+    // settle window before the very next interaction.
+    await page.waitForTimeout(300);
+
+    // Bench Press dropped onto Squat's slot -> Overhead Press and Squat both shift up one.
+    await expect(dialog.getByRole('button', { name: 'Remove: Dumbbell Overhead Press (1 of 3)' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Remove: Barbell Back Squat (2 of 3)' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Remove: Barbell Bench Press (3 of 3)' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Save routine' }).click();
+    await expect(page.getByText('Dumbbell Overhead Press, Barbell Back Squat, Barbell Bench Press')).toBeVisible();
+  });
+
   // Bailing out of a routine partway through. The only exit used to be "Finish routine", which
   // appears on the LAST step alone -- so leaving a 3-exercise routine at step 1 meant stepping
   // through the other two, or scrubbing the pill strip to its end and tapping in. This asserts

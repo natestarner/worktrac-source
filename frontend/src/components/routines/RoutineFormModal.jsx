@@ -1,10 +1,15 @@
 import { useRef, useState } from 'react';
+import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { createRoutine, updateRoutine } from '../../api/routines';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import AddEditExerciseModal from '../settings/AddEditExerciseModal';
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
+import IconButton from '../shared/IconButton';
+import { IconClose, IconGripVertical } from '../shared/icons';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import { searchExercises } from '../../utils/exerciseSearch';
 import { FIELD_LIMITS } from '../../utils/fieldLimits';
@@ -21,12 +26,21 @@ import { FIELD_LIMITS } from '../../utils/fieldLimits';
 // position, not "every row for this exercise". Nothing on the backend ever restricted this --
 // routine_exercises has no unique index on (routine_id, exercise_id) and sort_order is assigned
 // by list position -- the whole restriction was the picker filter this used to apply.
+//
+// Reordering has two independent input paths that both funnel into the same setRows: dragging a
+// row's grip handle (mouse, touch or pen, via dnd-kit's PointerSensor) and pressing an arrow key
+// while a handle is focused (hand-rolled, NOT dnd-kit's own KeyboardSensor -- that sensor derives
+// the "next" slot from measured DOM rects, which jsdom never lays out, so a keyboard reorder
+// driven by it would be unwritable as a unit test; calling the same moveExercise the old up/down
+// buttons used keeps this path both real and testable). Only ONE sensor (Pointer) is registered
+// on DndContext, so dnd-kit's own listeners never attach a keydown handler to the handle and
+// there is nothing for our onKeyDown to collide with.
 export default function RoutineFormModal({ personId, routine, personExercises, catalog, onClose, onSaved, onExerciseCreated }) {
   const isEditing = !!routine;
   const [name, setName] = useState(routine?.name || '');
   // Monotonic, modal-local, and never reused: a row's key has to survive reordering and stay
   // distinct from the other copies of the same exercise, so it can't be derived from the
-  // exercise id or the index.
+  // exercise id or the index. It also doubles as the dnd-kit sortable id.
   const nextRowKey = useRef(0);
   const [rows, setRows] = useState(() =>
     routine ? routine.exercises.map((e) => ({ key: (nextRowKey.current += 1), exerciseId: e.exerciseId })) : [],
@@ -36,7 +50,20 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   const [locallyCreated, setLocallyCreated] = useState([]);
   const [nameError, setNameError] = useState(false);
   const [exercisesError, setExercisesError] = useState(false);
+  // dnd-kit's own DragOverlay content, and nothing else -- which row (if any) is mid-drag.
+  const [activeId, setActiveId] = useState(null);
+  // A single sr-only live region, updated by BOTH reorder paths below, so a screen-reader user
+  // hears the same wording regardless of whether the move came from a drag or an arrow key.
+  const [liveMessage, setLiveMessage] = useState('');
   const { run } = useGatedMutation();
+
+  // A small activation distance -- not zero -- so a tap that lands on the handle but isn't
+  // really a drag (a fat-fingered touch that moves a pixel or two) doesn't register as one.
+  // The options object is hoisted (POINTER_SENSOR_OPTIONS below) rather than a literal here --
+  // useSensor keys its memoization off THIS object's identity, so a fresh literal on every
+  // render of a modal that re-renders on every keystroke made it rebuild the sensor, and with it
+  // tear down and reattach dnd-kit's document-level pointer listeners, on every render.
+  const sensors = useSensors(useSensor(PointerSensor, POINTER_SENSOR_OPTIONS));
 
   // Names resolve against the full catalog (plus anything just created in this modal) so a
   // selected exercise always renders, whatever list it came from.
@@ -63,13 +90,35 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   function removeExercise(key) {
     setRows((list) => list.filter((row) => row.key !== key));
   }
+  // The keyboard path: one step at a time, same semantics as the old dedicated up/down buttons.
   function moveExercise(index, dir) {
     setRows((list) => {
-      const arr = [...list];
       const j = index + dir;
-      if (j < 0 || j >= arr.length) return arr;
+      if (j < 0 || j >= list.length) return list;
+      const arr = [...list];
       [arr[index], arr[j]] = [arr[j], arr[index]];
+      announceMove(arr[j].exerciseId, j, arr.length);
       return arr;
+    });
+  }
+  function announceMove(exerciseId, newIndex, total) {
+    const exerciseName = exerciseById.get(exerciseId)?.name;
+    setLiveMessage(`${exerciseName} moved to position ${newIndex + 1} of ${total}.`);
+  }
+
+  // The pointer/touch path: dnd-kit reports the row dropped ON (`over`), which can be more than
+  // one position away from where the drag started.
+  function handleDragEnd(event) {
+    const { active, over } = event;
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+    setRows((list) => {
+      const oldIndex = list.findIndex((row) => row.key === active.id);
+      const newIndex = list.findIndex((row) => row.key === over.id);
+      if (oldIndex === -1 || newIndex === -1) return list;
+      const next = arrayMove(list, oldIndex, newIndex);
+      announceMove(list[oldIndex].exerciseId, newIndex, next.length);
+      return next;
     });
   }
 
@@ -108,6 +157,8 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
     },
   );
 
+  const activeRow = rows.find((row) => row.key === activeId);
+
   return (
     <Modal width={420} onClose={onClose} title={isEditing ? 'Edit routine' : 'New routine'}>
       <input
@@ -132,50 +183,52 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
 
       {rows.length === 0 && exercisesError && <div style={{ ...errorTextStyle, marginBottom: 18 }}>Add at least one exercise.</div>}
 
+      {/* Zero-sized and always mounted, per RefreshIndicator's pattern -- a screen reader only
+          announces changes WITHIN an existing live region, so this can't be mounted on demand. */}
+      <div aria-live="polite" className="sr-only">
+        {liveMessage}
+      </div>
+
       {rows.length > 0 && (
         <>
           <div style={sectionLabelStyle}>In this routine</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
-            {rows.map((row, idx) => {
-              const exerciseName = exerciseById.get(row.exerciseId)?.name;
-              // Two rows for the same exercise are otherwise indistinguishable to a screen
-              // reader -- these three controls had no accessible name at all before (their
-              // labels are the glyphs), so the position is the only thing that separates them.
-              const position = `${exerciseName} (${idx + 1} of ${rows.length})`;
-              return (
-                <div
-                  key={row.key}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 8,
-                    padding: '10px 12px',
-                    borderRadius: 10,
-                    border: '1px solid var(--color-border)',
-                    background: 'var(--color-pr-bg)',
-                  }}
-                >
-                  <span style={{ fontSize: 14, fontWeight: 600 }}>{exerciseName}</span>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button onClick={() => moveExercise(idx, -1)} aria-label={`Move up: ${position}`} style={miniButtonStyle}>
-                      &uarr;
-                    </button>
-                    <button onClick={() => moveExercise(idx, 1)} aria-label={`Move down: ${position}`} style={miniButtonStyle}>
-                      &darr;
-                    </button>
-                    <button
-                      onClick={() => removeExercise(row.key)}
-                      aria-label={`Remove: ${position}`}
-                      style={{ ...miniButtonStyle, color: 'var(--color-danger)' }}
-                    >
-                      &times;
-                    </button>
-                  </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            accessibility={dndAccessibility}
+            onDragStart={(event) => setActiveId(event.active.id)}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveId(null)}
+          >
+            <SortableContext items={rows.map((row) => row.key)} strategy={verticalListSortingStrategy}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+                {rows.map((row, idx) => (
+                  <SortableRoutineRow
+                    key={row.key}
+                    row={row}
+                    index={idx}
+                    total={rows.length}
+                    exerciseName={exerciseById.get(row.exerciseId)?.name}
+                    onRemove={removeExercise}
+                    onMoveByKey={moveExercise}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+            {/* Rendered through dnd-kit's own portal, above everything -- including the modal's
+                sticky header -- so a row dragged near either edge of the panel's own scroll area
+                is never clipped by it. */}
+            <DragOverlay>
+              {activeRow ? (
+                <div style={{ ...rowStyle, boxShadow: 'var(--shadow-4), var(--elevation-hairline)', cursor: 'grabbing' }}>
+                  <span style={gripIconWrapperStyle} aria-hidden="true">
+                    <IconGripVertical />
+                  </span>
+                  <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 0 }}>{exerciseById.get(activeRow.exerciseId)?.name}</span>
                 </div>
-              );
-            })}
-          </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         </>
       )}
 
@@ -243,6 +296,90 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   );
 }
 
+const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 4 } };
+
+// dnd-kit's default instructions describe ITS OWN keyboard sensor's pick-up/move/drop model.
+// This modal deliberately doesn't register that sensor (see the file header comment), so the
+// default text would describe a space-bar interaction that doesn't exist here -- override it
+// with what a handle actually does.
+const screenReaderInstructions = {
+  draggable:
+    "To reorder this exercise, press and drag its grip handle with a mouse or touch. Or, with the handle focused, press the up or down arrow key to move it one position at a time.",
+};
+// Passed to DndContext's `accessibility` prop. Hoisted so its identity is stable across
+// RoutineFormModal's re-renders (every keystroke, every reorder) rather than a fresh object
+// each time.
+const dndAccessibility = { screenReaderInstructions };
+
+// One row in the "In this routine" list. `setNodeRef`/`transform`/`transition` position the
+// whole row as dnd-kit reorders the list; `attributes`/`listeners` (the drag activators) go on
+// the handle ALONE, not the row -- otherwise the exercise name and the remove button would start
+// a drag too, instead of just being read or tapped.
+function SortableRoutineRow({ row, index, total, exerciseName, onRemove, onMoveByKey }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: row.key });
+  // The x component is dropped -- this list only ever reorders vertically, and a slightly
+  // diagonal drag shouldn't nudge the row sideways too.
+  const style = {
+    ...rowStyle,
+    transform: CSS.Transform.toString(transform ? { ...transform, x: 0 } : transform),
+    transition,
+    // The dragged row's own place in the list becomes a faint placeholder -- the "real" copy is
+    // the one following the pointer in the DragOverlay above.
+    opacity: isDragging ? 0.4 : 1,
+  };
+  // Two rows for the same exercise are otherwise indistinguishable to a screen reader -- the
+  // position is the only thing that separates them.
+  const position = `${exerciseName} (${index + 1} of ${total})`;
+
+  function handleKeyDown(event) {
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      onMoveByKey(index, -1);
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      onMoveByKey(index, 1);
+    }
+  }
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <IconButton
+        {...attributes}
+        {...listeners}
+        ref={setActivatorNodeRef}
+        onKeyDown={handleKeyDown}
+        icon={IconGripVertical}
+        label={`Reorder: ${position}`}
+        style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+      />
+      <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 0 }}>{exerciseName}</span>
+      <IconButton icon={IconClose} label={`Remove: ${position}`} tone="danger" onClick={() => onRemove(row.key)} />
+    </div>
+  );
+}
+
+const rowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '6px 6px 6px 10px',
+  borderRadius: 10,
+  border: '1px solid var(--color-border)',
+  background: 'var(--color-pr-bg)',
+};
+
+// Matches the 40x40 footprint of the IconButton the DragOverlay clone stands in for, so the
+// "lifted" card is the same size as the row it was picked up from.
+const gripIconWrapperStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 40,
+  height: 40,
+  flexShrink: 0,
+  color: 'var(--color-muted)',
+};
+
 const sectionLabelStyle = {
   fontSize: 13,
   fontWeight: 700,
@@ -282,17 +419,6 @@ const errorTextStyle = {
   fontWeight: 600,
   color: 'var(--color-danger)',
   marginBottom: 16,
-};
-
-const miniButtonStyle = {
-  width: 32,
-  height: 32,
-  border: 'none',
-  borderRadius: 8,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text)',
-  fontSize: 14,
-  cursor: 'pointer',
 };
 
 const addChipStyle = {

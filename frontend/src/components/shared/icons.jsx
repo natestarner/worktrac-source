@@ -143,6 +143,19 @@ export const IconTrash = (props) => (
   </Icon>
 );
 
+// Drag handle for a reorderable row (routine builder). Lucide's grip-vertical: two columns
+// of three dots, recognisable as "grab this" independent of any tooltip or label.
+export const IconGripVertical = (props) => (
+  <Icon {...props}>
+    <circle cx="9" cy="5" r="1" />
+    <circle cx="9" cy="12" r="1" />
+    <circle cx="9" cy="19" r="1" />
+    <circle cx="15" cy="5" r="1" />
+    <circle cx="15" cy="12" r="1" />
+    <circle cx="15" cy="19" r="1" />
+  </Icon>
+);
+
 // The "?" affordance on a chart header. Lucide's circle-help: the dot is a
 // separate 0-length path rather than a <circle> so it inherits the round cap
 // and stays visible at 16px.

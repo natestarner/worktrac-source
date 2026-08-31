@@ -92,7 +92,11 @@ describe('RoutineFormModal exercise selection', () => {
     expect(screen.getByText('Squat')).toBeInTheDocument();
   });
 
-  it('reorders one occurrence without disturbing its twin', () => {
+  // Pointer/touch dragging goes through dnd-kit, which measures real DOM layout that jsdom
+  // never computes -- that path is covered for real in e2e/tests/routines.spec.ts instead. The
+  // grip handle's arrow-key path is hand-rolled specifically so it stays real AND testable here
+  // (see RoutineFormModal.jsx's file header comment).
+  it('reorders one occurrence without disturbing its twin, via the grip handle\'s arrow keys', () => {
     renderModal();
 
     fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
@@ -100,11 +104,35 @@ describe('RoutineFormModal exercise selection', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
 
     // Bench, Squat, Bench -> move the last Bench up -> Bench, Bench, Squat.
-    fireEvent.click(screen.getByRole('button', { name: 'Move up: Bench Press (3 of 3)' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder: Bench Press (3 of 3)' }), { key: 'ArrowUp' });
 
     expect(screen.getByRole('button', { name: 'Remove: Bench Press (1 of 3)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove: Bench Press (2 of 3)' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove: Squat (3 of 3)' })).toBeInTheDocument();
+  });
+
+  it('announces a keyboard reorder through the sr-only live region', () => {
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Squat' }));
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder: Squat (2 of 2)' }), { key: 'ArrowUp' });
+
+    expect(screen.getByText('Squat moved to position 1 of 2.')).toBeInTheDocument();
+  });
+
+  it('a grip handle at either end of the list ignores the arrow key that would move it out of bounds', () => {
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Squat' }));
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder: Bench Press (1 of 2)' }), { key: 'ArrowUp' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Reorder: Squat (2 of 2)' }), { key: 'ArrowDown' });
+
+    expect(screen.getByRole('button', { name: 'Remove: Bench Press (1 of 2)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove: Squat (2 of 2)' })).toBeInTheDocument();
   });
 
   it('clears the search box after adding an exercise from search results', () => {
