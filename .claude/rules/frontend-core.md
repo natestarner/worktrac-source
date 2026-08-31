@@ -346,9 +346,10 @@ renders, hydration throws a beat later, React unmounts everything.
 - **Don't move it inside the providers, and don't merge it with the route boundary.** Those are
   the same position, and it is the position that failed.
 - **It must never depend on what it protects.** `ErrorBoundary` is a class component with no
-  hooks or context, and its fallback's only child (`Button` → `Spinner`) imports no context — so
-  it still renders when every provider below has thrown. A fallback that read `useAuth()` would
-  throw inside the boundary and white-screen anyway.
+  hooks or context, and `CriticalErrorFallback` (its fallback here, and the route boundary's —
+  see below) imports no context either — so it still renders when every provider below has
+  thrown. A fallback that read `useAuth()` would throw inside the boundary and white-screen
+  anyway.
 - **No `resetKey` on this one**, unlike the tab boundary's. It would need `useLocation()` in
   `App`, re-rendering the entire provider tree on every navigation to reset an error that isn't
   route-scoped.
@@ -357,8 +358,30 @@ renders, hydration throws a beat later, React unmounts everything.
   reached us in no form whatsoever, which is why the first real occurrence could only be
   described as "it went white."
 
-`App.bootBoundary.test.jsx` pins it by mocking `AuthProvider` to throw. Verified non-vacuous:
-without the boundary all three of its cases fail with the raw error propagating out of `render`.
+**The boot and route boundaries both use `CriticalErrorFallback`, not `ErrorBoundary`'s own
+default fallback.** The default's only action is "Try again", which re-renders the SAME tree
+against the SAME (possibly still-poisoned) restored state — for an axis-D throw that reliably
+fails again immediately. `CriticalErrorFallback` makes a real `<a href="/login">` (not a
+client-side `navigate()` — there may be no working router to hand it to) the PRIMARY action,
+because that is the one thing that has twice now actually recovered a real occurrence:
+`AuthContext.login()` calls `resetQueryCache()` before anything else, which "Try again" alone
+never does. **Only these two boundaries** — the tab boundary keeps the plain default (a
+crashed tab is not "is any of this still working", the person can just switch tabs).
+
+**A React error boundary cannot catch everything**, and this class of bug has proven itself
+capable of finding the gaps: a throw inside a `useEffect` (passive, not part of React's
+render/commit try-catch), or anything before React ever calls `render` at all. Belt-and-suspenders
+for exactly that gap: `frontend/public/boot-watchdog.js`, a plain script (not a module, not part
+of the bundle) that polls whether `#root` has ever painted anything and shows a static, dependency-
+free "go to login" fallback if it hasn't — see that file's own header for the full reasoning and
+why it's a deliberately different mechanism from the three boundaries rather than a fourth one of
+the same kind.
+
+`App.bootBoundary.test.jsx` / `App.routeBoundary.test.jsx` pin the two `CriticalErrorFallback`
+boundaries by mocking something inside each to throw. `boot-watchdog.spec.ts` (e2e — the watchdog
+runs outside anything Vitest exercises) pins the backstop by emptying `#root` directly, standing
+in for "every boundary got bypassed" without needing to reproduce a specific real crash. All
+verified non-vacuous: remove what each covers and the corresponding case fails.
 
 ## Boot chrome renders for real, but must not be interactive
 

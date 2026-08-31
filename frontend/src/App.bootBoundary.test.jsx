@@ -59,6 +59,17 @@ describe('App boot boundary', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 
+  // "Try again" alone re-renders the SAME tree against the SAME (still-poisoned) restored state --
+  // for a throw rooted in axis D that just throws again immediately. A real link to /login is the
+  // PRIMARY way out here, not merely present: see CriticalErrorFallback.jsx's header for the two
+  // times this exact "painted, then white, had to manually type the login URL" shape was reported.
+  it('offers a real link to /login as the primary way out, not just Try again', async () => {
+    await renderApp();
+
+    const login = screen.getByRole('link', { name: 'Go to login' });
+    expect(login).toHaveAttribute('href', '/login');
+  });
+
   it('records the error locally, so Contact Us can offer it after recovery', async () => {
     await renderApp();
 
