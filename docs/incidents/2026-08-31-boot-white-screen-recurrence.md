@@ -75,10 +75,22 @@ Not the root cause — the guarantee that not knowing it no longer matters.
    cannot catch a throw inside a `useEffect` (passive, not part of React's render/commit
    try-catch), and it cannot catch anything before React ever calls `render`. Both remained live
    candidates for this exact recurrence, and neither is closed by adding a fourth React boundary.
+3. **`config.js`'s `loadConfig()` and the `/config.json` service-worker route are both now bounded
+   to 5s** (`AbortController` on the app-side fetch; `networkTimeoutSeconds` on the workbox
+   `NetworkFirst` route). Found while confirming this incident's own note above that "the asset
+   files... served correctly when checked directly" — true, but a one-off request can only prove a
+   file is reachable, not that it can't *hang*. This fetch runs in `main.jsx` before
+   `createRoot().render()` is ever called, so nothing — not even `AppShellSkeleton` — paints until
+   it settles. It was unbounded at both the app layer and the service-worker layer: a hard-offline
+   device rejects this fetch fast and was never at risk, but a connection to *this app's own
+   static host* that's merely slow rather than actually failing (a shape nothing else in the app
+   watches for — `reachabilityMonitor` only instruments `/api/*` calls) could leave it pending
+   indefinitely. Not confirmed as this incident's cause, but a real gap regardless, and directly
+   the kind of "flaky connection" condition this write-up was originally trying to rule in or out.
 
-See `.claude/rules/frontend-core.md`'s "Three error boundaries" section for the mechanism this
-sits alongside, and `boot-watchdog.js`'s own header for the full reasoning behind the watchdog
-specifically.
+See `.claude/rules/frontend-core.md`'s "Three error boundaries" section for the mechanism items 1
+and 2 sit alongside, and `boot-watchdog.js`'s / `config.js`'s own headers for the full reasoning
+behind each.
 
 ## Also found, not yet fixed
 

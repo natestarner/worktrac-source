@@ -34,9 +34,20 @@ const pwaPlugin = VitePWA({
       {
         // Runtime config: serve fresh when online so a changed apiUrl still updates, but fall back
         // to the last-known copy offline so the cold boot in main.jsx isn't blocked.
+        //
+        // networkTimeoutSeconds matters as much as the NetworkFirst choice itself: without it,
+        // NetworkFirst waits for the network fetch to settle -- resolve OR reject -- before ever
+        // trying the cache, with no bound of its own. A hard-offline device rejects fast and was
+        // never at risk; a connection to this app's own static host that's merely SLOW rather than
+        // outright failing (nothing else in the app watches for that -- reachabilityMonitor only
+        // instruments /api/* calls) could leave this pending indefinitely, and main.jsx awaits
+        // loadConfig() before createRoot().render() is ever called -- nothing paints until it
+        // settles one way or the other. 5s matches config.js's own CONFIG_FETCH_TIMEOUT_MS, and is
+        // comfortably inside boot-watchdog.js's GRACE_MS (7s). See
+        // docs/incidents/2026-08-31-boot-white-screen-recurrence.md.
         urlPattern: ({ url }) => url.pathname === '/config.json',
         handler: 'NetworkFirst',
-        options: { cacheName: 'runtime-config', expiration: { maxEntries: 1 } },
+        options: { cacheName: 'runtime-config', expiration: { maxEntries: 1 }, networkTimeoutSeconds: 5 },
       },
     ],
     // Do NOT cache /api responses -- the TanStack Query cache owns data; a second SW cache would
