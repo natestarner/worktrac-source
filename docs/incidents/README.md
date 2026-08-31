@@ -32,6 +32,7 @@ need the "why" or the debugging story.
 | 2026-08-14 | [A routine's position was lost when a reload beat the IndexedDB commit](2026-08-14-routine-position-lost-to-async-persist.md) — the worst test in the suite (38 of 51 runs) was reporting a real durability bug, hidden behind CI retries | Frontend state / persistence |
 | 2026-08-14 | [The cold-boot-offline spec was measuring lie-fi](2026-08-14-cold-boot-offline-spec-measured-liefi.md) — `setOffline` doesn't survive into the document a reload creates; written off as rot, then nearly "fixed" in the app | E2E harness / offline |
 | 2026-08-19 | [Creating an exercise stopped opening it, online only](2026-08-19-exercise-create-navigation-lost-online.md) — an awaited invalidation evicted the optimistic row before it was selected; invisible in all three degraded modes, and the flow had no online coverage | Log screen / offline |
+| 2026-08-31 | [The boot white screen came back, and the 2026-08-25 fix's recovery path didn't help](2026-08-31-boot-white-screen-recurrence.md) — "Try again" re-threw against the same restored state; root cause still not identified, but a real `/login` link plus an outside-React watchdog now guarantee a way out regardless | Frontend / resilience |
 
 ## Adding a new incident
 

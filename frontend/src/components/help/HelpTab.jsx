@@ -864,7 +864,7 @@ export default function HelpTab() {
             ],
             [
               'The app shows an error instead of loading',
-              'Tap “Try again”. If it comes back, log out and in again, then send it from Contact Us, which attaches what went wrong automatically. Nothing you logged is lost either way; it is saved on the device.',
+              'Tap “Go to login” and sign back in. Nothing you logged is lost; it is saved on the device and syncs once you are back in. Afterward, Contact Us can send along what went wrong automatically.',
             ],
           ]}
         />

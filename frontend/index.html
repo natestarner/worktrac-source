@@ -26,6 +26,11 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Last-resort boot watchdog: shows a static "go to login" escape hatch if the React app
+         never manages to render anything, regardless of why. Not a module, not part of the
+         bundle -- see boot-watchdog.js's own header for the full reasoning. Placed before the
+         main script so its timer starts as early as possible. -->
+    <script src="/boot-watchdog.js"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

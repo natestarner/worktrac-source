@@ -23,6 +23,7 @@ import AdminRoute from './routes/AdminRoute';
 import AppShell from './routes/AppShell';
 import ServiceWorkerUpdater from './components/shared/ServiceWorkerUpdater';
 import ErrorBoundary from './components/shared/ErrorBoundary';
+import CriticalErrorFallback from './components/shared/CriticalErrorFallback';
 import LogTab from './components/log/LogTab';
 import HistoryTab from './components/history/HistoryTab';
 import PRsTab from './components/prs/PRsTab';
@@ -82,8 +83,9 @@ export default function App() {
     // beat later, and React unmounts the whole tree with nothing above it to catch.
     //
     // Safe to wrap everything because the fallback depends on NOTHING it is protecting: it is a
-    // class component with no hooks or context, and its only child component (Button -> Spinner)
-    // imports no context either. So it still renders when every provider below has thrown.
+    // class component with no hooks or context, and CriticalErrorFallback (see its own header for
+    // why "Try again" alone isn't enough here) imports no context either. So it still renders when
+    // every provider below has thrown.
     //
     // Deliberately NO `resetKey` here, unlike AppShell's. resetKey would need useLocation() in
     // this component, which re-renders the entire provider tree on every navigation -- a real cost
@@ -92,7 +94,9 @@ export default function App() {
     // The diagnostic payoff matters as much as the screen: componentDidCatch stashes the error via
     // lib/lastClientError.js, so after recovering, Contact Us offers it in "What gets sent". A boot
     // throw previously reached us in no form whatsoever.
-    <ErrorBoundary title="Huddle couldn’t finish starting up">
+    <ErrorBoundary
+      fallback={({ retry }) => <CriticalErrorFallback title="Huddle couldn’t finish starting up" retry={retry} />}
+    >
     <PersistQueryClientProvider
       client={queryClient}
       persistOptions={persistOptions}
@@ -115,8 +119,14 @@ export default function App() {
             <ServiceWorkerUpdater />
             {/* Last-resort boundary. AppShell has a tighter one around the tab panel that keeps
                 navigation alive; this one only catches a throw outside any tab -- the shell
-                itself, or an unauthenticated route. */}
-            <ErrorBoundary>
+                itself (Header, PersonPillBar, SessionBar and AppShell's own effects are NOT
+                covered by the tab boundary, only <Outlet/> is), or an unauthenticated route.
+                Same CriticalErrorFallback as the boot boundary, not the generic default: by the
+                time something up here has thrown, the person is in the same "is any of this
+                still working" position either way. */}
+            <ErrorBoundary
+              fallback={({ retry }) => <CriticalErrorFallback title="Huddle ran into a problem" retry={retry} />}
+            >
             <Routes>
             <Route path="/" element={<Navigate to="/app/log" replace />} />
             <Route path="/login" element={<LoginPage />} />
