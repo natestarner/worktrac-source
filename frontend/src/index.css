@@ -49,6 +49,22 @@
   --color-accent-text: #a8532c; /* 5.07 bg / 5.33 surface / 4.64 subtle */
   --color-accent-contrast: #ffffff;
 
+  /* The accent ramp above is NOT the logo. The mark's orange is #E8734A and that value is
+     brand-fixed, but it is 2.93:1 on --color-bg -- under even the 3:1 bar for borders and the
+     focus ring -- and white on it is 3.01:1, which would drop the primary CTA below AA Large.
+     --color-accent is that same hue (16deg) darkened until it clears those bars, i.e. the
+     accessible expression of the brand orange. Do not "correct" it to #E8734A.
+     Full derivation: docs/architecture/design-system.md, docs/brand/README.md.
+
+     The mark's own four colours (#E8734A orange, #F2A65A amber, #F2EDE1 cream, #B5542D rust)
+     are literals wherever it is drawn -- HuddleMark.jsx, public/icon.svg -- because a logo keeps
+     its colours regardless of theme. The ONE part of the mark that varies is its hairline: the
+     cream circle is ~1.1:1 on a white surface and needs an outline to exist at all, while on a
+     dark surface it is high-contrast on its own and the brand sheet drops the outline. That is a
+     property of the GROUND, not of the user's theme -- see HuddleMark's header for the caller
+     whose ground stays light in both schemes and therefore pins its own value. */
+  --brand-mark-hairline: #bdb6af;
+
   /* --- Status --------------------------------------------------------- */
   /* Raised from #15803d, which was 4.46:1 on its own --color-success-bg. */
   --color-success: #147038; /* 5.86 bg / 5.48 on success-bg */
@@ -237,6 +253,10 @@
        it clears AA against the dark grounds (5.00 bg / 4.54 surface). Only the
        small-text variant needs lifting. */
     --color-accent-text: #e07a52; /* 6.09 bg / 5.52 surface / 5.01 subtle */
+
+    /* No hairline on a dark ground: the mark's cream circle is already high-contrast there, and
+       the brand sheet specifies the outline for light surfaces only. */
+    --brand-mark-hairline: transparent;
 
     /* Both of these were left at their light-mode values and never re-derived,
        landing at ~3.3:1 against the dark surface -- under AA while carrying

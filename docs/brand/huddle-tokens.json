@@ -1,0 +1,33 @@
+{
+  "mark": {
+    "orange": "#E8734A",
+    "amber": "#F2A65A",
+    "cream": "#F2EDE1",
+    "rust": "#B5542D"
+  },
+  "surface": {
+    "light": "#FFFFFF",
+    "dark": "#14100E"
+  },
+  "ink": {
+    "onLight": "#3E3A37",
+    "onDark": "#F2EDE1"
+  },
+  "hairline": {
+    "value": "#BDB6AF",
+    "appliesTo": "cream circle outline, light surfaces only",
+    "width": "1.5pt at 200-unit canvas"
+  },
+  "type": {
+    "wordmark": "Barlow",
+    "weight": 600,
+    "note": "Wordmark ships as outlines; no font needed to render logo files."
+  },
+  "rules": {
+    "clearSpace": "Minimum clear space on all sides = radius of the large orange circle (34 units / 17% of mark width).",
+    "minWidthHorizontalLockup": "120px",
+    "minWidthVerticalLockup": "84px",
+    "minMarkSize": "16px",
+    "hairlineClamp": "Below ~114px the 1.5pt hairline is clamped to 1 device px so it stays visible."
+  }
+}

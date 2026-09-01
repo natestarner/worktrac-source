@@ -1,19 +1,25 @@
 import { useUI } from '../../context/UIContext';
 
+// The mark's own three warms -- orange, rust, amber -- not a generic confetti palette. The middle
+// colour used to be #15803D, and it was the last cool hue left anywhere in the app's decorative
+// surface; index.css's toast comment already makes the argument ('a saturated success green is the
+// one hue in the palette that has nothing else to talk to'). All three read on the scrim, which is
+// the same rgba(28,27,25,0.55) in both themes. ProCelebration.jsx carries an identical copy on
+// purpose -- keep them in step.
 const CONFETTI_SPECS = [
-  { left: 6, color: '#D4673E', delay: 0.0 },
-  { left: 16, color: '#15803D', delay: 0.08 },
+  { left: 6, color: '#E8734A', delay: 0.0 },
+  { left: 16, color: '#B5542D', delay: 0.08 },
   { left: 24, color: '#F2A65A', delay: 0.02 },
-  { left: 33, color: '#D4673E', delay: 0.14 },
-  { left: 41, color: '#15803D', delay: 0.06 },
+  { left: 33, color: '#E8734A', delay: 0.14 },
+  { left: 41, color: '#B5542D', delay: 0.06 },
   { left: 49, color: '#F2A65A', delay: 0.18 },
-  { left: 57, color: '#D4673E', delay: 0.04 },
-  { left: 65, color: '#15803D', delay: 0.16 },
+  { left: 57, color: '#E8734A', delay: 0.04 },
+  { left: 65, color: '#B5542D', delay: 0.16 },
   { left: 73, color: '#F2A65A', delay: 0.1 },
-  { left: 81, color: '#D4673E', delay: 0.02 },
+  { left: 81, color: '#E8734A', delay: 0.02 },
   { left: 12, color: '#F2A65A', delay: 0.2 },
-  { left: 89, color: '#15803D', delay: 0.12 },
-  { left: 45, color: '#D4673E', delay: 0.22 },
+  { left: 89, color: '#B5542D', delay: 0.12 },
+  { left: 45, color: '#E8734A', delay: 0.22 },
   { left: 60, color: '#F2A65A', delay: 0.24 },
 ];
 

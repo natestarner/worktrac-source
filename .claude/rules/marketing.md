@@ -7,6 +7,21 @@ paths:
 
 Full narrative: `docs/marketing-site.md`.
 
+## The inline brand mark carries a ground-aware hairline
+
+The four-circle mark is inlined in `index.html` (header **and** footer), `privacy.html` and
+`terms.html`. Its cream circle is ~1.1:1 on the light page ground, so it takes a
+`.brand__mark-hairline` circle; on the dark ground it is high-contrast on its own and the
+brand sheet drops the outline, so the rule goes to `stroke: none` rather than to a dark
+stroke. Both marks sit on the page background, which follows `prefers-color-scheme`, so
+keying it to the media query is correct **here** — the app has one caller whose ground stays
+light in both schemes and pins its own value instead (`HuddleMark.jsx`).
+
+The mark's four colours are fixed (`#e8734a` / `#f2a65a` / `#f2ede1` / `#b5542d`) and the
+`viewBox` / `width` / `height` on those `<svg>`s are load-bearing sizing — leave them alone.
+`scripts/check-marketing.sh`'s check 7 fails the build if the retired teal `#163b3e` comes
+back. Full kit: `docs/brand/README.md`.
+
 ## `prefers-reduced-motion`: capping `animation-duration` alone is not enough
 
 `marketing/styles.css`'s reduced-motion block was found (2026-08-23, live-tested, not

@@ -1,0 +1,23 @@
+/* Huddle brand tokens */
+:root {
+  /* Mark — never alter these */
+  --huddle-orange: #E8734A;
+  --huddle-amber: #F2A65A;
+  --huddle-cream: #F2EDE1;
+  --huddle-rust: #B5542D;
+
+  /* Surfaces */
+  --huddle-surface-light: #FFFFFF;
+  --huddle-surface-dark: #14100E;
+
+  /* Ink */
+  --huddle-ink-on-light: #3E3A37;
+  --huddle-ink-on-dark: #F2EDE1;
+
+  /* Hairline on the cream circle, light surfaces only */
+  --huddle-hairline: #BDB6AF;
+
+  /* Type */
+  --huddle-font-wordmark: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --huddle-wordmark-weight: 600;
+}

@@ -27,6 +27,21 @@ Full reasoning: `docs/architecture/design-system.md`.
   `--color-accent` only for fills behind large bold text, borders, icons and the focus ring.
 - **`--color-faint` is not a text colour.** Dividers, inactive glyphs and dashed borders only; body
   copy and empty states use `--color-muted`.
+- **Never recolour the mark's four circles** (`#E8734A` orange, `#F2A65A` amber, `#F2EDE1`
+  cream, `#B5542D` rust). **Cream is one of them, not a surface token** — it was
+  `var(--color-surface)` once and rendered a near-black hole in dark mode. `HuddleMark` is the
+  single copy; don't draw a second one.
+- **The UI accent is deliberately NOT the mark's orange.** `#E8734A` is 2.93:1 on
+  `--color-bg` and 3.01:1 under white, so it fails as a border, a focus ring and a button
+  fill. `--color-accent` is that hue darkened until it passes. Don't "correct" it.
+- **The mark's hairline follows the GROUND, not the theme.** `--brand-mark-hairline` is
+  `#bdb6af` on light and `transparent` on dark, which is right for any ground that follows
+  `prefers-color-scheme`. A ground that stays light in **both** schemes (today only
+  `.plan-badge--pro`) must pass `HuddleMark`'s `hairline` prop explicitly, or the cream circle
+  loses its outline in dark mode and dissolves into the pill.
+- **The lockup SVGs in `assets/` carry a cropped `viewBox`** so the header keeps `height: 52`.
+  Re-exporting them from the kit's own canvas silently shrinks the mark and grows the header
+  — see `docs/brand/README.md` before touching them.
 - **Inputs must stay at `--text-md` (16px)** or iOS Safari zooms the viewport on focus. Two e2e
   specs assert the computed value.
 - **Pair shadows with the hairline**: `box-shadow: var(--shadow-3), var(--elevation-hairline)`. A
