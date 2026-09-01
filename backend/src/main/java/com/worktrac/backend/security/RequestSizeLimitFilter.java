@@ -71,7 +71,7 @@ public class RequestSizeLimitFilter extends OncePerRequestFilter {
     private void reject(HttpServletRequest request, HttpServletResponse response, long declared, long maxBytes)
             throws IOException {
         log.warn("Rejected {} {} from ip {}: body of {} bytes exceeds the {} byte limit",
-                request.getMethod(), request.getRequestURI(), request.getRemoteAddr(), declared, maxBytes);
+                request.getMethod(), request.getRequestURI(), ClientIpResolver.resolveClientIp(request), declared, maxBytes);
         response.setStatus(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
         response.setContentType("application/json");
         response.getWriter().write("{\"status\":413,\"message\":\"That request is too large.\"}");

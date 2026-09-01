@@ -53,9 +53,14 @@ Contact Us bug report could only be matched to the container logs by timestamp. 
   `docs/incidents/2026-07-28-offline-banner-go-back-online.md`).
 - Never set `spring.jpa.hibernate.ddl-auto` to anything other than `validate`. Schema changes go
   in Flyway migrations, never manual DDL.
-- `server.forward-headers-strategy: framework` is load-bearing — it makes `X-Forwarded-For`
-  trusted so per-IP rate limits are actually per-user behind Azure Container Apps' ingress,
-  not one shared bucket.
+- **`server.forward-headers-strategy` is `none` — do not set it to `framework`/`native`.** Both
+  trust the *first* (leftmost) `X-Forwarded-For` entry, and Azure Container Apps appends its own
+  observed IP to whatever a caller already sent rather than replacing it, so the leftmost entry is
+  exactly the value an external caller controls. `security.ClientIpResolver.resolveClientIp` is
+  the only correct way to get the real client IP: it reads the raw header itself and takes the
+  *last* entry, the one hop ACA vouches for. Every per-IP rate limiter and IP-bearing log line goes
+  through it — never `request.getRemoteAddr()` directly. See
+  `docs/incidents/2026-08-31-xff-spoofing-bypassed-per-ip-rate-limits.md`.
 
 ## Concurrency — the local database must match Azure SQL
 

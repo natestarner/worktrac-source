@@ -12,4 +12,7 @@
   password/code), so a repeat is diagnosable instead of a dead end. Full investigation
   narrative and the Spring Security filter-ordering gotcha hit while wiring this up:
   `git log --grep="X-Forwarded-For" -i` (PR #80).
+- ⚠️ **Superseded 2026-08-31:** trusting `X-Forwarded-For` via `forward-headers-strategy: framework`
+  turned out to be spoofable and was replaced by `security.ClientIpResolver`. See
+  `2026-08-31-xff-spoofing-bypassed-per-ip-rate-limits.md`.
 

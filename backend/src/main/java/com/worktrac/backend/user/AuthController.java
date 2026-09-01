@@ -1,5 +1,6 @@
 package com.worktrac.backend.user;
 
+import com.worktrac.backend.security.ClientIpResolver;
 import com.worktrac.backend.security.CurrentUser;
 import com.worktrac.backend.user.dto.AuthResponse;
 import com.worktrac.backend.user.dto.ConfirmEmailRequest;
@@ -39,7 +40,7 @@ public class AuthController {
     @PostMapping("/register")
     public RegisterStartedResponse register(@Valid @RequestBody RegisterRequest request,
                                              HttpServletRequest servletRequest) {
-        return registrationService.register(request, servletRequest.getRemoteAddr());
+        return registrationService.register(request, ClientIpResolver.resolveClientIp(servletRequest));
     }
 
     @PostMapping("/confirm-email")
@@ -49,12 +50,12 @@ public class AuthController {
 
     @PostMapping("/resend-code")
     public void resendCode(@Valid @RequestBody ResendCodeRequest request, HttpServletRequest servletRequest) {
-        registrationService.resendCode(request, servletRequest.getRemoteAddr());
+        registrationService.resendCode(request, ClientIpResolver.resolveClientIp(servletRequest));
     }
 
     @PostMapping("/forgot-password")
     public void forgotPassword(@Valid @RequestBody ForgotPasswordRequest request, HttpServletRequest servletRequest) {
-        passwordResetService.requestReset(request, servletRequest.getRemoteAddr());
+        passwordResetService.requestReset(request, ClientIpResolver.resolveClientIp(servletRequest));
     }
 
     @PostMapping("/reset-password")
@@ -64,15 +65,16 @@ public class AuthController {
 
     @PostMapping("/resend-reset-code")
     public void resendResetCode(@Valid @RequestBody ResendResetCodeRequest request, HttpServletRequest servletRequest) {
-        passwordResetService.resendResetCode(request, servletRequest.getRemoteAddr());
+        passwordResetService.resendResetCode(request, ClientIpResolver.resolveClientIp(servletRequest));
     }
 
-    // getRemoteAddr is the real client IP because server.forward-headers-strategy is `framework`
-    // -- without it every external caller would share the Azure ingress hop as one rate-limit
-    // bucket, exactly as the registration and contact routes already note.
+    // ClientIpResolver, not getRemoteAddr() directly -- see its class comment for why: Azure
+    // Container Apps appends the real client IP to X-Forwarded-For rather than replacing it, so
+    // getRemoteAddr() alone (or Spring's forward-headers-strategy) trusts whatever an external
+    // caller puts in that header, defeating this bucket entirely.
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
-        return authService.login(request, servletRequest.getRemoteAddr());
+        return authService.login(request, ClientIpResolver.resolveClientIp(servletRequest));
     }
 
     @GetMapping("/me")
