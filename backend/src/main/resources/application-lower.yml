@@ -51,7 +51,7 @@ app:
     # RegistrationService.register() calls checkSendAllowed() unconditionally, and the
     # e2e-noop-recipient-pattern above only skips the ACS send inside EmailService -- it does not
     # bypass the limiter. All of a CI run's registrations also share ONE bucket, because
-    # forward-headers-strategy resolves them to the single runner IP.
+    # ClientIpResolver resolves them all to the single runner IP.
     #
     # KEEP THIS NUMBER AHEAD OF THE SUITE SIZE. A cap below the per-run registration count fails
     # whichever arbitrary specs happen to run after the bucket empties -- a different set each
@@ -71,7 +71,7 @@ app:
     # The contact spec submits far fewer times than registration, so these need far less headroom.
     # ⚠️ KEEP THESE AHEAD OF THE SUITE SIZE, for exactly the reason the per-ip-per-hour comment
     # above spells out. The e2e suite is ~109 tests, EVERY one of which authenticates, and
-    # forward-headers-strategy resolves all of them to the single CI runner IP -- so one run spends
+    # ClientIpResolver resolves all of them to the single CI runner IP -- so one run spends
     # ~109 tokens from one bucket before Playwright's 2-retries-per-failure policy multiplies it.
     # A cap below that fails whichever arbitrary specs happen to run after the bucket empties: a
     # different set every time, which reads as CI-runner flakiness and gets "fixed" by re-running

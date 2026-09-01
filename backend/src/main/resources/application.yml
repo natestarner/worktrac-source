@@ -23,19 +23,19 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
-  # Azure Container Apps' ingress is the sole external entry point for this container --
-  # nothing can reach port 8080 directly, bypassing it -- and it sets X-Forwarded-* headers
-  # itself on every request it forwards, so trusting them here is safe. "framework" (Spring's
-  # own ForwardedHeaderFilter, a plain Servlet Filter) is used instead of Tomcat's
-  # RemoteIpValve because a Valve only runs inside a real embedded Tomcat connector and is
-  # invisible to MockMvc-based tests (MockMvc drives the filter chain directly, never a real
-  # connector) -- RemoteIpValve would make this behavior untestable. Safe locally too: with no
-  # reverse proxy in front of `mvn spring-boot:run`, ordinary local requests never carry
-  # X-Forwarded-* headers, so this filter has nothing to rewrite and getRemoteAddr() behaves
-  # exactly as before. Without this, the per-IP registration/reset rate limiter
-  # (RegistrationRateLimiter) bucketed every external user under the ingress's own hop
-  # address instead of the real client IP.
-  forward-headers-strategy: framework
+  # Deliberately NOT "framework" (or "native"/Tomcat's RemoteIpValve) -- both trust the FIRST
+  # (leftmost) entry in X-Forwarded-For as the real client, and Azure Container Apps' ingress
+  # appends its own observed IP to whatever a caller already sent rather than replacing it (its
+  # own docs: "If specified in initial request, it is appended to. Only the rightmost IP is
+  # provided by Azure Container Apps."). Confirmed live on lower 2026-08-31: a request sent with
+  # X-Forwarded-For: 9.9.9.9, 8.8.8.8 was trusted as coming from 9.9.9.9 -- fully attacker-chosen,
+  # trivially defeating every per-IP rate limiter fed by AuthController/ContactController. See
+  # docs/incidents/2026-08-31-xff-spoofing-bypassed-per-ip-rate-limits.md.
+  #
+  # `security.ClientIpResolver` is the replacement: it reads the raw X-Forwarded-For header
+  # itself and takes the LAST entry -- the one hop ACA appends and vouches for -- so
+  # forward-headers-strategy stays "none" (the default) and Spring never touches getRemoteAddr().
+  forward-headers-strategy: none
 
 # Emits the MDC values RequestDiagnosticsFilter and JwtAuthenticationFilter set, so every log line
 # a request produces carries the browser's correlation id and (once authenticated) the user id.

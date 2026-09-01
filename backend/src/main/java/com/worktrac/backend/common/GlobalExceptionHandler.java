@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.registrationaudit.RegistrationAuditService;
 import com.worktrac.backend.registrationaudit.RegistrationEventType;
+import com.worktrac.backend.security.ClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -185,7 +186,7 @@ public class GlobalExceptionHandler {
         }
         try {
             auditService.record(extractEmail(request), RegistrationEventType.UNEXPECTED_ERROR, reason,
-                    request.getRemoteAddr());
+                    ClientIpResolver.resolveClientIp(request));
         } catch (Exception e) {
             log.error("Failed to record UNEXPECTED_ERROR audit event", e);
         }

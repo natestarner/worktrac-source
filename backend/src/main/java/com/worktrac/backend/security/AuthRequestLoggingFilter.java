@@ -41,13 +41,13 @@ public class AuthRequestLoggingFilter extends OncePerRequestFilter {
             filterChain.doFilter(wrapped, response);
         } catch (Exception e) {
             log.error("{} {} from ip {} email {} threw an unhandled exception", request.getMethod(),
-                    request.getRequestURI(), request.getRemoteAddr(), extractEmail(wrapped), e);
+                    request.getRequestURI(), ClientIpResolver.resolveClientIp(request), extractEmail(wrapped), e);
             throw e;
         } finally {
             long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
             int status = response.getStatus();
             String message = "{} {} from ip {} email {} -> {} ({} ms)";
-            Object[] args = {request.getMethod(), request.getRequestURI(), request.getRemoteAddr(),
+            Object[] args = {request.getMethod(), request.getRequestURI(), ClientIpResolver.resolveClientIp(request),
                     extractEmail(wrapped), status, durationMs};
             if (status >= 500) {
                 log.error(message, args);

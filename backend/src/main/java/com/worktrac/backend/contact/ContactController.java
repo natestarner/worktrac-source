@@ -1,5 +1,6 @@
 package com.worktrac.backend.contact;
 
+import com.worktrac.backend.security.ClientIpResolver;
 import com.worktrac.backend.security.CurrentUser;
 import com.worktrac.backend.security.RequestDiagnosticsFilter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -35,10 +36,9 @@ public class ContactController {
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void submit(@Valid @RequestBody ContactRequest request, HttpServletRequest servletRequest) {
-        // getRemoteAddr is the real client IP because server.forward-headers-strategy is `framework`
-        // -- without it every external caller would share the Azure ingress hop as one bucket.
+        // ClientIpResolver, not getRemoteAddr() directly -- see its class comment.
         contactMessageService.submit(currentUser.accountId(), currentUser.userId(), request,
-                servletRequest.getRemoteAddr(),
+                ClientIpResolver.resolveClientIp(servletRequest),
                 servletRequest.getHeader("User-Agent"),
                 servletRequest.getHeader(RequestDiagnosticsFilter.CORRELATION_ID_HEADER));
     }

@@ -95,6 +95,25 @@ class AuthControllerRateLimitTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    // The actual regression test for 2026-08-31: Azure Container Apps appends its own observed IP
+    // as the LAST entry rather than replacing whatever a caller sent, so a caller who varies only
+    // the LEFTMOST (client-suppliable) entry while the trusted rightmost one stays fixed must still
+    // land in one shared bucket. Before the fix (trusting the first entry, matching Spring's
+    // ForwardedHeaderFilter) this passed status().isOk() twice and never rate-limited at all.
+    @Test
+    void spoofedLeftmostEntriesShareOneBucketWhenTheTrustedRightmostEntryMatches() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .header("X-Forwarded-For", "1.1.1.1, 10.0.0.5")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody(uniqueEmail("xff-spoof-1"), "A")))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/auth/register")
+                        .header("X-Forwarded-For", "2.2.2.2, 10.0.0.5")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerBody(uniqueEmail("xff-spoof-2"), "A")))
+                .andExpect(status().isTooManyRequests());
+    }
+
     @Test
     void missingForwardedHeaderFallsBackToRemoteAddr() throws Exception {
         mockMvc.perform(post("/api/auth/register")
