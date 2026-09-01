@@ -32,6 +32,44 @@ every string was bold, so the eye had no path through a screen.
 | React primitives | `components/shared/` | `Button`, `Card`, `Input`, `IconButton`, `SectionLabel`, `EmptyState` |
 | Icons | `components/shared/icons.jsx` | Vendored Lucide paths |
 
+## The brand mark
+
+Four circles, four fixed colours. The kit and its rules are in `docs/brand/` (tokens copied
+verbatim); the full brand sheet lives outside the repo at `../logo/v3/`.
+
+| Role | Value | |
+|---|---|---|
+| Orange | `#E8734A` | the large circle |
+| Amber | `#F2A65A` | |
+| Cream | `#F2EDE1` | |
+| Rust | `#B5542D` | |
+| Wordmark ink | `#3E3A37` on light, `#F2EDE1` on dark | |
+| Hairline | `#BDB6AF` | cream circle outline, **light grounds only** |
+| Dark surface | `#14100E` | |
+
+Clear space on all sides is the orange circle's radius (~17% of the mark's width). Minimum
+sizes: horizontal lockup 120px, vertical lockup 84px, mark alone 16px. Below ~114px the 1.5pt
+hairline clamps to one device pixel — which is why `HuddleMark` draws it with `strokeWidth="1"`
+and `vectorEffect="non-scaling-stroke"` rather than a scaled 1.5 (at `size=14` a scaled 1.5
+resolves to ~0.16px, i.e. nothing).
+
+**Cream is a mark colour, not a surface token.** `HuddleMark`'s pale circle used to be
+`var(--color-surface)` so it would blend into whatever card it sat on. That was close enough to
+cream in light mode and rendered a near-**black** hole in dark mode — the one place the mark was
+being altered rather than themed.
+
+**The hairline follows the ground, not the viewer's theme.** The cream circle is ~1.1:1 on a
+white surface and needs the outline to exist at all; on a dark surface it is high-contrast on its
+own and the brand sheet drops the outline. `--brand-mark-hairline` carries that per scheme
+(`#bdb6af` / `transparent`), which is right for every ground that follows the viewer's setting.
+`.plan-badge--pro` is the exception: its pill is a fixed light gradient in **both** schemes, so it
+passes `HuddleMark`'s `hairline` prop explicitly. Keying it to the theme there would erase the
+outline in dark mode and dissolve the circle into the pill.
+
+**The app's lockup SVGs carry a deliberately cropped `viewBox`** — retightened to the brand-minimum
+clear space so the header can keep `height: 52`. Restoring the kit's own canvas silently shrinks
+the mark and grows the header. The derivation is in `docs/brand/README.md`.
+
 ## The three accent tokens
 
 This is the single easiest place to reintroduce a contrast bug, so it's worth understanding.
@@ -39,9 +77,16 @@ This is the single easiest place to reintroduce a contrast bug, so it's worth un
 The brand terracotta `#d4673e` is **3.44:1 on `--color-bg`** — below the 4.5:1 AA needs for normal
 text, and white-on-accent is 3.62:1. One hex cannot do every accent job legibly:
 
+**These are not the mark's `#E8734A`, on purpose.** That value is 2.93:1 on `--color-bg`,
+under even the 3:1 bar for borders and the focus ring, and white on it is 3.01:1 — which
+would drop the Log screen's primary CTA below AA Large. `--color-accent` is the same hue
+(16°) darkened until it clears those bars: the accessible expression of the brand orange,
+not a stale value waiting to be corrected. Wherever the mark itself is *drawn* it uses
+`#E8734A` exactly.
+
 | Token | Value | Use it for | Why |
 |---|---|---|---|
-| `--color-accent` | `#d4673e` | Fills behind large bold text, borders, icons, chart marks, focus ring | Only needs 3:1 for these; keeps the brand colour |
+| `--color-accent` | `#d4673e` | Fills behind large bold text, borders, icons, chart marks, focus ring | Only needs 3:1 for these; the brand hue at a legible lightness |
 | `--color-accent-strong` | `#b8552f` | Fills for small/medium filled buttons | White label reaches 4.80:1 |
 | `--color-accent-text` | `#a8532c` light / `#e07a52` dark | Accent-coloured text at normal sizes | 5.07:1 / 5.52:1 |
 

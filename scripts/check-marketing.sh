@@ -14,6 +14,9 @@
 #   5. Every <img> has alt           -- the design-system accessibility bar.
 #   6. Canonical + og:url agree      -- www serves identical content, so a
 #                                       disagreement splits the indexing.
+#   7. No retired brand colour       -- brand v3 dropped the teal #163b3e this
+#                                       site used to carry; a stray copy is the
+#                                       one regression nothing else would catch.
 #
 # Usage: bash scripts/check-marketing.sh
 set -euo pipefail
@@ -105,6 +108,18 @@ elif [ "$canonical" != "$ogurl" ]; then
   fail "canonical ($canonical) and og:url ($ogurl) disagree"
 else
   pass "canonical and og:url agree ($canonical)"
+fi
+
+# --- 7. No retired brand colour ----------------------------------------------
+# The v3 mark is #e8734a / #f2a65a / #f2ede1 / #b5542d and the wordmark inks are
+# #3e3a37 and #f2ede1. The teal that used to sit in the mark and in the palette
+# is retired -- see docs/brand/README.md. Matched case-insensitively: the inline
+# marks are lowercase and the kit's own files are upper.
+if grep -riq '163b3e' "$DIR"/*.html "$DIR"/*.css "$DIR"/*.js; then
+  fail "retired teal #163b3e found (brand v3 replaced it)"
+  grep -rin '163b3e' "$DIR"/*.html "$DIR"/*.css "$DIR"/*.js | sed 's/^/        /'
+else
+  pass "no retired teal #163b3e"
 fi
 
 echo

@@ -1,7 +1,7 @@
 import UserMenu from './UserMenu';
 import PlanBadge from '../billing/PlanBadge';
-import logoLight from '../../assets/huddle-lockup-horizontal-light.svg';
-import logoDark from '../../assets/huddle-lockup-horizontal-dark.svg';
+import logoLight from '../../assets/huddle-lockup-horizontal-onlight.svg';
+import logoDark from '../../assets/huddle-lockup-horizontal-ondark.svg';
 
 // `booting` is forwarded to UserMenu and set only by AppShellSkeleton -- see UserMenu's own
 // header comment for why the boot-time copy of this header must not offer an openable menu.
@@ -17,6 +17,10 @@ export default function Header({ booting = false }) {
         borderBottom: '1px solid var(--color-border)',
       }}
     >
+      {/* height 52 is unchanged from the pre-brand-v3 lockup on purpose: these assets carry a
+          viewBox cropped to the brand-minimum clear space (docs/brand/README.md), so 52 renders a
+          141x52 box against the old 145x52 one. Sizing them from the kit's own uncropped canvas
+          instead would silently shrink the mark and grow the header. */}
       <picture>
         <source srcSet={logoDark} media="(prefers-color-scheme: dark)" />
         <img src={logoLight} alt="Huddle" style={{ height: 52, display: 'block' }} />

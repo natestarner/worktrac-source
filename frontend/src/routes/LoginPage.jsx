@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/shared/Spinner';
-import logoLight from '../assets/huddle-lockup-barlow-light.svg';
-import logoDark from '../assets/huddle-lockup-barlow-dark.svg';
+import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
+import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -56,8 +56,8 @@ export default function LoginPage() {
           <source srcSet={logoDark} media="(prefers-color-scheme: dark)" />
           <img
             src={logoLight}
-            alt="Workout Tracker"
-            style={{ width: 445, maxWidth: '100%', height: 'auto', marginBottom: 40 }}
+            alt="Huddle"
+            style={{ width: 216, maxWidth: '100%', height: 'auto', marginBottom: 40 }}
           />
         </picture>
 

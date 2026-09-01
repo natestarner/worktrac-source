@@ -64,16 +64,17 @@ export default function PlanBadge() {
   // same four circles rendered as the browser tab favicon. HuddleMark is aria-hidden and no text
   // was split into spans, so getByText('Pro', { exact: true }) is unmoved.
   //
-  // paleFill/paleStroke pinned to fixed light values: this pill's own background is a fixed light
-  // colour regardless of theme (see .plan-badge--pro's comment), and the mark's pale circle
-  // otherwise pulls dark mode's dark --color-surface/--color-border, tuned to blend into a DARK
-  // card -- exactly wrong here.
+  // hairline pinned to the light value: this pill's own background is a fixed light gradient
+  // regardless of theme (see .plan-badge--pro's comment), so it is the one caller whose ground
+  // does not follow the user's setting. HuddleMark's default --brand-mark-hairline goes
+  // transparent in dark mode -- correct on a dark card, but here it would erase the outline
+  // from a cream circle still sitting on a near-white pill and dissolve it.
   //
   // NOT wrapped in OfflineDisabledWrap, same reasoning as "Go Pro": this is a navigation, not a
   // write, and client-side routing works offline.
   return (
     <Link to="/app/billing" className="pressable plan-badge plan-badge--pro" aria-label="Pro">
-      <HuddleMark size={14} paleFill="#ffffff" paleStroke="#e7e3dc" />
+      <HuddleMark size={14} hairline="#bdb6af" />
       Pro
     </Link>
   );

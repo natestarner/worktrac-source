@@ -3,8 +3,8 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { errorBannerStyle, inputStyle, primaryButtonStyle } from './LoginPage';
 import Spinner from '../components/shared/Spinner';
-import logoLight from '../assets/huddle-lockup-barlow-light.svg';
-import logoDark from '../assets/huddle-lockup-barlow-dark.svg';
+import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
+import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
 import LegalLinks from '../components/shared/LegalLinks';
 import { FIELD_LIMITS } from '../utils/fieldLimits';
 
@@ -88,7 +88,7 @@ export default function RegisterPage() {
           <img
             src={logoLight}
             alt="Huddle"
-            style={{ display: 'block', margin: '0 auto 24px', width: 445, maxWidth: '100%', height: 'auto' }}
+            style={{ display: 'block', margin: '0 auto 24px', width: 216, maxWidth: '100%', height: 'auto' }}
           />
         </picture>
 

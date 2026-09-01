@@ -1,7 +1,7 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/config.json", "/favicon.ico", "/icons.svg", "/og-image.png", "/assets/*", "/email/*", "/apple-touch-icon.png", "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest", "/sw.js", "/workbox-*.js", "/registerSW.js", "/boot-watchdog.js"]
+    "exclude": ["/config.json", "/favicon.ico", "/icons.svg", "/og-image.png", "/assets/*", "/email/*", "/apple-touch-icon.png", "/icon.svg", "/favicon-16x16.png", "/favicon-32x32.png", "/favicon-48x48.png", "/icon-192.png", "/icon-512.png", "/icon-maskable-192.png", "/icon-maskable-512.png", "/manifest.webmanifest", "/sw.js", "/workbox-*.js", "/registerSW.js", "/boot-watchdog.js"]
   },
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",

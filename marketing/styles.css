@@ -9,10 +9,10 @@
    app's stylesheet. If you change a brand colour, the type ramp, a radius or a
    shadow in the app, change it here too.
 
-   Palette note: the deep teal from the logo mark (#163b3e) is an ACCENT only --
-   it appears in the mark itself and in small details. Large dark surfaces use a
-   warm near-black instead, so the page reads as one warm paper palette rather
-   than two competing brands.
+   Palette note: brand v3 retired the deep teal this file used to carry. The mark
+   is four fixed colours -- #e8734a orange, #f2a65a amber, #f2ede1 cream, #b5542d
+   rust -- and nothing else on the page may recolour them. Dark surfaces are a
+   warm near-black, so the page reads as one warm paper palette throughout.
    ========================================================================= */
 
 :root {
@@ -38,10 +38,9 @@
   --color-pr-text: #a8532c;
 
   /* --- Marketing-only brand tones (from the logo mark) ------------- */
-  --color-teal: #163b3e; /* accent only */
   --color-amber: #f2a65a;
 
-  /* The one dark surface on the page. Warm near-black, not teal. */
+  /* The one dark surface on the page. Warm near-black. */
   --color-inverse-bg: #1c1b19;
   --color-inverse-text: #f7f5f1;
   --color-inverse-muted: rgba(247, 245, 241, 0.74);
@@ -490,6 +489,27 @@ img {
 
 .brand__mark {
   flex-shrink: 0;
+}
+
+/* The mark's cream circle is ~1.1:1 on this page's light ground -- without an outline it simply
+   is not there. On the dark ground it is high-contrast on its own, and the brand sheet drops the
+   outline, so this goes to none rather than to a dark stroke. Both marks on the site (header and
+   footer) sit on the page background, which follows the viewer's scheme, so keying this to
+   prefers-color-scheme is right here; the app has one caller whose ground stays light in both
+   schemes and pins its own value instead (see HuddleMark.jsx).
+
+   vector-effect keeps the stroke at one device pixel at both sizes the mark is drawn (52px and
+   34px), which is the brand sheet's own clamp below ~114px. */
+.brand__mark-hairline {
+  stroke: #bdb6af;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+@media (prefers-color-scheme: dark) {
+  .brand__mark-hairline {
+    stroke: none;
+  }
 }
 
 .brand__word {
