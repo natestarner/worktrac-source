@@ -1,9 +1,16 @@
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AuthProvider, useAuth, RECONNECT_RETRY_BASE_MS, RECONNECT_RETRY_MAX_MS } from './AuthContext';
-import { me as apiMe } from '../api/auth';
+import {
+  AuthProvider,
+  useAuth,
+  BOOT_STALL_AFTER_ATTEMPTS,
+  RECONNECT_RETRY_BASE_MS,
+  RECONNECT_RETRY_MAX_MS,
+} from './AuthContext';
+import { login as apiLogin, me as apiMe } from '../api/auth';
 import { getAuthToken, setAuthToken } from '../api/client';
+import { resetQueryCache } from '../lib/queryClient';
 import { clearAuthSnapshot, loadAuthSnapshot, saveAuthSnapshot } from '../lib/authSnapshot';
 import { requestPersistentStorage } from '../lib/durableStorage';
 import { getOutboxAccountId, __resetOutboxAccountForTests } from '../lib/outboxPersistence';
@@ -50,12 +57,14 @@ const SNAPSHOT = {
 };
 
 function Harness() {
-  const { status, offline, people } = useAuth();
+  const { status, offline, people, bootStalled, login } = useAuth();
   return (
     <div>
       <span data-testid="status">{status}</span>
       <span data-testid="offline">{String(offline)}</span>
       <span data-testid="people">{people.length}</span>
+      <span data-testid="stalled">{String(Boolean(bootStalled))}</span>
+      <button onClick={() => login('nate@example.com', 'password123').catch(() => {})}>login</button>
     </div>
   );
 }
@@ -231,5 +240,155 @@ describe('AuthContext offline boot', () => {
     renderHarness();
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
     expect(getOutboxAccountId()).toBeNull();
+  });
+
+  // "Hold and retry" above is right, but it used to hold with NO bound on how long the person sat
+  // looking at a skeleton, and ProtectedRoute renders `loading` as exactly that. Reproduced in a
+  // real browser at 81s and still going, recoverable only by clearing site data -- the "spinner
+  // over a request that will never succeed" .claude/rules/resilience.md forbids. See
+  // docs/incidents/2026-09-02-cold-backend-login-strands-the-device.md.
+  describe('a boot that keeps failing eventually says so, without giving up', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    // Attempt 1 fires immediately; each failure schedules the next after a doubling, capped delay.
+    // Tracked across calls so a follow-up run continues the real backoff rather than restarting it
+    // at zero and advancing past nothing.
+    let pendingDelay = 0;
+    beforeEach(() => {
+      pendingDelay = 0;
+    });
+
+    async function runAttempts(count) {
+      for (let i = 0; i < count; i += 1) {
+        // eslint-disable-next-line no-await-in-loop -- sequential by nature: each attempt's
+        // failure is what schedules the next delay.
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(pendingDelay);
+        });
+        pendingDelay =
+          pendingDelay === 0 ? RECONNECT_RETRY_BASE_MS : Math.min(pendingDelay * 2, RECONNECT_RETRY_MAX_MS);
+      }
+    }
+
+    it('does not flag a stall while the wait is still explainable as an ordinary cold start', async () => {
+      apiMe.mockRejectedValue(new TypeError('Failed to fetch'));
+      loadAuthSnapshot.mockReturnValue(null);
+      renderHarness();
+
+      await runAttempts(BOOT_STALL_AFTER_ATTEMPTS - 1);
+      expect(screen.getByTestId('stalled').textContent).toBe('false');
+      expect(screen.getByTestId('status').textContent).toBe('loading');
+    });
+
+    it('flags the stall once the failures stop being explainable, and keeps retrying anyway', async () => {
+      apiMe.mockRejectedValue(new TypeError('Failed to fetch'));
+      loadAuthSnapshot.mockReturnValue(null);
+      renderHarness();
+
+      await runAttempts(BOOT_STALL_AFTER_ATTEMPTS);
+      expect(screen.getByTestId('stalled').textContent).toBe('true');
+      // Bounded VISIBILITY, not a bounded retry -- the session is not discarded and the token is
+      // untouched, so a backend that comes back still heals this with no interaction.
+      expect(setAuthToken).not.toHaveBeenCalled();
+      expect(clearAuthSnapshot).not.toHaveBeenCalled();
+      const attemptsAtStall = apiMe.mock.calls.length;
+      await runAttempts(2);
+      expect(apiMe.mock.calls.length).toBeGreaterThan(attemptsAtStall);
+    });
+
+    it('clears the stall by itself when a later attempt finally succeeds', async () => {
+      apiMe.mockRejectedValue(new TypeError('Failed to fetch'));
+      loadAuthSnapshot.mockReturnValue(null);
+      renderHarness();
+
+      await runAttempts(BOOT_STALL_AFTER_ATTEMPTS);
+      expect(screen.getByTestId('stalled').textContent).toBe('true');
+
+      apiMe.mockResolvedValue(SNAPSHOT);
+      await runAttempts(2);
+      expect(screen.getByTestId('status').textContent).toBe('authenticated');
+      expect(screen.getByTestId('stalled').textContent).toBe('false');
+    });
+  });
+
+  // The root cause behind all of the above. login() used to run every teardown -- resetQueryCache,
+  // clearAuthSnapshot -- and persist the new token BEFORE /me had confirmed anything. Against a
+  // scale-to-zero backend (~35s cold start vs api/client.js's abort) that /me routinely failed,
+  // leaving a VALID token, no snapshot and no cached data: precisely the input the boot effect
+  // reads as "retry forever".
+  describe('a sign-in whose /me never lands must leave the device exactly as it found it', () => {
+    beforeEach(() => {
+      getAuthToken.mockReturnValue(null);
+      loadAuthSnapshot.mockReturnValue(null);
+      apiMe.mockRejectedValue(new TypeError('Failed to fetch'));
+      apiLogin.mockResolvedValue({ token: 'fresh-token' });
+    });
+
+    it('puts the token back rather than stranding one with no identity behind it', async () => {
+      renderHarness();
+      await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
+      setAuthToken.mockClear();
+
+      fireEvent.click(screen.getByText('login'));
+
+      await waitFor(() => expect(setAuthToken).toHaveBeenCalledWith('fresh-token'));
+      // ...and then undone, because /me never confirmed it. The LAST word must be the token this
+      // device had before the attempt (here: none), or the next boot inherits the stranded state.
+      await waitFor(() => expect(setAuthToken).toHaveBeenLastCalledWith(null));
+    });
+
+    it('keeps the previous session usable: neither the snapshot nor the persisted cache is discarded', async () => {
+      getAuthToken.mockReturnValue('existing-token');
+      loadAuthSnapshot.mockReturnValue(SNAPSHOT);
+      renderHarness();
+      await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'));
+      clearAuthSnapshot.mockClear();
+      resetQueryCache.mockClear();
+      setAuthToken.mockClear();
+
+      fireEvent.click(screen.getByText('login'));
+      await waitFor(() => expect(apiLogin).toHaveBeenCalled());
+      await waitFor(() => expect(setAuthToken).toHaveBeenLastCalledWith('existing-token'));
+
+      // Nothing the device was still relying on may be torn down by an attempt that failed.
+      expect(clearAuthSnapshot).not.toHaveBeenCalled();
+      expect(resetQueryCache).not.toHaveBeenCalled();
+    });
+
+    it('still discards the previous household\'s cached state once /me DOES land', async () => {
+      apiMe.mockReset();
+      apiMe.mockResolvedValue(SNAPSHOT);
+      renderHarness();
+      await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
+      resetQueryCache.mockClear();
+
+      fireEvent.click(screen.getByText('login'));
+
+      // Account-shared keys (catalog, tags) carry no accountId, so this clear is what stops a
+      // second household reading the first's -- moving it after /me must not lose it.
+      await waitFor(() => expect(resetQueryCache).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'));
+    });
+
+    it('does NOT put back a token the server has definitively rejected', async () => {
+      getAuthToken.mockReturnValue('existing-token');
+      loadAuthSnapshot.mockReturnValue(SNAPSHOT);
+      apiMe.mockReset();
+      // First call is the boot one; the login's /me is the 401.
+      apiMe.mockResolvedValueOnce(SNAPSHOT);
+      apiMe.mockRejectedValueOnce({ status: 401 });
+      renderHarness();
+      await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'));
+      setAuthToken.mockClear();
+
+      fireEvent.click(screen.getByText('login'));
+
+      await waitFor(() => expect(setAuthToken).toHaveBeenCalledWith('fresh-token'));
+      // A 4xx is the server's real answer: api/client.js has already cleared the token and run the
+      // unauthorized handler, so restoring the old one would resurrect a rejected session.
+      await new Promise((r) => setTimeout(r, 0));
+      expect(setAuthToken).not.toHaveBeenCalledWith('existing-token');
+    });
   });
 });

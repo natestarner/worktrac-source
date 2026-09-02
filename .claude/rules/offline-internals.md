@@ -135,6 +135,25 @@ clearing: it suppresses exactly one id, and session ids are never reused.
 same treatment** — a throttled persist plus a reload you can't predict means the query cache alone
 can't be trusted to carry "this thing is over".
 
+### A DESTRUCTIVE decision from a query gates on `isFetchedAfterMount`, never `dataUpdatedAt`
+
+`dataUpdatedAt` **survives the persist/hydrate round trip**, so a restored entry reports itself
+freshly fetched — it cannot distinguish "the server told us this" from "this came off disk".
+`isFetchedAfterMount` can: TanStack derives it from the fetch count against the observer's own
+initial snapshot, so hydrated data reads `false` until the network actually confirms it.
+
+`LogTab`'s "end a routine that no longer exists" gate read `dataUpdatedAt` and carried a comment
+claiming it "stays 0/falsy until a REAL fetch has completed". It doesn't, and the gate only held
+because `AppShell` (and `useOfflineCacheWarming`'s boot warm) happened to mount a frame before
+`LogTab`, so `isFetching` was already true — an accident of render ordering that disappeared the
+moment `ProtectedRoute`'s gate was tightened. It was also wrong offline in its own right: a
+**paused** query reports `isFetching: false` while holding restored data, so it would destroy state
+on evidence it could not revalidate. See
+`docs/incidents/2026-09-02-cold-backend-login-strands-the-device.md`.
+
+**Not acting is the correct degradation** for anything of this shape — the next confirmed fetch
+reconciles it.
+
 ## Cache warming
 
 `offlineCacheWarm.js` prefetches **every** household member's logging essentials, not just the
@@ -247,3 +266,26 @@ fails with a network error or 5xx and a token + snapshot exist; a real **401 sti
 `/login`**. With **no snapshot yet**, a transient `/me` failure holds the loading skeleton and
 retries with capped doubling backoff instead of signing out. Requires the production service
 worker to precache the app shell — **disabled in `vite dev`** and Vitest.
+
+### Signing in must be atomic: acquire, THEN discard
+
+`verifyNewSession()` is the one choke point for `login()` and `confirmEmail()`. It sets the token,
+awaits `/me`, and only then discards the previous household's snapshot and query cache — and on
+any non-4xx failure it **puts the previous token back**.
+
+Getting this backwards is the root cause of the 2026-09-02 white screen
+(`docs/incidents/2026-09-02-cold-backend-login-strands-the-device.md`). The old order tore
+everything down first, so a `/me` that timed out left a **valid token, no snapshot, no persisted
+cache** — a combination the boot effect above can only read as "retry forever", producing a boot
+skeleton with no exit that a reload reconstructs every time.
+
+- **`resetQueryCache()`/`clearAuthSnapshot()` must never run before the replacement is in hand.**
+  They are still required — account-shared keys (catalog, tags) carry no accountId — but a sign-in
+  that never completed must not cost the CURRENT session its offline copy.
+- **Don't restore the token on a definitive 4xx.** `api/client.js` has already cleared it and run
+  the unauthorized handler; putting it back resurrects a session the server just rejected.
+- **The boot retry is unbounded on purpose, but its VISIBILITY is not.** After
+  `BOOT_STALL_AFTER_ATTEMPTS` unreachable attempts with no snapshot, `bootStalled` lets
+  `ProtectedRoute` show a real way out while the retry keeps running underneath and heals the
+  screen by itself. Three attempts, because lower's ~35s cold start against a 15s client abort
+  makes attempts 1–2 failing the *ordinary* path, not a fault.

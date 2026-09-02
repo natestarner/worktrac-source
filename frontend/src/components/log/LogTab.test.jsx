@@ -96,7 +96,7 @@ describe('LogTab routine nav button placement', () => {
     useExercises.mockReturnValue({ exercises: [{ id: 1, name: 'Bench Press' }, { id: 2, name: 'Overhead Press' }], loading: false });
     usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
-    useRoutines.mockReturnValue({ routines: [routine], loading: false, isFetching: false, updatedAt: Date.now() });
+    useRoutines.mockReturnValue({ routines: [routine], loading: false, isFetching: false, fetchedAfterMount: true });
     useLiveSession.mockReturnValue({ session: null, refetch: vi.fn() });
     useHistory.mockReturnValue({ history: [], loading: false, refetch: vi.fn() });
     useSessionEntries.mockReturnValue([]);
@@ -224,43 +224,57 @@ describe('LogTab routine nav button placement', () => {
   // Regression test: `routinesLoading`/`isFetching` both read as "settled" (false) in states where
   // `routines` is NOT yet trustworthy -- e.g. right after a reload, before `activePersonId` itself
   // has resolved, the query is `enabled: false` (neither loading nor fetching), so `routines`
-  // defaults to `[]`, indistinguishable from "genuinely empty and settled". `updatedAt`
-  // (dataUpdatedAt) sidesteps this: it's falsy until a real fetch has ever completed, regardless of
-  // why. Reproduced live against the lower environment (higher latency widened the window enough to
-  // hit consistently; local dev's near-zero latency never saw it).
-  it('does not end the routine before the routines query has ever completed a real fetch (updatedAt falsy), even if routines reads empty', () => {
+  // defaults to `[]`, indistinguishable from "genuinely empty and settled". Reproduced live
+  // against the lower environment (higher latency widened the window enough to hit consistently;
+  // local dev's near-zero latency never saw it).
+  it('does not end the routine before the routines query has ever completed a real fetch, even if routines reads empty', () => {
     const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
     useAppState.mockReturnValue(appState);
-    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false, updatedAt: 0 });
+    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false, fetchedAfterMount: false });
 
     render(<MemoryRouter><LogTab /></MemoryRouter>);
 
     expect(appState.endRoutine).not.toHaveBeenCalled();
   });
 
-  // A second, narrower race: the query cache persister is throttled (at most once/second, see
-  // queryClient.js's queryPersister), so a reload shortly after creating/advancing a routine can
-  // restore a STALE (but present, non-zero updatedAt) snapshot that predates it, while the real list
-  // is still being fetched in the background (isFetching: true). updatedAt alone doesn't catch this
-  // -- it must also wait for isFetching to clear before trusting a stale-but-present list.
-  it('does not end the routine while the routines query is still fetching in the background, even with a non-zero (but stale) updatedAt', () => {
+  // The gate that `dataUpdatedAt` could not provide, and the reason this moved to
+  // `isFetchedAfterMount`. The persister is throttled (at most once/second), so a reload shortly
+  // after creating a routine restores a snapshot that PREDATES it -- and a restored entry carries
+  // the `dataUpdatedAt` it had on disk, so it reports itself freshly fetched. The old gate read
+  // that as "trustworthy" and ended a live routine on every reload; it only ever passed because
+  // AppShell's cache warm happened to have set `isFetching` first (see LogTab's own comment and
+  // docs/incidents/2026-09-02-cold-backend-login-strands-the-device.md).
+  it('does not end the routine from a RESTORED list that has not been confirmed over the network', () => {
     const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
     useAppState.mockReturnValue(appState);
-    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: true, updatedAt: Date.now() - 5000 });
+    // Exactly what a hydrated entry looks like: present, settled, nothing in flight -- and never
+    // fetched by this observer.
+    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false, fetchedAfterMount: false });
 
     render(<MemoryRouter><LogTab /></MemoryRouter>);
 
     expect(appState.endRoutine).not.toHaveBeenCalled();
   });
 
-  // Once a real fetch has completed (updatedAt truthy) and nothing is still in flight, and the
-  // routine genuinely isn't in the (now real) list, the existing cleanup behavior must still fire --
-  // this isn't gated on either signal staying "not ready" forever, only on the transient windows
-  // above.
+  // A second, narrower race: the real list is still being fetched in the background, so whatever is
+  // on hand right now is about to be superseded.
+  it('does not end the routine while the routines query is still fetching in the background', () => {
+    const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
+    useAppState.mockReturnValue(appState);
+    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: true, fetchedAfterMount: true });
+
+    render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+    expect(appState.endRoutine).not.toHaveBeenCalled();
+  });
+
+  // Once a real fetch has completed since mount and nothing is still in flight, and the routine
+  // genuinely isn't in the (now confirmed) list, the cleanup must still fire -- this isn't gated on
+  // either signal staying "not ready" forever, only on the transient windows above.
   it('still ends the routine once a real fetch has completed and it is genuinely gone', () => {
     const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0 });
     useAppState.mockReturnValue(appState);
-    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false, updatedAt: Date.now() });
+    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false, fetchedAfterMount: true });
 
     render(<MemoryRouter><LogTab /></MemoryRouter>);
 
@@ -356,7 +370,7 @@ describe('opening a newly created exercise', () => {
     useExercises.mockReturnValue({ exercises: [], loading: false, refetch: neverSettles() });
     usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: neverSettles() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: neverSettles() });
-    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false, updatedAt: Date.now() });
+    useRoutines.mockReturnValue({ routines: [], loading: false, isFetching: false, fetchedAfterMount: true });
     useLiveSession.mockReturnValue({ session: null, refetch: vi.fn() });
     useHistory.mockReturnValue({ history: [], loading: false, refetch: vi.fn() });
     useSessionEntries.mockReturnValue([]);

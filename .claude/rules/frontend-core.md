@@ -383,6 +383,33 @@ because that is the one thing that has twice now actually recovered a real occur
 never does. **Only these two boundaries** — the tab boundary keeps the plain default (a
 crashed tab is not "is any of this still working", the person can just switch tabs).
 
+### An empty `#root` is a failure mode — never `return null` from a routed component
+
+The boundaries above catch *throws*. They cannot catch a tree that renders nothing on purpose, and
+from outside React the two are identical: `boot-watchdog.js` polls `#root` and, seven seconds after
+it goes empty, declares **"Huddle couldn't load"**. `AppShell`'s `if (!activePersonId) return null`
+was doing exactly that — and it, not any throw, is what three white-screen reports
+(2026-08-25, 2026-08-31, 2026-09-02) actually were. See
+`docs/incidents/2026-09-02-cold-backend-login-strands-the-device.md`.
+
+- **Ask of any `return null` on a routed path: what else is on screen if this renders nothing?**
+  If the answer is "nothing", it is a white screen, not a no-op. `ServiceWorkerUpdater` is the only
+  other thing `App` renders beside `<Routes>`, and it renders `null` too whenever no update is
+  pending.
+- **A transient blank frame and a latched one need different answers**, which is why
+  `NoActivePersonScreen` branches: `AppShellSkeleton` while `people.length > 0` (the auto-select
+  effect fixes it on the next commit, and the skeleton is pixel-identical to what `ProtectedRoute`
+  showed a frame earlier), a real card with an action when there are no people at all — because
+  then nothing will ever select one.
+- **A blank frame can latch itself into localStorage.** `RECONCILE_PEOPLE` nulls `activePersonId`
+  and empties `byPerson` whenever the people list is empty, and `appStatePersistence` writes that
+  synchronously — so a one-frame gap becomes a permanent white screen reconstructed on every boot,
+  curable only by clearing site data.
+- **`ProtectedRoute`'s `hydrated` gate is account-scoped for the same reason.** As a plain boolean
+  the unauthenticated branch also set it, so the first render after `status` flipped to
+  `'authenticated'` let `<Outlet/>` through one frame early, straight into that blank render.
+  `hydrated` must keep meaning "the slice for **this** account is in state".
+
 **A React error boundary cannot catch everything**, and this class of bug has proven itself
 capable of finding the gaps: a throw inside a `useEffect` (passive, not part of React's
 render/commit try-catch), or anything before React ever calls `render` at all. Belt-and-suspenders

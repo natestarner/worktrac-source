@@ -176,6 +176,36 @@ describe('apiClient reachability reporting', () => {
 
     vi.useRealTimers();
   });
+
+  // A timed-out request rejects with the AbortController's own DOMException, whose message is
+  // the string "signal is aborted without reason" -- and LoginPage renders a caught error's
+  // `.message` straight into its error banner, which is exactly where a cold-start timeout lands.
+  // That is what a person saw after a failed sign-in against a scale-to-zero backend on
+  // 2026-09-02. The classification must not change with the wording: no status still means
+  // "unreachable" to isOfflineError and "retry" to shouldRetryWrite.
+  it('turns a timeout into a human message while keeping it statusless (i.e. still transient)', async () => {
+    vi.useFakeTimers();
+    global.fetch = vi.fn(
+      (url, options) =>
+        new Promise((resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(new DOMException('signal is aborted without reason', 'AbortError')));
+        }),
+    );
+
+    let caught;
+    apiClient.get('/api/auth/me').catch((e) => {
+      caught = e;
+    });
+    await vi.advanceTimersByTimeAsync(20000);
+
+    expect(caught).toBeDefined();
+    expect(caught.message).not.toMatch(/signal is aborted/i);
+    expect(caught.message).toMatch(/couldn’t reach huddle/i);
+    expect(caught.status).toBeUndefined();
+    expect(isOfflineError(caught)).toBe(true);
+
+    vi.useRealTimers();
+  });
 });
 
 describe('isOfflineError', () => {
