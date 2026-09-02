@@ -44,12 +44,26 @@ diagnostic were measured wrong, and fixing them changed the answer:
    **same** inherited handle succeeds — so Vite's output landed, the log looked healthy, and
    `e2e.sh`'s "no marker means something killed it" fired every single time regardless of truth.
 
-With `scripts/supervise-server.js` recording the native code, two consecutive real deaths under
-identical load typed as **different mechanisms**: `0xFFFFFFFF` (external kill) and `0xC0000409`
-(crash inside the process). That is why four single-cause investigations each failed — they were
-sampling two different bugs through an instrument that rendered them identical.
+3. **`intent=unexpected` was wrong for a large share of the ledger.** `down.sh` drops a sentinel
+   before killing, and a death is "planned" only if that sentinel is under 60s old — but `up.sh`
+   used to **delete the sentinel the moment both ports answered**, ~20s in, while the dying server
+   records its own exit asynchronously. Under load that lag is tens of seconds: a stop measured at
+   20:33:17.3 — 1.3s after `down.sh` wrote the sentinel — did not reach the ledger until 20:33:44,
+   by which point the breadcrumb was gone. So **ordinary `/run-local` restarts were filed as
+   unexpected deaths.** Tells: 23 of the "unexpected" frontend deaths have `chrome=0` (no test run
+   in flight, i.e. exactly what a restart looks like), and one batch shows four servers across
+   three worktrees dying inside the same second — a machine-wide shutdown, all marked unexpected.
+   `up.sh` now lets the sentinel age out instead.
 
-**Read the native code, never `rc=127`.** `0xFFFFFFFF` = something killed it; `0xC0000409` =
+**So the ledger's 66 "mysteries" were inflated.** With the native code recorded, the only death so
+far confirmed natural — mid-e2e, no fresh sentinel anywhere — carried `0xC0000409`, a fail-fast
+abort **inside** the process. Every `0xFFFFFFFF` (external kill) instance examined has been
+accounted for: `down.sh` doing its job, or a deliberate verification kill. **An external killer has
+not been demonstrated to exist.** Do not go hunting one without a sample that survives this
+sentinel check.
+
+**Read the native code, never `rc=127`** — and check `intent` before treating anything as a bug.
+`0xFFFFFFFF` = something killed it (usually `down.sh`, so expect `intent=planned`); `0xC0000409` =
 it aborted itself; `0xC0000005` = native crash; a small integer = a real self-exit.
 
 ### What this retires

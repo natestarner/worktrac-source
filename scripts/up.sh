@@ -282,10 +282,23 @@ wait_for_url() {
 wait_for_url "backend " "http://localhost:$BACKEND_PORT/actuator/health" "$LOG_DIR/backend.log"
 wait_for_url "frontend" "http://localhost:$FRONTEND_PORT" "$LOG_DIR/frontend.log"
 
-# Both ports answer, so down.sh's "this stop was intentional" breadcrumb has done its job. Clearing
-# it here rather than letting it age out is what keeps the next death honestly labelled: a server
-# that dies a minute from now must not inherit the intent of the restart that preceded it.
-rm -f "$LOG_DIR/.planned-stop"
+# The sentinel is deliberately NOT deleted here -- it ages out on record-memory-state.sh's own 60s
+# window instead.
+#
+# Deleting it eagerly is what made the death ledger untrustworthy (measured 2026-09-01). The dying
+# server records its own exit ASYNCHRONOUSLY, and under load that lag is tens of seconds: a stop
+# timed at 20:33:17, 1.3s after down.sh wrote the sentinel, did not reach the ledger until
+# 20:33:44. By then this line had already removed the breadcrumb -- because both ports were
+# answering again ~20s in -- so an ordinary `/run-local` restart was filed as an UNEXPECTED death.
+#
+# That inflated the ledger badly enough to send four separate investigations after a phantom: 23 of
+# the "unexpected" frontend deaths have chrome=0, i.e. no test run in flight at all, which is
+# exactly what a routine restart looks like. One batch shows four servers across three worktrees
+# dying inside the same second -- a machine-wide shutdown, all recorded as unexpected.
+#
+# The 60s age check already does the job this deletion was reaching for: a server dying a minute
+# from now cannot inherit this restart's intent, because the sentinel will have aged past the
+# window. Letting it expire naturally is both sufficient and correct.
 
 echo ""
 echo "=== Worktree '$WORKTREE_SLUG' is up ==="
