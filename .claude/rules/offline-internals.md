@@ -103,20 +103,32 @@ the warning — a create-success notification comes from a network response, not
 it was deliberately left alone rather than changed speculatively. **If the warning ever names
 `LogTab` again after the three hooks above were fixed, this is where to look.**
 
-## Cache lifetime: 14 days, and the ceiling is `setTimeout`, not taste
+## Cache lifetime: `maxAge` and `gcTime` answer different questions
 
-`maxAge`/`gcTime` are 14 days. They move together — a `gcTime` below `maxAge` garbage-collects
-persisted entries out of memory before a restore can bring them back.
+`maxAge` is **30 days**; `gcTime` is **20 days**. They are deliberately NOT equal, and re-coupling
+them is a regression.
 
-- **A short `maxAge` empties the cache from exactly the person who needs it.** It was 24h, and the
-  person most likely to need the offline copy is the one who has not opened the app in a while,
-  whose backend has therefore scaled to zero. Measured at 25h with a cold backend: the app boots
-  with every section blank for the full 15s abort and beyond.
-- **Never set either above 2³¹−1 ms (~24.85 days).** TanStack schedules GC with
-  `setTimeout(..., gcTime)`; past that the 32-bit timer overflows and fires ~immediately, so a
-  *longer* `gcTime` evicts every inactive query within a millisecond and empties what the persister
-  then writes. Node warns (`TimeoutOverflowWarning`); browsers are silent.
-  `queryClient.test.js` pins it against `MAX_SAFE_TIMEOUT_MS`.
+- **`maxAge` must never expire while the session that could use it is still valid.** It was 24h,
+  and the person most likely to need the offline copy is the one who has not opened the app in a
+  while, whose backend has therefore scaled to zero. `persistQueryClient` re-stamps `timestamp` on
+  every persist, so `maxAge` measures *time since this device last opened the app*, not data age —
+  which makes the JWT's own 30-day life the natural bound. Below it there is a window where a
+  still-valid session boots against a dead backend to an **empty exercise picker and cannot log
+  anything**. Verified live at 25 days (pickable) and 31 days (not — correct; the token is expired
+  and `login()` resets the cache anyway).
+- **`gcTime` is not about restore at all.** Restore is `hydrate()` at boot and consults no timer.
+  `gcTime` bounds how long an *inactive query* survives in memory **during a session**, so the real
+  requirement is that it comfortably exceed a realistic continuous session — otherwise queries
+  evaporate mid-session and the next throttled persist writes them out of the blob. An earlier
+  comment in `queryClient.js` claimed it "must be >= maxAge"; that is stronger than the truth, and
+  believing it is what dragged `maxAge` under the ceiling below and reopened the window above.
+- **Only `gcTime` is capped, at 2³¹−1 ms (~24.85 days).** TanStack schedules GC with
+  `setTimeout(..., gcTime)` and `isValidTimeout` rejects only non-numbers/negatives/Infinity, so a
+  larger value passes the check and then **overflows the 32-bit timer and fires almost
+  immediately** — evicting every inactive query within a millisecond and emptying what the
+  persister writes. Node warns (`TimeoutOverflowWarning`); browsers are silent. `maxAge` is a plain
+  `Date.now() - timestamp` comparison and is unaffected — that asymmetry is exactly why the two
+  differ, and `queryClient.test.js` pins both halves.
 - **Age is not staleness.** A longer `maxAge` is not a longer `staleTime`: restored entries are
   still revalidated at 60s the moment there is a network, `refreshAfterRestore` still force-refreshes
   its keys on every boot, and `OfflineDataNotice` still shows how old the data is.

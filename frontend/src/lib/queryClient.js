@@ -17,33 +17,56 @@ import { byEnqueueOrder, withEnqueueSeq } from './outboxSequence';
 // restored cache whose buster doesn't match instead of hydrating stale/incompatible data.
 export const QUERY_CACHE_BUSTER = 'v1';
 
-// How long a persisted cache stays usable, and how long an inactive query survives in memory.
+// The persisted cache must never expire while the session that could use it is still valid.
 //
-// This was 24h, and 24h was a cliff pointing the wrong way. The person most likely to NEED the
+// It was 24h, and 24h was a cliff pointing the wrong way: the person most likely to NEED the
 // offline cache is the one who has not opened the app in a while against a backend that has
-// therefore scaled to zero -- and that is exactly the person the old bound had just thrown it away
-// on. Measured 2026-09-02 with the persisted cache aged to 25h and the backend cold: the app boots
+// therefore scaled to zero -- exactly the person the old bound had just thrown it away from.
+// Measured 2026-09-02 with the cache aged past the bound and the backend cold: the app boots
 // (chrome, person pills, tabs) with EVERY section empty for the full 15s abort and beyond, which is
-// the "logged in but none of my data is there" half of that day's report. With the cache retained
-// it renders instantly from disk instead.
+// the "logged in but none of my data is there" half of that day's report.
+//
+// 30 days, matching the JWT's own lifetime, and that pairing is the whole point rather than a
+// coincidence. `timestamp` is re-stamped by persistQueryClient on EVERY persist, so maxAge measures
+// "how long since this device last had the app open", not how old the data is. Past 30 days the
+// token has expired anyway, so reaching the app requires a sign-in, and `login()` calls
+// resetQueryCache() regardless -- there is nothing a longer bound could preserve. Below 30 days
+// there is a window where a still-valid session boots against a dead backend to an empty picker
+// and cannot log anything, which is precisely the failure this exists to prevent.
+//
+// (One honest gap: offline, a token PAST expiry still boots from the auth snapshot, because /me
+// cannot be reached to reject it. Such a device loses the cache at 30 days. Its queued writes would
+// 401 on reconnect regardless, so it is already in a state only a fresh sign-in resolves.)
 //
 // Age is not freshness and nothing here treats it as such: a restored entry is still revalidated by
 // the ordinary 60s staleTime the moment there is a network, offlineCacheWarm still force-refreshes
 // the refreshAfterRestore keys on every boot, OfflineDataNotice still shows the person how old what
 // they are looking at is, and QUERY_CACHE_BUSTER still discards the whole thing on a shape change.
 // What changes is only whether there is anything to show while the server is unreachable.
-//
-// FOURTEEN days, not thirty, and the ceiling is not a preference -- it is `setTimeout`. TanStack
-// schedules garbage collection with `setTimeout(..., gcTime)`, and any delay above 2^31-1 ms
-// (~24.85 days) OVERFLOWS the 32-bit timer and fires almost immediately instead. A 30-day gcTime
-// therefore does the exact opposite of what it reads as: every inactive query is evicted from
-// memory within a millisecond of losing its last observer, which also empties what the persister
-// then writes to disk. Node surfaces this as `TimeoutOverflowWarning: ... Timeout duration was set
-// to 1`; browsers do it silently. Any future increase must stay under that ceiling -- there is a
-// test pinning it.
-const CACHE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
+const CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
-// 2^31-1 ms. Exported so the test that guards the overflow above cannot drift from the real limit.
+// gcTime is a DIFFERENT question from maxAge, and conflating them cost this file a wrong answer
+// once already -- an earlier revision of the comment below claimed gcTime "must be >= the persister
+// maxAge, or persisted entries would be garbage-collected out of the in-memory cache before they
+// can be restored". That is not what gcTime does. Restore happens via hydrate() at boot and
+// consults no timer; gcTime only decides how long an INACTIVE query survives in memory *during a
+// session*, and the real requirement is therefore that it comfortably exceed a realistic continuous
+// session -- otherwise queries evaporate mid-session and the next throttled persist writes them out
+// of the blob. 20 days is absurdly beyond any session while leaving ~5 days of headroom under the
+// ceiling below.
+//
+// That ceiling is `setTimeout`, and it is not a preference. TanStack schedules collection with
+// `setTimeout(..., gcTime)` (see removable.js), and `isValidTimeout` rejects only non-numbers,
+// negatives and Infinity -- so a delay above 2^31-1 ms (~24.85 days) passes the check and then
+// OVERFLOWS the 32-bit timer, firing almost immediately instead. A 30-day gcTime therefore does the
+// exact opposite of what it reads as: every inactive query evicted within a millisecond of losing
+// its last observer, emptying what the persister then writes to disk. Node surfaces it as
+// `TimeoutOverflowWarning: ... Timeout duration was set to 1`; browsers do it silently. Caught here
+// on a first attempt at 30 days. maxAge is unaffected -- it is a plain `Date.now() - timestamp`
+// comparison with no timer anywhere near it, which is exactly why the two can differ.
+const GC_TIME_MS = 20 * 24 * 60 * 60 * 1000;
+
+// 2^31-1 ms. Exported so the test guarding the overflow above cannot drift from the real limit.
 export const MAX_SAFE_TIMEOUT_MS = 2147483647;
 
 export const queryClient = new QueryClient({
@@ -53,9 +76,9 @@ export const queryClient = new QueryClient({
       // and does NOT refetch (no refresh indicator, no value pop). Window-focus refetch only
       // refires queries that have actually gone stale past this.
       staleTime: 60 * 1000,
-      // Must be >= the persister maxAge below, or persisted entries would be garbage-collected
-      // out of the in-memory cache before they can be restored. They move together for that reason.
-      gcTime: CACHE_LIFETIME_MS,
+      // Long enough that an inactive query cannot evaporate mid-session; deliberately NOT tied to
+      // the persister's maxAge, and bounded by setTimeout rather than by policy. See GC_TIME_MS.
+      gcTime: GC_TIME_MS,
       retry: 2,
       refetchOnWindowFocus: true,
     },
@@ -637,7 +660,7 @@ export function shouldDehydrateQuery(query) {
 
 export const persistOptions = {
   persister: queryPersister,
-  maxAge: CACHE_LIFETIME_MS,
+  maxAge: CACHE_MAX_AGE_MS,
   buster: QUERY_CACHE_BUSTER,
   // Queries ONLY. Unsynced writes are NOT persisted here -- they live in the separate durable
   // outbox (lib/outboxPersistence.js), which has no maxAge and no buster, so ANY length of offline gap or

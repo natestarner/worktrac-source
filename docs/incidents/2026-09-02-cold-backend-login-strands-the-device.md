@@ -229,13 +229,29 @@ That is the "logged in but none of my data is in there" half of the report, repr
 completely different direction than the login race — and it needs no failed login at all, just a
 gap longer than a day.
 
-`maxAge`/`gcTime` are now 14 days. **Not 30**, and the ceiling is not a preference: TanStack
-schedules garbage collection with `setTimeout(..., gcTime)`, and any delay above 2³¹−1 ms
-(~24.85 days) overflows the 32-bit timer and fires almost immediately instead. A 30-day `gcTime`
-therefore does the exact opposite of what it reads as — every inactive query evicted from memory
-within a millisecond, which also empties what the persister then writes to disk. Node surfaced it
-as `TimeoutOverflowWarning: … Timeout duration was set to 1` on the first attempt; browsers do it
-silently. There is now a test pinning `gcTime` under that ceiling.
+`maxAge` is now **30 days**, matching the JWT's own lifetime, and `gcTime` is **20 days**. The two
+are deliberately different, which took two attempts to get right and is worth recording:
+
+- A first pass set both to 30 days and Node warned `TimeoutOverflowWarning: … Timeout duration was
+  set to 1`. TanStack schedules GC with `setTimeout(..., gcTime)`, and above 2³¹−1 ms (~24.85
+  days) the 32-bit timer overflows and fires almost immediately — so a 30-day `gcTime` does the
+  exact opposite of what it reads as, evicting every inactive query within a millisecond and
+  emptying what the persister then writes. Browsers do this silently.
+- A second pass dropped **both** to 14 days to stay under that ceiling. That was wrong for a
+  different reason, and only surfaced when the bound was questioned directly: it left a
+  fortnight-wide window in which a **still-valid session** (the JWT lasts 30 days) boots against a
+  dead backend to an empty exercise picker and cannot log anything. A narrower version of the very
+  bug being fixed.
+- The ceiling only ever applied to `gcTime`. `maxAge` is a plain `Date.now() - timestamp`
+  comparison with no timer anywhere near it, and `gcTime` has nothing to do with restore — it
+  bounds how long an *inactive query* lives in memory during a session. `queryClient.js`'s own
+  comment claiming `gcTime` "must be >= maxAge or persisted entries would be garbage-collected out
+  of the in-memory cache before they can be restored" is stronger than the truth, and believing it
+  is what produced the 14-day answer.
+
+Verified live at both edges with the backend cold: at 25 days the cache restores and an exercise is
+pickable (a set can actually be logged); at 31 days it is dropped, which is correct — the token has
+expired, so reaching the app requires a sign-in and `login()` resets the cache regardless.
 
 Three other idle-path scenarios were tested and did **not** reproduce anything: a long-backgrounded
 tab regaining visibility with an update pending and the backend cold (the visibility trigger fires a
