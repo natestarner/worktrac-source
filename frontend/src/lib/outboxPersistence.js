@@ -7,8 +7,8 @@ import { byEnqueueOrder, seedOutboxSeq } from './outboxSequence';
 // IndexedDB key -- deliberately separate from the query cache's persister.
 //
 // Why separate (hardening #1): the query cache is discarded on restore if it's older than its
-// `maxAge` (1 day) or if `QUERY_CACHE_BUSTER` changes (which it does on an app update). Unsynced
-// WRITES must survive both -- a >24h offline gap, or shipping a new build while a user holds queued
+// `maxAge` (30 days) or if `QUERY_CACHE_BUSTER` changes. Unsynced
+// WRITES must survive both -- an offline gap longer than that, or shipping a new build while a user holds queued
 // writes -- so they cannot live in that same age-limited, buster-gated blob. This store has no age
 // limit and no buster: a queued write persists until it actually syncs.
 //

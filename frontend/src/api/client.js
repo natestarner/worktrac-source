@@ -174,6 +174,12 @@ export const apiClient = {
       response = await fetch(getApiUrl(path), { headers, signal: controller.signal });
     } catch (error) {
       reachabilityMonitor.recordFailure();
+      // Same mapping as `request` above, for the same reason: an export that times out otherwise
+      // surfaces the AbortController's own "signal is aborted without reason" to whoever is
+      // reading the failure. Statusless either way, so the failure taxonomy is unchanged.
+      if (error?.name === 'AbortError') {
+        throw new ApiError(undefined, 'Couldn’t reach Huddle. Check your connection and try again.');
+      }
       throw error;
     } finally {
       clearTimeout(timeoutId);

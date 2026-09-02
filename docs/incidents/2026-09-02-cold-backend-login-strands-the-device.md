@@ -207,6 +207,42 @@ the real "Reload" banner with the backend held open.
   order that no longer holds.
 - Full suites green afterwards: 1138 frontend unit tests, 217 e2e, 5 PWA/service-worker.
 
+## Follow-up: "I hadn't used the app for several hours" turned out to matter
+
+Re-reading the report against the idle detail led to a fourth defect, found by testing the idle
+path directly rather than the reload path.
+
+**The persisted query cache had a 24-hour `maxAge`.** Past that, `persistQueryClientRestore`
+discards the whole thing and hydrates nothing. So the person most likely to *need* the offline
+cache — someone who has not opened the app in a while, whose backend has therefore scaled to zero —
+was exactly the person it had just been thrown away from.
+
+Measured directly, cache aged to 25h, backend cold. The app boots either way; the difference is
+what is in it:
+
+| | Log tab at t+15s |
+|---|---|
+| Cache retained | `…Routines Trends **For faster exercise logging…**` + the exercise list |
+| Cache expired (24h `maxAge`) | `…Routines Trends` — **nothing** |
+
+That is the "logged in but none of my data is in there" half of the report, reproduced from a
+completely different direction than the login race — and it needs no failed login at all, just a
+gap longer than a day.
+
+`maxAge`/`gcTime` are now 14 days. **Not 30**, and the ceiling is not a preference: TanStack
+schedules garbage collection with `setTimeout(..., gcTime)`, and any delay above 2³¹−1 ms
+(~24.85 days) overflows the 32-bit timer and fires almost immediately instead. A 30-day `gcTime`
+therefore does the exact opposite of what it reads as — every inactive query evicted from memory
+within a millisecond, which also empties what the persister then writes to disk. Node surfaced it
+as `TimeoutOverflowWarning: … Timeout duration was set to 1` on the first attempt; browsers do it
+silently. There is now a test pinning `gcTime` under that ceiling.
+
+Three other idle-path scenarios were tested and did **not** reproduce anything: a long-backgrounded
+tab regaining visibility with an update pending and the backend cold (the visibility trigger fires a
+real forced reload — it recovered cleanly), a browser refresh landing inside the old-SW → new-SW
+handoff with v1's assets already deleted from the server (no 404, no white screen), and the
+handoff itself under a 35s hold.
+
 ## What is still not explained, and what will answer it next time
 
 A white screen starting from a **healthy** session — valid token, valid snapshot, plain reload

@@ -51,7 +51,7 @@ See `docs/incidents/2026-08-01-outbox-reorder-enqueueseq.md`.
   instead of remove-and-recreate (which always re-registers at the end of the array). Safe only
   because a terminal-`'error'` mutation's retryer has fully settled, unlike a `'pending'` one.
 - Persisted to its **own** IndexedDB key (`worktrac-outbox:<accountId>`), deliberately separate
-  from the query cache's persister, so neither the 24h `maxAge` nor an app-update `buster` bump
+  from the query cache's persister, so neither the query cache's `maxAge` nor an app-update `buster` bump
   can silently drop a queued write.
 - **Retries forever on transient failure** (`shouldRetryWrite`): 5xx, timeout, or statusless
   network error backs off (capped 30s) but never gives up. Only a definitive **4xx** stops
@@ -102,6 +102,24 @@ exercise from a temp id to the real one once a `createExercise` write syncs. It 
 the warning — a create-success notification comes from a network response, not from a render — so
 it was deliberately left alone rather than changed speculatively. **If the warning ever names
 `LogTab` again after the three hooks above were fixed, this is where to look.**
+
+## Cache lifetime: 14 days, and the ceiling is `setTimeout`, not taste
+
+`maxAge`/`gcTime` are 14 days. They move together — a `gcTime` below `maxAge` garbage-collects
+persisted entries out of memory before a restore can bring them back.
+
+- **A short `maxAge` empties the cache from exactly the person who needs it.** It was 24h, and the
+  person most likely to need the offline copy is the one who has not opened the app in a while,
+  whose backend has therefore scaled to zero. Measured at 25h with a cold backend: the app boots
+  with every section blank for the full 15s abort and beyond.
+- **Never set either above 2³¹−1 ms (~24.85 days).** TanStack schedules GC with
+  `setTimeout(..., gcTime)`; past that the 32-bit timer overflows and fires ~immediately, so a
+  *longer* `gcTime` evicts every inactive query within a millisecond and empties what the persister
+  then writes. Node warns (`TimeoutOverflowWarning`); browsers are silent.
+  `queryClient.test.js` pins it against `MAX_SAFE_TIMEOUT_MS`.
+- **Age is not staleness.** A longer `maxAge` is not a longer `staleTime`: restored entries are
+  still revalidated at 60s the moment there is a network, `refreshAfterRestore` still force-refreshes
+  its keys on every boot, and `OfflineDataNotice` still shows how old the data is.
 
 ## Query cache persistence
 
@@ -215,7 +233,7 @@ the row was evicted milliseconds before it was named, and the person landed back
   `queryCache.build()`, so writing to a key with no entry *creates* it -- holding whatever that one
   updater returned, stamped `dataUpdatedAt = Date.now()`. A create replayed from the outbox has no
   component behind it and the cache it was queued against may be gone (cleared on an auth change,
-  or dropped by the 24h `maxAge` / `buster` the outbox deliberately does not share), so this is a
+  or dropped by the `maxAge` / `buster` the outbox deliberately does not share), so this is a
   reachable state, not a hypothetical. The result is a catalog whose only member is that one
   exercise: online the following invalidation repairs it in a round trip, but a replay can land on
   any tab, and with no observer to refetch -- or offline before it lands -- that stands as the

@@ -17,7 +17,34 @@ import { byEnqueueOrder, withEnqueueSeq } from './outboxSequence';
 // restored cache whose buster doesn't match instead of hydrating stale/incompatible data.
 export const QUERY_CACHE_BUSTER = 'v1';
 
-const ONE_DAY = 24 * 60 * 60 * 1000;
+// How long a persisted cache stays usable, and how long an inactive query survives in memory.
+//
+// This was 24h, and 24h was a cliff pointing the wrong way. The person most likely to NEED the
+// offline cache is the one who has not opened the app in a while against a backend that has
+// therefore scaled to zero -- and that is exactly the person the old bound had just thrown it away
+// on. Measured 2026-09-02 with the persisted cache aged to 25h and the backend cold: the app boots
+// (chrome, person pills, tabs) with EVERY section empty for the full 15s abort and beyond, which is
+// the "logged in but none of my data is there" half of that day's report. With the cache retained
+// it renders instantly from disk instead.
+//
+// Age is not freshness and nothing here treats it as such: a restored entry is still revalidated by
+// the ordinary 60s staleTime the moment there is a network, offlineCacheWarm still force-refreshes
+// the refreshAfterRestore keys on every boot, OfflineDataNotice still shows the person how old what
+// they are looking at is, and QUERY_CACHE_BUSTER still discards the whole thing on a shape change.
+// What changes is only whether there is anything to show while the server is unreachable.
+//
+// FOURTEEN days, not thirty, and the ceiling is not a preference -- it is `setTimeout`. TanStack
+// schedules garbage collection with `setTimeout(..., gcTime)`, and any delay above 2^31-1 ms
+// (~24.85 days) OVERFLOWS the 32-bit timer and fires almost immediately instead. A 30-day gcTime
+// therefore does the exact opposite of what it reads as: every inactive query is evicted from
+// memory within a millisecond of losing its last observer, which also empties what the persister
+// then writes to disk. Node surfaces this as `TimeoutOverflowWarning: ... Timeout duration was set
+// to 1`; browsers do it silently. Any future increase must stay under that ceiling -- there is a
+// test pinning it.
+const CACHE_LIFETIME_MS = 14 * 24 * 60 * 60 * 1000;
+
+// 2^31-1 ms. Exported so the test that guards the overflow above cannot drift from the real limit.
+export const MAX_SAFE_TIMEOUT_MS = 2147483647;
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,8 +54,8 @@ export const queryClient = new QueryClient({
       // refires queries that have actually gone stale past this.
       staleTime: 60 * 1000,
       // Must be >= the persister maxAge below, or persisted entries would be garbage-collected
-      // out of the in-memory cache before they can be restored.
-      gcTime: ONE_DAY,
+      // out of the in-memory cache before they can be restored. They move together for that reason.
+      gcTime: CACHE_LIFETIME_MS,
       retry: 2,
       refetchOnWindowFocus: true,
     },
@@ -337,7 +364,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         //
         // It must NEVER build the entry, only reconcile one that already exists. A create replayed
         // from the outbox has no component behind it, and the query cache it was queued against may
-        // be gone -- cleared on an auth change, or dropped by the 24h maxAge / buster bump the
+        // be gone -- cleared on an auth change, or dropped by the maxAge / buster bump the
         // OUTBOX deliberately does not share. Building here would leave a catalog holding exactly
         // this one exercise, stamped as freshly fetched: online the invalidation below fixes it in a
         // round trip, but with no observer to refetch (the replay can land on any tab), or offline
@@ -610,10 +637,10 @@ export function shouldDehydrateQuery(query) {
 
 export const persistOptions = {
   persister: queryPersister,
-  maxAge: ONE_DAY,
+  maxAge: CACHE_LIFETIME_MS,
   buster: QUERY_CACHE_BUSTER,
   // Queries ONLY. Unsynced writes are NOT persisted here -- they live in the separate durable
-  // outbox (lib/outboxPersistence.js), which has no maxAge and no buster, so a >24h offline gap or
+  // outbox (lib/outboxPersistence.js), which has no maxAge and no buster, so ANY length of offline gap or
   // an app update (which changes the buster and discards this cache) can never drop a queued write.
   dehydrateOptions: {
     shouldDehydrateMutation: () => false,

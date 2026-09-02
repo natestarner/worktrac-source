@@ -8,6 +8,7 @@ import {
   clearOutboxMutations,
   flushOutbox,
   persistOptions,
+  MAX_SAFE_TIMEOUT_MS,
   queryClient,
   registerOfflineMutationDefaults,
   resetQueryCache,
@@ -78,6 +79,46 @@ describe('shouldRetryWrite (failure taxonomy, hardening #8)', () => {
     expect(shouldRetryWrite(8, { status: 503 })).toBe(true);
     expect(shouldRetryWrite(100, { status: 503 })).toBe(true);
     expect(shouldRetryWrite(100, new TypeError('Failed to fetch'))).toBe(true);
+  });
+});
+
+// The cache exists to be there when the server is not. A bound shorter than the session it serves
+// throws it away from exactly the person most likely to need it: someone who has not opened the app
+// in a while, whose backend has therefore scaled to zero. Measured 2026-09-02 at 25h with the
+// backend cold -- the app booted with every section empty for the full 15s abort and beyond, which
+// is the "logged in but none of my data is there" half of that day's report.
+describe('persisted cache lifetime', () => {
+  const gcTime = () => queryClient.getDefaultOptions().queries.gcTime;
+
+  it('outlives a long gap between sessions rather than expiring inside one', () => {
+    // A fortnight away with the backend scaled to zero must still render from disk. At the old 24h
+    // bound this was zero.
+    expect(persistOptions.maxAge).toBeGreaterThanOrEqual(14 * 24 * 60 * 60 * 1000);
+  });
+
+  // THE trap, and the reason this is 14 days rather than 30. TanStack schedules garbage collection
+  // with setTimeout(..., gcTime); above 2^31-1 ms the 32-bit timer overflows and fires almost
+  // immediately, so a "longer" gcTime silently evicts every inactive query within a millisecond --
+  // the exact opposite of what it reads as, and it empties what the persister then writes to disk.
+  // Caught here as `TimeoutOverflowWarning` on a first attempt at 30 days; browsers are silent.
+  it('keeps gcTime under the 32-bit setTimeout ceiling, or GC fires instantly instead of never', () => {
+    expect(gcTime()).toBeLessThan(MAX_SAFE_TIMEOUT_MS);
+  });
+
+  it('keeps maxAge under it too, since gcTime must be at least maxAge', () => {
+    expect(persistOptions.maxAge).toBeLessThan(MAX_SAFE_TIMEOUT_MS);
+  });
+
+  // queryClient.js's own stated invariant: a shorter gcTime would garbage-collect persisted entries
+  // out of the in-memory cache before a restore could ever bring them back.
+  it('keeps gcTime at or above maxAge, or the restore is defeated in memory', () => {
+    expect(gcTime()).toBeGreaterThanOrEqual(persistOptions.maxAge);
+  });
+
+  // Age is not freshness, and nothing here confuses the two: a restored entry is still revalidated
+  // by the ordinary staleTime the moment there is a network.
+  it('still revalidates restored data promptly -- a longer maxAge is not a longer staleTime', () => {
+    expect(queryClient.getDefaultOptions().queries.staleTime).toBe(60 * 1000);
   });
 });
 
