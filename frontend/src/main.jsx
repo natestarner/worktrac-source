@@ -22,6 +22,13 @@ import { markUpdateAvailable, startUpdatePolling } from './lib/swUpdate'
 // already-controlling worker -- see docs/incidents/2026-08-31-boot-white-screen-recurrence.md's
 // second follow-up. This comment exists to force a genuinely new service-worker version to exist
 // on lower so that transition can be tested for real, rather than simulated.
+// Boot breadcrumbs for boot-watchdog.js. Reaching this line means the whole module graph evaluated
+// -- so if the watchdog later fires WITHOUT this mark, the failure was upstream of any app code
+// (the bundle never loaded, or a module-evaluation throw), which no React boundary could ever have
+// caught and which nothing else in the app can distinguish. Optional-called: the global only exists
+// if the watchdog itself loaded, and the diagnostic must never become a boot dependency.
+window.__huddleBootMark?.('bundle')
+
 const updateSW = registerSW({
   onRegisteredSW(_swUrl, registration) {
     startUpdatePolling(registration)
@@ -32,6 +39,10 @@ const updateSW = registerSW({
 })
 
 loadConfig().then(() => {
+  // The other half of the split: `bundle` without `render` means loadConfig never settled, which is
+  // the one boot step that blocks createRoot entirely (see config.js). With both marks present and
+  // still no paint, the failure is inside React's first render.
+  window.__huddleBootMark?.('render')
   createRoot(document.getElementById('root')).render(
     <StrictMode>
       <BrowserRouter>

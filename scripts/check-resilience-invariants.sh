@@ -211,7 +211,13 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 # modal for this account", never to a lost write: the flag carries no queued work and sits on no
 # write's path, and the module it gates (AuthContext.confirmEmail) must keep authenticating the
 # account whether or not the flag itself could be written.
-EXPECTED_LIB_SWALLOWS=42
+# 2026-09-02: 42 -> 44. lib/bootFailure.js reads back the record public/boot-watchdog.js leaves
+# when the app fails to start (read, clear). Same shape and same reasoning as lastClientError.js
+# directly above: a storage-availability guard degrading to "no diagnostics", never to a lost write
+# -- it carries no queued work, sits on no write's path, and is READ during a Contact Us render, so
+# a throw here would blank the very screen a person is using to report the failure. Diagnostics must
+# never be able to break the app they exist to diagnose; that rule is what earns these two.
+EXPECTED_LIB_SWALLOWS=44
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

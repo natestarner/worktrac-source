@@ -101,7 +101,11 @@ class ContactControllerTest extends AbstractIntegrationTest {
                 "screen", "/app/log",
                 "wasOnline", true,
                 "unsyncedWrites", 2,
-                "clientError", "TypeError: undefined"));
+                "clientError", "TypeError: undefined",
+                // boot-watchdog.js's record. Kept distinct from clientError on purpose: a boot that
+                // never rendered produces no clientError at all, so one cannot stand in for the
+                // other. See V60__add_boot_failure_to_contact_messages.sql.
+                "bootFailure", "boot-failure on /app/log after 7000ms -- never painted"));
 
         assertEquals(202, submit(payload));
 
@@ -114,6 +118,7 @@ class ContactControllerTest extends AbstractIntegrationTest {
         assertEquals(2, message.getUnsyncedWrites());
         assertTrue(message.getWasOnline());
         assertEquals("TypeError: undefined", message.getClientError());
+        assertEquals("boot-failure on /app/log after 7000ms -- never painted", message.getBootFailure());
         // Read server-side from the request, never from the body -- so the stored value is
         // guaranteed to be the one the backend logged against.
         assertEquals("TestAgent/1.0", message.getUserAgent());

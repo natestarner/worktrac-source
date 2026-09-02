@@ -410,6 +410,28 @@ was doing exactly that — and it, not any throw, is what three white-screen rep
   `'authenticated'` let `<Outlet/>` through one frame early, straight into that blank render.
   `hydrated` must keep meaning "the slice for **this** account is in state".
 
+### The watchdog records WHY it fired, and that record must never cost the escape hatch
+
+`boot-watchdog.js` writes `worktrac-boot-failure` to localStorage when it fires. The field that
+earns its place is **`painted`** — did `#root` ever have content? "The app appeared then went
+white" and "nothing ever appeared" are indistinguishable in a bug report and have completely
+different causes, and every white-screen investigation so far has had to open with that question
+and been unable to answer it. `marks` (from `window.__huddleBootMark`, which the watchdog defines
+and the bundle optional-calls) says how far boot got: no `bundle` mark means the module graph never
+evaluated; `bundle` without `render` means `loadConfig` never settled.
+
+- **Capture is subordinate to the fallback, always.** It runs in its own `try/catch`, before
+  `showFallback()` and structurally unable to prevent it. A diagnostic that can stop the escape
+  hatch rendering is strictly worse than no diagnostic. `boot-watchdog.spec.ts` pins this by
+  disabling `Storage` entirely and asserting the fallback still appears — verified non-vacuous
+  (drop the `try` and it fails).
+- **Adding a breadcrumb means an optional call, never an import.** The watchdog is a plain script
+  outside the bundle; if it didn't load, `window.__huddleBootMark?.(...)` is a no-op instead of a
+  second thing that can break boot.
+- **It reaches the server the same way `lastClientError` does** — `lib/bootFailure.js` → Contact
+  Us's disclosed `diagnostics` → `contact_messages.boot_failure`. It is **not** a reporting
+  pipeline, and nothing transmits on its own; see `ErrorBoundary.jsx`'s header, which still stands.
+
 **A React error boundary cannot catch everything**, and this class of bug has proven itself
 capable of finding the gaps: a throw inside a `useEffect` (passive, not part of React's
 render/commit try-catch), or anything before React ever calls `render` at all. Belt-and-suspenders

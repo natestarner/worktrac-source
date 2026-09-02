@@ -43,9 +43,79 @@
   var elapsedMs = 0;
   var shown = false;
 
+  // ---------------------------------------------------------------------------------------------
+  // Diagnostics.
+  //
+  // Three white-screen reports (2026-08-25, 2026-08-31, 2026-09-02) each cost a multi-day
+  // investigation whose central question was always the same and was never answerable after the
+  // fact: DID REACT EVER RENDER? "The app painted then went white" and "nothing ever appeared" look
+  // identical in a bug report and have completely different causes -- the first is a tree that
+  // unmounted or a component that returned nothing, the second is a boot that never got that far
+  // (a module-evaluation throw, or a boot step that never settled). The 2026-08-31 write-up ends by
+  // naming this exact artifact as the highest-value thing to capture next.
+  //
+  // So this records WHY it fired, not just that it did. `painted`/`emptiedAfterMs` split those two
+  // cases apart on their own; the marks below say how far the bundle got.
+  //
+  // EVERY line of this is subordinate to showing the fallback. Capture runs in its own try/catch,
+  // before the fallback and unable to prevent it: a diagnostic that can stop the escape hatch from
+  // rendering would be strictly worse than no diagnostic at all. Same rule lib/lastClientError.js
+  // states for its own writes.
+  var STORAGE_KEY = 'worktrac-boot-failure';
+  var MAX_RECORD_CHARS = 1800; // under contact_messages.boot_failure's NVARCHAR(2000)
+  var everPainted = false;
+  var emptiedAfterMs = null;
+  var startedAt = Date.now();
+
+  // Breadcrumbs the main bundle leaves as it gets through boot. Defined HERE, on purpose: this
+  // script is a plain <script src> that runs before the module bundle, so the global always exists
+  // by the time anything calls it -- and if this file failed to load, the bundle's calls are simple
+  // optional-call no-ops rather than a second thing that can break boot.
+  var marks = {};
+  window.__huddleBootMark = function (name, detail) {
+    try {
+      if (typeof name !== 'string') return;
+      marks[name] = { atMs: Date.now() - startedAt, detail: detail == null ? null : String(detail).slice(0, 40) };
+    } catch {
+      // A diagnostic breadcrumb must never be able to throw into the boot path that reports it.
+    }
+  };
+
   function rootHasContent() {
     var root = document.getElementById('root');
     return !!(root && root.firstChild);
+  }
+
+  function recordBootFailure() {
+    var record = {
+      v: 1,
+      at: new Date().toISOString(),
+      route: window.location ? window.location.pathname : null,
+      waitedMs: elapsedMs,
+      // The discriminator. `true` means the tree rendered and then went away -- a component
+      // returning nothing, or an unmount past every boundary. `false` means React never committed
+      // anything, so look at the marks below for how far boot got.
+      painted: everPainted,
+      emptiedAfterMs: emptiedAfterMs,
+      readyState: document.readyState,
+      online: typeof navigator === 'undefined' ? null : navigator.onLine,
+      visibility: document.visibilityState,
+      // A controlling worker means the shell came from the precache rather than the network, which
+      // is the difference between "the deploy is broken" and "this device's cache is".
+      swController: !!(navigator.serviceWorker && navigator.serviceWorker.controller),
+      marks: marks,
+      ua: navigator.userAgent ? navigator.userAgent.slice(0, 180) : null,
+    };
+    var serialized = JSON.stringify(record);
+    if (serialized.length > MAX_RECORD_CHARS) {
+      // Drop the least load-bearing field rather than storing something the backend will reject.
+      record.ua = null;
+      serialized = JSON.stringify(record).slice(0, MAX_RECORD_CHARS);
+    }
+    // localStorage, synchronously: the very next thing this person does is usually reload, so an
+    // async store could lose the record to the teardown it is describing. Same reasoning as
+    // lib/appStatePersistence.js and lib/authSnapshot.js.
+    localStorage.setItem(STORAGE_KEY, serialized);
   }
 
   function prefersDark() {
@@ -158,8 +228,30 @@
 
   var intervalId = window.setInterval(function () {
     elapsedMs += CHECK_INTERVAL_MS;
+
+    // Tracked on EVERY tick, not just at the grace boundary, because "did it ever paint" is only
+    // knowable by having watched. Note this keeps running for the life of the page: the shape the
+    // reports describe -- "flashes the app, then goes white" -- is a root that empties LATER, and
+    // it is caught here with painted:true and the elapsed time it survived.
+    if (rootHasContent()) {
+      everPainted = true;
+    } else if (everPainted && emptiedAfterMs === null) {
+      emptiedAfterMs = elapsedMs;
+    }
+
     if (elapsedMs < GRACE_MS) return;
     if (rootHasContent()) return;
+
+    // Capture first, but never at the fallback's expense: this whole block is disposable, the
+    // fallback below is not. A storage failure (private mode, quota, disabled) or anything else
+    // going wrong in here must leave the escape hatch completely unaffected.
+    try {
+      recordBootFailure();
+    } catch {
+      // Deliberately empty. See the diagnostics comment above -- there is nothing useful to do
+      // with a failure to record a failure, and the one thing that matters still happens next.
+    }
+
     showFallback();
     window.clearInterval(intervalId);
   }, CHECK_INTERVAL_MS);

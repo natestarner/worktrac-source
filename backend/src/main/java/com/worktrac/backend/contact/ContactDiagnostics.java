@@ -13,10 +13,16 @@ import jakarta.validation.constraints.Size;
 //
 // clientError is the last render-time error ErrorBoundary caught. It is stored and displayed, never
 // written into a log line or the alert email's subject.
+//
+// bootFailure is the same idea one layer lower: what boot-watchdog.js recorded when the app failed
+// to start at all. It cannot be folded into clientError -- that one is written by a React error
+// boundary, so it only exists when React was alive enough to catch something, and a boot that never
+// rendered produces nothing there. Same handling: stored and displayed, never logged or emailed.
 public record ContactDiagnostics(
         @Size(max = 40) String appBuild,
         @Size(max = 80) String screen,
         Boolean wasOnline,
         @Min(0) @Max(9999) Integer unsyncedWrites,
-        @Size(max = 2000) String clientError) {
+        @Size(max = 2000) String clientError,
+        @Size(max = 2000) String bootFailure) {
 }

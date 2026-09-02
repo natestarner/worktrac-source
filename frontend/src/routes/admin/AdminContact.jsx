@@ -75,6 +75,10 @@ function MessageRow({ row }) {
           <Detail label="Person" value={row.personName} />
           <Detail label="Account" value={row.accountName} />
           <Detail label="Last client error" value={row.clientError} mono />
+          {/* The boot watchdog's record, when the app failed to start at all. Its first line says
+              whether React ever rendered -- the question every white-screen investigation has had
+              to open with and could never answer after the fact. */}
+          <Detail label="Last failed start" value={row.bootFailure} mono />
           <Detail label="Alert detail" value={row.alertDetail} />
         </dl>
       )}

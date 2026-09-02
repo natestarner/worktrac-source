@@ -142,6 +142,7 @@ public class ContactMessageService {
         contactMessage.setWasOnline(diagnostics.wasOnline());
         contactMessage.setUnsyncedWrites(diagnostics.unsyncedWrites());
         contactMessage.setClientError(diagnostics.clientError());
+        contactMessage.setBootFailure(diagnostics.bootFailure());
     }
 
     // userAgent and correlationId come from request headers, which carry no bean-validation

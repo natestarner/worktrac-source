@@ -207,6 +207,36 @@ the real "Reload" banner with the backend held open.
   order that no longer holds.
 - Full suites green afterwards: 1138 frontend unit tests, 217 e2e, 5 PWA/service-worker.
 
+## What is still not explained, and what will answer it next time
+
+A white screen starting from a **healthy** session — valid token, valid snapshot, plain reload
+against a cold backend — was never reproduced, before or after the fix. Every simulation of it
+recovered: skeleton until the 15s abort, then cached data, with zero empty-`#root` samples across a
+plain reload, an Azure-shaped 503, a double reload, and a real old-SW → new-SW handoff with the
+network held 35s.
+
+What *was* observed is that pre-fix, every authenticated boot rendered an empty `#root` for at
+least one frame (`SHELL activePersonId=null` in the trace) — `ProtectedRoute`'s stale `hydrated`
+let `<Outlet/>` through early, and passive effects flush after paint, so that frame is genuinely
+painted. Its duration is bounded by whatever else holds the main thread, which at that exact
+instant is the query-cache hydrate, the outbox restore and the cache-warm fan-out. Stretching one
+frame to seven seconds on a loaded phone is plausible and **unmeasured**; it is recorded here as a
+hypothesis, not a finding. It is closed either way.
+
+So the watchdog now records **why** it fired (`worktrac-boot-failure`, surfaced through Contact Us
+into `contact_messages.boot_failure`). The decisive field is `painted`:
+
+| Next recurrence shows | Means |
+|---|---|
+| `painted: true` + `emptiedAfterMs` | The tree rendered and went away — a component returned nothing, or an unmount past every boundary |
+| `painted: false`, no `bundle` mark | The module graph never evaluated — the bundle didn't load, or threw at import time |
+| `painted: false`, `bundle` but no `render` | `loadConfig` never settled — the one boot step that blocks `createRoot` |
+| `painted: false`, both marks | The throw is inside React's first render |
+
+That is the artifact the 2026-08-31 write-up asked for and could not get. It cannot reach the
+server while the backend is down — which is exactly why it is a durable local stash with deferred
+delivery, the same principle as the outbox.
+
 ## Takeaways
 
 - **An empty `#root` is a failure mode, not a rendering detail.** `return null` from a routed
