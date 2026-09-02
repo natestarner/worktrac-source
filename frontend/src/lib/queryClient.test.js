@@ -256,6 +256,25 @@ describe('registerOfflineMutationDefaults dispatches to the right endpoint', () 
     // Person scoping still holds -- one person's set must not invalidate another's trends.
     expect(isStale(otherPerson)).toBe(false);
   });
+
+  // The same rule, for the count of what the Free-tier window is hiding. It is derived from logged
+  // sets like prs/history/trends, and the flow that makes it load-bearing rather than tidy is the
+  // exact one the notice exists for: logging a set into an out-of-window past session is how the
+  // count goes 0 -> 1. Left out of this handler, History would keep rendering a stale "nothing is
+  // hidden" for a minute after the person watched their workout disappear.
+  it('marks the hidden-workout count stale after a set is logged', async () => {
+    const forPerson = queryKeys.historyWindow(7);
+    const otherPerson = queryKeys.historyWindow(99);
+    for (const key of [forPerson, otherPerson]) {
+      client.setQueryData(key, { windowStart: null, hiddenSessions: 0, earliestHiddenAt: null });
+    }
+    const isStale = (key) => client.getQueryState(key).isInvalidated;
+
+    await dispatch({ mode: 'session', sessionId: 42, personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k4', clientLoggedAt: 't' });
+
+    expect(isStale(forPerson)).toBe(true);
+    expect(isStale(otherPerson)).toBe(false);
+  });
 });
 
 describe('dependent writes guard against an unresolved temp exercise id', () => {

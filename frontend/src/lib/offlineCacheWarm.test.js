@@ -16,6 +16,7 @@ vi.mock('../api/routines', () => ({
 vi.mock('../api/sessions', () => ({
   getLiveSession: vi.fn().mockResolvedValue(null),
   getHistory: vi.fn().mockResolvedValue([]),
+  getHistoryWindow: vi.fn().mockResolvedValue({ windowStart: null, hiddenSessions: 0, earliestHiddenAt: null }),
 }));
 vi.mock('../api/stats', () => ({
   getPrs: vi.fn().mockResolvedValue([]),
@@ -24,7 +25,7 @@ vi.mock('../api/stats', () => ({
 import { listExercises, listPersonExercises } from '../api/exercises';
 import { listTags } from '../api/tags';
 import { listRoutines } from '../api/routines';
-import { getLiveSession, getHistory } from '../api/sessions';
+import { getLiveSession, getHistory, getHistoryWindow } from '../api/sessions';
 import { getPrs } from '../api/stats';
 
 const PEOPLE = [{ id: 1 }, { id: 2 }];
@@ -53,6 +54,7 @@ describe('warmOfflineCache', () => {
     expect(getLiveSession).toHaveBeenCalledTimes(2);
     expect(getHistory).toHaveBeenCalledTimes(2);
     expect(getPrs).toHaveBeenCalledTimes(2);
+    expect(getHistoryWindow).toHaveBeenCalledTimes(2);
 
     for (const person of PEOPLE) {
       expect(listPersonExercises).toHaveBeenCalledWith(person.id);
@@ -62,6 +64,16 @@ describe('warmOfflineCache', () => {
       expect(getPrs).toHaveBeenCalledWith(person.id);
       expect(client.getQueryData(queryKeys.history(person.id))).toEqual([]);
       expect(client.getQueryData(queryKeys.prs(person.id))).toEqual([]);
+      // Without this key warmed, the three clamped tabs go back to looking COMPLETE while offline
+      // -- the same screen saying two different things depending on the network, which is the one
+      // thing resilience.md forbids outright. It is one small row per person, unlike the trends
+      // fan-out deliberately excluded below.
+      expect(getHistoryWindow).toHaveBeenCalledWith(person.id);
+      expect(client.getQueryData(queryKeys.historyWindow(person.id))).toEqual({
+        windowStart: null,
+        hiddenSessions: 0,
+        earliestHiddenAt: null,
+      });
     }
     expect(client.getQueryData(queryKeys.exercises())).toEqual([{ id: 1, name: 'Squat' }]);
   });
@@ -144,6 +156,11 @@ describe('warmOfflineCache afterRestore', () => {
       client.setQueryData(queryKeys.prs(person.id), []);
       client.setQueryData(queryKeys.personExercises(person.id), [UNSYNCED_EXERCISE]);
       client.setQueryData(queryKeys.liveSession(person.id), null);
+      client.setQueryData(queryKeys.historyWindow(person.id), {
+        windowStart: null,
+        hiddenSessions: 0,
+        earliestHiddenAt: null,
+      });
     }
     client.setQueryData(queryKeys.exercises(), [UNSYNCED_EXERCISE]);
   }
@@ -158,6 +175,7 @@ describe('warmOfflineCache afterRestore', () => {
     expect(listRoutines).not.toHaveBeenCalled();
     expect(getHistory).not.toHaveBeenCalled();
     expect(getPrs).not.toHaveBeenCalled();
+    expect(getHistoryWindow).not.toHaveBeenCalled();
   });
 
   it('the boot warm refetches the server-owned collections even though they look fresh', async () => {
@@ -169,6 +187,10 @@ describe('warmOfflineCache afterRestore', () => {
     expect(listRoutines).toHaveBeenCalledTimes(2);
     expect(getHistory).toHaveBeenCalledTimes(2);
     expect(getPrs).toHaveBeenCalledTimes(2);
+    // Forced for the same reason as history and prs, one step stronger: it is a pure server-side
+    // derivation of the billing state and the clock, so the client could not be holding an unsent
+    // version of it even in principle. It also goes stale on its own as the window slides.
+    expect(getHistoryWindow).toHaveBeenCalledTimes(2);
     // The routine the persister never got to write is now back.
     expect(client.getQueryData(queryKeys.routines(1))).toEqual([{ id: 7, name: 'Push Day' }]);
   });

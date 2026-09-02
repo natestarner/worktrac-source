@@ -63,6 +63,39 @@ commitment rather than an implementation detail.
   celebration is the emotional core of this app. Note `log-screen.md` documents three PR predicates
   that are deliberately not unified — the clamp touches each differently.
 
+## The window must SAY it is clamping
+
+A clamped screen that looks complete is the bug this feature exists to fix: a Free household could
+log a past workout months back, tap Done, and land on History reading *"No workouts logged yet"* —
+about a workout the app had just saved.
+
+- **The server answers "is anything hidden from you"; the client never computes the window.**
+  `GET /api/people/{id}/history-window` → `HistoryWindowDto(windowStart, hiddenSessions,
+  earliestHiddenAt)`. A client-side "90 days" would be a second copy of `FREE_HISTORY_WINDOW`, free
+  to drift from the clamp it describes — so even the copy derives its number from `windowStart`
+  (`historyWindowCopy.js`). `windowStart` is non-null for **every** Free household, including one
+  with nothing hidden yet; that is what lets `PastSessionModal` warn *before* the workout is logged.
+- **`hiddenSessions` counts only pre-window sessions that have sets**, matching `getHistory`'s own
+  filter exactly, so the number is precisely how many History rows are missing. An honest count is
+  the entire justification for showing one.
+- **`HistoryWindowNotice` is the one way any screen says this**, and it composes `ProUpsell` rather
+  than replacing it, so "one way to ask for an upgrade" still holds. Three fail-closed gates:
+  unknown plan, unanswered query, or a zero count all render **nothing** — which is why a Free
+  household inside the window sees no change anywhere in the app.
+- **`PastSessionModal` warns, it does not block.** No `min` on the date input and no disabled
+  button: the workout genuinely is saved and returns on upgrade, so refusing it would turn a display
+  limit into a data-entry limit and contradict "nothing is deleted, ever".
+- **`HistoryWindowModal` is a modal, and `ProUpsell`'s header says never to use one.** The
+  distinction is solicited vs unsolicited — that rule forbids an upgrade prompt that *interrupts*.
+  This one only ever opens from an explicit tap on "Why is this hidden?". Nothing may be changed to
+  open it automatically.
+- **This adds no connectivity branch**, so nothing about it belongs on `resilience.md`'s register.
+  `historyWindow` is in `offlineCacheWarm.js` (`refreshAfterRestore: true` — the server wholly owns
+  it), so the notice reads identically in every mode; `parity-…`-style coverage is in
+  `free-window-notice.spec.ts`. Dropping it from the warm makes the three tabs look **complete**
+  while offline, which is the divergence the contract forbids outright.
+- **`hasAnyHistory` must stay pre-clamp.** See `trends.md`.
+
 ## Reserved words: `billing_plan` and `billing_interval`
 
 Both `PLAN` and `INTERVAL` are reserved in T-SQL, and an unbracketed one fails the migration
@@ -136,5 +169,9 @@ full reasoning; don't move it back in front of the deletes.
   household on `/app/billing` has both on screen, and a shared accessible name makes every
   Playwright `getByRole` on it a strict-mode violation. "Upgrade" alone would be worse — a substring
   of the other, matching both.
+- The window notice adds two more, and all five have to stay mutually non-containing: `ProUpsell`'s
+  **"See Pro"**, and — inside `HistoryWindowModal`, which opens with the notice and the header badge
+  both still in the DOM — **"Unlock full history"** and **"How Free and Pro differ"**, alongside
+  `Modal`'s own **"Close"**. Pinned in `HistoryWindowNotice.test.jsx`.
 - **"Pro" is a substring of "Profile"**, `UserMenu`'s first item, in the same header subtree. Assert
   the badge with `exact: true` / an exact string, always.

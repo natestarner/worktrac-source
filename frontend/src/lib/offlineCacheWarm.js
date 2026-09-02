@@ -3,7 +3,7 @@ import { queryKeys } from '../api/queryKeys';
 import { listExercises, listPersonExercises } from '../api/exercises';
 import { listTags } from '../api/tags';
 import { listRoutines } from '../api/routines';
-import { getLiveSession, getHistory } from '../api/sessions';
+import { getLiveSession, getHistory, getHistoryWindow } from '../api/sessions';
 import { getPrs } from '../api/stats';
 
 // How fresh a warmed entry needs to be before prefetchQuery bothers refetching it -- kept short
@@ -34,6 +34,14 @@ const WARM_STALE_TIME = 30 * 1000;
 //   - history, prs   -- no optimistic writer anywhere; they are invalidation-driven only, so an
 //                       unsynced set is simply absent from them (see "a durable write is not the
 //                       same as a visible value" in .claude/rules/frontend-core.md).
+//   - historyWindow  -- same reason, one step further: it is a pure server-side derivation of the
+//                       billing state and the clock, so the client could not hold an unsent
+//                       version of it even in principle.
+//
+// historyWindow is warmed at all -- unlike trends, which is deliberately excluded -- because it is
+// one small row per person, and because without it the three clamped tabs would silently lose the
+// "there is more here than you can see" notice for a whole outage. A screen that goes back to
+// looking complete while offline is exactly the second code path resilience.md exists to prevent.
 //
 // The others are deliberately excluded because they CAN hold unsynced local state, and refetching
 // would delete it mid-flight:
@@ -47,6 +55,7 @@ function personWarmTargets(personId) {
     { queryKey: queryKeys.routines(personId), queryFn: () => listRoutines(personId), refreshAfterRestore: true },
     { queryKey: queryKeys.history(personId), queryFn: () => getHistory(personId), refreshAfterRestore: true },
     { queryKey: queryKeys.prs(personId), queryFn: () => getPrs(personId), refreshAfterRestore: true },
+    { queryKey: queryKeys.historyWindow(personId), queryFn: () => getHistoryWindow(personId), refreshAfterRestore: true },
   ];
 }
 

@@ -11,10 +11,11 @@ test.describe('Log a past workout', () => {
     // window, which would correctly hide the session this spec then asserts is in History. The
     // round trip is what is being tested, not the window.
     //
-    // ⚠️ That combination is a real product gap, not just a test detail: a Free household can
-    // complete this whole flow and land back on History with nothing there. Flagged for a
-    // follow-up decision (warn, clamp the date picker, or accept) rather than silently changed
-    // here.
+    // The Free side of that combination used to be an unhandled product gap (complete the flow,
+    // land on History, be told "No workouts logged yet"). It is now handled and covered by
+    // free-window-notice.spec.ts: the modal warns before the date is accepted, and History
+    // explains itself afterwards. So this line is a deliberate choice of subject, not a
+    // workaround -- keep it, or this spec starts testing the window instead of the round trip.
     const email = await registerHousehold(page, request, 'Jamie');
     await setBillingPlan(request, email, 'PRO');
     await page.reload();

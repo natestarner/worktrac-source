@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { usePrs } from '../../hooks/usePrs';
+import { useHistoryWindow } from '../../hooks/useHistoryWindow';
 import { useExerciseTagMap } from '../../hooks/useExerciseTagMap';
 import { useExerciseFilter } from '../../hooks/useExerciseFilter';
 import { formatDateLabel, toLocalDateStr, formatRestTime } from '../../utils/datetime';
@@ -12,6 +13,10 @@ import Skeleton from '../shared/Skeleton';
 import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
+import EmptyState from '../shared/EmptyState';
+import HistoryWindowNotice from '../shared/HistoryWindowNotice';
+import { IconStar } from '../shared/icons';
+import { windowLabel } from '../shared/historyWindowCopy';
 import { tagChipStyle } from '../shared/tagChipStyle';
 
 // Wrapper: same key={activePersonId} remount pattern as HistoryTab (see its header comment) --
@@ -25,11 +30,17 @@ export default function PRsTab() {
 function PRsTabContent() {
   const navigate = useNavigate();
   const { activePersonId, prsSort, setPrsSort } = useAppState();
-  const { people } = useAuth();
+  const { people, account } = useAuth();
   const { prs, loading, isFetching, updatedAt } = usePrs(activePersonId);
+  const { historyWindow } = useHistoryWindow(activePersonId);
   const { tagsByExerciseId } = useExerciseTagMap(activePersonId);
   const filter = useExerciseFilter();
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
+  const hiddenFromView = historyWindow?.hiddenSessions ?? 0;
+  // Named on this tab specifically, because a board of "bests" that silently covers only part of a
+  // training life is the most misleading of the three clamped screens: the number on the row is a
+  // real record, just not necessarily the person's real record.
+  const prsLead = `Bests here cover ${windowLabel(historyWindow?.windowStart)}.`;
 
   const allExerciseIds = useMemo(() => prs.map((pr) => pr.exerciseId), [prs]);
   const tagVocabulary = useMemo(
@@ -62,6 +73,10 @@ function PRsTabContent() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <RefreshIndicator show={isFetching && !loading} />
       <OfflineDataNotice updatedAt={updatedAt} />
+
+      {!loading && prs.length > 0 && (
+        <HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} lead={prsLead} />
+      )}
 
       {!loading && prs.length > 0 && (
         <>
@@ -127,7 +142,20 @@ function PRsTabContent() {
           </div>
         ))}
 
-      {!loading && prs.length === 0 && (
+      {/* "log a set to start the board" is advice that cannot work for someone whose sets are all
+          behind the window -- they have already done the thing it asks for. */}
+      {!loading && prs.length === 0 && hiddenFromView > 0 && (
+        <EmptyState
+          icon={IconStar}
+          title="No records inside this window"
+          body={`${activePersonName}'s earlier bests are saved, just not shown on Free.`}
+          action={
+            <HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} lead={prsLead} />
+          }
+        />
+      )}
+
+      {!loading && prs.length === 0 && hiddenFromView === 0 && (
         <div style={emptyStyle}>No PRs yet for {activePersonName}: log a set to start the board.</div>
       )}
 

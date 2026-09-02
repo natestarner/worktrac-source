@@ -21,6 +21,23 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
     // account without trusting a client-supplied personId at all.
     Optional<WorkoutSession> findByIdAndPerson_Account_Id(Long id, Long accountId);
 
+    // How much of this person's history the Free-tier window is hiding, as ONE aggregate rather
+    // than a full-history load: COUNT plus the oldest startedAt, in a single round trip. StatsService
+    // already loads every set a person has ever logged on four separate paths, and
+    // .claude/rules/trends.md forbids adding a fifth -- a projection/aggregate is the sanctioned way
+    // to add a number.
+    //
+    // The EXISTS sub-select is not an optimization: WorkoutSessionService#getHistory drops sessions
+    // with no sets (an abandoned retroactive session), so counting them here would promise the
+    // person more hidden workouts than upgrading could ever show them.
+    //
+    // Returns a single row; COUNT is 0 and MIN is null when nothing is hidden.
+    @Query("SELECT new com.worktrac.backend.workoutsession.HiddenHistorySummary("
+            + "COUNT(s), MIN(s.startedAt)) FROM WorkoutSession s "
+            + "WHERE s.person.id = :personId AND s.startedAt < :floor "
+            + "AND EXISTS (SELECT 1 FROM WorkoutSet w WHERE w.session = s)")
+    HiddenHistorySummary summarizeHiddenBefore(@Param("personId") Long personId, @Param("floor") Instant floor);
+
     // Admin-only aggregates below, consumed only by AdminService.
 
     @Query("SELECT ws.person.account.id, COUNT(ws) FROM WorkoutSession ws GROUP BY ws.person.account.id")

@@ -53,4 +53,14 @@ public class WorkoutSessionController {
     public List<HistorySessionDto> history(@PathVariable Long personId) {
         return workoutSessionService.getHistory(currentUser.accountId(), personId);
     }
+
+    // How much of this person's history the Free-tier window is hiding. Its own endpoint rather than
+    // an envelope around /history, because all three clamped screens ask the same question and only
+    // one of them reads the history list -- and because widening /history's response from a bare
+    // array to an object would break every persisted query cache written by an older build (the
+    // axis-D case in .claude/rules/resilience.md).
+    @GetMapping("/api/people/{personId}/history-window")
+    public HistoryWindowDto historyWindow(@PathVariable Long personId) {
+        return workoutSessionService.getHistoryWindow(currentUser.accountId(), personId);
+    }
 }

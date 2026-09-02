@@ -1,5 +1,6 @@
 import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // This tab's data hooks are all mocked, but OfflineDataNotice reads the durable outbox count
 // straight off the mutation cache, so the tree still needs a real QueryClient around it.
@@ -8,6 +9,7 @@ import TrendsTab from './TrendsTab';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTrendsOverview } from '../../hooks/useTrendsOverview';
+import { useHistoryWindow } from '../../hooks/useHistoryWindow';
 
 // TrendsTab's own job is orchestration -- loading/empty states, the range toggle, and
 // wiring the overview into SummaryCards -- so the heavier chart subcomponents (which
@@ -18,6 +20,7 @@ import { useTrendsOverview } from '../../hooks/useTrendsOverview';
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTrendsOverview', () => ({ useTrendsOverview: vi.fn() }));
+vi.mock('../../hooks/useHistoryWindow', () => ({ useHistoryWindow: vi.fn() }));
 vi.mock('./WeeklyFrequencyChart', () => ({ default: () => <div>weekly-frequency-chart</div> }));
 vi.mock('./WeeklyMetricChart', () => ({ default: () => <div>weekly-metric-chart</div> }));
 vi.mock('./ConsistencyHeatmap', () => ({ default: () => <div>consistency-heatmap</div> }));
@@ -48,6 +51,7 @@ describe('TrendsTab', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useHistoryWindow.mockReturnValue({ historyWindow: null });
     setTrendsRange = vi.fn();
     useAppState.mockReturnValue({
       activePersonId: 7,
@@ -148,5 +152,97 @@ describe('TrendsTab', () => {
     act(() => onlineManager.setOnline(false));
     expect(screen.getByText(/Offline.*data as of/)).toBeInTheDocument();
     onlineManager.setOnline(true);
+  });
+});
+
+// TrendsTab renders no router links until the window notice appears, which is why the rest of this
+// file needs no MemoryRouter and this block does.
+describe('TrendsTab and the Free-tier window', () => {
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const clipped = { windowStart: ninetyDaysAgo, hiddenSessions: 21, earliestHiddenAt: '2025-01-02T10:00:00Z' };
+
+  function renderTrends() {
+    return renderWithQuery(
+      <MemoryRouter>
+        <TrendsTab />
+      </MemoryRouter>,
+    );
+  }
+
+  function mockAppState(trendsRangeWeeks) {
+    useAppState.mockReturnValue({
+      activePersonId: 7,
+      trendsRangeWeeks,
+      setTrendsRange: vi.fn(),
+      trendsExerciseId: null,
+      selectTrendsExercise: vi.fn(),
+      trendsWeeklyMetric: 'volume',
+      setTrendsWeeklyMetric: vi.fn(),
+      trendsExerciseMetric: 'est1rm',
+      setTrendsExerciseMetric: vi.fn(),
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb', plan: 'FREE' } });
+    useHistoryWindow.mockReturnValue({ historyWindow: clipped });
+  });
+
+  it('qualifies the charts on a populated screen', () => {
+    mockAppState(12);
+    useTrendsOverview.mockReturnValue({ overview: overviewWithActivity, loading: false });
+
+    renderTrends();
+
+    expect(screen.getByText(/21 earlier workouts are saved but hidden on Free/)).toBeInTheDocument();
+  });
+
+  // 12 weeks is 84 days and fits inside a 90-day window, so the charts for THAT range are complete
+  // and a "this range is clipped" lead would be false. The notice still shows, because the
+  // consistency grid ignores the range toggle and is clipped on every range.
+  it('does not claim a range is clipped when that range fits inside the window', () => {
+    mockAppState(12);
+    useTrendsOverview.mockReturnValue({ overview: overviewWithActivity, loading: false });
+
+    renderTrends();
+
+    expect(screen.queryByText(/This range stops at/)).not.toBeInTheDocument();
+  });
+
+  // "All" promises five years while the charts stop at 90 days. That is the sharpest version of the
+  // problem and the one place the range itself is worth naming.
+  it('names the range when the toggle promises more than the window can show', () => {
+    mockAppState(260);
+    useTrendsOverview.mockReturnValue({ overview: overviewWithActivity, loading: false });
+
+    renderTrends();
+
+    expect(screen.getByText(/This range stops at the last 90 days on Free/)).toBeInTheDocument();
+  });
+
+  // "Try a wider range" is a loop for someone on Free: widening the range is exactly what the
+  // window is clipping, so it cannot reach what it is hiding.
+  it('does not send a clipped household to widen a range that cannot help', () => {
+    mockAppState(4);
+    useTrendsOverview.mockReturnValue({ overview: emptyRange(true), loading: false });
+
+    renderTrends();
+
+    expect(screen.queryByText(/Try a wider range/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Earlier training is saved/)).toBeInTheDocument();
+  });
+
+  it('keeps the original range-empty copy when nothing is hidden', () => {
+    mockAppState(4);
+    useHistoryWindow.mockReturnValue({
+      historyWindow: { windowStart: ninetyDaysAgo, hiddenSessions: 0, earliestHiddenAt: null },
+    });
+    useTrendsOverview.mockReturnValue({ overview: emptyRange(true), loading: false });
+
+    renderTrends();
+
+    expect(screen.getByText(/Try a wider range/)).toBeInTheDocument();
   });
 });

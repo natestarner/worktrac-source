@@ -219,6 +219,7 @@ function invalidateTrends(client, personId) {
 export function invalidateAfterImport(client, personId) {
   client.invalidateQueries({ queryKey: queryKeys.history(personId) });
   client.invalidateQueries({ queryKey: queryKeys.prs(personId) });
+  client.invalidateQueries({ queryKey: queryKeys.historyWindow(personId) });
   client.invalidateQueries({ queryKey: queryKeys.personExercises(personId) });
   client.invalidateQueries({ queryKey: queryKeys.exercises() });
   client.invalidateQueries({ queryKey: queryKeys.tags() });
@@ -343,6 +344,9 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       }
       client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
       client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+      // Derived from sets like the three above: logging into an out-of-window past session is how
+      // the hidden count goes 0 -> 1, and that is the exact flow the notice exists for.
+      client.invalidateQueries({ queryKey: queryKeys.historyWindow(vars.personId) });
       invalidateTrends(client, vars.personId);
     },
   });
@@ -440,6 +444,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
     client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
     client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+    client.invalidateQueries({ queryKey: queryKeys.historyWindow(vars.personId) });
     invalidateTrends(client, vars.personId);
   };
 

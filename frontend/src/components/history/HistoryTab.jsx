@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { useHistory } from '../../hooks/useHistory';
+import { useHistoryWindow } from '../../hooks/useHistoryWindow';
 import { useExerciseTagMap } from '../../hooks/useExerciseTagMap';
 import { useExerciseFilter } from '../../hooks/useExerciseFilter';
 import { downloadPersonCsv } from '../../api/export';
@@ -15,10 +16,13 @@ import Skeleton from '../shared/Skeleton';
 import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import EmptyState from '../shared/EmptyState';
+import HistoryWindowNotice from '../shared/HistoryWindowNotice';
+import { windowLabel } from '../shared/historyWindowCopy';
 import SetPillRow from '../shared/SetPillRow';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
 import { tagChipStyle } from '../shared/tagChipStyle';
-import { IconNote } from '../shared/icons';
+import { IconNote, IconInbox } from '../shared/icons';
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
@@ -59,8 +63,9 @@ export default function HistoryTab() {
 function HistoryTabContent({ initialExerciseFilter }) {
   const navigate = useNavigate();
   const { activePersonId, startEditingSession } = useAppState();
-  const { people } = useAuth();
+  const { people, account } = useAuth();
   const { history, loading, isFetching, updatedAt } = useHistory(activePersonId);
+  const { historyWindow } = useHistoryWindow(activePersonId);
   const { tagsByExerciseId } = useExerciseTagMap(activePersonId);
   const filter = useExerciseFilter(initialExerciseFilter);
   const [showPastSessionModal, setShowPastSessionModal] = useState(false);
@@ -90,6 +95,10 @@ function HistoryTabContent({ initialExerciseFilter }) {
       ),
     [history, filter.text, filter.selectedTagIds, filter.exerciseFilter, tagsByExerciseId],
   );
+
+  // 0 while the window request is unanswered, so an empty History with no server answer keeps the
+  // original copy rather than guessing. Both branches render something honest; only one is a fact.
+  const hiddenFromView = historyWindow?.hiddenSessions ?? 0;
 
   const totalEntryCount = history.reduce((sum, s) => sum + s.entries.length, 0);
   const matchedEntryCount = filteredSessions.reduce((sum, s) => sum + s.entries.length, 0);
@@ -135,6 +144,13 @@ function HistoryTabContent({ initialExerciseFilter }) {
       <RefreshIndicator show={isFetching && !loading} />
       <OfflineDataNotice updatedAt={updatedAt} />
 
+      {/* Above the list, not below it: someone should know their history is clipped before they
+          read it and conclude it is complete. It renders nothing at all unless something really is
+          hidden, so a Free household inside the window sees no change here. */}
+      {!loading && history.length > 0 && (
+        <HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} />
+      )}
+
       {!loading && history.length > 0 && (
         <ExerciseFilterBar
           text={filter.text}
@@ -172,7 +188,20 @@ function HistoryTabContent({ initialExerciseFilter }) {
           </div>
         ))}
 
-      {!loading && history.length === 0 && (
+      {/* Two different empty screens, and telling them apart is the whole point. "No workouts
+          logged yet" is simply FALSE for a Free household whose training all predates the window --
+          including, acutely, someone who has just logged a past workout at an out-of-window date
+          and tapped Done. That flow used to land here and be told the workout did not exist. */}
+      {!loading && history.length === 0 && hiddenFromView > 0 && (
+        <EmptyState
+          icon={IconInbox}
+          title={`Nothing in ${windowLabel(historyWindow?.windowStart)}`}
+          body={`Everything ${activePersonName} logged before then is saved, just not shown on Free.`}
+          action={<HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} />}
+        />
+      )}
+
+      {!loading && history.length === 0 && hiddenFromView === 0 && (
         <div style={emptyStyle}>No workouts logged yet for {activePersonName}.</div>
       )}
 

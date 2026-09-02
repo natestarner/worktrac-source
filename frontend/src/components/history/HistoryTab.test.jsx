@@ -7,11 +7,13 @@ import HistoryTab from './HistoryTab';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { useHistory } from '../../hooks/useHistory';
+import { useHistoryWindow } from '../../hooks/useHistoryWindow';
 import { listPersonExercises } from '../../api/exercises';
 
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useHistory', () => ({ useHistory: vi.fn() }));
+vi.mock('../../hooks/useHistoryWindow', () => ({ useHistoryWindow: vi.fn() }));
 vi.mock('../../api/exercises', () => ({ listPersonExercises: vi.fn() }));
 
 const mockNavigate = vi.fn();
@@ -34,6 +36,7 @@ describe('HistoryTab session notes', () => {
     useAppState.mockReturnValue({ activePersonId: 7, startEditingSession: vi.fn() });
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
     listPersonExercises.mockResolvedValue([]);
+    useHistoryWindow.mockReturnValue({ historyWindow: null });
   });
 
   it('shows the session note beneath the sets for an entry that has one', async () => {
@@ -292,5 +295,61 @@ describe('HistoryTab filter isolation across a person switch', () => {
     );
 
     await screen.findByText('Bench Press'); // the search text did not survive the person switch
+  });
+});
+
+// The gap this closes: a Free household could log a past workout at an out-of-window date, tap
+// Done, land here, and be told "No workouts logged yet" -- about a workout the app had just saved.
+describe('HistoryTab and the Free-tier window', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppState.mockReturnValue({ activePersonId: 7, startEditingSession: vi.fn() });
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }], account: { plan: 'FREE' } });
+    listPersonExercises.mockResolvedValue([]);
+    useHistory.mockReturnValue({ loading: false, history: [] });
+  });
+
+  it('does not claim an empty window means nothing was ever logged', async () => {
+    useHistoryWindow.mockReturnValue({
+      historyWindow: { windowStart: '2026-03-17T12:00:00Z', hiddenSessions: 3, earliestHiddenAt: '2025-11-02T10:00:00Z' },
+    });
+
+    renderHistoryTab();
+
+    expect(screen.queryByText(/No workouts logged yet/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/3 earlier workouts are saved but hidden on Free/)).toBeInTheDocument();
+  });
+
+  // The other side of the same branch: with nothing hidden, an empty History really is empty and
+  // the original copy is the honest one.
+  it('keeps the original copy for a person who really has never logged anything', async () => {
+    useHistoryWindow.mockReturnValue({
+      historyWindow: { windowStart: '2026-03-17T12:00:00Z', hiddenSessions: 0, earliestHiddenAt: null },
+    });
+
+    renderHistoryTab();
+
+    expect(await screen.findByText('No workouts logged yet for Nate.')).toBeInTheDocument();
+  });
+
+  it('marks a populated but clipped list as incomplete', async () => {
+    useHistory.mockReturnValue({
+      loading: false,
+      history: [
+        {
+          id: 101,
+          startedAt: '2026-06-01T12:00:00Z',
+          endedAt: '2026-06-01T13:00:00Z',
+          entries: [{ exerciseId: 1, exerciseName: 'Squat', sets: [{ weight: 225, reps: 5, unit: 'lb' }], note: null }],
+        },
+      ],
+    });
+    useHistoryWindow.mockReturnValue({
+      historyWindow: { windowStart: '2026-03-17T12:00:00Z', hiddenSessions: 12, earliestHiddenAt: '2025-01-02T10:00:00Z' },
+    });
+
+    renderHistoryTab();
+
+    expect(await screen.findByText(/12 earlier workouts are saved but hidden on Free/)).toBeInTheDocument();
   });
 });

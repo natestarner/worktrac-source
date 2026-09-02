@@ -54,10 +54,30 @@ an exact duplicate of it. Don't reintroduce a "1RM" row that ranks on raw weight
 |---|---|---|
 | `weeks[]`, exercise trend points | the `weeks` param | what the toggle is for |
 | `workoutDays` (heatmap) | fixed trailing `HEATMAP_DAYS` (182) | 4 columns reads as broken, 260 is unusable on a phone |
-| `hasAnyHistory` | all time | separates a new person from a lapsed one — see below |
+| `hasAnyHistory` | all time — **pre-clamp** | separates a new person from a lapsed one — see below |
 | `/exercises/{id}/records` | all time, **no `weeks` param** | a record isn't relative to the range; keeping it out of the URL *and* the query key is what stops the toggle refetching it |
 
 **Don't add `weeks` to the records endpoint or `queryKeys.exerciseRecords`.**
+
+### `hasAnyHistory` is read BEFORE the Free-tier window narrows the set list
+
+`getOverview` computes it from the unclamped repository result, not from the `visibleTo(...)` output
+every other aggregate on that DTO uses. It was derived post-clamp for a long time, which made it
+answer the wrong question for exactly the households it exists to serve: a Free household whose
+whole training history predates the 90-day window got *"No workouts logged yet. Trends will show up
+here once a few sessions are in the books."* — told they had never trained, by the field added to
+stop that. The window clamps **display**; it must never change what the app believes about a person.
+Guarded by `FreeTierHistoryWindowTest#aFreeHouseholdWithOnlyOldHistoryIsNotToldItHasNeverTrained`.
+
+### The empty state has THREE cases, not two
+
+The third is "nothing in this range, and there is more behind the Free window". *"Try a wider
+range"* is a loop for that household — widening the range is precisely what the window is clipping,
+so it cannot reach what it is hiding. `TrendsTab` renders `HistoryWindowNotice` instead; see
+`billing.md`. The notice shows on **every** range, not just the wide ones, because the consistency
+grid ignores the range toggle and is therefore clipped on all of them — but the range-specific lead
+("this range stops at…") appears only when the selected range really does reach past the window,
+since at 4wk and 12wk the charts for that range are complete and the lead would be false.
 
 ## Empty state: the range being empty ≠ never having trained
 

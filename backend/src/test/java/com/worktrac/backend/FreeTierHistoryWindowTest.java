@@ -139,6 +139,22 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
         return objectMapper.readTree(response);
     }
 
+    private JsonNode getHistoryWindow() throws Exception {
+        String response = mockMvc.perform(get("/api/people/" + personId + "/history-window")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response);
+    }
+
+    private JsonNode getTrendsOverview() throws Exception {
+        String response = mockMvc.perform(get("/api/people/" + personId + "/trends/overview")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response);
+    }
+
     // Deliberately this PERSON's sets, not workoutSetRepository.count(): that counts the whole
     // database, which in a shared test database includes every other case in this class. The
     // promise is about a household's own rows surviving, so that is what gets counted.
@@ -259,6 +275,113 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
                 "Beating the genuine all-time best is still a PR on Free");
     }
 
+    // -- Telling the person what is hidden --------------------------------------------------
+
+    // The count is only worth showing if it is exactly right, so this asserts the two halves add
+    // up rather than merely that the count is non-zero: what Free can see, plus what it is told is
+    // hidden, must equal what Pro sees. A count derived from a slightly different filter than
+    // getHistory's would satisfy a "> 0" assertion and still lie to the person.
+    @Test
+    void freeIsToldExactlyHowManyWorkoutsAreHidden() throws Exception {
+        seedOldAndRecent();
+        setPro(false);
+
+        JsonNode window = getHistoryWindow();
+        assertEquals(1, window.get("hiddenSessions").asInt());
+        assertTrue(window.get("earliestHiddenAt").asText().startsWith("2026-01-10"),
+                "The explainer names a real date, so it must be the oldest hidden session");
+        assertTrue(window.get("windowStart").asText().startsWith("2026-03-17"),
+                "90 days before the frozen 2026-06-15 test clock");
+
+        int visible = getHistory().size();
+        setPro(true);
+        assertEquals(getHistory().size(), visible + window.get("hiddenSessions").asInt(),
+                "visible + hidden must account for every session Pro can see");
+    }
+
+    // Pro has no floor, so there is nothing to report and no query to run.
+    @Test
+    void proIsToldNothingIsHidden() throws Exception {
+        seedOldAndRecent();
+        setPro(true);
+
+        JsonNode window = getHistoryWindow();
+        assertTrue(window.get("windowStart").isNull(), "A null floor is what marks a household Pro");
+        assertEquals(0, window.get("hiddenSessions").asInt());
+        assertTrue(window.get("earliestHiddenAt").isNull());
+    }
+
+    @Test
+    void compedHouseholdsAreToldNothingIsHidden() throws Exception {
+        seedOldAndRecent();
+        Subscription subscription = subscriptionRepository.findByAccountId(accountId).orElseThrow();
+        subscription.setComped(true);
+        subscriptionRepository.save(subscription);
+
+        assertEquals(0, getHistoryWindow().get("hiddenSessions").asInt(),
+                "Comped is Pro everywhere, here too -- no second code path");
+    }
+
+    // getHistory drops sessions with no sets, so counting them here would promise the person more
+    // hidden workouts than upgrading could ever show them. An abandoned retroactive session is the
+    // realistic way to end up with one.
+    @Test
+    void anEmptyOldSessionIsNotCountedAsHidden() throws Exception {
+        createPastSession("2026-01-10T10:00:00Z"); // created, never logged into
+        setPro(false);
+
+        JsonNode window = getHistoryWindow();
+        assertEquals(0, window.get("hiddenSessions").asInt(),
+                "A session with no sets is not a History row, so it is not a hidden one either");
+        assertTrue(window.get("earliestHiddenAt").isNull());
+    }
+
+    // The boundary is reported even with nothing behind it yet. This is what lets the app warn
+    // someone picking an out-of-window date in "Log a past workout" BEFORE they log the workout,
+    // instead of explaining afterwards why it vanished -- and it is why the client never computes
+    // the 90 days itself.
+    @Test
+    void aFreeHouseholdWithNothingHiddenStillLearnsTheBoundary() throws Exception {
+        long recent = createPastSession("2026-06-01T10:00:00Z");
+        logSet(recent, 135, 5);
+        setPro(false);
+
+        JsonNode window = getHistoryWindow();
+        assertEquals(0, window.get("hiddenSessions").asInt());
+        assertTrue(window.get("windowStart").isTextual(),
+                "Free always reports its floor, even when nothing has fallen behind it yet");
+    }
+
+    // The count follows the clock for the same reason the clamp does.
+    @Test
+    void theHiddenCountSlidesWithTheClock() throws Exception {
+        long session = createPastSession("2026-06-01T10:00:00Z");
+        logSet(session, 135, 5);
+        setPro(false);
+        assertEquals(0, getHistoryWindow().get("hiddenSessions").asInt());
+
+        clock.advance(Duration.ofDays(120));
+
+        assertEquals(1, getHistoryWindow().get("hiddenSessions").asInt(),
+                "The session fell out of the window, so it is now reported as hidden");
+        assertEquals(1, storedSetCount(), "...and is still in the database");
+    }
+
+    // REGRESSION. hasAnyHistory was computed from the CLAMPED set list, so a Free household whose
+    // entire training history predates the window was told "No workouts logged yet. Trends will
+    // show up here once a few sessions are in the books." -- by the exact field that exists to
+    // separate a new person from a lapsed one. The window clamps DISPLAY; it must never change
+    // what the app believes about the person.
+    @Test
+    void aFreeHouseholdWithOnlyOldHistoryIsNotToldItHasNeverTrained() throws Exception {
+        long old = createPastSession("2026-01-10T10:00:00Z");
+        logSet(old, 225, 5);
+        setPro(false);
+
+        JsonNode overview = getTrendsOverview();
+        assertTrue(overview.get("hasAnyHistory").asBoolean(),
+                "They have years of history; only the last 90 days of it are visible");
+    }
     // ── Comped households ──────────────────────────────────────────────────────────────────────
 
     @Test

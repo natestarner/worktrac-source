@@ -174,6 +174,31 @@ public class WorkoutSessionService {
                 .toList();
     }
 
+    // What the Free-tier window is currently hiding from this person, so the three clamped screens
+    // (History, PRs, Trends) can say so instead of quietly rendering a partial view.
+    //
+    // Pro short-circuits with NO QUERY AT ALL: a null floor means nothing is filtered anywhere, so
+    // there is nothing to count and nothing to say. Free runs one aggregate -- never a second
+    // full-history load.
+    //
+    // This is a read about billing's effect on data, not a billing gate: it grants nothing, refuses
+    // nothing, and a household with no subscription row resolves to Free the same way every other
+    // caller of historyFloor does.
+    @Transactional(readOnly = true)
+    public HistoryWindowDto getHistoryWindow(Long accountId, Long personId) {
+        Person person = personService.requireOwnedPerson(personId, accountId);
+        Instant floor = subscriptionService.historyFloor(accountId);
+        if (floor == null) {
+            return HistoryWindowDto.unclamped();
+        }
+        HiddenHistorySummary hidden = workoutSessionRepository.summarizeHiddenBefore(person.getId(), floor);
+        long count = hidden == null || hidden.hiddenSessions() == null ? 0L : hidden.hiddenSessions();
+        // The floor is reported even when the count is zero. A Free household with nothing hidden
+        // yet still needs the boundary date, so PastSessionModal can warn about an out-of-window
+        // date BEFORE the workout is logged rather than after it vanishes.
+        return new HistoryWindowDto(floor, (int) count, count == 0 ? null : hidden.earliestHiddenAt());
+    }
+
     private HistorySessionDto toHistorySessionDto(WorkoutSession session, List<WorkoutSet> sessionSets,
                                                    Map<Long, String> notesByExercise) {
         Map<Long, List<WorkoutSet>> byExercise = new LinkedHashMap<>();

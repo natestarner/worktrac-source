@@ -146,6 +146,70 @@ complete, and an expiry to forget. Also rejected: a "comp this account" admin bu
 a third sanctioned write action in a deliberately read-only portal.
 
 
+## Saying what the window is hiding
+
+The clamp shipped correct and silent, and silent was the bug. Two shapes of it:
+
+- **The acute one.** A Free household taps "+ Log a past workout", picks a date months back, logs
+  the sets, taps Done — and lands on History reading *"No workouts logged yet."* The work is saved
+  and returns with Pro, but the app has just told them it does not exist. `log-past-workout.spec.ts`
+  flagged this in a comment and worked around it by forcing the household to Pro.
+- **The chronic one.** Any Free household past ~90 days of use. History simply ends, the PR board
+  can be missing whole exercises, and the Trends range toggle offers "All" while the charts cover 90
+  days. Nothing on screen said so.
+
+### The server answers "is anything hidden from you"
+
+`GET /api/people/{id}/history-window` returns `windowStart`, `hiddenSessions` and
+`earliestHiddenAt`. It is its own endpoint rather than an envelope on `/history` for two reasons:
+all three clamped screens ask the same question and only one of them reads the history list, and
+widening `/history` from a bare array to an object would break every persisted query cache written
+by an older build — the axis-D case in `resilience.md`.
+
+Pro short-circuits with no query at all (a null floor means nothing is filtered, so there is nothing
+to count). Free runs one `COUNT` + `MIN` aggregate with an `EXISTS` sub-select — never a second
+full-history load, which `trends.md` forbids outright.
+
+**The client never computes the window**, not even for copy: `historyWindowCopy.js` derives "the
+last 90 days" from the `windowStart` the server reported. A literal 90 on the client would be a
+second copy of `FREE_HISTORY_WINDOW`, and the copy is the half nobody would think to update.
+
+### Why the count, and not just "Free shows 90 days"
+
+The number is the person's own data, which makes it simultaneously the most honest framing and the
+strongest argument. "47 earlier workouts are saved but hidden on Free" is a fact about them; "Free
+shows the last 90 days" is a policy, and a reader cannot tell whether it is hiding two workouts or
+two hundred. That is also why `hiddenSessions` applies exactly the same "has sets" filter
+`getHistory` does — an inflated count would be worse than no count.
+
+### Warn, don't block
+
+`PastSessionModal` shows the warning inline the moment an out-of-window date is picked, and does
+**not** put a `min` on the input or disable the button. The workout genuinely is saved and comes
+back on upgrade; refusing it would turn a display limit into a data-entry limit, which contradicts
+the promise the marketing site makes twice in writing. The person is told before they spend five
+minutes entering sets, and History explains itself afterwards — one coherent story either side of
+the flow.
+
+### Honest first, persuasive second
+
+`HistoryWindowModal` leads with the reassurance ("Nothing is deleted, ever") before any pitch,
+because someone who has just found data missing from their own screen needs *did I lose it?*
+answered first. It then names two things a less honest version would omit: PR detection has been
+reading the whole history all along, so their celebrations were real; and export is free on both
+plans, so the data is retrievable regardless. An upgrade taken on a complete picture is the only
+kind worth having, and both facts are already true — they simply were not being said.
+
+### What keeps it from being an ad
+
+It renders only when it is stating a fact about that household's own data. Unknown plan, unanswered
+query, or a zero count each render nothing, so the majority of Free households — anyone inside their
+first 90 days — see no change anywhere in the app. It is not dismissible, which is the accepted
+trade: for a long-tenured Free household the statement stays true, so it stays on screen, and that
+is why it is one line rather than a card. A dismiss would need a new persisted per-person field with
+the hydrate-path hazard every one of those carries.
+
+
 ## Deploying it: the environment variables
 
 All of these live in the separate **`worktrac-deploy`** repo, never here. Three places have to

@@ -7,11 +7,13 @@ import PRsTab from './PRsTab';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { getPrs } from '../../api/stats';
+import { useHistoryWindow } from '../../hooks/useHistoryWindow';
 import { listPersonExercises } from '../../api/exercises';
 
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../api/stats', () => ({ getPrs: vi.fn() }));
+vi.mock('../../hooks/useHistoryWindow', () => ({ useHistoryWindow: vi.fn() }));
 vi.mock('../../api/exercises', () => ({ listPersonExercises: vi.fn() }));
 
 const mockNavigate = vi.fn();
@@ -35,6 +37,7 @@ describe('PRsTab', () => {
     useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn() });
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
     listPersonExercises.mockResolvedValue([]);
+    useHistoryWindow.mockReturnValue({ historyWindow: null });
   });
   afterEach(() => onlineManager.setOnline(true));
 
@@ -218,5 +221,64 @@ describe('PRsTab sorting', () => {
 
     await waitFor(() => expect(screen.getByText(/log a set to start the board/)).toBeInTheDocument());
     expect(screen.queryByLabelText('Sort')).not.toBeInTheDocument();
+  });
+});
+
+// windowLabel derives "the last N days" from the floor the SERVER reported, measured against the
+// real clock -- that is the whole point of not hardcoding 90 anywhere on the client. So the fixture
+// has to be anchored to now, not to a date literal that ages.
+const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+
+describe('PRsTab and the Free-tier window', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn() });
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }], account: { plan: 'FREE' } });
+    listPersonExercises.mockResolvedValue([]);
+  });
+
+  // "log a set to start the board" is advice someone whose sets are all behind the window has
+  // already taken. Repeating it tells them their training never happened.
+  it('does not tell a clipped household to go and log its first set', async () => {
+    getPrs.mockResolvedValue([]);
+    useHistoryWindow.mockReturnValue({
+      historyWindow: { windowStart: ninetyDaysAgo, hiddenSessions: 8, earliestHiddenAt: '2025-02-02T10:00:00Z' },
+    });
+
+    renderPRsTab();
+
+    expect(await screen.findByText('No records inside this window')).toBeInTheDocument();
+    expect(screen.queryByText(/log a set to start the board/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the original copy when nothing is hidden', async () => {
+    getPrs.mockResolvedValue([]);
+    useHistoryWindow.mockReturnValue({
+      historyWindow: { windowStart: ninetyDaysAgo, hiddenSessions: 0, earliestHiddenAt: null },
+    });
+
+    renderPRsTab();
+
+    expect(await screen.findByText(/log a set to start the board/)).toBeInTheDocument();
+  });
+
+  // The board itself is the misleading part: every row is a real record, just not necessarily the
+  // person's real record, so the notice names what the bests actually cover.
+  it('says what the bests on a populated board actually cover', async () => {
+    getPrs.mockResolvedValue([
+      {
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        best: { weight: 135, reps: 5, durationSeconds: null, unit: 'lb', est1rm: 157.5, sessionStartedAt: '2026-06-01T12:00:00Z' },
+      },
+    ]);
+    useHistoryWindow.mockReturnValue({
+      historyWindow: { windowStart: ninetyDaysAgo, hiddenSessions: 8, earliestHiddenAt: '2025-02-02T10:00:00Z' },
+    });
+
+    renderPRsTab();
+
+    expect(await screen.findByText(/Bests here cover the last 90 days/)).toBeInTheDocument();
   });
 });
