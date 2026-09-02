@@ -527,3 +527,42 @@ describe('AppShell product tour mounting', () => {
     expect(screen.getByTestId('product-tour')).toBeInTheDocument();
   });
 });
+
+// The white screen this app has now been reported with three times (2026-08-25, 2026-08-31,
+// 2026-09-02). `if (!activePersonId) return null` is a literally empty #root, which
+// boot-watchdog.js reports as "Huddle couldn't load" after seven seconds -- reproduced end to end
+// in a real browser on 2026-09-02: #root emptied at 0.15s and the watchdog fired on schedule, with
+// nothing actually broken except that no person was selected.
+//
+// The empty-people case is the one that latches. Nothing will ever select a person, and
+// RECONCILE_PEOPLE's result is written to localStorage synchronously, so every later boot starts
+// here too -- which is why "clearing site data" was the only reported cure.
+describe('AppShell never renders an empty #root', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useUI.mockReturnValue(baseUI());
+    migrateLegacyRestTimerPrefs.mockResolvedValue(false);
+  });
+
+  it('renders boot chrome, not nothing, during the transient no-person-selected-yet frame', () => {
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate', isPrimary: true }], refreshPeople: vi.fn() });
+    useAppState.mockReturnValue(baseAppState({ activePersonId: null }));
+
+    const { container } = renderShell();
+
+    expect(container).not.toBeEmptyDOMElement();
+  });
+
+  it('offers a way forward, not a blank screen, when the household has no people at all', () => {
+    useAuth.mockReturnValue({ people: [], refreshPeople: vi.fn() });
+    useAppState.mockReturnValue(baseAppState({ activePersonId: null }));
+
+    const { container } = renderShell();
+
+    expect(container).not.toBeEmptyDOMElement();
+    expect(screen.getByText('No one to log for yet')).toBeInTheDocument();
+    // A real navigation, like CriticalErrorFallback's -- signing back in re-reads the people list.
+    expect(screen.getByRole('link', { name: 'Go to login' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('button', { name: 'Add a person' })).toBeInTheDocument();
+  });
+});

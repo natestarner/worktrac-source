@@ -40,6 +40,18 @@ function writeLastKnownApiUrl(apiUrl) {
   }
 }
 
+// Optional-called into boot-watchdog.js's breadcrumb collector, which is a plain script loaded
+// before this bundle. Wrapped because a diagnostic must never be able to throw into boot -- and
+// this one sits inside loadConfig's own try/catch, where a throw would be silently misread as a
+// config-fetch failure and send every later request to the wrong origin.
+function markBoot(name, detail) {
+  try {
+    window.__huddleBootMark?.(name, detail);
+  } catch {
+    // Nothing to do, and nothing that depends on it.
+  }
+}
+
 export async function loadConfig() {
   if (config) return config;
   const controller = new AbortController();
@@ -49,6 +61,10 @@ export async function loadConfig() {
     if (!response.ok) throw new Error(`/config.json responded ${response.status}`);
     config = await response.json();
     writeLastKnownApiUrl(config.apiUrl);
+    // Which SOURCE answered matters as much as the timing: a boot that fell back to the
+    // last-known origin is a completely different failure from one that fetched cleanly, and it is
+    // invisible afterwards. See boot-watchdog.js's diagnostics comment.
+    markBoot('config', 'network');
   } catch {
     // Covers a real rejection, a non-2xx response, and the abort above alike -- boot must not
     // wait to find out which.
@@ -73,6 +89,7 @@ export async function loadConfig() {
     // that has genuinely never loaded this app before falls through to the empty/relative
     // fallback, which is also exactly what local dev's own config.json (apiUrl: "") produces.
     config = { apiUrl: readLastKnownApiUrl() };
+    markBoot('config', config.apiUrl ? 'lastKnown' : 'relative');
   } finally {
     clearTimeout(timeoutId);
   }

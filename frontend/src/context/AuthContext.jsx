@@ -20,14 +20,31 @@ import { markOnboardingPending } from '../lib/onboardingPending';
 
 const AuthContext = createContext(null);
 
-const EMPTY = { status: 'loading', user: null, account: null, people: [], offline: false };
-const SIGNED_OUT = { status: 'unauthenticated', user: null, account: null, people: [], offline: false };
+const EMPTY = { status: 'loading', user: null, account: null, people: [], offline: false, bootStalled: false };
+const SIGNED_OUT = { status: 'unauthenticated', user: null, account: null, people: [], offline: false, bootStalled: false };
 
 // Backoff for retrying /me at boot when the server/DB is unreachable and there's no snapshot to
 // fall back to (see the boot effect below) -- capped, doubling delay, same shape as the durable
 // outbox's own retryDelay (queryClient.js).
 export const RECONNECT_RETRY_BASE_MS = 2000;
 export const RECONNECT_RETRY_MAX_MS = 30000;
+
+// How many consecutive unreachable-server /me attempts the boot may make before it stops showing
+// a bare skeleton and says something. This bounds the VISIBILITY of the wait, not the retry: the
+// retry keeps going for as long as the app is open, so a backend that eventually answers still
+// heals the screen on its own with no interaction.
+//
+// It exists because "token present, no snapshot, server unreachable" used to be a terminal state
+// with no exit. ProtectedRoute renders AppShellSkeleton for `status === 'loading'`, this branch
+// never leaves `loading`, and a reload lands in exactly the same state -- so the person sat on a
+// fake loading screen indefinitely and only clearing site data recovered it (measured: 81s and
+// still going). That is precisely the "spinner over a request that will never succeed" outcome
+// .claude/rules/resilience.md forbids.
+//
+// Three attempts, not one: a lower cold start is ~35s end to end and api/client.js aborts at 15s,
+// so attempts 1-2 failing is the ORDINARY scale-to-zero path, not a fault. Stalling earlier would
+// fire on every cold boot; this fires only once the wait is genuinely unexplained.
+export const BOOT_STALL_AFTER_ATTEMPTS = 3;
 
 // Records which account currently owns whatever's sitting in the live outbox. If a DIFFERENT
 // account is becoming active than the one the outbox pointer says owns it (a shared device: A's
@@ -50,6 +67,52 @@ function adoptOutboxAccount(accountId) {
   setOutboxAccountId(accountId);
   if (switched) clearOutboxMutations();
   return switched;
+}
+
+// Turns a freshly-issued token into a verified identity, or leaves the device exactly as it was.
+// The single choke point for both credential paths (login and confirmEmail), because both used to
+// get this ordering wrong in the same way.
+//
+// The old order was: resetQueryCache() -> clearAuthSnapshot() -> setAuthToken(token) -> await
+// apiMe(). Every teardown ran BEFORE the app had anything to put back, and the token was persisted
+// before /me had confirmed a single thing. That is fine right up until /me doesn't answer -- and
+// against a scale-to-zero backend it routinely doesn't: lower runs min-replicas=0, a measured cold
+// start is ~35s, and api/client.js aborts at 15s, so the first /me after a scale-to-zero reliably
+// loses that race even though the credentials were accepted.
+//
+// What that left on the device was the worst possible combination: a VALID token, NO auth snapshot
+// and NO persisted query cache. The boot effect above reads exactly that state as "keep retrying
+// /me forever" (it can't tell a stranded token from a live session whose server is briefly down),
+// so every later reload sat on the boot skeleton with nothing cached to render and no way out.
+// Only clearing site data recovered it. See
+// docs/incidents/2026-09-02-cold-backend-login-strands-the-device.md.
+//
+// So: acquire first, tear down second. Nothing the device is currently relying on is discarded
+// until `data` is in hand, and a failed attempt restores the token it found. The window in which
+// the app holds a token it hasn't verified is now bounded by this function rather than by whether
+// the network cooperates.
+async function verifyNewSession(token) {
+  const priorToken = getAuthToken();
+  setAuthToken(token);
+  let data;
+  try {
+    data = await apiMe();
+  } catch (error) {
+    // A definitive 4xx means api/client.js has already cleared the token and run the unauthorized
+    // handler -- putting it back would resurrect a session the server just rejected. Everything
+    // else (abort, timeout, 5xx, cold start) is "couldn't reach the server", which says nothing
+    // about this token, so undo our own write and let the caller surface the failure.
+    if (isOfflineError(error)) setAuthToken(priorToken);
+    throw error;
+  }
+  // Only now is discarding safe. The QUERY cache still has to go -- account-shared keys (catalog,
+  // tags) carry no accountId, so a second household on this device must never read the first's --
+  // but a sign-in that never completed must not cost the CURRENT session its offline copy.
+  // Deliberately does NOT touch the outbox (see resetQueryCache's own comment); adoptOutboxAccount
+  // at each call site handles that, same household or not.
+  resetQueryCache();
+  clearAuthSnapshot();
+  return data;
 }
 
 export function AuthProvider({ children }) {
@@ -96,7 +159,7 @@ export function AuthProvider({ children }) {
       return cancelled || getAuthToken() !== tokenAtStart;
     }
 
-    function attemptMe(nextDelayMs) {
+    function attemptMe(nextDelayMs, attempt = 1) {
       apiMe()
         .then((data) => {
           if (isStale()) return;
@@ -128,8 +191,17 @@ export function AuthProvider({ children }) {
             // outage. Stay on the loading skeleton (ProtectedRoute treats `loading` the same as
             // the initial boot -- never /login) and keep retrying with backoff instead; a genuine
             // invalid-session 4xx still falls to the branch below on any attempt.
+            //
+            // Retrying forever is right; showing a bare skeleton forever is not. Once the wait
+            // stops being explainable as an ordinary cold start, flag it so ProtectedRoute can
+            // offer a way out (see BOOT_STALL_AFTER_ATTEMPTS). The token is deliberately NOT
+            // cleared and the retry below is deliberately NOT stopped: this is a change to what
+            // the person can SEE and DO, never to what the app is still trying.
+            if (attempt >= BOOT_STALL_AFTER_ATTEMPTS) {
+              setState((s) => (s.status === 'loading' && !s.bootStalled ? { ...s, bootStalled: true } : s));
+            }
             retryTimer = setTimeout(() => {
-              if (!isStale()) attemptMe(Math.min(nextDelayMs * 2, RECONNECT_RETRY_MAX_MS));
+              if (!isStale()) attemptMe(Math.min(nextDelayMs * 2, RECONNECT_RETRY_MAX_MS), attempt + 1);
             }, nextDelayMs);
           } else {
             // A genuine sign-out (a real 4xx -- the token itself is invalid) must clear the token
@@ -176,14 +248,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const { token } = await apiLogin({ email, password });
-    // Clear any QUERY cache left by a previously logged-in household on this device before we start
-    // fetching this account's data -- account-shared keys (catalog, tags) carry no accountId. Does
-    // NOT touch the outbox (see resetQueryCache's own comment) -- adoptOutboxAccount below handles
-    // that safely, whether this is the same household logging back in after a 401 or a different one.
-    resetQueryCache();
-    clearAuthSnapshot();
-    setAuthToken(token);
-    const data = await apiMe();
+    const data = await verifyNewSession(token);
     saveAuthSnapshot(data);
     const switchedAccount = adoptOutboxAccount(data.account?.id);
     // Only restore when the account actually changed -- the same account's queued writes never left
@@ -206,10 +271,7 @@ export function AuthProvider({ children }) {
 
   const confirmEmail = useCallback(async ({ email, code }) => {
     const { token } = await apiConfirmEmail({ email, code });
-    resetQueryCache();
-    clearAuthSnapshot();
-    setAuthToken(token);
-    const data = await apiMe();
+    const data = await verifyNewSession(token);
     saveAuthSnapshot(data);
     // Arms the first-run welcome modal for this account. Here, and NOT in login(): this is the
     // only path where the account is provably created in this same request -- confirmEmail is

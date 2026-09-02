@@ -108,6 +108,50 @@ describe('ContactTab', () => {
     );
   });
 
+  // The failure class clientError structurally cannot cover: it is written by a React error
+  // boundary, so a boot that never rendered leaves nothing there. Carried as its own field so
+  // triage can tell the two apart -- see lib/bootFailure.js.
+  it('attaches the boot watchdog\'s record of a failed start, separately from any render error', async () => {
+    localStorage.setItem(
+      'worktrac-boot-failure',
+      JSON.stringify({
+        v: 1,
+        at: '2026-09-02T04:00:00.000Z',
+        route: '/app/log',
+        waitedMs: 7000,
+        painted: true,
+        emptiedAfterMs: 3000,
+        marks: { bundle: { atMs: 300 } },
+      }),
+    );
+    mockAppState({ category: 'BUG', subject: 'White screen', message: 'It went blank on reload.' });
+    render(<ContactTab />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    await waitFor(() => expect(sendContactMessage).toHaveBeenCalled());
+    const { diagnostics } = sendContactMessage.mock.calls[0][0];
+    expect(diagnostics.bootFailure).toContain('painted, then emptied at 3000ms');
+    // Distinct fields: a render error and a failed start are different evidence.
+    expect(diagnostics.clientError).toBeNull();
+    // Cleared on success only, like the draft and the client error beside it.
+    await waitFor(() => expect(localStorage.getItem('worktrac-boot-failure')).toBeNull());
+  });
+
+  it('discloses a failed start rather than attaching it silently', async () => {
+    localStorage.setItem(
+      'worktrac-boot-failure',
+      JSON.stringify({ v: 1, at: '2026-09-02T04:00:00.000Z', route: '/app/log', waitedMs: 7000, painted: false }),
+    );
+    mockAppState();
+    render(<ContactTab />);
+
+    fireEvent.click(screen.getByRole('button', { name: /What gets sent with this/ }));
+
+    expect(await screen.findByText('Last failed start')).toBeInTheDocument();
+    expect(screen.getByText(/app never appeared/)).toBeInTheDocument();
+  });
+
   it('lists what gets sent, so the diagnostics are not attached silently', async () => {
     mockAppState();
     render(<ContactTab />);

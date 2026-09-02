@@ -30,7 +30,7 @@
   queued against a still-syncing set replays after the create it depends on — see the two
   Resolved Incidents below for the mechanism this guarantee depends on). Persisted to
   its own IndexedDB key (`worktrac-outbox:<accountId>`) — deliberately separate from the query
-  cache's persister, so neither the query cache's 24h `maxAge` nor an app-update `buster` bump
+  cache's persister, so neither the query cache's `maxAge` nor an app-update `buster` bump
   can ever silently drop a queued write. Every write carries a client-generated idempotency key
   so a replay (or a retried/duplicated dispatch) can't double-insert; delete-set treats a replay
   404 as success. `flushOutbox()` (resume paused + re-dispatch terminal-errored) runs on

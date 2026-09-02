@@ -262,29 +262,40 @@ const AppStateContext = createContext(null);
 export function AppStateProvider({ children }) {
   const { status, account, people, freshLogin } = useAuth();
   const [state, dispatch] = useReducer(reducer, initialState);
-  const [hydrated, setHydrated] = useState(false);
+  // WHICH account's slice is currently in `state`, not merely "did a hydration finish". A plain
+  // boolean could not answer the question ProtectedRoute actually asks, because the
+  // not-authenticated branch below sets it too: on the very first render after `status` flipped to
+  // 'authenticated', the boolean was still `true` from the signed-out case while `state` was still
+  // `initialState`. ProtectedRoute let <Outlet/> through on that render, AppShell found no active
+  // person and returned null -- an empty #root, which is the one outcome
+  // .claude/rules/resilience.md rules out. Comparing account ids closes that frame by
+  // construction. `undefined` (no hydration yet) can never equal a real accountId; `null` is a
+  // real value here, since an offline boot from a snapshot with no account still hydrates.
+  const [hydratedAccountId, setHydratedAccountId] = useState(undefined);
   const accountId = account?.id ?? null;
+  const hydrated = status !== 'authenticated' || hydratedAccountId === accountId;
 
   // Rehydrate this account's persisted per-person state once we know which account we're in.
   // First paint is gated on this completing (ProtectedRoute shows the AppShell skeleton) so a
   // restored routine/tab is there on the first render, never popped in a beat later.
   useEffect(() => {
     let cancelled = false;
-    if (status !== 'authenticated') {
-      setHydrated(true); // nothing to hydrate on login/public pages -- don't block them
-      return undefined;
-    }
-    setHydrated(false);
-    loadAppState(accountId).then((loaded) => {
-      if (cancelled) return;
-      dispatch({
-        type: 'HYDRATE',
-        activePersonId: loaded?.activePersonId ?? null,
-        byPerson: loaded?.byPerson ?? {},
-        resetTab: freshLogin,
+    if (status !== 'authenticated') return undefined; // nothing to hydrate on login/public pages
+    loadAppState(accountId)
+      // loadAppState swallows every storage failure internally and resolves to null, so this can't
+      // currently reject. Belt-and-braces anyway: an unhandled rejection here would leave
+      // `hydrated` false forever, which ProtectedRoute renders as a skeleton that never resolves.
+      .catch(() => null)
+      .then((loaded) => {
+        if (cancelled) return;
+        dispatch({
+          type: 'HYDRATE',
+          activePersonId: loaded?.activePersonId ?? null,
+          byPerson: loaded?.byPerson ?? {},
+          resetTab: freshLogin,
+        });
+        setHydratedAccountId(accountId);
       });
-      setHydrated(true);
-    });
     return () => {
       cancelled = true;
     };

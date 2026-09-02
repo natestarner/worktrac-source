@@ -14,6 +14,7 @@ import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { useOutboxCount } from '../../hooks/useOutboxCount';
 import { clearClientError, formatClientError, readClientError } from '../../lib/lastClientError';
+import { clearBootFailure, formatBootFailure, readBootFailure } from '../../lib/bootFailure';
 
 const CATEGORIES = [
   { label: 'Suggestion', value: 'SUGGESTION' },
@@ -57,6 +58,9 @@ export default function ContactTab() {
   // Read once per mount: the person is looking at a snapshot of what will be sent, and it must not
   // change under them while they type.
   const clientError = useMemo(() => readClientError(), []);
+  // Read once on mount, like clientError: both are one-slot stashes, and re-reading on every
+  // render would let a boot failure recorded in another tab appear mid-compose.
+  const bootFailure = useMemo(() => readBootFailure(), []);
 
   // Where they were when they opened the menu, passed through by UserMenu. Falls back to the
   // current route for a direct navigation (a bookmark, or a restored lastTab after reload).
@@ -95,6 +99,11 @@ export default function ContactTab() {
           wasOnline: online,
           unsyncedWrites,
           clientError: formatClientError(clientError),
+          // Kept a SEPARATE field rather than folded into clientError: they answer different
+          // questions and come from different places (a React boundary vs. a plain script that
+          // runs when React may never have started), and a triage that cannot tell them apart
+          // is the position the last three investigations were in.
+          bootFailure: formatBootFailure(bootFailure),
         },
       });
 
@@ -102,6 +111,7 @@ export default function ContactTab() {
       // has already shown the error toast, and the person can retry without retyping.
       clearContactDraft();
       clearClientError();
+      clearBootFailure();
       setSent(true);
       showToast('Thanks. Your message is on its way.');
     },
@@ -194,6 +204,7 @@ export default function ContactTab() {
           online={online}
           unsyncedWrites={unsyncedWrites}
           clientError={clientError}
+          bootFailure={bootFailure}
         />
 
         <OfflineDisabledWrap message="Sending a message needs a connection.">
@@ -209,7 +220,7 @@ export default function ContactTab() {
 // The disclosure. Diagnostics make a bug report actionable, but attaching them silently would mean
 // the person doesn't know what they're sending -- so everything captured is listed here in plain
 // language, collapsed by default so it doesn't crowd the form.
-function WhatGetsSent({ appBuild, screen, online, unsyncedWrites, clientError }) {
+function WhatGetsSent({ appBuild, screen, online, unsyncedWrites, clientError, bootFailure }) {
   const [open, setOpen] = useState(false);
   const rows = [
     ['App version', appBuild],
@@ -220,6 +231,14 @@ function WhatGetsSent({ appBuild, screen, online, unsyncedWrites, clientError })
   ];
   if (clientError) {
     rows.push(['Last error', `${clientError.message} (${clientError.route ?? 'unknown screen'})`]);
+  }
+  if (bootFailure) {
+    rows.push([
+      'Last failed start',
+      `${bootFailure.at} on ${bootFailure.route ?? 'unknown screen'} (${
+        bootFailure.painted ? 'app appeared, then went blank' : 'app never appeared'
+      })`,
+    ]);
   }
 
   return (

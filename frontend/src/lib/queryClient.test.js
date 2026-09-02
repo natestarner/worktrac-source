@@ -8,6 +8,7 @@ import {
   clearOutboxMutations,
   flushOutbox,
   persistOptions,
+  MAX_SAFE_TIMEOUT_MS,
   queryClient,
   registerOfflineMutationDefaults,
   resetQueryCache,
@@ -78,6 +79,53 @@ describe('shouldRetryWrite (failure taxonomy, hardening #8)', () => {
     expect(shouldRetryWrite(8, { status: 503 })).toBe(true);
     expect(shouldRetryWrite(100, { status: 503 })).toBe(true);
     expect(shouldRetryWrite(100, new TypeError('Failed to fetch'))).toBe(true);
+  });
+});
+
+// The cache exists to be there when the server is not. A bound shorter than the session it serves
+// throws it away from exactly the person most likely to need it: someone who has not opened the app
+// in a while, whose backend has therefore scaled to zero. Measured 2026-09-02 at 25h with the
+// backend cold -- the app booted with every section empty for the full 15s abort and beyond, which
+// is the "logged in but none of my data is there" half of that day's report.
+describe('persisted cache lifetime', () => {
+  const gcTime = () => queryClient.getDefaultOptions().queries.gcTime;
+  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+
+  // THE invariant. persistQueryClient re-stamps `timestamp` on every persist, so maxAge measures
+  // "how long since this device last opened the app" -- and the JWT lasts 30 days. Any shorter
+  // bound leaves a window where a STILL-VALID session boots against a dead backend to an empty
+  // exercise picker and cannot log anything. At the original 24h that window was 29 of the 30 days.
+  it('never expires while the session that could use it is still valid', () => {
+    expect(persistOptions.maxAge).toBeGreaterThanOrEqual(THIRTY_DAYS);
+  });
+
+  // gcTime answers a DIFFERENT question and must not be re-coupled to maxAge -- an earlier comment
+  // in queryClient.js claimed it had to be >= maxAge, which is what dragged maxAge down under the
+  // setTimeout ceiling and reintroduced the window above. Restore is hydrate() at boot and consults
+  // no timer; gcTime only bounds how long an INACTIVE query lives in memory during a session.
+  it('keeps an inactive query alive far longer than any real session', () => {
+    expect(gcTime()).toBeGreaterThan(7 * 24 * 60 * 60 * 1000);
+  });
+
+  // The trap, and the reason gcTime alone is capped. TanStack schedules GC with
+  // setTimeout(..., gcTime); above 2^31-1 ms the 32-bit timer overflows and fires almost
+  // immediately, so a "longer" gcTime evicts every inactive query within a millisecond -- the exact
+  // opposite of what it reads as -- and empties what the persister then writes to disk. Caught as
+  // `TimeoutOverflowWarning` on a first attempt at 30 days; browsers are silent.
+  it('keeps gcTime under the 32-bit setTimeout ceiling, or GC fires instantly instead of never', () => {
+    expect(gcTime()).toBeLessThan(MAX_SAFE_TIMEOUT_MS);
+  });
+
+  // maxAge is a plain `Date.now() - timestamp` comparison with no timer, so it is deliberately NOT
+  // bounded by that ceiling. This pins the asymmetry so nobody "fixes" the inconsistency by
+  // dragging maxAge back down.
+  it('does not apply the timer ceiling to maxAge, which uses no timer', () => {
+    expect(persistOptions.maxAge).toBeGreaterThan(MAX_SAFE_TIMEOUT_MS);
+  });
+
+  // Age is not staleness: a restored entry is still revalidated the moment there is a network.
+  it('still revalidates restored data promptly -- a longer maxAge is not a longer staleTime', () => {
+    expect(queryClient.getDefaultOptions().queries.staleTime).toBe(60 * 1000);
   });
 });
 

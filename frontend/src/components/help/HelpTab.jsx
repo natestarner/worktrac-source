@@ -872,8 +872,9 @@ export default function HelpTab() {
         <h3 className="help-h3">Reporting something</h3>
         <p>
           Account menu &rarr; <T>Contact Us</T>. The form shows you exactly what it sends along with
-          your message: which screen you were on, whether you were online, and whether anything
-          was waiting to sync. So there are no surprises.
+          your message: which screen you were on, whether you were online, whether anything was
+          waiting to sync, and &mdash; if the app ever failed to start &mdash; what it recorded
+          about that. So there are no surprises.
         </p>
         <p>
           You can write a report while offline; it&rsquo;s kept safely on your device, and you send it

@@ -58,7 +58,7 @@ export default function LogTab() {
     routines,
     loading: routinesLoading,
     isFetching: routinesFetching,
-    updatedAt: routinesUpdatedAt,
+    fetchedAfterMount: routinesFetchedAfterMount,
   } = useRoutines(activePersonId);
   const { session: liveSession, refetch: refetchLiveSession } = useLiveSession(activePersonId);
   const activeSessionId = editingSession?.id || liveSession?.id || null;
@@ -87,27 +87,39 @@ export default function LogTab() {
   // another device) since it was last active, drop the stale routine state rather than showing an
   // empty routine banner.
   //
-  // Trustworthiness of `routines` for this DESTRUCTIVE decision hinges on `routinesUpdatedAt`
-  // (TanStack's `dataUpdatedAt`), not `routinesLoading`/`isFetching` -- both of those read as
-  // "settled" (false) in states where `routines` is NOT yet trustworthy: (a) right after a reload,
-  // before `activePersonId` itself has resolved, the query is simply `enabled: false` -- neither
-  // loading nor fetching, `data` still `undefined` -> `routines` defaults to `[]`, indistinguishable
-  // from "genuinely empty and settled"; (b) once enabled, the query-cache persister is throttled
-  // (writes at most once/second, see queryClient.js's `queryPersister`), so a reload shortly after
-  // creating/advancing a routine can restore a STALE snapshot that predates it -- `isLoading` is
-  // already false because `data` isn't `undefined`, it's just wrong, while the real list is still
-  // being fetched in the background. `dataUpdatedAt` sidesteps both: it stays `0`/falsy until a REAL
-  // fetch has actually completed at least once, so `!routinesUpdatedAt` alone covers every case
-  // where `routines` can't yet be trusted, and `!routinesFetching` additionally guards against
-  // acting on data that's about to be superseded by an in-flight refetch (see
-  // useOfflineCacheWarming.js for the same class of persisted-cache-restoration race in a different
-  // spot).
+  // Trustworthiness of `routines` for this DESTRUCTIVE decision cannot come from
+  // `routinesLoading`/`isFetching` -- both read as "settled" (false) in states where `routines` is
+  // NOT trustworthy: (a) right after a reload, before `activePersonId` itself has resolved, the
+  // query is simply `enabled: false` -- neither loading nor fetching, `data` still `undefined` ->
+  // `routines` defaults to `[]`, indistinguishable from "genuinely empty and settled"; (b) once
+  // enabled, the query-cache persister is throttled (writes at most once/second, see
+  // queryClient.js's `queryPersister`), so a reload shortly after creating a routine can restore a
+  // STALE snapshot that predates it -- `isLoading` is already false because `data` isn't
+  // `undefined`, it's just wrong.
+  //
+  // It cannot come from `dataUpdatedAt` either, which is what this gate used to read and is why it
+  // is being replaced. That timestamp SURVIVES the persist/hydrate round trip, so a restored entry
+  // reports itself freshly fetched -- the exact axis-D trap in
+  // docs/incidents/2026-08-08-restored-cache-looks-fresh.md. The gate only ever held because
+  // `routinesFetching` happened to already be true by the time this effect first ran: AppShell
+  // (and with it useOfflineCacheWarming's boot warm) mounted a frame BEFORE LogTab, since
+  // ProtectedRoute let <Outlet/> through early. That was an accident of render ordering, and
+  // closing the empty-#root hole in that gate removed it -- at which point this effect ended a
+  // live routine on every reload, from a restored list that predated it
+  // (docs/incidents/2026-09-02-cold-backend-login-strands-the-device.md).
+  //
+  // `isFetchedAfterMount` is the signal that actually answers the question: it counts fetches
+  // completed since THIS observer mounted, so hydrated data reads false until the network confirms
+  // it. It also fixes the same bug offline, where the old gate would fire on a restored list that
+  // could not possibly be revalidated (a paused query reports `isFetching: false`). Not ending a
+  // routine whose deletion we cannot confirm is the correct degradation; the next online mount
+  // reconciles it. `!routinesFetching` still guards against acting on data about to be superseded.
   useEffect(() => {
-    if (!routinesUpdatedAt || routinesFetching) return;
+    if (!routinesFetchedAfterMount || routinesFetching) return;
     if (activeRoutineId && !routines.some((r) => r.id === activeRoutineId)) {
       endRoutine();
     }
-  }, [routinesUpdatedAt, routinesFetching, activeRoutineId, routines, endRoutine]);
+  }, [routinesFetchedAfterMount, routinesFetching, activeRoutineId, routines, endRoutine]);
 
   // Returning to the picker refreshes the person's list so a just-logged exercise (or a
   // favorite/tag change made on the detail screen) shows up.

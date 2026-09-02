@@ -20,6 +20,7 @@ import OfflineBanner from '../components/shared/OfflineBanner';
 import ConnectionTroubleBanner from '../components/shared/ConnectionTroubleBanner';
 import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
 import ErrorBoundary from '../components/shared/ErrorBoundary';
+import NoActivePersonScreen from '../components/shared/NoActivePersonScreen';
 import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator';
 import WelcomeModal from '../components/onboarding/WelcomeModal';
 import ProductTour from '../components/onboarding/ProductTour';
@@ -184,8 +185,11 @@ export default function AppShell() {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [queryClient, activePersonId]);
 
+  // NEVER `return null` here. That is a literally empty #root, which boot-watchdog.js reports as
+  // "Huddle couldn't load" after seven seconds -- see NoActivePersonScreen for the full mechanism
+  // and why the two cases behind "no active person" need different answers.
   if (!activePersonId) {
-    return null;
+    return <NoActivePersonScreen people={people} />;
   }
 
   // See the chrome comment below. Read straight off `people` rather than held in state, so a

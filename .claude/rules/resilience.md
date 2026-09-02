@@ -30,7 +30,7 @@ to signed-out, blank, silently-lost, or a spinner over a request that will never
 ### B. The server answers, but not with success
 | Condition | What makes it distinct |
 |---|---|
-| **Cold start / scale-to-zero** | Lower runs `min-replicas=0`. **A fulfilled 5xx resets the reachability counter, so this does _not_ trip lie-fi** — a genuinely separate path, not a lie-fi variant |
+| **Cold start / scale-to-zero** | Lower runs `min-replicas=0`. The ingress **holds the connection ~35s** while a replica starts — it does not refuse and does not 503 (measured 2026-09-02). So the client's 15s abort fires FIRST: the first call after a scale-to-zero always fails, by arithmetic. **A simulated hang shorter than that abort proves nothing** — fourteen rounds of investigation came back clean for exactly this reason. A fulfilled 5xx, when one does arrive, resets the reachability counter, so this does _not_ trip lie-fi either |
 | **DB down, backend up** | `GlobalExceptionHandler` → honest 503. Must degrade to "queue and retry", **never** "you are signed out" (`docs/incidents/2026-07-27-db-outage-forced-logout.md`) |
 | **DB slow / pool exhausted** | Hikari default max 10; lower/prod `connection-timeout: 60000`. Requests hang past the client's abort, so a *busy* server presents as lie-fi |
 | **Definitive 4xx** | The only thing allowed to end a durable write's retries (`shouldRetryWrite`) |
@@ -95,6 +95,7 @@ is added here with a reason** — and none of these may be "simplified" away.
 | `ImportDataModal` | Branches on **file type** (`.xlsx` → lazy converter, else `file.text()`), never on connectivity | Not a connectivity branch at all; listed only so the `await import(...)` beside a gated write doesn't read as one |
 | `SessionSummary` remove | The deletes are durable, but the entry point stays `OfflineDisabledWrap`ped | Enumerating which rows to delete needs a live `listSessionSets` read. The *write* is no longer the limitation — the *read* is |
 | `getRaw` (export) and `IMPORT_TIMEOUT_MS` (import) | 60s timeout vs `request`'s 15s | A full-history export — and an import of one, with thousands of inserts behind it — is legitimately slow; aborting a working transfer would be worse. Bounded is the point, not the number |
+| `AUTH_TIMEOUT_MS` (`login`, `confirm-email`) | 45s timeout vs `request`'s 15s | 15s is right everywhere else *because something better waits behind it* — a read falls back to the cache, a write to the outbox, boot `/me` to the auth snapshot. Credentials have no fallback: an aborted sign-in is just a sign-in that didn't work. Lower's measured cold start is ~35s with the ingress **holding** the connection, so at 15s the first sign-in after a scale-to-zero was arithmetically certain to fail (`docs/incidents/2026-09-02-cold-backend-login-strands-the-device.md`) |
 
 ## Prove it, don't argue it
 

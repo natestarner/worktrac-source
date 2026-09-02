@@ -82,6 +82,9 @@ public class ContactMessage {
     @Column(name = "client_error", length = 2000)
     private String clientError;
 
+    @Column(name = "boot_failure", length = 2000)
+    private String bootFailure;
+
     @Column(name = "ip_address", length = 45)
     private String ipAddress;
 
@@ -211,6 +214,14 @@ public class ContactMessage {
 
     public void setClientError(String clientError) {
         this.clientError = clientError;
+    }
+
+    public String getBootFailure() {
+        return bootFailure;
+    }
+
+    public void setBootFailure(String bootFailure) {
+        this.bootFailure = bootFailure;
     }
 
     public String getIpAddress() {

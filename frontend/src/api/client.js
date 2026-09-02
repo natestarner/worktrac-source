@@ -20,6 +20,21 @@ const EXPORT_TIMEOUT_MS = 60000;
 // the point, not the number; see the divergence row in .claude/rules/resilience.md.
 const IMPORT_TIMEOUT_MS = 60000;
 
+// Signing in gets a bound that clears a cold start, because it is the one call with no cached
+// answer to fall back on.
+//
+// Everywhere else, 15s is right precisely BECAUSE something better is waiting behind it: a read
+// falls back to the persisted cache, a write goes to the durable outbox, and the boot /me falls
+// back to the auth snapshot -- so failing fast gets the person to real content sooner. Credentials
+// have none of that. A login that aborts is simply a login that didn't work, and the person's only
+// recourse is to type it all again.
+//
+// Lower runs min-replicas=0 and a measured cold start is ~35s end to end (2026-09-02), during
+// which the Container Apps ingress HOLDS the connection rather than refusing it -- so at 15s the
+// first sign-in after a scale-to-zero was not merely likely to fail, it was arithmetically certain
+// to. 45s clears that with margin while still being bounded, which is the actual requirement.
+const AUTH_TIMEOUT_MS = 45000;
+
 let token = localStorage.getItem(TOKEN_STORAGE_KEY) || null;
 let onUnauthorized = null;
 
@@ -85,6 +100,15 @@ async function request(path, { method = 'GET', body, isFormData = false, timeout
     });
   } catch (error) {
     reachabilityMonitor.recordFailure();
+    // A timed-out request rejects with the AbortController's own DOMException, whose message is
+    // "signal is aborted without reason". Anything that shows a caught error's `.message` to a
+    // person -- LoginPage's error banner does, and it is exactly where a cold-start timeout lands
+    // -- then renders that string verbatim. Re-throw as an ApiError with no status, which is the
+    // shape isOfflineError and shouldRetryWrite already classify as transient, so the failure
+    // taxonomy is unchanged and only the wording a human sees is different.
+    if (error?.name === 'AbortError') {
+      throw new ApiError(undefined, 'Couldn’t reach Huddle. Check your connection and try again.');
+    }
     throw error;
   } finally {
     clearTimeout(timeoutId);
@@ -150,6 +174,12 @@ export const apiClient = {
       response = await fetch(getApiUrl(path), { headers, signal: controller.signal });
     } catch (error) {
       reachabilityMonitor.recordFailure();
+      // Same mapping as `request` above, for the same reason: an export that times out otherwise
+      // surfaces the AbortController's own "signal is aborted without reason" to whoever is
+      // reading the failure. Statusless either way, so the failure taxonomy is unchanged.
+      if (error?.name === 'AbortError') {
+        throw new ApiError(undefined, 'Couldn’t reach Huddle. Check your connection and try again.');
+      }
       throw error;
     } finally {
       clearTimeout(timeoutId);
@@ -166,4 +196,4 @@ export const apiClient = {
   },
 };
 
-export { ApiError, IMPORT_TIMEOUT_MS };
+export { ApiError, IMPORT_TIMEOUT_MS, AUTH_TIMEOUT_MS };
