@@ -138,8 +138,8 @@ fi
 # The slug is baked in at launch time so the SHARED ledger can attribute a death to the worktree it
 # came from -- `$rc` stays literal here on purpose, for the inner shell to expand when it fires.
 _record_exit() {
-  printf '%s; rc=$?; echo "[[%s exited rc=$rc at $(date +%%Y-%%m-%%dT%%H:%%M:%%S)]]"; bash "%s/record-memory-state.sh" %s %s $rc' \
-    "$1" "$2" "$SCRIPT_DIR" "$2" "$WORKTREE_SLUG"
+  printf '%s; rc=$?; { echo "[[%s exited rc=$rc at $(date +%%Y-%%m-%%dT%%H:%%M:%%S)]]"; bash "%s/record-memory-state.sh" %s %s $rc; } >> "%s/%s.log" 2>&1' \
+    "$1" "$2" "$SCRIPT_DIR" "$2" "$WORKTREE_SLUG" "$LOG_DIR" "$2"
 }
 
 # ...but the marker above is only useful if it OUTLIVES the death it describes, and until
@@ -221,6 +221,11 @@ cd "$REPO_ROOT/frontend"
 # took up.sh but not detach-launch.js -- they must ship together). Without this the frontend simply
 # never starts and you wait out wait_for_url's 150s timeout, which then tails a log the launcher
 # never got to write, i.e. the least informative possible failure.
+if [ ! -f "$SCRIPT_DIR/supervise-server.js" ]; then
+  echo "up.sh: FATAL -- scripts/supervise-server.js is missing." >&2
+  echo "  It records the frontend's real exit code; without it a death is untypeable." >&2
+  exit 1
+fi
 if [ ! -f "$SCRIPT_DIR/detach-launch.js" ]; then
   echo "up.sh: FATAL -- scripts/detach-launch.js is missing." >&2
   echo "  The frontend is launched through it so Vite gets its own console/process group and" >&2
@@ -229,9 +234,23 @@ if [ ! -f "$SCRIPT_DIR/detach-launch.js" ]; then
   exit 1
 fi
 
+# The frontend is supervised by NODE, not wrapped in bash, and that is load-bearing rather than
+# stylistic. bash collapses every abnormal end to exit 127: measured on 2026-09-01, an external
+# `Stop-Process -Force` (native 0xFFFFFFFF) and a fail-fast abort inside Vite (native 0xC0000409)
+# both reach bash as wait status 32512. Those are two COMPLETELY different bugs, and for months
+# the ledger recorded both as an identical "rc=127", which is why four investigations each picked
+# a different single cause and none of them held.
+#
+# A bash wrapper also could not write the marker at all: Git Bash's bash.exe, spawned with
+# DETACHED_PROCESS by detach-launch.js, silently discards its own stdout, while a native Windows
+# child writing the SAME inherited handle succeeds. So Vite's output landed, the log looked
+# healthy, and the `[[frontend exited ...]]` line e2e.sh tells you to look for was never once
+# written. supervise-server.js is node, so its writes land, and it reports the child's REAL exit
+# code and names the mechanism. See its header.
 FRONTEND_PORT="$FRONTEND_PORT" VITE_BACKEND_ORIGIN="$VITE_BACKEND_ORIGIN" \
   node "$SCRIPT_DIR/detach-launch.js" "$LOG_DIR/frontend.log" \
-    bash -c "$(_record_exit 'npm run dev' 'frontend')" > /dev/null
+    node "$SCRIPT_DIR/supervise-server.js" "$LOG_DIR/frontend.log" frontend "$WORKTREE_SLUG" "$SCRIPT_DIR" \
+      npm run dev > /dev/null
 
 echo ""
 echo "Backend  -- log: $LOG_DIR/backend.log"
