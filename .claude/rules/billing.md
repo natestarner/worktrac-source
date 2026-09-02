@@ -83,10 +83,8 @@ about a workout the app had just saved.
   the thing keeping someone from their own training. That is the wrong posture for a product whose
   central promise is that it never deletes anything, and the invitation belongs to the "See Pro"
   link beside the sentence rather than to the sentence. Pinned in `historyWindowCopy.test.js`.
-- **The mark appears on the notice and on the explainer's benefits block**, via `HuddleMark` — the
-  same four circles `PlanBadge` uses for the Pro pill. It reads as "this is Huddle Pro", and never
-  as "you have Pro" (that is the badge's job; a Free household's badge still shows the outline
-  star). Both grounds follow the theme, so neither needs `PlanBadge`'s explicit `hairline` override.
+- **The notice carries no mark; the explainer's benefits block does.** See "The mark names the
+  PRODUCT" below for the convention and why the sentence about someone's own data is excluded.
 - **`HistoryWindowNotice` is the one way any screen says this**, and it composes `ProUpsell` rather
   than replacing it, so "one way to ask for an upgrade" still holds. Three fail-closed gates:
   unknown plan, unanswered query, or a zero count all render **nothing** — which is why a Free
@@ -104,6 +102,42 @@ about a workout the app had just saved.
   `free-window-notice.spec.ts`. Dropping it from the warm makes the three tabs look **complete**
   while offline, which is the divergence the contract forbids outright.
 - **`hasAnyHistory` must stay pre-clamp.** See `trends.md`.
+
+## The mark names the PRODUCT, not the entitlement
+
+`HuddleMark` leads every phrase that names Huddle Pro as a product, on **both** plans:
+`PlanBadge`'s two pills, `BillingTab`'s "Huddle Pro" plan heading, `ProCelebration`, and
+`HistoryWindowModal`'s benefits block. So "Go Pro" reads as *go Huddle Pro* rather than as a generic
+upsell.
+
+This **supersedes** an earlier reading in which the mark meant "you have Pro" and Free households
+got an aspirational outline star instead. The star is gone. What signals possession now is the
+**pill**, not the glyph — `.plan-badge--pro`'s fixed bright identity colours against
+`.plan-badge--upgrade`'s transparent outline.
+
+Where it does **not** go, and each exclusion is load-bearing:
+
+- **Inside a control label** — "Upgrade to Pro", "See Pro". A four-colour glyph inside a filled
+  primary button or a small text link is clutter, and "logo Pro" only parses as a unit when *Pro*
+  opens the phrase. `PlanBadge`'s pills are the exception because a badge **is** a brand chip.
+- **In handbook prose.** `HelpTab` says "Pro" dozens of times mid-sentence; marks there would be
+  confetti, and `getByText` concatenates only DIRECT text children (`frontend-core.md`).
+- **On a sentence that doesn't name Pro.** `HistoryWindowNotice`'s line is about the person's own
+  data; a mark on it is decoration, and decoration is how a quiet inline note starts reading as an
+  ad — the one thing `ProUpsell` exists to prevent.
+
+**No image wordmark.** "Pro" is nearly always a word inside a label, so an image would break the
+accessible names the non-containment rule depends on, could not inherit the app's font/size/colour,
+and would reintroduce the hardcoded light/dark hairline `HuddleMark` was drawn inline to escape.
+`docs/brand/README.md` also forbids respacing the lockup, so a real "Huddle Pro" lockup has to come
+from the brand kit rather than being assembled here. Compose it from `HuddleMark` + live text. An
+asset is only the answer for surfaces that cannot compose — email (hence `public/email/logo.png`),
+marketing, social cards.
+
+**Hairline**: pass `hairline="#bdb6af"` only where the ground stays light in **both** schemes —
+today just `.plan-badge--pro`. Every other caller sits on a theme-following surface and takes the
+default. `HuddleMark` is always `aria-hidden`, so it never touches the accessible name beside it,
+which is what keeps the non-containment rule intact.
 
 ## Reserved words: `billing_plan` and `billing_interval`
 

@@ -187,9 +187,31 @@ data as theirs — and leaving the invitation to the "See Pro" link beside it �
 without the app taking the role of gatekeeper. `historyWindowCopy.test.js` pins the posture, not
 just the string.
 
-The mark rides along for the same reason. `HuddleMark` on the notice and on the explainer's benefits
-block is the same four circles `PlanBadge` gives a paying household, so an upsell looks like Huddle
-rather than like an interstitial; it says "this is Huddle Pro" and never "you have Pro". That is also why `hiddenSessions` applies exactly the same "has sets" filter
+### What the mark means
+
+A second pass settled this too, and it moved the meaning of the mark itself.
+
+It used to signal **entitlement**: `PlanBadge` gave a paying household the four circles and a Free
+household an outline star — "aspirational, not achieved". That reads fine in the header and nowhere
+else, because every other place the product is named ("Huddle Pro" on the billing screen, the
+celebration, an upsell's benefits list) is talking about the *product*, not about who owns it.
+
+So the mark now names the product, on both plans, and possession is carried by the **pill** instead:
+`.plan-badge--pro`'s fixed bright identity colours against `.plan-badge--upgrade`'s transparent
+outline. "Go Pro" reads as *go Huddle Pro*.
+
+The exclusions are where the convention earns its keep. Not inside a control label — "logo Pro" only
+parses as a unit when *Pro* opens the phrase, and a four-colour glyph inside a filled primary button
+is clutter. Not in handbook prose, which says "Pro" dozens of times mid-sentence. And not on
+`HistoryWindowNotice`'s line, which names the person's own data rather than the product: a mark
+there is decoration, and decoration is how a quiet inline note starts reading as an advertisement.
+
+**Not an image wordmark**, either. "Pro" is nearly always a word inside a label, so an image would
+break the accessible names the non-containment rule depends on, could not inherit the app's font,
+size or colour, and would reintroduce exactly the hardcoded light/dark hairline that `HuddleMark`
+was redrawn inline to escape. The brand sheet also forbids respacing the lockup, so a genuine
+"Huddle Pro" lockup would have to come from the kit. An asset is the right answer only for surfaces
+that cannot compose one — email, marketing, social cards. That is also why `hiddenSessions` applies exactly the same "has sets" filter
 `getHistory` does — an inflated count would be worse than no count.
 
 ### Warn, don't block

@@ -47,6 +47,23 @@ describe('PlanBadge', () => {
     expect(link).toHaveAttribute('href', '/app/billing');
   });
 
+  // The mark names the product, so it leads BOTH pills -- it is not a reward for paying. This
+  // replaced an outline star on the Free badge, which had made the mark mean "you have Pro"; what
+  // distinguishes the two states now is the pill's own styling, not the glyph. Asserted as an svg
+  // rather than by role, because HuddleMark is aria-hidden by design (it must never touch the
+  // "Go Pro"/"Pro" accessible names, which the non-containment rule depends on).
+  it('leads both pills with the mark, so Pro reads as Huddle Pro on either plan', () => {
+    withAccount({ id: 1, plan: 'FREE' });
+    const free = renderBadge();
+    expect(free.container.querySelector('.plan-badge--upgrade svg')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Go Pro' })).toBeInTheDocument();
+    free.unmount();
+
+    withAccount({ id: 1, plan: 'PRO' });
+    const pro = renderBadge();
+    expect(pro.container.querySelector('.plan-badge--pro svg')).toBeInTheDocument();
+  });
+
   // THE case this component exists to get right. An auth snapshot written before billing shipped
   // carries no `plan`, so it hydrates as undefined -- and rendering "Go Pro" then would nag a
   // household that already pays. Absence is the only safe answer; it self-corrects on the next /me.
