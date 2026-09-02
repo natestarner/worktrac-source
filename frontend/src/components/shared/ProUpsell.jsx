@@ -12,7 +12,7 @@ import { Link } from 'react-router-dom';
 // household that already pays is the worst outcome available here. Absence is the safe default.
 //
 // `action` is an optional control rendered in the same row as the link, for a prompt that needs to
-// offer something besides "go to billing" -- today only HistoryWindowNotice's "Why is this hidden?"
+// offer something besides "go to billing" -- today only HistoryWindowNotice's "About your full history"
 // affordance. It sits out here rather than inside `children` so it lands in the flex row and can
 // reach the 44px touch target; a control nested in the paragraph cannot without wrecking the line.
 // It is deliberately NOT a second upgrade path: keep it to explanation, or this stops being one way

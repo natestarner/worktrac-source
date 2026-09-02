@@ -196,7 +196,7 @@ describe('TrendsTab and the Free-tier window', () => {
 
     renderTrends();
 
-    expect(screen.getByText(/21 earlier workouts are saved but hidden on Free/)).toBeInTheDocument();
+    expect(screen.getByText(/Your full history has 21 more workouts/)).toBeInTheDocument();
   });
 
   // 12 weeks is 84 days and fits inside a 90-day window, so the charts for THAT range are complete
@@ -208,7 +208,7 @@ describe('TrendsTab and the Free-tier window', () => {
 
     renderTrends();
 
-    expect(screen.queryByText(/This range stops at/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/This range shows/)).not.toBeInTheDocument();
   });
 
   // "All" promises five years while the charts stop at 90 days. That is the sharpest version of the
@@ -219,7 +219,7 @@ describe('TrendsTab and the Free-tier window', () => {
 
     renderTrends();
 
-    expect(screen.getByText(/This range stops at the last 90 days on Free/)).toBeInTheDocument();
+    expect(screen.getByText(/This range shows the last 90 days on Free/)).toBeInTheDocument();
   });
 
   // "Try a wider range" is a loop for someone on Free: widening the range is exactly what the
@@ -231,7 +231,7 @@ describe('TrendsTab and the Free-tier window', () => {
     renderTrends();
 
     expect(screen.queryByText(/Try a wider range/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Earlier training is saved/)).toBeInTheDocument();
+    expect(screen.getByText(/Earlier training is part of your full history/)).toBeInTheDocument();
   });
 
   it('keeps the original range-empty copy when nothing is hidden', () => {

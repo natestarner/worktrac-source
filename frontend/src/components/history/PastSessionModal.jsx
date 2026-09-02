@@ -82,8 +82,8 @@ export default function PastSessionModal({ onClose }) {
       {outsideWindow && (
         <div style={{ marginBottom: 12 }}>
           <ProUpsell plan={account?.plan}>
-            That date is outside {windowLabel(windowStart)}. The workout will be saved either way,
-            but History, PRs and Trends won&rsquo;t show it on Free.
+            That&rsquo;s outside {windowLabel(windowStart)}, which is what History, PRs and Trends
+            show on Free. The workout still saves to your full history.
           </ProUpsell>
         </div>
       )}

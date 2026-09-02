@@ -38,7 +38,7 @@ function renderModal() {
   );
 }
 
-const WARNING = /That date is outside the last 90 days/;
+const WARNING = /outside the last 90 days, which is what History, PRs and Trends/;
 
 describe('PastSessionModal and the Free-tier window', () => {
   beforeEach(() => {

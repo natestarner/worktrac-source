@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import ProUpsell from './ProUpsell';
 import HistoryWindowModal from './HistoryWindowModal';
-import { hiddenWorkoutsSentence } from './historyWindowCopy';
+import { fullHistorySentence } from './historyWindowCopy';
+import HuddleMark from './HuddleMark';
 import { IconHelp } from './icons';
 
 // "There is more here than you can see." The one way History, PRs and Trends say so, so all three
@@ -49,7 +50,7 @@ export default function HistoryWindowNotice({ plan, historyWindow, lead }) {
           <button
             type="button"
             onClick={() => setExplaining(true)}
-            aria-label="Why is this hidden?"
+            aria-label="About your full history"
             className="pressable"
             style={infoButtonStyle}
           >
@@ -57,8 +58,17 @@ export default function HistoryWindowNotice({ plan, historyWindow, lead }) {
           </button>
         }
       >
-        {lead ? `${lead} ` : ''}
-        {hiddenWorkoutsSentence(hidden)}
+        {/* The mark, not a generic icon. PlanBadge's Pro pill establishes the four circles as
+            Huddle's own identity; using them here reads as "this is Huddle Pro", which is what the
+            notice is about -- it never claims the household HAS Pro (that is the badge's job, and a
+            Free household's badge still shows the outline star). Sits on --color-subtle-bg, which
+            follows the theme, so the default per-scheme hairline is correct and no override is
+            needed -- unlike the Pro pill, whose ground stays light in both schemes. */}
+        <span style={markStyle}>
+          <HuddleMark size={16} />
+        </span>
+        {lead ? ` ${lead} ` : ' '}
+        {fullHistorySentence(hidden)}
       </ProUpsell>
 
       {explaining && (
@@ -69,6 +79,16 @@ export default function HistoryWindowNotice({ plan, historyWindow, lead }) {
 }
 
 const wrapStyle = { marginBottom: 'var(--space-4)' };
+
+// Inline with the sentence rather than in a separate leading slot, so the notice stays one line of
+// prose carrying a mark rather than becoming an icon-plus-text banner -- the quieter of the two,
+// which is the posture ProUpsell exists to hold. verticalAlign centres it against the x-height; on
+// the text baseline it sits visibly low.
+const markStyle = {
+  display: 'inline-flex',
+  verticalAlign: 'middle',
+  marginRight: 'var(--space-1)',
+};
 
 // --color-muted rather than the accent: the "See Pro" link sitting beside it is this box's call to
 // action, and two competing accents in one small notice is how something calm starts reading as an

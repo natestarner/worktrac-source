@@ -3,9 +3,10 @@ import Modal from './Modal';
 import Button from './Button';
 import { PRO_BENEFITS } from '../billing/planCopy';
 import { windowLabel } from './historyWindowCopy';
+import HuddleMark from './HuddleMark';
 import { formatDate } from '../../utils/datetime';
 
-// The explainer behind HistoryWindowNotice's "Why is this hidden?" control.
+// The explainer behind HistoryWindowNotice's "About your full history" control.
 //
 // THIS IS A MODAL, AND ProUpsell's header says never to use one. The distinction is solicited vs
 // unsolicited: what that rule forbids is an upgrade prompt that INTERRUPTS -- an interstitial
@@ -23,12 +24,11 @@ export default function HistoryWindowModal({ historyWindow, onClose }) {
   const since = historyWindow?.earliestHiddenAt;
 
   return (
-    <Modal width={360} onClose={onClose} title="Why some workouts are hidden">
+    <Modal width={360} onClose={onClose} title="Your full history">
       <p style={leadStyle}>
-        {hidden === 1 ? '1 workout' : `${hidden} workouts`}
-        {since ? `, going back to ${formatDate(since)},` : ''} {hidden === 1 ? 'sits' : 'sit'}{' '}
-        outside {windowLabel(historyWindow?.windowStart)}. History, PRs and Trends show that window
-        on Free.
+        On Free, History, PRs and Trends cover {windowLabel(historyWindow?.windowStart)}. Your full
+        history {since ? `goes back to ${formatDate(since)} and holds` : 'holds'}{' '}
+        {hidden === 1 ? '1 more workout' : `${hidden} more workouts`}.
       </p>
 
       {/* The reassurance comes before the pitch, on purpose. The marketing site promises this in
@@ -40,7 +40,13 @@ export default function HistoryWindowModal({ historyWindow, onClose }) {
       </p>
 
       <div style={benefitsWrapStyle}>
-        <div style={benefitsTitleStyle}>Pro adds</div>
+        <div style={benefitsTitleStyle}>
+          {/* Same reasoning as the notice's mark: this block IS the Pro offering, so it is the one
+              place in the modal the identity belongs. --color-subtle-bg follows the theme, so the
+              default hairline is right here too. */}
+          <HuddleMark size={14} />
+          <span>What Pro adds</span>
+        </div>
         <ul style={listStyle}>
           {PRO_BENEFITS.map((benefit) => (
             <li key={benefit.id} style={listItemStyle}>
@@ -102,6 +108,9 @@ const benefitsWrapStyle = {
 };
 
 const benefitsTitleStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 'var(--space-2)',
   fontSize: 'var(--text-2xs)',
   fontWeight: 'var(--weight-bold)',
   letterSpacing: '0.06em',

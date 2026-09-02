@@ -1,6 +1,10 @@
-// The vocabulary for "the Free window is hiding some of your history", in one place, so the three
-// tab notices, the explainer modal and PastSessionModal's warning cannot drift apart about what the
-// limit is or how it is described. Same rule planCopy.js follows for the plan itself.
+// The vocabulary for "your full history goes back further than this screen", in one place, so the
+// three tab notices, the explainer modal and PastSessionModal's warning cannot drift apart about
+// what the limit is or how it is described. Same rule planCopy.js follows for the plan itself.
+//
+// Note the deliberate split between engineering names and product voice: the server field really is
+// `hiddenSessions`, because that is precisely what it counts and an API should say what it means.
+// None of that word reaches a person -- see fullHistorySentence.
 //
 // EVERY NUMBER HERE COMES FROM THE SERVER. The window length is derived from the `windowStart` the
 // backend reports, never written down as 90 -- a literal here would be a second copy of
@@ -22,13 +26,20 @@ export function windowLabel(windowStart, now = Date.now()) {
   return days ? `the last ${days} days` : 'a limited window';
 }
 
-// The count sentence every notice ends with. Singular is spelled out rather than left as
-// "1 earlier workouts" -- this is the sentence asking someone for money, and it should read like
-// someone wrote it.
-export function hiddenWorkoutsSentence(hiddenSessions) {
+// The count sentence every notice ends with.
+//
+// FRAMED AS WHAT THEY HAVE, NEVER AS WHAT THE APP IS WITHHOLDING. An earlier draft read "47 earlier
+// workouts are saved but hidden on Free", which casts the app as the thing keeping someone from
+// their own training -- true of the window, but the wrong posture for a product whose central
+// promise is that it never deletes anything. "Your full history has 47 more workouts" says the same
+// thing as a fact about them, and leaves the invitation to the "See Pro" link beside it.
+//
+// Singular is spelled out rather than left as "1 more workouts" -- this is the sentence asking
+// someone for money, and it should read like someone wrote it.
+export function fullHistorySentence(hiddenSessions) {
   return hiddenSessions === 1
-    ? '1 earlier workout is saved but hidden on Free.'
-    : `${hiddenSessions} earlier workouts are saved but hidden on Free.`;
+    ? 'Your full history has 1 more workout.'
+    : `Your full history has ${hiddenSessions} more workouts.`;
 }
 
 // Whether a Trends range reaches back past the window -- i.e. whether the range toggle is currently

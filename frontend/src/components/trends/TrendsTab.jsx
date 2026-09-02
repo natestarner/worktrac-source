@@ -115,7 +115,7 @@ export default function TrendsTab() {
   // that ignores the toggle entirely (see .claude/rules/trends.md) -- so it is clipped on every
   // range, not just the wide one.
   const trendsLead = rangeReachesPastWindow(trendsRangeWeeks, historyWindow?.windowStart)
-    ? `This range stops at ${windowLabel(historyWindow?.windowStart)} on Free.`
+    ? `This range shows ${windowLabel(historyWindow?.windowStart)} on Free.`
     : undefined;
   const windowNotice = (
     <HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} lead={trendsLead} />
@@ -142,7 +142,7 @@ export default function TrendsTab() {
           <EmptyState
             icon={IconDumbbell}
             title={`No workouts in the ${rangeEmptyLabel(trendsRangeWeeks)}`}
-            body="Earlier training is saved, but Trends covers this window on Free."
+            body="Earlier training is part of your full history."
             action={windowNotice}
           />
         ) : (

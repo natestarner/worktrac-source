@@ -21,7 +21,7 @@ describe('HistoryWindowNotice', () => {
   it('tells a Free household exactly how much is hidden, and offers a way to see it', () => {
     renderNotice({ plan: 'FREE', historyWindow: HIDDEN });
 
-    expect(screen.getByText(/47 earlier workouts are saved but hidden on Free\./)).toBeInTheDocument();
+    expect(screen.getByText(/Your full history has 47 more workouts\./)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'See Pro' })).toBeInTheDocument();
   });
 
@@ -29,7 +29,7 @@ describe('HistoryWindowNotice', () => {
     renderNotice({ plan: 'FREE', historyWindow: HIDDEN, lead: 'Bests here cover the last 90 days.' });
 
     expect(
-      screen.getByText(/Bests here cover the last 90 days\. 47 earlier workouts are saved/),
+      screen.getByText(/Bests here cover the last 90 days\. Your full history has 47 more workouts/),
     ).toBeInTheDocument();
   });
 
@@ -74,11 +74,11 @@ describe('HistoryWindowNotice', () => {
     it('opens on the why control and leads with the reassurance, not the pitch', () => {
       renderNotice({ plan: 'FREE', historyWindow: HIDDEN });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Why is this hidden?' }));
+      fireEvent.click(screen.getByRole('button', { name: 'About your full history' }));
 
       expect(screen.getByText(/Nothing is deleted, ever/)).toBeInTheDocument();
       // Names a real date rather than an abstraction.
-      expect(screen.getByText(/going back to Mar 12, 2024/)).toBeInTheDocument();
+      expect(screen.getByText(/goes back to Mar 12, 2024/)).toBeInTheDocument();
       // The benefits come from planCopy's PRO_BENEFITS, not retyped prose.
       expect(screen.getByText(/Your whole history/)).toBeInTheDocument();
       // The two facts a less honest version would omit.
@@ -92,9 +92,16 @@ describe('HistoryWindowNotice', () => {
     // them a strict-mode violation somewhere else in the suite. See .claude/rules/billing.md.
     it('keeps its control names non-containing with the notice and the modal chrome', () => {
       renderNotice({ plan: 'FREE', historyWindow: HIDDEN });
-      fireEvent.click(screen.getByRole('button', { name: 'Why is this hidden?' }));
+      fireEvent.click(screen.getByRole('button', { name: 'About your full history' }));
 
-      const names = ['See Pro', 'Unlock full history', 'How Free and Pro differ', 'Close', 'Go Pro'];
+      const names = [
+        'See Pro',
+        'About your full history',
+        'Unlock full history',
+        'How Free and Pro differ',
+        'Close',
+        'Go Pro',
+      ];
       for (const a of names) {
         for (const b of names) {
           if (a === b) continue;
@@ -118,21 +125,25 @@ describe('HistoryWindowNotice', () => {
         plan: 'FREE',
         historyWindow: { ...HIDDEN, hiddenSessions: 1 },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'Why is this hidden?' }));
+      fireEvent.click(screen.getByRole('button', { name: 'About your full history' }));
 
-      expect(screen.getByText(/1 workout, going back to Mar 12, 2024, sits outside/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Your full\s+history goes back to Mar 12, 2024 and holds 1 more workout\./),
+      ).toBeInTheDocument();
     });
 
     it('and at more than one', () => {
       renderNotice({ plan: 'FREE', historyWindow: HIDDEN });
-      fireEvent.click(screen.getByRole('button', { name: 'Why is this hidden?' }));
+      fireEvent.click(screen.getByRole('button', { name: 'About your full history' }));
 
-      expect(screen.getByText(/47 workouts, going back to Mar 12, 2024, sit outside/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Your full\s+history goes back to Mar 12, 2024 and holds 47 more workouts\./),
+      ).toBeInTheDocument();
     });
 
     it('closes again', () => {
       renderNotice({ plan: 'FREE', historyWindow: HIDDEN });
-      fireEvent.click(screen.getByRole('button', { name: 'Why is this hidden?' }));
+      fireEvent.click(screen.getByRole('button', { name: 'About your full history' }));
       fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
       expect(screen.queryByText(/Nothing is deleted, ever/)).not.toBeInTheDocument();

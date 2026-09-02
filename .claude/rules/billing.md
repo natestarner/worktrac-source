@@ -78,6 +78,15 @@ about a workout the app had just saved.
 - **`hiddenSessions` counts only pre-window sessions that have sets**, matching `getHistory`'s own
   filter exactly, so the number is precisely how many History rows are missing. An honest count is
   the entire justification for showing one.
+- **Say what the person HAS, never what the app is withholding.** "Your full history has 47 more
+  workouts" — not "47 workouts are hidden on Free", which was the first draft and casts the app as
+  the thing keeping someone from their own training. That is the wrong posture for a product whose
+  central promise is that it never deletes anything, and the invitation belongs to the "See Pro"
+  link beside the sentence rather than to the sentence. Pinned in `historyWindowCopy.test.js`.
+- **The mark appears on the notice and on the explainer's benefits block**, via `HuddleMark` — the
+  same four circles `PlanBadge` uses for the Pro pill. It reads as "this is Huddle Pro", and never
+  as "you have Pro" (that is the badge's job; a Free household's badge still shows the outline
+  star). Both grounds follow the theme, so neither needs `PlanBadge`'s explicit `hairline` override.
 - **`HistoryWindowNotice` is the one way any screen says this**, and it composes `ProUpsell` rather
   than replacing it, so "one way to ask for an upgrade" still holds. Three fail-closed gates:
   unknown plan, unanswered query, or a zero count all render **nothing** — which is why a Free
@@ -87,8 +96,8 @@ about a workout the app had just saved.
   limit into a data-entry limit and contradict "nothing is deleted, ever".
 - **`HistoryWindowModal` is a modal, and `ProUpsell`'s header says never to use one.** The
   distinction is solicited vs unsolicited — that rule forbids an upgrade prompt that *interrupts*.
-  This one only ever opens from an explicit tap on "Why is this hidden?". Nothing may be changed to
-  open it automatically.
+  This one only ever opens from an explicit tap on "About your full history". Nothing may be
+  changed to open it automatically.
 - **This adds no connectivity branch**, so nothing about it belongs on `resilience.md`'s register.
   `historyWindow` is in `offlineCacheWarm.js` (`refreshAfterRestore: true` — the server wholly owns
   it), so the notice reads identically in every mode; `parity-…`-style coverage is in
@@ -169,9 +178,12 @@ full reasoning; don't move it back in front of the deletes.
   household on `/app/billing` has both on screen, and a shared accessible name makes every
   Playwright `getByRole` on it a strict-mode violation. "Upgrade" alone would be worse — a substring
   of the other, matching both.
-- The window notice adds two more, and all five have to stay mutually non-containing: `ProUpsell`'s
-  **"See Pro"**, and — inside `HistoryWindowModal`, which opens with the notice and the header badge
-  both still in the DOM — **"Unlock full history"** and **"How Free and Pro differ"**, alongside
-  `Modal`'s own **"Close"**. Pinned in `HistoryWindowNotice.test.jsx`.
+- The window notice adds three more, and all six have to stay mutually non-containing:
+  `ProUpsell`'s **"See Pro"**, the notice's **"About your full history"**, and — inside
+  `HistoryWindowModal`, which opens with the notice and the header badge both still in the DOM —
+  **"Unlock full history"** and **"How Free and Pro differ"**, alongside `Modal`'s own **"Close"**.
+  Note "About your full history" and "Unlock full history" share the words *full history* without
+  either containing the other, which is what the rule actually requires. Pinned in
+  `HistoryWindowNotice.test.jsx`.
 - **"Pro" is a substring of "Profile"**, `UserMenu`'s first item, in the same header subtree. Assert
   the badge with `exact: true` / an exact string, always.

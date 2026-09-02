@@ -177,9 +177,19 @@ second copy of `FREE_HISTORY_WINDOW`, and the copy is the half nobody would thin
 ### Why the count, and not just "Free shows 90 days"
 
 The number is the person's own data, which makes it simultaneously the most honest framing and the
-strongest argument. "47 earlier workouts are saved but hidden on Free" is a fact about them; "Free
-shows the last 90 days" is a policy, and a reader cannot tell whether it is hiding two workouts or
-two hundred. That is also why `hiddenSessions` applies exactly the same "has sets" filter
+strongest argument. "Your full history has 47 more workouts" is a fact about them; "Free shows the
+last 90 days" is a policy, and a reader cannot tell whether it covers two workouts or two hundred.
+
+The **voice** took a second pass. The first draft read "47 earlier workouts are saved but hidden on
+Free", which is accurate and still wrong: it casts the app as the thing standing between someone and
+their own training, in a product whose central promise is that it never deletes anything. Naming the
+data as theirs — and leaving the invitation to the "See Pro" link beside it — says the same thing
+without the app taking the role of gatekeeper. `historyWindowCopy.test.js` pins the posture, not
+just the string.
+
+The mark rides along for the same reason. `HuddleMark` on the notice and on the explainer's benefits
+block is the same four circles `PlanBadge` gives a paying household, so an upsell looks like Huddle
+rather than like an interstitial; it says "this is Huddle Pro" and never "you have Pro". That is also why `hiddenSessions` applies exactly the same "has sets" filter
 `getHistory` does — an inflated count would be worse than no count.
 
 ### Warn, don't block

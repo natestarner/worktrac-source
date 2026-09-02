@@ -3,8 +3,8 @@ import { registerHousehold } from './support/auth';
 import { pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
-// A Free household is told what the 90-day window is hiding, instead of being shown a truncated
-// screen that looks complete.
+// A Free household is told how much more its full history holds, instead of being shown a
+// truncated screen that looks complete.
 //
 // The acute case this closes, which log-past-workout.spec.ts flagged and worked around by forcing
 // the household to Pro: log a past workout at an out-of-window date, tap Done, and land on History
@@ -42,9 +42,9 @@ async function logAnOutOfWindowWorkout(page: Page) {
   await expect(page).toHaveURL(/\/app\/history/);
 }
 
-const HIDDEN_COUNT = /1 earlier workout is saved but hidden on Free\./;
+const FULL_HISTORY = /Your full history has 1 more workout\./;
 
-test.describe('The Free-tier window says what it is hiding', () => {
+test.describe('The Free-tier window names the rest of your history', () => {
   test('warns before the workout is logged, and explains after', async ({ page, request }) => {
     await registerHousehold(page, request, 'Jamie');
 
@@ -53,10 +53,10 @@ test.describe('The Free-tier window says what it is hiding', () => {
     const modal = page.getByRole('dialog');
 
     // Today is inside the window, so there is nothing to say yet.
-    await expect(modal.getByText(/That date is outside/)).toHaveCount(0);
+    await expect(modal.getByText(/outside the last 90 days/)).toHaveCount(0);
 
     await modal.locator('input[type="date"]').fill(outOfWindowDate());
-    await expect(modal.getByText(/That date is outside the last 90 days/)).toBeVisible();
+    await expect(modal.getByText(/outside the last 90 days, which is what History/)).toBeVisible();
 
     // ⚠️ WARN, NEVER BLOCK. The workout genuinely is saved and returns on upgrade, so the app must
     // not refuse to record something that actually happened.
@@ -74,21 +74,21 @@ test.describe('The Free-tier window says what it is hiding', () => {
     // THE GAP. This screen used to read "No workouts logged yet for Jamie."
     await expect(page).toHaveURL(/\/app\/history/);
     await expect(page.getByText('No workouts logged yet for Jamie.')).toHaveCount(0);
-    await expect(page.getByText(HIDDEN_COUNT)).toBeVisible();
+    await expect(page.getByText(FULL_HISTORY)).toBeVisible();
   });
 
   test('says so on History, PRs and Trends alike', async ({ page, request }) => {
     await registerHousehold(page, request, 'Jamie');
     await logAnOutOfWindowWorkout(page);
 
-    await expect(page.getByText(HIDDEN_COUNT)).toBeVisible();
+    await expect(page.getByText(FULL_HISTORY)).toBeVisible();
 
     await page.getByRole('link', { name: 'PRs' }).click();
-    await expect(page.getByText(HIDDEN_COUNT)).toBeVisible();
+    await expect(page.getByText(FULL_HISTORY)).toBeVisible();
     await expect(page.getByText(/log a set to start the board/)).toHaveCount(0);
 
     await page.getByRole('link', { name: 'Trends' }).click();
-    await expect(page.getByText(HIDDEN_COUNT)).toBeVisible();
+    await expect(page.getByText(FULL_HISTORY)).toBeVisible();
   });
 
   test('explains itself on request, and offers the upgrade', async ({ page, request }) => {
@@ -98,7 +98,7 @@ test.describe('The Free-tier window says what it is hiding', () => {
     // Nothing opens on its own -- the explainer is solicited, never an interstitial.
     await expect(page.getByText(/Nothing is deleted, ever/)).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Why is this hidden?' }).click();
+    await page.getByRole('button', { name: 'About your full history' }).click();
 
     const explainer = page.getByRole('dialog');
     await expect(explainer.getByText(/Nothing is deleted, ever/)).toBeVisible();
@@ -111,13 +111,13 @@ test.describe('The Free-tier window says what it is hiding', () => {
   // A household with nothing behind the window must see no change anywhere. This is what keeps the
   // notice from being an ad: it only ever appears when it is stating a fact about that person's own
   // data, which for most Free households is never.
-  test('stays silent for a household with nothing hidden', async ({ page, request }) => {
+  test('stays silent for a household with nothing beyond the window', async ({ page, request }) => {
     await registerHousehold(page, request, 'Jamie');
 
     for (const tab of ['History', 'PRs', 'Trends']) {
       await page.getByRole('link', { name: tab }).click();
-      await expect(page.getByText(/hidden on Free/)).toHaveCount(0);
-      await expect(page.getByRole('button', { name: 'Why is this hidden?' })).toHaveCount(0);
+      await expect(page.getByText(/Your full history has/)).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'About your full history' })).toHaveCount(0);
     }
 
     // ...and the original empty-state copy is still the honest one here.
@@ -133,13 +133,13 @@ test.describe('The Free-tier window says what it is hiding', () => {
 // It also guards a specific failure shape: if historyWindow were dropped from offlineCacheWarm, the
 // three tabs would go back to looking COMPLETE while degraded -- the same screen saying two
 // different things depending on the network, which is exactly what the contract forbids.
-forEachConnectivityMode<void>('a Free household is told what is hidden', {
+forEachConnectivityMode<void>('a Free household is told what its full history holds', {
   setup: async (page, request) => {
     await registerHousehold(page, request, 'Jamie');
     await logAnOutOfWindowWorkout(page);
     // Read History once online so the count reflects the set just logged before connectivity is
     // taken away. This mirrors real use -- you have seen the tab before you lose signal.
-    await expect(page.getByText(HIDDEN_COUNT)).toBeVisible();
+    await expect(page.getByText(FULL_HISTORY)).toBeVisible();
   },
   navigate: async (page) => {
     await page.getByRole('link', { name: 'History' }).click();
@@ -147,7 +147,7 @@ forEachConnectivityMode<void>('a Free household is told what is hidden', {
   act: async () => {},
   assert: async (page) => {
     // No branch on ctx.mode. That is the parity claim.
-    await expect(page.getByText(HIDDEN_COUNT)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Why is this hidden?' })).toBeVisible();
+    await expect(page.getByText(FULL_HISTORY)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'About your full history' })).toBeVisible();
   },
 });

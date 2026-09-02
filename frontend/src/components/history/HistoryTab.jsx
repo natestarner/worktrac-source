@@ -196,7 +196,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
         <EmptyState
           icon={IconInbox}
           title={`Nothing in ${windowLabel(historyWindow?.windowStart)}`}
-          body={`Everything ${activePersonName} logged before then is saved, just not shown on Free.`}
+          body={`Everything ${activePersonName} logged before then is part of your full history.`}
           action={<HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} />}
         />
       )}

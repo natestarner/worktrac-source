@@ -76,7 +76,7 @@ range"* is a loop for that household — widening the range is precisely what th
 so it cannot reach what it is hiding. `TrendsTab` renders `HistoryWindowNotice` instead; see
 `billing.md`. The notice shows on **every** range, not just the wide ones, because the consistency
 grid ignores the range toggle and is therefore clipped on all of them — but the range-specific lead
-("this range stops at…") appears only when the selected range really does reach past the window,
+("this range shows…") appears only when the selected range really does reach past the window,
 since at 4wk and 12wk the charts for that range are complete and the lead would be false.
 
 ## Empty state: the range being empty ≠ never having trained

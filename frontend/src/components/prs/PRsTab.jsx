@@ -148,7 +148,7 @@ function PRsTabContent() {
         <EmptyState
           icon={IconStar}
           title="No records inside this window"
-          body={`${activePersonName}'s earlier bests are saved, just not shown on Free.`}
+          body={`${activePersonName}'s earlier bests are part of your full history.`}
           action={
             <HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} lead={prsLead} />
           }

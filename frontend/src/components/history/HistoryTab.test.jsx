@@ -317,7 +317,7 @@ describe('HistoryTab and the Free-tier window', () => {
     renderHistoryTab();
 
     expect(screen.queryByText(/No workouts logged yet/)).not.toBeInTheDocument();
-    expect(await screen.findByText(/3 earlier workouts are saved but hidden on Free/)).toBeInTheDocument();
+    expect(await screen.findByText(/Your full history has 3 more workouts/)).toBeInTheDocument();
   });
 
   // The other side of the same branch: with nothing hidden, an empty History really is empty and
@@ -350,6 +350,6 @@ describe('HistoryTab and the Free-tier window', () => {
 
     renderHistoryTab();
 
-    expect(await screen.findByText(/12 earlier workouts are saved but hidden on Free/)).toBeInTheDocument();
+    expect(await screen.findByText(/Your full history has 12 more workouts/)).toBeInTheDocument();
   });
 });

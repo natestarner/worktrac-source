@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  hiddenWorkoutsSentence,
+  fullHistorySentence,
   rangeReachesPastWindow,
   windowDays,
   windowLabel,
@@ -29,10 +29,21 @@ describe('windowDays / windowLabel', () => {
   });
 });
 
-describe('hiddenWorkoutsSentence', () => {
+describe('fullHistorySentence', () => {
   it('reads like someone wrote it at one, which is the case a naive template gets wrong', () => {
-    expect(hiddenWorkoutsSentence(1)).toBe('1 earlier workout is saved but hidden on Free.');
-    expect(hiddenWorkoutsSentence(47)).toBe('47 earlier workouts are saved but hidden on Free.');
+    expect(fullHistorySentence(1)).toBe('Your full history has 1 more workout.');
+    expect(fullHistorySentence(47)).toBe('Your full history has 47 more workouts.');
+  });
+
+  // Deliberate posture, not incidental phrasing. An earlier draft ("saved but hidden on Free")
+  // cast the app as the thing keeping someone from their own training -- the wrong voice for a
+  // product whose central promise is that it never deletes anything. The invitation belongs to the
+  // "See Pro" link beside the sentence, not to the sentence.
+  it('states what the person has, never what the app is withholding', () => {
+    for (const n of [1, 2, 47]) {
+      expect(fullHistorySentence(n)).toContain('Your full history');
+      expect(fullHistorySentence(n)).not.toMatch(/hidden|withheld|locked|blocked/i);
+    }
   });
 });
 

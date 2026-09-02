@@ -659,9 +659,9 @@ export default function HelpTab() {
             thing happens in reverse: hidden, never lost.
           </p>
           <p>
-            You don&rsquo;t have to keep track of this yourself. Whenever History, PRs or Trends is
-            leaving something out, that screen says so and tells you how many workouts are behind
-            the window &mdash; tap <T>Why is this hidden?</T> there for the details.
+            You don&rsquo;t have to keep track of this yourself. Whenever your full history holds
+            more than History, PRs or Trends is showing, that screen says so and tells you how many
+            workouts &mdash; tap <T>About your full history</T> there for the details.
           </p>
         </Note>
 
