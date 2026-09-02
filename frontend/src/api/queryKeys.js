@@ -20,6 +20,9 @@ export const queryKeys = {
   liveSession: (personId) => ['live-session', personId],
   personExercises: (personId) => ['person-exercises', personId],
   history: (personId) => ['history', personId],
+  // What the Free-tier window is hiding from this person. Its own key rather than a field on
+  // `history`, because PRs and Trends ask the same question without reading the history list.
+  historyWindow: (personId) => ['history-window', personId],
   routines: (personId) => ['routines', personId],
   prs: (personId) => ['prs', personId],
   trendsOverview: (personId, weeks) => ['trends-overview', personId, weeks],

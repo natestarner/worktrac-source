@@ -233,8 +233,20 @@ public class StatsService {
         LocalDate currentWeekStart = today.with(DayOfWeek.MONDAY);
         LocalDate rangeStart = currentWeekStart.minusWeeks(effectiveWeeks - 1L);
 
-        List<WorkoutSet> all = visibleTo(accountId,
-                workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId()));
+        List<WorkoutSet> loaded = workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId());
+
+        // hasAnyHistory is read from the UNCLAMPED list, deliberately -- it is the one field on this
+        // DTO that is all-time rather than range-scoped, and its entire job is separating a
+        // brand-new person from a lapsed one so TrendsTab can pick between two different empty
+        // states. Deriving it from `all` below made it answer the wrong question for exactly the
+        // households it exists to serve: a Free household whose whole training history predates the
+        // 90-day window got "No workouts logged yet. Trends will show up here once a few sessions
+        // are in the books." -- told they had never trained, by the field added to stop that.
+        // See .claude/rules/trends.md and .claude/rules/billing.md (the window is a read filter on
+        // DISPLAY; it must never reshape what the app believes about the person).
+        boolean hasAnyHistory = !loaded.isEmpty();
+
+        List<WorkoutSet> all = visibleTo(accountId, loaded);
 
         // Collapse to one entry per session (not per set) so a session with many sets only
         // counts once toward workoutCount, while still summing every set's volume.
@@ -323,7 +335,7 @@ public class StatsService {
                 volumeThisMonthLb.setScale(1, RoundingMode.HALF_UP),
                 volumeLastMonthLb.setScale(1, RoundingMode.HALF_UP),
                 buildWorkoutDays(sessionDate, sessionSetCount, today),
-                !all.isEmpty());
+                hasAnyHistory);
     }
 
     // Days with at least one session in the fixed trailing heatmap window, ascending. Only active

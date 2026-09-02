@@ -19,3 +19,11 @@ export function editSession(sessionId, startedAt) {
 export function getHistory(personId) {
   return apiClient.get(`/api/people/${personId}/history`);
 }
+
+// How much of this person's history the Free-tier window is hiding right now:
+// `{ windowStart, hiddenSessions, earliestHiddenAt }`. The SERVER answers this -- the client knows
+// the plan but deliberately not the window, so there is never a second copy of the 90 days to drift
+// from the clamp it describes. See HistoryWindowNotice.jsx.
+export function getHistoryWindow(personId) {
+  return apiClient.get(`/api/people/${personId}/history-window`);
+}

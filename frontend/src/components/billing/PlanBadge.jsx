@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { IconStar } from '../shared/icons';
 import HuddleMark from '../shared/HuddleMark';
 
 // The household's plan, in the header, immediately left of the account menu.
@@ -17,6 +16,14 @@ import HuddleMark from '../shared/HuddleMark';
 // that makes the state reachable in the first place, and on the billing screen, which already
 // reads the full status. Adding a network-dependent query here to say it sooner would trade a
 // correct offline header for a marginally earlier warning.
+//
+// THE MARK LEADS EVERY PHRASE THAT NAMES THE PRODUCT, on both plans. It used to appear only on the
+// Pro pill, with Free getting an outline star -- the mark meaning "you have this", the star meaning
+// "not yet". That reading is gone: the mark now means Huddle Pro the PRODUCT, so "Go Pro" reads as
+// "go Huddle Pro" rather than as a generic upsell, and the same convention holds wherever Pro is
+// named as a product (BillingTab's plan heading, ProCelebration, HistoryWindowModal's benefits
+// block). What still signals possession is the PILL, not the glyph -- .plan-badge--pro's fixed
+// bright identity colours against this one's transparent outline. See .claude/rules/billing.md.
 //
 // Labelled "Go Pro", NOT "Upgrade to Pro": a Free household standing on /app/billing has this
 // control and that screen's primary button on screen together, and two controls sharing an
@@ -36,15 +43,22 @@ export default function PlanBadge() {
   }
 
   if (plan === 'FREE') {
-    // Outline star, echoing the same glyph the favourite toggle uses for "not yet" -- aspirational,
-    // not achieved. IconStar is aria-hidden (icons.jsx), so it never touches the "Go Pro" name below.
+    // No hairline override here, unlike the Pro pill below: .plan-badge--upgrade is
+    // `background: transparent`, so it sits on the header's own theme-following ground and the
+    // default --brand-mark-hairline is already correct in both schemes. Only a ground that stays
+    // light in BOTH needs the explicit value.
+    //
+    // size 14 matches the Pro pill exactly, so the badge does not resize when a household upgrades
+    // -- HuddleMark's height is round(size * 115/129), i.e. 12px at 14, the same box the outline
+    // star occupied at size 12. HuddleMark is aria-hidden, so it never touches the "Go Pro"
+    // accessible name below.
     return (
       <Link
         to="/app/billing"
         className="pressable plan-badge plan-badge--upgrade"
         aria-label="Go Pro"
       >
-        <IconStar size={12} />
+        <HuddleMark size={14} />
         Go Pro
       </Link>
     );
@@ -59,10 +73,10 @@ export default function PlanBadge() {
   // filter by role before matching name, and a Free household never sees this link at all (Pro and
   // Free are mutually exclusive), so there is no state in which two same-named links coexist.
   //
-  // The actual mark, not a generic icon -- paying for Huddle earns Huddle's own identity, not just
-  // a colour swap on the same star. It's already proven legible this small: public/icon.svg is the
-  // same four circles rendered as the browser tab favicon. HuddleMark is aria-hidden and no text
-  // was split into spans, so getByText('Pro', { exact: true }) is unmoved.
+  // The same mark the Free pill now carries -- what changes between the two states is the pill, not
+  // the glyph. It's already proven legible this small: public/icon.svg is the same four circles
+  // rendered as the browser tab favicon. HuddleMark is aria-hidden and no text was split into
+  // spans, so getByText('Pro', { exact: true }) is unmoved.
   //
   // hairline pinned to the light value: this pill's own background is a fixed light gradient
   // regardless of theme (see .plan-badge--pro's comment), so it is the one caller whose ground

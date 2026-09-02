@@ -10,12 +10,20 @@ import { Link } from 'react-router-dom';
 // It renders NOTHING while the plan is unknown, for the same reason PlanBadge does: an auth
 // snapshot written before billing shipped carries no plan, and showing an upgrade prompt to a
 // household that already pays is the worst outcome available here. Absence is the safe default.
-export default function ProUpsell({ plan, children }) {
+//
+// `action` is an optional control rendered in the same row as the link, for a prompt that needs to
+// offer something besides "go to billing" -- today only HistoryWindowNotice's "About your full history"
+// affordance. It sits out here rather than inside `children` so it lands in the flex row and can
+// reach the 44px touch target; a control nested in the paragraph cannot without wrecking the line.
+// It is deliberately NOT a second upgrade path: keep it to explanation, or this stops being one way
+// to ask and becomes two.
+export default function ProUpsell({ plan, children, action }) {
   if (plan !== 'FREE') return null;
 
   return (
     <div style={wrapStyle}>
       <p style={textStyle}>{children}</p>
+      {action}
       {/* "See Pro" -- deliberately not "Upgrade to Pro" (the billing screen's primary button) or
           "Go Pro" (the header badge). Playwright matches accessible names as a case-insensitive
           substring, so three controls that can share a screen need three mutually non-containing

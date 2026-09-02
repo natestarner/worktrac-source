@@ -63,6 +63,82 @@ commitment rather than an implementation detail.
   celebration is the emotional core of this app. Note `log-screen.md` documents three PR predicates
   that are deliberately not unified — the clamp touches each differently.
 
+## The window must SAY it is clamping
+
+A clamped screen that looks complete is the bug this feature exists to fix: a Free household could
+log a past workout months back, tap Done, and land on History reading *"No workouts logged yet"* —
+about a workout the app had just saved.
+
+- **The server answers "is anything hidden from you"; the client never computes the window.**
+  `GET /api/people/{id}/history-window` → `HistoryWindowDto(windowStart, hiddenSessions,
+  earliestHiddenAt)`. A client-side "90 days" would be a second copy of `FREE_HISTORY_WINDOW`, free
+  to drift from the clamp it describes — so even the copy derives its number from `windowStart`
+  (`historyWindowCopy.js`). `windowStart` is non-null for **every** Free household, including one
+  with nothing hidden yet; that is what lets `PastSessionModal` warn *before* the workout is logged.
+- **`hiddenSessions` counts only pre-window sessions that have sets**, matching `getHistory`'s own
+  filter exactly, so the number is precisely how many History rows are missing. An honest count is
+  the entire justification for showing one.
+- **Say what the person HAS, never what the app is withholding.** "Your full history has 47 more
+  workouts" — not "47 workouts are hidden on Free", which was the first draft and casts the app as
+  the thing keeping someone from their own training. That is the wrong posture for a product whose
+  central promise is that it never deletes anything, and the invitation belongs to the "See Pro"
+  link beside the sentence rather than to the sentence. Pinned in `historyWindowCopy.test.js`.
+- **The notice carries no mark; the explainer's benefits block does.** See "The mark names the
+  PRODUCT" below for the convention and why the sentence about someone's own data is excluded.
+- **`HistoryWindowNotice` is the one way any screen says this**, and it composes `ProUpsell` rather
+  than replacing it, so "one way to ask for an upgrade" still holds. Three fail-closed gates:
+  unknown plan, unanswered query, or a zero count all render **nothing** — which is why a Free
+  household inside the window sees no change anywhere in the app.
+- **`PastSessionModal` warns, it does not block.** No `min` on the date input and no disabled
+  button: the workout genuinely is saved and returns on upgrade, so refusing it would turn a display
+  limit into a data-entry limit and contradict "nothing is deleted, ever".
+- **`HistoryWindowModal` is a modal, and `ProUpsell`'s header says never to use one.** The
+  distinction is solicited vs unsolicited — that rule forbids an upgrade prompt that *interrupts*.
+  This one only ever opens from an explicit tap on "About your full history". Nothing may be
+  changed to open it automatically.
+- **This adds no connectivity branch**, so nothing about it belongs on `resilience.md`'s register.
+  `historyWindow` is in `offlineCacheWarm.js` (`refreshAfterRestore: true` — the server wholly owns
+  it), so the notice reads identically in every mode; `parity-…`-style coverage is in
+  `free-window-notice.spec.ts`. Dropping it from the warm makes the three tabs look **complete**
+  while offline, which is the divergence the contract forbids outright.
+- **`hasAnyHistory` must stay pre-clamp.** See `trends.md`.
+
+## The mark names the PRODUCT, not the entitlement
+
+`HuddleMark` leads every phrase that names Huddle Pro as a product, on **both** plans:
+`PlanBadge`'s two pills, `BillingTab`'s "Huddle Pro" plan heading, `ProCelebration`, and
+`HistoryWindowModal`'s benefits block. So "Go Pro" reads as *go Huddle Pro* rather than as a generic
+upsell.
+
+This **supersedes** an earlier reading in which the mark meant "you have Pro" and Free households
+got an aspirational outline star instead. The star is gone. What signals possession now is the
+**pill**, not the glyph — `.plan-badge--pro`'s fixed bright identity colours against
+`.plan-badge--upgrade`'s transparent outline.
+
+Where it does **not** go, and each exclusion is load-bearing:
+
+- **Inside a control label** — "Upgrade to Pro", "See Pro". A four-colour glyph inside a filled
+  primary button or a small text link is clutter, and "logo Pro" only parses as a unit when *Pro*
+  opens the phrase. `PlanBadge`'s pills are the exception because a badge **is** a brand chip.
+- **In handbook prose.** `HelpTab` says "Pro" dozens of times mid-sentence; marks there would be
+  confetti, and `getByText` concatenates only DIRECT text children (`frontend-core.md`).
+- **On a sentence that doesn't name Pro.** `HistoryWindowNotice`'s line is about the person's own
+  data; a mark on it is decoration, and decoration is how a quiet inline note starts reading as an
+  ad — the one thing `ProUpsell` exists to prevent.
+
+**No image wordmark.** "Pro" is nearly always a word inside a label, so an image would break the
+accessible names the non-containment rule depends on, could not inherit the app's font/size/colour,
+and would reintroduce the hardcoded light/dark hairline `HuddleMark` was drawn inline to escape.
+`docs/brand/README.md` also forbids respacing the lockup, so a real "Huddle Pro" lockup has to come
+from the brand kit rather than being assembled here. Compose it from `HuddleMark` + live text. An
+asset is only the answer for surfaces that cannot compose — email (hence `public/email/logo.png`),
+marketing, social cards.
+
+**Hairline**: pass `hairline="#bdb6af"` only where the ground stays light in **both** schemes —
+today just `.plan-badge--pro`. Every other caller sits on a theme-following surface and takes the
+default. `HuddleMark` is always `aria-hidden`, so it never touches the accessible name beside it,
+which is what keeps the non-containment rule intact.
+
 ## Reserved words: `billing_plan` and `billing_interval`
 
 Both `PLAN` and `INTERVAL` are reserved in T-SQL, and an unbracketed one fails the migration
@@ -136,5 +212,12 @@ full reasoning; don't move it back in front of the deletes.
   household on `/app/billing` has both on screen, and a shared accessible name makes every
   Playwright `getByRole` on it a strict-mode violation. "Upgrade" alone would be worse — a substring
   of the other, matching both.
+- The window notice adds three more, and all six have to stay mutually non-containing:
+  `ProUpsell`'s **"See Pro"**, the notice's **"About your full history"**, and — inside
+  `HistoryWindowModal`, which opens with the notice and the header badge both still in the DOM —
+  **"Unlock full history"** and **"How Free and Pro differ"**, alongside `Modal`'s own **"Close"**.
+  Note "About your full history" and "Unlock full history" share the words *full history* without
+  either containing the other, which is what the rule actually requires. Pinned in
+  `HistoryWindowNotice.test.jsx`.
 - **"Pro" is a substring of "Profile"**, `UserMenu`'s first item, in the same header subtree. Assert
   the badge with `exact: true` / an exact string, always.

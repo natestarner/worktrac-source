@@ -23,6 +23,18 @@ export function localDateTimeToIso(dateStr, timeStr) {
   return new Date(y, mo - 1, d, hh, mm, 0, 0).toISOString();
 }
 
+// The same local date+time pair as epoch millis, and NULL rather than a throw when either input is
+// incomplete. Both exist on purpose: localDateTimeToIso is called from submit handlers, where an
+// unparseable date is a bug worth surfacing, while this is called during RENDER as someone types
+// into an <input type="date"> -- which is empty or half-written for several keystrokes, and where
+// `new Date(NaN).toISOString()` throws a RangeError that would take the whole tab down.
+export function localDateTimeToMs(dateStr, timeStr) {
+  const [y, mo, d] = String(dateStr ?? '').split('-').map(Number);
+  const [hh, mm] = String(timeStr ?? '').split(':').map(Number);
+  const ms = new Date(y, mo - 1, d, hh, mm, 0, 0).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
 export function formatDateLabel(localDateStr) {
   const today = toLocalDateStr(new Date().toISOString());
   const y = new Date();

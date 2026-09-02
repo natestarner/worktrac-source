@@ -658,6 +658,11 @@ export default function HelpTab() {
             you later cancel, you keep Pro until the period you paid for ends, and then the same
             thing happens in reverse: hidden, never lost.
           </p>
+          <p>
+            You don&rsquo;t have to keep track of this yourself. Whenever your full history holds
+            more than History, PRs or Trends is showing, that screen says so and tells you how many
+            workouts &mdash; tap <T>About your full history</T> there for the details.
+          </p>
         </Note>
 
         <h3 className="help-h3">Personal records still know the truth</h3>
