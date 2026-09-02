@@ -30,10 +30,47 @@ on that console at once. That is what killed Vite mid-run for months, and it pre
   `Start-Process` substitute reverted twice — once for the pair, once for the frontend alone.
   Don't "unify" the two launches for symmetry.
 
-Ruled out by instruments, not argument — don't re-derive these: host commit-charge exhaustion
-(zero `Microsoft-Windows-Resource-Exhaustion-Detector` events ever; commit 49–60% at every death),
-a crash (zero Application Error / WER events in the death window), and the npm shim chain (127
-still appeared with npm removed from the launch path entirely).
+## 2026-09-01 — there are TWO failure modes, and `rc=127` could never tell them apart
+
+**Everything above this section was reasoning about a broken instrument.** Both halves of the
+diagnostic were measured wrong, and fixing them changed the answer:
+
+1. **`rc=127` carries no information.** bash collapses every abnormal end to wait status 32512.
+   Measured the same day: an external `Stop-Process -Force` (native `0xFFFFFFFF`) and a fail-fast
+   abort inside Vite (native `0xC0000409`) both arrive at bash as "exit 127".
+2. **The `[[frontend exited rc=…]]` marker had never once been written.** Zero occurrences in any
+   `frontend.log`, against 8 in `backend.log`. Git Bash's `bash.exe`, spawned with
+   `DETACHED_PROCESS`, silently discards its own stdout, while a native Windows child writing the
+   **same** inherited handle succeeds — so Vite's output landed, the log looked healthy, and
+   `e2e.sh`'s "no marker means something killed it" fired every single time regardless of truth.
+
+With `scripts/supervise-server.js` recording the native code, two consecutive real deaths under
+identical load typed as **different mechanisms**: `0xFFFFFFFF` (external kill) and `0xC0000409`
+(crash inside the process). That is why four single-cause investigations each failed — they were
+sampling two different bugs through an instrument that rendered them identical.
+
+**Read the native code, never `rc=127`.** `0xFFFFFFFF` = something killed it; `0xC0000409` =
+it aborted itself; `0xC0000005` = native crash; a small integer = a real self-exit.
+
+### What this retires
+
+- *"A crash is ruled out — zero Application Error / WER events."* **Wrong inference.**
+  `__fastfail` (`0xC0000409`) terminates without running exception handlers, so it produces no WER
+  event by design. Absence of WER never ruled a crash out, and one of the two modes is a crash.
+- *"Host commit-charge exhaustion is ruled out — commit 49–60% at every death."* Stale. Deaths are
+  now recorded at **84–92%** commit with 24–76 concurrent Chrome processes. Commit is not the sole
+  cause (23 deaths happened with `chrome=0`), but the old numbers no longer describe the picture.
+- *"The console-CTRL event is the root cause, fixed by `detach-launch.js`."* Detaching was correct
+  and should stay, but it **did not reduce the death rate**: 5, 9 on either side of 2026-08-18 and
+  unchanged after. It also introduced the lost-marker bug above.
+
+The npm-shim finding still stands (127 appeared with npm removed) — and is now explained: 127 was
+never about npm, it is just what bash reports for any abnormal end.
+
+Ruled out by instruments, not argument — don't re-derive these: Playwright teardown (there is no
+`webServer` in `playwright.config.ts`, and its workers keep cycling for 10+ s after Vite dies) and
+Vite's own memory (peak 572 MB private against Node's multi-GB ceiling, and *falling* in the final
+seconds, with handles and threads flat).
 
 ## Detaching means nothing reaps it for you
 

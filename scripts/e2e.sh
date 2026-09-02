@@ -91,6 +91,8 @@ if [ -n "${BACKEND_PORT:-}" ]; then
       echo "   Test results above are NOT trustworthy -- specs after it went down failed for that" >&2
       echo "   reason, not because of your change. Check $REPO_ROOT/.dev-logs/$name.log:" >&2
       echo "     an '[[$name exited rc=...]]' line means it exited on its own (rc says why);" >&2
+      echo "     READ THE NATIVE CODE, not rc=127 -- bash reports 127 for BOTH a kill and a" >&2
+      echo "     crash. 0xFFFFFFFF = something killed it; 0xC0000409 = it aborted itself." >&2
       echo "     no such line means something killed it (a sibling worktree's down.sh is the" >&2
       echo "     usual suspect -- see .claude/rules/e2e-tests.md)." >&2
       echo "     the '[[$name mem-at-exit]]' line beneath it carries host commit charge at that" >&2
