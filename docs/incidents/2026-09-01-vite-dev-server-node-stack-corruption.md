@@ -57,11 +57,20 @@ the stack overwritten, i.e. genuine memory corruption inside `node.exe`.
 
 Then A/B, identical load (`E2E_WORKERS=11`, full e2e suite):
 
-| Node | Crashes |
-|---|---|
-| **v24.15.0** | **2 in 3** (plus 3 earlier hunts that each crashed on attempt 1) |
-| v24.14.1 | **0 in 8** |
-| v24.20.0 | see `dev-stack.md` for the version this repo pins |
+| Order run | Node | Crashes |
+|---|---|---|
+| 1st | **v24.15.0** | **2 in 3** |
+| 2nd | v24.14.1 | 0 in 8 |
+| 3rd | v24.20.0 | 0 in 8 |
+| 4th | **v24.15.0 again** | **2 in 4** |
+
+**v24.15.0: 4 crashes in 7 runs. Alternatives: 0 in 16.** Fisher's exact p ~ 0.004, plus three
+earlier hunts that each crashed on their first run.
+
+The arms were deliberately **interleaved** -- the bad build was re-run last, after both clean
+arms. Sequential arms alone cannot separate "this build is broken" from "the machine got
+quieter", and that confound would otherwise have been a legitimate objection to the whole
+result. Any future version comparison must interleave for the same reason.
 
 Also eliminated along the way, each by measurement rather than argument:
 
