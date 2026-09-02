@@ -36,7 +36,11 @@ if (!logPath || !label || !command) {
 // cmd.exe between us and npm -- which is harmless for our purpose: the probe measured the native
 // code propagating intact up through BOTH cmd.exe and npm-cli.js (all three read 0xC0000409 on a
 // crash). bash is the only link in the chain that mangles it, and it is no longer in the path.
-const child = spawn(command, args, { stdio: 'inherit', shell: process.platform === 'win32' });
+// A shell is needed ONLY to launch a .cmd (npm). Spawning a real .exe through cmd.exe breaks on
+// any space in its path ("C:/Program Files/..." arrives as the token "C:/Program") and trips
+// DEP0190. So use the shell only when the target is not an executable.
+const needsShell = process.platform === 'win32' && !/\.exe$/i.test(command);
+const child = spawn(command, args, { stdio: 'inherit', shell: needsShell });
 
 child.on('exit', (code, signal) => {
   const when = new Date().toISOString().replace(/\.\d+Z$/, '');

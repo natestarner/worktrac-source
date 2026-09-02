@@ -165,6 +165,10 @@ _open_log() {
     echo "=============================================================================="
   } >> "$log"
 }
+# A known-bad Node build is the one failure mode that looks exactly like a code regression, so
+# say so BEFORE anything starts rather than after an e2e run has gone red.
+bash "$SCRIPT_DIR/check-node-version.sh" || true
+
 _open_log backend.log
 _open_log frontend.log
 
