@@ -30,61 +30,65 @@ on that console at once. That is what killed Vite mid-run for months, and it pre
   `Start-Process` substitute reverted twice — once for the pair, once for the frontend alone.
   Don't "unify" the two launches for symmetry.
 
-## 2026-09-01 — there are TWO failure modes, and `rc=127` could never tell them apart
+## SOLVED 2026-09-01 — it was a Node.js bug, not Vite
 
-**Everything above this section was reasoning about a broken instrument.** Both halves of the
-diagnostic were measured wrong, and fixing them changed the answer:
+**Node v24.15.0 corrupts its own stack under concurrent load on Windows.** Windows' `/GS`
+stack-cookie check catches it and fail-fasts the process instantly and silently, which is why
+there was never an error message, a crash dialog, or a WER event. Everything above this section
+was reasoning about instruments that could not see it. Full narrative:
+`docs/incidents/2026-09-01-vite-dev-server-node-stack-corruption.md`.
 
-1. **`rc=127` carries no information.** bash collapses every abnormal end to wait status 32512.
-   Measured the same day: an external `Stop-Process -Force` (native `0xFFFFFFFF`) and a fail-fast
-   abort inside Vite (native `0xC0000409`) both arrive at bash as "exit 127".
-2. **The `[[frontend exited rc=…]]` marker had never once been written.** Zero occurrences in any
-   `frontend.log`, against 8 in `backend.log`. Git Bash's `bash.exe`, spawned with
-   `DETACHED_PROCESS`, silently discards its own stdout, while a native Windows child writing the
-   **same** inherited handle succeeds — so Vite's output landed, the log looked healthy, and
-   `e2e.sh`'s "no marker means something killed it" fired every single time regardless of truth.
+Minidump, parsed for its exception record and module list:
 
-3. **`intent=unexpected` was wrong for a large share of the ledger.** `down.sh` drops a sentinel
-   before killing, and a death is "planned" only if that sentinel is under 60s old — but `up.sh`
-   used to **delete the sentinel the moment both ports answered**, ~20s in, while the dying server
-   records its own exit asynchronously. Under load that lag is tens of seconds: a stop measured at
-   20:33:17.3 — 1.3s after `down.sh` wrote the sentinel — did not reach the ledger until 20:33:44,
-   by which point the breadcrumb was gone. So **ordinary `/run-local` restarts were filed as
-   unexpected deaths.** Tells: 23 of the "unexpected" frontend deaths have `chrome=0` (no test run
-   in flight, i.e. exactly what a restart looks like), and one batch shows four servers across
-   three worktrees dying inside the same second — a machine-wide shutdown, all marked unexpected.
-   `up.sh` now lets the sentinel age out instead.
+```
+code            : 0xC0000409
+fast-fail code  : 2  (STACK_COOKIE_CHECK_FAILURE)   <- NOT 7 (abort); real memory corruption
+faulting module : C:\Program Files\nodejs\node.exe
+```
 
-**So the ledger's 66 "mysteries" were inflated.** With the native code recorded, the only death so
-far confirmed natural — mid-e2e, no fresh sentinel anywhere — carried `0xC0000409`, a fail-fast
-abort **inside** the process. Every `0xFFFFFFFF` (external kill) instance examined has been
-accounted for: `down.sh` doing its job, or a deliberate verification kill. **An external killer has
-not been demonstrated to exist.** Do not go hunting one without a sample that survives this
-sentinel check.
+A/B on this repo's own e2e suite at `E2E_WORKERS=11`:
 
-**Read the native code, never `rc=127`** — and check `intent` before treating anything as a bug.
-`0xFFFFFFFF` = something killed it (usually `down.sh`, so expect `intent=planned`); `0xC0000409` =
-it aborted itself; `0xC0000005` = native crash; a small integer = a real self-exit.
+| Node | Crashes |
+|---|---|
+| **v24.15.0** | **2 in 3** (plus three earlier hunts that each crashed on the first run) |
+| v24.14.1 | 0 in 8 |
+| v24.20.0 | 0 in 8 |
+
+Reproduces identically on Vite **7.3.6** and Vite **8.2.1**, so it is neither the new toolchain
+nor its Rust native addons. Upstream: [nodejs/node#62991](https://github.com/nodejs/node/issues/62991)
+(Windows-only; Linux/macOS unaffected, so CI on ubuntu was never at risk).
+
+`scripts/check-node-version.sh` warns at `up.sh` time when the running Node is on the known-bad
+list. **Add to that list rather than rediscovering this**, and don't pin CI for it — the bug is
+Windows-only and CI does not run there.
+
+### Read the native exit code, never `rc=127`
+
+`scripts/supervise-server.js` records the real code, because bash collapses every abnormal end to
+127 — an external `Stop-Process -Force` and a fail-fast crash are indistinguishable through it.
+
+| Native | Meaning |
+|---|---|
+| `0xFFFFFFFF` | `TerminateProcess(-1)` — something killed it. Usually `down.sh`, so expect `intent=planned` |
+| `0xC0000409` | fail-fast. **Check the subcode**: 2 = stack corruption, 7 = deliberate `abort()` |
+| `0xC0000005` | native access violation |
+| small integer | a real self-exit |
 
 ### What this retires
 
-- *"A crash is ruled out — zero Application Error / WER events."* **Wrong inference.**
-  `__fastfail` (`0xC0000409`) terminates without running exception handlers, so it produces no WER
-  event by design. Absence of WER never ruled a crash out, and one of the two modes is a crash.
-- *"Host commit-charge exhaustion is ruled out — commit 49–60% at every death."* Stale. Deaths are
-  now recorded at **84–92%** commit with 24–76 concurrent Chrome processes. Commit is not the sole
-  cause (23 deaths happened with `chrome=0`), but the old numbers no longer describe the picture.
-- *"The console-CTRL event is the root cause, fixed by `detach-launch.js`."* Detaching was correct
-  and should stay, but it **did not reduce the death rate**: 5, 9 on either side of 2026-08-18 and
-  unchanged after. It also introduced the lost-marker bug above.
+- *"A crash is ruled out — zero Application Error / WER events."* **Wrong inference, and the most
+  expensive one.** `__fastfail` bypasses exception handling *by design* and produces no WER event.
+- *"Memory is ruled out — commit was comfortable."* True but irrelevant: it measured host commit
+  charge. Vite's own peak was 572 MB against Node's multi-GB ceiling, and falling at the end.
+- *"The console-CTRL event is the root cause, fixed by `detach-launch.js`."* Detaching is correct
+  and stays, but it did not reduce the death rate (5, 9 either side of 2026-08-18) and it is what
+  broke the exit marker.
+- *"There are 66 unexplained deaths."* A large share were routine `/run-local` restarts misfiled
+  as unexpected — `up.sh` deleted the planned-stop sentinel before the dying server could read it.
 
-The npm-shim finding still stands (127 appeared with npm removed) — and is now explained: 127 was
-never about npm, it is just what bash reports for any abnormal end.
-
-Ruled out by instruments, not argument — don't re-derive these: Playwright teardown (there is no
-`webServer` in `playwright.config.ts`, and its workers keep cycling for 10+ s after Vite dies) and
-Vite's own memory (peak 572 MB private against Node's multi-GB ceiling, and *falling* in the final
-seconds, with handles and threads flat).
+Still ruled out by instruments, not argument: Playwright teardown (no `webServer` in
+`playwright.config.ts`; its workers keep cycling 10+ s after Vite dies) and job objects
+(everything is `inJob=True`, including the backend that survives).
 
 ## Detaching means nothing reaps it for you
 
