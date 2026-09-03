@@ -1,12 +1,6 @@
 import { convertWeight } from '../../utils/formulas';
 import SectionLabel from '../shared/SectionLabel';
-
-const cardStyle = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 16,
-  padding: '16px 18px',
-};
+import Card from '../shared/Card';
 
 function streakText(weeks) {
   if (weeks === 0) return 'No streak yet';
@@ -48,11 +42,11 @@ export default function SummaryCards({ overview, defaultUnit }) {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
-      <div style={cardStyle}>
+      <Card size="dense">
         <SectionLabel>Streak</SectionLabel>
         <div style={{ fontSize: 22, fontWeight: 800 }}>{streakText(overview.currentStreakWeeks)}</div>
-      </div>
-      <div style={cardStyle}>
+      </Card>
+      <Card size="dense">
         <SectionLabel>This week</SectionLabel>
         <div style={{ fontSize: 22, fontWeight: 800 }}>
           {overview.workoutsThisWeek} workout{overview.workoutsThisWeek === 1 ? '' : 's'}
@@ -60,8 +54,8 @@ export default function SummaryCards({ overview, defaultUnit }) {
         <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 2 }}>
           {weekDeltaText(overview.workoutsThisWeek, overview.workoutsLastWeek)}
         </div>
-      </div>
-      <div style={cardStyle}>
+      </Card>
+      <Card size="dense">
         <SectionLabel>Volume &middot; last 30 days</SectionLabel>
         <div
           style={
@@ -72,7 +66,7 @@ export default function SummaryCards({ overview, defaultUnit }) {
         >
           {volumeText}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

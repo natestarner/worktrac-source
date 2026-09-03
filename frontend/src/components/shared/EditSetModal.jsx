@@ -125,7 +125,7 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
         <Button
           onClick={handleSave}
           disabled={tooShort}
-          style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
+          style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
           Save
         </Button>

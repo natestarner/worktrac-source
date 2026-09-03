@@ -512,6 +512,15 @@ button:not(.pressable):active:not(:disabled) {
 .card-flush {
   padding: 0;
 }
+/* The dense step. Measured rather than invented: of the ~61 places that hand-rolled the card
+   recipe, the real clusters sat at 16-18px vertical against 18-20px horizontal -- i.e. two
+   groups, a roomy one and a tight one, expressed 27 different ways. `.card` is the roomy one
+   (--space-5); this is the tight one, for list-shaped cards whose rows carry their own rhythm
+   (History sessions, PRs rows, the session summary). Anything needing a third value is an
+   outlier and should say so with an explicit override rather than widening this scale. */
+.card-dense {
+  padding: var(--space-4);
+}
 
 /* Rows inside a card, separated by hairlines rather than by gaps between
    separate cards. A list of per-row cards reads as a brick wall; one card with

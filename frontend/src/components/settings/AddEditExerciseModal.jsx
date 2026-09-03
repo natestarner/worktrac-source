@@ -234,7 +234,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
           boxSizing: 'border-box',
           padding: 14,
           border: `1px solid ${nameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
-          borderRadius: 10,
+          borderRadius: 'var(--radius-md)',
           fontSize: 16,
           marginBottom: nameError || duplicateNote ? 6 : 16,
         }}
@@ -283,7 +283,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
         <Button
           onClick={handleSave}
           disabled={saving}
-          style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
+          style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
           {isEditing ? 'Save' : openTarget ? `Open ${openLabel}` : 'Add'}
         </Button>

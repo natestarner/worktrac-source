@@ -65,7 +65,7 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
         </button>
         <Button
           onClick={handleEnd}
-          style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
+          style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
           End workout
         </Button>

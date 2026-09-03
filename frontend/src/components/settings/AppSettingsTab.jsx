@@ -322,12 +322,12 @@ export default function AppSettingsTab() {
             flex: 1,
             padding: '12px 14px',
             border: `1px solid ${tagNameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
-            borderRadius: 10,
+            borderRadius: 'var(--radius-md)',
             fontSize: 16,
           }}
         />
         <OfflineDisabledWrap message="Adding a tag needs a connection.">
-          <Button onClick={() => guardedAddTag()} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          <Button onClick={() => guardedAddTag()} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
             Add
           </Button>
         </OfflineDisabledWrap>
