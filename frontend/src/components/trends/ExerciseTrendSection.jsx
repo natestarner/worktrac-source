@@ -11,6 +11,7 @@ import ChartHelp from '../shared/ChartHelp';
 import { EXERCISE_METRIC_OPTIONS, metricSpec } from './exerciseMetrics';
 import { exerciseTrendHelp } from './chartHelp';
 import Skeleton from '../shared/Skeleton';
+import Card from '../shared/Card';
 
 // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
 const selectStyle = {
@@ -57,7 +58,7 @@ export default function ExerciseTrendSection({
   const spec = metricSpec(metric);
 
   return (
-    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
+    <Card size="dense">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
         {/* One text node, deliberately: an e2e spec looks this header up by its full string, and
             RTL's getByText concatenates only direct children. Don't split it into spans. */}
@@ -131,6 +132,6 @@ export default function ExerciseTrendSection({
       )}
 
       <ExerciseRecordsTable records={records} loading={recordsLoading} defaultUnit={defaultUnit} />
-    </div>
+    </Card>
   );
 }

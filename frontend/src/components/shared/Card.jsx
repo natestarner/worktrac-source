@@ -11,7 +11,12 @@
 // a tight group at ~16px, with everything else an outlier:
 //
 //   default   --space-5 (20px)   a card you read: settings sections, summary cards, forms
-//   dense     --space-4 (16px)   a card that is a LIST, whose rows carry their own rhythm
+//   dense     16px x 20px       a card that is a LIST, whose rows carry their own rhythm.
+//                              Vertical-tight, horizontal-roomy -- NOT 16px all round. That
+//                              shape is what the app already does: '16px 20px' is the single
+//                              biggest cluster in the codebase (7 sites), with '16px 18px'
+//                              and '18px 20px' next. A square 16 would have narrowed the
+//                              gutters on every one of them for no reason.
 //   flush     0                  the children own their spacing entirely (a .card-row list, a
 //                                chart that must bleed to the edge)
 //

@@ -23,6 +23,7 @@ import ProUpsell from '../shared/ProUpsell';
 import LegalLinks from '../shared/LegalLinks';
 import { APP_BUILD } from '../../lib/appBuild';
 import { invalidateAfterImport } from '../../lib/queryClient';
+import Card from '../shared/Card';
 
 // Every setting here is household-wide -- nothing is scoped to whichever person happens to be
 // active. Units and the shared tag vocabulary are account-level; the rest timer is a per-person
@@ -151,7 +152,7 @@ export default function AppSettingsTab() {
       </button>
 
       <SectionLabel>Units</SectionLabel>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
+      <Card size="dense" style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
           Default unit for new sets entered from now on. Sets already logged keep the unit they were recorded in. Changing this never rewrites past numbers.
         </div>
@@ -192,10 +193,10 @@ export default function AppSettingsTab() {
             );
           })}
         </div>
-      </div>
+      </Card>
 
       <SectionLabel>Offline Mode</SectionLabel>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
+      <Card size="dense" style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
           Turn this on if you&rsquo;re somewhere with a bad connection. The app stops trying to reach
           the server. Everything you log is saved on this device and syncs automatically once
@@ -231,10 +232,10 @@ export default function AppSettingsTab() {
             );
           })}
         </div>
-      </div>
+      </Card>
 
       <SectionLabel>Rest Timer</SectionLabel>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
+      <Card size="dense" style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 16 }}>
           Show a countdown after logging a set, per person. Rest time between sets is always recorded
           for Trends either way.
@@ -282,7 +283,7 @@ export default function AppSettingsTab() {
             );
           })}
         </div>
-      </div>
+      </Card>
 
       <SectionLabel>Tags</SectionLabel>
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
@@ -337,7 +338,7 @@ export default function AppSettingsTab() {
       )}
 
       <SectionLabel>Data</SectionLabel>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
+      <Card size="dense" style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
           Download a CSV of every set ever logged, for every person on this account. One file per person, zipped together.
         </div>
@@ -392,7 +393,7 @@ export default function AppSettingsTab() {
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
       {showImportModal && (
         <ImportDataModal

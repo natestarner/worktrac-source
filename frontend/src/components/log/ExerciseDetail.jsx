@@ -1100,7 +1100,10 @@ export default function ExerciseDetail({
                         <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
                           <IconButton onClick={() => setEditingSet(set)} label="Edit" icon={IconPencil} tone="accent" />
                           <IconButton
-                            onClick={() => openConfirm('Delete this set?', () => handleDeleteSet(set))}
+                            onClick={() => openConfirm(
+                                'Delete this set? It stops counting toward your history, records and trends.',
+                                () => handleDeleteSet(set),
+                              )}
                             label="Delete"
                             icon={IconTrash}
                             tone="danger"

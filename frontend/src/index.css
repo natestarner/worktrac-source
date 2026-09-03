@@ -519,7 +519,7 @@ button:not(.pressable):active:not(:disabled) {
    (History sessions, PRs rows, the session summary). Anything needing a third value is an
    outlier and should say so with an explicit override rather than widening this scale. */
 .card-dense {
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-5);
 }
 
 /* Rows inside a card, separated by hairlines rather than by gaps between

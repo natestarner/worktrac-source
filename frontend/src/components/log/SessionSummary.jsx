@@ -114,7 +114,10 @@ export default function SessionSummary({ entries, loading, sessionId, personId, 
                 message="Removing this needs a connection."
                 when={entry.sets.some((s) => !s.optimistic)}
               >
-                <button onClick={() => openConfirm(`Remove ${entry.exerciseName} from this session?`, () => handleRemove(entry))} style={removeLinkStyle}>
+                <button onClick={() => openConfirm(
+                      `Remove ${entry.exerciseName}? The ${entry.sets.length} set${entry.sets.length === 1 ? '' : 's'} you logged for it in this workout will be deleted.`,
+                      () => handleRemove(entry),
+                    )} style={removeLinkStyle}>
                   Remove
                 </button>
               </OfflineDisabledWrap>
