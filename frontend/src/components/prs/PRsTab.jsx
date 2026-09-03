@@ -142,7 +142,7 @@ function PRsTabContent() {
           </div>
         ))}
 
-      {/* "log a set to start the board" is advice that cannot work for someone whose sets are all
+      {/* "Log a set and the board starts filling in" is advice that cannot work for someone whose sets are all
           behind the window -- they have already done the thing it asks for. */}
       {!loading && prs.length === 0 && hiddenFromView > 0 && (
         <EmptyState
@@ -156,11 +156,19 @@ function PRsTabContent() {
       )}
 
       {!loading && prs.length === 0 && hiddenFromView === 0 && (
-        <div style={emptyStyle}>No PRs yet for {activePersonName}: log a set to start the board.</div>
+        <EmptyState
+          icon={IconStar}
+          title={`No PRs yet for ${activePersonName}.`}
+          body="Log a set and the board starts filling in."
+        />
       )}
 
       {!loading && prs.length > 0 && filteredPrs.length === 0 && (
-        <div style={emptyStyle}>No exercises match this filter.</div>
+        <EmptyState
+          icon={IconStar}
+          title="No exercises match this filter."
+          body="Try a different exercise or tag, or clear the filter above."
+        />
       )}
 
       {!loading &&

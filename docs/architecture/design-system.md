@@ -142,6 +142,24 @@ was ~35px and the Trends switchers ~28px before this.
 enters and exits. Durations are short deliberately: this is a tool used mid-set, and anything that
 makes the UI feel like it's waiting on an animation is wrong.
 
+### Press feedback is opt-out; the hover treatment is opt-in
+
+`.pressable` was originally the only thing that gave a control any feedback at all, and it reached
+about 40 of the app's ~100 buttons. The other sixty had **nothing** — because the rule that removes
+iOS's own tap feedback (`-webkit-tap-highlight-color: transparent`) is global, while the rule that
+replaced it was not. `ExerciseChip`, the primary tap target of the most-used screen in the app,
+was one of them.
+
+So the `:active` scale now applies to every `button`, and `.pressable` carries the hover treatment
+and the colour/shadow transitions on top. The split follows what each rule needs to know:
+
+- A **press** needs to know nothing about the control, and `transform` costs no layout — so it can
+  be global and can never fight a call site's own styling.
+- A **hover/colour transition** has to know what it is animating, so it stays opt-in.
+
+The general form: **a replacement for a browser default must have the same reach as the default it
+replaced.** An opt-in replacement for a global removal will always drift, and this one did.
+
 Two things are easy to get wrong:
 
 - **Guard `:hover` with `@media (hover: hover)`.** Without it iOS applies `:hover` on tap and leaves

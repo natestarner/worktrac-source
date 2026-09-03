@@ -115,7 +115,7 @@ export default function ConfirmEmailPage() {
           </div>
         )}
 
-        <label style={labelStyle}>Verification code</label>
+        <label htmlFor="verification-code" style={labelStyle}>Verification code</label>
         <input
           autoFocus
           id="verification-code"

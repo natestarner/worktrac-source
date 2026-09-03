@@ -20,6 +20,7 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import ImportDataModal from './ImportDataModal';
 import ProUpsell from '../shared/ProUpsell';
 import LegalLinks from '../shared/LegalLinks';
+import { APP_BUILD } from '../../lib/appBuild';
 import { invalidateAfterImport } from '../../lib/queryClient';
 
 // Every setting here is household-wide -- nothing is scoped to whichever person happens to be
@@ -295,7 +296,7 @@ export default function AppSettingsTab() {
               <OfflineDisabledWrap message="Deleting a tag needs a connection.">
                 <button
                   onClick={() => openConfirm(`Delete tag "${t.name}"? It will be removed from every exercise it's applied to.`, () => guardedDeleteTag(t))}
-                  style={{ background: 'none', border: 'none', color: 'var(--color-faint)', fontSize: 15, cursor: 'pointer' }}
+                  style={{ background: 'none', border: 'none', color: 'var(--color-muted)', fontSize: 15, cursor: 'pointer' }}
                 >
                   &times;
                 </button>
@@ -303,7 +304,7 @@ export default function AppSettingsTab() {
             </div>
           ))}
         {!tagsLoading && tags.length === 0 && (
-          <div style={{ fontSize: 13, color: 'var(--color-faint)' }}>No tags yet.</div>
+          <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>No tags yet.</div>
         )}
       </div>
 
@@ -404,6 +405,15 @@ export default function AppSettingsTab() {
       <div style={sectionLabelStyle}>Legal</div>
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 24 }}>
         <LegalLinks />
+      </div>
+
+      {/* The build stamp existed already, but the only place anyone could read it was inside Contact
+          Us's "What gets sent" disclosure -- i.e. you had to be filing a bug report, and had to
+          expand a panel, to find out which version you were on. It is the first thing any support
+          conversation needs, so it belongs somewhere you can just go and look. */}
+      <div style={sectionLabelStyle}>About</div>
+      <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)' }}>
+        Huddle · build {APP_BUILD}
       </div>
     </div>
   );

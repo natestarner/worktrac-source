@@ -19,9 +19,17 @@ Full reasoning: `docs/architecture/design-system.md`.
 - **Reach for a primitive before writing a style object.** `Button` (with `variant`/`size`), `Card`,
   `Input`, `IconButton`, `SectionLabel`, `EmptyState` in `components/shared/`. At most **one**
   `variant="primary"` visible per screen.
-- **Anything interactive needs `className="pressable"`** so it gets the press/hover transition, and
-  it must reach the 44px touch target (`sm` variants at 40px for dense rows). This app is used on an
-  iPad mid-workout.
+- **Anything interactive should carry `className="pressable"`** for the hover treatment and the
+  colour/shadow transitions, and it must reach the 44px touch target (`sm` variants and `.icon-btn`
+  at 40px for dense rows). This app is used on an iPad mid-workout.
+  - **Press feedback and the focus ring are global and need no class.** `button:not(.pressable)`
+    gets the `:active` scale, and `:where(button, a, input, …):focus-visible` gets the ring. That
+    asymmetry is deliberate: the rule *stripping* iOS's tap feedback
+    (`-webkit-tap-highlight-color: transparent`) applies to every button, while `.pressable` reached
+    only ~40 of ~100 — so sixty controls, including the exercise chips on the most-used screen,
+    acknowledged a tap with nothing. A replacement for a browser default has to have the same
+    reach as the thing it replaces. So a control that forgets `.pressable` is missing polish, not
+    missing feedback.
 - **Pick the right accent token.** `--color-accent` is 3.44:1 as small text and **fails AA** — use
   `--color-accent-text` for text, `--color-accent-strong` for small filled buttons, and
   `--color-accent` only for fills behind large bold text, borders, icons and the focus ring.

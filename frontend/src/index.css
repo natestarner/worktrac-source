@@ -350,7 +350,13 @@ body {
    living in inline style objects. Inline styles cannot express :hover, :active
    or :focus-visible, which is why the app previously had no press feedback, no
    hover affordance, and -- more seriously -- no keyboard focus indicator
-   anywhere (WCAG 2.4.7). Anything interactive should carry .pressable.
+   anywhere (WCAG 2.4.7).
+
+   The focus ring below and the press transform further down are both GLOBAL, so
+   neither depends on a call site remembering anything. .pressable is the opt-in
+   upgrade on top: the hover treatment and the colour/shadow transitions, which
+   do need to know what they are animating. Prefer it on anything interactive --
+   but a control that forgets it is now missing polish, not missing feedback.
    =========================================================================== */
 
 :where(button, a, input, select, textarea, [role='button'], [tabindex]):focus-visible {
@@ -438,6 +444,34 @@ textarea {
 
 button {
   -webkit-tap-highlight-color: transparent;
+  /* Kills the ~300ms wait Safari spends deciding whether a tap is the first half of a double-tap
+     zoom. On the Log screen that delay sits in front of the single most repeated action in the
+     app, and it reads as the app being slow rather than as the browser being careful. */
+  touch-action: manipulation;
+  /* A long press on a control mid-set otherwise starts selecting its label -- easy to do
+     one-handed on an iPad, and it leaves a blue selection over the button you meant to tap. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Press feedback is opt-OUT, not opt-in, and the asymmetry above is why: the rule that STRIPS
+   iOS's own tap feedback applies to every button in the app, while `.pressable` -- the thing that
+   put something back -- reached only about 40 of ~100. The remaining sixty acknowledged a tap with
+   nothing whatsoever, including `ExerciseChip`, the primary tap target of the most-used screen.
+   Opt-in was the right shape for the transition below (which needs to know what it is animating)
+   and the wrong shape for a replacement of a browser default.
+
+   Only `transform` on `:active`, deliberately. It costs no layout (transforms paint, they do not
+   reflow), it needs no knowledge of what the control looks like, and it cannot fight a call site's
+   own colours the way a blanket background transition would. `.pressable` still carries the richer
+   hover/colour treatment, so it stays worth applying -- it is now an upgrade rather than the
+   difference between feedback and none.
+
+   `button:not(.pressable)` rather than a bare `button` so the two rules never both match and the
+   intent stays readable in devtools. */
+button:not(.pressable):active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 
 /* Inline text link to an external page (currently just Terms/Privacy on huddle.fitness --

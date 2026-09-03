@@ -72,14 +72,14 @@ describe('ConfigureExerciseModal standing note', () => {
   it('prefills the existing standing note, even for a preloaded (global) exercise', () => {
     renderModal({ id: 2, name: 'Barbell Bench Press', isGlobal: true, note: 'Bar is loaded to 45lb' });
 
-    expect(screen.getByPlaceholderText('e.g. Keep elbows tucked, bad knee -- go light')).toHaveValue('Bar is loaded to 45lb');
+    expect(screen.getByPlaceholderText('e.g. Keep elbows tucked, bad knee — go light')).toHaveValue('Bar is loaded to 45lb');
   });
 
   it('saves the standing note on blur', async () => {
     setPersistentNote.mockResolvedValue({ note: 'Keep elbows tucked' });
     renderModal({ id: 1, name: 'My Curl', isGlobal: false, note: '' });
 
-    const textarea = screen.getByPlaceholderText('e.g. Keep elbows tucked, bad knee -- go light');
+    const textarea = screen.getByPlaceholderText('e.g. Keep elbows tucked, bad knee — go light');
     fireEvent.change(textarea, { target: { value: 'Keep elbows tucked' } });
     fireEvent.blur(textarea);
 
@@ -89,7 +89,7 @@ describe('ConfigureExerciseModal standing note', () => {
   it('does not call the API when blurring without a change', () => {
     renderModal({ id: 1, name: 'My Curl', isGlobal: false, note: 'Already saved' });
 
-    fireEvent.blur(screen.getByPlaceholderText('e.g. Keep elbows tucked, bad knee -- go light'));
+    fireEvent.blur(screen.getByPlaceholderText('e.g. Keep elbows tucked, bad knee — go light'));
 
     expect(setPersistentNote).not.toHaveBeenCalled();
   });
@@ -107,7 +107,7 @@ describe('ConfigureExerciseModal offline', () => {
     renderModal({ id: 1, name: 'My Curl', isGlobal: false, note: 'Go light' });
 
     expect(screen.getByDisplayValue('My Curl')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('e.g. Keep elbows tucked, bad knee -- go light')).toHaveValue('Go light');
+    expect(screen.getByPlaceholderText('e.g. Keep elbows tucked, bad knee — go light')).toHaveValue('Go light');
   });
 
   it('disables every edit control and shows an offline note while offline', () => {
@@ -116,7 +116,7 @@ describe('ConfigureExerciseModal offline', () => {
 
     expect(screen.getByText(/Editing needs a connection/)).toBeInTheDocument();
     expect(screen.getByDisplayValue('My Curl')).toBeDisabled();
-    expect(screen.getByPlaceholderText('e.g. Keep elbows tucked, bad knee -- go light')).toBeDisabled();
+    expect(screen.getByPlaceholderText('e.g. Keep elbows tucked, bad knee — go light')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Delete this exercise' })).toBeDisabled();
   });
 

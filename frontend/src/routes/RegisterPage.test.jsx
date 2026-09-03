@@ -117,6 +117,34 @@ describe('RegisterPage validation', () => {
     );
   });
 
+  // The household placeholder was the literal string "Defaults to “{name}'s Household”" -- a plain
+  // JSX attribute, so `{name}` was never interpolated and every new household saw the braces on
+  // screen. It must also stay in step with RegistrationService, which builds the default as
+  // `personName + "'s Household"` whenever the field is left blank.
+  it('derives the household placeholder from the typed name, with no literal braces', () => {
+    renderPage();
+
+    const householdField = screen.getByLabelText('Household name (optional)');
+    expect(householdField).toHaveAttribute('placeholder', 'Defaults to your household');
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Alex' } });
+
+    expect(householdField).toHaveAttribute('placeholder', "Defaults to “Alex's Household”");
+    expect(householdField.getAttribute('placeholder')).not.toContain('{name}');
+  });
+
+  // Every field must be reachable by its visible label: tapping the label focuses the input on an
+  // iPad, and a screen reader announces a named field instead of an anonymous one. Only LoginPage
+  // wired htmlFor/id before this; the other four auth pages had labels that pointed at nothing.
+  it('associates every label with its input', () => {
+    renderPage();
+
+    expect(screen.getByLabelText('Your name')).toBe(screen.getByPlaceholderText('e.g. Alex'));
+    expect(screen.getByLabelText('Email')).toBe(screen.getByPlaceholderText('you@example.com'));
+    expect(screen.getByLabelText('Password')).toBe(screen.getByPlaceholderText('At least 8 characters'));
+    expect(screen.getByLabelText('Household name (optional)')).toBeInTheDocument();
+  });
+
   it('shows the server error banner and does not navigate when register fails', async () => {
     register.mockRejectedValue(new Error('An account with that email already exists'));
     renderPage();

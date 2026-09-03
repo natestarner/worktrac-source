@@ -23,7 +23,7 @@ test.describe('Password reset', () => {
 
     // No auto-login after a reset -- lands back on /login with a success banner instead.
     await expect(page).toHaveURL(/\/login/);
-    await expect(page.getByText('Password reset -- sign in with your new password.')).toBeVisible();
+    await expect(page.getByText('Password reset — sign in with your new password.')).toBeVisible();
 
     // The old password no longer works.
     await page.getByPlaceholder('Email').fill(email);

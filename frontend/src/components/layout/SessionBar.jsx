@@ -116,13 +116,21 @@ export default function SessionBar() {
         <EndWorkoutConfirmModal
           personId={activePersonId}
           onClose={() => setShowEndWorkoutConfirm(false)}
-          onEnded={() => {
+          onEnded={(recap) => {
             setShowEndWorkoutConfirm(false);
             endRoutine();
             // Ending a workout from the exercise screen returns this person to their Log picker.
             backToPicker();
             refetchLiveSession();
-            showToast('Workout ended. Logging a set anytime starts a new one.');
+            // The recap is computed in the modal and handed here, rather than recomputed: by this
+            // point handleEnd has already nulled the cached liveSession, so recomputing would
+            // report an empty workout. Falls back to the plain sentence when there was nothing to
+            // report -- ending a workout with no sets in it is a real case.
+            showToast(
+              recap
+                ? `Workout ended — ${recap}.`
+                : 'Workout ended. Logging a set anytime starts a new one.',
+            );
             // An explicit "I'm done with this session" signal -- one of the forced-reload trigger
             // points (guarded: a no-op if the END_WORKOUT write itself, or anything else for this
             // person, is still in flight and not yet durable). See swUpdate.js.

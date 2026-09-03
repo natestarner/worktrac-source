@@ -134,7 +134,7 @@ export default function ConfigureExerciseModal({
         <span style={isOwn ? ownBadgeStyle : preloadedBadgeStyle}>{isOwn ? 'Created by you' : 'Preloaded exercise'}</span>
       </div>
 
-      <OfflineNotice message="Editing needs a connection -- your current setup is still shown below." />
+      <OfflineNotice message="Editing needs a connection — your current setup is still shown below." />
 
       {isOwn && (
         <>
@@ -166,7 +166,7 @@ export default function ConfigureExerciseModal({
       )}
 
       <div style={labelStyle}>Standing note</div>
-      <div style={{ fontSize: 12, color: 'var(--color-faint)', marginBottom: 8 }}>Shown every time you do this exercise</div>
+      <div style={{ fontSize: 12, color: 'var(--color-muted)', marginBottom: 8 }}>Shown every time you do this exercise</div>
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
@@ -174,7 +174,7 @@ export default function ConfigureExerciseModal({
         disabled={locked}
         maxLength={FIELD_LIMITS.note}
         rows={2}
-        placeholder="e.g. Keep elbows tucked, bad knee -- go light"
+        placeholder="e.g. Keep elbows tucked, bad knee — go light"
         style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit', marginBottom: 20, opacity: locked ? 0.6 : 1 }}
       />
 
@@ -205,7 +205,7 @@ export default function ConfigureExerciseModal({
           );
         })}
         {allTags.length === 0 && (
-          <div style={{ fontSize: 13, color: 'var(--color-faint)' }}>No tags yet.</div>
+          <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>No tags yet.</div>
         )}
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
@@ -254,7 +254,7 @@ export default function ConfigureExerciseModal({
           </div>
         ))}
         {customFields.length === 0 && (
-          <div style={{ fontSize: 13, color: 'var(--color-faint)' }}>No custom fields yet.</div>
+          <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>No custom fields yet.</div>
         )}
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>

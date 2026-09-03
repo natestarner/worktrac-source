@@ -39,7 +39,7 @@ describe('ExercisePicker empty state', () => {
 
     expect(
       screen.getByText(
-        'No favorite exercises yet. Search the exercise library above to find one, or add your own below.'
+        "Let's find your first exercise"
       )
     ).toBeInTheDocument();
   });
@@ -47,7 +47,7 @@ describe('ExercisePicker empty state', () => {
   it('hides the empty copy once the person has at least one exercise', () => {
     renderPicker({ personExercises: [{ id: 1, name: 'Bench Press', isFavorite: true }] });
 
-    expect(screen.queryByText(/No favorite exercises yet/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Let's find your first exercise/)).not.toBeInTheDocument();
     expect(screen.getByText('Bench Press')).toBeInTheDocument();
   });
 });

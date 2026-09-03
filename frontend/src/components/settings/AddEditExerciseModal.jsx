@@ -85,7 +85,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       const updated = await updateExercise(exercise.id, { name: trimmed });
       onSaved(updated);
     },
-    { errorMessage: "Couldn't save -- check your connection and try again." },
+    { errorMessage: "Couldn't save — check your connection and try again." },
   );
 
   // A caller that needs a real, already-synced exercise id (the Routines form sends the created
@@ -98,7 +98,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       if (personId) await favoriteExercise(personId, created.id);
       onSaved(created);
     },
-    { errorMessage: "Couldn't create -- check your connection and try again." },
+    { errorMessage: "Couldn't create — check your connection and try again." },
   );
 
   // Open an exercise that already exists rather than making a second one. No create is dispatched,

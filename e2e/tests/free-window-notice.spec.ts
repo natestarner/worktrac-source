@@ -85,7 +85,7 @@ test.describe('The Free-tier window names the rest of your history', () => {
 
     await page.getByRole('link', { name: 'PRs' }).click();
     await expect(page.getByText(FULL_HISTORY)).toBeVisible();
-    await expect(page.getByText(/log a set to start the board/)).toHaveCount(0);
+    await expect(page.getByText(/board starts filling in/)).toHaveCount(0);
 
     await page.getByRole('link', { name: 'Trends' }).click();
     await expect(page.getByText(FULL_HISTORY)).toBeVisible();

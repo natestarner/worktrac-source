@@ -14,6 +14,8 @@ import Skeleton from '../shared/Skeleton';
 import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import EmptyState from '../shared/EmptyState';
+import { IconNote } from '../shared/icons';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 export default function RoutinesTab() {
@@ -77,9 +79,11 @@ export default function RoutinesTab() {
       )}
 
       {!loading && routines.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--color-faint)', fontSize: 15 }}>
-          No routines yet. Build one from your exercise library.
-        </div>
+        <EmptyState
+          icon={IconNote}
+          title="No routines yet."
+          body="Build one from your exercise library and starting a workout is one tap."
+        />
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
