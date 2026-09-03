@@ -372,6 +372,30 @@ body {
    and 1px box are the standard belt-and-braces against it ever forcing a scrollbar.
    Don't swap this for `display: none` or `visibility: hidden` -- both remove it
    from the accessibility tree, which is the one thing it exists for. */
+/* Off-screen until focused, then a real, visible control at the top-left. Deliberately NOT
+   .sr-only: that hides it from sighted keyboard users too, which defeats the purpose -- the point
+   is that someone tabbing sees where the focus went. Uses the same accent ring every other control
+   gets, so it reads as part of the app rather than as a stray browser affordance. */
+.skip-link {
+  position: absolute;
+  left: var(--space-3);
+  top: calc(-1 * var(--space-10));
+  z-index: var(--z-header-menu);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  color: var(--color-accent-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-3), var(--elevation-hairline);
+  text-decoration: none;
+  transition: top var(--dur-base) var(--ease-out);
+}
+.skip-link:focus-visible {
+  top: var(--space-3);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
