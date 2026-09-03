@@ -93,7 +93,7 @@ public class WorkoutSetService {
             return duplicate;
         }
         WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, accountId)
-                .orElseThrow(() -> new NotFoundException("No such session"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that workout."));
         Person person = session.getPerson();
         Account account = accountRepository.getReferenceById(accountId);
         Exercise exercise = requireVisibleExercise(accountId, request.exerciseId());
@@ -199,7 +199,7 @@ public class WorkoutSetService {
     @Transactional(readOnly = true)
     public java.util.List<WorkoutSetDto> listForSessionAndExercise(Long accountId, Long sessionId, Long exerciseId) {
         workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, accountId)
-                .orElseThrow(() -> new NotFoundException("No such session"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that workout."));
         return workoutSetRepository.findBySession_IdAndExercise_IdOrderByCreatedAtAsc(sessionId, exerciseId).stream()
                 .map(WorkoutSetDto::from)
                 .toList();
@@ -208,7 +208,7 @@ public class WorkoutSetService {
     @Transactional
     public WorkoutSetDto editSet(Long accountId, Long setId, EditSetRequest request) {
         WorkoutSet set = workoutSetRepository.findByIdAndSession_Person_Account_Id(setId, accountId)
-                .orElseThrow(() -> new NotFoundException("No such set"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that set."));
         // Same reconciliation (and the same leniency) as a create -- an edit is a separate durable
         // write that can sit in the outbox just as long, so a rejection here loses it just as
         // permanently. restSeconds is deliberately untouched: it records what actually happened.
@@ -222,16 +222,16 @@ public class WorkoutSetService {
     @Transactional
     public void deleteSet(Long accountId, Long setId) {
         WorkoutSet set = workoutSetRepository.findByIdAndSession_Person_Account_Id(setId, accountId)
-                .orElseThrow(() -> new NotFoundException("No such set"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that set."));
         workoutSetRepository.delete(set);
     }
 
     private Exercise requireVisibleExercise(Long accountId, Long exerciseId) {
         Exercise exercise = exerciseRepository.findById(exerciseId)
-                .orElseThrow(() -> new NotFoundException("No such exercise"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that exercise."));
         boolean visible = exercise.isGlobal() || exercise.getAccount().getId().equals(accountId);
         if (!visible) {
-            throw new NotFoundException("No such exercise");
+            throw new NotFoundException("We couldn't find that exercise.");
         }
         return exercise;
     }

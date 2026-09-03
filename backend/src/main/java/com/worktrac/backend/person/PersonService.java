@@ -30,7 +30,7 @@ public class PersonService {
     @Transactional(readOnly = true)
     public Person requireOwnedPerson(Long personId, Long accountId) {
         return personRepository.findByIdAndAccount_Id(personId, accountId)
-                .orElseThrow(() -> new NotFoundException("No such person"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that person."));
     }
 
     @Transactional(readOnly = true)

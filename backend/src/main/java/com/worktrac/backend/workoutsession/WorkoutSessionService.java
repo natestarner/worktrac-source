@@ -122,7 +122,7 @@ public class WorkoutSessionService {
     @Transactional
     public WorkoutSessionDto editSession(Long accountId, Long sessionId, Instant newStartedAt) {
         WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, accountId)
-                .orElseThrow(() -> new NotFoundException("No such session"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that workout."));
 
         Duration delta = Duration.between(session.getStartedAt(), newStartedAt);
         // Shift every timestamp on the session by the same delta -- preserves the

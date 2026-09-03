@@ -120,10 +120,10 @@ public class ExerciseService {
 
     private Exercise requireVisibleExercise(Long accountId, Long exerciseId) {
         Exercise exercise = exerciseRepository.findById(exerciseId)
-                .orElseThrow(() -> new NotFoundException("No such exercise"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that exercise."));
         boolean visible = exercise.isGlobal() || exercise.getAccount().getId().equals(accountId);
         if (!visible) {
-            throw new NotFoundException("No such exercise");
+            throw new NotFoundException("We couldn't find that exercise.");
         }
         return exercise;
     }
