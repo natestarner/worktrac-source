@@ -101,6 +101,16 @@ describe('AppSettingsTab tag management', () => {
       'https://huddle.fitness/privacy.html',
     );
   });
+
+  // The build stamp existed, but only inside Contact Us's "What gets sent" disclosure -- so finding
+  // out which version you were on meant starting a bug report and expanding a panel. It is the
+  // first thing any support conversation asks for. ("dev" is what APP_BUILD resolves to under
+  // Vitest, which does not apply vite.config.js's define.)
+  it('shows which build this is, without having to start a bug report', () => {
+    renderTab();
+
+    expect(screen.getByText(/^Huddle · build/)).toBeInTheDocument();
+  });
 });
 
 describe('AppSettingsTab rest timer toggle', () => {

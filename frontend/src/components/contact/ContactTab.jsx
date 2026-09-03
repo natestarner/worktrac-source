@@ -15,6 +15,7 @@ import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { useOutboxCount } from '../../hooks/useOutboxCount';
 import { clearClientError, formatClientError, readClientError } from '../../lib/lastClientError';
 import { clearBootFailure, formatBootFailure, readBootFailure } from '../../lib/bootFailure';
+import { APP_BUILD } from '../../lib/appBuild';
 
 const CATEGORIES = [
   { label: 'Suggestion', value: 'SUGGESTION' },
@@ -26,9 +27,6 @@ const SUBJECT_MAX = 150;
 const MESSAGE_MAX = 4000;
 const MESSAGE_MIN = 10;
 
-// Injected by vite.config.js's `define`. Guarded because Vitest transforms this file without that
-// define in place, and a bare reference to an undeclared global is a ReferenceError, not undefined.
-const APP_BUILD = typeof __APP_BUILD__ === 'string' ? __APP_BUILD__ : 'dev';
 
 // The Contact Us page, reached from the profile dropdown. Mirrors ProfileTab/AppSettingsTab's
 // shape (back link, section label, card) but builds it out of the primitives rather than their

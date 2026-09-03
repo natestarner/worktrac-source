@@ -20,6 +20,7 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import ImportDataModal from './ImportDataModal';
 import ProUpsell from '../shared/ProUpsell';
 import LegalLinks from '../shared/LegalLinks';
+import { APP_BUILD } from '../../lib/appBuild';
 import { invalidateAfterImport } from '../../lib/queryClient';
 
 // Every setting here is household-wide -- nothing is scoped to whichever person happens to be
@@ -404,6 +405,15 @@ export default function AppSettingsTab() {
       <div style={sectionLabelStyle}>Legal</div>
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 24 }}>
         <LegalLinks />
+      </div>
+
+      {/* The build stamp existed already, but the only place anyone could read it was inside Contact
+          Us's "What gets sent" disclosure -- i.e. you had to be filing a bug report, and had to
+          expand a panel, to find out which version you were on. It is the first thing any support
+          conversation needs, so it belongs somewhere you can just go and look. */}
+      <div style={sectionLabelStyle}>About</div>
+      <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)' }}>
+        Huddle · build {APP_BUILD}
       </div>
     </div>
   );

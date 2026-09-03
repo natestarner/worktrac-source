@@ -44,7 +44,7 @@ export const TOUR_STEPS = [
     id: 'people-bar',
     anchor: TOUR_ANCHORS.PEOPLE_BAR,
     title: 'Everyone on one account',
-    body: 'Add everyone in your household here. Tap their name to switch as you workout. Everyone’s numbers stay separate.',
+    body: 'Add everyone in your household here. Tap their name to switch as you work out. Everyone’s numbers stay separate.',
     screen: { route: '/app/log', exercise: 'none' },
   },
   {
