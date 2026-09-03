@@ -46,7 +46,7 @@ export default function EditPersonModal({ person, onClose }) {
           boxSizing: 'border-box',
           padding: 14,
           border: `1px solid ${nameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
-          borderRadius: 10,
+          borderRadius: 'var(--radius-md)',
           fontSize: 16,
           marginBottom: nameError ? 6 : 16,
         }}
@@ -66,7 +66,7 @@ export default function EditPersonModal({ person, onClose }) {
             background: 'var(--color-accent)',
             color: '#fff',
             border: 'none',
-            borderRadius: 10,
+            borderRadius: 'var(--radius-md)',
             fontSize: 15,
             fontWeight: 700,
             cursor: 'pointer',

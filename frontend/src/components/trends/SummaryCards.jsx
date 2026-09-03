@@ -1,12 +1,6 @@
 import { convertWeight } from '../../utils/formulas';
 import SectionLabel from '../shared/SectionLabel';
-
-const cardStyle = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 16,
-  padding: '16px 18px',
-};
+import Card from '../shared/Card';
 
 function streakText(weeks) {
   if (weeks === 0) return 'No streak yet';
@@ -48,31 +42,31 @@ export default function SummaryCards({ overview, defaultUnit }) {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
-      <div style={cardStyle}>
+      <Card size="dense">
         <SectionLabel>Streak</SectionLabel>
-        <div style={{ fontSize: 22, fontWeight: 800 }}>{streakText(overview.currentStreakWeeks)}</div>
-      </div>
-      <div style={cardStyle}>
+        <div style={{ fontSize: 22, fontWeight: 'var(--weight-bold)' }}>{streakText(overview.currentStreakWeeks)}</div>
+      </Card>
+      <Card size="dense">
         <SectionLabel>This week</SectionLabel>
-        <div style={{ fontSize: 22, fontWeight: 800 }}>
+        <div style={{ fontSize: 22, fontWeight: 'var(--weight-bold)' }}>
           {overview.workoutsThisWeek} workout{overview.workoutsThisWeek === 1 ? '' : 's'}
         </div>
         <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 2 }}>
           {weekDeltaText(overview.workoutsThisWeek, overview.workoutsLastWeek)}
         </div>
-      </div>
-      <div style={cardStyle}>
+      </Card>
+      <Card size="dense">
         <SectionLabel>Volume &middot; last 30 days</SectionLabel>
         <div
           style={
             volumePlaceholder
               ? { fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-1)' }
-              : { fontSize: 22, fontWeight: 800, color: volumeColor }
+              : { fontSize: 22, fontWeight: 'var(--weight-bold)', color: volumeColor }
           }
         >
           {volumeText}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

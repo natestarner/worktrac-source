@@ -19,7 +19,7 @@ export default function OutboxModal({ items, onClose }) {
             style={{
               padding: '10px 14px',
               background: 'var(--color-subtle-bg)',
-              borderRadius: 10,
+              borderRadius: 'var(--radius-md)',
               fontSize: 14,
             }}
           >
@@ -43,7 +43,7 @@ export default function OutboxModal({ items, onClose }) {
           background: 'var(--color-subtle-bg)',
           color: 'var(--color-text)',
           border: 'none',
-          borderRadius: 10,
+          borderRadius: 'var(--radius-md)',
           fontSize: 14,
           fontWeight: 700,
           cursor: 'pointer',

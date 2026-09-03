@@ -370,7 +370,7 @@ export default function LogTab() {
                   style={{
                     flexShrink: 0,
                     padding: '9px 14px',
-                    borderRadius: 10,
+                    borderRadius: 'var(--radius-md)',
                     border: 'none',
                     fontSize: 13,
                     fontWeight: 700,

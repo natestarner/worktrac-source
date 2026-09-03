@@ -70,13 +70,13 @@ export default function PastSessionModal({ onClose }) {
           value={date}
           onChange={(e) => setDate(e.target.value)}
           // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
-          style={{ flex: 1, padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 16 }}
+          style={{ flex: 1, padding: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 16 }}
         />
         <input
           type="time"
           value={time}
           onChange={(e) => setTime(e.target.value)}
-          style={{ flex: 1, padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 16 }}
+          style={{ flex: 1, padding: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 16 }}
         />
       </div>
       {outsideWindow && (
@@ -105,7 +105,7 @@ export default function PastSessionModal({ onClose }) {
             background: online ? 'var(--color-accent)' : 'var(--color-faint)',
             color: '#fff',
             border: 'none',
-            borderRadius: 10,
+            borderRadius: 'var(--radius-md)',
             fontSize: 15,
             fontWeight: 700,
             cursor: online ? 'pointer' : 'not-allowed',
