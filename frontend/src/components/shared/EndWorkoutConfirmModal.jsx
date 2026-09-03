@@ -1,6 +1,7 @@
 import { queryClient, enqueueOutboxWrite, END_WORKOUT_MUTATION_KEY } from '../../lib/queryClient';
 import { queryKeys } from '../../api/queryKeys';
 import { markSessionEnded } from '../../lib/endedSessions';
+import { tryHaptic } from '../../lib/haptics';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useSessionRecap } from '../../hooks/useSessionRecap';
@@ -36,6 +37,10 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
     clearRestTimer(personId);
     setRestTimer({});
     enqueueOutboxWrite(END_WORKOUT_MUTATION_KEY, { personId });
+    // A softer tick than the PR's double tap: finishing is an acknowledgement, not a fanfare.
+    // Fired here rather than in onEnded so it lands on the tap that ends the workout, and so it
+    // stays tied to the act itself rather than to whatever the caller does afterwards.
+    tryHaptic('complete');
     onEnded(recap);
   }
 
