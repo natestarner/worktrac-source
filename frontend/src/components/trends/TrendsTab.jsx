@@ -17,7 +17,6 @@ import { IconDumbbell } from '../shared/icons';
 import { rangeReachesPastWindow, windowLabel } from '../shared/historyWindowCopy';
 import Card from '../shared/Card';
 
-const cardStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 18px' };
 
 // One placeholder shape per real chart component below (ConsistencyHeatmap, WeeklyFrequencyChart,
 // WeeklyMetricChart, ExerciseTrendChart) -- each mirrors that component's own
@@ -48,19 +47,19 @@ function TrendsSkeleton() {
         <Skeleton width={160} height={34} radius={10} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
-        <div style={cardStyle}>
+        <Card size="dense">
           <Skeleton width={50} height={11} style={{ marginBottom: 8 }} />
           <Skeleton width={90} height={20} />
-        </div>
-        <div style={cardStyle}>
+        </Card>
+        <Card size="dense">
           <Skeleton width={70} height={11} style={{ marginBottom: 8 }} />
           <Skeleton width={100} height={20} style={{ marginBottom: 2 }} />
           <Skeleton width={120} height={13} />
-        </div>
-        <div style={cardStyle}>
+        </Card>
+        <Card size="dense">
           <Skeleton width={110} height={11} style={{ marginBottom: 8 }} />
           <Skeleton width={130} height={20} />
-        </div>
+        </Card>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
         <HeatmapSkeleton />
