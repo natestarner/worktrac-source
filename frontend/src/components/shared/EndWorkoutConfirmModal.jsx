@@ -3,6 +3,8 @@ import { queryKeys } from '../../api/queryKeys';
 import { markSessionEnded } from '../../lib/endedSessions';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
+import { useSessionRecap } from '../../hooks/useSessionRecap';
+import { formatSessionRecap, sessionElapsedMs } from '../../utils/sessionRecap';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
 import Button from './Button';
@@ -10,6 +12,12 @@ import Button from './Button';
 export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
   const { clearRestTimer } = useUI();
   const { setRestTimer } = useAppState();
+  const { exerciseCount, setCount, startedAt } = useSessionRecap(personId);
+
+  // Computed once, on the render the modal opens, and handed to onEnded so the toast that follows
+  // formats from the SAME derivation rather than recomputing against a cache the end-workout write
+  // has already begun clearing. `null` whenever there is nothing worth reporting.
+  const recap = formatSessionRecap({ exerciseCount, setCount, elapsedMs: sessionElapsedMs(startedAt) });
 
   function handleEnd() {
     // Record the ended id SYNCHRONOUSLY before touching the query cache. The cache clear below only
@@ -28,11 +36,26 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
     clearRestTimer(personId);
     setRestTimer({});
     enqueueOutboxWrite(END_WORKOUT_MUTATION_KEY, { personId });
-    onEnded();
+    onEnded(recap);
   }
 
   return (
     <Modal width={320} onClose={onClose} title="End this workout?">
+      {/* What they actually did, above the reassurance rather than instead of it. This is the
+          moment the numbers are most worth saying, and the modal is where they are certain to be
+          read -- a 3.2s toast after the fact is easy to miss with a phone back in a pocket. */}
+      {recap && (
+        <div
+          style={{
+            fontSize: 'var(--text-base)',
+            fontWeight: 'var(--weight-semibold)',
+            color: 'var(--color-text)',
+            marginBottom: 'var(--space-2)',
+          }}
+        >
+          {recap}
+        </div>
+      )}
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 20 }}>
         You can keep going any time. Logging another set later will simply start a new workout.
       </div>

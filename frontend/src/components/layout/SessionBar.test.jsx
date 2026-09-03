@@ -5,12 +5,17 @@ import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useLiveSession } from '../../hooks/useLiveSession';
 import { useRestTimerPreference } from '../../hooks/useRestTimerPreference';
+import { useSessionRecap } from '../../hooks/useSessionRecap';
 import { endWorkout } from '../../api/sessions';
 import { tryForceUpdate } from '../../lib/swUpdate';
 
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 vi.mock('../../hooks/useLiveSession', () => ({ useLiveSession: vi.fn() }));
+// Mocked like useLiveSession above: the recap's own assembly (history + catalog + pending writes)
+// is covered by useSessionRecap's sources, and its wording by utils/sessionRecap.test.js. What
+// matters here is that whatever it reports reaches the modal and the toast.
+vi.mock('../../hooks/useSessionRecap', () => ({ useSessionRecap: vi.fn() }));
 vi.mock('../../hooks/useRestTimerPreference', () => ({ useRestTimerPreference: vi.fn() }));
 vi.mock('../../api/sessions', () => ({ endWorkout: vi.fn().mockResolvedValue(), editSession: vi.fn() }));
 vi.mock('../../lib/swUpdate', () => ({ tryForceUpdate: vi.fn() }));
@@ -50,6 +55,7 @@ beforeEach(() => {
   useUI.mockReturnValue(baseUI());
   useLiveSession.mockReturnValue({ session: liveSession, refetch: vi.fn() });
   useRestTimerPreference.mockReturnValue([true, vi.fn()]);
+  useSessionRecap.mockReturnValue({ exerciseCount: 3, setCount: 12, startedAt: liveSession.startedAt });
 });
 
 afterEach(() => {
@@ -240,5 +246,44 @@ describe('SessionBar end workout', () => {
 
     await waitFor(() => expect(tryForceUpdate).toHaveBeenCalled());
     expect(tryForceUpdate.mock.calls[0][1]).toBe(7);
+  });
+
+  // Ending a workout used to report only a state transition ("Workout ended.") while the session's
+  // own numbers sat unused in the cache. The confirm modal is where they are certain to be read; a
+  // 3.2s toast after the fact is easy to miss with a phone already back in a pocket.
+  it('shows what was actually done, in the modal and again in the toast', async () => {
+    const showToast = vi.fn();
+    useUI.mockReturnValue(baseUI({ showToast }));
+    // Anchored to now, not to `liveSession`'s fixed date: the duration is measured against the real
+    // clock, so a literal startedAt would render however long ago that date happens to be.
+    const startedAt = new Date(Date.now() - 47 * 60 * 1000).toISOString();
+    useSessionRecap.mockReturnValue({ exerciseCount: 3, setCount: 12, startedAt });
+    render(<SessionBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
+    expect(screen.getByText('3 exercises · 12 sets · 47 min')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'End workout' }).at(-1));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalled());
+    expect(showToast.mock.calls[0][0]).toBe('Workout ended — 3 exercises · 12 sets · 47 min.');
+  });
+
+  // A workout with nothing in it is real -- a mis-tap on "Log set" that was then deleted, or a
+  // session someone else's set started on a shared device. Reporting "0 exercises · 0 sets" would
+  // be worse than the plain sentence, so the recap suppresses itself and the caller falls back.
+  it('falls back to the plain sentence when there is nothing to report', async () => {
+    const showToast = vi.fn();
+    useUI.mockReturnValue(baseUI({ showToast }));
+    useSessionRecap.mockReturnValue({ exerciseCount: 0, setCount: 0, startedAt: liveSession.startedAt });
+    render(<SessionBar />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'End workout' }));
+    expect(screen.queryByText(/exercises ·/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'End workout' }).at(-1));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalled());
+    expect(showToast.mock.calls[0][0]).toBe('Workout ended. Logging a set anytime starts a new one.');
   });
 });
