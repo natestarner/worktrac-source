@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ExercisePicker from './ExercisePicker';
 import { useAppState } from '../../context/AppStateContext';
@@ -64,5 +64,36 @@ describe('ExercisePicker tour anchors', () => {
     const { container } = renderPicker();
     expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.EXERCISE_SEARCH}"]`)).not.toBeNull();
     expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.ADD_EXERCISE}"]`)).not.toBeNull();
+  });
+});
+
+// The search field moved from a hand-rolled <input> to the Input primitive. Two things about that
+// swap fail SILENTLY, so both are pinned here rather than trusted.
+describe('ExercisePicker search field', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch: vi.fn() });
+  });
+
+  // `Input` is a plain function component, not forwardRef -- so the ref only reaches the element
+  // because React 19 passes `ref` as an ordinary prop into `...rest`. If that ever stops being
+  // true, `searchInputRef.current` is null and the focus handler's `?.scrollIntoView` guard
+  // swallows it: the keyboard covers the results on a phone and nothing anywhere reports why.
+  it('forwards the ref to the real input, so the focus-scroll can still fire', () => {
+    renderPicker();
+    const input = screen.getByPlaceholderText('Search all exercises');
+
+    const scrollIntoView = vi.fn();
+    input.scrollIntoView = scrollIntoView;
+    fireEvent.focus(input);
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+  });
+
+  // 16px is the threshold below which iOS Safari zooms the viewport on focus. It used to be a
+  // literal with a comment beside it; it is now `.input`'s --text-md, which two e2e specs assert.
+  it('renders through the .input class rather than a hand-rolled copy of it', () => {
+    renderPicker();
+    expect(screen.getByPlaceholderText('Search all exercises')).toHaveClass('input');
   });
 });
