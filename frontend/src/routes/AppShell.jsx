@@ -9,6 +9,7 @@ import { migrateLegacyRestTimerPrefs } from '../lib/restTimerMigration';
 import { tryForceUpdate } from '../lib/swUpdate';
 import { clearOnboardingPending, isOnboardingPending } from '../lib/onboardingPending';
 import { useOfflineCacheWarming } from '../hooks/useOfflineCacheWarming';
+import { screenTitleFor } from '../utils/screenTitle';
 import Header from '../components/layout/Header';
 import PersonPillBar from '../components/layout/PersonPillBar';
 import SessionBar from '../components/layout/SessionBar';
@@ -198,6 +199,12 @@ export default function AppShell() {
 
   return (
     <div className="app-shell" style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+      {/* The first thing a keyboard reaches, and invisible until it is focused. Without it,
+          getting to the log form meant tabbing through the account menu, every person pill and
+          all five tab links on every single screen. Targets the <main> below. */}
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
       <OfflineBanner />
       <ConnectionTroubleBanner />
       <OfflineRecoveryPrompt />
@@ -235,7 +242,18 @@ export default function AppShell() {
       </div>
       {/* Padding lives on .tab-panel in index.css, not here -- an inline `padding`
           shorthand would override the class's top value. */}
-      <div className="tab-panel" style={{ margin: '0 auto' }}>
+      {/* A real <main>, not a div. axe's landmark-one-main flagged the whole app: there was no
+          main landmark anywhere, so a screen reader had nothing to jump to and six regions of
+          content sat outside any landmark at all. The class stays, so the CSS and the e2e specs
+          that measure `.tab-panel` are untouched.
+
+          The <h1> is visually hidden and names the screen. It is the app's ONLY h1 outside the
+          Handbook -- every other screen title is a styled div -- so without it a screen reader
+          landed on a new screen with no announcement of which one. Keyed on the route so the five
+          tabs and the six account-menu screens all resolve, from one derivation rather than eleven
+          separate headings that could drift. */}
+      <main className="tab-panel" id="main-content" style={{ margin: '0 auto' }}>
+        <h1 className="sr-only">{screenTitleFor(location.pathname)}</h1>
         {/* Scoped to the tab panel, not the whole shell, so a crashing tab leaves the header,
             person pills and tab nav usable -- the person can switch away and keep working
             instead of losing the app. `resetKey` (not `key`) clears a previous tab's error on
@@ -243,7 +261,7 @@ export default function AppShell() {
         <ErrorBoundary resetKey={location.pathname}>
           <Outlet />
         </ErrorBoundary>
-      </div>
+      </main>
 
       <SessionBar />
       <Toast />

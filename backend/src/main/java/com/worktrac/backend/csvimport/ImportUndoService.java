@@ -71,7 +71,7 @@ public class ImportUndoService {
     public ImportBatchDto undo(Long accountId, Long personId, Long batchId) {
         Person person = personService.requireOwnedPerson(personId, accountId);
         ImportBatch batch = importBatchRepository.findByIdAndPerson_Id(batchId, person.getId())
-                .orElseThrow(() -> new NotFoundException("No such import"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that import."));
         if (batch.isUndone()) {
             // Already reversed. Idempotent rather than an error: the rows are gone either way, and
             // a double-tap should not read as a failure.

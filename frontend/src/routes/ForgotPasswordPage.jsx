@@ -37,7 +37,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div
+    <main
       style={{
         minHeight: '100vh',
         display: 'flex',
@@ -59,7 +59,7 @@ export default function ForgotPasswordPage() {
           boxShadow: 'var(--shadow-2), var(--elevation-hairline)',
         }}
       >
-        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', marginBottom: 'var(--space-1)', textAlign: 'center' }}>Reset your password</div>
+        <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', margin: '0 0 var(--space-1)', textAlign: 'center' }}>Reset your password</h1>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
           Enter your email and we'll send you a code to reset your password.
         </div>
@@ -107,7 +107,7 @@ export default function ForgotPasswordPage() {
           <Link to="/login" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>Back to login</Link>
         </div>
       </form>
-    </div>
+    </main>
   );
 }
 

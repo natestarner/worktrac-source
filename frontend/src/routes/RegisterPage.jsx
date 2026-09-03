@@ -70,7 +70,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div
+    <main
       style={{
         minHeight: '100vh',
         display: 'flex',
@@ -101,7 +101,7 @@ export default function RegisterPage() {
           />
         </picture>
 
-        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', marginBottom: 'var(--space-1)', textAlign: 'center' }}>Create your household</div>
+        <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', margin: '0 0 var(--space-1)', textAlign: 'center' }}>Create your household</h1>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
           You'll be the primary login — kids and training partners get added inside the app, no login needed.
         </div>
@@ -195,7 +195,7 @@ export default function RegisterPage() {
           Already have an account? <Link to="/login" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>Log in</Link>
         </div>
       </form>
-    </div>
+    </main>
   );
 }
 

@@ -116,4 +116,37 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(503, response.getStatusCode().value());
     }
+
+    // Bean Validation reports the FIELD name, which is a Java identifier -- so a person filling in
+    // the registration form was shown "personName must not be blank". The default message is the
+    // useful half and is kept; only the identifier is humanized.
+    @Test
+    void humanizesCamelCaseFieldNamesSoDtoShapeIsNotShownToUsers() {
+        assertEquals("Person name", GlobalExceptionHandler.humanizeField("personName"));
+        assertEquals("Account name", GlobalExceptionHandler.humanizeField("accountName"));
+        assertEquals("Duration seconds", GlobalExceptionHandler.humanizeField("durationSeconds"));
+    }
+
+    @Test
+    void leavesAlreadyHumanFieldNamesAlone() {
+        assertEquals("Email", GlobalExceptionHandler.humanizeField("email"));
+        assertEquals("Password", GlobalExceptionHandler.humanizeField("password"));
+    }
+
+    // A nested binding path reads worse than its last segment: "Person.name" is our object graph,
+    // "Name" is the thing the person typed into.
+    @Test
+    void usesTheLastSegmentOfANestedPath() {
+        assertEquals("Name", GlobalExceptionHandler.humanizeField("person.name"));
+        assertEquals("Weight lb", GlobalExceptionHandler.humanizeField("request.set.weightLb"));
+    }
+
+    // Never throws into an error handler -- a NullPointerException raised while BUILDING an error
+    // response would escape to the /error re-dispatch this whole class exists to prevent.
+    @Test
+    void degradesRatherThanThrowingOnAMissingFieldName() {
+        assertEquals("That value", GlobalExceptionHandler.humanizeField(null));
+        assertEquals("That value", GlobalExceptionHandler.humanizeField(""));
+        assertEquals("That value", GlobalExceptionHandler.humanizeField("   "));
+    }
 }

@@ -97,10 +97,29 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .findFirst()
-                .map(fe -> fe.getField() + " " + fe.getDefaultMessage())
-                .orElse("Invalid request");
+                .map(fe -> humanizeField(fe.getField()) + " " + fe.getDefaultMessage())
+                .orElse("Something in that request wasn't valid. Check what you entered and try again.");
         recordIfRegistrationRoute(request, "Validation failed: " + message);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(400, message));
+    }
+
+
+    // Bean Validation reports the FIELD name, which is a Java identifier: "personName must not be
+    // blank" is what a person filling in the registration form actually saw. Splitting camelCase
+    // and sentence-casing it turns that into "Person name must not be blank" -- still terse, but
+    // it no longer exposes the shape of our DTOs to someone who is just trying to sign up.
+    //
+    // Deliberately keeps the field rather than replacing the whole thing with a generic: the
+    // default messages ("must not be blank", "must be at least 8 characters") are genuinely useful,
+    // and which field they refer to is the half that makes them actionable.
+    static String humanizeField(String field) {
+        if (field == null || field.isBlank()) {
+            return "That value";
+        }
+        // A nested path ("person.name") reads worse than its last segment.
+        String leaf = field.substring(field.lastIndexOf('.') + 1);
+        String spaced = leaf.replaceAll("([a-z0-9])([A-Z])", "$1 $2").toLowerCase();
+        return Character.toUpperCase(spaced.charAt(0)) + spaced.substring(1);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -121,7 +140,7 @@ public class GlobalExceptionHandler {
             return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(ApiError.of(413, "That request is too large."));
         }
         recordIfRegistrationRoute(request, "Malformed request body");
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(400, "Malformed request body"));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(400, "That request didn't come through correctly. Please try again."));
     }
 
     private boolean rootCauseIsPayloadTooLarge(Throwable ex) {
@@ -139,7 +158,7 @@ public class GlobalExceptionHandler {
     // A path/query param that doesn't match its declared type (e.g. a non-numeric id).
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(400, "Invalid request parameter"));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(400, "That request didn't come through correctly. Please try again."));
     }
 
     // A dependency this endpoint needs is unconfigured or unreachable -- e.g. billing in an
@@ -160,7 +179,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleDataAccess(DataAccessException ex, HttpServletRequest request) {
         log.error("Database access error", ex);
         recordIfRegistrationRoute(request, "Database access error: " + ex.getMessage());
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiError.of(503, "Service temporarily unavailable"));
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiError.of(503, "Huddle is having trouble reaching your data right now. Try again in a moment."));
     }
 
     // Last resort: any exception not already handled above. Never let this escape to the
@@ -170,7 +189,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
         log.error("Unhandled exception", ex);
         recordIfRegistrationRoute(request, ex.getClass().getSimpleName() + ": " + ex.getMessage());
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiError.of(500, "Something went wrong"));
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiError.of(500, "Something went wrong on our end. Try again in a moment."));
     }
 
     // Records UNEXPECTED_ERROR for a request to one of the three registration endpoints that
