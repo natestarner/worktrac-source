@@ -217,7 +217,17 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 # -- it carries no queued work, sits on no write's path, and is READ during a Contact Us render, so
 # a throw here would blank the very screen a person is using to report the failure. Diagnostics must
 # never be able to break the app they exist to diagnose; that rule is what earns these two.
-EXPECTED_LIB_SWALLOWS=44
+# 2026-09-03: 44 -> 47. lib/haptics.js (prefersReducedMotion, supportsIosSwitchHaptic, tryHaptic).
+# A different shape from the storage guards above, and it earns its place for a different reason: a
+# haptic is DECORATION. It exists to acknowledge a personal record and the end of a workout, and it
+# is fired from inside showCelebration and from the End Workout handler -- so a throw would take
+# down the celebration, or the write that ends the session, for the sake of a buzz. There is also no
+# way to feature-detect the whole surface reliably: `navigator.vibrate` is absent on iOS entirely,
+# `matchMedia` can throw in restricted contexts, and the iOS switch-element route is an undocumented
+# behaviour rather than an API. Losing the error is exactly right here -- the caller cannot act on
+# it, the person loses nothing they can perceive beyond a missing tick, and tryHaptic still RETURNS
+# which route it took so a test (and a human) can see what happened.
+EXPECTED_LIB_SWALLOWS=47
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"
