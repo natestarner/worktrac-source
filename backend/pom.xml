@@ -30,6 +30,13 @@
              fixed in 4.2.16.Final): override Spring Boot's managed 4.2.15.Final until the
              parent BOM picks up the patched release itself. -->
         <netty.version>4.2.16.Final</netty.version>
+        <!-- CVE-2026-68525/65905/65182 (tomcat-embed-core, all CRITICAL, fixed in 11.0.25):
+             override Spring Boot 4.1.0's managed 11.0.22 until the parent BOM picks up the
+             patched release itself. Patch-only bump inside the same 11.0.x line, so no
+             servlet-API or cross-module compatibility concern.
+             These landed in Trivy's DB on 2026-09-03 and failed `docker-build` on every
+             push from that moment; nothing in this repo changed to cause them. -->
+        <tomcat.version>11.0.25</tomcat.version>
         <!-- NOTE: verify these are still the latest stable versions on Maven Central
              before your first build. bucket4j_jdk17-core targets JDK 17+ (this project
              is on Java 25); do not use the bucket4j_jdk8-core artifact. -->

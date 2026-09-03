@@ -21,6 +21,7 @@ import AddEditExerciseModal from '../settings/AddEditExerciseModal';
 import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
 import { IconClose } from '../shared/icons';
+import Card from '../shared/Card';
 
 function routineBannerDismissKey(personId) {
   return `workout-tracker-routine-banner-dismissed-${personId}`;
@@ -333,7 +334,7 @@ export default function LogTab() {
           above stays in flow deliberately: that one is a form, not a status. */}
 
       {activeRoutine && (
-        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16, marginBottom: 16 }}>
+        <Card size="dense" style={{ marginBottom: 16 }}>
           {/* "End routine" lives up here, in the one piece of chrome that's on screen for the
               whole life of a routine (this card renders above BOTH the picker and the exercise
               screen). Before it, the only exit was "Finish routine" below -- which appears solely
@@ -407,7 +408,7 @@ export default function LogTab() {
           >
             {routineIndex + 1 >= activeRoutine.exercises.length ? 'Finish routine' : 'Next exercise'}
           </button>
-        </div>
+        </Card>
       )}
 
       {hasActiveSession && !selectedExercise && (

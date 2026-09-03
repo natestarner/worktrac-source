@@ -30,7 +30,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div
+    <main
       style={{
         minHeight: '100vh',
         display: 'flex',
@@ -60,6 +60,11 @@ export default function LoginPage() {
             style={{ width: 216, maxWidth: '100%', height: 'auto', marginBottom: 40 }}
           />
         </picture>
+
+        {/* No visible title on this page -- the lockup above is the branding. A screen reader
+            still needs to know which screen it landed on, and axe's page-has-heading-one flagged
+            its absence. */}
+        <h1 className="sr-only">Log in</h1>
 
         {successMessage && (
           <div role="status" style={successBannerStyle}>
@@ -134,7 +139,7 @@ export default function LoginPage() {
           </Link>
         </div>
       </form>
-    </div>
+    </main>
   );
 }
 

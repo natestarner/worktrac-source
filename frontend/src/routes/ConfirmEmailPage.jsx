@@ -82,7 +82,7 @@ export default function ConfirmEmailPage() {
   }
 
   return (
-    <div
+    <main
       style={{
         minHeight: '100vh',
         display: 'flex',
@@ -104,7 +104,7 @@ export default function ConfirmEmailPage() {
           boxShadow: 'var(--shadow-2), var(--elevation-hairline)',
         }}
       >
-        <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', marginBottom: 'var(--space-1)', textAlign: 'center' }}>Check your email</div>
+        <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', margin: '0 0 var(--space-1)', textAlign: 'center' }}>Check your email</h1>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
           Enter the 6-digit code we sent to {email}.
         </div>
@@ -184,7 +184,7 @@ export default function ConfirmEmailPage() {
           </div>
         )}
       </form>
-    </div>
+    </main>
   );
 }
 

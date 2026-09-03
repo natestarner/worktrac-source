@@ -8,6 +8,7 @@ import { dispatchDurableWrite, DELETE_SET_MUTATION_KEY } from '../../lib/queryCl
 import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import SetPillRow from '../shared/SetPillRow';
+import Card from '../shared/Card';
 
 export default function SessionSummary({ entries, loading, sessionId, personId, onSelectExercise, onChanged }) {
   const { openConfirm } = useUI();
@@ -71,9 +72,9 @@ export default function SessionSummary({ entries, loading, sessionId, personId, 
   // own space: mid-set, vertical room is the scarce resource.
   if (entries.length === 0) {
     return (
-      <div style={{ marginBottom: 16, padding: '16px 20px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, color: 'var(--color-muted)', fontSize: 14 }}>
+      <Card size="dense" style={{ marginBottom: 16, color: 'var(--color-muted)', fontSize: 14 }}>
         Nothing logged in this workout yet — pick an exercise below to start.
-      </div>
+      </Card>
     );
   }
 

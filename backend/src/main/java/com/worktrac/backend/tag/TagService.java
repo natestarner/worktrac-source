@@ -42,7 +42,7 @@ public class TagService {
     public TagDto rename(Long accountId, Long tagId, String name) {
         String trimmed = requireName(name);
         Tag tag = tagRepository.findByIdAndAccount_Id(tagId, accountId)
-                .orElseThrow(() -> new NotFoundException("No such tag"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that tag."));
         if (!tag.getName().equalsIgnoreCase(trimmed)
                 && tagRepository.findByAccount_IdAndName(accountId, trimmed).isPresent()) {
             throw new ConflictException("A tag with that name already exists");
@@ -54,7 +54,7 @@ public class TagService {
     @Transactional
     public void delete(Long accountId, Long tagId) {
         Tag tag = tagRepository.findByIdAndAccount_Id(tagId, accountId)
-                .orElseThrow(() -> new NotFoundException("No such tag"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that tag."));
         tagRepository.delete(tag);
     }
 
