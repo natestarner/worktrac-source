@@ -3,24 +3,35 @@ import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { useOfflinePin } from '../../hooks/useOfflinePin';
 import { useOutboxCount } from '../../hooks/useOutboxCount';
 import { useOutboxItems } from '../../hooks/useOutboxItems';
+import { useJustSynced } from '../../hooks/useJustSynced';
 import { unpinOffline } from '../../lib/offlineMode';
 import { probeReachability } from '../../lib/reachabilityProbe';
 import Button from './Button';
 import OutboxModal from './OutboxModal';
+import { IconCheck } from './icons';
 
 // The top-level offline signal, so the user is never in doubt about which mode they're in. While
 // offline it names exactly how many entered changes are safely queued ("N changes waiting to
 // sync") -- the reassurance that nothing is lost. While online it stays out of the way, except to
-// briefly announce writes still draining after a reconnect. Renders nothing when online with an
-// empty outbox.
+// briefly announce writes still draining after a reconnect, and then to confirm once they have
+// landed. Renders nothing when online with an empty outbox and nothing recently drained.
+//
+// That last beat is the point of `useJustSynced`: this banner used to communicate success purely
+// by ABSENCE -- it counted "3 changes waiting to sync" and then silently unmounted, so the single
+// moment the app keeps its central promise was the one moment it said nothing.
 export default function OfflineBanner() {
   const online = useOnlineStatus();
   const pinned = useOfflinePin();
   const queued = useOutboxCount();
+  const justSynced = useJustSynced(online, queued);
   const [showOutbox, setShowOutbox] = useState(false);
   const [checkFailed, setCheckFailed] = useState(false);
 
-  if (online && queued === 0) return null;
+  if (online && queued === 0 && !justSynced) return null;
+
+  // Every other state in this banner is an ongoing condition; this one is a completed event, so it
+  // takes the check rather than the pulseless status dot.
+  const caughtUp = online && queued === 0;
 
   const queuedLabel = queued === 1 ? '1 change waiting to sync' : `${queued} changes waiting to sync`;
 
@@ -55,16 +66,21 @@ export default function OfflineBanner() {
           borderBottom: '1px solid var(--color-faint)',
         }}
       >
-        <span
-          aria-hidden="true"
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: 'var(--color-muted)',
-          }}
-        />
-        {online && <span>Syncing&hellip; </span>}
+        {caughtUp ? (
+          <IconCheck size={14} />
+        ) : (
+          <span
+            aria-hidden="true"
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: 'var(--color-muted)',
+            }}
+          />
+        )}
+        {caughtUp && <span>All caught up.</span>}
+        {online && queued > 0 && <span>Syncing&hellip; </span>}
         {!online && queued > 0 && <span>Offline: </span>}
         {!online && queued === 0 && (
           <span>Offline. Your changes are saved on this device and will sync when you reconnect.</span>

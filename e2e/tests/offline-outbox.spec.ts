@@ -34,4 +34,27 @@ test.describe('Offline mode — durable set-logging outbox', () => {
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
     await expect(page.getByText('Set 1')).toHaveCount(1);
   });
+
+  // The banner used to communicate success purely by ABSENCE -- it counted "1 change waiting to
+  // sync" and then silently unmounted, so the one moment the app keeps its central promise was the
+  // one moment it said nothing. Asserted end-to-end rather than only in jsdom because the claim is
+  // about a REAL drain: the unit tests drive a mutation cache directly and so cannot show that the
+  // message lands after the write actually reached the server.
+  test('confirms a real drain with "All caught up.", then withdraws it', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Robin');
+    await pickExercise(page, 'Barbell Bench Press');
+
+    await goHardOffline(page);
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(outboxCountText(page, 1)).toBeVisible();
+
+    // Nothing may claim success while the write is still queued.
+    await expect(page.getByText('All caught up.')).toBeHidden();
+
+    await goOnline(page);
+
+    await expect(page.getByText('All caught up.')).toBeVisible();
+    // It is a confirmation, not chrome: it takes itself off screen.
+    await expect(page.getByText('All caught up.')).toBeHidden({ timeout: 15000 });
+  });
 });

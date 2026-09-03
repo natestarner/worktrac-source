@@ -8,6 +8,7 @@ import { useExercises } from '../../hooks/useExercises';
 import { logLiveSet } from '../../api/sets';
 import { isOfflinePinned, pinOffline, __resetOfflineModeForTests } from '../../lib/offlineMode';
 import { probeReachability } from '../../lib/reachabilityProbe';
+import { JUST_SYNCED_MS } from '../../hooks/useJustSynced';
 import OfflineBanner from './OfflineBanner';
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
@@ -91,6 +92,71 @@ describe('OfflineBanner', () => {
     expect(await screen.findByText('Waiting to sync (1)')).toBeInTheDocument();
     expect(screen.getByText('Nate — Bench Press', { exact: true })).toBeInTheDocument();
     expect(screen.getByText('logged 135 lb × 5')).toBeInTheDocument();
+  });
+
+  // Success used to be communicated only by the banner vanishing. These four cover the one thing
+  // that must be true of a confirmation: it appears exactly when the claim is true.
+  describe('"All caught up." when the outbox drains', () => {
+    it('confirms the drain, then withdraws itself', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      onlineManager.setOnline(false);
+      const { queryClient } = renderWithQuery(<OfflineBanner />);
+      act(() => {
+        dispatchLogSet(queryClient, {
+          mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
+          idempotencyKey: 'drain', clientLoggedAt: 't', tempId: 'temp-drain',
+        });
+      });
+      await screen.findByRole('button', { name: '1 change waiting to sync' });
+
+      await act(async () => {
+        onlineManager.setOnline(true);
+      });
+
+      expect(await screen.findByText('All caught up.')).toBeInTheDocument();
+      expect(screen.queryByText(/waiting to sync/)).not.toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(JUST_SYNCED_MS + 50);
+      });
+      await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+      vi.useRealTimers();
+    });
+
+    // The ordinary boot. Nothing drained, so claiming a sync would be inventing one.
+    it('says nothing on a mount that simply finds an empty outbox', () => {
+      onlineManager.setOnline(true);
+      renderWithQuery(<OfflineBanner />);
+      expect(screen.queryByText('All caught up.')).not.toBeInTheDocument();
+    });
+
+    // Merely reconnecting is not evidence anything synced.
+    it('says nothing when connectivity flips with nothing queued', () => {
+      onlineManager.setOnline(false);
+      renderWithQuery(<OfflineBanner />);
+      act(() => onlineManager.setOnline(true));
+      expect(screen.queryByText('All caught up.')).not.toBeInTheDocument();
+    });
+
+    // Queued writes are PAUSED offline and cannot succeed, so a drop to zero while offline means
+    // they were discarded -- the opposite of caught up.
+    it('says nothing when the outbox empties while still offline', async () => {
+      onlineManager.setOnline(false);
+      const { queryClient } = renderWithQuery(<OfflineBanner />);
+      act(() => {
+        dispatchLogSet(queryClient, {
+          mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
+          idempotencyKey: 'discarded', clientLoggedAt: 't', tempId: 'temp-discarded',
+        });
+      });
+      await screen.findByRole('button', { name: '1 change waiting to sync' });
+
+      // What logout does to the outbox, without tearing down the whole session.
+      act(() => queryClient.getMutationCache().clear());
+
+      await waitFor(() => expect(screen.queryByText(/waiting to sync/)).not.toBeInTheDocument());
+      expect(screen.queryByText('All caught up.')).not.toBeInTheDocument();
+    });
   });
 
   it('closes the outbox detail modal from its Done button', async () => {
