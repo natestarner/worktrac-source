@@ -228,13 +228,12 @@ function PRsTabContent() {
 
 // Was --color-faint (2.07:1 -- effectively unreadable). Empty-state copy is body text
 // and belongs on --color-muted; see the token comments in index.css.
-const emptyStyle = { textAlign: 'center', padding: 'var(--space-10) var(--space-5)', color: 'var(--color-muted)', fontSize: 'var(--text-base)' };
 
 // 16px avoids iOS Safari's zoom-on-focus, same reason as ExerciseFilterBar's search input.
 const sortSelectStyle = {
   padding: '8px 10px',
   border: '1px solid var(--color-border)',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-md)',
   background: 'var(--color-surface)',
   color: 'var(--color-text)',
   fontSize: 16,

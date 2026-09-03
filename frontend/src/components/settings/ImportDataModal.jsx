@@ -380,7 +380,7 @@ const selectStyle = {
   width: '100%',
   padding: 12,
   border: '1px solid var(--color-border)',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-md)',
   fontSize: 16,
   background: 'var(--color-surface)',
   color: 'var(--color-text)',

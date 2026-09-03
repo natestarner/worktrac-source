@@ -124,7 +124,7 @@ const searchInputStyle = {
   boxSizing: 'border-box',
   padding: '12px 40px 12px 14px',
   border: '1px solid var(--color-border)',
-  borderRadius: 14,
+  borderRadius: 'var(--radius-lg)',
   fontSize: 16,
   background: 'var(--color-surface)',
   color: 'var(--color-text)',
@@ -140,7 +140,7 @@ const clearButtonStyle = {
   height: 44,
   border: 'none',
   background: 'none',
-  color: 'var(--color-faint)',
+  color: 'var(--color-muted)',
   fontSize: 20,
   cursor: 'pointer',
 };

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import SectionLabel from '../shared/SectionLabel';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
@@ -167,7 +168,7 @@ export default function BillingTab() {
 
       {checkout ? (
         <>
-          <div style={sectionLabelStyle}>Payment</div>
+          <SectionLabel>Payment</SectionLabel>
           <div style={cardStyle}>
             <EmbeddedCheckout
               clientSecret={checkout.clientSecret}
@@ -204,7 +205,7 @@ function ProSummary({ subscription, pending, onManage }) {
 
   return (
     <>
-      <div style={sectionLabelStyle}>Your plan</div>
+      <SectionLabel>Your plan</SectionLabel>
       <div style={cardStyle}>
         {/* The mark, not the wordmark: "Huddle Pro" is already spelled out beside it, and the
             horizontal lockup would repeat the word. aria-hidden inside HuddleMark, so a screen
@@ -227,7 +228,7 @@ function ProSummary({ subscription, pending, onManage }) {
         )}
       </div>
 
-      <div style={sectionLabelStyle}>What Pro includes</div>
+      <SectionLabel>What Pro includes</SectionLabel>
       <div style={cardStyle}>
         <BenefitList />
       </div>
@@ -255,7 +256,7 @@ function renewalLine(cancelling, periodEnd) {
 function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFree }) {
   return (
     <>
-      <div style={sectionLabelStyle}>Your plan</div>
+      <SectionLabel>Your plan</SectionLabel>
       <div style={cardStyle}>
         <div style={planHeadingStyle}>Free</div>
         <p style={mutedLineStyle}>
@@ -263,7 +264,7 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
         </p>
       </div>
 
-      <div style={sectionLabelStyle}>Upgrade to Pro</div>
+      <SectionLabel>Upgrade to Pro</SectionLabel>
       <div style={cardStyle}>
         <PlanChooser value={interval} onChange={onIntervalChange} />
         <BenefitList />
@@ -339,15 +340,6 @@ const backButtonStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   padding: '0 0 var(--space-3) 0',
-};
-
-const sectionLabelStyle = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: 'var(--color-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 12,
 };
 
 const cardStyle = {

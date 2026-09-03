@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import SectionLabel from '../shared/SectionLabel';
 import { useUI } from '../../context/UIContext';
 import { listSessionSets } from '../../api/sets';
 import { queryKeys } from '../../api/queryKeys';
@@ -81,9 +82,9 @@ export default function SessionSummary({ entries, loading, sessionId, personId, 
     // this list -- an exercise name legitimately appears here AND in the picker below AND in
     // search results, so a bare getByText for it is a strict-mode violation waiting to happen.
     <div className="session-exercises" style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
+      <SectionLabel>
         Session exercises
-      </div>
+      </SectionLabel>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '0 20px' }}>
         {entries.map((entry, i) => (
           <div

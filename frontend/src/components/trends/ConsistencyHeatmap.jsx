@@ -71,7 +71,7 @@ export default function ConsistencyHeatmap({ workoutDays }) {
         <div style={{ display: 'flex', gap: 6, minWidth: 'min-content' }}>
           <div style={{ display: 'grid', gridTemplateRows: `repeat(${DAYS_PER_WEEK}, ${CELL}px)`, gap: GAP, paddingTop: 16 }}>
             {DAY_LABELS.map((label, i) => (
-              <div key={i} style={{ fontSize: 9, lineHeight: `${CELL}px`, color: 'var(--color-faint)', textAlign: 'right' }}>
+              <div key={i} style={{ fontSize: 9, lineHeight: `${CELL}px`, color: 'var(--color-muted)', textAlign: 'right' }}>
                 {label}
               </div>
             ))}
@@ -80,7 +80,7 @@ export default function ConsistencyHeatmap({ workoutDays }) {
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${HEATMAP_WEEKS}, ${COLUMN}px)`, height: 16 }}>
               {labels.map((label, i) => (
-                <div key={i} style={{ fontSize: 9, color: 'var(--color-faint)', whiteSpace: 'nowrap' }}>
+                <div key={i} style={{ fontSize: 9, color: 'var(--color-muted)', whiteSpace: 'nowrap' }}>
                   {label}
                 </div>
               ))}

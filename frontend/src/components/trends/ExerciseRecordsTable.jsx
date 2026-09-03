@@ -1,6 +1,7 @@
 import { formatDateLabel, formatRestTime } from '../../utils/datetime';
 import { convertWeight } from '../../utils/formulas';
 import Skeleton from '../shared/Skeleton';
+import SectionLabel from '../shared/SectionLabel';
 
 // All-time bests for the selected exercise. This is the one part of Trends meant to be consulted
 // mid-workout ("what have I done for 5+ before?"), so it stays a plain readable table rather than
@@ -18,13 +19,13 @@ const rowStyle = {
 
 const labelStyle = { color: 'var(--color-muted)' };
 const valueStyle = { fontWeight: 600, textAlign: 'right' };
-const dateStyle = { color: 'var(--color-faint)', fontSize: 12, fontWeight: 400, marginLeft: 6 };
+const dateStyle = { color: 'var(--color-muted)', fontSize: 12, fontWeight: 400, marginLeft: 6 };
 
 function Row({ label, value, date, empty }) {
   return (
     <div style={rowStyle}>
       <span style={labelStyle}>{label}</span>
-      <span style={empty ? { ...valueStyle, color: 'var(--color-faint)', fontWeight: 400 } : valueStyle}>
+      <span style={empty ? { ...valueStyle, color: 'var(--color-muted)', fontWeight: 400 } : valueStyle}>
         {value}
         {date && <span style={dateStyle}>{formatDateLabel(date)}</span>}
       </span>
@@ -32,21 +33,11 @@ function Row({ label, value, date, empty }) {
   );
 }
 
-function SectionLabel({ children }) {
-  return (
-    <div
-      style={{
-        fontSize: 11,
-        fontWeight: 700,
-        color: 'var(--color-muted)',
-        textTransform: 'uppercase',
-        letterSpacing: '0.04em',
-        margin: '16px 0 4px',
-      }}
-    >
-      {children}
-    </div>
-  );
+// The shared primitive, with only the spacing this table needs. It was previously a LOCAL component
+// of the same name, shadowing the import -- so the app had two `SectionLabel`s that rendered at
+// different sizes and weights, and which one you got depended on which file you were reading.
+function RecordsSectionLabel({ children }) {
+  return <SectionLabel style={{ margin: 'var(--space-4) 0 var(--space-1)' }}>{children}</SectionLabel>;
 }
 
 export default function ExerciseRecordsTable({ records, loading, defaultUnit }) {
@@ -72,7 +63,7 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
   if (records.durationTracked) {
     return (
       <div style={{ marginTop: 8 }}>
-        <SectionLabel>Records &middot; holds</SectionLabel>
+        <RecordsSectionLabel>Records &middot; holds</RecordsSectionLabel>
         <Row
           label="Longest hold"
           value={
@@ -103,7 +94,7 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
   if (records.bodyweightOnly) {
     return (
       <div style={{ marginTop: 8 }}>
-        <SectionLabel>Records &middot; bodyweight</SectionLabel>
+        <RecordsSectionLabel>Records &middot; bodyweight</RecordsSectionLabel>
         <Row
           label="Most reps in a set"
           value={`${records.mostReps.reps} reps`}
@@ -117,7 +108,7 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
 
   return (
     <div style={{ marginTop: 8 }}>
-      <SectionLabel>All-time bests</SectionLabel>
+      <RecordsSectionLabel>All-time bests</RecordsSectionLabel>
       {/* Epley-estimated, so this legitimately disagrees with "Heaviest weight" below it: a
           185 lb x 8 estimates to ~234 lb and outranks a 225 lb x 1 single. That disagreement is
           the reason both rows exist -- the qualifier names the set the estimate came from, so a
@@ -154,7 +145,7 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
         date={records.mostReps.date}
       />
 
-      <SectionLabel>Lifetime</SectionLabel>
+      <RecordsSectionLabel>Lifetime</RecordsSectionLabel>
       <Row label="Total sets" value={records.totalSets} />
       <Row label="Total reps" value={records.totalReps} />
       <Row label="Total volume" value={`${Math.round(w(records.totalVolumeLb))} ${defaultUnit}`} />

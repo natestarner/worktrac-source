@@ -1,7 +1,9 @@
 import { useRef } from 'react';
+import SectionLabel from '../shared/SectionLabel';
 import { useAppState } from '../../context/AppStateContext';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import Skeleton from '../shared/Skeleton';
+import Input from '../shared/Input';
 import EmptyState from '../shared/EmptyState';
 import { IconDumbbell } from '../shared/icons';
 import { searchExercises } from '../../utils/exerciseSearch';
@@ -43,7 +45,7 @@ export default function ExercisePicker({
     <div>
       {showRoutineQuickStart && (
         <div style={{ marginBottom: 22 }}>
-          <div style={sectionLabelStyle}>Start a routine</div>
+          <SectionLabel>Start a routine</SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {routines.map((r) => (
               <button
@@ -56,7 +58,7 @@ export default function ExercisePicker({
                   padding: '16px 18px',
                   background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
-                  borderRadius: 14,
+                  borderRadius: 'var(--radius-lg)',
                   fontSize: 15,
                   fontWeight: 700,
                   color: 'var(--color-text)',
@@ -72,9 +74,14 @@ export default function ExercisePicker({
         </div>
       )}
 
-      {showRoutineQuickStart && <div style={sectionLabelStyle}>Or pick an exercise</div>}
+      {showRoutineQuickStart && <SectionLabel>Or pick an exercise</SectionLabel>}
 
-      <input
+      {/* The app's most-used input, and it was the only one not going through the primitive: a
+          hand-rolled copy of the same recipe that had drifted to a 14px radius and 14px/16px
+          padding against `.input`'s --radius-md and --space-3/--space-4. The iOS 16px floor that
+          used to be commented here is `.input`'s --text-md, where two e2e specs already assert it
+          -- so it is now enforced rather than remembered. */}
+      <Input
         ref={searchInputRef}
         data-tour-anchor={TOUR_ANCHORS.EXERCISE_SEARCH}
         value={exerciseSearch}
@@ -89,18 +96,7 @@ export default function ExercisePicker({
         }}
         placeholder="Search all exercises"
         style={{
-          width: '100%',
-          boxSizing: 'border-box',
-          padding: '14px 16px',
-          border: '1px solid var(--color-border)',
-          borderRadius: 14,
-          // iOS Safari auto-zooms the page on focus for any input under 16px, and doesn't
-          // reliably zoom back out when selecting a result clears/unmounts this input instead
-          // of a normal blur -- 16px avoids triggering the zoom at all.
-          fontSize: 16,
-          marginBottom: 18,
-          background: 'var(--color-surface)',
-          color: 'var(--color-text)',
+          marginBottom: 'var(--space-4)',
         }}
       />
 
@@ -109,7 +105,7 @@ export default function ExercisePicker({
           <Skeleton width={84} height={12} style={{ marginBottom: 10 }} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
             {[110, 140, 96].map((w, i) => (
-              <Skeleton key={i} width={w} height={46} radius={14} />
+              <Skeleton key={i} width={w} height={46} radius={16} />
             ))}
           </div>
         </>
@@ -118,7 +114,7 @@ export default function ExercisePicker({
       {/* Search results across the whole catalog */}
       {!loading && searching && (
         <div style={{ marginBottom: 20 }}>
-          <div style={sectionLabelStyle}>Search results</div>
+          <SectionLabel>Search results</SectionLabel>
           <ExerciseSearchResults
             results={searchResults}
             term={exerciseSearch}
@@ -143,7 +139,7 @@ export default function ExercisePicker({
         ) : (
           groups.map((group) => (
             <div key={group.id} style={{ marginBottom: 20 }}>
-              <div style={sectionLabelStyle}>{group.name}</div>
+              <SectionLabel>{group.name}</SectionLabel>
               <div style={chipWrapStyle}>
                 {group.items.map((ex) => (
                   <ExerciseChip key={ex.id} name={ex.name} onSelect={() => onSelectExercise(ex.id)} />
@@ -175,7 +171,7 @@ function ExerciseChip({ name, onSelect }) {
         padding: '14px 18px',
         background: 'var(--color-surface)',
         border: '1px solid var(--color-border)',
-        borderRadius: 14,
+        borderRadius: 'var(--radius-lg)',
         fontSize: 15,
         fontWeight: 600,
         color: 'var(--color-text)',
@@ -187,15 +183,6 @@ function ExerciseChip({ name, onSelect }) {
   );
 }
 
-const sectionLabelStyle = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: 'var(--color-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 10,
-};
-
 const chipWrapStyle = { display: 'flex', flexWrap: 'wrap', gap: 10 };
 
 const addOwnButtonStyle = {
@@ -205,7 +192,7 @@ const addOwnButtonStyle = {
   background: 'var(--color-subtle-bg)',
   color: 'var(--color-text)',
   border: 'none',
-  borderRadius: 12,
+  borderRadius: 'var(--radius-md)',
   fontSize: 14,
   fontWeight: 700,
   cursor: 'pointer',

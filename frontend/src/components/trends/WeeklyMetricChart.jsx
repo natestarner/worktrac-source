@@ -24,7 +24,7 @@ export function ChartTooltip({ active, payload, metric, defaultUnit }) {
       style={{
         background: 'var(--color-surface)',
         border: '1px solid var(--color-border)',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-md)',
         padding: '8px 12px',
         fontSize: 13,
         boxShadow: '0 2px 8px rgba(0,0,0,0.12)',

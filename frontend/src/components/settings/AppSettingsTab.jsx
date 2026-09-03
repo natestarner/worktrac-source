@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import SectionLabel from '../shared/SectionLabel';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
@@ -149,7 +150,7 @@ export default function AppSettingsTab() {
         &larr; Back
       </button>
 
-      <div style={sectionLabelStyle}>Units</div>
+      <SectionLabel>Units</SectionLabel>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
           Default unit for new sets entered from now on. Sets already logged keep the unit they were recorded in. Changing this never rewrites past numbers.
@@ -193,7 +194,7 @@ export default function AppSettingsTab() {
         </div>
       </div>
 
-      <div style={sectionLabelStyle}>Offline Mode</div>
+      <SectionLabel>Offline Mode</SectionLabel>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
           Turn this on if you&rsquo;re somewhere with a bad connection. The app stops trying to reach
@@ -232,7 +233,7 @@ export default function AppSettingsTab() {
         </div>
       </div>
 
-      <div style={sectionLabelStyle}>Rest Timer</div>
+      <SectionLabel>Rest Timer</SectionLabel>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 16 }}>
           Show a countdown after logging a set, per person. Rest time between sets is always recorded
@@ -283,7 +284,7 @@ export default function AppSettingsTab() {
         </div>
       </div>
 
-      <div style={sectionLabelStyle}>Tags</div>
+      <SectionLabel>Tags</SectionLabel>
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
         Shared tags anyone on this account can apply to exercises from an exercise&rsquo;s Customize screen.
       </div>
@@ -335,7 +336,7 @@ export default function AppSettingsTab() {
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 18 }}>Enter a tag name.</div>
       )}
 
-      <div style={sectionLabelStyle}>Data</div>
+      <SectionLabel>Data</SectionLabel>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 20px', marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
           Download a CSV of every set ever logged, for every person on this account. One file per person, zipped together.
@@ -402,7 +403,7 @@ export default function AppSettingsTab() {
         />
       )}
 
-      <div style={sectionLabelStyle}>Legal</div>
+      <SectionLabel>Legal</SectionLabel>
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 24 }}>
         <LegalLinks />
       </div>
@@ -411,7 +412,7 @@ export default function AppSettingsTab() {
           Us's "What gets sent" disclosure -- i.e. you had to be filing a bug report, and had to
           expand a panel, to find out which version you were on. It is the first thing any support
           conversation needs, so it belongs somewhere you can just go and look. */}
-      <div style={sectionLabelStyle}>About</div>
+      <SectionLabel>About</SectionLabel>
       <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)' }}>
         Huddle · build {APP_BUILD}
       </div>
@@ -438,15 +439,6 @@ const backButtonStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   padding: '0 0 var(--space-3) 0',
-};
-
-const sectionLabelStyle = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: 'var(--color-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 12,
 };
 
 const categoryChipStyle = {

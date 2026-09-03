@@ -304,7 +304,6 @@ function HistoryTabContent({ initialExerciseFilter }) {
 
 // Was --color-faint (2.07:1 -- effectively unreadable). Empty-state copy is body text
 // and belongs on --color-muted; see the token comments in index.css.
-const emptyStyle = { textAlign: 'center', padding: 'var(--space-10) var(--space-5)', color: 'var(--color-muted)', fontSize: 'var(--text-base)' };
 
 // "Log a past workout" and "Export data" sit side by side and carry equal weight, but
 // used to be given two different treatments -- one filled on --color-subtle-bg, the other
