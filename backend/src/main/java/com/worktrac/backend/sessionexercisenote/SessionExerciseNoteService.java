@@ -59,7 +59,7 @@ public class SessionExerciseNoteService {
     @Transactional
     public SessionExerciseNoteDto upsertSessionNote(Long accountId, Long sessionId, Long exerciseId, String note) {
         WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, accountId)
-                .orElseThrow(() -> new NotFoundException("No such session"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that workout."));
         Exercise exercise = requireVisibleExercise(accountId, exerciseId);
         return upsert(session, exercise, note);
     }
@@ -67,7 +67,7 @@ public class SessionExerciseNoteService {
     @Transactional(readOnly = true)
     public Optional<SessionExerciseNoteDto> getNote(Long accountId, Long sessionId, Long exerciseId) {
         workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, accountId)
-                .orElseThrow(() -> new NotFoundException("No such session"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that workout."));
         return sessionExerciseNoteRepository.findBySession_IdAndExercise_Id(sessionId, exerciseId)
                 .map(n -> new SessionExerciseNoteDto(sessionId, exerciseId, n.getNote()));
     }
@@ -94,10 +94,10 @@ public class SessionExerciseNoteService {
 
     private Exercise requireVisibleExercise(Long accountId, Long exerciseId) {
         Exercise exercise = exerciseRepository.findById(exerciseId)
-                .orElseThrow(() -> new NotFoundException("No such exercise"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that exercise."));
         boolean visible = exercise.isGlobal() || exercise.getAccount().getId().equals(accountId);
         if (!visible) {
-            throw new NotFoundException("No such exercise");
+            throw new NotFoundException("We couldn't find that exercise.");
         }
         return exercise;
     }

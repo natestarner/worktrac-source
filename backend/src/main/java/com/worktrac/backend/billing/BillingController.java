@@ -193,6 +193,6 @@ public class BillingController {
 
     private Account requireAccount(Long accountId) {
         return accountRepository.findById(accountId)
-                .orElseThrow(() -> new NotFoundException("No such account"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that account."));
     }
 }

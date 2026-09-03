@@ -127,7 +127,7 @@ async function request(path, { method = 'GET', body, isFormData = false, timeout
   if (response.status === 401 && hadToken) {
     setAuthToken(null);
     if (onUnauthorized) onUnauthorized();
-    throw new ApiError(401, 'Session expired -- please log in again.');
+    throw new ApiError(401, 'Session expired — please log in again.');
   }
 
   if (response.status === 204) return null;
@@ -136,7 +136,7 @@ async function request(path, { method = 'GET', body, isFormData = false, timeout
   const payload = contentType.includes('application/json') ? await response.json() : await response.text();
 
   if (!response.ok) {
-    const message = (payload && payload.message) || 'Something went wrong';
+    const message = (payload && payload.message) || 'Something went wrong on our end. Try again in a moment.';
     throw new ApiError(response.status, message);
   }
   return payload;
@@ -189,9 +189,9 @@ export const apiClient = {
     if (response.status === 401) {
       setAuthToken(null);
       if (onUnauthorized) onUnauthorized();
-      throw new ApiError(401, 'Session expired -- please log in again.');
+      throw new ApiError(401, 'Session expired — please log in again.');
     }
-    if (!response.ok) throw new ApiError(response.status, 'Export failed');
+    if (!response.ok) throw new ApiError(response.status, "That export didn't finish. Try again in a moment.");
     return response;
   },
 };

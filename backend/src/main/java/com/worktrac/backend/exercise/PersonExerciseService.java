@@ -250,9 +250,9 @@ public class PersonExerciseService {
 
     private PersonExerciseField requireField(Person person, Long exerciseId, Long fieldId) {
         PersonExercise pe = personExerciseRepository.findByPerson_IdAndExercise_Id(person.getId(), exerciseId)
-                .orElseThrow(() -> new NotFoundException("No such custom field"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that custom field."));
         return personExerciseFieldRepository.findByIdAndPersonExercise_Id(fieldId, pe.getId())
-                .orElseThrow(() -> new NotFoundException("No such custom field"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that custom field."));
     }
 
     private PersonExercise getOrCreate(Person person, Exercise exercise) {
@@ -262,10 +262,10 @@ public class PersonExerciseService {
 
     private Exercise requireVisibleExercise(Long accountId, Long exerciseId) {
         Exercise exercise = exerciseRepository.findById(exerciseId)
-                .orElseThrow(() -> new NotFoundException("No such exercise"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that exercise."));
         boolean visible = exercise.isGlobal() || exercise.getAccount().getId().equals(accountId);
         if (!visible) {
-            throw new NotFoundException("No such exercise");
+            throw new NotFoundException("We couldn't find that exercise.");
         }
         return exercise;
     }
