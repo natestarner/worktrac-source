@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UIProvider, useUI } from './UIContext';
+import { tryHaptic } from '../lib/haptics';
+
+vi.mock('../lib/haptics', () => ({ tryHaptic: vi.fn() }));
 
 // The onboarding tour's runtime state -- see ProductTour.jsx and tourSteps.js for what actually
 // consumes this. Structurally identical to toast/confirmDialog/celebration: one overlay, in
@@ -413,5 +416,39 @@ describe('UIContext per-person hold timers', () => {
 
     act(() => screen.getByText('hold-stop-2').click());
     expect(screen.getByTestId('elapsed-1').textContent).toBe('25'); // untouched
+  });
+});
+
+
+// A personal record is one of only two moments in a workout that get a physical acknowledgement
+// (the other is finishing). Pinned here, at the point the celebration is RAISED, because that is
+// what makes it fire exactly once: an effect inside PRCelebration would re-fire on any re-render
+// while the overlay is up, and buzz twice for one PR.
+function CelebrationHarness() {
+  const { showCelebration, celebration } = useUI();
+  return (
+    <div>
+      <span data-testid="celebrating">{celebration ? 'yes' : 'no'}</span>
+      <button onClick={() => showCelebration({ est1rmText: '185 lb' })}>celebrate</button>
+    </div>
+  );
+}
+
+describe('UIContext PR celebration haptic', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('fires the celebrate pattern once, when the celebration is raised', () => {
+    render(
+      <UIProvider>
+        <CelebrationHarness />
+      </UIProvider>,
+    );
+    expect(tryHaptic).not.toHaveBeenCalled();
+
+    act(() => screen.getByText('celebrate').click());
+
+    expect(screen.getByTestId('celebrating').textContent).toBe('yes');
+    expect(tryHaptic).toHaveBeenCalledTimes(1);
+    expect(tryHaptic).toHaveBeenCalledWith('celebrate');
   });
 });

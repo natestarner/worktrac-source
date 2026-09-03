@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { tryHaptic } from '../lib/haptics';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../utils/restTarget';
 
 // Cross-cutting overlays that live above the tab content: toast, the destructive-action
@@ -194,6 +195,11 @@ export function UIProvider({ children }) {
 
   const showCelebration = useCallback((data) => {
     setCelebration(data);
+    // Fired where the celebration is RAISED rather than where it renders. PRCelebration returns
+    // null until there is something to show, so an effect inside it would fire on mount-with-data
+    // -- which also happens on a re-render, and would buzz twice for one PR. This runs exactly
+    // once per celebration, in the same call that starts its timer.
+    tryHaptic('celebrate');
     clearTimeout(celebTimerRef.current);
     celebTimerRef.current = setTimeout(() => setCelebration(null), 2800);
   }, []);
