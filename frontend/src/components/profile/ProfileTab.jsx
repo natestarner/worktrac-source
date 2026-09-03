@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import SectionLabel from '../shared/SectionLabel';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
@@ -37,14 +38,14 @@ export default function ProfileTab() {
         &larr; Back
       </button>
 
-      <div style={sectionLabelStyle}>Account holder</div>
+      <SectionLabel>Account holder</SectionLabel>
       <div style={cardStyle}>
         <Field label="Name" value={primary?.name} />
         <Field label="Household" value={account?.name} />
         <Field label="Email" value={user?.email} last />
       </div>
 
-      <div style={sectionLabelStyle}>People</div>
+      <SectionLabel>People</SectionLabel>
       <div style={cardStyle}>
         {people.map((p, i) => (
           <div
@@ -84,7 +85,7 @@ export default function ProfileTab() {
         ))}
       </div>
 
-      <div style={sectionLabelStyle}>Danger zone</div>
+      <SectionLabel>Danger zone</SectionLabel>
       <div style={cardStyle}>
         <div
           style={{
@@ -134,15 +135,6 @@ const backButtonStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   padding: '0 0 var(--space-3) 0',
-};
-
-const sectionLabelStyle = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: 'var(--color-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 12,
 };
 
 const cardStyle = {

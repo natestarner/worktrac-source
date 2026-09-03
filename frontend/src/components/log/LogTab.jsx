@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import SectionLabel from '../shared/SectionLabel';
 import { useNavigate } from 'react-router-dom';
 import { queryClient, CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
 import { useAppState } from '../../context/AppStateContext';
@@ -293,9 +294,9 @@ export default function LogTab() {
                 latter is meant as "page background", which is light in light mode but flips to
                 near-black in dark mode, making this text unreadable against the always-dark
                 chip background it sits on. */}
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent-contrast)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <SectionLabel style={{ color: 'var(--color-accent-contrast)' }}>
               Editing past session
-            </div>
+            </SectionLabel>
             <button
               onClick={() => {
                 doneEditingSession();
@@ -341,9 +342,9 @@ export default function LogTab() {
               `ghost` variant's accent text: it sits beside the accent-coloured "n of m" counter,
               and two accent items in one row blur into each other. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)', marginBottom: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <SectionLabel>
               {activeRoutine.name}
-            </div>
+            </SectionLabel>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent-text)' }}>
                 {Math.min(routineIndex + 1, activeRoutine.exercises.length)} of {activeRoutine.exercises.length}

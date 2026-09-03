@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import SectionLabel from './SectionLabel';
 import { addCustomField, updateCustomField, removeCustomField, setExerciseTags, updateExercise } from '../../api/exercises';
 import { setPersistentNote } from '../../api/notes';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
@@ -138,7 +139,7 @@ export default function ConfigureExerciseModal({
 
       {isOwn && (
         <>
-          <div style={labelStyle}>Name</div>
+          <SectionLabel>Name</SectionLabel>
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
             <input
               value={name}
@@ -165,7 +166,7 @@ export default function ConfigureExerciseModal({
         </>
       )}
 
-      <div style={labelStyle}>Standing note</div>
+      <SectionLabel>Standing note</SectionLabel>
       <div style={{ fontSize: 12, color: 'var(--color-muted)', marginBottom: 8 }}>Shown every time you do this exercise</div>
       <textarea
         value={note}
@@ -178,7 +179,7 @@ export default function ConfigureExerciseModal({
         style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit', marginBottom: 20, opacity: locked ? 0.6 : 1 }}
       />
 
-      <div style={labelStyle}>Tags</div>
+      <SectionLabel>Tags</SectionLabel>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
         {allTags.map((t) => {
           const active = isSelected(t.name);
@@ -232,7 +233,7 @@ export default function ConfigureExerciseModal({
         </button>
       </div>
 
-      <div style={labelStyle}>Setup fields</div>
+      <SectionLabel>Setup fields</SectionLabel>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
         {customFields.map((field) => (
           <div key={field.id} style={{ display: 'flex', gap: 8 }}>
@@ -297,15 +298,6 @@ export default function ConfigureExerciseModal({
     </Modal>
   );
 }
-
-const labelStyle = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: 'var(--color-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 10,
-};
 
 // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
 const inputStyle = {

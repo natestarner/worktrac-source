@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import SectionLabel from '../shared/SectionLabel';
 import { useAppState } from '../../context/AppStateContext';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import Skeleton from '../shared/Skeleton';
@@ -43,7 +44,7 @@ export default function ExercisePicker({
     <div>
       {showRoutineQuickStart && (
         <div style={{ marginBottom: 22 }}>
-          <div style={sectionLabelStyle}>Start a routine</div>
+          <SectionLabel>Start a routine</SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {routines.map((r) => (
               <button
@@ -72,7 +73,7 @@ export default function ExercisePicker({
         </div>
       )}
 
-      {showRoutineQuickStart && <div style={sectionLabelStyle}>Or pick an exercise</div>}
+      {showRoutineQuickStart && <SectionLabel>Or pick an exercise</SectionLabel>}
 
       <input
         ref={searchInputRef}
@@ -118,7 +119,7 @@ export default function ExercisePicker({
       {/* Search results across the whole catalog */}
       {!loading && searching && (
         <div style={{ marginBottom: 20 }}>
-          <div style={sectionLabelStyle}>Search results</div>
+          <SectionLabel>Search results</SectionLabel>
           <ExerciseSearchResults
             results={searchResults}
             term={exerciseSearch}
@@ -143,7 +144,7 @@ export default function ExercisePicker({
         ) : (
           groups.map((group) => (
             <div key={group.id} style={{ marginBottom: 20 }}>
-              <div style={sectionLabelStyle}>{group.name}</div>
+              <SectionLabel>{group.name}</SectionLabel>
               <div style={chipWrapStyle}>
                 {group.items.map((ex) => (
                   <ExerciseChip key={ex.id} name={ex.name} onSelect={() => onSelectExercise(ex.id)} />
@@ -186,15 +187,6 @@ function ExerciseChip({ name, onSelect }) {
     </button>
   );
 }
-
-const sectionLabelStyle = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: 'var(--color-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 10,
-};
 
 const chipWrapStyle = { display: 'flex', flexWrap: 'wrap', gap: 10 };
 

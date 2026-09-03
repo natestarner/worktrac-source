@@ -48,7 +48,7 @@ function ChartTooltip({ active, payload, metric, defaultUnit }) {
       <div style={{ color: 'var(--color-muted)' }}>
         {spec.title} {Math.round(point.metricValue * 10) / 10} {spec.isWeight ? defaultUnit : 'reps'}
       </div>
-      <div style={{ color: 'var(--color-faint)', fontSize: 12, marginTop: 2 }}>
+      <div style={{ color: 'var(--color-muted)', fontSize: 12, marginTop: 2 }}>
         {point.setCount} set{point.setCount === 1 ? '' : 's'} &middot; best {point.weightDisplay} {defaultUnit} &times; {point.reps}
       </div>
       {point.isPr && <div style={{ color: 'var(--color-success)', fontWeight: 700, marginTop: 2 }}>New PR</div>}

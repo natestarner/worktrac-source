@@ -66,6 +66,13 @@ jobs:
       - name: Check resilience invariants
         run: bash scripts/check-resilience-invariants.sh
 
+      # Same job, same reasoning, different rule: the design system's primitives are only worth
+      # having if they are actually reached for. That rule was documented in #151 and enforced by
+      # nothing, and by the time anyone looked the app had six different renderings of the same
+      # uppercase section label. Also ~1s, and also deliberately ungated by `changes`.
+      - name: Check design primitives are used
+        run: bash scripts/check-design-primitives.sh
+
   # ──────────────────────────────────────────────
   # Job 1: Build and test the backend
   # ──────────────────────────────────────────────

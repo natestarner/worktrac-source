@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import SectionLabel from './SectionLabel';
 import { updateCustomField } from '../../api/exercises';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import Modal from './Modal';
@@ -23,9 +24,9 @@ export default function CustomFieldEditorModal({ personId, exerciseId, field, on
 
   return (
     <Modal width={300} onClose={onClose}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+      <SectionLabel>
         {field.name}
-      </div>
+      </SectionLabel>
       <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 14 }}>Just for this person</div>
       <OfflineNotice message="Editing needs a connection — the current value is still shown above." />
       <input

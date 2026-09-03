@@ -140,7 +140,7 @@ const clearButtonStyle = {
   height: 44,
   border: 'none',
   background: 'none',
-  color: 'var(--color-faint)',
+  color: 'var(--color-muted)',
   fontSize: 20,
   cursor: 'pointer',
 };

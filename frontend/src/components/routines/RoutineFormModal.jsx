@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import SectionLabel from '../shared/SectionLabel';
 import { DndContext, DragOverlay, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -191,7 +192,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
 
       {rows.length > 0 && (
         <>
-          <div style={sectionLabelStyle}>In this routine</div>
+          <SectionLabel>In this routine</SectionLabel>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -232,7 +233,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
         </>
       )}
 
-      <div style={sectionLabelStyle}>Add exercise to routine</div>
+      <SectionLabel>Add exercise to routine</SectionLabel>
       {/* fontSize must stay >=16px -- below that, iOS Safari auto-zooms on focus and doesn't
           reliably zoom back out (see ExercisePicker.jsx's search input for the full story). */}
       <input
@@ -254,7 +255,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
       ) : (
         groups.map((group) => (
           <div key={group.id} style={{ marginBottom: 14 }}>
-            <div style={groupLabelStyle}>{group.name}</div>
+            <SectionLabel style={{ marginBottom: 'var(--space-2)' }}>{group.name}</SectionLabel>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {group.items.map((ex) => (
                 <button key={ex.id} onClick={() => addExercise(ex.id)} style={addChipStyle}>
@@ -380,25 +381,8 @@ const gripIconWrapperStyle = {
   color: 'var(--color-muted)',
 };
 
-const sectionLabelStyle = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: 'var(--color-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 10,
-};
 
-const groupLabelStyle = {
-  fontSize: 11,
-  fontWeight: 700,
-  color: 'var(--color-faint)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  marginBottom: 8,
-};
-
-const hintStyle = { padding: '10px 2px 18px', color: 'var(--color-faint)', fontSize: 14 };
+const hintStyle = { padding: '10px 2px 18px', color: 'var(--color-muted)', fontSize: 14 };
 
 const addOwnButtonStyle = {
   width: '100%',
