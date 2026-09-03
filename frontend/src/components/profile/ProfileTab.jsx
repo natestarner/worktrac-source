@@ -147,7 +147,7 @@ const cardStyle = {
 
 const badgeStyle = {
   fontSize: 11,
-  fontWeight: 800,
+  fontWeight: 'var(--weight-bold)',
   color: 'var(--color-muted)',
   background: 'var(--color-subtle-bg)',
   padding: '3px 8px',

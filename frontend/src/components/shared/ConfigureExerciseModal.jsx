@@ -305,7 +305,7 @@ const inputStyle = {
   boxSizing: 'border-box',
   padding: '10px 12px',
   border: '1px solid var(--color-border)',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-md)',
   fontSize: 16,
 };
 
@@ -314,7 +314,7 @@ const smallButtonStyle = {
   background: 'var(--color-dark)',
   color: '#fff',
   border: 'none',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-md)',
   fontSize: 13,
   fontWeight: 700,
   cursor: 'pointer',

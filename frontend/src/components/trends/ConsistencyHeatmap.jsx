@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { buildGrid, monthLabels, DAYS_PER_WEEK, HEATMAP_WEEKS } from './consistencyGrid';
 import ChartHelp from '../shared/ChartHelp';
 import { CONSISTENCY_HELP } from './chartHelp';
+import Card from '../shared/Card';
 
 // Deliberately plain DOM rather than recharts: a day-grid isn't a plot, and staying out of
 // recharts means this is the one Trends chart that can be asserted on for real in jsdom (the
@@ -55,7 +56,7 @@ export default function ConsistencyHeatmap({ workoutDays }) {
   const activeDays = cells.filter((c) => c.setCount > 0).length;
 
   return (
-    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
+    <Card size="dense">
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)' }}>Consistency &middot; last 6 months</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -132,6 +133,6 @@ export default function ConsistencyHeatmap({ workoutDays }) {
         </div>
         <Legend />
       </div>
-    </div>
+    </Card>
   );
 }

@@ -95,7 +95,7 @@ export default function ProCelebration({ onDismiss }) {
               already right in both schemes. */}
           <HuddleMark size={40} />
         </div>
-        <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.01em', marginBottom: 8, position: 'relative', zIndex: 1 }}>
+        <div style={{ fontSize: 24, fontWeight: 'var(--weight-bold)', letterSpacing: '-0.01em', marginBottom: 8, position: 'relative', zIndex: 1 }}>
           Welcome to Huddle Pro
         </div>
         <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-muted)', lineHeight: 1.5, position: 'relative', zIndex: 1 }}>

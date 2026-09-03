@@ -95,7 +95,7 @@ export default function PRCelebration() {
             }}
           />
         </div>
-        <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.01em', marginBottom: 4, position: 'relative', zIndex: 1 }}>
+        <div style={{ fontSize: 24, fontWeight: 'var(--weight-bold)', letterSpacing: '-0.01em', marginBottom: 4, position: 'relative', zIndex: 1 }}>
           New PR!
         </div>
         <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--color-muted)', marginBottom: 18, position: 'relative', zIndex: 1 }}>
@@ -104,7 +104,7 @@ export default function PRCelebration() {
         <div
           style={{
             fontSize: 34,
-            fontWeight: 800,
+            fontWeight: 'var(--weight-bold)',
             color: 'var(--color-accent)',
             position: 'relative',
             zIndex: 1,

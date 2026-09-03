@@ -53,6 +53,44 @@ describe('SessionSummary', () => {
     expect(screen.getByText('135lb×5')).toBeInTheDocument();
   });
 
+  // "Remove X from this session?" read like it un-files an exercise, while handleRemove DELETES
+  // every set logged for it in this workout. It was the only confirm in the app whose wording
+  // understated what it does -- and it is also the only one that destroys more than one thing.
+  it('warns that removing an entry deletes the sets, and counts them', () => {
+    const messages = [];
+    useUI.mockReturnValue({ openConfirm: (msg) => messages.push(msg) });
+    const entries = [
+      {
+        exerciseId: 1,
+        exerciseName: 'Bench Press',
+        sets: [
+          { id: 55, weight: 135, reps: 5, unit: 'lb' },
+          { id: 56, weight: 145, reps: 5, unit: 'lb' },
+        ],
+      },
+    ];
+    renderWithQuery(
+      <SessionSummary entries={entries} loading={false} sessionId={101} onSelectExercise={onSelectExercise} onChanged={onChanged} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    expect(messages[0]).toBe('Remove Bench Press? The 2 sets you logged for it in this workout will be deleted.');
+  });
+
+  it('singularises the warning for a single set', () => {
+    const messages = [];
+    useUI.mockReturnValue({ openConfirm: (msg) => messages.push(msg) });
+    const entries = [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 55, weight: 135, reps: 5, unit: 'lb' }] }];
+    renderWithQuery(
+      <SessionSummary entries={entries} loading={false} sessionId={101} onSelectExercise={onSelectExercise} onChanged={onChanged} />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    expect(messages[0]).toBe('Remove Bench Press? The 1 set you logged for it in this workout will be deleted.');
+  });
+
   it('removing a fully-synced entry deletes each of its sets, via the durable DELETE_SET write', async () => {
     listSessionSets.mockResolvedValue([{ id: 55 }, { id: 56 }]);
     const entries = [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 55, weight: 135, reps: 5, unit: 'lb' }] }];

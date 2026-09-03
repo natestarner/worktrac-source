@@ -53,7 +53,7 @@ export default function PlanChooser({ value, onChange }) {
               <span
                 style={{
                   fontSize: 'var(--text-xs)',
-                  fontWeight: 800,
+                  fontWeight: 'var(--weight-bold)',
                   color: 'var(--color-accent-text)',
                   whiteSpace: 'nowrap',
                 }}

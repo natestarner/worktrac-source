@@ -92,9 +92,25 @@ if [ -n "$faint" ]; then
   fail=1
 fi
 
+# -- 4. The weight scale tops out at 700 --------------------------------------
+#
+# design-system.md retires 800 explicitly. The type pass existed because `fontWeight: 700` appeared
+# 132 times and `400` three, so every string was bold and nothing stood out -- a weight ABOVE the
+# top of the scale is that same mistake one step further on. --weight-bold is the ceiling.
+heavy=$(grep -rn "fontWeight: 800\|font-weight: 800" --include='*.jsx' --include='*.css' "$SRC" \
+  | grep -v '\.test\.jsx:' \
+  | grep -v 'components/admin/' \
+  | grep -v 'routes/admin/' || true)
+
+if [ -n "$heavy" ]; then
+  echo "FAIL: fontWeight 800 is retired (design-system.md) -- --weight-bold (700) is the ceiling:"
+  printf '%s\n' "$heavy" | while read -r line; do note "${line#"$SRC"/}"; done
+  fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "check-design-primitives: FAILED"
   exit 1
 fi
 
-echo "check-design-primitives: OK (section labels, primitive shadowing, --color-faint as text)."
+echo "check-design-primitives: OK (section labels, primitive shadowing, --color-faint as text, weight ceiling)."

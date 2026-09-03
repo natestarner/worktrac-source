@@ -175,7 +175,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
           boxSizing: 'border-box',
           padding: 14,
           border: `1px solid ${nameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
-          borderRadius: 10,
+          borderRadius: 'var(--radius-md)',
           fontSize: 16,
           marginBottom: nameError ? 6 : 16,
         }}
@@ -240,7 +240,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
         value={exerciseFilter}
         onChange={(e) => setExerciseFilter(e.target.value)}
         placeholder="Search all exercises"
-        style={{ width: '100%', boxSizing: 'border-box', padding: 12, border: '1px solid var(--color-border)', borderRadius: 10, fontSize: 16, marginBottom: 14 }}
+        style={{ width: '100%', boxSizing: 'border-box', padding: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 16, marginBottom: 14 }}
       />
 
       {searching ? (
@@ -277,7 +277,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
         </button>
         <Button
           onClick={handleSave}
-          style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
+          style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
         >
           {isEditing ? 'Save' : 'Save routine'}
         </Button>
@@ -364,7 +364,7 @@ const rowStyle = {
   alignItems: 'center',
   gap: 4,
   padding: '6px 6px 6px 10px',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-md)',
   border: '1px solid var(--color-border)',
   background: 'var(--color-pr-bg)',
 };
@@ -392,7 +392,7 @@ const addOwnButtonStyle = {
   background: 'var(--color-subtle-bg)',
   color: 'var(--color-text)',
   border: 'none',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-md)',
   fontSize: 13,
   fontWeight: 700,
   cursor: 'pointer',

@@ -15,6 +15,7 @@ import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import EmptyState from '../shared/EmptyState';
+import Card from '../shared/Card';
 import { IconNote } from '../shared/icons';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
@@ -63,7 +64,7 @@ export default function RoutinesTab() {
       {loading && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '18px 20px' }}>
+            <Card key={i}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <Skeleton width={140} height={16} />
                 <div style={{ display: 'flex', gap: 14 }}>
@@ -73,7 +74,7 @@ export default function RoutinesTab() {
               </div>
               <Skeleton width={200} height={13} style={{ marginBottom: 14 }} />
               <Skeleton width={144} height={41} radius={10} />
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -88,7 +89,7 @@ export default function RoutinesTab() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!loading && routines.map((r) => (
-          <div key={r.id} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '18px 20px' }}>
+          <Card key={r.id}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div style={{ fontSize: 16, fontWeight: 700 }}>{r.name}</div>
               <div style={{ display: 'flex', gap: 14 }}>
@@ -120,7 +121,7 @@ export default function RoutinesTab() {
             <button onClick={() => handleStart(r)} style={startButtonStyle}>
               Start routine
             </button>
-          </div>
+          </Card>
         ))}
       </div>
 
@@ -167,7 +168,7 @@ const startButtonStyle = {
   background: 'var(--color-accent)',
   color: '#fff',
   border: 'none',
-  borderRadius: 10,
+  borderRadius: 'var(--radius-md)',
   fontSize: 14,
   fontWeight: 700,
   cursor: 'pointer',

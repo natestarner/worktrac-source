@@ -15,6 +15,7 @@ import EmptyState from '../shared/EmptyState';
 import HistoryWindowNotice from '../shared/HistoryWindowNotice';
 import { IconDumbbell } from '../shared/icons';
 import { rangeReachesPastWindow, windowLabel } from '../shared/historyWindowCopy';
+import Card from '../shared/Card';
 
 const cardStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 18px' };
 
@@ -32,11 +33,11 @@ function BarChartSkeleton() {
 
 function HeatmapSkeleton() {
   return (
-    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
+    <Card size="dense">
       <Skeleton width={170} height={13} style={{ marginBottom: 12 }} />
       {/* 7 rows of 10px cells + 3px gaps + the month-label strip = 107px. */}
       <Skeleton width="100%" height={107} radius={8} />
-    </div>
+    </Card>
   );
 }
 
@@ -66,12 +67,12 @@ function TrendsSkeleton() {
         <BarChartSkeleton />
         <BarChartSkeleton />
       </div>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 16 }}>
+      <Card size="dense">
         <Skeleton width={140} height={13} style={{ marginBottom: 12 }} />
         <Skeleton width="100%" height={42} radius={12} style={{ marginBottom: 12 }} />
         <Skeleton width={260} height={34} radius={10} style={{ marginBottom: 12 }} />
         <Skeleton width="100%" height={200} radius={8} />
-      </div>
+      </Card>
     </div>
   );
 }

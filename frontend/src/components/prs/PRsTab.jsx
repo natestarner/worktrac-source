@@ -195,7 +195,7 @@ function PRsTabContent() {
                 {pr.best.durationSeconds != null ? (
                   <>
                     {/* A hold has no est. 1RM (BestDto sends null), so the record IS the time. */}
-                    <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-pr-text)' }}>
+                    <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-pr-text)' }}>
                       {formatRestTime(pr.best.durationSeconds)}
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
@@ -204,12 +204,12 @@ function PRsTabContent() {
                   </>
                 ) : pr.best.weight === 0 ? (
                   <>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-pr-text)' }}>{pr.best.reps} reps</div>
+                    <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-pr-text)' }}>{pr.best.reps} reps</div>
                     <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>Bodyweight</div>
                   </>
                 ) : (
                   <>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--color-pr-text)' }}>
+                    <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-pr-text)' }}>
                       {pr.best.est1rm} {pr.best.unit}
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>

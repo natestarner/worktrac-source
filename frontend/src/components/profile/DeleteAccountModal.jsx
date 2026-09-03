@@ -63,7 +63,7 @@ export default function DeleteAccountModal({ onClose }) {
           style={{
             background: 'var(--color-pr-bg)',
             color: 'var(--color-danger)',
-            borderRadius: 10,
+            borderRadius: 'var(--radius-md)',
             padding: '10px 14px',
             fontSize: 13,
             marginBottom: 16,
@@ -86,7 +86,7 @@ export default function DeleteAccountModal({ onClose }) {
           boxSizing: 'border-box',
           padding: 14,
           border: '1px solid var(--color-border)',
-          borderRadius: 10,
+          borderRadius: 'var(--radius-md)',
           fontSize: 16,
           marginBottom: 16,
         }}
@@ -107,7 +107,7 @@ export default function DeleteAccountModal({ onClose }) {
           boxSizing: 'border-box',
           padding: 14,
           border: '1px solid var(--color-border)',
-          borderRadius: 10,
+          borderRadius: 'var(--radius-md)',
           fontSize: 16,
           marginBottom: 16,
         }}

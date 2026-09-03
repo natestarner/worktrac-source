@@ -41,7 +41,7 @@ export default function CustomFieldEditorModal({ personId, exerciseId, field, on
           boxSizing: 'border-box',
           padding: 14,
           border: '1px solid var(--color-border)',
-          borderRadius: 10,
+          borderRadius: 'var(--radius-md)',
           fontSize: 18,
           fontWeight: 700,
           marginBottom: 18,
@@ -55,7 +55,7 @@ export default function CustomFieldEditorModal({ personId, exerciseId, field, on
         <Button
           onClick={guardedSave}
           disabled={!online}
-          style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: online ? 'pointer' : 'not-allowed' }}
+          style={{ flex: 1, padding: 14, background: 'var(--color-accent)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 15, fontWeight: 700, cursor: online ? 'pointer' : 'not-allowed' }}
         >
           Save
         </Button>
