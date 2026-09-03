@@ -869,7 +869,10 @@ export default function ExerciseDetail({
           {ready && (
             <div className="summary-cards-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
               <div className="summary-card" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)' }}>
-                <div style={cardLabelStyle}>Last time &middot; {lastLabel}</div>
+                {/* The separator belongs to the date, not to the label: with no previous session
+                    `lastLabel` is empty and a bare "Last time ·" left a middot dangling off the
+                    end of the card -- in both themes, on the app's most-used screen. */}
+                <div style={cardLabelStyle}>Last time{lastLabel && ` · ${lastLabel}`}</div>
                 {summary?.lastSession ? (
                   <SetPillRow sets={summary.lastSession.sets} style={{ marginTop: 2 }} />
                 ) : (
