@@ -28,11 +28,20 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Mirrors what the server actually does with a blank household name --
+  // RegistrationService builds `personName + "'s Household"`. Derived from the name field as it is
+  // typed so the placeholder is never a promise the backend doesn't keep. This was previously the
+  // literal string "Defaults to “{name}'s Household”": a plain JSX attribute, so `{name}` was not
+  // interpolated and every new household saw the braces on screen.
+  const trimmedPersonName = personName.trim();
+  const householdPlaceholder = trimmedPersonName
+    ? `Defaults to “${trimmedPersonName}'s Household”`
+    : 'Defaults to your household';
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
 
-    const trimmedPersonName = personName.trim();
     const trimmedEmail = email.trim();
     let hasError = false;
     if (!trimmedPersonName) {
@@ -94,7 +103,7 @@ export default function RegisterPage() {
 
         <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', marginBottom: 'var(--space-1)', textAlign: 'center' }}>Create your household</div>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
-          You'll be the primary login -- kids and training partners get added inside the app, no login needed.
+          You'll be the primary login — kids and training partners get added inside the app, no login needed.
         </div>
 
         {error && (
@@ -103,8 +112,11 @@ export default function RegisterPage() {
           </div>
         )}
 
-        <label style={labelStyle}>Your name</label>
+        <label htmlFor="person-name" style={labelStyle}>Your name</label>
         <input
+          id="person-name"
+          name="name"
+          autoComplete="name"
           placeholder="e.g. Alex"
           maxLength={FIELD_LIMITS.personName}
           value={personName}
@@ -112,20 +124,24 @@ export default function RegisterPage() {
             setPersonName(e.target.value);
             if (personNameError) setPersonNameError(false);
           }}
+          aria-invalid={personNameError || undefined}
+          aria-describedby={personNameError ? 'person-name-error' : undefined}
           className={`input ${personNameError ? 'input-invalid' : ''}`} style={inputStyle}
         />
-        {personNameError && <div style={fieldErrorStyle}>Enter your name.</div>}
+        {personNameError && <div id="person-name-error" style={fieldErrorStyle}>Enter your name.</div>}
 
-        <label style={labelStyle}>Household name (optional)</label>
+        <label htmlFor="account-name" style={labelStyle}>Household name (optional)</label>
         <input
-          placeholder="Defaults to “{name}'s Household”"
+          id="account-name"
+          name="organization"
+          placeholder={householdPlaceholder}
           value={accountName}
           maxLength={FIELD_LIMITS.accountName}
           onChange={(e) => setAccountName(e.target.value)}
           className="input" style={inputStyle}
         />
 
-        <label style={labelStyle}>Email</label>
+        <label htmlFor="email" style={labelStyle}>Email</label>
         <input
           type="email"
           id="email"
@@ -137,11 +153,13 @@ export default function RegisterPage() {
             setEmail(e.target.value);
             if (emailError) setEmailError(false);
           }}
+          aria-invalid={emailError || undefined}
+          aria-describedby={emailError ? 'email-error' : undefined}
           className={`input ${emailError ? 'input-invalid' : ''}`} style={inputStyle}
         />
-        {emailError && <div style={fieldErrorStyle}>Enter your email address.</div>}
+        {emailError && <div id="email-error" style={fieldErrorStyle}>Enter your email address.</div>}
 
-        <label style={labelStyle}>Password</label>
+        <label htmlFor="password" style={labelStyle}>Password</label>
         <input
           type="password"
           id="password"
@@ -154,9 +172,11 @@ export default function RegisterPage() {
             setPassword(e.target.value);
             if (passwordError) setPasswordError(false);
           }}
+          aria-invalid={passwordError || undefined}
+          aria-describedby={passwordError ? 'password-error' : undefined}
           className={`input ${passwordError ? 'input-invalid' : ''}`} style={inputStyle}
         />
-        {passwordError && <div style={fieldErrorStyle}>Password must be at least 8 characters.</div>}
+        {passwordError && <div id="password-error" style={fieldErrorStyle}>Password must be at least 8 characters.</div>}
 
         <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ ...primaryButtonStyle, position: 'relative' }}>
           <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Create household</span>

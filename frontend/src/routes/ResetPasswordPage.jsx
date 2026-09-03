@@ -54,7 +54,7 @@ export default function ResetPasswordPage() {
     setSubmitting(true);
     try {
       await resetPassword({ email, code: trimmedCode, password });
-      navigate('/login', { state: { message: 'Password reset -- sign in with your new password.' } });
+      navigate('/login', { state: { message: 'Password reset — sign in with your new password.' } });
     } catch (err) {
       setError(err.message || 'Could not reset your password');
     } finally {
@@ -111,7 +111,7 @@ export default function ResetPasswordPage() {
           </div>
         )}
 
-        <label style={labelStyle}>Reset code</label>
+        <label htmlFor="reset-code" style={labelStyle}>Reset code</label>
         <input
           autoFocus
           id="reset-code"
@@ -136,7 +136,7 @@ export default function ResetPasswordPage() {
         />
         {codeError && <div style={fieldErrorStyle}>Enter the 6-digit code.</div>}
 
-        <label style={labelStyle}>New password</label>
+        <label htmlFor="new-password" style={labelStyle}>New password</label>
         <input
           type="password"
           id="new-password"

@@ -1161,7 +1161,7 @@ export default function ExerciseDetail({
       {showSessionNoteModal && (
         <ExerciseNoteModal
           title="Note for this session"
-          subtitle="Just for today's workout -- shown again next time in your Last time card"
+          subtitle="Just for today's workout — shown again next time in your Last time card"
           initialNote={sessionNote || ''}
           onClose={() => setShowSessionNoteModal(false)}
           onSave={handleSaveSessionNote}

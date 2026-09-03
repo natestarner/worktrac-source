@@ -61,7 +61,7 @@ describe('ResetPasswordPage', () => {
       expect(resetPassword).toHaveBeenCalledWith({ email: 'alex@example.com', code: '123456', password: 'newpassword456' }),
     );
     expect(mockNavigate).toHaveBeenCalledWith('/login', {
-      state: { message: "Password reset -- sign in with your new password." },
+      state: { message: "Password reset — sign in with your new password." },
     });
   });
 

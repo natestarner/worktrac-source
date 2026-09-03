@@ -155,7 +155,7 @@ describe('AddEditExerciseModal', () => {
       fireEvent.click(lastAddButton());
 
       await waitFor(() =>
-        expect(showToast).toHaveBeenCalledWith("Couldn't create -- check your connection and try again.", { tone: 'error' }),
+        expect(showToast).toHaveBeenCalledWith("Couldn't create — check your connection and try again.", { tone: 'error' }),
       );
       expect(onSaved).not.toHaveBeenCalled();
       // The button's accessible name reverts to "Add" once `saving` clears (it shows a spinner with

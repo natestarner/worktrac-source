@@ -134,7 +134,7 @@ export default function ConfigureExerciseModal({
         <span style={isOwn ? ownBadgeStyle : preloadedBadgeStyle}>{isOwn ? 'Created by you' : 'Preloaded exercise'}</span>
       </div>
 
-      <OfflineNotice message="Editing needs a connection -- your current setup is still shown below." />
+      <OfflineNotice message="Editing needs a connection — your current setup is still shown below." />
 
       {isOwn && (
         <>
@@ -174,7 +174,7 @@ export default function ConfigureExerciseModal({
         disabled={locked}
         maxLength={FIELD_LIMITS.note}
         rows={2}
-        placeholder="e.g. Keep elbows tucked, bad knee -- go light"
+        placeholder="e.g. Keep elbows tucked, bad knee — go light"
         style={{ ...inputStyle, width: '100%', resize: 'vertical', fontFamily: 'inherit', marginBottom: 20, opacity: locked ? 0.6 : 1 }}
       />
 

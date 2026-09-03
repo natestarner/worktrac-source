@@ -27,7 +27,7 @@ export default function CustomFieldEditorModal({ personId, exerciseId, field, on
         {field.name}
       </div>
       <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 14 }}>Just for this person</div>
-      <OfflineNotice message="Editing needs a connection -- the current value is still shown above." />
+      <OfflineNotice message="Editing needs a connection — the current value is still shown above." />
       <input
         autoFocus
         value={value}

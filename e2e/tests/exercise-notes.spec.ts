@@ -17,7 +17,7 @@ test.describe('Exercise notes', () => {
 
     // --- Standing (persistent) note, set via the Customize modal ---
     await page.getByRole('button', { name: 'Customize this exercise' }).click();
-    const standingNoteInput = page.getByPlaceholder('e.g. Keep elbows tucked, bad knee -- go light');
+    const standingNoteInput = page.getByPlaceholder('e.g. Keep elbows tucked, bad knee — go light');
     await standingNoteInput.fill('Keep elbows tucked, pause at chest');
     const standingNoteSaved = page.waitForResponse(
       (r) => r.url().includes('/exercises/') && r.url().endsWith('/note') && r.request().method() === 'PUT',
@@ -95,7 +95,7 @@ test.describe('Exercise notes', () => {
     await pickExercise(page, 'Barbell Bench Press');
 
     await page.getByRole('button', { name: 'Customize this exercise' }).click();
-    const standingNoteInput = page.getByPlaceholder('e.g. Keep elbows tucked, bad knee -- go light');
+    const standingNoteInput = page.getByPlaceholder('e.g. Keep elbows tucked, bad knee — go light');
     await standingNoteInput.fill('Go light -- bad knee');
     let saved = page.waitForResponse((r) => r.url().endsWith('/note') && r.request().method() === 'PUT');
     await standingNoteInput.blur();

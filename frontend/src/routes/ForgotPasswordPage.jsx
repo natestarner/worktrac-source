@@ -8,6 +8,7 @@ export default function ForgotPasswordPage() {
   const { requestPasswordReset } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -16,7 +17,12 @@ export default function ForgotPasswordPage() {
     setError('');
 
     const trimmedEmail = email.trim();
-    if (!trimmedEmail) return;
+    // Was a bare `return`, which made an empty submit do nothing at all with no explanation --
+    // the only auth form in the app that stayed silent. Every sibling shows an inline field error.
+    if (!trimmedEmail) {
+      setEmailError(true);
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -64,15 +70,29 @@ export default function ForgotPasswordPage() {
           </div>
         )}
 
+        <label htmlFor="email" style={labelStyle}>Email</label>
+        {/* Carries no `required`, deliberately: it hands an empty submit to the browser's native
+            validation bubble, which never reaches handleSubmit and looks nothing like the app's
+            own inline errors. RegisterPage already validates this way and is the neighbouring
+            page in the same flow. `required` also only tests for emptiness, so a whitespace-only
+            entry fell straight through it into the silent `return` this replaces. */}
         <input
           type="email"
+          id="email"
+          name="email"
+          autoComplete="username"
           autoFocus
-          required
           placeholder="you@example.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="input" style={inputStyle}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            if (emailError) setEmailError(false);
+          }}
+          aria-invalid={emailError || undefined}
+          aria-describedby={emailError ? 'email-error' : undefined}
+          className={`input ${emailError ? 'input-invalid' : ''}`} style={inputStyle}
         />
+        {emailError && <div id="email-error" style={fieldErrorStyle}>Enter your email address.</div>}
 
         <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ ...primaryButtonStyle, position: 'relative' }}>
           <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Send reset code</span>
@@ -90,3 +110,20 @@ export default function ForgotPasswordPage() {
     </div>
   );
 }
+
+const labelStyle = {
+  display: 'block',
+  fontSize: 'var(--text-xs)',
+  fontWeight: 'var(--weight-semibold)',
+  color: 'var(--color-muted)',
+  textTransform: 'uppercase',
+  letterSpacing: 'var(--tracking-label)',
+  marginBottom: 'var(--space-1)',
+};
+
+const fieldErrorStyle = {
+  fontSize: 'var(--text-xs)',
+  fontWeight: 'var(--weight-semibold)',
+  color: 'var(--color-danger)',
+  marginBottom: 'var(--space-4)',
+};
