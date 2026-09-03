@@ -21,7 +21,7 @@ public class AccountService {
     @Transactional
     public AccountDto updateDefaultUnit(Long accountId, String defaultUnit) {
         Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new NotFoundException("No such account"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that account."));
         account.setDefaultUnit(defaultUnit);
         return AccountDto.from(account, subscriptionService.planFor(accountId));
     }

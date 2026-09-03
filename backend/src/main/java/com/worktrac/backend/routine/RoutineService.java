@@ -56,7 +56,7 @@ public class RoutineService {
     public RoutineDto update(Long accountId, Long personId, Long routineId, RoutineRequest request) {
         Person person = personService.requireOwnedPerson(personId, accountId);
         Routine routine = routineRepository.findByIdAndPerson_Id(routineId, person.getId())
-                .orElseThrow(() -> new NotFoundException("No such routine"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that routine."));
         routine.setName(request.name().trim());
         routine.getExercises().clear();
         applyExercises(accountId, person, routine, request.exerciseIds());
@@ -67,7 +67,7 @@ public class RoutineService {
     public void delete(Long accountId, Long personId, Long routineId) {
         Person person = personService.requireOwnedPerson(personId, accountId);
         Routine routine = routineRepository.findByIdAndPerson_Id(routineId, person.getId())
-                .orElseThrow(() -> new NotFoundException("No such routine"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that routine."));
         routineRepository.delete(routine);
     }
 
@@ -75,7 +75,7 @@ public class RoutineService {
     public List<RoutineDto> copy(Long accountId, Long personId, Long routineId, CopyRoutineRequest request) {
         Person sourcePerson = personService.requireOwnedPerson(personId, accountId);
         Routine source = routineRepository.findByIdAndPerson_Id(routineId, sourcePerson.getId())
-                .orElseThrow(() -> new NotFoundException("No such routine"));
+                .orElseThrow(() -> new NotFoundException("We couldn't find that routine."));
 
         // Exercise visibility is account-scoped, not person-scoped, so resolve it once
         // and reuse the same list for every target person instead of re-validating per target.
@@ -127,7 +127,7 @@ public class RoutineService {
         for (Long exerciseId : exerciseIds) {
             Exercise exercise = visibleById.get(exerciseId);
             if (exercise == null) {
-                throw new NotFoundException("No such exercise");
+                throw new NotFoundException("We couldn't find that exercise.");
             }
             resolved.add(exercise);
         }
