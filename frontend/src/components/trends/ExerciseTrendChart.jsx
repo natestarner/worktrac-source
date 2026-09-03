@@ -57,10 +57,13 @@ function ChartTooltip({ active, payload, metric, defaultUnit }) {
 }
 
 export default function ExerciseTrendChart({ points, metric, defaultUnit }) {
+  // Sits inside a chart card that already has its own heading and range switcher, so this stays a
+  // plain line rather than a full EmptyState -- an icon and title here would compete with the
+  // card's own. --color-muted, not --color-faint: this is body copy.
   if (points.length === 0) {
     return (
-      <div style={{ fontSize: 14, color: 'var(--color-faint)', padding: '20px 0', textAlign: 'center' }}>
-        No sets logged for this exercise in the selected range.
+      <div style={{ fontSize: 14, color: 'var(--color-muted)', padding: '20px 0', textAlign: 'center' }}>
+        No sets for this exercise in the selected range. Try a wider range above.
       </div>
     );
   }

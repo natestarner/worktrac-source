@@ -11,7 +11,7 @@ export default function OutboxModal({ items, onClose }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '50vh', overflowY: 'auto' }}>
         {items.length === 0 && (
-          <div style={{ fontSize: 14, color: 'var(--color-faint)' }}>Nothing queued right now.</div>
+          <div style={{ fontSize: 14, color: 'var(--color-muted)' }}>Nothing queued right now.</div>
         )}
         {items.map((item) => (
           <div

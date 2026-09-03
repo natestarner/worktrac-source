@@ -201,12 +201,24 @@ function HistoryTabContent({ initialExerciseFilter }) {
         />
       )}
 
+      {/* The title is kept verbatim as ONE string: six e2e specs and a unit test assert
+          `No workouts logged yet for {Name}.` as a single text node, and several of them guard past
+          incidents (free-window-notice, offline-reads, offline-cache-warming, import). Splitting
+          the sentence across title and body would break every one of them for a cosmetic gain. */}
       {!loading && history.length === 0 && hiddenFromView === 0 && (
-        <div style={emptyStyle}>No workouts logged yet for {activePersonName}.</div>
+        <EmptyState
+          icon={IconInbox}
+          title={`No workouts logged yet for ${activePersonName}.`}
+          body={`Every workout ${activePersonName} logs lands here, newest first.`}
+        />
       )}
 
       {!loading && history.length > 0 && filteredSessions.length === 0 && (
-        <div style={emptyStyle}>No exercises match this filter.</div>
+        <EmptyState
+          icon={IconInbox}
+          title="No exercises match this filter."
+          body="Try a different exercise or tag, or clear the filter above."
+        />
       )}
 
       {!loading &&

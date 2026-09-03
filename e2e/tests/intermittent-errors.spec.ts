@@ -67,7 +67,10 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // user's input.
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.getByText('No routines yet. Build one from your exercise library.')).toBeVisible();
+    // Title and body are separate elements since this became an EmptyState, so the sentence can no
+    // longer be matched as one string.
+    await expect(page.getByText('No routines yet.')).toBeVisible();
+    await expect(page.getByText('Build one from your exercise library and starting a workout is one tap.')).toBeVisible();
   });
 
   test('tapping "Go offline" from the trouble banner transitions cleanly into elected offline mode', async ({ page, request }) => {

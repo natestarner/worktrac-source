@@ -63,10 +63,15 @@ export default function SessionSummary({ entries, loading, sessionId, personId, 
     );
   }
 
+  // Deliberately NOT the EmptyState primitive, unlike the screen-level empties on History, PRs and
+  // Routines. This card sits directly above the exercise picker during a live workout, and
+  // EmptyState's --space-10 padding plus a 32px icon would push the picker down out from under the
+  // thumb at the one moment someone is reaching for it. Same reasoning as SessionBar reserving its
+  // own space: mid-set, vertical room is the scarce resource.
   if (entries.length === 0) {
     return (
       <div style={{ marginBottom: 16, padding: '16px 20px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, color: 'var(--color-muted)', fontSize: 14 }}>
-        No exercises logged yet. Add one below.
+        Nothing logged in this workout yet — pick an exercise below to start.
       </div>
     );
   }

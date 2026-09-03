@@ -2,6 +2,8 @@ import { useRef } from 'react';
 import { useAppState } from '../../context/AppStateContext';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import Skeleton from '../shared/Skeleton';
+import EmptyState from '../shared/EmptyState';
+import { IconDumbbell } from '../shared/icons';
 import { searchExercises } from '../../utils/exerciseSearch';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
@@ -121,7 +123,7 @@ export default function ExercisePicker({
             results={searchResults}
             term={exerciseSearch}
             onSelect={onSelectExercise}
-            emptyMessage={`No exercises match "${exerciseSearch}".`}
+            emptyMessage={`No exercises match "${exerciseSearch}". Try a shorter word, or add it as your own below.`}
           />
         </div>
       )}
@@ -129,9 +131,15 @@ export default function ExercisePicker({
       {/* Default view: Favorites + Other Previously Logged */}
       {!loading && !searching && (
         !hasList ? (
-          <div style={emptyStyle}>
-            No favorite exercises yet. Search the exercise library above to find one, or add your own below.
-          </div>
+          // The first screen a brand-new person ever sees, and it was the barest empty state in the
+          // app: centred grey text, no icon, no hierarchy. No action button here on purpose -- the
+          // search field is directly above and "+ Add your own exercise" directly below, so a third
+          // control would just be a duplicate of one of them.
+          <EmptyState
+            icon={IconDumbbell}
+            title="Let's find your first exercise"
+            body="Search the library above, or add your own at the bottom."
+          />
         ) : (
           groups.map((group) => (
             <div key={group.id} style={{ marginBottom: 20 }}>
@@ -189,8 +197,6 @@ const sectionLabelStyle = {
 };
 
 const chipWrapStyle = { display: 'flex', flexWrap: 'wrap', gap: 10 };
-
-const emptyStyle = { textAlign: 'center', padding: 'var(--space-8) var(--space-5)', color: 'var(--color-muted)', fontSize: 'var(--text-base)' };
 
 const addOwnButtonStyle = {
   width: '100%',

@@ -140,7 +140,7 @@ describe('PRsTab tags, filtering, and row navigation', () => {
 
     fireEvent.change(screen.getByLabelText('Search exercises'), { target: { value: 'deadlift' } });
     expect(screen.getByText('No exercises match this filter.')).toBeInTheDocument();
-    expect(screen.queryByText(/log a set to start the board/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/board starts filling in/)).not.toBeInTheDocument();
   });
 
   it('tapping a PR row navigates to History pre-filtered to that exercise', async () => {
@@ -219,7 +219,7 @@ describe('PRsTab sorting', () => {
     getPrs.mockResolvedValue([]);
     renderPRsTab();
 
-    await waitFor(() => expect(screen.getByText(/log a set to start the board/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/board starts filling in/)).toBeInTheDocument());
     expect(screen.queryByLabelText('Sort')).not.toBeInTheDocument();
   });
 });
@@ -238,7 +238,7 @@ describe('PRsTab and the Free-tier window', () => {
     listPersonExercises.mockResolvedValue([]);
   });
 
-  // "log a set to start the board" is advice someone whose sets are all behind the window has
+  // "Log a set and the board starts filling in" is advice someone whose sets are all behind the
   // already taken. Repeating it tells them their training never happened.
   it('does not tell a clipped household to go and log its first set', async () => {
     getPrs.mockResolvedValue([]);
@@ -249,7 +249,7 @@ describe('PRsTab and the Free-tier window', () => {
     renderPRsTab();
 
     expect(await screen.findByText('No records inside this window')).toBeInTheDocument();
-    expect(screen.queryByText(/log a set to start the board/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/board starts filling in/)).not.toBeInTheDocument();
   });
 
   it('keeps the original copy when nothing is hidden', async () => {
@@ -260,7 +260,7 @@ describe('PRsTab and the Free-tier window', () => {
 
     renderPRsTab();
 
-    expect(await screen.findByText(/log a set to start the board/)).toBeInTheDocument();
+    expect(await screen.findByText(/board starts filling in/)).toBeInTheDocument();
   });
 
   // The board itself is the misleading part: every row is a real record, just not necessarily the

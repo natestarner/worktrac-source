@@ -295,7 +295,7 @@ export default function AppSettingsTab() {
               <OfflineDisabledWrap message="Deleting a tag needs a connection.">
                 <button
                   onClick={() => openConfirm(`Delete tag "${t.name}"? It will be removed from every exercise it's applied to.`, () => guardedDeleteTag(t))}
-                  style={{ background: 'none', border: 'none', color: 'var(--color-faint)', fontSize: 15, cursor: 'pointer' }}
+                  style={{ background: 'none', border: 'none', color: 'var(--color-muted)', fontSize: 15, cursor: 'pointer' }}
                 >
                   &times;
                 </button>
@@ -303,7 +303,7 @@ export default function AppSettingsTab() {
             </div>
           ))}
         {!tagsLoading && tags.length === 0 && (
-          <div style={{ fontSize: 13, color: 'var(--color-faint)' }}>No tags yet.</div>
+          <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>No tags yet.</div>
         )}
       </div>
 
