@@ -44,11 +44,11 @@ export default function SummaryCards({ overview, defaultUnit }) {
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
       <Card size="dense">
         <SectionLabel>Streak</SectionLabel>
-        <div style={{ fontSize: 22, fontWeight: 800 }}>{streakText(overview.currentStreakWeeks)}</div>
+        <div style={{ fontSize: 22, fontWeight: 'var(--weight-bold)' }}>{streakText(overview.currentStreakWeeks)}</div>
       </Card>
       <Card size="dense">
         <SectionLabel>This week</SectionLabel>
-        <div style={{ fontSize: 22, fontWeight: 800 }}>
+        <div style={{ fontSize: 22, fontWeight: 'var(--weight-bold)' }}>
           {overview.workoutsThisWeek} workout{overview.workoutsThisWeek === 1 ? '' : 's'}
         </div>
         <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 2 }}>
@@ -61,7 +61,7 @@ export default function SummaryCards({ overview, defaultUnit }) {
           style={
             volumePlaceholder
               ? { fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-1)' }
-              : { fontSize: 22, fontWeight: 800, color: volumeColor }
+              : { fontSize: 22, fontWeight: 'var(--weight-bold)', color: volumeColor }
           }
         >
           {volumeText}

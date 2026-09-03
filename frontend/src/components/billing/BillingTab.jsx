@@ -359,7 +359,7 @@ const planTitleRowStyle = {
 
 const planHeadingStyle = {
   fontSize: 'var(--text-xl)',
-  fontWeight: 800,
+  fontWeight: 'var(--weight-bold)',
 };
 
 const mutedLineStyle = {

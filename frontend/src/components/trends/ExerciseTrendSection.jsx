@@ -117,7 +117,7 @@ export default function ExerciseTrendSection({
                       background: 'var(--color-success-bg)',
                       color: 'var(--color-success)',
                       fontSize: 11,
-                      fontWeight: 800,
+                      fontWeight: 'var(--weight-bold)',
                       padding: '3px 8px',
                       borderRadius: 999,
                       letterSpacing: '0.03em',
