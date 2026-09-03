@@ -7,7 +7,7 @@ import logoDark from '../../assets/huddle-lockup-horizontal-ondark.svg';
 // header comment for why the boot-time copy of this header must not offer an openable menu.
 export default function Header({ booting = false }) {
   return (
-    <div
+    <header
       className="header-bar"
       style={{
         display: 'flex',
@@ -34,6 +34,6 @@ export default function Header({ booting = false }) {
         <PlanBadge />
         <UserMenu booting={booting} />
       </div>
-    </div>
+    </header>
   );
 }
