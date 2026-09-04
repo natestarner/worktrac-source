@@ -414,8 +414,8 @@ export default function HelpTab() {
           every exercise and every set. Personal records are badged where they happened.
         </p>
         <p>
-          On <T>Free</T> this shows the last 90 days. Older workouts are hidden rather than deleted.
-          See <a href="#plan">Free and Pro</a>.
+          On <T>Free</T> this shows the last 90 days. Everything before that is still saved in your
+          full history. See <a href="#plan">Free and Pro</a>.
         </p>
 
         <h3 className="help-h3">Finding something</h3>
@@ -681,10 +681,11 @@ export default function HelpTab() {
 
         <Note title="Nothing you log is ever deleted">
           <p>
-            On Free, workouts older than 90 days are <strong>hidden, not removed</strong>. Every set
-            stays exactly where it was, and the moment you subscribe your whole history is back. If
-            you later cancel, you keep Pro until the period you paid for ends, and then the same
-            thing happens in reverse: hidden, never lost.
+            On Free, History, PRs and Trends <strong>show the last 90 days</strong>. Everything
+            older is still saved &mdash; every set stays exactly where it was, and the moment you
+            subscribe your whole history is on screen again. If you later cancel, you keep Pro until
+            the period you paid for ends, and then those screens go back to 90 days.{' '}
+            <strong>Your history never changes; only how much of it is on screen does.</strong>
           </p>
           <p>
             You don&rsquo;t have to keep track of this yourself. Whenever your full history holds

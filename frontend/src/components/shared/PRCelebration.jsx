@@ -124,7 +124,12 @@ export default function PRCelebration() {
             zIndex: 1,
           }}
         >
-          {celebration.isBodyweight ? 'Bodyweight' : <>Est. 1RM &middot; {celebration.setText}</>}
+          {/* One string, decided by the caller (ExerciseDetail). This used to be a boolean the
+              overlay re-interpreted as the literal word "Bodyweight", which captioned every hold
+              that way -- weighted ones included. Deciding it here meant this component had to know
+              the difference between "has no est. 1RM" and "was performed at bodyweight", and it
+              only ever received the first. */}
+          {celebration.caption}
         </div>
       </div>
     </div>
