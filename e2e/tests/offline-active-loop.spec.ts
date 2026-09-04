@@ -137,4 +137,77 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
     await page.reload();
     await expect(page.getByText(/Session in progress/)).toBeHidden();
   });
+
+  // THE reported bug, end to end. Editing a not-yet-synced set queues a separate EDIT_SET against
+  // the create's temp id; deleting that set then cancelled only the CREATE, leaving the edit
+  // pointing at an id nothing would ever map. On reconnect it retried forever, and because every
+  // durable write shares one serial mutation scope, a write stuck in 'pending' never releases it --
+  // so nothing queued behind it ever synced again, including sets logged later while fully online.
+  //
+  // The assertion that matters is the LAST one: a set logged after reconnecting has to reach the
+  // server. "The edit is stuck" and "the app no longer syncs anything" were the same bug.
+  // docs/incidents/2026-09-04-outbox-wedged-by-orphaned-edit.md
+  test('editing then deleting a not-yet-synced set leaves nothing stuck, and later writes still sync', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Quinn');
+    await pickExercise(page, 'Barbell Bench Press');
+
+    await goHardOffline(page);
+
+    // Log a set offline, correct it, then delete it -- all before anything syncs.
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'Edit' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.locator('.stepper-row').first().getByRole('button', { name: '+' }).click();
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(outboxCountText(page, 2)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+
+    // The set is gone from the screen AND its correction is gone from the sync list. Leaving the
+    // edit listed was the visible half of the report: "the edit record still shows in the syncing
+    // list, but the set was removed."
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0);
+    await expect(page.getByText(/waiting to sync/)).toBeHidden();
+
+    await goOnline(page);
+    await waitForOutboxDrain(page);
+
+    // The queue is genuinely usable again -- this is the assertion the bug actually broke.
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+    await waitForOutboxDrain(page);
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+  });
+
+  // The escape hatch. Even with the wedge fixed, a person who believes their queue is stuck needs a
+  // way out that is not "log out and lose the session too".
+  test('the sync list can be cleared by hand, and the app keeps working afterwards', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Sasha');
+    await pickExercise(page, 'Barbell Bench Press');
+
+    await goHardOffline(page);
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await expect(outboxCountText(page, 1)).toBeVisible();
+
+    await page.getByRole('button', { name: /waiting to sync/ }).click();
+    await expect(page.getByText('Waiting to sync (1)')).toBeVisible();
+
+    // Destructive, so it confirms first rather than firing on the tap.
+    await page.getByRole('button', { name: 'Clear all queued changes' }).click();
+    await expect(page.getByText(/Discard 1 change that hasn't synced yet/)).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+
+    await expect(page.getByText(/waiting to sync/)).toBeHidden();
+
+    // And the outbox still works: a set logged after the clear syncs normally on reconnect.
+    await goOnline(page);
+    await page.getByRole('button', { name: /Log set/ }).click();
+    await waitForOutboxDrain(page);
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+  });
 });

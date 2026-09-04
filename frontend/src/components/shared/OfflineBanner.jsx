@@ -1,10 +1,14 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { useOfflinePin } from '../../hooks/useOfflinePin';
-import { useOutboxCount } from '../../hooks/useOutboxCount';
-import { useOutboxItems } from '../../hooks/useOutboxItems';
+import { useOutboxCount, getUnsyncedWriteCount } from '../../hooks/useOutboxCount';
+import { useOutboxItems, discardOutboxItem } from '../../hooks/useOutboxItems';
 import { useJustSynced } from '../../hooks/useJustSynced';
+import { useUI } from '../../context/UIContext';
 import { unpinOffline } from '../../lib/offlineMode';
+import { clearOutboxMutations } from '../../lib/queryClient';
+import { clearOutbox } from '../../lib/outboxPersistence';
 import { probeReachability } from '../../lib/reachabilityProbe';
 import Button from './Button';
 import OutboxModal from './OutboxModal';
@@ -133,7 +137,48 @@ export default function OfflineBanner() {
 // Split out so useOutboxItems (which needs AuthContext + the exercise catalog to resolve
 // names) only mounts -- and only runs -- once the user actually opens the detail view, not on
 // every render of the banner itself.
+//
+// It also owns the two destructive actions, keeping OutboxModal itself presentational. Both close
+// this modal before opening the confirm, matching ExerciseDetail's handleRequestDelete: ConfirmDialog
+// is itself a Modal, and Modal installs a focus trap, so stacking two is a trap over a trap with no
+// coherent answer for what Escape closes.
 function OutboxModalContainer({ onClose }) {
+  const queryClient = useQueryClient();
+  const { openConfirm } = useUI();
   const items = useOutboxItems();
-  return <OutboxModal items={items} onClose={onClose} />;
+
+  function handleDiscard(item) {
+    onClose();
+    openConfirm(
+      `Discard this change? ${item.personName}${item.exerciseName ? ` — ${item.exerciseName}` : ''}: ${item.detail}. It won't be sent, and it can't be recovered.`,
+      () => discardOutboxItem(queryClient, item.id),
+    );
+  }
+
+  function handleClearAll() {
+    onClose();
+    // getUnsyncedWriteCount, NOT the banner's display count -- the same choice UserMenu's logout
+    // guard makes, and for the same reason: this discards the outbox, so a write still on the wire
+    // (which the display predicate deliberately hides so a fast online write can't flash the
+    // banner) is exactly one this action strips of its retry. See useOutboxCount.js.
+    const atRisk = getUnsyncedWriteCount(queryClient);
+    // Zero at risk with a non-empty list is a real state, not an edge case: it means everything
+    // showing is already undeliverable (a definitive rejection, or a dependency that is gone), so
+    // "discard 0 changes" would be both wrong and alarming. Say what is actually true instead.
+    const message =
+      atRisk === 0
+        ? "Clear the sync list? Nothing in it is still waiting to reach the server, so this only removes changes that can't be sent."
+        : `Discard ${atRisk === 1 ? '1 change' : `${atRisk} changes`} that ${atRisk === 1 ? "hasn't" : "haven't"} synced yet? They won't be sent, and they can't be recovered.`;
+    openConfirm(
+      message,
+      () => {
+        // The same pair AuthContext.logout() uses: the live mutation cache AND the persisted
+        // IndexedDB copy. Clearing only the first lets the next reload restore everything.
+        clearOutboxMutations(queryClient);
+        return clearOutbox();
+      },
+    );
+  }
+
+  return <OutboxModal items={items} onDiscard={handleDiscard} onClearAll={handleClearAll} onClose={onClose} />;
 }

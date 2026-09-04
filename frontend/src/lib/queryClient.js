@@ -126,7 +126,19 @@ export const FAVORITE_MUTATION_KEY = ['favorite'];
 // docs/architecture/resilience.md, axis B.
 const RETRYABLE_4XX = new Set([408, 429]);
 
+// `error.terminal` is the one non-HTTP way retries end, and it is deliberately NOT a network
+// judgement: it is set only by the dependency check below, which asks a purely LOCAL question --
+// "is the create this write depends on still in the mutation cache?". Nothing a backend does can
+// reach it. That matters, because a hard-down/cold/overloaded backend emits every code there is
+// (502, 503, 504, aborted timeouts, bare rejected fetches) and NONE of those say the write is bad;
+// they all still retry forever below. A write whose dependency is gone is different in kind: no
+// amount of waiting can produce the id it needs, and while it waits it holds the single serial
+// outbox scope, so everything queued behind it stops too. Retrying it forever is what wedged the
+// whole queue (docs/incidents/2026-09-04-outbox-wedged-by-orphaned-edit.md).
+// Note this ENDS RETRIES; it does not discard. The write stays in the cache, stays persisted by
+// outboxPersistence (which drops only `success`), and stays listed -- exactly like a definitive 4xx.
 export function shouldRetryWrite(_failureCount, error) {
+  if (error?.terminal) return false;
   const status = error?.status;
   if (status >= 400 && status < 500) return RETRYABLE_4XX.has(status);
   return true;
@@ -149,27 +161,98 @@ export function shouldRetryWrite(_failureCount, error) {
 // Note this answers a DIFFERENT question from useOutboxCount's "is it queued or struggling",
 // which deliberately excludes a brand-new online first attempt so a fast successful write doesn't
 // flash the banner. Don't unify those two.
-export function isUnsyncedWrite({ status, errorStatus }) {
+// `errorTerminal` mirrors shouldRetryWrite's own first clause, so the two predicates stay in step:
+// a write whose dependency can never arrive has already stopped retrying, exactly like a definitive
+// 4xx, so it is not something a discard would destroy. Keeping it "unsynced" would make the logout
+// guard warn about a write nothing can ever deliver.
+// The 4xx test goes through RETRYABLE_4XX rather than a bare range check, so 408 and 429 land the
+// same way here as they do in shouldRetryWrite: still retrying, therefore still unsynced. As a bare
+// range this said "already reached the server" for two codes that explicitly mean "try again", so
+// the logout guard would have discarded such a write without warning. Unreachable in practice --
+// those keep retrying and so never settle into 'error' -- but the two predicates disagreeing is
+// exactly the drift the pinned agreement test below exists to prevent.
+export function isUnsyncedWrite({ status, errorStatus, errorTerminal }) {
   if (status === 'success') return false;
-  return !(status === 'error' && errorStatus >= 400 && errorStatus < 500);
+  if (status === 'error' && errorTerminal) return false;
+  return !(status === 'error' && errorStatus >= 400 && errorStatus < 500 && !RETRYABLE_4XX.has(errorStatus));
+}
+
+// "Is this queued write dead -- past the point where waiting or reconnecting could ever land it?"
+//
+// The single place the UI asks that question, so the modal's badge and the retry policy can never
+// disagree about what "stuck" means. Deliberately NARROW: a write retrying against a 5xx, a
+// timeout, a cold start or an unreachable backend is not dead, it is waiting, and under those
+// conditions shouldRetryWrite keeps it 'pending' so it never even reaches here.
+//
+// 401 is excluded on purpose. A forced 401 deliberately PRESERVES the outbox (see AuthContext) and
+// flushOutbox replays it after the next sign-in, so a write rejected for an expired session is
+// recoverable -- badging it "couldn't sync" would call a write dead that is one login away from
+// landing.
+export function isDeadWrite({ status, errorStatus, errorTerminal }) {
+  if (status !== 'error') return false;
+  if (errorTerminal) return true;
+  if (errorStatus === 401) return false;
+  return errorStatus >= 400 && errorStatus < 500 && !RETRYABLE_4XX.has(errorStatus);
 }
 
 // Thrown by a dependent write's mutationFn (log-set, note, favorite) when the exercise id it needs
-// is still an unresolved temp id -- i.e. the exercise-create it depends on hasn't synced yet. This
-// error carries no `.status`, so shouldRetryWrite treats it as transient and keeps retrying/requeuing
-// rather than sending the raw "temp-exercise-<uuid>" string to the server: the backend's exerciseId
-// field is a Long, so that request can never succeed and previously surfaced as a malformed-request
-// failure that (before the backend fix) collapsed into a session-killing 401.
+// is still an unresolved temp id -- i.e. the exercise-create it depends on hasn't synced yet. It
+// never carries a `.status`, so it is never mistaken for a server answer, and the raw
+// "temp-exercise-<uuid>" string never reaches the wire: the backend's exerciseId field is a Long,
+// so that request can never succeed and previously surfaced as a malformed-request failure that
+// (before the backend fix) collapsed into a session-killing 401.
+//
+// `terminal` is what decides whether waiting can help, and it is set from dependencyIsGone below
+// rather than from anything the network did. Not terminal (the create is still queued) ->
+// shouldRetryWrite keeps retrying, which is how the dependent waits for its dependency. Terminal
+// (the create is cancelled or has itself terminally failed) -> retries end, because no amount of
+// waiting produces the id and the retry loop would hold the serial outbox scope forever.
 class UnresolvedExerciseIdError extends Error {
-  constructor(tempId) {
-    super(`Exercise ${tempId} has not finished syncing yet`);
+  constructor(tempId, terminal) {
+    super(
+      terminal
+        ? `Exercise ${tempId} will never sync -- the create it depends on is gone`
+        : `Exercise ${tempId} has not finished syncing yet`,
+    );
     this.name = 'UnresolvedExerciseIdError';
+    this.terminal = terminal;
   }
 }
 
-function requireResolvedExerciseId(id) {
+// "Could the create that would map this temp id still run?" -- a purely LOCAL question about the
+// mutation cache, deliberately not a network one, so no backend condition can influence the answer.
+//
+// Retrying an unresolved temp id forever is correct while the create is still queued: the shared
+// serial scope guarantees it replays first, and the retry is what waits for it. It is catastrophic
+// once the create can no longer run, because a 'pending' mutation never releases that scope -- the
+// entire outbox stops, permanently, including writes made later while fully online.
+//
+// Two ways a create stops being able to run, and both are terminal for anything depending on it:
+//   - It is GONE from the cache. Cancelled by cancelQueuedWritesForSet (deleting a not-yet-synced
+//     set), or evicted. Nothing will ever record the mapping. This is the reported bug:
+//     docs/incidents/2026-09-04-outbox-wedged-by-orphaned-edit.md.
+//   - It is in a terminal 'error' state -- a definitive 4xx (a quota 403 on an exercise create, a
+//     400 on an unknown trackingType). Its own retries have ended, so the mapping is not coming.
+//
+// The second is still recoverable rather than final, which is why this ends RETRIES and never
+// discards: flushOutbox re-executes EVERY errored outbox mutation on the next reconnect/visibility/
+// login, in byEnqueueOrder -- so if the create later succeeds (a 401 followed by a re-login, say),
+// the dependent is re-executed in the same pass, resolves, and lands. Nothing that could have
+// succeeded is lost; it simply stops holding the queue hostage while it waits.
+function dependencyIsGone(client, kind, tempId) {
+  const create = client
+    .getMutationCache()
+    .getAll()
+    .find((m) => m.options.mutationKey?.[0] === kind && m.state.variables?.tempId === tempId);
+  if (!create) return true;
+  return create.state.status === 'error';
+}
+
+function requireResolvedExerciseId(client, id) {
   const resolved = resolveExerciseId(id);
-  if (isTempExerciseId(resolved)) throw new UnresolvedExerciseIdError(resolved);
+  if (isTempExerciseId(resolved)) {
+    throw new UnresolvedExerciseIdError(resolved, dependencyIsGone(client, 'createExercise', resolved));
+  }
   return resolved;
 }
 
@@ -180,15 +263,22 @@ function requireResolvedExerciseId(id) {
 // in-flight mutation, and mutating the create in place risks the backend's idempotency dedup
 // silently discarding the edit if the original create had already reached the server).
 class UnresolvedSetIdError extends Error {
-  constructor(tempId) {
-    super(`Set ${tempId} has not finished syncing yet`);
+  constructor(tempId, terminal) {
+    super(
+      terminal
+        ? `Set ${tempId} will never sync -- the set it edits is gone`
+        : `Set ${tempId} has not finished syncing yet`,
+    );
     this.name = 'UnresolvedSetIdError';
+    this.terminal = terminal;
   }
 }
 
-function requireResolvedSetId(id) {
+function requireResolvedSetId(client, id) {
   const resolved = resolveSetId(id);
-  if (isTempSetId(resolved)) throw new UnresolvedSetIdError(resolved);
+  if (isTempSetId(resolved)) {
+    throw new UnresolvedSetIdError(resolved, dependencyIsGone(client, 'logSet', resolved));
+  }
   return resolved;
 }
 
@@ -244,7 +334,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         // serial scope guarantees that ordering (PR 4). A normal numeric id passes through unchanged.
         // If the create hasn't synced yet (still resolves to a temp id), this throws instead of
         // sending the server a string it can't parse as a Long -- see requireResolvedExerciseId.
-        exerciseId: requireResolvedExerciseId(vars.exerciseId),
+        exerciseId: requireResolvedExerciseId(client, vars.exerciseId),
         weight: vars.weight,
         reps: vars.reps,
         durationSeconds: vars.durationSeconds,
@@ -457,12 +547,31 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
   // -- and the shared serial outbox scope guarantees the create replays first, exactly like
   // requireResolvedExerciseId above. Idempotent (same value re-applied).
   client.setMutationDefaults(EDIT_SET_MUTATION_KEY, durable({
-    mutationFn: (vars) =>
-      editSet(requireResolvedSetId(vars.setId), {
-        weight: vars.weight,
-        reps: vars.reps,
-        durationSeconds: vars.durationSeconds,
-      }),
+    // A 404 is treated as done, exactly as DELETE_SET below does, and for the same reason: the row
+    // is gone, so there is nothing left for this edit to apply to. Reachable whenever another
+    // device or tab deleted the set while this correction sat in the outbox. Left as an error it
+    // never leaves the queue -- outboxPersistence drops only 'success' -- so the banner reads
+    // "1 change waiting to sync" forever and flushOutbox re-fires a doomed PATCH on every
+    // reconnect, tab-focus and login.
+    //
+    // This is the ONLY place a write leaves the outbox on something the server said, so it is worth
+    // being precise about what it costs: a 404 requires the server to have actually ANSWERED. A
+    // down, cold, timing-out or unreachable backend produces a rejected fetch, an abort, or a
+    // 5xx/gateway error -- never a 404 -- and every one of those keeps retrying via
+    // shouldRetryWrite. So no degraded condition can reach this branch.
+    mutationFn: async (vars) => {
+      const setId = requireResolvedSetId(client, vars.setId);
+      try {
+        return await editSet(setId, {
+          weight: vars.weight,
+          reps: vars.reps,
+          durationSeconds: vars.durationSeconds,
+        });
+      } catch (error) {
+        if (error?.status === 404) return null;
+        throw error;
+      }
+    },
     // From the RESPONSE first -- WorkoutSetDto carries the set's real `sessionId`, which is the only
     // reliable answer when this edit was queued before the session existed. Same idiom LOG_SET
     // (`data?.session?.id`) and SAVE_NOTE (`data?.sessionId`) already use, for the same reason.
@@ -500,7 +609,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
   // note on an offline-created exercise lands on the real one.
   client.setMutationDefaults(SAVE_NOTE_MUTATION_KEY, durable({
     mutationFn: (vars) => {
-      const exerciseId = requireResolvedExerciseId(vars.exerciseId);
+      const exerciseId = requireResolvedExerciseId(client, vars.exerciseId);
       return vars.mode === 'session'
         ? saveSessionExerciseNote(vars.sessionId, exerciseId, vars.note)
         : saveLiveExerciseNote(vars.personId, { exerciseId, note: vars.note });
@@ -527,7 +636,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
   // Favorite / unfavorite. Idempotent booleans; exerciseId resolves through the id map.
   client.setMutationDefaults(FAVORITE_MUTATION_KEY, durable({
     mutationFn: (vars) => {
-      const exerciseId = requireResolvedExerciseId(vars.exerciseId);
+      const exerciseId = requireResolvedExerciseId(client, vars.exerciseId);
       return vars.favorite ? favoriteExercise(vars.personId, exerciseId) : unfavoriteExercise(vars.personId, exerciseId);
     },
     onSettled: (_d, _e, vars) => {
@@ -622,8 +731,13 @@ export function flushOutbox() {
 // account is about to become active and a stale write must not be able to replay under the wrong
 // session (see AuthContext's adoptOutboxAccount), and by an explicit logout's full discard
 // (alongside clearOutbox, which removes the IndexedDB copy too).
-export function clearOutboxMutations() {
-  const cache = queryClient.getMutationCache();
+//
+// Takes an explicit client, defaulting to the app singleton. AuthContext calls it bare (it is
+// acting on the one live app client), while a caller that already holds `useQueryClient()` passes
+// its own -- the same reasoning dispatchDurableWrite documents: a queued mutation lives in whichever
+// client dispatched it, which in tests is a fresh per-test client rather than the singleton.
+export function clearOutboxMutations(client = queryClient) {
+  const cache = client.getMutationCache();
   cache
     .getAll()
     .filter((m) => m.options.scope?.id === OUTBOX_SCOPE_ID)

@@ -33,7 +33,7 @@ to signed-out, blank, silently-lost, or a spinner over a request that will never
 | **Cold start / scale-to-zero** | Lower runs `min-replicas=0`. The ingress **holds the connection ~35s** while a replica starts — it does not refuse and does not 503 (measured 2026-09-02). So the client's 15s abort fires FIRST: the first call after a scale-to-zero always fails, by arithmetic. **A simulated hang shorter than that abort proves nothing** — fourteen rounds of investigation came back clean for exactly this reason. A fulfilled 5xx, when one does arrive, resets the reachability counter, so this does _not_ trip lie-fi either |
 | **DB down, backend up** | `GlobalExceptionHandler` → honest 503. Must degrade to "queue and retry", **never** "you are signed out" (`docs/incidents/2026-07-27-db-outage-forced-logout.md`) |
 | **DB slow / pool exhausted** | Hikari default max 10; lower/prod `connection-timeout: 60000`. Requests hang past the client's abort, so a *busy* server presents as lie-fi |
-| **Definitive 4xx** | The only thing allowed to end a durable write's retries (`shouldRetryWrite`) |
+| **Definitive 4xx** | One of only two things allowed to end a durable write's retries (`shouldRetryWrite`). The other is a **dead dependency** — a temp id whose create is gone or has itself terminally failed — which is a local check, never a network one. Both end RETRIES; neither discards. A write leaves the outbox only by succeeding or by an explicit human action, **never** because it failed (`offline-internals.md`) |
 
 ### C. Client lifecycle — what the device does
 | Condition | What makes it distinct |
@@ -66,6 +66,8 @@ There is already exactly one way to do each of these. **Adding a second is the b
 | Ordering queued writes | `byEnqueueOrder` / `enqueueSeq` | TanStack's `submittedAt` — re-stamped on every re-execute |
 | Retry policy for a write | `shouldRetryWrite` | A per-mutation `retry` option |
 | "Has this write not synced yet?" | `isUnsyncedWrite` | `status === 'pending'` |
+| "Can this write never land?" | `isDeadWrite` | Reading `status === 'error'` directly — that is also how a 401 and a still-retrying write look |
+| Discarding a queued write | `cancelQueuedWritesForSet` (one set's writes) / `discardOutboxItem` (one item) / `clearOutboxMutations` + `clearOutbox` (all) | Removing from the mutation cache without also clearing the persisted copy — a reload resurrects it |
 | Data available offline | Add the key to `offlineCacheWarm.js` | A per-screen fallback fetch |
 | HTTP | `api/client.js` | A raw `fetch` |
 | Reachability check | `probeReachability` | A second health ping |

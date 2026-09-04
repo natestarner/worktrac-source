@@ -10,6 +10,8 @@ import { isOfflinePinned, pinOffline, __resetOfflineModeForTests } from '../../l
 import { probeReachability } from '../../lib/reachabilityProbe';
 import { JUST_SYNCED_MS } from '../../hooks/useJustSynced';
 import OfflineBanner from './OfflineBanner';
+import ConfirmDialog from './ConfirmDialog';
+import { UIProvider } from '../../context/UIContext';
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useExercises', () => ({ useExercises: vi.fn() }));
@@ -37,6 +39,18 @@ function dispatchLogSet(client, variables) {
   return observer;
 }
 
+// The banner's outbox modal now owns two destructive actions, both routed through UIContext's one
+// confirm dialog -- so these need the real provider AND the dialog mounted beside the banner, the
+// same pairing AppShell gives them in the app.
+function renderBanner() {
+  return renderWithQuery(
+    <UIProvider>
+      <OfflineBanner />
+      <ConfirmDialog />
+    </UIProvider>,
+  );
+}
+
 // Wrapped in a QueryClientProvider because the banner now reads the durable outbox count. With no
 // queued writes, the count is 0, so the online/offline visibility behavior is unchanged.
 describe('OfflineBanner', () => {
@@ -51,20 +65,20 @@ describe('OfflineBanner', () => {
 
   it('renders nothing while online with an empty outbox', () => {
     onlineManager.setOnline(true);
-    renderWithQuery(<OfflineBanner />);
+    renderBanner();
     expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('shows the reassuring offline message while offline', () => {
     onlineManager.setOnline(false);
-    renderWithQuery(<OfflineBanner />);
+    renderBanner();
     expect(screen.getByRole('status')).toHaveTextContent(/offline/i);
     expect(screen.getByRole('status')).toHaveTextContent(/sync when you reconnect/i);
   });
 
   it('appears and clears as connectivity flips', () => {
     onlineManager.setOnline(true);
-    renderWithQuery(<OfflineBanner />);
+    renderBanner();
     expect(screen.queryByRole('status')).toBeNull();
 
     act(() => onlineManager.setOnline(false));
@@ -76,7 +90,7 @@ describe('OfflineBanner', () => {
 
   it('makes the queued-changes count a clickable summary of what is actually queued', async () => {
     onlineManager.setOnline(false);
-    const { queryClient } = renderWithQuery(<OfflineBanner />);
+    const { queryClient } = renderBanner();
     act(() => {
       dispatchLogSet(queryClient, {
         mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
@@ -94,13 +108,71 @@ describe('OfflineBanner', () => {
     expect(screen.getByText('logged 135 lb × 5')).toBeInTheDocument();
   });
 
+  // The escape hatch, end to end -- the modal is presentational, so this is the only place the
+  // wiring (confirm -> clearOutboxMutations + clearOutbox) is actually exercised.
+  describe('clearing the sync list', () => {
+    async function openOutboxWithOneQueuedSet() {
+      onlineManager.setOnline(false);
+      const rendered = renderBanner();
+      act(() => {
+        dispatchLogSet(rendered.queryClient, {
+          mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
+          idempotencyKey: 'clr', clientLoggedAt: 't', tempId: 'temp-clr',
+        });
+      });
+      fireEvent.click(await screen.findByRole('button', { name: '1 change waiting to sync' }));
+      await screen.findByText('Waiting to sync (1)');
+      return rendered;
+    }
+
+    // Destructive, so it must never fire on the tap. It also closes the modal first: ConfirmDialog
+    // is itself a Modal with a focus trap, and stacking two has no coherent answer for Escape.
+    it('asks before discarding anything, and discards nothing until confirmed', async () => {
+      const { queryClient } = await openOutboxWithOneQueuedSet();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear all queued changes' }));
+
+      expect(await screen.findByText(/Discard 1 change that hasn't synced yet/)).toBeInTheDocument();
+      expect(queryClient.getMutationCache().getAll()).toHaveLength(1);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(queryClient.getMutationCache().getAll()).toHaveLength(1));
+      expect(await screen.findByRole('button', { name: '1 change waiting to sync' })).toBeInTheDocument();
+    });
+
+    it('empties the outbox once confirmed, and the banner goes with it', async () => {
+      const { queryClient } = await openOutboxWithOneQueuedSet();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear all queued changes' }));
+      await screen.findByText(/Discard 1 change that hasn't synced yet/);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      });
+
+      await waitFor(() => expect(queryClient.getMutationCache().getAll()).toHaveLength(0));
+      await waitFor(() => expect(screen.queryByText(/waiting to sync/)).not.toBeInTheDocument());
+    });
+
+    it('discards just the one item from its own row', async () => {
+      const { queryClient } = await openOutboxWithOneQueuedSet();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Discard Bench Press logged 135 lb × 5' }));
+      expect(await screen.findByText(/Discard this change\?/)).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      });
+
+      await waitFor(() => expect(queryClient.getMutationCache().getAll()).toHaveLength(0));
+    });
+  });
+
   // Success used to be communicated only by the banner vanishing. These four cover the one thing
   // that must be true of a confirmation: it appears exactly when the claim is true.
   describe('"All caught up." when the outbox drains', () => {
     it('confirms the drain, then withdraws itself', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       onlineManager.setOnline(false);
-      const { queryClient } = renderWithQuery(<OfflineBanner />);
+      const { queryClient } = renderBanner();
       act(() => {
         dispatchLogSet(queryClient, {
           mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
@@ -126,14 +198,14 @@ describe('OfflineBanner', () => {
     // The ordinary boot. Nothing drained, so claiming a sync would be inventing one.
     it('says nothing on a mount that simply finds an empty outbox', () => {
       onlineManager.setOnline(true);
-      renderWithQuery(<OfflineBanner />);
+      renderBanner();
       expect(screen.queryByText('All caught up.')).not.toBeInTheDocument();
     });
 
     // Merely reconnecting is not evidence anything synced.
     it('says nothing when connectivity flips with nothing queued', () => {
       onlineManager.setOnline(false);
-      renderWithQuery(<OfflineBanner />);
+      renderBanner();
       act(() => onlineManager.setOnline(true));
       expect(screen.queryByText('All caught up.')).not.toBeInTheDocument();
     });
@@ -142,7 +214,7 @@ describe('OfflineBanner', () => {
     // they were discarded -- the opposite of caught up.
     it('says nothing when the outbox empties while still offline', async () => {
       onlineManager.setOnline(false);
-      const { queryClient } = renderWithQuery(<OfflineBanner />);
+      const { queryClient } = renderBanner();
       act(() => {
         dispatchLogSet(queryClient, {
           mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
@@ -161,7 +233,7 @@ describe('OfflineBanner', () => {
 
   it('closes the outbox detail modal from its Done button', async () => {
     onlineManager.setOnline(false);
-    const { queryClient } = renderWithQuery(<OfflineBanner />);
+    const { queryClient } = renderBanner();
     act(() => {
       dispatchLogSet(queryClient, {
         mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
@@ -193,13 +265,13 @@ describe('OfflineBanner "Go back online" button (manually pinned offline)', () =
   it('does not show the button for plain (non-pinned) hard-offline', () => {
     __resetOfflineModeForTests();
     onlineManager.setOnline(false);
-    renderWithQuery(<OfflineBanner />);
+    renderBanner();
     expect(screen.queryByRole('button', { name: 'Go back online' })).not.toBeInTheDocument();
   });
 
   it('leaves offline mode once the probe confirms the server is reachable', async () => {
     probeReachability.mockResolvedValue(true);
-    renderWithQuery(<OfflineBanner />);
+    renderBanner();
 
     fireEvent.click(screen.getByRole('button', { name: 'Go back online' }));
 
@@ -209,7 +281,7 @@ describe('OfflineBanner "Go back online" button (manually pinned offline)', () =
 
   it('stays offline and explains why when the probe fails', async () => {
     probeReachability.mockResolvedValue(false);
-    renderWithQuery(<OfflineBanner />);
+    renderBanner();
 
     fireEvent.click(screen.getByRole('button', { name: 'Go back online' }));
 
@@ -219,7 +291,7 @@ describe('OfflineBanner "Go back online" button (manually pinned offline)', () =
 
   it('does not lose the queued outbox count if the probe fails and offline mode is kept', async () => {
     probeReachability.mockResolvedValue(false);
-    const { queryClient } = renderWithQuery(<OfflineBanner />);
+    const { queryClient } = renderBanner();
     act(() => {
       dispatchLogSet(queryClient, {
         mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
