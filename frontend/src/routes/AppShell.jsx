@@ -65,6 +65,8 @@ export default function AppShell() {
   const restTimersRef = useRef(restTimers);
   restTimersRef.current = restTimers;
   const location = useLocation();
+  // null on a screen that renders its own <h1> -- see the <main> below.
+  const screenTitle = screenTitleFor(location.pathname);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const prevPersonIdRef = useRef(activePersonId);
@@ -251,9 +253,14 @@ export default function AppShell() {
           Handbook -- every other screen title is a styled div -- so without it a screen reader
           landed on a new screen with no announcement of which one. Keyed on the route so the five
           tabs and the six account-menu screens all resolve, from one derivation rather than eleven
-          separate headings that could drift. */}
+          separate headings that could drift.
+
+          `screenTitleFor` returns null for a screen that draws its own <h1> (today only the
+          Handbook), and then this renders NOTHING. Rendering it unconditionally put a hidden
+          "Huddle Handbook" heading immediately above the visible one -- announced twice, and a
+          strict-mode violation for the two Handbook e2e specs. */}
       <main className="tab-panel" id="main-content" style={{ margin: '0 auto' }}>
-        <h1 className="sr-only">{screenTitleFor(location.pathname)}</h1>
+        {screenTitle ? <h1 className="sr-only">{screenTitle}</h1> : null}
         {/* Scoped to the tab panel, not the whole shell, so a crashing tab leaves the header,
             person pills and tab nav usable -- the person can switch away and keep working
             instead of losing the app. `resetKey` (not `key`) clears a previous tab's error on
