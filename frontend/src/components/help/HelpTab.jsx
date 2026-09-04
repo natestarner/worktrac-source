@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { EXERCISE_METRICS } from '../trends/exerciseMetrics';
 import { WEEKLY_METRICS } from '../trends/weeklyMetrics';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
@@ -47,7 +47,35 @@ const restCeilingMinutes = REST_CEILING_SECONDS / 60;
 
 export default function HelpTab() {
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const { startTour } = useUI();
+
+  // ARRIVING at /app/help#plan has to land on that section. Nothing else makes it happen, and the
+  // section ids are advertised as deep links right above -- so "How Free and Pro differ"
+  // (HistoryWindowModal) navigated to the handbook and left the reader at the top of a very long
+  // page, twelve thousand pixels above the answer. Measured: scrollY stayed 0 with the target
+  // heading at y=12447.
+  //
+  // Neither entry path can scroll on its own, for different reasons:
+  //   full load / reload / bookmark -- the browser looks for #plan before React has rendered it,
+  //     finds nothing, and does not retry.
+  //   client-side <Link> -- React Router changes the URL and never scrolls at all.
+  // Both are a mount of this component, which is why one mount-time effect covers both.
+  //
+  // This does NOT replace the native jump for the in-page <a href="#plan"> links: those already
+  // work (verified -- scrollY 0 -> 12283), and a hash-only anchor click fires `hashchange` rather
+  // than `popstate`, so `useLocation` may not even re-run for them. Running twice would be
+  // harmless anyway; scrolling to the same element is idempotent.
+  //
+  // scrollIntoView() honours the `scroll-margin-top: 132px` on .help-section, so the heading
+  // clears the sticky chrome exactly as a native jump does -- don't reach for scrollTo(), which
+  // would have to re-derive that offset and could then disagree with the CSS.
+  useEffect(() => {
+    const id = hash ? decodeURIComponent(hash.slice(1)) : '';
+    if (!id) return;
+    const target = document.getElementById(id);
+    if (target) target.scrollIntoView();
+  }, [hash]);
 
   return (
     <div className="help">
@@ -386,8 +414,8 @@ export default function HelpTab() {
           every exercise and every set. Personal records are badged where they happened.
         </p>
         <p>
-          On <T>Free</T> this shows the last 90 days. Older workouts are hidden rather than deleted.
-          See <a href="#plan">Free and Pro</a>.
+          On <T>Free</T> this shows the last 90 days. Everything before that is still saved in your
+          full history. See <a href="#plan">Free and Pro</a>.
         </p>
 
         <h3 className="help-h3">Finding something</h3>
@@ -653,10 +681,11 @@ export default function HelpTab() {
 
         <Note title="Nothing you log is ever deleted">
           <p>
-            On Free, workouts older than 90 days are <strong>hidden, not removed</strong>. Every set
-            stays exactly where it was, and the moment you subscribe your whole history is back. If
-            you later cancel, you keep Pro until the period you paid for ends, and then the same
-            thing happens in reverse: hidden, never lost.
+            On Free, History, PRs and Trends <strong>show the last 90 days</strong>. Everything
+            older is still saved &mdash; every set stays exactly where it was, and the moment you
+            subscribe your whole history is on screen again. If you later cancel, you keep Pro until
+            the period you paid for ends, and then those screens go back to 90 days.{' '}
+            <strong>Your history never changes; only how much of it is on screen does.</strong>
           </p>
           <p>
             You don&rsquo;t have to keep track of this yourself. Whenever your full history holds

@@ -67,6 +67,35 @@ test.describe('Handbook', () => {
     expect(box!.y).toBeGreaterThanOrEqual(chrome!.y + chrome!.height);
   });
 
+  // ARRIVING at a section id, rather than clicking through to it. The ids are advertised as deep
+  // links in HelpTab.jsx's own header, and neither entry path scrolled on its own: a full load
+  // looks for #plan before React has rendered it and does not retry, and a client-side <Link>
+  // never scrolls at all. So "How Free and Pro differ" opened the handbook at the top of a very
+  // long page -- measured, the target heading sat at y=12447 with scrollY still 0.
+  //
+  // Asserted the same way as the contents-link test above: the heading must clear the sticky
+  // chrome, not merely exist. "Visible" is not the claim -- the whole page is in the DOM, so a
+  // heading twelve thousand pixels down is "visible" to a query and useless to a reader.
+  test('deep-linking to a section lands on it, not at the top of the page', async ({
+    page,
+    request,
+  }) => {
+    await registerHousehold(page, request, 'Curie');
+    await page.goto('/app/help#plan');
+
+    const heading = page.getByRole('heading', { name: 'Free and Pro' });
+    await expect(heading).toBeVisible();
+
+    const chrome = await page.locator('.app-chrome').boundingBox();
+    const box = await heading.boundingBox();
+    expect(chrome).not.toBeNull();
+    expect(box).not.toBeNull();
+    expect(box!.y).toBeGreaterThanOrEqual(chrome!.y + chrome!.height);
+
+    // And it must actually have scrolled, rather than the section happening to be near the top.
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  });
+
   test('the whole handbook is readable with no connection', async ({ page, request }) => {
     await registerHousehold(page, request, 'Villanueva');
     await openHelp(page);
