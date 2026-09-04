@@ -150,6 +150,64 @@ describe('Modal dismissal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // The content wrapper's top padding does double duty: with a header it is the gap below the
+  // title, and with no header it is the panel's own top inset. Those want different numbers -- the
+  // gap was 36px of padding (~40px measured from the title's box to the first field in every modal)
+  // and read as detached, while a headerless panel still wants a full space-6 all round.
+  //
+  // Pinned because getting it wrong is silent: an unconditional space-4 leaves a headerless modal
+  // with 16px on top against 24px on its other three sides, which no test would otherwise notice.
+  // jsdom computes no layout, but this is an inline style, so the declaration itself is readable.
+  // Read off the `padding` SHORTHAND rather than `style.paddingTop`: jsdom does not expand a
+  // shorthand whose values contain var(), so the longhand reads back as ''. The first component of
+  // the shorthand is the top edge.
+  const topPadding = (el) => el.style.padding.split(' ')[0];
+
+  it('tightens the top inset only when there is a header above it', () => {
+    const { unmount } = render(
+      <Modal title="Add a person" onClose={() => {}}>
+        <input aria-label="name" />
+      </Modal>,
+    );
+    expect(topPadding(screen.getByRole('dialog').lastElementChild)).toBe('var(--space-4)');
+    unmount();
+
+    render(
+      <Modal>
+        <input aria-label="name" />
+      </Modal>,
+    );
+    expect(topPadding(screen.getByRole('dialog').lastElementChild)).toBe('var(--space-6)');
+  });
+
+  // The 2026-08-10 incident's structural rule, which this must not undo: the header is
+  // position:sticky WITH a z-index, so it paints above ordinary flow content regardless of DOM
+  // order and can rasterize a hairline over anything it merely touches. Most of the gap therefore
+  // has to live on the plain, non-positioned wrapper -- shrinking the wrapper instead of the
+  // header's padding would quietly re-open that bug.
+  it('keeps most of the header gap on the non-positioned wrapper, not the sticky header', () => {
+    render(
+      <Modal title="Add a person" onClose={() => {}}>
+        <input aria-label="name" />
+      </Modal>,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const header = dialog.firstElementChild;
+    const content = dialog.lastElementChild;
+
+    // The header is the elevated one; the wrapper must stay plain flow content.
+    expect(header.style.position).toBe('sticky');
+    expect(content.style.position).toBe('');
+
+    // Compare the SHARES, not the literals -- the claim is "the wrapper owns more of the gap than
+    // the sticky header does", which stays true (and stays checkable) if both numbers are retuned
+    // later. --space-N is monotonic in N, so the step index orders them. Third component of the
+    // padding shorthand is the bottom edge.
+    const step = (token) => Number(token.match(/--space-(\d+)/)[1]);
+    expect(step(topPadding(content))).toBeGreaterThan(step(header.style.padding.split(' ')[2]));
+  });
+
   it('renders no header at all when neither a title nor onClose is given', () => {
     render(
       <Modal>
