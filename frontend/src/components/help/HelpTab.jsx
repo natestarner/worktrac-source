@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { EXERCISE_METRICS } from '../trends/exerciseMetrics';
 import { WEEKLY_METRICS } from '../trends/weeklyMetrics';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
@@ -47,7 +47,35 @@ const restCeilingMinutes = REST_CEILING_SECONDS / 60;
 
 export default function HelpTab() {
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const { startTour } = useUI();
+
+  // ARRIVING at /app/help#plan has to land on that section. Nothing else makes it happen, and the
+  // section ids are advertised as deep links right above -- so "How Free and Pro differ"
+  // (HistoryWindowModal) navigated to the handbook and left the reader at the top of a very long
+  // page, twelve thousand pixels above the answer. Measured: scrollY stayed 0 with the target
+  // heading at y=12447.
+  //
+  // Neither entry path can scroll on its own, for different reasons:
+  //   full load / reload / bookmark -- the browser looks for #plan before React has rendered it,
+  //     finds nothing, and does not retry.
+  //   client-side <Link> -- React Router changes the URL and never scrolls at all.
+  // Both are a mount of this component, which is why one mount-time effect covers both.
+  //
+  // This does NOT replace the native jump for the in-page <a href="#plan"> links: those already
+  // work (verified -- scrollY 0 -> 12283), and a hash-only anchor click fires `hashchange` rather
+  // than `popstate`, so `useLocation` may not even re-run for them. Running twice would be
+  // harmless anyway; scrolling to the same element is idempotent.
+  //
+  // scrollIntoView() honours the `scroll-margin-top: 132px` on .help-section, so the heading
+  // clears the sticky chrome exactly as a native jump does -- don't reach for scrollTo(), which
+  // would have to re-derive that offset and could then disagree with the CSS.
+  useEffect(() => {
+    const id = hash ? decodeURIComponent(hash.slice(1)) : '';
+    if (!id) return;
+    const target = document.getElementById(id);
+    if (target) target.scrollIntoView();
+  }, [hash]);
 
   return (
     <div className="help">

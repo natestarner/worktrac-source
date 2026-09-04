@@ -65,7 +65,26 @@ before changing one. `HelpTab.test.jsx` pins the list deliberately as a literal 
 deriving it from the component, since a derived list would agree with any rename.
 
 Current ids: `setup`, `people`, `logging`, `rest`, `time`, `own`, `routines`, `history`, `prs`,
-`trends`, `personal`, `settings`, `data`, `offline`, `trouble`.
+`trends`, `personal`, `settings`, `plan`, `data`, `offline`, `trouble`.
+
+(`plan` was missing from this list while `HistoryWindowModal` linked to it — the one id a
+contextual deep-link actually used.)
+
+**A deep link has to SCROLL, and nothing does that for free.** `HelpTab` carries an effect that
+scrolls to `location.hash` on mount, because neither entry path manages it alone: a full load looks
+for the element before React has rendered it and never retries, and a client-side `<Link>` changes
+the URL without scrolling at all. Both presented identically — the handbook opening at the top of a
+very long page, with the named section twelve thousand pixels below the fold — so it read as a dead
+link rather than a scroll bug.
+
+The in-page `<a href="#id">` links are a *different* mechanism (the browser's own fragment
+navigation) and were never broken. Don't "unify" them onto the effect: a hash-only anchor click
+fires `hashchange`, not `popstate`, so `useLocation` may not even re-run for it.
+
+Guarded by `help.spec.ts`'s deep-link spec and `free-window-notice.spec.ts`'s
+"How Free and Pro differ" spec — both assert the heading clears the sticky chrome **and** that
+`scrollY` actually moved. Visibility alone proves nothing here: the whole handbook is in the DOM, so
+a heading far below the fold is "visible" to a query and useless to a reader.
 
 ## The page must survive the basement
 
