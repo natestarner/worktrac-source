@@ -16,7 +16,7 @@ describe('PRCelebration', () => {
     useUI.mockReturnValue({
       celebration: {
         exerciseName: 'Bench Press',
-        isBodyweight: false,
+        caption: 'Est. 1RM · 185 lb × 5',
         setText: '185 lb × 5',
         est1rmText: '208 lb',
       },
@@ -33,7 +33,7 @@ describe('PRCelebration', () => {
     useUI.mockReturnValue({
       celebration: {
         exerciseName: 'Pull-Up',
-        isBodyweight: true,
+        caption: 'Bodyweight',
         setText: '0 lb × 12',
         est1rmText: '12 reps',
       },
@@ -44,5 +44,43 @@ describe('PRCelebration', () => {
     expect(screen.getByText('12 reps')).toBeInTheDocument();
     expect(screen.getByText('Bodyweight')).toBeInTheDocument();
     expect(screen.queryByText(/Est\. 1RM/)).not.toBeInTheDocument();
+  });
+
+  // THE REGRESSION. The caption used to be a boolean this component turned into the literal word
+  // "Bodyweight", and ExerciseDetail set it for every hold -- so a hold logged WITH weight on it
+  // was captioned "Bodyweight", contradicting the number the person had just typed.
+  it('names the load on a weighted hold instead of calling it bodyweight', () => {
+    useUI.mockReturnValue({
+      celebration: {
+        exerciseName: 'Weighted Plank',
+        caption: 'Weighted · 25 lb',
+        setText: '25 lb × 1:00',
+        est1rmText: '1:00 hold',
+      },
+      dismissCelebration: vi.fn(),
+    });
+    render(<PRCelebration />);
+
+    expect(screen.getByText('1:00 hold')).toBeInTheDocument();
+    expect(screen.getByText('Weighted · 25 lb')).toBeInTheDocument();
+    expect(screen.queryByText('Bodyweight')).not.toBeInTheDocument();
+  });
+
+  // The other half: an unweighted hold IS a bodyweight hold, so that caption stays correct there.
+  // Only the weighted case was ever wrong.
+  it('still says bodyweight for a hold with no weight on it', () => {
+    useUI.mockReturnValue({
+      celebration: {
+        exerciseName: 'Plank',
+        caption: 'Bodyweight',
+        setText: '1:00',
+        est1rmText: '1:00 hold',
+      },
+      dismissCelebration: vi.fn(),
+    });
+    render(<PRCelebration />);
+
+    expect(screen.getByText('1:00 hold')).toBeInTheDocument();
+    expect(screen.getByText('Bodyweight')).toBeInTheDocument();
   });
 });
