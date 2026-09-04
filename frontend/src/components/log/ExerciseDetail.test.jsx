@@ -192,7 +192,9 @@ describe('ExerciseDetail PR celebration payload', () => {
     fireEvent.click(await screen.findByText('Log set'));
 
     await waitFor(() =>
-      expect(showCelebration).toHaveBeenCalledWith(expect.objectContaining({ isBodyweight: true, est1rmText: '12 reps' })),
+      expect(showCelebration).toHaveBeenCalledWith(
+        expect.objectContaining({ caption: 'Bodyweight', est1rmText: '12 reps' }),
+      ),
     );
   });
 
@@ -209,7 +211,56 @@ describe('ExerciseDetail PR celebration payload', () => {
     fireEvent.click(await screen.findByText('Log set'));
 
     await waitFor(() =>
-      expect(showCelebration).toHaveBeenCalledWith(expect.objectContaining({ isBodyweight: false, est1rmText: '208 lb' })),
+      expect(showCelebration).toHaveBeenCalledWith(
+        expect.objectContaining({ caption: 'Est. 1RM · 185 lb × 5', est1rmText: '208 lb' }),
+      ),
+    );
+  });
+
+  // THE REGRESSION, reported from the app: create a timed exercise, put a weight AND a time on it,
+  // log it, and the PR overlay called it "Bodyweight".
+  //
+  // The cause was one flag answering two questions. `isBodyweight: isBodyweight || isHold` is
+  // correct for "does this set have an est. 1RM to show" and wrong for "was this performed at
+  // bodyweight", and PRCelebration rendered it as the literal word. PRsTab has always split those
+  // correctly ("Longest hold at 25lb"), so the two surfaces disagreed about the same set.
+  it('names the load on a weighted hold rather than calling it bodyweight', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 25, reps: 0 }));
+    logLiveSet.mockResolvedValue({
+      isPR: true,
+      best: { weight: 25, reps: 0, unit: 'lb', est1rm: null, durationSeconds: 60 },
+      session: { id: 101 },
+      set: { id: 201 },
+    });
+    renderExerciseDetail({ exercise: { ...exercise, trackingType: 'duration' } });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() =>
+      expect(showCelebration).toHaveBeenCalledWith(
+        expect.objectContaining({ caption: 'Weighted · 25 lb' }),
+      ),
+    );
+    expect(showCelebration).not.toHaveBeenCalledWith(
+      expect.objectContaining({ caption: 'Bodyweight' }),
+    );
+  });
+
+  // The half that was never wrong: an unweighted hold really is a bodyweight hold.
+  it('still calls an unweighted hold bodyweight', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 0 }));
+    logLiveSet.mockResolvedValue({
+      isPR: true,
+      best: { weight: 0, reps: 0, unit: 'lb', est1rm: null, durationSeconds: 60 },
+      session: { id: 101 },
+      set: { id: 201 },
+    });
+    renderExerciseDetail({ exercise: { ...exercise, trackingType: 'duration' } });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() =>
+      expect(showCelebration).toHaveBeenCalledWith(expect.objectContaining({ caption: 'Bodyweight' })),
     );
   });
 });
