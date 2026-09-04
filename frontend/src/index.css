@@ -376,10 +376,19 @@ body {
    .sr-only: that hides it from sighted keyboard users too, which defeats the purpose -- the point
    is that someone tabbing sees where the focus went. Uses the same accent ring every other control
    gets, so it reads as part of the app rather than as a stray browser affordance. */
+/* Parked off-screen by its OWN height (translateY -100%), never by a fixed offset.
+   It was `top: calc(-1 * var(--space-10))` -- 40px -- against a box that measures 45.5px, so 5.5px
+   of it stayed on screen: a rounded, bordered, shadowed sliver above the header, indented 12px
+   from the left, which read as a stray line above the Huddle lockup.
+   A magic offset has to be re-verified against every change to the font size, the padding, the
+   border, or the length of the string once it is translated; -100% cannot drift, because it IS the
+   height. The extra --space-6 clears the box-shadow, which a flush -100% would leave bleeding.
+   Transform also composites instead of triggering layout on each frame of the transition. */
 .skip-link {
   position: absolute;
   left: var(--space-3);
-  top: calc(-1 * var(--space-10));
+  top: var(--space-3);
+  transform: translateY(calc(-100% - var(--space-6)));
   z-index: var(--z-header-menu);
   padding: var(--space-3) var(--space-4);
   background: var(--color-surface);
@@ -390,10 +399,10 @@ body {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-3), var(--elevation-hairline);
   text-decoration: none;
-  transition: top var(--dur-base) var(--ease-out);
+  transition: transform var(--dur-base) var(--ease-out);
 }
 .skip-link:focus-visible {
-  top: var(--space-3);
+  transform: translateY(0);
 }
 
 .sr-only {
@@ -845,8 +854,13 @@ input[type='search']::-webkit-search-results-decoration {
    the full screen including the area behind the home indicator and, in
    landscape, the sensor housing. index.html sets viewport-fit=cover to opt into
    that region; these insets are what keeps content out from under it. */
+/* Vertical padding is --space-2, not --space-3, because the lockup brings its own. The asset's
+   viewBox is cropped to the brand-minimum clear space (docs/brand/README.md), which at height 52
+   renders as ~11px of empty pixels above and below the ink -- so 12px of padding on top of that
+   read as ~23px of gap and made the bar look unfinished rather than generous. Trimming the
+   PADDING respects the clear space; cropping the asset or shrinking the 52 would not. */
 .header-bar {
-  padding: var(--space-3) var(--space-6);
+  padding: var(--space-2) var(--space-6);
   padding-left: max(var(--space-6), env(safe-area-inset-left));
   padding-right: max(var(--space-6), env(safe-area-inset-right));
 }
