@@ -22,7 +22,7 @@ import { windowLabel } from '../shared/historyWindowCopy';
 import SetPillRow from '../shared/SetPillRow';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
 import { tagChipStyle } from '../shared/tagChipStyle';
-import { IconNote, IconInbox } from '../shared/icons';
+import { IconNote, IconScroll } from '../shared/icons';
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
@@ -194,7 +194,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
           and tapped Done. That flow used to land here and be told the workout did not exist. */}
       {!loading && history.length === 0 && hiddenFromView > 0 && (
         <EmptyState
-          icon={IconInbox}
+          icon={IconScroll}
           title={`Nothing in ${windowLabel(historyWindow?.windowStart)}`}
           body={`Everything ${activePersonName} logged before then is part of your full history.`}
           action={<HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} />}
@@ -207,7 +207,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
           the sentence across title and body would break every one of them for a cosmetic gain. */}
       {!loading && history.length === 0 && hiddenFromView === 0 && (
         <EmptyState
-          icon={IconInbox}
+          icon={IconScroll}
           title={`No workouts logged yet for ${activePersonName}.`}
           body={`Every workout ${activePersonName} logs lands here, newest first.`}
         />
@@ -215,7 +215,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
 
       {!loading && history.length > 0 && filteredSessions.length === 0 && (
         <EmptyState
-          icon={IconInbox}
+          icon={IconScroll}
           title="No exercises match this filter."
           body="Try a different exercise or tag, or clear the filter above."
         />

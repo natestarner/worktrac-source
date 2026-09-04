@@ -16,7 +16,7 @@ import OfflineDataNotice from '../shared/OfflineDataNotice';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import EmptyState from '../shared/EmptyState';
 import Card from '../shared/Card';
-import { IconNote } from '../shared/icons';
+import { IconClipboardList } from '../shared/icons';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 export default function RoutinesTab() {
@@ -81,7 +81,7 @@ export default function RoutinesTab() {
 
       {!loading && routines.length === 0 && (
         <EmptyState
-          icon={IconNote}
+          icon={IconClipboardList}
           title="No routines yet."
           body="Build one from your exercise library and starting a workout is one tap."
         />
