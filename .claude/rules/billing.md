@@ -83,6 +83,23 @@ about a workout the app had just saved.
   the thing keeping someone from their own training. That is the wrong posture for a product whose
   central promise is that it never deletes anything, and the invitation belongs to the "See Pro"
   link beside the sentence rather than to the sentence. Pinned in `historyWindowCopy.test.js`.
+
+  **This governs EVERY surface, not just that one sentence.** It was written for
+  `historyWindowCopy.js` and then not applied anywhere else, so the handbook still said *"workouts
+  older than 90 days are hidden, not removed"* and the Terms and Privacy pages both said *"hidden
+  from view"* — the app describing itself as concealing someone's own training, on the two pages
+  that exist to promise the opposite.
+
+  The frame that works everywhere: **a plan decides what a screen SHOWS; it never decides what
+  exists.** Prefer "History, PRs and Trends show the last 90 days" over any construction where the
+  app is the subject doing something to the data. "Hidden", "withheld", "locked", "restricted" and
+  "removed from view" all fail this; "shows", "covers", "still saved" and "on screen again" pass.
+  The one-line form is *"Your history never changes; only how much of it is on screen does."*
+
+  **The `hiddenSessions` / `earliestHiddenAt` DTO fields are exempt and stay as they are** — they
+  are engineering vocabulary on an internal contract, never rendered. This rule is about copy a
+  person reads, and renaming an accurate field would be churn across the backend, the client and
+  the specs for no reader's benefit. Just never let the field name leak into a sentence.
 - **The notice carries no mark; the explainer's benefits block does.** See "The mark names the
   PRODUCT" below for the convention and why the sentence about someone's own data is excluded.
 - **`HistoryWindowNotice` is the one way any screen says this**, and it composes `ProUpsell` rather

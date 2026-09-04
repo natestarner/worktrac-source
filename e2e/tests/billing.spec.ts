@@ -133,6 +133,9 @@ test.describe('billing', () => {
     await page.goto('/app/help#plan');
 
     await expect(page.getByRole('heading', { name: 'Free and Pro' })).toBeVisible();
-    await expect(page.getByText(/hidden, not removed/)).toBeVisible();
+    // The claim is "a plan decides what a screen SHOWS, never what exists" -- see billing.md. This
+    // used to assert "hidden, not removed", which described the app as concealing someone's own
+    // training on the very page promising it never deletes anything.
+    await expect(page.getByText(/only how much of it is on screen does/)).toBeVisible();
   });
 });
