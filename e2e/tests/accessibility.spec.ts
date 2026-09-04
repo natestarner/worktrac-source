@@ -70,6 +70,43 @@ test.describe('Accessibility baseline', () => {
   // spec happening to select a heading by role. The Handbook is listed explicitly because it is
   // the only screen that draws its own h1, and therefore the only one where the shell has to
   // render nothing.
+  // The skip link is `position: absolute` and parked off-screen until focused. It was parked at a
+  // FIXED offset (top: -40px) while measuring 45.5px tall, so 5.5px of a rounded, bordered,
+  // shadowed box sat permanently above the header -- reported as "an odd line/shape right above
+  // the logo". axe cannot see this: the element is present, labelled and reachable, which is all
+  // it checks. Only geometry catches it, and jsdom computes no layout, so this has to be e2e.
+  //
+  // Asserted as "fully above the viewport", not "-57.5px", so it survives any change to the
+  // font, padding or string length -- pinning the exact number would just relocate the brittleness
+  // that caused the bug.
+  test('the skip link is fully off-screen until focused, then fully on', async ({
+    page,
+    request,
+  }) => {
+    await registerHousehold(page, request, 'Curie');
+
+    const skip = page.locator('.skip-link');
+    const parked = await skip.boundingBox();
+    expect(parked, 'the skip link should be in the layout, just off-screen').not.toBeNull();
+    expect(
+      parked!.y + parked!.height,
+      'no part of the skip link may be visible while unfocused',
+    ).toBeLessThanOrEqual(0);
+
+    // Tab from the document start: the skip link is deliberately the first thing focus reaches.
+    await page.keyboard.press('Tab');
+    await expect(skip).toBeFocused();
+
+    // Polled, not sampled once -- the reveal is a transform transition, so a single boundingBox
+    // read straight after the keypress catches it mid-flight (it returned -11.95 on the first cut
+    // of this test). Polling asserts where it comes to REST, which is the actual claim.
+    await expect
+      .poll(async () => (await skip.boundingBox())?.y ?? -1, {
+        message: 'focusing it must bring the whole control on screen',
+      })
+      .toBeGreaterThanOrEqual(0);
+  });
+
   test('every screen has exactly one h1', async ({ page, request }) => {
     await registerHousehold(page, request, 'Hopper');
 
