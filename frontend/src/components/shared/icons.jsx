@@ -169,10 +169,26 @@ export const IconHelp = (props) => (
 
 // Empty-state illustration marks. Larger and lighter-weight than the inline
 // icons above -- an empty state is the one place an icon carries real size.
-export const IconInbox = (props) => (
+
+// History tab: an unrolled training log, not a mail inbox -- nothing here is delivered to you.
+export const IconScroll = (props) => (
   <Icon strokeWidth={1.5} {...props}>
-    <path d="M22 12h-6l-2 3h-4l-2-3H2" />
-    <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
+    <path d="M15 12h-5" />
+    <path d="M15 8h-5" />
+    <path d="M19 17V5a2 2 0 0 0-2-2H4" />
+    <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" />
+  </Icon>
+);
+
+// Routines tab: a clipboard checklist -- "a plan you follow", not the pencil used for note-taking.
+export const IconClipboardList = (props) => (
+  <Icon strokeWidth={1.5} {...props}>
+    <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    <path d="M12 11h4" />
+    <path d="M12 16h4" />
+    <path d="M8 11h.01" />
+    <path d="M8 16h.01" />
   </Icon>
 );
 
@@ -185,6 +201,15 @@ export const IconDumbbell = (props) => (
     <path d="m2 6 4-4" />
     <path d="m3 10 7-7" />
     <path d="m14 21 7-7" />
+  </Icon>
+);
+
+// Trends tab: the line-and-arrow "trending up" mark, not a dumbbell -- this screen is about the
+// shape of the data over time, not the fact of a workout.
+export const IconTrendingUp = (props) => (
+  <Icon strokeWidth={1.5} {...props}>
+    <path d="M16 7h6v6" />
+    <path d="m22 7-8.5 8.5-5-5L2 17" />
   </Icon>
 );
 
