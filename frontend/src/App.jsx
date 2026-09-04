@@ -109,7 +109,19 @@ export default function App() {
         // onlineManager subscription above flushes them on reconnect. Both id maps load first so a
         // set logged against an offline-created exercise, or an edit queued against a not-yet-synced
         // set, can resolve on replay.
-        await Promise.all([loadExerciseIdMap(), loadSetIdMap(), restoreOutbox(queryClient)]);
+        //
+        // "First" is SEQUENTIAL, and it has to be. These were one Promise.all, which ran the maps
+        // concurrently with the restore -- so a restored dependent write could reach
+        // requireResolvedExerciseId/requireResolvedSetId before the mapping it needs had loaded off
+        // disk. That was survivable only because an unresolved temp id retried forever and the map
+        // won the race on a later attempt. It is not survivable now: a dependent whose create is
+        // absent from the cache is treated as terminally undeliverable (see queryClient.js), and a
+        // create that already SUCCEEDED is absent by definition -- successes are never persisted.
+        // Losing that race would therefore fail a write that has a perfectly good mapping sitting
+        // in IndexedDB. Awaiting the maps first removes the race rather than relying on retries to
+        // paper over it.
+        await Promise.all([loadExerciseIdMap(), loadSetIdMap()]);
+        await restoreOutbox(queryClient);
         flushOutbox();
       }}
     >

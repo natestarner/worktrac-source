@@ -5,6 +5,7 @@ import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useHistory } from '../../hooks/useHistory';
 import { useDurableMutation } from '../../hooks/useDurableMutation';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { queryKeys } from '../../api/queryKeys';
 import { isTempExerciseId } from '../../lib/exerciseIdMap';
 import { newId } from '../../utils/id';
@@ -17,7 +18,7 @@ import {
   FAVORITE_MUTATION_KEY,
   isUnsyncedWrite,
 } from '../../lib/queryClient';
-import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
+import { cancelQueuedWritesForSet } from '../../lib/offlineSetEdits';
 import { comparableValue, computePrefillDraft, isPrSet } from '../../utils/formulas';
 import { resolveRestTargetSeconds } from '../../utils/restTarget';
 import { deriveExerciseSummaryFromHistory, mergeBestWithLocalSets } from '../../utils/exerciseSummaryFromHistory';
@@ -81,6 +82,14 @@ export default function ExerciseDetail({
     stopHoldTimer,
   } = useUI();
   const queryClient = useQueryClient();
+  // The one Tier-3 write this screen owns (deleting the exercise itself). Everything else here is
+  // durable and goes through the outbox; ConfigureExerciseModal has its own instance for the
+  // rename/tags/fields it owns. See handleRequestDelete for why the gate has to wrap the CONFIRM
+  // callback rather than the button.
+  const deleteExercise = useGatedMutation({
+    offlineMessage: 'Deleting needs a connection.',
+    errorMessage: "Couldn't delete that exercise. Try again.",
+  });
 
   // The one flag that decides what this screen measures. exercise.trackingType has shipped to the
   // client on both ExerciseDto and PersonExerciseDto since V6 -- it was simply never read.
@@ -265,15 +274,28 @@ export default function ExerciseDetail({
     favoriteMutation.mutate({ personId, exerciseId: exercise.id, exerciseName: exercise.name, favorite: next });
   }
 
+  // Tier-3, and already gated twice before it can be reached: ConfigureExerciseModal routes the
+  // entry point through useGatedMutation with `disabled={!online}`, and the Customize button that
+  // opens that modal is disabled for a temp id. Neither gate covers the window this handler owns,
+  // though -- the actual write happens after the CONFIRM, and UIContext's runConfirm is
+  // try/finally with no catch. So connectivity dropping between tapping Delete and confirming (or
+  // any 500) rejected into nothing: the dialog closed and the exercise was still there, looking
+  // exactly like a delete that worked.
+  //
+  // `deleteExercise.run` is the same useGatedMutation instance the rest of this screen's Tier-3
+  // writes use, so the failure lands on the one error path rather than a try/catch hand-rolled
+  // here -- open-coded copies of this with no catch are precisely what that hook was created to
+  // remove (see .claude/rules/frontend-core.md). Nothing about the outbox is involved: an exercise
+  // delete is not a durable write and never enters the queue.
   function handleRequestDelete() {
     setShowConfigureModal(false);
     openConfirm(
       `Delete "${exercise.name}"? Already-logged sets for it are kept, but it will disappear from your picker.`,
-      async () => {
+      deleteExercise.run(async () => {
         await removeExercise(exercise.id);
         if (onPersonalizationChanged) await onPersonalizationChanged();
         onBack();
-      },
+      }),
     );
   }
 
@@ -752,7 +774,7 @@ export default function ExerciseDetail({
     if (set.optimistic) {
       // Not yet synced -- there's no server row to delete, only a still-pending create. Cancel it
       // outright rather than queuing a delete that would 404 (see offlineSetEdits.js).
-      cancelPendingLogSet(queryClient, set.id);
+      cancelQueuedWritesForSet(queryClient, set.id);
       return;
     }
     // Durable mutation reconciles sets/PRs/History on sync and treats a replay 404 (already

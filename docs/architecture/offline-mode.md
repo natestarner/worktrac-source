@@ -39,11 +39,31 @@
   - **Retries forever on a transient failure** (`shouldRetryWrite` in `queryClient.js`): a 5xx,
     timeout, or statusless network error backs off (capped at 30s) but never gives up — a
     connectivity problem alone can never be the reason a queued write is lost or silently stops
-    trying. Only a definitive 4xx (the server's real answer) stops retrying, since a write that
-    can never succeed would otherwise permanently head-of-line-block every write queued behind it
-    in the shared serial scope. A dependent write (log-set/note/favorite) that still resolves to
-    an unmapped temp exercise id throws a status-less (therefore retryable) error instead of
-    dispatching a value the backend can't parse — see the Resolved Incident below.
+    trying. A dependent write (log-set/note/favorite) that still resolves to an unmapped temp
+    exercise id throws a status-less error instead of dispatching a value the backend can't parse.
+
+    ### Does the queue ever stop retrying? Three tiers, and only one of them is absolute
+
+    Worth stating exactly, because *"a durable write retries forever"* is wrong in one direction
+    and the obvious correction is wrong in the other.
+
+    | Tier | What happens | Reachable from a bad backend? |
+    |---|---|---|
+    | **1. Never stops** — 5xx, 502/503/504, cold start, DB down, pool exhausted, an aborted 15s request, a bare rejected fetch, 408, 429 | Backs off and retries forever, at any attempt count | This *is* the bad backend, and it can never end retries |
+    | **2. The retry LOOP ends, the write does not** — a definitive 4xx outside `{408, 429}`, or a dead dependency (`error.terminal`) | Stays in the cache, stays persisted, stays listed, and `flushOutbox` re-executes it on every reconnect / tab-focus / login / boot | **No.** A 4xx needs the server to have *answered*; `terminal` is a purely local check that never consults the network |
+    | **3. Leaves the queue** — success; a 404 on edit/delete; or an explicit human action (deleting the set whose create it targeted, Discard, Clear all, logout) | Gone | **No.** Never because it failed |
+
+    Tier 2 exists *because* of tier 1's absolutism, not in spite of it. A `'pending'` mutation holds
+    the single serial scope, so a write retrying forever on something that can never be satisfied
+    does not fail alone — it stops the entire queue, including writes made later while fully online.
+    "Retry forever" and "the queue always drains" are in direct tension, and the resolution is that
+    **retrying forever is correct precisely while retrying can still change the outcome** — which is
+    a local question about the mutation cache, never a question for the network.
+
+    `flushOutbox` filters on `state.status === 'error'` with **no check on why it errored**, which is
+    what makes tier 2 recoverable rather than final: a dependent stranded behind a create that 401'd
+    lands by itself after the next sign-in, because the create sorts first by `enqueueSeq` and
+    resolves in the same pass. See `docs/incidents/2026-09-04-outbox-wedged-by-orphaned-edit.md`.
   - **Gated on an authenticated session:** `flushOutbox()` and `restoreOutbox()` (boot) no-op /
     hydrate everything as paused when there is no current auth token, rather than firing a queued
     write with no `Authorization` header — that tokenless request would 401, and a 401 can itself

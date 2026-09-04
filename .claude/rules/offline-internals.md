@@ -54,15 +54,88 @@ See `docs/incidents/2026-08-01-outbox-reorder-enqueueseq.md`.
   from the query cache's persister, so neither the query cache's `maxAge` nor an app-update `buster` bump
   can silently drop a queued write.
 - **Retries forever on transient failure** (`shouldRetryWrite`): 5xx, timeout, or statusless
-  network error backs off (capped 30s) but never gives up. Only a definitive **4xx** stops
-  retrying, since a write that can never succeed would head-of-line-block the shared serial scope.
-- A dependent write resolving to an unmapped temp id throws a **status-less (therefore retryable)**
-  error rather than dispatching a value the backend can't parse (`requireResolvedExerciseId` /
-  `requireResolvedSetId`, via `exerciseIdMap.js` / `setIdMap.js`). Delete-set treats a replay 404
-  as success.
+  network error backs off (capped 30s) but never gives up. Only a definitive **4xx** — or a dead
+  dependency, below — stops retrying, since a write that can never succeed would
+  head-of-line-block the shared serial scope. 408/429 are carved out as retryable, and
+  `isUnsyncedWrite` shares that carve-out through the same `RETRYABLE_4XX` set: as a bare 400-499
+  range check it called those two already-delivered while retries were still running, which would
+  have let the logout guard discard them silently.
+- A dependent write resolving to an unmapped temp id throws a status-less error rather than
+  dispatching a value the backend can't parse (`requireResolvedExerciseId` /
+  `requireResolvedSetId`, via `exerciseIdMap.js` / `setIdMap.js`). Edit-set **and** delete-set both
+  treat a replay 404 as success — the row is gone, so the end state is already reached, and a 404
+  needs the server to have *answered*, which no degraded condition produces.
 - **Gated on an authenticated session:** `flushOutbox`/`restoreOutbox` no-op or hydrate as paused
   when there's no token, rather than firing a write with no `Authorization` header — that 401
   could tear down a session that a moment later *does* have a valid token.
+
+### A dependent write dies with its dependency — the anti-wedge rule
+
+**Retrying forever is only correct while retrying can still change the outcome.** A mutation stays
+`'pending'` for the whole of its retry loop, and TanStack runs only the first `'pending'` mutation
+in a scope — so a write that can *never* succeed does not merely fail, it stops the entire outbox,
+including writes made later while fully online. `docs/incidents/2026-09-04-outbox-wedged-by-orphaned-edit.md`.
+
+`dependencyIsGone` (`queryClient.js`) answers that as a **local** question about the mutation
+cache, never a network one, and stamps `terminal` on the unresolved-id error;
+`shouldRetryWrite` honours it as its first clause.
+
+| The create it depends on | Verdict |
+|---|---|
+| Present, paused/pending/retrying | **retry** — this is how a dependent waits for its dependency |
+| **Absent** (cancelled by `cancelQueuedWritesForSet`, or evicted) | **terminal** |
+| Present, terminal `'error'` (a quota 403 on an exercise create, say) | **terminal** |
+
+- **This ends RETRIES; it never discards.** The write stays in the cache, stays persisted, stays
+  listed. `flushOutbox` re-executes every errored outbox mutation in `byEnqueueOrder`, so a
+  dependency that later succeeds takes its dependents with it in the same pass.
+- **Deleting a not-yet-synced set must cancel every write targeting it**, not just the create —
+  `cancelQueuedWritesForSet`, which is the source-level half of the same fix.
+- **`App.jsx` must `await` both id maps BEFORE `restoreOutbox`, sequentially.** They were one
+  `Promise.all`, and a restored dependent could beat its own mapping off disk. Survivable only
+  while unresolved ids retried forever; now it would fail a write whose mapping is sitting in
+  IndexedDB.
+- **Any new dependent write needs an answer to "what if its dependency never lands?"**
+
+### "Does the queue ever stop retrying?" — the exact answer
+
+Asked directly, and worth answering precisely, because the intuitive reading of *"a durable write
+retries forever"* is wrong in one direction and the intuitive fix is wrong in the other.
+
+**Tier 1 — never stops, unconditionally.** Anything caused by connectivity or server health: 5xx,
+502/503/504, cold start, DB down, pool exhausted, an aborted 15s request, a bare rejected fetch,
+408, 429. Retries forever with backoff (capped 30s), at any attempt count. **No status code a
+struggling backend can emit will ever end a write's retries**, and none of them can badge it or
+discard it — under those conditions the mutation never even leaves `'pending'`/`isPaused`.
+
+**Tier 2 — the retry LOOP ends; the write does not.** Exactly two things, and neither can be
+produced by a degraded backend:
+
+| Stop | What it is |
+|---|---|
+| A definitive 4xx (outside `{408, 429}`) | The server answered and rejected *this* write |
+| `error.terminal` — a dead dependency | A purely **local** check (`dependencyIsGone`); never consults the network |
+
+The write stays in the mutation cache, stays persisted, stays listed. And `flushOutbox` filters on
+`state.status === 'error'` **with no check on why it errored**, so it gets a completely fresh
+attempt on every reconnect, every tab-focus, every login and every boot. A dependent stuck behind a
+create that 401'd recovers by itself after the next sign-in: the create sorts first by `enqueueSeq`,
+lands in the same pass, and the dependent resolves behind it.
+
+**Tier 3 — actually leaves the queue.** Success; a 404 on edit/delete (the row is gone, so the end
+state is already reached — and a 404 needs the server to have *answered*); or an explicit human
+action (deleting the set whose create it targeted, Discard, Clear all, logout). **Never because it
+failed.**
+
+`isDeadWrite` is the single predicate for "this can never land" (definitive 4xx, or `terminal`), and
+it deliberately excludes **401**: a forced sign-out preserves the outbox and replays it after the
+next login, so badging it would call a write dead that is one login away from landing.
+
+**Why tier 2 exists at all**, given tier 1's absolutism: a `'pending'` mutation holds the single
+serial scope, so a write retrying forever on something that can never be satisfied does not fail
+alone — it stops the entire queue. *"Retry forever"* and *"the queue always drains"* are in direct
+tension, and the resolution is that **retrying forever is correct precisely while retrying can still
+change the outcome** — a question answered locally, never by asking the network.
 
 ## Editing a still-queued set
 

@@ -849,6 +849,20 @@ export default function HelpTab() {
           and can be edited and deleted like any other; they aren&rsquo;t stuck behind a spinner. When
           the connection returns, everything sends in the order you did it.
         </p>
+        <p>
+          Tapping that count opens the full list, so you can check nothing you entered was lost. A
+          change that genuinely can&rsquo;t be sent &mdash; a correction to a set you later deleted
+          on another device, say &mdash; is marked <T>Couldn&rsquo;t sync</T> rather than sitting
+          there looking like it&rsquo;s still trying. A slow or unreachable server never gets that
+          mark: those keep retrying for as long as it takes, and they will send.
+        </p>
+        <p>
+          Every row has a <T>Discard</T>, and there&rsquo;s a <T>Clear all queued changes</T> at the
+          bottom. You shouldn&rsquo;t need either &mdash; the queue sends on its own &mdash; but
+          they&rsquo;re there so a change you no longer want, or one you believe is stuck, is never
+          something you have to log out to get rid of. Both ask before discarding anything, and what
+          they discard is gone for good.
+        </p>
 
         <h3 className="help-h3">When the signal is bad rather than absent</h3>
         <p>

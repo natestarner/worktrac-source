@@ -3,6 +3,7 @@ import { notifyManager, useQueryClient } from '@tanstack/react-query';
 import { OUTBOX_SCOPE_ID } from '../lib/outboxPersistence';
 import { byEnqueueOrder } from '../lib/outboxSequence';
 import { describeOutboxMutation } from '../lib/outboxDescribe';
+import { isDeadWrite } from '../lib/queryClient';
 import { useAuth } from '../context/AuthContext';
 import { useExercises } from './useExercises';
 
@@ -67,9 +68,28 @@ export function useOutboxItems() {
 
   return mutations.map((mutation) => ({
     id: mutation.mutationId,
+    // "This one is stuck" -- derived through the shared isDeadWrite predicate rather than
+    // re-asked here, so the modal's badge can never disagree with the retry policy about what
+    // counts as dead. A write merely retrying against a 5xx/timeout/unreachable backend is NOT
+    // dead: it stays 'pending' and reads as waiting to sync, which is the truth.
+    dead: isDeadWrite({
+      status: mutation.state.status,
+      errorStatus: mutation.state.error?.status,
+      errorTerminal: mutation.state.error?.terminal,
+    }),
     ...describeOutboxMutation(
       { mutationKey: mutation.options.mutationKey, variables: mutation.state.variables },
       { peopleById, exercisesById, tempExerciseNames },
     ),
   }));
+}
+
+// Drop one queued write. The same `getMutationCache().remove()` cancelQueuedWritesForSet and
+// clearOutboxMutations already use -- outboxPersistence's un-throttled mutation-cache subscription
+// rewrites the IndexedDB copy immediately, so there is no separate persistence step and no window
+// where a reload resurrects what was just discarded.
+export function discardOutboxItem(queryClient, mutationId) {
+  const cache = queryClient.getMutationCache();
+  const mutation = cache.getAll().find((m) => m.mutationId === mutationId);
+  if (mutation) cache.remove(mutation);
 }

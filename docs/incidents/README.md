@@ -36,6 +36,7 @@ need the "why" or the debugging story.
 | 2026-08-31 | [X-Forwarded-For spoofing bypassed every per-IP rate limit](2026-08-31-xff-spoofing-bypassed-per-ip-rate-limits.md) — the 2026-07-17 fix traded a shared-bucket bug for a header-spoofing one; confirmed live against lower before the fix | Auth / infra / security |
 | 2026-09-01 | [The Vite dev server died mid-run for months — it was a Node.js bug](2026-09-01-vite-dev-server-node-stack-corruption.md) — Node v24.15.0 corrupts its own stack on Windows and fail-fasts silently; four investigations failed because `rc=127`, the exit marker and the planned/unexpected tag were all broken | Local dev tooling |
 | 2026-09-02 | [The boot white screen, root-caused at last](2026-09-02-cold-backend-login-strands-the-device.md) — lower's cold start holds a request ~35s against a 15s client abort, so sign-in reliably tore down the auth snapshot and query cache without a replacement; `AppShell`'s `return null` was the blank `#root` itself | Frontend / resilience |
+| 2026-09-04 | [An orphaned edit wedged the outbox permanently](2026-09-04-outbox-wedged-by-orphaned-edit.md) — deleting a not-yet-synced set cancelled only its create, leaving an edit that retried forever and head-of-line-blocked the one serial scope, so nothing synced again; a definitive 4xx on an exercise create wedged it the same way | Offline |
 
 ## Adding a new incident
 
