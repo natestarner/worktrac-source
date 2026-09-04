@@ -85,6 +85,10 @@ export default function Modal({ width = 320, onClose, title, children, align = '
   }, []);
 
   const isSheet = align === 'bottom';
+  // One derivation, used by BOTH the header's own conditional and the content wrapper's top
+  // padding below -- those two must never disagree about whether a header is on screen, or a
+  // headerless modal gets the shrunken header-gap inset instead of its own.
+  const hasHeader = Boolean(title || onClose);
 
   return createPortal(
     <div
@@ -133,7 +137,7 @@ export default function Modal({ width = 320, onClose, title, children, align = '
           animation: `${isSheet ? 'modalSheetIn' : 'modalDialogIn'} var(--dur-slow) var(--ease-out)`,
         }}
       >
-        {(title || onClose) && (
+        {hasHeader && (
           // Sticky, not static: the panel is maxHeight 80vh with its own scrollbar, and the
           // routine form is genuinely taller than that. A close button that scrolls out of
           // reach is what would make "the backdrop no longer closes this" feel like a trap.
@@ -167,7 +171,7 @@ export default function Modal({ width = 320, onClose, title, children, align = '
               justifyContent: title ? 'space-between' : 'flex-end',
               gap: 'var(--space-3)',
               background: 'var(--color-surface)',
-              padding: 'var(--space-6) var(--space-6) var(--space-3)',
+              padding: 'var(--space-6) var(--space-6) var(--space-2)',
             }}
           >
             {title && (
@@ -189,10 +193,21 @@ export default function Modal({ width = 320, onClose, title, children, align = '
         )}
         <div
           style={{
-            // Top padding is always space-6 -- whether or not there's a header above, this is
-            // plain flow content, un-elevated, so it's immune to the stacking-context paintover
-            // described above.
-            padding: `var(--space-6) var(--space-6) ${isSheet ? 'calc(var(--space-6) + env(safe-area-inset-bottom))' : 'var(--space-6)'}`,
+            // Plain flow content, un-elevated, so it is immune to the stacking-context paintover
+            // described above -- which is why the header->content gap is still mostly HERE rather
+            // than on the header's own bottom padding. That part of the 2026-08-10 fix is intact.
+            //
+            // What changed is the SIZE, not the structure. With a header the gap was space-3 + a
+            // full space-6 = 36px of padding, measuring ~40px from the title's box to the first
+            // field across every modal (add-person, routine, past-workout alike) -- enough that
+            // the title read as detached from the content it introduces. It is now space-2 +
+            // space-4 = 24px, and the wrapper still owns two thirds of it.
+            //
+            // Conditional because this padding does DOUBLE DUTY: with a header it is the gap, but
+            // with no header it is the panel's own top inset, where space-6 is correct and must
+            // stay -- shrinking it unconditionally would leave a headerless modal with 16px on top
+            // against 24px on its other three sides.
+            padding: `${hasHeader ? 'var(--space-4)' : 'var(--space-6)'} var(--space-6) ${isSheet ? 'calc(var(--space-6) + env(safe-area-inset-bottom))' : 'var(--space-6)'}`,
           }}
         >
           {children}
