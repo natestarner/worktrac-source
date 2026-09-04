@@ -24,6 +24,51 @@ describe('Modal focus management', () => {
     expect(document.activeElement).toBe(screen.getByLabelText('tag name'));
   });
 
+  // initialFocus="dialog" exists for a modal whose first control is a SEGMENTED input. Focusing an
+  // <input type="date"> makes the browser highlight its active segment, so "Log a past workout"
+  // opened with a stray selected number in the date field -- it read as a rendering fault.
+  //
+  // jsdom renders no segment highlight, so what is asserted here is the thing that CAUSES it:
+  // which element holds focus. The visual symptom is downstream of exactly that.
+  it('lands on the dialog itself when initialFocus is "dialog", not the first field', () => {
+    render(
+      <Modal onClose={() => {}} title="Log a past workout" initialFocus="dialog">
+        <input aria-label="date" type="date" />
+        <input aria-label="time" type="time" />
+      </Modal>,
+    );
+
+    expect(document.activeElement).toBe(screen.getByRole('dialog'));
+    expect(document.activeElement).not.toBe(screen.getByLabelText('date'));
+  });
+
+  // The default must not change: every other modal wants a real field, and landing on the dialog
+  // everywhere would be a worse keyboard experience, not a safer one.
+  it('still prefers the first control when initialFocus is not given', () => {
+    render(
+      <Modal onClose={() => {}} title="Anything else">
+        <input aria-label="date" type="date" />
+      </Modal>,
+    );
+
+    expect(document.activeElement).toBe(screen.getByLabelText('date'));
+  });
+
+  // Tab must still reach the fields -- focusing the container is only acceptable because nothing
+  // is removed from the tab cycle. A dialog that trapped focus on itself would be a real downgrade.
+  it('keeps every control reachable after landing on the dialog', () => {
+    render(
+      <Modal onClose={() => {}} title="Log a past workout" initialFocus="dialog">
+        <input aria-label="date" type="date" />
+        <input aria-label="time" type="time" />
+      </Modal>,
+    );
+
+    const date = screen.getByLabelText('date');
+    date.focus();
+    expect(document.activeElement).toBe(date);
+  });
+
   // The regression this exists for: typing in one field used to yank the caret back to the
   // first control on every keystroke, because the dismissal callback was an effect dependency
   // and its identity changed on each parent render. In the real app that showed up as focus

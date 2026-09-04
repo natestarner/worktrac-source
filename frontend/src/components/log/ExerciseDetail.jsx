@@ -380,20 +380,44 @@ export default function ExerciseDetail({
       // the weight/reps shown come from the exact values submitted (the mutation variables).
       if (result.isPR) {
         const isHold = result.best.durationSeconds != null;
-        const isBodyweight = result.best.weight === 0;
+        // Read the LOGGED set's weight, not result.best's. The caption describes the set being
+        // celebrated and setText below comes from the same `variables`, so the two must not be able
+        // to disagree -- the old code mixed the sources for no reason.
+        const loggedWeight = Number(variables.weight) || 0;
+        const setText = formatSetSpaced({
+          weight: variables.weight,
+          reps: variables.reps,
+          durationSeconds: variables.durationSeconds,
+          unit: defaultUnit,
+        });
+        // ONE caption, chosen here rather than a boolean the overlay re-interprets.
+        //
+        // It was `isBodyweight: isBodyweight || isHold`, and PRCelebration renders the literal word
+        // "Bodyweight" for that flag -- so EVERY hold was captioned "Bodyweight", including one
+        // logged with weight on it. The comment said a hold "takes the same rep-focused
+        // presentation branch", which is true of the LAYOUT and false of the LABEL; one flag was
+        // answering both questions.
+        //
+        // PRsTab has had the correct three-way split all along (durationSeconds first, then
+        // weight === 0, then est. 1RM) and says "Longest hold at 25lb" -- so the two surfaces
+        // disagreed about the same set. This brings the celebration in line.
+        //
+        // The caption does not repeat the word "hold": est1rmText above it already reads
+        // "1:00 hold", so what is missing for a weighted hold is only the load.
+        const caption = isHold
+          ? loggedWeight > 0
+            ? `Weighted · ${loggedWeight} ${defaultUnit}`
+            : 'Bodyweight'
+          : loggedWeight === 0
+            ? 'Bodyweight'
+            : `Est. 1RM · ${setText}`;
         showCelebration({
           exerciseName: exercise.name,
-          // A hold has no est. 1RM either, so it takes the same rep-focused presentation branch.
-          isBodyweight: isBodyweight || isHold,
-          setText: formatSetSpaced({
-            weight: variables.weight,
-            reps: variables.reps,
-            durationSeconds: variables.durationSeconds,
-            unit: defaultUnit,
-          }),
+          caption,
+          setText,
           est1rmText: isHold
             ? `${formatRestTime(variables.durationSeconds)} hold`
-            : isBodyweight
+            : loggedWeight === 0
               ? `${variables.reps} reps`
               : `${result.best.est1rm} ${defaultUnit}`,
         });

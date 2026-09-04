@@ -350,7 +350,20 @@ export default function LogTab() {
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent-text)' }}>
                 {Math.min(routineIndex + 1, activeRoutine.exercises.length)} of {activeRoutine.exercises.length}
               </div>
-              <Button variant="ghost" size="sm" onClick={handleEndRoutine} style={{ color: 'var(--color-muted)' }}>
+              {/* The negative block margin keeps the 40px touch target while stopping it from
+                  becoming the ROW's height. This is a row of small text -- an 12px uppercase
+                  label and a 13px counter -- and .btn-sm's min-height was defining it at 40px,
+                  so the label rode centred with 11px of dead space above it. Added to the card's
+                  own 16px that read as 28px of gap above the label and looked unfinished.
+                  Nothing paints here to look cramped: .btn-ghost has no hover background, so the
+                  overflowing target is invisible, and .card sets no overflow, so the focus ring
+                  is not clipped. Same trade, and the same -px shape, as Modal.jsx's close button. */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleEndRoutine}
+                style={{ color: 'var(--color-muted)', marginTop: -10, marginBottom: -10 }}
+              >
                 End routine
               </Button>
             </div>
