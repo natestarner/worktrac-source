@@ -12,8 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class RoutineService {
@@ -37,7 +39,7 @@ public class RoutineService {
     @Transactional(readOnly = true)
     public List<RoutineDto> list(Long accountId, Long personId) {
         Person person = personService.requireOwnedPerson(personId, accountId);
-        return routineRepository.findByPerson_IdOrderByCreatedAtAsc(person.getId()).stream()
+        return routineRepository.findByPerson_IdOrderBySortOrderAscIdAsc(person.getId()).stream()
                 .map(RoutineDto::from)
                 .toList();
     }
@@ -48,6 +50,7 @@ public class RoutineService {
         quotaService.requireRoutineCapacity(accountId, person.getId(),
                 routineRepository.countByPerson_Id(person.getId()));
         Routine routine = new Routine(person, request.name().trim());
+        routine.setSortOrder(nextSortOrder(person));
         applyExercises(accountId, person, routine, request.exerciseIds());
         return RoutineDto.from(routineRepository.save(routine));
     }
@@ -86,11 +89,52 @@ public class RoutineService {
         for (Long targetPersonId : request.targetPersonIds()) {
             Person target = personService.requireOwnedPerson(targetPersonId, accountId);
             Routine copy = new Routine(target, source.getName());
+            // The target's tail, not the source's -- a copy lands at the end of the list it is
+            // arriving in. Re-read per target because each one has its own numbering, and
+            // because copying to the same person twice must not reuse a position.
+            copy.setSortOrder(nextSortOrder(target));
             attachExercises(copy, exercises);
             copies.add(RoutineDto.from(routineRepository.save(copy)));
             favorite(target, exercises);
         }
         return copies;
+    }
+
+    // Rewrites the person's whole arrangement in one shot. The request must name every one of
+    // their routines exactly once: a partial list has no correct answer (the omitted routines
+    // would keep positions that now collide), and silently renumbering around it is worse than
+    // refusing. IllegalArgumentException is a 400, which is terminal -- correct here, since this
+    // is an online-gated write with no outbox behind it to retry.
+    @Transactional
+    public List<RoutineDto> reorder(Long accountId, Long personId, ReorderRoutinesRequest request) {
+        Person person = personService.requireOwnedPerson(personId, accountId);
+        List<Routine> existing = routineRepository.findByPerson_IdOrderBySortOrderAscIdAsc(person.getId());
+
+        Map<Long, Routine> byId = new HashMap<>();
+        for (Routine routine : existing) {
+            byId.put(routine.getId(), routine);
+        }
+        Set<Long> requested = new LinkedHashSet<>(request.routineIds());
+        if (requested.size() != request.routineIds().size() || !requested.equals(byId.keySet())) {
+            throw new IllegalArgumentException("That list of routines doesn't match this person's routines.");
+        }
+
+        int position = 0;
+        List<RoutineDto> reordered = new ArrayList<>();
+        for (Long routineId : request.routineIds()) {
+            Routine routine = byId.get(routineId);
+            routine.setSortOrder(position++);
+            reordered.add(RoutineDto.from(routine));
+        }
+        return reordered;
+    }
+
+    // Zero-based and append-only. Reorder is the only thing that ever renumbers, so positions can
+    // go sparse after a delete -- which is harmless, since nothing reads them but ORDER BY.
+    private int nextSortOrder(Person person) {
+        return routineRepository.findFirstByPerson_IdOrderBySortOrderDesc(person.getId())
+                .map(routine -> routine.getSortOrder() + 1)
+                .orElse(0);
     }
 
     private void applyExercises(Long accountId, Person person, Routine routine, List<Long> exerciseIds) {

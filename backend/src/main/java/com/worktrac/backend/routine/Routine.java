@@ -40,6 +40,13 @@ public class Routine {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    // Where this routine sits in its person's own list -- a preference they set by dragging on
+    // the Routines tab, not a derived value. Zero-based, dense within a person, and assigned by
+    // RoutineService (append at the end on create/copy, by list position on reorder). Backfilled
+    // from created_at in V62 so existing households saw no change when ordering shipped.
+    @Column(name = "sort_order", nullable = false)
+    private int sortOrder;
+
     @OneToMany(mappedBy = "routine", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder ASC")
     private List<RoutineExercise> exercises = new ArrayList<>();
@@ -77,6 +84,14 @@ public class Routine {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public int getSortOrder() {
+        return sortOrder;
+    }
+
+    public void setSortOrder(int sortOrder) {
+        this.sortOrder = sortOrder;
     }
 
     public List<RoutineExercise> getExercises() {

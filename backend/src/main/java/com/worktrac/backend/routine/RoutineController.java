@@ -41,6 +41,14 @@ public class RoutineController {
         return routineService.update(currentUser.accountId(), personId, routineId, request);
     }
 
+    // Its own endpoint rather than an overload of update: RoutineRequest carries name +
+    // exerciseIds, so reordering through it would rewrite every routine's exercise membership
+    // to do the work of moving one row.
+    @PutMapping("/api/people/{personId}/routines/order")
+    public List<RoutineDto> reorder(@PathVariable Long personId, @Valid @RequestBody ReorderRoutinesRequest request) {
+        return routineService.reorder(currentUser.accountId(), personId, request);
+    }
+
     @PostMapping("/api/people/{personId}/routines/{routineId}/copy")
     public List<RoutineDto> copy(@PathVariable Long personId, @PathVariable Long routineId,
                                   @Valid @RequestBody CopyRoutineRequest request) {

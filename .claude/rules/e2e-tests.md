@@ -354,6 +354,21 @@ the re-seed that write triggers has fired before the next call types anything. *
 
 ## Locator gotchas
 
+- **The first click after a dnd-kit drag is swallowed — wait ~150ms.**
+  `AbstractPointerSensor.handleStart` adds a document-level capture-phase `click` →
+  `stopPropagation` listener, and `detach()` removes it on a **50ms `setTimeout`** (so the drag's
+  own synthetic click can't be read as a tap). Playwright can drop and click again well inside
+  that window, and the click is eaten **with no error**: actionability passes, the click
+  "succeeds", and the handler never runs. It presents as "my onClick broke after a drag". A real
+  person cannot drop and reach another control in 50ms, so **this is a test-timing artifact, not a
+  product defect — don't "fix" it in the app.** `routine-reorder.spec.ts` waits it out; this is one
+  of the few places a fixed `waitForTimeout` is the honest tool, because what is being waited out
+  is a fixed timer in a dependency with no observable signal to poll.
+- **`expect(await someAsyncRead()).toEqual(...)` does not retry.** A gated write commits and then
+  refetches, so a list re-renders a beat after the action — a one-shot `toEqual` over a plain array
+  captures the pre-refetch order and fails with correct data read too early. Use
+  `expect.poll(() => read()).toEqual(...)`. (`locator.count()` doesn't auto-wait either, which
+  fails the same way but quieter: it reports a short or empty list rather than throwing.)
 - **Use `exact: true` with `getByText`.** Toast and confirm-dialog text embeds item names, so
   substring matches collide and throw strict-mode violations.
 - New visible UI text that repeats an existing name (e.g. a link containing an exercise name) can

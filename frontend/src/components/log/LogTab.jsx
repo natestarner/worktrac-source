@@ -441,6 +441,12 @@ export default function LogTab() {
 
       {!selectedExercise && (
         <ExercisePicker
+          // Remount on person switch, for the same reason ExerciseDetail below carries this key:
+          // the picker holds local "I expanded this section" state, and unlike ExerciseDetail it
+          // is NOT unmounted by a person switch on its own (AppShell just navigates to that
+          // person's lastTab, which is usually this one). Without the key, one person's expanded
+          // Favorites list would be showing on the next person's screen.
+          key={activePersonId}
           personExercises={personExercises}
           catalog={catalog}
           routines={routines}

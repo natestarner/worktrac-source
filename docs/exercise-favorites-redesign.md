@@ -836,3 +836,113 @@ now samples per animation frame and asserts the picker was never painted after t
 restoring the await fails `[online]` on 8 painted frames and `[lie-fi]` on 182, while both offline
 modes correctly pass. That asymmetry is the point: the fix made online match what degraded already
 did, without disturbing degraded.
+
+## Update — 2026-09-04: the picker is bounded, and routines get an order the person chooses
+
+This redesign's founding move was to make the catalog **searched, not dumped**. That fixed the
+catalog; it left the person's *own* list unbounded, and three years of use is the case it was never
+sized for. All three lists on the picker had grown the same defect — an ordering uncorrelated with
+what you are about to do, and no bound at all:
+
+| Section | Ordering before | Bound before |
+|---|---|---|
+| Start a routine | `created_at ASC` — **oldest first** | none (quota: 100/person) |
+| Favorites | alphabetical | none |
+| Other Previously Logged | alphabetical | none — grows monotonically, forever |
+
+The picker list is `favorited ∪ noted ∪ tagged ∪ has-custom-field ∪ ever-logged-a-set`, so it never
+forgets. Log one thing once and it sits there permanently, and the routine you built first — most
+likely the one you abandoned — sat at the top of the quick-start block while your current program
+sat at the bottom.
+
+### Recency ranking was the obvious fix, and it was rejected
+
+The first proposal was to rank by last-logged. The objection that killed it is the one worth
+recording: **a picker list is read two ways, and they want opposite orderings.**
+
+- **Recognition** — "I know what's next, get me there." A small set. Recency works, and instability
+  doesn't hurt, because you are spotting rather than reading.
+- **Retrieval** — "where is Bulgarian Split Squat?" Needs a **position that is the same every
+  visit**. A list that re-sorts itself between visits cannot be learned; alphabetical-but-long
+  beats correctly-ranked-but-moving.
+
+"Other Previously Logged" is overwhelmingly read the second way, which makes it the list *least*
+able to tolerate reordering. So the ordering is untouched and **bounding is the only lever
+applied** — it shortens a list without moving anything in it. `PersonExerciseDto` gained no
+`lastLoggedAt`/`logCount`; adding them would also have been an axis-D hazard, since a persisted
+`personExercises` cache written by an older build would order wrongly until a refetch, and that key
+is deliberately excluded from `refreshAfterRestore`.
+
+### Bounded by rows, not by items
+
+Chips are variable-width, so a fixed item cap shows a wildly different amount of the list depending
+on how long someone's exercise names are — all-"Dip"-and-"Row" versus all-"Bulgarian Split Squat".
+The cap is therefore **nine rows** (`--picker-chip-rows`), which also makes it responsive for free:
+a wider screen fits more chips per row and shows more items in the same nine rows.
+
+Three things make that arithmetic hold, and each is load-bearing:
+
+1. **The clip is pure CSS.** `.picker-chip-wrap--clipped` caps the height, so the very first paint
+   is correct at any viewport width. Measuring first and rendering second would cost a wrong-height
+   frame on the app's most-used screen.
+2. **`.picker-chip` pins its own height and never wraps.** Every row is then exactly
+   `--picker-chip-h`, which is what lets a `calc()` land on a row boundary. A long name truncates
+   with an ellipsis and keeps its full `aria-label`.
+3. **The overflow is `inert`.** A clipped-but-present chip is still focusable, still in the
+   accessibility tree, and **still passes Playwright's `toBeVisible()`** — so "hidden" would have
+   been true only to a sighted mouse user. Dropping it from the DOM instead is an oscillation: the
+   container shrinks below its cap, the observer re-fires, no overflow is reported, the list comes
+   back.
+
+### The disclosure went to the bottom, on review
+
+It shipped for review beside the section heading and that was wrong: there it read as decoration on
+a label, and it sat nowhere near the place the list actually stops. It now sits **below** its list
+with a chevron that flips on expand (`Show all 40 favorites ⌄` / `Collapse favorites ⌃`).
+
+The chevron carries more weight here than it would elsewhere, because the clip lands exactly on a
+row boundary — a truncated list looks *deliberately complete*, with no half-row peeking out to
+suggest otherwise. Each label names its own noun, because up to three are on screen at once and
+Playwright matches accessible names by substring.
+
+### Routines get an explicit order (V61/V62)
+
+Rather than derive an order, the person sets one: drag-and-drop on the Routines tab, behind a
+`Reorder routines` mode. A mode rather than always-visible handles for two reasons that both matter
+— a row already carries Copy to… / Edit / Delete / Start routine, and routine CRUD is Tier-3, so a
+mode gives exactly **one** control to `OfflineDisabledWrap` instead of a handle per row. The gate is
+on opening the mode, never on `Done`: refusing after someone has arranged a dozen routines would
+throw the arrangement away.
+
+V62 backfills `sort_order` from `created_at`, so every existing household saw exactly the order it
+saw before, and nothing moved until someone chose to move it.
+
+### Two things the tests taught, both about vacuity
+
+**The `id` tiebreak hides a broken `sort_order`.** `ORDER BY sortOrder, id` means that while a list
+is still in creation order, ids ascend in the same direction as positions — so the first drafts of
+the ordering tests passed against a column stuck at 0. The only case that discriminates is creating
+*after* a reorder. Verified by breaking `nextSortOrder` and watching the strengthened assertions
+fail where the originals had not.
+
+**A dnd-kit drag eats the next click, and that is not a bug.** After the drag test's `Done` click
+silently did nothing, the first read was a real UX defect — drag, then tap, nothing happens.
+Reading dnd-kit's source instead: `handleStart` adds a document-level capture-phase `click` →
+`stopPropagation` and `detach()` removes it on a **50ms** timer, so the drag's own synthetic click
+can't register as a tap. A person cannot drop and reach another control in 50ms; Playwright can.
+The fix belonged in the test, not the app — and the general lesson is to read the dependency before
+concluding the app is wrong.
+
+### Deferred, deliberately
+
+**Tag filtering on the picker** is the strongest next lever and is *already built*:
+`person_exercise_tags` exists, every `PersonExerciseDto` already carries `tags`, and
+`ExerciseFilterBar` + `useExerciseFilter` + `useExerciseTagMap` are shipped on History and PRs.
+Tapping "Pull" would narrow 87 exercises to 12 **without moving anything**. The catch is that tags
+are opt-in and tagging is buried in the Customize screen, so it does nothing for someone who has
+never tagged — which is why it is a separate change with its own discovery problem to solve.
+
+Also found while sizing this and left alone: `searchExercises` explicitly never caps its result
+count (a one-letter query renders every match as a full row) and ignores the person's own usage;
+`GET /api/people/{id}/history` returns every session with every set as a bare array, unbounded for
+Pro; and nothing in the app is paginated on either side.

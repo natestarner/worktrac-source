@@ -192,6 +192,13 @@ export default function HelpTab() {
           &ldquo;barbell squat&rdquo; finds <strong>Barbell Back Squat</strong>. You don&rsquo;t have
           to guess the exact name.
         </p>
+        <p>
+          Both lists stay alphabetical, and they always will &mdash; so an exercise sits in the same
+          place every time you come looking for it. Once a list outgrows the screen it shows the
+          first few rows with a <T>Show all</T> link underneath; tap it to see the rest, and{' '}
+          <T>Collapse</T> to fold it back. Worth knowing: a wide screen fits more per row, so an
+          iPad shows more of the list than a phone before the link appears.
+        </p>
 
         <h3 className="help-h3">Logging</h3>
         <p>
@@ -368,6 +375,18 @@ export default function HelpTab() {
           exercises from your library in the order you&rsquo;ll do them. An exercise
           can appear more than once; each position is its own step, so a routine that opens and closes
           with the same movement works fine. <ChipWait />
+        </p>
+
+        <h3 className="help-h3">Putting them in order</h3>
+        <p>
+          Your routines are listed in whatever order you put them in, on the <T>Routines</T> tab and
+          in the Log picker&rsquo;s shortcut alike. Tap <T>Reorder routines</T>, drag the handles,
+          then tap <T>Done</T>. <ChipWait />
+        </p>
+        <p>
+          This is worth two minutes if you have more than a handful: the Log picker&rsquo;s{' '}
+          <T>Start a routine</T> shortcut only shows the first four, so the ones you put at the top
+          are the ones waiting for you when you walk in.
         </p>
 
         <h3 className="help-h3">Running one</h3>

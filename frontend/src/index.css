@@ -209,6 +209,21 @@
   --session-bar-height: 52px;
   --bottom-bar-height: 0px;
 
+  /* --- Log picker chips -------------------------------------------------
+     The picker's exercise chips are bounded by ROWS, not by a count of
+     items: chips are variable-width, so a fixed item cap shows wildly
+     different amounts of the list depending on how long someone's exercise
+     names are. Clipping at a row multiple also means a wider screen fits
+     more chips per row and therefore shows MORE items in the same nine
+     rows, for free and with no measurement.
+     These three are what make that arithmetic exact -- see .picker-chip
+     (whose height is pinned, not derived from font metrics) and
+     .picker-chip-wrap--clipped. Tune --picker-chip-rows here; nothing
+     else needs to change. */
+  --picker-chip-h: 46px;
+  --picker-chip-gap: var(--space-2);
+  --picker-chip-rows: 9;
+
   /* --- Rest ring -------------------------------------------------------
      The unfilled remainder of a person pill's rest ring. Two values because
      one ring has to work on two grounds: an inactive pill is --color-surface,
@@ -568,6 +583,59 @@ button:not(.pressable):active:not(:disabled) {
   color: var(--color-muted);
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
+}
+
+/* The Log picker's exercise chips -- the big tappable ones, not `.chip` (which is the small
+   read-only tag pill). Was an inline style object in ExercisePicker.jsx; it lives here because
+   the row-clipping below needs the height and gap as tokens, and CSS is the only place a
+   calc() over them can be written.
+
+   The height is PINNED rather than left to padding + font metrics. That is the whole trick: it
+   makes every chip exactly one row tall, so a wrapped row is exactly --picker-chip-h and
+   clipping at a multiple of it always lands on a row boundary. Derive the height from padding
+   instead and a font swap or a line-height change silently puts the clip mid-row.
+
+   Single-line for the same reason: a name long enough to wrap would make ITS row taller and
+   break the multiple. `display: block` (not inline-flex) with line-height centring is what
+   makes text-overflow: ellipsis actually apply -- ellipsis has no effect on a flex container.
+   The full name stays in the accessible name via aria-label at the call site, so truncation is
+   visual only. */
+.picker-chip {
+  display: block;
+  height: var(--picker-chip-h);
+  /* Minus the 1px border top and bottom -- box-sizing is border-box globally, so this centres
+     the text in the content box. */
+  line-height: calc(var(--picker-chip-h) - 2px);
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  cursor: pointer;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.picker-chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--picker-chip-gap);
+}
+
+/* n rows of chips plus the n-1 gaps between them. Purely visual and correct on the FIRST paint --
+   no measurement, no flash. ExercisePicker separately measures scrollHeight against clientHeight
+   to decide whether to offer "Show all", and marks the clipped chips inert; if that measurement
+   never runs (jsdom lays nothing out), the list is still correctly clipped. */
+.picker-chip-wrap--clipped {
+  max-height: calc(
+    var(--picker-chip-rows) * var(--picker-chip-h) +
+      (var(--picker-chip-rows) - 1) * var(--picker-chip-gap)
+  );
+  overflow: hidden;
 }
 
 .empty-state {
