@@ -61,8 +61,11 @@ export default function PastSessionModal({ onClose }) {
     errorMessage: "Couldn't start that past workout.",
   });
 
+  // initialFocus="dialog": the first control here is <input type="date">, and focusing it makes the
+  // browser highlight its month segment -- so the modal opened with a stray selected number in the
+  // date, which reads as a glitch. See Modal.jsx for why this is not an a11y downgrade.
   return (
-    <Modal width={340} onClose={onClose} title="Log a past workout">
+    <Modal width={340} onClose={onClose} title="Log a past workout" initialFocus="dialog">
       <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 18 }}>When did {activePersonName} work out?</div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
         <input

@@ -33,7 +33,26 @@ const FOCUSABLE_NOT_CLOSE = FOCUSABLE.split(', ')
   .map((selector) => `${selector}:not([data-modal-close])`)
   .join(', ');
 
-export default function Modal({ width = 320, onClose, title, children, align = 'center', labelledBy }) {
+// `initialFocus` picks where focus lands on open:
+//   'first'  (default) -- the first real control, so a keyboard user starts on the name field,
+//             the note box or the first stepper rather than at the top of the page.
+//   'dialog' -- the dialog container itself. For a modal whose first control is a SEGMENTED input
+//             (<input type="date"> / type="time">), where focusing it makes the browser highlight
+//             the active segment: the month reads as a stray selected number the moment the modal
+//             appears, which looks like a rendering fault rather than a focused field.
+// Focusing the dialog is not a downgrade -- the WAI-ARIA dialog pattern lists it as an accepted
+// landing spot (that is what tabIndex={-1} on the panel is for), the title is announced, and Tab
+// still reaches every control. Prefer it only where the first control is segmented; everywhere
+// else landing on a real field is the better keyboard experience.
+export default function Modal({
+  width = 320,
+  onClose,
+  title,
+  children,
+  align = 'center',
+  labelledBy,
+  initialFocus = 'first',
+}) {
   const dialogRef = useRef(null);
   const restoreFocusRef = useRef(null);
   const titleId = useId();
@@ -55,8 +74,10 @@ export default function Modal({ width = 320, onClose, title, children, align = '
     // The header's X is skipped here -- it is first in DOM order, so without the exclusion
     // it would steal the focus that belongs to the name field / note box / first stepper.
     // It stays in the Tab cycle below; it just isn't where focus lands on open.
-    // Runs exactly once, on open -- see the ref note above.
-    const first = dialog.querySelector(FOCUSABLE_NOT_CLOSE);
+    // Runs exactly once, on open -- see the ref note above. `initialFocus` is read rather than
+    // depended on for the same reason: this effect is mount-only, and its value at mount is
+    // exactly the one that matters.
+    const first = initialFocus === 'dialog' ? null : dialog.querySelector(FOCUSABLE_NOT_CLOSE);
     (first || dialog).focus({ preventScroll: true });
 
     function onKeyDown(event) {
