@@ -898,6 +898,31 @@ input[type='search']::-webkit-search-results-decoration {
   justify-content: center;
 }
 
+/* TabsNav (Log/History/PRs/Routines/Trends) keeps `.seg`'s default look -- sized to its own
+   content, NOT stretched full-width like `.seg-fill` -- whenever there's room for it. Below a
+   phone-portrait width there isn't: at full padding the five tabs are wider than the content
+   column beside them (the search box, a routine card), so the row either needs to scroll (the
+   old behaviour -- and iOS's overlay scrollbar is invisible until you already know to swipe, so
+   it just looked cut off) or shrink.
+   `flex-shrink` alone can't do this: a flex item's automatic minimum width already INCLUDES its
+   current padding, so shrinking never reaches into the padding -- it either leaves the box alone
+   or starts overflowing the text past it, which is the exact bug .seg-fill's own item rule
+   documents above. Padding has to be a value we write, not a width flex-shrink discovers.
+   A CSS lock, not a breakpoint: the row needs to trim by a different amount at 320px than at
+   414px, so a single cutover would either undershoot (still short of the edge) or overshoot
+   (tighter than it needs to be) everywhere except the one width it was tuned for. `10vw - 25px`
+   is fitted to two measured points -- full padding (--space-4, 16px) exactly filling the content
+   column at a ~410px-wide screen, and 7px (just under --space-2) at 320px, the narrowest iPhone
+   ever shipped -- so every real phone lands smoothly between the two ends rather than snapping,
+   and even that oldest width fits without needing to scroll. `.app-chrome` (and this bar with it)
+   is always full viewport width with no narrower wrapper of its own, which is what makes `vw` an
+   exact stand-in for "this element's own available width" here -- it would need a container query
+   instead if that ever stopped being true. Re-fit the two constants if the tab labels change
+   enough to move either point. */
+.tabs-nav-bar .seg-item {
+  padding-inline: clamp(7px, 10vw - 25px, var(--space-4));
+}
+
 .seg-fill .seg-item {
   flex: 1 1 0;
   /* Deliberately NOT min-width: 0. A flex item's automatic minimum defaults to its own
