@@ -67,9 +67,10 @@ export default function HelpTab() {
   // than `popstate`, so `useLocation` may not even re-run for them. Running twice would be
   // harmless anyway; scrolling to the same element is idempotent.
   //
-  // scrollIntoView() honours the `scroll-margin-top: 132px` on .help-section, so the heading
-  // clears the sticky chrome exactly as a native jump does -- don't reach for scrollTo(), which
-  // would have to re-derive that offset and could then disagree with the CSS.
+  // scrollIntoView() honours the `scroll-margin-top: var(--sticky-chrome-clearance)` on
+  // .help-section, so the heading clears the sticky chrome exactly as a native jump does -- don't
+  // reach for scrollTo(), which would have to re-derive that offset and could then disagree with
+  // the CSS.
   useEffect(() => {
     const id = hash ? decodeURIComponent(hash.slice(1)) : '';
     if (!id) return;

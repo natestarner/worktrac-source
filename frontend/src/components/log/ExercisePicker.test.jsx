@@ -122,6 +122,80 @@ describe('ExercisePicker search field', () => {
     renderPicker();
     expect(screen.getByPlaceholderText('Search all exercises')).toHaveClass('input');
   });
+
+  // Regression: the on-focus scroll landed the field at the very top of the scroll container,
+  // which is exactly where the sticky .app-chrome paints -- hiding the field behind it rather
+  // than below it. index.css's scroll-margin-top on this class is what fixes that; this only
+  // pins that the class is still there to carry it.
+  it('carries the scroll-margin-top class that keeps it clear of the sticky chrome', () => {
+    renderPicker();
+    expect(screen.getByPlaceholderText('Search all exercises')).toHaveClass('exercise-search-input');
+  });
+});
+
+// Regression: starting (or clearing) a search hides (or reveals) the routine quick-start block
+// ABOVE the field, which moves the field itself out from under a scroll position set before that
+// reflow happened -- "the search box jumps up" while typing on a phone.
+describe('ExercisePicker search field re-scroll on layout shift', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useChipRowOverflow.mockReturnValue(NOTHING_HIDDEN);
+  });
+
+  it('re-scrolls the field into view when starting a search collapses the routine block above it, while focused', () => {
+    const setExerciseSearch = vi.fn();
+    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch });
+    const { rerender } = renderPicker({ routines: routines(1) });
+
+    const input = screen.getByPlaceholderText('Search all exercises');
+    const scrollIntoView = vi.fn();
+    input.scrollIntoView = scrollIntoView;
+    input.focus();
+    scrollIntoView.mockClear(); // the focus event's own call isn't what this test is about
+
+    useAppState.mockReturnValue({ exerciseSearch: 'squ', setExerciseSearch });
+    rerender(
+      <ExercisePicker
+        personExercises={[]}
+        catalog={[]}
+        routines={routines(1)}
+        loading={false}
+        onSelectExercise={vi.fn()}
+        onAddExercise={vi.fn()}
+        onStartRoutine={vi.fn()}
+        hasActiveRoutine={false}
+      />
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+  });
+
+  it('does not re-scroll on that same transition when the field is not the one focused', () => {
+    const setExerciseSearch = vi.fn();
+    useAppState.mockReturnValue({ exerciseSearch: '', setExerciseSearch });
+    const { rerender } = renderPicker({ routines: routines(1) });
+
+    const input = screen.getByPlaceholderText('Search all exercises');
+    const scrollIntoView = vi.fn();
+    input.scrollIntoView = scrollIntoView;
+    // Deliberately not focused -- e.g. the search term came from restored state, not typing.
+
+    useAppState.mockReturnValue({ exerciseSearch: 'squ', setExerciseSearch });
+    rerender(
+      <ExercisePicker
+        personExercises={[]}
+        catalog={[]}
+        routines={routines(1)}
+        loading={false}
+        onSelectExercise={vi.fn()}
+        onAddExercise={vi.fn()}
+        onStartRoutine={vi.fn()}
+        hasActiveRoutine={false}
+      />
+    );
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
 });
 
 // The routine quick-start block sits ABOVE the search field, so its length is what decides
