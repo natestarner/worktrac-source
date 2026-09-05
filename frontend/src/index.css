@@ -911,16 +911,43 @@ input[type='search']::-webkit-search-results-decoration {
    A CSS lock, not a breakpoint: the row needs to trim by a different amount at 320px than at
    414px, so a single cutover would either undershoot (still short of the edge) or overshoot
    (tighter than it needs to be) everywhere except the one width it was tuned for. `10vw - 25px`
-   is fitted to two measured points -- full padding (--space-4, 16px) exactly filling the content
-   column at a ~410px-wide screen, and 7px (just under --space-2) at 320px, the narrowest iPhone
-   ever shipped -- so every real phone lands smoothly between the two ends rather than snapping,
-   and even that oldest width fits without needing to scroll. `.app-chrome` (and this bar with it)
-   is always full viewport width with no narrower wrapper of its own, which is what makes `vw` an
-   exact stand-in for "this element's own available width" here -- it would need a container query
-   instead if that ever stopped being true. Re-fit the two constants if the tab labels change
-   enough to move either point. */
+   is fitted to two points measured LOCALLY (Windows Chrome, which -- like every non-Apple
+   platform -- already falls through this app's `-apple-system, BlinkMacSystemFont, 'SF Pro
+   Text'` stack to a substitute font): full padding (--space-4, 16px) at a ~410px-wide screen,
+   and 7px (just under --space-2) at 320px. `.app-chrome` (and this bar with it) is always full
+   viewport width with no narrower wrapper of its own, which is what makes `vw` an exact stand-in
+   for "this element's own available width" here.
+
+   That measurement being platform-specific is exactly why the fit-content/flex-shrink pair below
+   exists, and why this alone was not enough: lower's e2e run (Linux/Chromium, a third fallback
+   font again) rendered these same five labels ~40px wider in total than the Windows measurement
+   the constants above were fitted to, so the same padding floor that fits comfortably on the two
+   platforms actually measured here still overflowed by ~40px on a THIRD. No fixed pixel constant
+   can be fitted against a font stack this app never actually gets to render outside real Apple
+   hardware -- so padding shrinking first is the common-case polish, verified only for the
+   fallback fonts on hand, and the pair below is what turns "must never overflow" into a real
+   guarantee instead of a measurement that happened to hold on the machines used to take it. */
+.tabs-nav-bar .seg {
+  /* A definite width for `.seg-item`'s flex-shrink below to compress against once the padding
+     floor above isn't enough on its own -- `fit-content` keeps hugging its own content exactly
+     as before whenever that content is narrower than the row (the common case), so this changes
+     nothing visible unless the floor above has already been reached. */
+  width: fit-content;
+  max-width: 100%;
+}
+
 .tabs-nav-bar .seg-item {
   padding-inline: clamp(7px, 10vw - 25px, var(--space-4));
+  /* The unconditional safety net: if the padding floor above still isn't enough (a wider font
+     than either fallback this was measured against), shrink into the label itself rather than
+     overflow or scroll -- ellipsis, not the overlap `.seg-fill`'s own item rule documents, since
+     this overrides the automatic min-content floor that rule relies on. Ellipsis truncates the
+     PAINT only; the text node (and therefore the accessible name) is untouched, so a screen
+     reader still hears "Routines" even on a screen narrow/wide-fonted enough to show "Routi…". */
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .seg-fill .seg-item {
