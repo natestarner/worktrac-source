@@ -868,6 +868,14 @@ input[type='search']::-webkit-search-results-decoration {
 
 .seg-fill {
   display: flex;
+  /* Lets a row with more options than a narrow phone can hold (Trends' 5-way exercise metric
+     switcher: Est. 1RM / Top weight / Volume / Best set / Reps) break onto a second line instead
+     of every pill's text overflowing on top of its neighbour -- see .seg-fill .seg-item below for
+     the half of this that actually decides WHEN that happens. `gap` above already spaces a second
+     row the same as the first, so no wrapping-specific gap is needed here. A control with few
+     enough options to always fit one row (the 3-item range/weekly-metric toggles) never reaches
+     the width this triggers at, so this is a no-op for them. */
+  flex-wrap: wrap;
   width: 100%;
 }
 
@@ -892,7 +900,16 @@ input[type='search']::-webkit-search-results-decoration {
 
 .seg-fill .seg-item {
   flex: 1 1 0;
-  min-width: 0;
+  /* Deliberately NOT min-width: 0. A flex item's automatic minimum defaults to its own
+     min-content size (its label's natural width, since nothing here sets overflow), and that
+     content-based floor is exactly what should decide wrapping -- it needs no breakpoint and
+     needs no per-label pixel guess, and it still updates itself for free if a label is ever
+     reworded. `min-width: 0` was overriding that floor to force every pill onto one line
+     regardless of content, which is what let "Top weight" and "Best set" shrink past their own
+     text width on an iPhone-portrait Trends card: with white-space: nowrap and no truncation, the
+     overflowing text painted on top of the next pill instead of wrapping the row.
+     flex-basis 0 still means each line's pills grow to fill it evenly once wrapping has settled
+     which pills share a line -- unchanged from before. */
   padding: var(--space-2) var(--space-1);
 }
 
