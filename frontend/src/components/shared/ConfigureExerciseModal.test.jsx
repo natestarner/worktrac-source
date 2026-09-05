@@ -69,6 +69,21 @@ describe('ConfigureExerciseModal standing note', () => {
   });
   afterEach(() => onlineManager.setOnline(true));
 
+  // Regression: Modal's default autofocuses the first real control, which for a preloaded
+  // exercise (no Name field) IS the standing note textarea -- popping the mobile keyboard the
+  // instant the modal opens, before anyone's seen what's in it. See Modal.jsx's initialFocus doc.
+  it('does not autofocus the standing note textarea on open', () => {
+    renderModal({ id: 2, name: 'Barbell Bench Press', isGlobal: true, note: '' });
+
+    expect(document.activeElement).not.toBe(screen.getByPlaceholderText('e.g. Keep elbows tucked, bad knee — go light'));
+  });
+
+  it('does not autofocus the name field on open, for the same reason', () => {
+    renderModal({ id: 1, name: 'My Curl', isGlobal: false, note: '' });
+
+    expect(document.activeElement).not.toBe(screen.getByDisplayValue('My Curl'));
+  });
+
   it('prefills the existing standing note, even for a preloaded (global) exercise', () => {
     renderModal({ id: 2, name: 'Barbell Bench Press', isGlobal: true, note: 'Bar is loaded to 45lb' });
 

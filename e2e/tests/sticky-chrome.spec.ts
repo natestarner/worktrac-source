@@ -142,3 +142,62 @@ test.describe('Sticky chrome by household size', () => {
     expect(await topOf(personBar(page))).toBeLessThanOrEqual(2);
   });
 });
+
+// The tab bar's own describe block, separate from this file's 390px default: these tests need to
+// sweep a RANGE of widths, from a narrow phone up through desktop, rather than assert at one.
+test.describe('Tab bar: full padding when there is room, a CSS lock when there is not', () => {
+  // Only a real browser can prove any of this: jsdom lays nothing out.
+
+  // Regression for two different bugs, one after the other:
+  //   1. Original: `.seg` at its full intrinsic padding is wider than a phone -- reaching the
+  //      last tab needed a swipe with no visible scrollbar to suggest one was possible.
+  //   2. Introduced fixing #1, then reverted: switching to `.seg-fill` DID stop the overflow, but
+  //      it also stretches the row to the container's full width on every screen -- correct on a
+  //      phone, wrong on a tablet/desktop where `.seg` living at its own content width (not
+  //      filling the row) is the look this bar has always had.
+  // The fix is a fluid padding lock (see .tabs-nav-bar .seg-item in index.css), so this sweeps
+  // enough widths to tell "shrinks to fit, never stretches" apart from either wrong version.
+  for (const width of [320, 375, 390, 414, 768, 1280]) {
+    test(`fits without scrolling and without stretching full-width at ${width}px`, async ({ page, request }) => {
+      await page.setViewportSize({ width, height: 700 });
+      await registerHousehold(page, request, 'Alex');
+
+      // No tab's own label is wider than its box (the .seg-fill regression from the Trends
+      // switcher: shrinking that reaches past a label's own text, not just its padding).
+      for (const label of ['Log', 'History', 'PRs', 'Routines', 'Trends']) {
+        const tab = page.getByRole('link', { name: label, exact: true });
+        const overflow = await tab.evaluate((el) => el.scrollWidth - el.clientWidth);
+        expect(overflow, `"${label}" tab's label is wider than its own box by ${overflow}px`).toBeLessThanOrEqual(1);
+      }
+
+      // No scrolling needed to reach any of them (the original bug).
+      const navOverflow = await page
+        .locator('.tabs-nav-bar')
+        .evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(navOverflow, `the tab bar needs ${navOverflow}px of horizontal scroll to reach every tab`).toBeLessThanOrEqual(1);
+
+      // And it never grows wider than its own container -- the `seg-fill` regression, checked at
+      // the widest end of the sweep where "shrink to fit" and "stretch to fill" look identical at
+      // narrow widths but diverge sharply once there's room to spare.
+      if (width >= 768) {
+        const barWidth = (await page.locator('.tabs-nav-bar').boundingBox())!.width;
+        const segWidth = (await page.locator('.tabs-nav-bar .seg').boundingBox())!.width;
+        expect(segWidth, 'the tab bar stretched to fill its full-width container instead of hugging its own content').toBeLessThan(barWidth * 0.6);
+      }
+    });
+  }
+
+  // The specific ask this was built for: on a phone narrow enough to need the lock at all, the
+  // shrunk row's right edge should land at roughly the same place as the rest of the tab's
+  // content, not stop noticeably short of it.
+  test('on a narrow phone, the shrunk row lines up with the content column beside it', async ({ page, request }) => {
+    await page.setViewportSize({ width: 375, height: 700 });
+    await registerHousehold(page, request, 'Alex');
+
+    const segRight = (await page.locator('.tabs-nav-bar .seg').boundingBox())!;
+    const searchRight = (await page.getByPlaceholder('Search all exercises').boundingBox())!;
+    const gap = searchRight.x + searchRight.width - (segRight.x + segRight.width);
+
+    expect(Math.abs(gap), `the tab bar's right edge is ${gap}px away from the content column's`).toBeLessThan(10);
+  });
+});

@@ -130,7 +130,12 @@ export default function ConfigureExerciseModal({
   const guardedRequestDelete = run(onRequestDelete, { offlineMessage: 'Deleting needs a connection.' });
 
   return (
-    <Modal width={360} onClose={onClose} title="Customize this exercise">
+    // initialFocus="dialog": the first control here is a text field (Name for an owned exercise,
+    // otherwise the Standing note textarea), and autofocusing either pops the mobile keyboard the
+    // instant this opens -- covering half the modal before anyone's had a chance to see what's in
+    // it, let alone decide they meant to edit that field. See Modal.jsx's own comment for why
+    // landing on the dialog is an accepted landing spot, not a downgrade.
+    <Modal width={360} onClose={onClose} title="Customize this exercise" initialFocus="dialog">
       <div style={{ marginBottom: 18 }}>
         <span style={isOwn ? ownBadgeStyle : preloadedBadgeStyle}>{isOwn ? 'Created by you' : 'Preloaded exercise'}</span>
       </div>

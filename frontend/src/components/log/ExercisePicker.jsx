@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import SectionLabel from '../shared/SectionLabel';
 import { useAppState } from '../../context/AppStateContext';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
@@ -52,6 +52,26 @@ export default function ExercisePicker({
   const [expandedGroups, setExpandedGroups] = useState(() => new Set());
   const term = exerciseSearch.trim().toLowerCase();
   const searching = term.length > 0;
+
+  // On mobile, the keyboard covers roughly the bottom half of the screen -- scrolling the input
+  // to the top of the viewport on focus keeps it visible above the keyboard and leaves the most
+  // possible room below it for search results. `.exercise-search-input`'s scroll-margin-top is
+  // what keeps that landing spot clear of the sticky .app-chrome above it (see index.css).
+  const scrollSearchIntoView = useCallback(() => {
+    // jsdom (unit tests) doesn't implement scrollIntoView -- guard rather than skip this
+    // entirely so real browsers still get it.
+    searchInputRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  // Starting (or clearing) a search hides (or reveals) the routine quick-start block ABOVE this
+  // field, which moves the field itself -- exactly the moment someone is mid-keystroke and least
+  // able to tell where their cursor went. The one-time on-focus scroll above can't see this: it
+  // already ran before the reflow happened. Re-running it here, keyed on `searching` flipping
+  // while the field still has focus, is what keeps the field from being left wherever that reflow
+  // happened to leave it.
+  useEffect(() => {
+    if (document.activeElement === searchInputRef.current) scrollSearchIntoView();
+  }, [searching, scrollSearchIntoView]);
 
   // Default view: favorites first, then everything else the person has logged.
   const favorites = personExercises.filter((e) => e.isFavorite);
@@ -130,16 +150,10 @@ export default function ExercisePicker({
       <Input
         ref={searchInputRef}
         data-tour-anchor={TOUR_ANCHORS.EXERCISE_SEARCH}
+        className="exercise-search-input"
         value={exerciseSearch}
         onChange={(e) => setExerciseSearch(e.target.value)}
-        // On mobile, the keyboard covers roughly the bottom half of the screen -- scrolling
-        // the input to the top of the viewport on focus keeps it visible above the keyboard
-        // and leaves the most possible room below it for search results.
-        onFocus={() => {
-          // jsdom (unit tests) doesn't implement scrollIntoView -- guard rather than skip this
-          // entirely so real browsers still get it.
-          if (searchInputRef.current?.scrollIntoView) searchInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }}
+        onFocus={scrollSearchIntoView}
         placeholder="Search all exercises"
         style={{
           marginBottom: 'var(--space-4)',

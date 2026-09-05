@@ -202,6 +202,29 @@ test.describe('Trends analytics', () => {
     }
   });
 
+  // Only a real browser can prove this too: jsdom lays nothing out, so a flex item shrinking its
+  // box below its own label's rendered width -- the actual mechanism of the bug -- is invisible
+  // to every unit test. Regression for the exercise metric switcher's five pills (Est. 1RM / Top
+  // weight / Volume / Best set / Reps) overflowing on top of each other on an iPhone-portrait
+  // Trends card; see .seg-fill .seg-item in index.css.
+  test('the exercise metric pills never overflow their own box on a phone', async ({ page, request }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await registerHousehold(page, request, 'Nate');
+
+    await pickExercise(page, 'Barbell Bench Press');
+    await logSet(page, 185, 8);
+
+    await page.getByRole('link', { name: 'Trends' }).click();
+    const exerciseMetric = page.getByRole('group', { name: 'Exercise metric' });
+    await expect(exerciseMetric).toBeVisible();
+
+    for (const label of ['Est. 1RM', 'Top weight', 'Volume', 'Best set', 'Reps']) {
+      const pill = exerciseMetric.getByRole('button', { name: label, exact: true });
+      const overflow = await pill.evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(overflow, `"${label}" pill's label is wider than its own box by ${overflow}px`).toBeLessThanOrEqual(1);
+    }
+  });
+
   test('a bodyweight-only lift gets a rep-based records view, not a column of zeros', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
 

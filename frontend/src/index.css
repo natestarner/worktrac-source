@@ -209,6 +209,18 @@
   --session-bar-height: 52px;
   --bottom-bar-height: 0px;
 
+  /* --- Top chrome clearance ----------------------------------------------
+     How far anything scrolled-to under the sticky .app-chrome needs to clear
+     it by, so the thing being scrolled to doesn't end up PAINTED OVER by the
+     chrome rather than merely near it. One shared value rather than two
+     independent guesses that could drift apart -- .help-section's anchored
+     headings and the Log picker's search field both need it.
+     Deliberately generous rather than exact: the chrome's height varies with
+     whether the person bar is showing (one person vs. several), and
+     overshooting costs a little whitespace where undershooting hides the
+     target behind the chrome. */
+  --sticky-chrome-clearance: 132px;
+
   /* --- Log picker chips -------------------------------------------------
      The picker's exercise chips are bounded by ROWS, not by a count of
      items: chips are variable-width, so a fixed item cap shows wildly
@@ -585,6 +597,15 @@ button:not(.pressable):active:not(:disabled) {
   letter-spacing: var(--tracking-label);
 }
 
+/* The Log picker's search field scrolls itself to the top of the viewport on focus (see
+   ExercisePicker.jsx), aiming to stay clear of a mobile keyboard. Without this, "the top of the
+   viewport" is also exactly where the sticky .app-chrome paints, at a higher z-index -- so the
+   field lands right BEHIND the chrome instead of below it: hidden on a phone, "sliding under the
+   log banner" on a desktop click. See --sticky-chrome-clearance. */
+.exercise-search-input {
+  scroll-margin-top: var(--sticky-chrome-clearance);
+}
+
 /* The Log picker's exercise chips -- the big tappable ones, not `.chip` (which is the small
    read-only tag pill). Was an inline style object in ExercisePicker.jsx; it lives here because
    the row-clipping below needs the height and gap as tokens, and CSS is the only place a
@@ -847,6 +868,14 @@ input[type='search']::-webkit-search-results-decoration {
 
 .seg-fill {
   display: flex;
+  /* Lets a row with more options than a narrow phone can hold (Trends' 5-way exercise metric
+     switcher: Est. 1RM / Top weight / Volume / Best set / Reps) break onto a second line instead
+     of every pill's text overflowing on top of its neighbour -- see .seg-fill .seg-item below for
+     the half of this that actually decides WHEN that happens. `gap` above already spaces a second
+     row the same as the first, so no wrapping-specific gap is needed here. A control with few
+     enough options to always fit one row (the 3-item range/weekly-metric toggles) never reaches
+     the width this triggers at, so this is a no-op for them. */
+  flex-wrap: wrap;
   width: 100%;
 }
 
@@ -869,9 +898,43 @@ input[type='search']::-webkit-search-results-decoration {
   justify-content: center;
 }
 
+/* TabsNav (Log/History/PRs/Routines/Trends) keeps `.seg`'s default look -- sized to its own
+   content, NOT stretched full-width like `.seg-fill` -- whenever there's room for it. Below a
+   phone-portrait width there isn't: at full padding the five tabs are wider than the content
+   column beside them (the search box, a routine card), so the row either needs to scroll (the
+   old behaviour -- and iOS's overlay scrollbar is invisible until you already know to swipe, so
+   it just looked cut off) or shrink.
+   `flex-shrink` alone can't do this: a flex item's automatic minimum width already INCLUDES its
+   current padding, so shrinking never reaches into the padding -- it either leaves the box alone
+   or starts overflowing the text past it, which is the exact bug .seg-fill's own item rule
+   documents above. Padding has to be a value we write, not a width flex-shrink discovers.
+   A CSS lock, not a breakpoint: the row needs to trim by a different amount at 320px than at
+   414px, so a single cutover would either undershoot (still short of the edge) or overshoot
+   (tighter than it needs to be) everywhere except the one width it was tuned for. `10vw - 25px`
+   is fitted to two measured points -- full padding (--space-4, 16px) exactly filling the content
+   column at a ~410px-wide screen, and 7px (just under --space-2) at 320px, the narrowest iPhone
+   ever shipped -- so every real phone lands smoothly between the two ends rather than snapping,
+   and even that oldest width fits without needing to scroll. `.app-chrome` (and this bar with it)
+   is always full viewport width with no narrower wrapper of its own, which is what makes `vw` an
+   exact stand-in for "this element's own available width" here -- it would need a container query
+   instead if that ever stopped being true. Re-fit the two constants if the tab labels change
+   enough to move either point. */
+.tabs-nav-bar .seg-item {
+  padding-inline: clamp(7px, 10vw - 25px, var(--space-4));
+}
+
 .seg-fill .seg-item {
   flex: 1 1 0;
-  min-width: 0;
+  /* Deliberately NOT min-width: 0. A flex item's automatic minimum defaults to its own
+     min-content size (its label's natural width, since nothing here sets overflow), and that
+     content-based floor is exactly what should decide wrapping -- it needs no breakpoint and
+     needs no per-label pixel guess, and it still updates itself for free if a label is ever
+     reworded. `min-width: 0` was overriding that floor to force every pill onto one line
+     regardless of content, which is what let "Top weight" and "Best set" shrink past their own
+     text width on an iPhone-portrait Trends card: with white-space: nowrap and no truncation, the
+     overflowing text painted on top of the next pill instead of wrapping the row.
+     flex-basis 0 still means each line's pills grow to fill it evenly once wrapping has settled
+     which pills share a line -- unchanged from before. */
   padding: var(--space-2) var(--space-1);
 }
 
@@ -2049,10 +2112,8 @@ input[type='search']::-webkit-search-results-decoration {
   padding-top: var(--space-8);
   margin-top: var(--space-8);
   /* Clears the sticky .app-chrome so an anchored section's heading isn't parked
-     underneath the tab bar. Deliberately generous rather than exact: the chrome's
-     height varies with whether the person bar is showing (one person vs. several),
-     and overshooting costs a little whitespace where undershooting hides a heading. */
-  scroll-margin-top: 132px;
+     underneath the tab bar. See --sticky-chrome-clearance. */
+  scroll-margin-top: var(--sticky-chrome-clearance);
 }
 
 .help-h2 {
