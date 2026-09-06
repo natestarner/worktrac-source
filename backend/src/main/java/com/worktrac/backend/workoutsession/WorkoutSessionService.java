@@ -2,6 +2,7 @@ package com.worktrac.backend.workoutsession;
 
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.NotFoundException;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.sessionexercisenote.SessionExerciseNote;
@@ -97,20 +98,20 @@ public class WorkoutSessionService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<WorkoutSessionDto> getLiveSessionDto(Long accountId, Long personId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public Optional<WorkoutSessionDto> getLiveSessionDto(AccountAccess access, Long personId) {
+        Person person = personService.requireVisiblePerson(personId, access);
         return getLiveSession(person).map(WorkoutSessionDto::from);
     }
 
     @Transactional
-    public void endWorkout(Long accountId, Long personId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public void endWorkout(AccountAccess access, Long personId) {
+        Person person = personService.requireWritablePerson(personId, access);
         getLiveSession(person).ifPresent(session -> session.setEndedAt(Instant.now(clock)));
     }
 
     @Transactional
-    public WorkoutSessionDto createPastSession(Long accountId, Long personId, Instant startedAt) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public WorkoutSessionDto createPastSession(AccountAccess access, Long personId, Instant startedAt) {
+        Person person = personService.requireWritablePerson(personId, access);
         WorkoutSession session = new WorkoutSession(person, startedAt, true);
         session.setEndedAt(startedAt); // point-in-time marker until sets are logged into it
         return WorkoutSessionDto.from(workoutSessionRepository.save(session));
@@ -120,9 +121,15 @@ public class WorkoutSessionService {
     // session -> person -> account, since there is no client-supplied personId to
     // cross-check against at all here.
     @Transactional
-    public WorkoutSessionDto editSession(Long accountId, Long sessionId, Instant newStartedAt) {
-        WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, accountId)
+    public WorkoutSessionDto editSession(AccountAccess access, Long sessionId, Instant newStartedAt) {
+        WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, access.accountId())
                 .orElseThrow(() -> new NotFoundException("We couldn't find that workout."));
+        // Child-id endpoint. The finder above proves the session is in this ACCOUNT, which was the
+        // entire boundary while an account had exactly one login -- it says nothing about whether
+        // the caller may write to the PERSON behind it. Without this, a member could edit a
+        // sibling's workout by its id alone, having been correctly refused the personId route.
+        // The message stays the session's, not the person's: from here that is what was asked for.
+        personService.requireWritablePerson(session.getPerson(), access, "We couldn't find that workout.");
 
         Duration delta = Duration.between(session.getStartedAt(), newStartedAt);
         // Shift every timestamp on the session by the same delta -- preserves the
@@ -142,8 +149,8 @@ public class WorkoutSessionService {
     // chronological). Sessions with zero sets logged (e.g. an abandoned retroactive
     // session) are excluded, matching the design's History tab.
     @Transactional(readOnly = true)
-    public List<HistorySessionDto> getHistory(Long accountId, Long personId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public List<HistorySessionDto> getHistory(AccountAccess access, Long personId) {
+        Person person = personService.requireVisiblePerson(personId, access);
         List<WorkoutSet> allSets = workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId());
 
         Map<Long, List<WorkoutSet>> setsBySession = new LinkedHashMap<>();
@@ -164,7 +171,7 @@ public class WorkoutSessionService {
         // The Free-tier window. A READ FILTER and nothing else -- every row above was loaded and
         // every row stays in the database, which is what makes "nothing is deleted, ever" true and
         // makes re-subscribing restore the full history in a single round trip.
-        Instant floor = subscriptionService.historyFloor(accountId);
+        Instant floor = subscriptionService.historyFloor(access.accountId());
 
         return workoutSessionRepository.findByPerson_IdOrderByStartedAtDesc(person.getId()).stream()
                 .filter(session -> SubscriptionService.isVisible(floor, session.getStartedAt()))
@@ -185,9 +192,9 @@ public class WorkoutSessionService {
     // nothing, and a household with no subscription row resolves to Free the same way every other
     // caller of historyFloor does.
     @Transactional(readOnly = true)
-    public HistoryWindowDto getHistoryWindow(Long accountId, Long personId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        Instant floor = subscriptionService.historyFloor(accountId);
+    public HistoryWindowDto getHistoryWindow(AccountAccess access, Long personId) {
+        Person person = personService.requireVisiblePerson(personId, access);
+        Instant floor = subscriptionService.historyFloor(access.accountId());
         if (floor == null) {
             return HistoryWindowDto.unclamped();
         }

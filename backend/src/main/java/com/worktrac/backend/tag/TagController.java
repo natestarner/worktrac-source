@@ -1,5 +1,7 @@
 package com.worktrac.backend.tag;
 
+import com.worktrac.backend.membership.RequiresPermission;
+import com.worktrac.backend.membership.Permission;
 import com.worktrac.backend.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -31,21 +33,25 @@ public class TagController {
     }
 
     @GetMapping
+    @RequiresPermission(anyMember = true)
     public List<TagDto> list() {
         return tagService.list(currentUser.accountId());
     }
 
     @PostMapping
+    @RequiresPermission(Permission.CREATE_SHARED_RESOURCE)
     public TagDto create(@Valid @RequestBody TagRequest request) {
         return tagService.create(currentUser.accountId(), request.name());
     }
 
     @PutMapping("/{tagId}")
+    @RequiresPermission(Permission.EDIT_ANY_SHARED_RESOURCE)
     public TagDto rename(@PathVariable Long tagId, @Valid @RequestBody TagRequest request) {
         return tagService.rename(currentUser.accountId(), tagId, request.name());
     }
 
     @DeleteMapping("/{tagId}")
+    @RequiresPermission(Permission.DELETE_SHARED_RESOURCE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long tagId) {
         tagService.delete(currentUser.accountId(), tagId);

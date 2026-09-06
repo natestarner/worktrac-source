@@ -2,6 +2,7 @@ package com.worktrac.backend.stats;
 
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.exercise.Exercise;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.sessionexercisenote.SessionExerciseNote;
@@ -62,8 +63,8 @@ public class StatsService {
     }
 
     @Transactional(readOnly = true)
-    public ExerciseSummaryDto getSummary(Long accountId, Long personId, Long exerciseId, Long excludeSessionId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public ExerciseSummaryDto getSummary(AccountAccess access, Long personId, Long exerciseId, Long excludeSessionId) {
+        Person person = personService.requireVisiblePerson(personId, access);
         LastSessionDto lastSession = getLastSession(person.getId(), exerciseId, excludeSessionId).orElse(null);
         BestDto best = getBest(person.getId(), exerciseId).orElse(null);
         return new ExerciseSummaryDto(lastSession, best);
@@ -109,8 +110,8 @@ public class StatsService {
     }
 
     @Transactional(readOnly = true)
-    public List<PrRowDto> getPrList(Long accountId, Long personId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public List<PrRowDto> getPrList(AccountAccess access, Long personId) {
+        Person person = personService.requireVisiblePerson(personId, access);
         List<WorkoutSet> all = workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId());
 
         // The Free-tier window, applied to what is DISPLAYED. Note this is deliberately NOT applied
@@ -118,7 +119,7 @@ public class StatsService {
         // whether a new set is a PR: detection reads the person's whole history, so a Free
         // household is never congratulated for beating a 90-day best that is not their real best.
         // Telling someone they set a record they did not set is worse than withholding one.
-        Instant floor = subscriptionService.historyFloor(accountId);
+        Instant floor = subscriptionService.historyFloor(access.accountId());
 
         Map<Long, List<WorkoutSet>> byExercise = new LinkedHashMap<>();
         for (WorkoutSet s : all) {
@@ -224,8 +225,8 @@ public class StatsService {
     }
 
     @Transactional(readOnly = true)
-    public TrendsOverviewDto getOverview(Long accountId, Long personId, int weeks, String zone) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public TrendsOverviewDto getOverview(AccountAccess access, Long personId, int weeks, String zone) {
+        Person person = personService.requireVisiblePerson(personId, access);
         int effectiveWeeks = Math.min(Math.max(weeks, 1), MAX_WEEKS);
         ZoneId zoneId = resolveZone(zone);
 
@@ -246,7 +247,7 @@ public class StatsService {
         // DISPLAY; it must never reshape what the app believes about the person).
         boolean hasAnyHistory = !loaded.isEmpty();
 
-        List<WorkoutSet> all = visibleTo(accountId, loaded);
+        List<WorkoutSet> all = visibleTo(access.accountId(), loaded);
 
         // Collapse to one entry per session (not per set) so a session with many sets only
         // counts once toward workoutCount, while still summing every set's volume.
@@ -360,8 +361,8 @@ public class StatsService {
     }
 
     @Transactional(readOnly = true)
-    public List<ExerciseTrendPointDto> getExerciseTrend(Long accountId, Long personId, Long exerciseId, int weeks, String zone) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public List<ExerciseTrendPointDto> getExerciseTrend(AccountAccess access, Long personId, Long exerciseId, int weeks, String zone) {
+        Person person = personService.requireVisiblePerson(personId, access);
         int effectiveWeeks = Math.min(Math.max(weeks, 1), MAX_WEEKS);
         ZoneId zoneId = resolveZone(zone);
 
@@ -374,7 +375,7 @@ public class StatsService {
         // as a PR on the chart. Same rule as getPrList: detection reads the whole history, only
         // what is DISPLAYED is clamped. Telling someone they set a record they did not set is
         // worse than withholding one.
-        Instant floor = subscriptionService.historyFloor(accountId);
+        Instant floor = subscriptionService.historyFloor(access.accountId());
         if (floor != null) {
             LocalDate floorDate = LocalDate.ofInstant(floor, zoneId);
             if (floorDate.isAfter(rangeStart)) rangeStart = floorDate;
@@ -464,10 +465,10 @@ public class StatsService {
     // One pass over the same per-exercise query getBest/getExerciseTrend already use; no new
     // repository method and no second full-history load.
     @Transactional(readOnly = true)
-    public ExerciseRecordsDto getExerciseRecords(Long accountId, Long personId, Long exerciseId, String zone) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public ExerciseRecordsDto getExerciseRecords(AccountAccess access, Long personId, Long exerciseId, String zone) {
+        Person person = personService.requireVisiblePerson(personId, access);
         ZoneId zoneId = resolveZone(zone);
-        List<WorkoutSet> all = visibleTo(accountId,
+        List<WorkoutSet> all = visibleTo(access.accountId(),
                 workoutSetRepository.findByPerson_IdAndExercise_Id(person.getId(), exerciseId));
         if (all.isEmpty()) {
             return new ExerciseRecordsDto(null, null, null, null, null, null, null, 0, 0, 0,

@@ -1,5 +1,6 @@
 package com.worktrac.backend.export;
 
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonDto;
 import com.worktrac.backend.person.PersonService;
@@ -60,8 +61,8 @@ public class CsvExportService {
     // which sets belonged to which workout. Without it an importer has to fall back to "one
     // session per day", which silently merges two workouts done on the same date.
     @Transactional(readOnly = true)
-    public CsvExport export(Long accountId, Long personId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public CsvExport export(AccountAccess access, Long personId) {
+        Person person = personService.requireVisiblePerson(personId, access);
 
         List<List<String>> rows = new ArrayList<>();
         // Duration (sec) is blank for a strength set and Est. 1RM is blank for a hold -- an empty
@@ -107,14 +108,14 @@ public class CsvExportService {
     // requiring a separate export per person. Reuses export() per person rather than
     // re-querying, so the two paths can never disagree on formatting.
     @Transactional(readOnly = true)
-    public ZipExport exportAll(Long accountId) {
-        List<PersonDto> people = personService.list(accountId);
+    public ZipExport exportAll(AccountAccess access) {
+        List<PersonDto> people = personService.list(access);
 
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Set<String> usedEntryNames = new HashSet<>();
         try (ZipOutputStream zip = new ZipOutputStream(buffer)) {
             for (PersonDto person : people) {
-                CsvExport csvExport = export(accountId, person.id());
+                CsvExport csvExport = export(access, person.id());
                 String entryName = csvExport.filename();
                 if (!usedEntryNames.add(entryName)) {
                     // Two people share a display name -- disambiguate by id rather than

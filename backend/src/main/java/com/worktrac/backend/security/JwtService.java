@@ -52,7 +52,15 @@ public class JwtService {
                     .parseSignedClaims(token)
                     .getPayload();
             Long userId = Long.valueOf(claims.getSubject());
-            Long accountId = claims.get("accountId", Number.class).longValue();
+            // Fails closed on a token carrying no accountId rather than throwing. This used to be
+            // an unguarded .longValue(), and the resulting NullPointerException is NOT caught by
+            // the JwtException | IllegalArgumentException below -- it escaped the filter entirely
+            // and surfaced as a 500 instead of the 401 every other malformed token produces.
+            Number accountIdClaim = claims.get("accountId", Number.class);
+            if (accountIdClaim == null) {
+                return Optional.empty();
+            }
+            Long accountId = accountIdClaim.longValue();
             String email = claims.get("email", String.class);
             // Defaults to USER for tokens issued before the role claim existed, so
             // pre-existing 30-day tokens keep working without forcing a re-login.

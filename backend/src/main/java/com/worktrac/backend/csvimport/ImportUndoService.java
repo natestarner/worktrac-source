@@ -1,6 +1,7 @@
 package com.worktrac.backend.csvimport;
 
 import com.worktrac.backend.common.NotFoundException;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.sessionexercisenote.SessionExerciseNoteRepository;
@@ -60,16 +61,16 @@ public class ImportUndoService {
     }
 
     @Transactional(readOnly = true)
-    public List<ImportBatchDto> list(Long accountId, Long personId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public List<ImportBatchDto> list(AccountAccess access, Long personId) {
+        Person person = personService.requireVisiblePerson(personId, access);
         return importBatchRepository.findByPerson_IdOrderByCreatedAtDesc(person.getId()).stream()
                 .map(ImportBatchDto::from)
                 .toList();
     }
 
     @Transactional
-    public ImportBatchDto undo(Long accountId, Long personId, Long batchId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public ImportBatchDto undo(AccountAccess access, Long personId, Long batchId) {
+        Person person = personService.requireWritablePerson(personId, access);
         ImportBatch batch = importBatchRepository.findByIdAndPerson_Id(batchId, person.getId())
                 .orElseThrow(() -> new NotFoundException("We couldn't find that import."));
         if (batch.isUndone()) {
