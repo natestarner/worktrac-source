@@ -80,6 +80,7 @@ app:
     #
     # 1000/5000 fits several full runs an hour including retries, while staying a real bound --
     # lower is genuinely internet-facing, unlike local.
+    login-per-email-per-hour: 1000
     login-per-ip-per-hour: 1000
     login-global-per-hour: 5000
     contact-per-user-per-hour: 200

@@ -36,16 +36,43 @@ public class RateLimitProperties {
 
     // Login limits (LoginRateLimiter). /api/auth/login had no throttle of any kind before this.
     //
-    // 60/hour per IP is far above any household's real use -- a whole family re-authenticating on
-    // several devices is a handful of logins a day -- while being low enough that neither password
-    // guessing nor the BCrypt-per-attempt CPU cost can run away. Deliberately NOT as tight as the
-    // contact limits: a login is free to serve when it succeeds, and locking a real family out
-    // mid-workout is a worse outcome than a slightly looser bound.
-    private int loginPerIpPerHour = 60;
+    // ⚠️ THE NARROWEST BUCKET, and the one that actually bounds guessing at a single account.
+    //
+    // 10/hour against ONE ADDRESS. A household re-authenticating never comes close: even a whole
+    // family on several devices is a handful of logins a day, and they are spread across different
+    // addresses now that each member has their own.
+    //
+    // It is what makes the per-IP bound safe to RAISE. Before member logins, per-IP at 60 was
+    // doing two jobs -- bounding guessing and bounding load -- and doing the first badly, since an
+    // attacker on 60 IPs got 3600 attempts at one account. Splitting them lets each be sized for
+    // its own job.
+    //
+    // ⚠️ <b>IT MUST BE CONSUMED FOR EVERY SUBMITTED ADDRESS, whether or not an account exists.</b>
+    // Consuming only for known emails makes "which addresses eventually 429" a user-enumeration
+    // oracle -- exactly what DUMMY_HASH and PasswordResetService's non-enumerating design exist to
+    // close, reintroduced through the rate limiter instead of the response. See
+    // AuthService.checkLoginAllowed, where it is consumed BEFORE the user lookup for that reason.
+    private int loginPerEmailPerHour = 10;
+
+    // Now a pure DoS/CPU bound rather than an anti-guessing one -- that job moved to the per-email
+    // bucket above, which does it far better. Raised 60 -> 300 because the old value was shaped by
+    // the job it no longer has, and 60/hour is genuinely reachable by legitimate traffic once a
+    // household has several member logins behind one home NAT, or a gym's shared wifi. Locking a
+    // real family out mid-workout is a worse outcome than a looser bound on a request that costs
+    // ~100ms of BCrypt.
+    private int loginPerIpPerHour = 300;
 
     // Backstop against a distributed attempt that rotates source IPs. Sized well above any
     // plausible real total, so it engages only under genuine attack rather than shaping normal use.
     private int loginGlobalPerHour = 2000;
+
+    public int getLoginPerEmailPerHour() {
+        return loginPerEmailPerHour;
+    }
+
+    public void setLoginPerEmailPerHour(int loginPerEmailPerHour) {
+        this.loginPerEmailPerHour = loginPerEmailPerHour;
+    }
 
     public int getLoginPerIpPerHour() {
         return loginPerIpPerHour;

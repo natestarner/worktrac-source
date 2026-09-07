@@ -80,4 +80,12 @@ public interface AccountMembershipRepository extends JpaRepository<AccountMember
     void deleteByAccount_Id(Long accountId);
 
     void deleteByAccount_IdIn(List<Long> accountIds);
+
+    // Admin-only: [accountId, count] pairs across ALL accounts, for the admin portal's per-household
+    // logins count. Same shape and same reasoning as PersonRepository.countGroupedByAccount --
+    // Object[] rather than a projection type, because this is a one-off internal aggregate consumed
+    // only by AdminService, and one grouped query rather than a lookup per row, because that list
+    // already fans out across every account in the database.
+    @Query("SELECT m.account.id, COUNT(m) FROM AccountMembership m GROUP BY m.account.id")
+    List<Object[]> countGroupedByAccount();
 }

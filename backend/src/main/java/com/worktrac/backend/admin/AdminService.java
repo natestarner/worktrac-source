@@ -9,6 +9,7 @@ import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.billing.SubscriptionStatus;
 import com.worktrac.backend.contact.ContactMessageService;
 import com.worktrac.backend.person.Person;
+import com.worktrac.backend.membership.AccountMembershipRepository;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.registrationaudit.RegistrationAlertSettings;
 import com.worktrac.backend.registrationaudit.RegistrationAlertSettingsService;
@@ -43,6 +44,7 @@ public class AdminService {
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
     private final PersonRepository personRepository;
+    private final AccountMembershipRepository membershipRepository;
     private final WorkoutSessionRepository workoutSessionRepository;
     private final WorkoutSetRepository workoutSetRepository;
     private final PendingRegistrationRepository pendingRegistrationRepository;
@@ -66,7 +68,9 @@ public class AdminService {
             RegistrationEventType.EMAIL_QUARANTINED);
 
     public AdminService(AccountRepository accountRepository, UserRepository userRepository,
-                         PersonRepository personRepository, WorkoutSessionRepository workoutSessionRepository,
+                         PersonRepository personRepository,
+                         AccountMembershipRepository membershipRepository,
+                         WorkoutSessionRepository workoutSessionRepository,
                          WorkoutSetRepository workoutSetRepository,
                          PendingRegistrationRepository pendingRegistrationRepository,
                          RegistrationEventRepository registrationEventRepository,
@@ -77,6 +81,7 @@ public class AdminService {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
+        this.membershipRepository = membershipRepository;
         this.workoutSessionRepository = workoutSessionRepository;
         this.workoutSetRepository = workoutSetRepository;
         this.pendingRegistrationRepository = pendingRegistrationRepository;
@@ -113,6 +118,7 @@ public class AdminService {
         Map<Long, String> emailByAccount = toStringMap(userRepository.ownerEmailGroupedByAccount());
         Map<Long, String> roleByAccount = toStringMap(userRepository.ownerRoleGroupedByAccount());
         Map<Long, Long> peopleCountByAccount = toLongMap(personRepository.countGroupedByAccount());
+        Map<Long, Long> loginCountByAccount = toLongMap(membershipRepository.countGroupedByAccount());
         Map<Long, Long> sessionCountByAccount = toLongMap(workoutSessionRepository.countGroupedByAccount());
         Map<Long, Long> setCountByAccount = toLongMap(workoutSetRepository.countGroupedByAccount());
         Map<Long, Instant> lastActivityByAccount = toInstantMap(
@@ -134,6 +140,9 @@ public class AdminService {
                         account.getDefaultUnit(),
                         account.getCreatedAt(),
                         peopleCountByAccount.getOrDefault(account.getId(), 0L),
+                        // 0 is legitimate rather than a bug: an account whose only user was
+                        // deleted keeps its people and history but has no login left.
+                        loginCountByAccount.getOrDefault(account.getId(), 0L),
                         sessionCountByAccount.getOrDefault(account.getId(), 0L),
                         setCountByAccount.getOrDefault(account.getId(), 0L),
                         lastActivityByAccount.get(account.getId()),

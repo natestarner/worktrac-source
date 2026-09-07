@@ -99,10 +99,14 @@ public class AuthService {
         // FIRST, before the lookup and before any BCrypt work. Every attempt costs ~100ms of CPU,
         // so a flood must be refused without paying for it -- this ordering is what makes the
         // limiter a DoS defence and not just an anti-guessing one. Do not move it below.
-        checkLoginAllowed(ipAddress);
-
         String email = request.email().trim().toLowerCase();
         Instant now = clock.instant();
+
+        // ⚠️ Still BEFORE the user lookup and before any BCrypt work, so a flood is refused
+        // without paying for it. What moved is only the email normalisation above it, which the
+        // per-email bucket needs -- keying on the raw string would give Nate@x.com and nate@x.com
+        // a budget each, which is a bypass rather than a nicety.
+        checkLoginAllowed(email, ipAddress);
 
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
@@ -229,7 +233,24 @@ public class AuthService {
 
     // Narrowest bucket first, matching ContactRateLimiter's ordering and for the same reason: a
     // single abuser should exhaust their own allowance before touching the shared one.
-    private void checkLoginAllowed(String ipAddress) {
+    // Narrowest bucket first, matching ContactRateLimiter's documented ordering and for the same
+    // reason: the message a caller gets should name the narrowest thing they actually tripped, and
+    // a wide bucket consumed on the way past a narrow refusal is budget spent on a request that
+    // was never going to be served.
+    private void checkLoginAllowed(String email, String ipAddress) {
+        // ⚠️ CONSUMED FOR EVERY SUBMITTED ADDRESS, known or not. Gating this on the account
+        // existing would make "which addresses eventually 429" a user-enumeration oracle --
+        // precisely what DUMMY_HASH (below) and PasswordResetService's non-enumerating design
+        // exist to close. That is why this sits here rather than after the lookup, where it would
+        // read as more natural and be wrong.
+        //
+        // The refusal message is deliberately the SAME shape as the per-IP one and names no
+        // account, so a 429 still reveals nothing about whether that address is registered.
+        if (!loginRateLimiter.tryConsumePerEmail(email)) {
+            log.warn("Login blocked by per-email rate limit (ip {})", ipAddress);
+            throw new TooManyRequestsException(
+                    "Too many sign-in attempts -- please try again later, or reset your password.");
+        }
         if (!loginRateLimiter.tryConsumePerIp(ipAddress)) {
             log.warn("Login blocked by per-IP rate limit from ip {}", ipAddress);
             throw new TooManyRequestsException("Too many sign-in attempts from this address -- please try again later.");

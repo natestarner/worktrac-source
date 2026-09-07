@@ -25,6 +25,17 @@ public record AdminAccountDto(
         String defaultUnit,
         Instant createdAt,
         long peopleCount,
+        /**
+         * How many logins this household has — {@code account_memberships} rows, so the owner's own
+         * counts as one.
+         *
+         * <p>The number the admin actually needs is "does this household use member logins", and
+         * the honest form of that is a raw count rather than a boolean: a household of 5 people
+         * with 1 login and one with 4 are very different support conversations, and a flag would
+         * flatten them. It is also the number that makes the Team-tier question answerable — how
+         * many households have outgrown the family shape — without a second query per row.
+         */
+        long loginCount,
         long sessionCount,
         long setCount,
         Instant lastActivityAt,
