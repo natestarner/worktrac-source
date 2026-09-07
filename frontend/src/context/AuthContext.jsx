@@ -12,6 +12,7 @@ import {
   resetPassword as apiResetPassword,
   startSession as apiStartSession,
 } from '../api/auth';
+import { acceptInvite as apiAcceptInvite } from '../api/logins';
 import { getAuthToken, isOfflineError, setAuthToken, setUnauthorizedHandler } from '../api/client';
 import { queryClient, resetQueryCache, clearOutboxMutations, flushOutbox } from '../lib/queryClient';
 import { clearOutbox, getOutboxScope, restoreOutbox, setOutboxScope } from '../lib/outboxPersistence';
@@ -318,6 +319,18 @@ export function AuthProvider({ children }) {
     return null;
   }, [establishSession]);
 
+  /**
+   * Finishes an invitation and signs the new member straight in.
+   *
+   * Goes through establishSession like every other way into a session -- the outbox re-scoping in
+   * particular is not optional here: this device may well be the OWNER's, with the owner's queued
+   * writes still in memory, and a member must never inherit them.
+   */
+  const acceptInvite = useCallback(async ({ inviteId, token, password }) => {
+    const { token: sessionToken } = await apiAcceptInvite({ inviteId, token, password });
+    await establishSession(sessionToken);
+  }, [establishSession]);
+
   /** Finishes a login that needed a household chosen. */
   const chooseHousehold = useCallback(async (accountId, selectionToken) => {
     const { token } = await apiStartSession({ accountId, selectionToken });
@@ -410,6 +423,7 @@ export function AuthProvider({ children }) {
         isAdmin,
         login,
         chooseHousehold,
+        acceptInvite,
         switchHousehold,
         register,
         confirmEmail,

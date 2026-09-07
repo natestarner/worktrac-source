@@ -1,5 +1,6 @@
 package com.worktrac.backend.email;
 
+import com.worktrac.backend.membership.MembershipInviteIssuedEvent;
 import com.worktrac.backend.registrationaudit.RegistrationAuditService;
 import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.user.PasswordResetCodeIssuedEvent;
@@ -81,6 +82,33 @@ public class RegistrationEmailEventListener {
                 RegistrationEventType.PASSWORD_RESET_SUCCESS_EMAIL_SENT,
                 RegistrationEventType.PASSWORD_RESET_SUCCESS_EMAIL_FAILED,
                 "password-reset-success");
+    }
+
+    /**
+     * The member-login invite.
+     *
+     * <p>Lives here rather than in a second listener on purpose: this is the same job — send an
+     * email after the transaction commits, off the request thread, and record the outcome either
+     * way — and a second component doing it would be a second mechanism to keep in step with
+     * {@code sendAndRecord}'s two-try/catch structure.
+     *
+     * <p>⚠️ A failure here is NOT recoverable by resending: the raw token exists only on this
+     * event, and the row holds a BCrypt hash that cannot reproduce it. The owner has to re-issue,
+     * which mints a new secret. That is exactly why the failure is audited rather than logged —
+     * an invitation that silently never arrived looks, from the owner's side, identical to one the
+     * recipient is ignoring.
+     */
+    @Async("emailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMembershipInviteIssued(MembershipInviteIssuedEvent event) {
+        sendAndRecord(event.email(),
+                () -> emailService.sendMembershipInvite(event.email(), event.personName(),
+                        event.householdName(), event.ownerName(),
+                        emailService.joinUrl(event.inviteId(), event.rawToken()),
+                        event.recipientHasAccount()),
+                RegistrationEventType.MEMBER_INVITE_EMAIL_SENT,
+                RegistrationEventType.MEMBER_INVITE_EMAIL_FAILED,
+                "membership invite");
     }
 
     // Common shape for all four handlers above: attempt the send; only a failure *of the send

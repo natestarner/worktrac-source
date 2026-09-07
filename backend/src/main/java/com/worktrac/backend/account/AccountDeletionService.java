@@ -1,6 +1,7 @@
 package com.worktrac.backend.account;
 
 import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.MembershipInviteRepository;
 import com.worktrac.backend.billing.BillingEventRepository;
 import com.worktrac.backend.billing.StripeSubscriptionCanceller;
 import com.worktrac.backend.billing.SubscriptionRepository;
@@ -44,10 +45,12 @@ public class AccountDeletionService {
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
     private final AccountMembershipRepository membershipRepository;
+    private final MembershipInviteRepository inviteRepository;
     private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
 
     public AccountDeletionService(AccountMembershipRepository membershipRepository,
+                                   MembershipInviteRepository inviteRepository,
                                    StripeSubscriptionCanceller stripeSubscriptionCanceller,
                                    SubscriptionRepository subscriptionRepository,
                                    BillingEventRepository billingEventRepository,
@@ -66,6 +69,7 @@ public class AccountDeletionService {
         this.tagRepository = tagRepository;
         this.userRepository = userRepository;
         this.membershipRepository = membershipRepository;
+        this.inviteRepository = inviteRepository;
         this.accountRepository = accountRepository;
         this.passwordEncoder = passwordEncoder;
     }
@@ -121,6 +125,14 @@ public class AccountDeletionService {
                 .map(membership -> membership.getUser().getId())
                 .distinct()
                 .toList();
+        // ⚠️ BEFORE the memberships, people and users below. membership_invites has NO ACTION FKs
+        // to accounts, people AND users (V71), so these rows have to be gone first or the deletes
+        // that follow fail the constraint -- a 503 from an irreversible action, which is exactly
+        // how the same mistake surfaced for account_memberships in V63's release.
+        //
+        // A bulk JPQL delete, so it executes immediately rather than queueing behind Hibernate's
+        // action-queue ordering. That is why this one needs no accompanying flush.
+        inviteRepository.deleteByAccountId(accountId);
         membershipRepository.deleteByAccount_Id(accountId);
         // The flush is what makes countByUser_Id below observe those deletes -- Hibernate orders
         // insertions before deletions within a transaction otherwise (the same trap as
@@ -154,6 +166,14 @@ public class AccountDeletionService {
         // Only the logins this household was the last reason to keep. A credential can belong to
         // more than one household now, so deleting an account must never delete a login that is
         // still someone's way into another one.
+        // ⚠️ An invite carries WHO SENT IT, and that stamp outlives this household: a member being
+        // deleted here may have sent an invitation in a DIFFERENT household that is still
+        // outstanding. Nulling the stamp keeps that invitation valid -- losing who sent it is a far
+        // smaller harm than losing the invitation, and the alternative is an FK failure during an
+        // unrelated account deletion.
+        if (!memberUserIds.isEmpty()) {
+            inviteRepository.clearInvitedByForUsers(memberUserIds);
+        }
         for (Long memberUserId : memberUserIds) {
             if (membershipRepository.countByUser_Id(memberUserId) == 0) {
                 userRepository.deleteById(memberUserId);

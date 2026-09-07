@@ -27,12 +27,21 @@ export function useAccountAccess() {
 
   const isMember = membership?.accountRole === 'MEMBER';
   const selfPersonId = membership?.personId ?? null;
+  // Null for an owner by design -- the server resolves it only for members, since an owner does not
+  // need telling who the owner is. Every consumer must render that absence as naming nobody rather
+  // than printing "null".
+  const ownerName = membership?.ownerName ?? null;
 
   return {
     isMember,
     isOwner: !isMember,
     /** The person this login IS, if any. Identity, never authority — go through canWritePerson. */
     selfPersonId,
+    /**
+     * The household owner's name, or null. Answers "who do I ask?" for a member, and is what makes
+     * the app's refusals actionable ("ask Nate to rename it"). Identity, never authority.
+     */
+    ownerName,
     /**
      * True when this login may change that person's training data.
      *
