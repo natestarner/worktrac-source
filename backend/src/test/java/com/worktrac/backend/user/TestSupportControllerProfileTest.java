@@ -53,5 +53,9 @@ class TestSupportControllerProfileTest {
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.billing.SubscriptionRepository.class));
         context.registerBean(com.worktrac.backend.billing.SubscriptionService.class,
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.billing.SubscriptionService.class));
+        // Added with the identity/membership split: resolving a household from an email now goes
+        // through account_memberships rather than users.account_id.
+        context.registerBean(com.worktrac.backend.membership.AccountMembershipRepository.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.membership.AccountMembershipRepository.class));
     }
 }

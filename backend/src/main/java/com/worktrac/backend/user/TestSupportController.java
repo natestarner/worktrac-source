@@ -2,6 +2,9 @@ package com.worktrac.backend.user;
 
 import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.billing.Subscription;
+import com.worktrac.backend.membership.AccountMembership;
+import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.AccountRole;
 import com.worktrac.backend.billing.SubscriptionRepository;
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.config.EmailProperties;
@@ -20,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -43,8 +47,10 @@ public class TestSupportController {
     private final UserRepository userRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionService subscriptionService;
+    private final AccountMembershipRepository membershipRepository;
 
     public TestSupportController(TestCodeCache testCodeCache, EmailProperties emailProperties,
+                                  AccountMembershipRepository membershipRepository,
                                   RegistrationEventRepository registrationEventRepository,
                                   UserRepository userRepository,
                                   SubscriptionRepository subscriptionRepository,
@@ -55,6 +61,7 @@ public class TestSupportController {
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.subscriptionService = subscriptionService;
+        this.membershipRepository = membershipRepository;
     }
 
     @GetMapping("/api/auth/test/pending-code")
@@ -119,7 +126,16 @@ public class TestSupportController {
         if (user.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
-        Subscription subscription = subscriptionService.getOrCreate(user.get().getAccount());
+        // The household this login OWNS. Test support drives billing state for the account under
+        // test, and a member's household is not theirs to change.
+        List<AccountMembership> owned = membershipRepository.findByUser_IdOrderByCreatedAtAscIdAsc(user.get().getId())
+                .stream()
+                .filter(m -> m.getAccountRole() == AccountRole.OWNER)
+                .toList();
+        if (owned.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        Subscription subscription = subscriptionService.getOrCreate(owned.get(0).getAccount());
         boolean pro = "PRO".equalsIgnoreCase(plan.trim());
         subscription.setComped(pro);
         subscription.setPlan(pro ? BillingPlan.PRO : BillingPlan.FREE);

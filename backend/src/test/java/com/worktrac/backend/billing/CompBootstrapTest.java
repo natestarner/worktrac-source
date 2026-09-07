@@ -1,6 +1,9 @@
 package com.worktrac.backend.billing;
 
 import com.worktrac.backend.account.Account;
+import com.worktrac.backend.membership.AccountMembership;
+import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.AccountRole;
 import com.worktrac.backend.config.CompedAccountProperties;
 import com.worktrac.backend.support.MutableClock;
 import com.worktrac.backend.user.User;
@@ -27,6 +30,7 @@ class CompBootstrapTest {
     private SubscriptionService subscriptionService;
     private CompedAccountProperties properties;
     private CompBootstrap bootstrap;
+    private AccountMembershipRepository membershipRepository;
     private Account account;
     private Subscription subscription;
 
@@ -37,7 +41,10 @@ class CompBootstrapTest {
         MutableClock clock = new MutableClock();
         subscriptionService = mock(SubscriptionService.class);
         properties = new CompedAccountProperties();
-        bootstrap = new CompBootstrap(userRepository, subscriptionRepository, subscriptionService, properties);
+        membershipRepository = mock(AccountMembershipRepository.class);
+        when(membershipRepository.findByUser_IdOrderByCreatedAtAscIdAsc(any())).thenReturn(List.of());
+        bootstrap = new CompBootstrap(userRepository, subscriptionRepository, membershipRepository,
+                subscriptionService, properties);
 
         account = new Account("Founding Household");
         subscription = new Subscription(account, clock.instant());
@@ -45,9 +52,17 @@ class CompBootstrapTest {
         when(subscriptionRepository.findByCompedTrue()).thenReturn(List.of());
     }
 
+    // A registered founder now means a user PLUS an OWNER membership -- comping follows the
+    // membership, not the credential, so that being invited to someone else's household never
+    // comps that household too.
     private void registerUser(String email) {
-        User user = new User(account, email, "hash");
+        User user = new User(email, "hash");
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        AccountMembership membership = mock(AccountMembership.class);
+        when(membership.getAccountRole()).thenReturn(AccountRole.OWNER);
+        when(membership.getAccount()).thenReturn(account);
+        when(membershipRepository.findByUser_IdOrderByCreatedAtAscIdAsc(user.getId()))
+                .thenReturn(List.of(membership));
     }
 
     @Test
@@ -117,8 +132,8 @@ class CompBootstrapTest {
         Subscription alreadyComped = subscription;
         alreadyComped.setComped(true);
         when(subscriptionRepository.findByCompedTrue()).thenReturn(List.of(alreadyComped));
-        when(userRepository.findByAccount_Id(any()))
-                .thenReturn(Optional.of(new User(account, "dropped@example.com", "hash")));
+        when(userRepository.findOwners(any()))
+                .thenReturn(List.of(new User("dropped@example.com", "hash")));
         // A different household entirely is configured; the comped one is no longer listed.
         properties.setCompedEmails(List.of("someone-else@example.com"));
         when(userRepository.findByEmail("someone-else@example.com")).thenReturn(Optional.empty());

@@ -1,5 +1,6 @@
 package com.worktrac.backend.account;
 
+import com.worktrac.backend.membership.AccountMembershipRepository;
 import com.worktrac.backend.billing.BillingEventRepository;
 import com.worktrac.backend.billing.StripeSubscriptionCanceller;
 import com.worktrac.backend.billing.SubscriptionRepository;
@@ -42,10 +43,12 @@ public class AccountDeletionService {
     private final ExerciseRepository exerciseRepository;
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
+    private final AccountMembershipRepository membershipRepository;
     private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public AccountDeletionService(StripeSubscriptionCanceller stripeSubscriptionCanceller,
+    public AccountDeletionService(AccountMembershipRepository membershipRepository,
+                                   StripeSubscriptionCanceller stripeSubscriptionCanceller,
                                    SubscriptionRepository subscriptionRepository,
                                    BillingEventRepository billingEventRepository,
                                    ContactMessageRepository contactMessageRepository,
@@ -62,6 +65,7 @@ public class AccountDeletionService {
         this.exerciseRepository = exerciseRepository;
         this.tagRepository = tagRepository;
         this.userRepository = userRepository;
+        this.membershipRepository = membershipRepository;
         this.accountRepository = accountRepository;
         this.passwordEncoder = passwordEncoder;
     }
@@ -106,10 +110,33 @@ public class AccountDeletionService {
         // it stamped are cleared rather than deleted here. ImportBatchCleanup explains why that
         // is the only order the constraints allow.
         importBatchCleanup.deleteForAccounts(List.of(accountId));
+        // ⚠️ MEMBERSHIPS BEFORE PEOPLE. account_memberships.person_id is a NO ACTION FK to people
+        // (V63), so deleting a person out from under a membership fails the whole transaction --
+        // and it fails exactly the way the contact_messages ordering above failed: a 503 from an
+        // irreversible action the person had already confirmed, with no path forward.
+        //
+        // The user ids are captured BEFORE the delete, because afterwards there is nothing left to
+        // ask which logins this household had.
+        List<Long> memberUserIds = membershipRepository.findByAccount_Id(accountId).stream()
+                .map(membership -> membership.getUser().getId())
+                .distinct()
+                .toList();
+        membershipRepository.deleteByAccount_Id(accountId);
+        // The flush is what makes countByUser_Id below observe those deletes -- Hibernate orders
+        // insertions before deletions within a transaction otherwise (the same trap as
+        // RegistrationService's pending-registration replace).
+        membershipRepository.flush();
         personRepository.deleteByAccount_Id(accountId);
         exerciseRepository.deleteByAccount_Id(accountId);
         tagRepository.deleteByAccount_Id(accountId);
-        userRepository.deleteByAccount_Id(accountId);
+        // Only the logins this household was the last reason to keep. A credential can belong to
+        // more than one household now, so deleting an account must never delete a login that is
+        // still someone's way into another one.
+        for (Long memberUserId : memberUserIds) {
+            if (membershipRepository.countByUser_Id(memberUserId) == 0) {
+                userRepository.deleteById(memberUserId);
+            }
+        }
         accountRepository.deleteById(accountId);
         log.info("Deleted account {}", accountId);
 

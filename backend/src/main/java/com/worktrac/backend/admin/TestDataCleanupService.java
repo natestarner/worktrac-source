@@ -1,5 +1,6 @@
 package com.worktrac.backend.admin;
 
+import com.worktrac.backend.membership.AccountMembershipRepository;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.billing.BillingEventRepository;
 import com.worktrac.backend.billing.SubscriptionRepository;
@@ -73,6 +74,7 @@ public class TestDataCleanupService {
 
     private final ImportBatchCleanup importBatchCleanup;
     private final UserRepository userRepository;
+    private final AccountMembershipRepository membershipRepository;
     private final PersonRepository personRepository;
     private final ExerciseRepository exerciseRepository;
     private final TagRepository tagRepository;
@@ -83,7 +85,8 @@ public class TestDataCleanupService {
     private final SubscriptionRepository subscriptionRepository;
     private final BillingEventRepository billingEventRepository;
 
-    public TestDataCleanupService(ImportBatchCleanup importBatchCleanup, UserRepository userRepository,
+    public TestDataCleanupService(AccountMembershipRepository membershipRepository,
+                                  ImportBatchCleanup importBatchCleanup, UserRepository userRepository,
                                    PersonRepository personRepository,
                                    ExerciseRepository exerciseRepository, TagRepository tagRepository,
                                    AccountRepository accountRepository,
@@ -94,6 +97,7 @@ public class TestDataCleanupService {
                                    BillingEventRepository billingEventRepository) {
         this.importBatchCleanup = importBatchCleanup;
         this.userRepository = userRepository;
+        this.membershipRepository = membershipRepository;
         this.personRepository = personRepository;
         this.exerciseRepository = exerciseRepository;
         this.tagRepository = tagRepository;
@@ -138,12 +142,31 @@ public class TestDataCleanupService {
             // workout rows rather than deleting them -- see ImportBatchCleanup for why nothing else
             // satisfies the constraints.
             importBatchCleanup.deleteForAccounts(accountIds);
+            // ⚠️ Memberships before people, for the same class of reason again:
+            // account_memberships.person_id is a NO ACTION FK to people (V63). This ordering must
+            // stay in step with AccountDeletionService's, which is the whole point of the note
+            // above about the two paths having drifted once already.
+            membershipRepository.deleteByAccount_IdIn(accountIds);
+            // ⚠️ The flush is not optional. The delete above is a DERIVED delete, so it only queues
+            // entity removals in the persistence context, while the person delete below is a bulk
+            // JPQL statement. Hibernate's auto-flush before a bulk query only covers the query
+            // spaces that query touches -- `people` does not overlap `account_memberships` -- so
+            // without this the membership rows are still in the database when `people` is deleted
+            // and the FK rejects the whole transaction. Same class of ordering trap as
+            // RegistrationService's pending-registration replace, and it presented identically:
+            // a 503 with the real cause buried in a constraint name.
+            membershipRepository.flush();
             personRepository.deleteByAccountIdIn(accountIds);
             exerciseRepository.deleteByAccountIdIn(accountIds);
             tagRepository.deleteByAccountIdIn(accountIds);
-            userRepository.deleteByAccountIdIn(accountIds);
             accountRepository.deleteAllByIdInBatch(accountIds);
         }
+        // By email, not by account. A member's user row survives the household it was invited
+        // to -- the membership is deleted, the credential is not -- so an account-scoped delete
+        // would leave e2e users accumulating in lower forever, surfacing much later as an
+        // unrelated FK failure during some other cleanup. Runs after the membership deletes above,
+        // because the FK from account_memberships to users is NO ACTION by design.
+        EMAIL_PATTERNS.forEach(userRepository::deleteByEmailLike);
         EMAIL_PATTERNS.forEach(registrationEventRepository::deleteByEmailLikeBulk);
         EMAIL_PATTERNS.forEach(pendingRegistrationRepository::deleteByEmailLikeBulk);
 
