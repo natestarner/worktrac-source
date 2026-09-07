@@ -37,8 +37,13 @@ class AccountAccessServiceTest {
     }
 
     private void stub(long userId, long accountId, AccountRole role, Long personId, int tokenVersion) {
+        stub(userId, accountId, role, personId, tokenVersion, true);
+    }
+
+    private void stub(long userId, long accountId, AccountRole role, Long personId, int tokenVersion,
+                       boolean membersSeeEveryone) {
         when(repository.findAccessRow(eq(userId), eq(accountId))).thenReturn(Optional.of(
-                new AccountAccessRow(userId, accountId, 55L, role, personId, tokenVersion)));
+                new AccountAccessRow(userId, accountId, 55L, role, personId, tokenVersion, membersSeeEveryone)));
     }
 
     @Nested
@@ -61,6 +66,18 @@ class AccountAccessServiceTest {
         @Test
         void refusesAStaleTokenVersion() {
             assertThat(service.resolve(USER, ACCOUNT, TOKEN_VERSION - 1)).isEmpty();
+        }
+
+        // The account's visibility setting reaches AccountAccess, which is what makes
+        // VIEW_OTHER_PEOPLE resolve differently for the same MEMBER role in different households.
+        @Test
+        void carriesTheAccountsMemberVisibilitySetting() {
+            stub(USER, OTHER_ACCOUNT, AccountRole.MEMBER, 200L, TOKEN_VERSION, false);
+
+            AccountAccess access = service.resolve(USER, OTHER_ACCOUNT, TOKEN_VERSION).orElseThrow();
+
+            assertThat(access.membersSeeEveryone()).isFalse();
+            assertThat(access.has(Permission.VIEW_OTHER_PEOPLE)).isFalse();
         }
 
         // What a revoked member's device sees. It must be indistinguishable from an expired

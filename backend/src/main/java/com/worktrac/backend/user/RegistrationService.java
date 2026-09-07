@@ -6,6 +6,7 @@ import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.membership.AccountMembership;
 import com.worktrac.backend.membership.AccountMembershipRepository;
 import com.worktrac.backend.membership.AccountRole;
+import com.worktrac.backend.membership.MembershipDto;
 import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.ConflictException;
@@ -277,7 +278,8 @@ public class RegistrationService {
         // it from (userId, accountId) on every request, so a claim could only ever be a second
         // copy that disagrees with the database -- and it would freeze for the token's 30-day life
         // exactly the thing that has to stay revocable.
-        membershipRepository.save(new AccountMembership(account, user, person, AccountRole.OWNER));
+        AccountMembership membership =
+                membershipRepository.save(new AccountMembership(account, user, person, AccountRole.OWNER));
         // Every account owns exactly one subscription row from the moment it exists, so "one row
         // per account" is true from here on rather than only for households that reach billing.
         // Nothing here talks to Stripe: a Stripe outage must never be able to break registration,
@@ -286,6 +288,6 @@ public class RegistrationService {
 
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole(), user.getTokenVersion());
         return new AuthResponse(token, UserDto.from(user), AccountDto.from(account, BillingPlan.FREE),
-                PersonDto.from(person));
+                MembershipDto.from(membership), PersonDto.from(person));
     }
 }

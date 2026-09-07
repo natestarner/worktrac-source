@@ -33,11 +33,6 @@ import java.util.Optional;
 @Service
 public class AccountAccessService {
 
-    // Phase 3 adds accounts.members_see_everyone (V66) and this becomes a real column read. Until
-    // then every household behaves as it does today -- everyone sees everyone -- which is also the
-    // value Pro/Family is forced to, so nothing about the shipping product depends on the change.
-    private static final boolean MEMBERS_SEE_EVERYONE_DEFAULT = true;
-
     private record AccessKey(Long userId, Long accountId) {
     }
 
@@ -69,7 +64,7 @@ public class AccountAccessService {
 
         return row.filter(r -> r.tokenVersion() == tokenVersion)
                 .map(r -> new AccountAccess(r.userId(), r.accountId(), r.membershipId(),
-                        r.accountRole(), r.personId(), MEMBERS_SEE_EVERYONE_DEFAULT));
+                        r.accountRole(), r.personId(), r.membersSeeEveryone()));
     }
 
     /** After a membership is created, removed, or has its role or person changed. */

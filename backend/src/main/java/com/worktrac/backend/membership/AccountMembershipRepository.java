@@ -23,11 +23,12 @@ public interface AccountMembershipRepository extends JpaRepository<AccountMember
      */
     @Query("""
             select new com.worktrac.backend.membership.AccountAccessRow(
-                u.id, m.account.id, m.id, m.accountRole, p.id, u.tokenVersion)
+                u.id, a.id, m.id, m.accountRole, p.id, u.tokenVersion, a.membersSeeEveryone)
             from AccountMembership m
             join m.user u
+            join m.account a
             left join m.person p
-            where u.id = :userId and m.account.id = :accountId
+            where u.id = :userId and a.id = :accountId
             """)
     Optional<AccountAccessRow> findAccessRow(@Param("userId") Long userId, @Param("accountId") Long accountId);
 

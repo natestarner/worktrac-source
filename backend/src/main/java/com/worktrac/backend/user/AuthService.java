@@ -8,11 +8,14 @@ import com.worktrac.backend.common.LockedException;
 import com.worktrac.backend.common.TooManyRequestsException;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.config.AdminProperties;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.membership.AccountMembership;
 import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.MembershipDto;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonDto;
 import com.worktrac.backend.person.PersonRepository;
+import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.ratelimit.LoginRateLimiter;
 import com.worktrac.backend.security.JwtService;
 import com.worktrac.backend.user.dto.AuthResponse;
@@ -61,13 +64,15 @@ public class AuthService {
     private final SubscriptionService subscriptionService;
     private final LoginRateLimiter loginRateLimiter;
     private final AccountMembershipRepository membershipRepository;
+    private final PersonService personService;
     private final Clock clock;
 
     public AuthService(AccountRepository accountRepository, UserRepository userRepository,
                         PersonRepository personRepository, PasswordEncoder passwordEncoder,
                         JwtService jwtService, AdminProperties adminProperties,
                         SubscriptionService subscriptionService, LoginRateLimiter loginRateLimiter,
-                        AccountMembershipRepository membershipRepository, Clock clock) {
+                        AccountMembershipRepository membershipRepository, PersonService personService,
+                        Clock clock) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
@@ -77,6 +82,7 @@ public class AuthService {
         this.subscriptionService = subscriptionService;
         this.loginRateLimiter = loginRateLimiter;
         this.membershipRepository = membershipRepository;
+        this.personService = personService;
         this.clock = clock;
     }
 
@@ -152,6 +158,7 @@ public class AuthService {
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole(), user.getTokenVersion());
         return new AuthResponse(token, UserDto.from(user),
                 AccountDto.from(account, subscriptionService.planFor(account.getId())),
+                MembershipDto.from(membership),
                 PersonDto.from(primaryPerson));
     }
 
@@ -182,15 +189,18 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public MeResponse me(Long userId, Long accountId) {
-        User user = userRepository.findById(userId)
+    public MeResponse me(AccountAccess access) {
+        Long accountId = access.accountId();
+        User user = userRepository.findById(access.userId())
                 .orElseThrow(() -> new UnauthorizedException("User no longer exists"));
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new UnauthorizedException("Account no longer exists"));
-        List<PersonDto> people = personRepository.findByAccount_IdOrderByCreatedAtAsc(accountId).stream()
-                .map(PersonDto::from)
-                .toList();
+        // Through PersonService, so the visibility filter lives in exactly one place. Reading the
+        // repository directly here would hand every member the full household roster through the
+        // one endpoint the whole client bootstraps from.
         return new MeResponse(UserDto.from(user),
-                AccountDto.from(account, subscriptionService.planFor(accountId)), people);
+                AccountDto.from(account, subscriptionService.planFor(accountId)),
+                MembershipDto.from(access),
+                personService.list(access));
     }
 }
