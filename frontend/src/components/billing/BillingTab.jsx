@@ -3,6 +3,8 @@ import SectionLabel from '../shared/SectionLabel';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
+import { useAccountAccess } from '../../hooks/useAccountAccess';
+import { listLogins } from '../../api/logins';
 import { useUI } from '../../context/UIContext';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import {
@@ -48,6 +50,28 @@ export default function BillingTab() {
   // itself, and a second copy of that answer here is the kind of duplicate the
   // mechanism table exists to prevent.
   const { pending, run } = useGatedMutation();
+
+  const { isOwner } = useAccountAccess();
+
+  // Who would lose their sign-in if this household went back to Free -- the numbers behind the
+  // notice above "Manage billing". `enabled` is filled in below, once isPro is known.
+  const loginsQuery = useQuery({
+    queryKey: queryKeys.accountLogins(),
+    queryFn: listLogins,
+    // Owner-only, and only while Pro. /api/account/logins requires MANAGE_LOGINS, so asking as a
+    // member is a guaranteed 403; and a household that is not Pro has no working member logins to
+    // warn about. Not offering a request the app knows will be refused is the same rule as not
+    // offering a control that can only fail.
+    enabled: isOwner && account?.plan === 'PRO',
+    staleTime: 60_000,
+  });
+
+  // ACTIVE only. An outstanding invitation has nobody signing in yet, so it has nothing to pause;
+  // and isSelf excludes the owner's own login, which a downgrade never touches.
+  const pausableLogins = (loginsQuery.data || []).filter(
+    (row) => row.status === 'ACTIVE' && !row.isSelf,
+  );
+
 
   // NOTE: leaving this screen is NOT what releases the deferral -- AppShell does that, keyed on the
   // route. An unmount cleanup here was the obvious implementation and it is wrong: StrictMode
@@ -181,7 +205,12 @@ export default function BillingTab() {
           </Button>
         </>
       ) : isPro ? (
-        <ProSummary subscription={subscription} pending={pending} onManage={handleManageBilling} />
+        <ProSummary
+          subscription={subscription}
+          pending={pending}
+          onManage={handleManageBilling}
+          pausableLogins={pausableLogins}
+        />
       ) : (
         <FreeSummary
           interval={interval}
@@ -197,7 +226,7 @@ export default function BillingTab() {
   );
 }
 
-function ProSummary({ subscription, pending, onManage }) {
+function ProSummary({ subscription, pending, onManage, pausableLogins = [] }) {
   const cancelling = subscription?.cancelAtPeriodEnd === true;
   const periodEnd = subscription?.currentPeriodEnd;
   const comped = subscription?.comped === true;
@@ -232,6 +261,28 @@ function ProSummary({ subscription, pending, onManage }) {
       <div style={cardStyle}>
         <BenefitList />
       </div>
+
+      {/* ⚠️ Said HERE, and here is the only place it can be said.
+          Cancelling happens in Stripe's hosted portal, which we do not control and cannot add a
+          confirmation step to -- so "Manage billing" is the last screen of ours an owner sees
+          before they can downgrade. An owner who does not know that other people's logins stop
+          working will find out from those people.
+
+          Counted, not generic: "2 logins" is actionable where "any member logins" is not, and the
+          two names make it concrete. Rendered only when there is somebody to affect, so a
+          single-login household never sees a warning about a thing it does not use. */}
+      {pausableLogins.length > 0 && (
+        <div style={pauseNoticeStyle}>
+          <strong>
+            {pausableLogins.length === 1
+              ? '1 personal login will stop working'
+              : `${pausableLogins.length} personal logins will stop working`}
+          </strong>{' '}
+          if this household goes back to Free &mdash; {formatNames(pausableLogins)} would no longer
+          be able to sign in on their own device. Nothing is deleted: their workouts stay, you keep
+          seeing everything, and their logins start working again the moment you return to Pro.
+        </div>
+      )}
 
       {!comped && (
         <OfflineDisabledWrap message="Managing your plan needs a connection.">
@@ -397,4 +448,22 @@ const finePrintStyle = {
   color: 'var(--color-muted)',
   margin: 'var(--space-3) 0 0 0',
   textAlign: 'center',
+};
+
+// "Sam", "Sam and Alex", "Sam, Alex and Robin" -- the shapes a household of 2-5 actually produces.
+function formatNames(rows) {
+  const names = rows.map((row) => row.personName);
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+const pauseNoticeStyle = {
+  margin: '0 0 var(--space-4)',
+  padding: 'var(--space-4)',
+  borderRadius: 'var(--radius-md)',
+  border: '1px solid var(--color-border)',
+  background: 'var(--color-surface)',
+  fontSize: 14,
+  lineHeight: 1.6,
+  color: 'var(--color-muted)',
 };

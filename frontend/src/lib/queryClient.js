@@ -126,6 +126,11 @@ export const FAVORITE_MUTATION_KEY = ['favorite'];
 // docs/architecture/resilience.md, axis B.
 const RETRYABLE_4XX = new Set([408, 429]);
 
+// The server's code for "this login is paused because the household left Pro"
+// (PermissionInterceptor.MEMBER_LOGIN_PAUSED). A contract with the backend, so the string is
+// literal on both sides and each names the other.
+export const MEMBER_LOGIN_PAUSED = 'MEMBER_LOGIN_PAUSED';
+
 // `error.terminal` is the one non-HTTP way retries end, and it is deliberately NOT a network
 // judgement: it is set only by the dependency check below, which asks a purely LOCAL question --
 // "is the create this write depends on still in the mutation cache?". Nothing a backend does can
@@ -188,10 +193,18 @@ export function isUnsyncedWrite({ status, errorStatus, errorTerminal }) {
 // flushOutbox replays it after the next sign-in, so a write rejected for an expired session is
 // recoverable -- badging it "couldn't sync" would call a write dead that is one login away from
 // landing.
-export function isDeadWrite({ status, errorStatus, errorTerminal }) {
+export function isDeadWrite({ status, errorStatus, errorCode, errorTerminal }) {
   if (status !== 'error') return false;
   if (errorTerminal) return true;
   if (errorStatus === 401) return false;
+  // ⚠️ A paused member login's 403 means the OPPOSITE of every other 403 here. The household went
+  // back to Free, so the write is refused -- but nothing was deleted and the membership still
+  // exists, so the moment they are Pro again flushOutbox re-executes it and the work lands. Same
+  // carve-out and same reasoning as 401 above: both are "not right now", not "never".
+  //
+  // Reported dead, a member who logged sets before the plan lapsed would be told those sets can
+  // never sync, and offered the discard that makes it true.
+  if (errorCode === MEMBER_LOGIN_PAUSED) return false;
   return errorStatus >= 400 && errorStatus < 500 && !RETRYABLE_4XX.has(errorStatus);
 }
 

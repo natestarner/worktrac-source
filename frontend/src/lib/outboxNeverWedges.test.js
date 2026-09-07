@@ -170,10 +170,28 @@ describe('a failing backend never costs a queued write', () => {
     expect(isDeadWrite({ status: 'error', errorStatus: 401 })).toBe(false);
   });
 
+  /**
+   * ⚠️ Pinned directly beside the 401 case above, because it is the same argument.
+   *
+   * A member login is paused when the household leaves Pro, and every write then 403s. Nothing has
+   * been deleted and the membership still exists, so the moment the household is Pro again
+   * flushOutbox re-executes the write and it lands. Reporting it dead would tell somebody the sets
+   * they logged before the plan lapsed can never sync — and offer them the Discard that makes it
+   * true.
+   *
+   * The 403 immediately below is the ordinary kind and MUST stay dead: this carve-out is keyed on
+   * the server's code, not on the status.
+   */
+  it('does not mark a paused member login dead -- it lands by itself when the household re-upgrades', () => {
+    expect(isDeadWrite({ status: 'error', errorStatus: 403, errorCode: 'MEMBER_LOGIN_PAUSED' }))
+      .toBe(false);
+  });
+
   // The only two things that ARE dead: the server definitively rejected this write, or its
   // dependency can never arrive.
   it('marks a definitively-rejected write dead', () => {
     expect(isDeadWrite({ status: 'error', errorStatus: 400 })).toBe(true);
+    // A bare 403, with no code, is still definitive -- the carve-out above is narrow on purpose.
     expect(isDeadWrite({ status: 'error', errorStatus: 403 })).toBe(true);
     expect(isDeadWrite({ status: 'error', errorStatus: 404 })).toBe(true);
   });

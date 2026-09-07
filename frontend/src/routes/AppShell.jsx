@@ -24,6 +24,7 @@ import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
 import ErrorBoundary from '../components/shared/ErrorBoundary';
 import ReadOnlyPersonNotice from '../components/shared/ReadOnlyPersonNotice';
 import NoActivePersonScreen from '../components/shared/NoActivePersonScreen';
+import PausedLoginScreen from '../components/shared/PausedLoginScreen';
 import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator';
 import WelcomeModal from '../components/onboarding/WelcomeModal';
 import ProductTour from '../components/onboarding/ProductTour';
@@ -33,7 +34,7 @@ export default function AppShell() {
   const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId, restTimersByPerson, setRestTimer } =
     useAppState();
   const { restTimers, startRestTimer, tour, startTour, onboardingDeferred, releaseOnboarding } = useUI();
-  const { selfPersonId } = useAccountAccess();
+  const { selfPersonId, isPaused } = useAccountAccess();
   const [showWelcome, setShowWelcome] = useState(false);
   const accountId = account?.id;
 
@@ -203,6 +204,19 @@ export default function AppShell() {
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [queryClient, activePersonId]);
+
+  // ⚠️ BEFORE the no-active-person check, and before any chrome. A paused login is refused on
+  // every route, so rendering the normal app would draw a screen whose every control fails --
+  // and it would do so while firing requests the server has already decided to refuse. It also
+  // must not depend on `people`: that list comes from /me, which still answers, but a paused
+  // member has no reason to wait on person selection to be told why nothing works.
+  //
+  // /me is the single authority for this (it keeps answering 200 while paused), so the client
+  // never infers it from a failed request. Offline, it comes from the auth snapshot's last-known
+  // value -- the only truth available, and the correct degradation.
+  if (isPaused) {
+    return <PausedLoginScreen />;
+  }
 
   // NEVER `return null` here. That is a literally empty #root, which boot-watchdog.js reports as
   // "Huddle couldn't load" after seven seconds -- see NoActivePersonScreen for the full mechanism
