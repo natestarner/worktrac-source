@@ -230,6 +230,32 @@ Changing the backing store is a **persisted-schema change**: keep a one-time mig
 the old location and only drops it once the new write is confirmed, or every existing install
 silently loses that state once on upgrade.
 
+**⚠️ Both persisted stores are keyed by (account, LOGIN), not by account.** `worktrac-appstate-`
+holds `activePersonId` and every `byPerson` draft, so under an account-only key a member signing in
+after a sibling on the same device would open on the SIBLING's person — one they may not be allowed
+to write to — with the sibling's half-typed weight and reps in the fields. `outboxPersistence` has
+the same shape with higher stakes (see `offline-internals.md`). Both migrations from the
+per-account key are **tombstoned to run once per account per device**: that key is shared by the
+whole household, so an unbounded fallback would hand it to whichever member signed in next,
+reintroducing the leak through the migration meant to carry state across it.
+
+**`AppStateContext`'s `hydrated` gate is scoped to the LOGIN for the same reason.** As an
+account-only comparison it reports "already hydrated" the instant a second member signs in, letting
+`<Outlet/>` through against the first member's restored state — the same one-frame-early render the
+gate exists to prevent, one identity dimension over.
+
+**⚠️ With nothing persisted, `AppShell` opens on the VIEWER's person, not the household's
+primary.** `people.find((p) => p.isPrimary)` names the household's primary person, who for a member
+is somebody else — so `selfPersonId` (from `useAccountAccess`) is tried first, with the primary as
+the fallback. Nothing changes for an owner, whose membership points at the primary anyway.
+
+That empty-state is not an edge case here: it is **every member's first sign-in**, and every one
+after on a device where the app-state key is now per-login. Getting it wrong greys out every write
+control on arrival, so the app reads as broken before it reads as read-only. A null `selfPersonId`
+(a v1 snapshot, or a membership with no person) must keep falling through to the old expression
+rather than to no person at all — `AppShell.test.jsx`'s "default active person" block pins all
+three cases.
+
 ### `lastTab` is the one exception to "always restore where they left off"
 
 A mid-session reload must resume the persisted tab, but an actual login/registration must land

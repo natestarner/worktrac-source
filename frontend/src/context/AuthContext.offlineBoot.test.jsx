@@ -13,7 +13,7 @@ import { getAuthToken, setAuthToken } from '../api/client';
 import { resetQueryCache } from '../lib/queryClient';
 import { clearAuthSnapshot, loadAuthSnapshot, saveAuthSnapshot } from '../lib/authSnapshot';
 import { requestPersistentStorage } from '../lib/durableStorage';
-import { getOutboxAccountId, __resetOutboxAccountForTests } from '../lib/outboxPersistence';
+import { getOutboxScope, __resetOutboxScopeForTests } from '../lib/outboxPersistence';
 
 vi.mock('../api/auth', () => ({
   login: vi.fn(),
@@ -84,10 +84,10 @@ describe('AuthContext offline boot', () => {
     vi.clearAllMocks();
     getAuthToken.mockReturnValue('valid-token');
     loadAuthSnapshot.mockReturnValue(null);
-    __resetOutboxAccountForTests();
+    __resetOutboxScopeForTests();
   });
 
-  afterEach(() => __resetOutboxAccountForTests());
+  afterEach(() => __resetOutboxScopeForTests());
 
   it('no token => unauthenticated and snapshot cleared', async () => {
     getAuthToken.mockReturnValue(null);
@@ -223,7 +223,7 @@ describe('AuthContext offline boot', () => {
     apiMe.mockResolvedValue(SNAPSHOT);
     renderHarness();
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('authenticated'));
-    expect(getOutboxAccountId()).toBe(String(SNAPSHOT.account.id));
+    expect(getOutboxScope()?.accountId).toBe(String(SNAPSHOT.account.id));
   });
 
   it('an offline boot from the snapshot adopts the SNAPSHOT\'s account for the outbox pointer', async () => {
@@ -231,7 +231,7 @@ describe('AuthContext offline boot', () => {
     loadAuthSnapshot.mockReturnValue(SNAPSHOT);
     renderHarness();
     await waitFor(() => expect(screen.getByTestId('offline').textContent).toBe('true'));
-    expect(getOutboxAccountId()).toBe(String(SNAPSHOT.account.id));
+    expect(getOutboxScope()?.accountId).toBe(String(SNAPSHOT.account.id));
   });
 
   it('a 401 at boot does NOT touch the outbox account pointer (queued writes must survive to replay after re-login)', async () => {
@@ -239,7 +239,7 @@ describe('AuthContext offline boot', () => {
     loadAuthSnapshot.mockReturnValue(SNAPSHOT);
     renderHarness();
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
-    expect(getOutboxAccountId()).toBeNull();
+    expect(getOutboxScope()).toBeNull();
   });
 
   // "Hold and retry" above is right, but it used to hold with NO bound on how long the person sat

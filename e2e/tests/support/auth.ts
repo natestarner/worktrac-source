@@ -134,7 +134,9 @@ export async function addMemberLogin(
     response.status(),
     `addMemberLogin failed for owner=${ownerEmail} person=${personName}. `
       + '404 covers a wrong E2E_TEST_SUPPORT_KEY, an unknown owner AND an unknown person name, '
-      + `so check all three. Body: ${await response.text()}`,
+      + 'so check all three; '
+      + "409 means that person already has a login -- naming the OWNER's own person does this. "
+      + `Body: ${await response.text()}`,
   ).toBe(204);
 
   return { email, password };
