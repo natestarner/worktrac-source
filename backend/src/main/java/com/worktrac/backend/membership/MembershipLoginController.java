@@ -64,8 +64,11 @@ public class MembershipLoginController {
     @RequiresPermission(Permission.MANAGE_LOGINS)
     public PersonLoginDto invite(@PathVariable Long personId, @Valid @RequestBody InviteRequest request) {
         MembershipInvite invite = inviteService.invite(currentUser.access(), personId, request.email()).invite();
+        // isSelf is false by construction: inviting yourself is impossible here -- the viewer
+        // already holds the login they would be inviting, and invite() refuses a person who has
+        // one with a 409 before reaching this line.
         return new PersonLoginDto(personId, invite.getPerson().getName(),
-                PersonLoginDto.INVITED, invite.getEmail());
+                PersonLoginDto.INVITED, invite.getEmail(), false);
     }
 
     /**

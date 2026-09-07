@@ -149,6 +149,24 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             assertThat(logins.findValuesAsText("status")).containsExactlyInAnyOrder("ACTIVE", "NONE");
         }
 
+        /**
+         * The client withholds <b>Remove</b> on the viewer's own row, and this flag is the only
+         * thing that lets it: every row here is a person in the viewer's own household, so nothing
+         * else in the payload separates "me" from "somebody else here". Without it the owner is
+         * offered a control that can only ever answer 409.
+         */
+        @Test
+        void marksTheViewersOwnRow() throws Exception {
+            JsonNode logins = json(mockMvc.perform(get("/api/account/logins")
+                    .header("Authorization", bearer(ownerToken))));
+
+            JsonNode nate = logins.get(0).get("personId").asLong() == samPersonId ? logins.get(1) : logins.get(0);
+            JsonNode sam = logins.get(0).get("personId").asLong() == samPersonId ? logins.get(0) : logins.get(1);
+
+            assertThat(nate.get("isSelf").asBoolean()).isTrue();
+            assertThat(sam.get("isSelf").asBoolean()).isFalse();
+        }
+
         @Test
         void invitingMovesThatPersonToInvited() throws Exception {
             invite(samPersonId, "sam-" + suffix + "@example.com");
