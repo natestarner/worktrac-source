@@ -2,6 +2,7 @@ package com.worktrac.backend.membership;
 
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
+import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.ConflictException;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.common.TooManyRequestsException;
@@ -77,6 +78,7 @@ public class MembershipInviteService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AccountAccessService accountAccessService;
+    private final SubscriptionService subscriptionService;
     private final ApplicationEventPublisher events;
     private final RegistrationAuditService auditService;
     private final Clock clock;
@@ -90,6 +92,7 @@ public class MembershipInviteService {
                                     UserRepository userRepository,
                                     PasswordEncoder passwordEncoder,
                                     AccountAccessService accountAccessService,
+                                    SubscriptionService subscriptionService,
                                     ApplicationEventPublisher events,
                                     RegistrationAuditService auditService,
                                     Clock clock) {
@@ -101,6 +104,7 @@ public class MembershipInviteService {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.accountAccessService = accountAccessService;
+        this.subscriptionService = subscriptionService;
         this.events = events;
         this.auditService = auditService;
         this.clock = clock;
@@ -221,6 +225,21 @@ public class MembershipInviteService {
         // requireVisiblePerson, not a bare lookup: a person outside this household must 404 rather
         // than confirm they exist somewhere.
         Person person = personService.requireVisiblePerson(personId, access);
+
+        // ⚠️ Refused on Free, and this is about not making a promise we cannot keep. Without it an
+        // owner on Free sends an invitation, the invitee chooses a password, accepts, and lands
+        // immediately on "your login is paused" -- an onboarding flow whose successful path is a
+        // dead end. The refusal reaches the owner verbatim (LoginsSection opts into
+        // showServerMessage), so they are told the actual reason rather than "that didn't save".
+        //
+        // A CONFLICT rather than a FORBIDDEN: they hold MANAGE_LOGINS perfectly well, and will be
+        // able to do exactly this the moment the household is Pro. 403 would say "not you", which
+        // is the wrong diagnosis and points at the wrong fix.
+        if (!subscriptionService.isPro(access.accountId())) {
+            throw new ConflictException(
+                    "Personal logins are part of Huddle Pro. Upgrade and you can invite "
+                            + person.getName() + " straight away.");
+        }
 
         // One login per person, enforced by UX_account_memberships_account_person. Checked here so
         // it reads as a conflict rather than surfacing later as a 503 from a unique-index violation

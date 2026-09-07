@@ -81,6 +81,15 @@ class MembershipInviteTest extends AbstractIntegrationTest {
                 .registerAndConfirm(mockMvc, objectMapper, testCodeCache, "owner-" + suffix + "@example.com", "Nate")
                 .get("token").asText();
 
+        // ⚠️ Pro FIRST. Member logins are a Pro feature and inviting is refused on Free, so a
+        // freshly-registered (therefore Free) household would 409 on every invite below. The one
+        // test that cares about that refusal downgrades explicitly.
+        mockMvc.perform(post("/api/auth/test/billing-plan")
+                        .header("X-E2E-Test-Key", "local-dev-only-e2e-test-key-do-not-use-elsewhere")
+                        .param("email", "owner-" + suffix + "@example.com")
+                        .param("plan", "PRO"))
+                .andExpect(status().isNoContent());
+
         accountId = json(mockMvc.perform(get("/api/auth/me")
                 .header("Authorization", bearer(ownerToken))))
                 .get("account").get("id").asLong();
@@ -234,6 +243,35 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             verify(emailService, timeout(2000))
                     .sendMembershipInvite(eq(samEmail), eq("Sam"), anyString(), anyString(),
                             nullable(String.class), anyBoolean());
+        }
+
+        /**
+         * ⚠️ Refused on Free, and this is about not making a promise the product cannot keep.
+         * Without it an owner invites, the invitee chooses a password and accepts, and lands
+         * straight on "your login is paused" -- an onboarding flow whose SUCCESSFUL path is a dead
+         * end.
+         *
+         * <p>409, not 403: they hold MANAGE_LOGINS perfectly well and will be able to do exactly
+         * this the moment the household is Pro. A 403 would say "not you", which is the wrong
+         * diagnosis and points at the wrong fix.
+         */
+        @Test
+        void invitingIsRefusedWhileTheHouseholdIsOnFree() throws Exception {
+            mockMvc.perform(post("/api/auth/test/billing-plan")
+                            .header("X-E2E-Test-Key", "local-dev-only-e2e-test-key-do-not-use-elsewhere")
+                            .param("email", "owner-" + suffix + "@example.com")
+                            .param("plan", "FREE"))
+                    .andExpect(status().isNoContent());
+
+            mockMvc.perform(post("/api/account/logins/" + samPersonId + "/invite")
+                            .header("Authorization", bearer(ownerToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("email", "sam-" + suffix + "@example.com"))))
+                    .andExpect(status().isConflict());
+
+            // ...and nothing was created, so there is no orphaned invitation to trip over later.
+            assertThat(inviteRepository.findPendingFor(accountId, samPersonId)).isEmpty();
         }
 
         @Test

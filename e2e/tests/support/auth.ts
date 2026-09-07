@@ -144,6 +144,13 @@ export async function addMemberLogin(
     ?? `huddle+e2e-member-${Date.now()}-${uniqueSuffix()}@starner.co`;
   const password = 'password123';
 
+  // ⚠️ Pro FIRST. Member logins are a Pro feature: from phase 8 a member in a Free household is
+  // PAUSED and refused on every route, so a spec that minted one against a freshly-registered
+  // (therefore Free) household would be testing the pause rather than whatever it says it tests.
+  // Registration creates a Free subscription, so this is needed for every caller, and doing it
+  // here rather than in each spec is what stops the next one forgetting.
+  await setBillingPlan(request, ownerEmail, 'PRO');
+
   const configResponse = await request.get('/config.json');
   const { apiUrl } = await configResponse.json();
   const params = new URLSearchParams({ ownerEmail, personName, memberEmail: email, password });
