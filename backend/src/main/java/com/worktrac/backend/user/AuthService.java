@@ -11,6 +11,7 @@ import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.config.AdminProperties;
 import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.membership.AccountMembership;
+import com.worktrac.backend.membership.AccountRole;
 import com.worktrac.backend.membership.AccountMembershipRepository;
 import com.worktrac.backend.membership.HouseholdChoiceDto;
 import com.worktrac.backend.membership.MembershipDto;
@@ -180,7 +181,8 @@ public class AuthService {
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole(), user.getTokenVersion());
         return AuthResponse.signedIn(token, UserDto.from(user),
                 AccountDto.from(account, subscriptionService.planFor(account.getId())),
-                MembershipDto.from(membership),
+                MembershipDto.from(membership,
+                        ownerNameForMember(account.getId(), membership.getAccountRole())),
                 PersonDto.from(primaryPerson));
     }
 
@@ -218,7 +220,8 @@ public class AuthService {
                 user.getRole(), user.getTokenVersion());
         return AuthResponse.signedIn(token, UserDto.from(user),
                 AccountDto.from(account, subscriptionService.planFor(account.getId())),
-                MembershipDto.from(membership),
+                MembershipDto.from(membership,
+                        ownerNameForMember(account.getId(), membership.getAccountRole())),
                 PersonDto.from(primaryPerson));
     }
 
@@ -268,8 +271,32 @@ public class AuthService {
                 .toList();
         return new MeResponse(UserDto.from(user),
                 AccountDto.from(account, subscriptionService.planFor(accountId)),
-                MembershipDto.from(access),
+                MembershipDto.from(access, ownerNameForMember(accountId, access.accountRole())),
                 personService.list(access),
                 households);
+    }
+
+    /**
+     * The household owner's person name, for the one audience that needs it: a MEMBER.
+     *
+     * <p>Answers "who do I ask?" — and carries the copy weight in every refusal a member can hit,
+     * because "ask Nate to rename it" is only actionable if the app can say who Nate is.
+     *
+     * <p><b>Null for an owner, deliberately, and that is not just tidiness.</b> An owner already
+     * knows who the owner is, so resolving it for them would buy nothing and cost a query on
+     * {@code /me} — the hottest endpoint in the app — for every single existing user, all of whom
+     * are owners today. Members are the rare case, and they are the only case that pays.
+     *
+     * <p>Null is also the honest answer for an account with no owner membership, or an owner
+     * membership with no person. Every consumer must degrade to a message that names nobody
+     * rather than printing "null".
+     */
+    private String ownerNameForMember(Long accountId, AccountRole role) {
+        if (role != AccountRole.MEMBER) {
+            return null;
+        }
+        return membershipRepository.findOwnerPersonNames(accountId, AccountRole.OWNER).stream()
+                .findFirst()
+                .orElse(null);
     }
 }

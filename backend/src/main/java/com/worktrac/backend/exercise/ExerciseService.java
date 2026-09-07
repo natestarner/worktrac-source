@@ -2,8 +2,14 @@ package com.worktrac.backend.exercise;
 
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
+import com.worktrac.backend.common.ConflictException;
 import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.membership.AccountAccess;
+import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.AccountRole;
+import com.worktrac.backend.membership.Permission;
+import com.worktrac.backend.membership.SharedResourceMessages;
+import com.worktrac.backend.workoutset.WorkoutSetRepository;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.quota.QuotaService;
 import org.springframework.stereotype.Service;
@@ -18,12 +24,17 @@ public class ExerciseService {
     private final ExerciseRepository exerciseRepository;
     private final AccountRepository accountRepository;
     private final QuotaService quotaService;
+    private final WorkoutSetRepository workoutSetRepository;
+    private final AccountMembershipRepository membershipRepository;
 
     public ExerciseService(ExerciseRepository exerciseRepository, AccountRepository accountRepository,
-                            QuotaService quotaService) {
+                            QuotaService quotaService, WorkoutSetRepository workoutSetRepository,
+                            AccountMembershipRepository membershipRepository) {
         this.exerciseRepository = exerciseRepository;
         this.accountRepository = accountRepository;
         this.quotaService = quotaService;
+        this.workoutSetRepository = workoutSetRepository;
+        this.membershipRepository = membershipRepository;
     }
 
     // The full catalog visible to this account, used for search. Grouping/favoriting is now
@@ -128,6 +139,34 @@ public class ExerciseService {
         // the picker contradicts on the same screen.
         if (!access.mayEditSharedResource(exercise.getCreatedByUserId())) {
             throw new ForbiddenException("Only the person who added this exercise, or the account owner, can rename it");
+        }
+
+        // ⚠️ RENAME ONLY WHILE NOBODY ELSE IS USING IT.
+        //
+        // An exercise is household-wide, so its NAME is the label on everyone's history. Having
+        // created it does not make it yours forever: once somebody else has logged against it,
+        // renaming silently relabels their sets, their Trends and their PRs.
+        //
+        // "Unused" means nobody OTHER than you has logged against it -- deliberately not "no sets
+        // at all". The harm is relabelling somebody ELSE's history, and a rule that stopped you
+        // fixing your own typo the moment you used your own exercise would be strictly annoying
+        // without preventing anything.
+        //
+        // The OWNER is exempt: they hold EDIT_ANY_SHARED_RESOURCE, they are the account holder,
+        // and -- practically -- they are the remedy this refusal points at. Block them too and the
+        // message below has nobody to send you to.
+        //
+        // 409, NOT 403: the caller is genuinely allowed to rename this exercise and was a moment
+        // ago. The permission is real; the household's state is what forbids it. A 403 would say
+        // "not yours", which is the wrong diagnosis and points at the wrong fix.
+        //
+        // Safe to refuse at all because rename is a GATED (online-only) write, not a durable one --
+        // see resilience.md's AddEditExerciseModal row. A definitive 4xx surfaces as a toast, never
+        // as a discarded queued write.
+        if (!access.has(Permission.EDIT_ANY_SHARED_RESOURCE)
+                && workoutSetRepository.existsByExercise_IdAndPerson_IdNot(exerciseId, access.requireSelfPersonId())) {
+            throw new ConflictException(SharedResourceMessages.inUse("exercise",
+                    membershipRepository.findOwnerPersonNames(access.accountId(), AccountRole.OWNER)));
         }
 
         exercise.setName(request.name().trim());

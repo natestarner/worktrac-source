@@ -60,6 +60,7 @@ There is already exactly one way to do each of these. **Adding a second is the b
 |---|---|---|
 | Offline-capable write | `useDurableMutation` (component) / `dispatchDurableWrite`, `enqueueOutboxWrite` (non-component) | A bare `useMutation`, or calling `api/*` directly |
 | Online-only (Tier-3) write | `useGatedMutation` (the **only** caller of `useRequireOnline`) | Calling `api/*` directly; an ad-hoc `try/catch` + toast per call site; `useRequireOnline` on its own |
+| Surfacing a server refusal a person can act on | `useGatedMutation`'s `showServerMessage` opt-in | A second catch at the call site, or making it the default — backend 4xx text is not uniformly user-facing (`"Unknown tracking type: foo"`), so a blanket switch leaks developer copy across ~35 writes. Off, a 409 saying "ask Nate to rename it" is replaced by "check your connection", which sends someone hunting for signal over something no connection fixes |
 | Disabling a Tier-3 entry point up front | `OfflineDisabledWrap` | Hand-rolled `disabled={!online}` |
 | Disabling a control that belongs to someone else | `ReadOnlyWrap` (nested INSIDE `OfflineDisabledWrap`) | A hand-rolled permission check, or a second message about connectivity |
 | "What may this login do here?" | `useAccountAccess` | Reading `membership` off `useAuth()` directly |

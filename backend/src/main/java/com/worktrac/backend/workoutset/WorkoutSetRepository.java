@@ -52,6 +52,14 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
 
     boolean existsByExercise_Id(Long exerciseId);
 
+    // "Has anyone OTHER than this person logged against this exercise?" -- the question that
+    // decides whether a rename would relabel somebody else's history.
+    //
+    // Derived rather than a @Query so the person comparison stays visible in the name. `Not` on a
+    // nested path is exactly `person_id <> ?`, and person_id is NOT NULL, so there is no
+    // three-valued-logic surprise here.
+    boolean existsByExercise_IdAndPerson_IdNot(Long exerciseId, Long personId);
+
     // Admin-only: [accountId, count] pairs across ALL accounts, consumed only by AdminService.
     @Query("SELECT ws.session.person.account.id, COUNT(ws) FROM WorkoutSet ws GROUP BY ws.session.person.account.id")
     List<Object[]> countGroupedByAccount();

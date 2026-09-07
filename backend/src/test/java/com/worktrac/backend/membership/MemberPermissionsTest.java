@@ -478,4 +478,167 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
         }
     }
 
+
+    /**
+     * Renaming a shared row is allowed only while nobody ELSE is using it.
+     *
+     * <p>An exercise or tag is household-wide, so its name is the label on everyone's history.
+     * Having created it does not make it yours forever — once somebody else has logged against it,
+     * a rename silently relabels their sets, their Trends and their PRs.
+     *
+     * <p>The status codes carry the diagnosis and must not be collapsed: <b>403</b> is "not yours",
+     * <b>409</b> is "yours, but in use". They point at different fixes, and 409 is the only one
+     * that has a remedy to offer.
+     */
+    @Nested
+    @DisplayName("renaming a shared resource that other people use")
+    class RenameWhileUnused {
+
+        private long createExerciseAs(String token, String name) throws Exception {
+            return json(mockMvc.perform(post("/api/exercises")
+                    .header("Authorization", bearer(token))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of("name", name)))))
+                    .get("id").asLong();
+        }
+
+        private void logSetFor(String token, long personId, long exerciseId) throws Exception {
+            mockMvc.perform(post("/api/people/" + personId + "/live-sets")
+                            .header("Authorization", bearer(token))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("exerciseId", exerciseId, "weight", 100, "reps", 5))))
+                    .andExpect(status().isOk());
+        }
+
+        private String rename(String token, long exerciseId, String name) throws Exception {
+            return mockMvc.perform(put("/api/exercises/" + exerciseId)
+                            .header("Authorization", bearer(token))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("name", name))))
+                    .andReturn().getResponse().getContentAsString();
+        }
+
+        // Your own exercise, nobody else has touched it: rename freely.
+        @Test
+        void aMemberMayRenameTheirOwnUnusedExercise() throws Exception {
+            long id = createExerciseAs(memberToken, "Sam's Curl");
+
+            mockMvc.perform(put("/api/exercises/" + id)
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("name", "Sam's EZ Curl"))))
+                    .andExpect(status().isOk());
+        }
+
+        // ⚠️ Deliberately NOT "no sets at all". Using your own exercise must not cost you the
+        // ability to fix your own typo -- the harm this rule prevents is relabelling somebody
+        // ELSE's history.
+        @Test
+        void usingItYourselfDoesNotLockYourOwnRename() throws Exception {
+            long id = createExerciseAs(memberToken, "Sam's Curl");
+            logSetFor(memberToken, memberPersonId, id);
+
+            mockMvc.perform(put("/api/exercises/" + id)
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("name", "Sam's EZ Curl"))))
+                    .andExpect(status().isOk());
+        }
+
+        // The rule itself: the owner logs against the member's exercise, and it stops being the
+        // member's to rename.
+        @Test
+        void anotherPersonUsingItRefusesTheRenameWith409() throws Exception {
+            long id = createExerciseAs(memberToken, "Sam's Curl");
+            logSetFor(ownerToken, ownerPersonId, id);
+
+            mockMvc.perform(put("/api/exercises/" + id)
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("name", "Renamed"))))
+                    .andExpect(status().isConflict());
+        }
+
+        // A refusal a person cannot act on is just an obstacle. The message has to say what
+        // happened AND who can fix it -- which is why MembershipDto carries the owner's name.
+        @Test
+        void theRefusalNamesTheOwnerAndOffersAWayForward() throws Exception {
+            long id = createExerciseAs(memberToken, "Sam's Curl");
+            logSetFor(ownerToken, ownerPersonId, id);
+
+            String body = rename(memberToken, id, "Renamed");
+
+            assertThat(body).contains("Nate");
+            assertThat(body).contains("add your own");
+        }
+
+        // The owner is exempt -- they hold EDIT_ANY_SHARED_RESOURCE, and they are the remedy the
+        // 409 above points at. Block them and that message has nobody to send you to.
+        @Test
+        void theOwnerMayStillRenameSomethingEveryoneUses() throws Exception {
+            long id = createExerciseAs(memberToken, "Sam's Curl");
+            logSetFor(ownerToken, ownerPersonId, id);
+            logSetFor(memberToken, memberPersonId, id);
+
+            mockMvc.perform(put("/api/exercises/" + id)
+                            .header("Authorization", bearer(ownerToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("name", "Curl (Sam)"))))
+                    .andExpect(status().isOk());
+        }
+
+        // 403 and 409 are different diagnoses pointing at different fixes. Somebody else's
+        // exercise is still 403 even when nobody has used it -- the in-use rule must not swallow
+        // the ownership one.
+        @Test
+        void somebodyElsesExerciseIsStill403NotConflict() throws Exception {
+            long id = createExerciseAs(ownerToken, "Nate's Row");
+
+            mockMvc.perform(put("/api/exercises/" + id)
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("name", "Not Nate's Row"))))
+                    .andExpect(status().isForbidden());
+        }
+
+        // Tags carry the same rule for the same reason: a tag is applied to OTHER people's
+        // exercises, so renaming one relabels whatever they filed under it.
+        @Test
+        void aTagAppliedByAnotherPersonRefusesTheRenameWith409() throws Exception {
+            long exerciseId = createExerciseAs(memberToken, "Shared Lift");
+            long tagId = json(mockMvc.perform(post("/api/tags")
+                    .header("Authorization", bearer(memberToken))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of("name", "sam-pull")))))
+                    .get("id").asLong();
+
+            // The OWNER applies it to their own copy of the exercise.
+            mockMvc.perform(put("/api/people/" + ownerPersonId + "/exercises/" + exerciseId + "/tags")
+                            .header("Authorization", bearer(ownerToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("tags", java.util.List.of("sam-pull")))))
+                    .andExpect(status().isOk());
+
+            mockMvc.perform(put("/api/tags/" + tagId)
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("name", "renamed"))))
+                    .andExpect(status().isConflict());
+        }
+
+        // /me tells a member who the owner is -- the field the 409 copy above depends on. Null for
+        // an owner, who does not need telling.
+        @Test
+        void meNamesTheOwnerForAMemberAndNobodyForAnOwner() throws Exception {
+            JsonNode memberMe = json(mockMvc.perform(get("/api/auth/me")
+                    .header("Authorization", bearer(memberToken))));
+            assertThat(memberMe.get("membership").get("ownerName").asText()).isEqualTo("Nate");
+
+            JsonNode ownerMe = json(mockMvc.perform(get("/api/auth/me")
+                    .header("Authorization", bearer(ownerToken))));
+            assertThat(ownerMe.get("membership").get("ownerName").isNull()).isTrue();
+        }
+    }
+
 }

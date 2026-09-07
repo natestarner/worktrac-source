@@ -3,6 +3,11 @@ package com.worktrac.backend.tag;
 import com.worktrac.backend.common.ConflictException;
 import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.membership.AccountAccess;
+import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.AccountRole;
+import com.worktrac.backend.membership.Permission;
+import com.worktrac.backend.membership.SharedResourceMessages;
+import com.worktrac.backend.exercise.PersonExerciseRepository;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.quota.QuotaService;
 import org.springframework.stereotype.Service;
@@ -22,12 +27,17 @@ public class TagService {
     private final TagRepository tagRepository;
     private final AccountRepository accountRepository;
     private final QuotaService quotaService;
+    private final PersonExerciseRepository personExerciseRepository;
+    private final AccountMembershipRepository membershipRepository;
 
     public TagService(TagRepository tagRepository, AccountRepository accountRepository,
-                       QuotaService quotaService) {
+                       QuotaService quotaService, PersonExerciseRepository personExerciseRepository,
+                       AccountMembershipRepository membershipRepository) {
         this.tagRepository = tagRepository;
         this.accountRepository = accountRepository;
         this.quotaService = quotaService;
+        this.personExerciseRepository = personExerciseRepository;
+        this.membershipRepository = membershipRepository;
     }
 
     @Transactional(readOnly = true)
@@ -56,6 +66,20 @@ public class TagService {
         // theirs to touch either way.
         if (!access.mayEditSharedResource(tag.getCreatedByUserId())) {
             throw new ForbiddenException("Only the person who added this tag, or the account owner, can rename it");
+        }
+
+        // The tag counterpart of ExerciseService.update's in-use check -- read that comment for the
+        // full reasoning. A tag is applied to OTHER people's exercises, so renaming one relabels
+        // whatever they filed under it. "Used" therefore means applied by somebody other than you,
+        // and the owner stays exempt because they are the remedy the message points at.
+        //
+        // Checked BEFORE the name-collision test below, deliberately: a member who may not rename
+        // this tag at all must not be able to learn which names the household already has from a
+        // 409-about-collision arriving instead of a 409-about-usage.
+        if (!access.has(Permission.EDIT_ANY_SHARED_RESOURCE)
+                && personExerciseRepository.isTagAppliedByAnotherPerson(tagId, access.requireSelfPersonId())) {
+            throw new ConflictException(SharedResourceMessages.inUse("tag",
+                    membershipRepository.findOwnerPersonNames(accountId, AccountRole.OWNER)));
         }
 
         if (!tag.getName().equalsIgnoreCase(trimmed)

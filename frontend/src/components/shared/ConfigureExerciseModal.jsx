@@ -120,7 +120,13 @@ export default function ConfigureExerciseModal({
     await onFieldsChanged();
   }
 
-  const guardedSaveName = run(saveName, { offlineMessage: 'Editing needs a connection.' });
+  // showServerMessage: renaming can be refused for a reason the person can act on -- not their
+  // exercise (403), or other people have already logged against it (409, which names the owner to
+  // ask). Those sentences are the point of the refusal; the generic fallback would bury them.
+  const guardedSaveName = run(saveName, {
+    offlineMessage: 'Editing needs a connection.',
+    showServerMessage: true,
+  });
   const guardedSaveNote = run(saveNote, { offlineMessage: 'Editing needs a connection.' });
   const guardedToggleTag = run(toggleTag, { offlineMessage: 'Editing needs a connection.' });
   const guardedAddTag = run(addTag, { offlineMessage: 'Editing needs a connection.' });

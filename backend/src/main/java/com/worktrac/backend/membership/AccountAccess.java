@@ -58,6 +58,27 @@ public record AccountAccess(
     }
 
     /**
+     * The person this login IS, insisting there is one.
+     *
+     * <p>For the checks that ask "has anyone OTHER than me used this", where the person id becomes
+     * a {@code <> :personId} comparison. A null there would not fail — it would match every row and
+     * report "used by nobody", quietly waving through exactly the rename the check exists to
+     * refuse. So this fails loudly instead of failing open.
+     *
+     * <p>Only ever reached for a MEMBER (an owner short-circuits on
+     * {@code EDIT_ANY_SHARED_RESOURCE} first), and a member always has a person —
+     * {@code UX_account_memberships_account_person} is what makes that true. An
+     * {@code IllegalStateException} here means that invariant broke, which is a 500 and correctly
+     * so: it is not a request the caller can fix.
+     */
+    public Long requireSelfPersonId() {
+        if (selfPersonId == null) {
+            throw new IllegalStateException("Membership has no person: " + membershipId);
+        }
+        return selfPersonId;
+    }
+
+    /**
      * Whether this login may change a shared account resource -- an exercise or a tag -- given who
      * created it.
      *
