@@ -615,4 +615,77 @@ describe('offline outbox persistence', () => {
       );
     });
   });
+
+  // ⚠️ THE HAND-OVER WINDOW. A member signing in after a sibling used to DELETE their own queued
+  // writes -- the ones the login was about to restore for them.
+  //
+  // adoptOutboxScope flips the scope pointer to the incoming login and only then evicts the
+  // outgoing login's mutations. The eviction fires the persistence subscription with an empty
+  // cache and a pointer that already names the newcomer, and the old "nothing queued -> del the
+  // key" branch took that at face value. The cache was not empty because the newcomer had no work;
+  // it was empty because their work had not been loaded yet.
+  //
+  // Found by member-device-handoff.spec.ts, which reproduces the whole path in a browser. These
+  // pin the mechanism directly, because the e2e is a sequence and this is one rule.
+  describe('an empty cache never deletes a key it has not been reconciled with', () => {
+    const OTHER = { accountId: 'acct-1', userId: 'user-2' };
+
+    afterEach(async () => {
+      await clearOutbox(OTHER);
+    });
+
+    it("does not delete the incoming login's queued writes when the outgoing login is evicted", async () => {
+      // user-2 has a queued write on disk, from an earlier session on this device.
+      setOutboxScope(OTHER);
+      const queued = newClient();
+      onlineManager.setOnline(false);
+      dispatchLogSet(queued, liveSetVars());
+      persistOutboxNow(queued);
+      expect(await get(keyFor(OTHER))).toBeTruthy();
+
+      // A different login now takes the device over: the pointer moves to user-2 (already there
+      // here -- what matters is that the CACHE speaking is not user-2's), and an empty cache
+      // persists on the way through.
+      __resetOutboxScopeForTests();
+      setOutboxScope(OTHER);
+      const empty = newClient();
+      persistOutboxNow(empty);
+
+      // Still there. This is the assertion the bug failed.
+      expect(await get(keyFor(OTHER))).toBeTruthy();
+    });
+
+    it('still clears the key once the cache genuinely speaks for it', async () => {
+      setOutboxScope(ACCOUNT);
+      const client = newClient();
+      onlineManager.setOnline(false);
+      dispatchLogSet(client, liveSetVars());
+      persistOutboxNow(client);
+      expect(await get(keyFor(ACCOUNT))).toBeTruthy();
+
+      // The same client, drained. A write leaving the outbox by SUCCEEDING must still clear the
+      // key -- otherwise a stale outbox gets replayed on the next boot, which is what the delete
+      // is for.
+      client.getMutationCache().clear();
+      persistOutboxNow(client);
+      await Promise.resolve();
+      expect(await get(keyFor(ACCOUNT))).toBeUndefined();
+    });
+
+    it('a restore counts as reconciliation, even when it finds nothing', async () => {
+      // Nothing on disk for this scope, and no write has ever been persisted for it.
+      setOutboxScope(ACCOUNT);
+      const client = newClient();
+      await restoreOutbox(client, ACCOUNT);
+
+      // Seed the key BEHIND the app's back, the way a second tab would. The restore already
+      // answered "this queue is empty", so the cache now speaks for the key and a drain-to-empty
+      // is allowed to clear it.
+      await set(keyFor(ACCOUNT), { mutations: [{ state: {} }] });
+      persistOutboxNow(client);
+      await Promise.resolve();
+      expect(await get(keyFor(ACCOUNT))).toBeUndefined();
+    });
+  });
+
 });

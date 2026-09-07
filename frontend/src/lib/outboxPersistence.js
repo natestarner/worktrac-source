@@ -125,6 +125,13 @@ function dehydrateOutbox(queryClient) {
   });
 }
 
+// The key the live mutation cache has actually been reconciled with -- set when we write that key,
+// and when restoreOutbox reads it (reading IS the reconciliation). Null until the first of those.
+//
+// It exists to answer one question: is an EMPTY cache evidence that this key's queue is empty, or
+// merely evidence that we have not loaded it yet? See persistOutboxNow.
+let reconciledKey = null;
+
 // Write the current queued writes to disk immediately. Called eagerly on every mutation-cache
 // change AND on pagehide/visibilitychange (hardening #6) -- no throttle, so a set logged and the app
 // swipe-killed a fraction of a second later is already durable.
@@ -133,11 +140,37 @@ export function persistOutboxNow(queryClient, scope) {
   const dehydrated = dehydrateOutbox(queryClient);
   const key = outboxKeyFor(scope);
   if (dehydrated.mutations.length > 0) {
+    reconciledKey = key;
     set(key, dehydrated).catch(() => {});
-  } else {
-    // Nothing queued -> clear the key so a stale outbox can't be replayed later.
-    del(key).catch(() => {});
+    return;
   }
+
+  // ⚠️ AN EMPTY CACHE IS ONLY EVIDENCE ABOUT A KEY WE HAVE ALREADY LOADED.
+  //
+  // adoptOutboxScope flips the scope pointer to the INCOMING login and only then evicts the
+  // outgoing login's mutations -- deliberately, because evicting first would persist "empty"
+  // against the OUTGOING key and delete work that is still perfectly good. But the eviction fires
+  // this subscription, the cache is momentarily empty, and the pointer already names the new
+  // login, so without this guard the branch below deleted the INCOMING login's own queued writes
+  // -- the ones restoreOutbox was about to hand back to them, a beat later.
+  //
+  // Two members of one household on one device hit that every time both had work queued: the
+  // second one to sign in destroyed the first one's. Silent, and on the return trip, so it looked
+  // like the work had never been saved at all. Proven in member-device-handoff.spec.ts, which fails
+  // on the assertion that the returning member still has their queued write.
+  //
+  // A suspend-during-handover flag cannot do this job: the mutation cache notifies through
+  // notifyManager's setTimeout(0) scheduler, so the callback lands after any window the caller
+  // could hold open. The question has to be answered from the event itself, and this is it.
+  //
+  // Skipping a delete is the safe direction. The key still holds exactly the writes the next
+  // restore will load -- current, not stale -- and a replayed write is idempotency-keyed anyway.
+  // Deleting is the unrecoverable direction, so it happens only where the cache genuinely speaks
+  // for the key.
+  if (key !== reconciledKey) return;
+
+  // Nothing queued -> clear the key so a stale outbox can't be replayed later.
+  del(key).catch(() => {});
 }
 
 // Subscribe the outbox to the mutation cache and to app-exit events. Returns a cleanup function.
@@ -261,6 +294,10 @@ export async function restoreOutbox(queryClient, scope) {
   try {
     const key = outboxKeyFor(scope);
     const dehydrated = await readOutboxKey(key, scope);
+    // Read or not, the cache now speaks for this key -- an empty result means the queue really is
+    // empty, which is exactly what persistOutboxNow needs to know before it may delete anything.
+    // Set BEFORE the early return so the empty case counts too.
+    reconciledKey = key;
     if (!dehydrated?.mutations?.length) return;
 
     const maxSeq = dehydrated.mutations.reduce((max, m) => Math.max(max, m.state.variables?.enqueueSeq ?? 0), 0);
@@ -298,8 +335,10 @@ export function clearOutbox(scope) {
   return del(outboxKeyFor(scope)).catch(() => {});
 }
 
-// Test-only: undo the scope pointer and every migration tombstone, without touching IndexedDB.
+// Test-only: undo the scope pointer, every migration tombstone, and the cache-vs-disk
+// reconciliation fact, without touching IndexedDB.
 export function __resetOutboxScopeForTests() {
+  reconciledKey = null;
   try {
     localStorage.removeItem(OUTBOX_SCOPE_KEY);
     localStorage.removeItem(LEGACY_OUTBOX_ACCOUNT_KEY);

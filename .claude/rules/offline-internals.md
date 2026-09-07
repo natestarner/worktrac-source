@@ -60,6 +60,27 @@ See `docs/incidents/2026-08-01-outbox-reorder-enqueueseq.md`.
   as dead writes in B's outbox. `adoptOutboxScope` keeps the **flip-pointer-before-evicting**
   ordering (below), and deliberately does **not** treat a null prior `userId` as a switch: that is
   a pre-upgrade device gaining an id on its first authenticated load, i.e. the same login.
+- **⚠ `persistOutboxNow` may only DELETE a key the live cache has been reconciled with.** An
+  empty mutation cache has two possible meanings — "this login's queue is empty" and "this
+  login's queue has not been loaded yet" — and only the first licenses a delete. The module
+  tracks the last key it wrote or that `restoreOutbox` read (`reconciledKey`); an empty cache
+  against any other key persists nothing.
+
+  Without it, the hand-over window destroys data. `adoptOutboxScope` flips the pointer to the
+  **incoming** login and only then evicts the outgoing one's mutations; that eviction fires the
+  persistence subscription with an empty cache and a pointer already naming the newcomer, so the
+  delete landed on the newcomer's own key — the writes `restoreOutbox` was about to hand back
+  to them, a beat later. Two members of one household on one device hit it whenever both had work
+  queued: the second to sign in destroyed the first's, silently, and it surfaced only on the return
+  trip as work that looked like it had never been saved.
+
+  **A suspend-during-hand-over flag cannot replace this.** The mutation cache notifies through
+  `notifyManager`'s `setTimeout(0)` scheduler, so the callback lands after any window a caller
+  could hold open; the question has to be answerable from the event itself. Skipping a delete is
+  also the safe direction — the key still holds exactly what the next restore will load, and a
+  replayed write is idempotency-keyed. Pinned by `outboxPersistence.test.js`'s "an empty cache
+  never deletes a key it has not been reconciled with" and end to end by
+  `member-device-handoff.spec.ts`.
 - **The per-account → composite migration is TOMBSTONED, and that bound is load-bearing.** The
   per-account key is shared by the whole household, so an unbounded fallback would hand it to
   whichever member signed in next — reintroducing the leak through the migration meant to prevent
