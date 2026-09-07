@@ -22,35 +22,77 @@ import { byEnqueueOrder, seedOutboxSeq } from './outboxSequence';
 export const OUTBOX_SCOPE_ID = 'offline-outbox';
 
 const OUTBOX_KEY_PREFIX = 'worktrac-outbox:';
-// Pre-per-account single global key, from before outbox entries were scoped per account. Adopted
-// (once) into whichever account's key is read first after an upgrade, so nobody mid-offline during
-// the upgrade loses queued writes -- see the migration in `readOutboxKey` below.
+// Pre-per-account single global key, from before outbox entries were scoped per account.
 const LEGACY_OUTBOX_KEY = 'worktrac-outbox';
-// Which account's queued writes currently live in the in-memory mutation cache, so persist/restore
-// know which per-account IndexedDB key to use without threading an accountId through every mutation
-// dispatch site. Kept in localStorage (synchronous, so it's already known at boot before any React
-// context mounts) and kept current by AuthContext at every real login/boot/token-refresh -- see
-// `adoptOutboxAccount` there. Deliberately NOT cleared on a 401 (the queued writes still belong to
+// Which LOGIN's queued writes currently live in the in-memory mutation cache, so persist/restore
+// know which IndexedDB key to use without threading identity through every mutation dispatch site.
+// Kept in localStorage (synchronous, so it's already known at boot before any React context
+// mounts) and kept current by AuthContext at every real login/boot/token-refresh -- see
+// `adoptOutboxScope` there. Deliberately NOT cleared on a 401 (the queued writes still belong to
 // whoever's session just expired, and must survive until they log back in); only an explicit
 // logout's full discard touches it (see clearOutbox).
-const OUTBOX_ACCOUNT_KEY = 'worktrac-outbox-account';
+//
+// ⚠️ SCOPED BY (account, user), NOT BY ACCOUNT ALONE -- and that distinction is the whole point of
+// this change. With member logins, two people in the SAME household can sign in on one device.
+// Under the old account-only key `adoptOutboxAccount` saw no change between them, so it did not
+// evict: member B inherited member A's queued writes and replayed them under B's token, where the
+// person guards reject them as writes onto somebody else's data. They would then sit as dead
+// writes needing a human to discard -- A's work, lost from B's screen, in B's outbox.
+const OUTBOX_SCOPE_KEY = 'worktrac-outbox-scope';
+// The account-only pointer this replaced. Read once, to carry an in-flight upgrade across.
+const LEGACY_OUTBOX_ACCOUNT_KEY = 'worktrac-outbox-account';
+// Marks a per-account key as already adopted into a composite one, so the fallback below runs at
+// most ONCE per account per device. See readOutboxKey for why that bound is load-bearing.
+const MIGRATED_PREFIX = 'worktrac-outbox-migrated:';
 
 const idbAvailable = typeof indexedDB !== 'undefined';
 
-export function setOutboxAccountId(accountId) {
+export function setOutboxScope(scope) {
   try {
-    if (accountId == null) localStorage.removeItem(OUTBOX_ACCOUNT_KEY);
-    else localStorage.setItem(OUTBOX_ACCOUNT_KEY, String(accountId));
+    if (scope?.accountId == null) localStorage.removeItem(OUTBOX_SCOPE_KEY);
+    else {
+      localStorage.setItem(
+        OUTBOX_SCOPE_KEY,
+        JSON.stringify({ accountId: String(scope.accountId), userId: scope.userId == null ? null : String(scope.userId) }),
+      );
+    }
   } catch {
     // Private-mode / quota / disabled storage: falls back to the 'unknown' bucket below.
   }
 }
 
-export function getOutboxAccountId() {
+export function getOutboxScope() {
   try {
-    return localStorage.getItem(OUTBOX_ACCOUNT_KEY);
+    const raw = localStorage.getItem(OUTBOX_SCOPE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.accountId != null) return { accountId: parsed.accountId, userId: parsed.userId ?? null };
+    }
+    // Upgrade path: the account-only pointer this replaced. A device that was mid-outage when the
+    // upgrade landed still has queued writes under the per-account key, and returning its account
+    // here is what lets readOutboxKey find them.
+    const legacyAccountId = localStorage.getItem(LEGACY_OUTBOX_ACCOUNT_KEY);
+    return legacyAccountId ? { accountId: legacyAccountId, userId: null } : null;
   } catch {
     return null;
+  }
+}
+
+// True once this account's per-account key has been folded into a composite one on this device.
+function migrationDone(accountId) {
+  try {
+    return localStorage.getItem(`${MIGRATED_PREFIX}${accountId}`) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markMigrated(accountId) {
+  try {
+    localStorage.setItem(`${MIGRATED_PREFIX}${accountId}`, '1');
+  } catch {
+    // Losing the tombstone only means the fallback may run again -- see readOutboxKey's note on
+    // what that would cost, and why it is bounded rather than dangerous.
   }
 }
 
@@ -58,9 +100,15 @@ export function getOutboxAccountId() {
 // touch localStorage) and otherwise falls back to the live pointer above -- which is what every
 // production call site relies on, since it's the only way to reach "whichever account is current"
 // from outside the React tree (App.jsx's boot effect runs above AuthProvider).
-function outboxKeyFor(accountId) {
-  const id = accountId ?? getOutboxAccountId();
-  return `${OUTBOX_KEY_PREFIX}${id ?? 'unknown'}`;
+function outboxKeyFor(scope) {
+  const resolved = scope ?? getOutboxScope();
+  if (resolved?.accountId == null) return `${OUTBOX_KEY_PREFIX}unknown`;
+  // A scope with no userId is a pre-member-logins device mid-upgrade; it keeps writing to the
+  // per-account key until the next /me supplies a userId, which is exactly the state readOutboxKey
+  // then migrates.
+  return resolved.userId == null
+    ? `${OUTBOX_KEY_PREFIX}${resolved.accountId}`
+    : `${OUTBOX_KEY_PREFIX}${resolved.accountId}:${resolved.userId}`;
 }
 
 function dehydrateOutbox(queryClient) {
@@ -77,10 +125,10 @@ function dehydrateOutbox(queryClient) {
 // Write the current queued writes to disk immediately. Called eagerly on every mutation-cache
 // change AND on pagehide/visibilitychange (hardening #6) -- no throttle, so a set logged and the app
 // swipe-killed a fraction of a second later is already durable.
-export function persistOutboxNow(queryClient, accountId) {
+export function persistOutboxNow(queryClient, scope) {
   if (!idbAvailable) return;
   const dehydrated = dehydrateOutbox(queryClient);
-  const key = outboxKeyFor(accountId);
+  const key = outboxKeyFor(scope);
   if (dehydrated.mutations.length > 0) {
     set(key, dehydrated).catch(() => {});
   } else {
@@ -93,10 +141,10 @@ export function persistOutboxNow(queryClient, accountId) {
 // Deliberately does NOT capture accountId once at attach time (that would go stale the moment a
 // different account logs in without a reload) -- persistOutboxNow re-reads the live pointer on
 // every single event instead, unless a fixed accountId override is passed (tests only).
-export function attachOutboxPersistence(queryClient, accountId) {
+export function attachOutboxPersistence(queryClient, scope) {
   if (!idbAvailable) return () => {};
-  const unsubscribe = queryClient.getMutationCache().subscribe(() => persistOutboxNow(queryClient, accountId));
-  const flush = () => persistOutboxNow(queryClient, accountId);
+  const unsubscribe = queryClient.getMutationCache().subscribe(() => persistOutboxNow(queryClient, scope));
+  const flush = () => persistOutboxNow(queryClient, scope);
   window.addEventListener('pagehide', flush);
   document.addEventListener('visibilitychange', flush);
   return () => {
@@ -106,11 +154,40 @@ export function attachOutboxPersistence(queryClient, accountId) {
   };
 }
 
-async function readOutboxKey(key) {
+// Reads this login's queued writes, adopting an older key shape if its own is empty.
+//
+// ⚠️ THE TOMBSTONE IS NOT HOUSEKEEPING -- it is what stops this migration handing one member
+// another member's work. The per-account key is shared by everyone in a household, so without a
+// bound, EVERY member signing in on a device that still has one would adopt whatever is in it.
+//
+// The bound is sound because of WHEN the fallback can fire: at migration time the only login that
+// account has ever had on this device is the one that wrote those entries (member logins did not
+// exist when they were written). So the first composite scope to look is necessarily their owner,
+// and after that the tombstone makes the per-account key invisible to everyone else.
+//
+// If the tombstone write fails (private mode, quota), the fallback can run again -- at worst the
+// same owner re-adopts their own already-adopted entries, because the key is deleted on adoption.
+async function readOutboxKey(key, scope) {
   const dehydrated = await get(key);
   if (dehydrated?.mutations?.length) return dehydrated;
-  // One-time migration: adopt the pre-per-account global key if this account's own key is empty,
-  // so upgrading mid-offline can't drop anything already queued.
+
+  const accountId = scope?.accountId ?? getOutboxScope()?.accountId;
+
+  // Per-account key -> composite key. Once only, per account, per device.
+  if (accountId != null && !migrationDone(accountId)) {
+    const perAccountKey = `${OUTBOX_KEY_PREFIX}${accountId}`;
+    if (perAccountKey !== key) {
+      const perAccount = await get(perAccountKey);
+      markMigrated(accountId);
+      if (perAccount?.mutations?.length) {
+        await set(key, perAccount).catch(() => {});
+        await del(perAccountKey).catch(() => {});
+        return perAccount;
+      }
+    }
+  }
+
+  // Pre-per-account global key, from before outbox entries were scoped at all.
   const legacy = await get(LEGACY_OUTBOX_KEY);
   if (legacy?.mutations?.length) {
     await set(key, legacy).catch(() => {});
@@ -172,11 +249,11 @@ async function readOutboxKey(key) {
 // to sit in: flushOutbox()'s own resumePausedMutations() (also gated on a token, see
 // queryClient.js) resumes it the moment a real session exists again, whether that's this same
 // boot (a token was already present) or a later login.
-export async function restoreOutbox(queryClient, accountId) {
+export async function restoreOutbox(queryClient, scope) {
   if (!idbAvailable) return;
   try {
-    const key = outboxKeyFor(accountId);
-    const dehydrated = await readOutboxKey(key);
+    const key = outboxKeyFor(scope);
+    const dehydrated = await readOutboxKey(key, scope);
     if (!dehydrated?.mutations?.length) return;
 
     const maxSeq = dehydrated.mutations.reduce((max, m) => Math.max(max, m.state.variables?.enqueueSeq ?? 0), 0);
@@ -209,15 +286,19 @@ export async function restoreOutbox(queryClient, accountId) {
   }
 }
 
-export function clearOutbox(accountId) {
+export function clearOutbox(scope) {
   if (!idbAvailable) return Promise.resolve();
-  return del(outboxKeyFor(accountId)).catch(() => {});
+  return del(outboxKeyFor(scope)).catch(() => {});
 }
 
-// Test-only: undo the account pointer without touching IndexedDB.
-export function __resetOutboxAccountForTests() {
+// Test-only: undo the scope pointer and every migration tombstone, without touching IndexedDB.
+export function __resetOutboxScopeForTests() {
   try {
-    localStorage.removeItem(OUTBOX_ACCOUNT_KEY);
+    localStorage.removeItem(OUTBOX_SCOPE_KEY);
+    localStorage.removeItem(LEGACY_OUTBOX_ACCOUNT_KEY);
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith(MIGRATED_PREFIX))
+      .forEach((k) => localStorage.removeItem(k));
   } catch {
     // ignore
   }

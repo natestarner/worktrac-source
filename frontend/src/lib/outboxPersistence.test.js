@@ -7,11 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   attachOutboxPersistence,
   clearOutbox,
-  getOutboxAccountId,
+  getOutboxScope,
   persistOutboxNow,
   restoreOutbox,
-  setOutboxAccountId,
-  __resetOutboxAccountForTests,
+  setOutboxScope,
+  __resetOutboxScopeForTests,
 } from './outboxPersistence';
 import { CREATE_EXERCISE_MUTATION_KEY, LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from './queryClient';
 import { clearExerciseIdMap, newTempExerciseId } from './exerciseIdMap';
@@ -33,11 +33,15 @@ vi.mock('../api/exercises', () => ({
   listExercises: vi.fn(),
 }));
 
-const ACCOUNT = 'acct-1';
+// A scope is (account, login) now, not an account -- see outboxPersistence's header for why.
+const ACCOUNT = { accountId: 'acct-1', userId: 'user-1' };
 const LEGACY_OUTBOX_KEY = 'worktrac-outbox';
 
-function keyFor(accountId) {
-  return `worktrac-outbox:${accountId}`;
+function keyFor(scope) {
+  if (typeof scope === 'string') return `worktrac-outbox:${scope}`;
+  return scope.userId == null
+    ? `worktrac-outbox:${scope.accountId}`
+    : `worktrac-outbox:${scope.accountId}:${scope.userId}`;
 }
 
 function newClient() {
@@ -87,7 +91,7 @@ describe('offline outbox persistence', () => {
 
   afterEach(async () => {
     onlineManager.setOnline(true);
-    __resetOutboxAccountForTests();
+    __resetOutboxScopeForTests();
     await clearExerciseIdMap();
     setAuthToken(null);
   });
@@ -412,15 +416,15 @@ describe('offline outbox persistence', () => {
     await vi.waitFor(() =>
       expect(client.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1),
     );
-    await persistOutboxNow(client, 'account-a');
+    await persistOutboxNow(client, { accountId: 'account-a', userId: 'u-a' });
 
     const client2 = newClient();
-    await restoreOutbox(client2, 'account-b');
+    await restoreOutbox(client2, { accountId: 'account-b', userId: 'u-b' });
     expect(client2.getMutationCache().getAll()).toHaveLength(0);
 
     // Account A's own data is untouched and still restorable.
     const client3 = newClient();
-    await restoreOutbox(client3, 'account-a');
+    await restoreOutbox(client3, { accountId: 'account-a', userId: 'u-a' });
     expect(client3.getMutationCache().getAll()).toHaveLength(1);
   });
 
@@ -433,27 +437,109 @@ describe('offline outbox persistence', () => {
     );
     // Simulate data left over from before per-account keys existed, under the bare legacy key.
     const dehydrated = await (async () => {
-      await persistOutboxNow(client, 'temp');
-      const data = await get(keyFor('temp'));
-      await clearOutbox('temp');
+      await persistOutboxNow(client, { accountId: 'temp', userId: 't' });
+      const data = await get(keyFor({ accountId: 'temp', userId: 't' }));
+      await clearOutbox({ accountId: 'temp', userId: 't' });
       return data;
     })();
     await set(LEGACY_OUTBOX_KEY, dehydrated);
 
     const freshClient = newClient();
-    await restoreOutbox(freshClient, 'acct-migrated');
+    await restoreOutbox(freshClient, { accountId: 'acct-migrated', userId: 'u-m' });
 
     expect(freshClient.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1);
     expect(await get(LEGACY_OUTBOX_KEY)).toBeUndefined();
-    expect(await get(keyFor('acct-migrated'))).toBeDefined();
+    expect(await get(keyFor({ accountId: 'acct-migrated', userId: 'u-m' }))).toBeDefined();
   });
 
-  it('the outbox account pointer round-trips through localStorage', () => {
-    expect(getOutboxAccountId()).toBeNull();
-    setOutboxAccountId(42);
-    expect(getOutboxAccountId()).toBe('42');
-    __resetOutboxAccountForTests();
-    expect(getOutboxAccountId()).toBeNull();
+  // ⚠️ THE REASON THIS PHASE EXISTS. Two members of the SAME household on one device.
+  //
+  // Under the old account-only key both of them resolved to `worktrac-outbox:<accountId>`, so
+  // member B's restore loaded member A's queued writes and replayed them under B's token -- where
+  // the person guards refuse them as writes onto somebody else's data. A's work would then sit as
+  // dead writes in B's outbox, gone from A's screen and unlandable from B's.
+  it("does not hand one member of a household another member's queued writes", async () => {
+    const memberA = { accountId: 'household-1', userId: 'member-a' };
+    const memberB = { accountId: 'household-1', userId: 'member-b' };
+
+    const clientA = newClient();
+    onlineManager.setOnline(false);
+    dispatchLogSet(clientA, liveSetVars({ idempotencyKey: 'belongs-to-a' }));
+    await vi.waitFor(() =>
+      expect(clientA.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1),
+    );
+    await persistOutboxNow(clientA, memberA);
+
+    const clientB = newClient();
+    await restoreOutbox(clientB, memberB);
+    expect(clientB.getMutationCache().getAll()).toHaveLength(0);
+
+    // And A's own writes are untouched -- evicting B's view must never destroy A's copy.
+    const clientA2 = newClient();
+    await restoreOutbox(clientA2, memberA);
+    expect(clientA2.getMutationCache().getAll()).toHaveLength(1);
+  });
+
+  // The tombstone. The per-account key is shared by everyone in a household, so an unbounded
+  // fallback would hand it to whichever member happened to sign in next -- reintroducing the exact
+  // leak above, through the migration meant to preserve data.
+  //
+  // It is sound because of WHEN the fallback can fire: at migration time the only login that
+  // account has ever had on this device is the one that wrote those entries, since member logins
+  // did not exist when they were written.
+  it('adopts the per-account key exactly once, and never for a second member', async () => {
+    const owner = { accountId: 'household-2', userId: 'owner' };
+    const member = { accountId: 'household-2', userId: 'member' };
+
+    // Data left over from before logins were scoped per user: written under the bare per-account key.
+    const seed = newClient();
+    onlineManager.setOnline(false);
+    dispatchLogSet(seed, liveSetVars({ idempotencyKey: 'pre-upgrade' }));
+    await vi.waitFor(() =>
+      expect(seed.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1),
+    );
+    await persistOutboxNow(seed, { accountId: 'household-2', userId: null });
+    expect(await get(keyFor({ accountId: 'household-2', userId: null }))).toBeDefined();
+
+    // The owner signs in first and inherits their own pre-upgrade writes.
+    const ownerClient = newClient();
+    await restoreOutbox(ownerClient, owner);
+    expect(ownerClient.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1);
+    expect(await get(keyFor({ accountId: 'household-2', userId: null }))).toBeUndefined();
+
+    // A member signing in afterwards gets nothing -- the key is gone AND the tombstone is set.
+    const memberClient = newClient();
+    await restoreOutbox(memberClient, member);
+    expect(memberClient.getMutationCache().getAll()).toHaveLength(0);
+  });
+
+  // A device that upgraded while its owner was mid-outage must not have the fallback consumed by
+  // an empty read before the writes are looked for. The tombstone is set on the attempt, so this
+  // pins that the attempt still RETURNS the data rather than merely marking it done.
+  it('adopts the per-account key even when the composite key was read first', async () => {
+    const scope = { accountId: 'household-3', userId: 'owner-3' };
+
+    const seed = newClient();
+    onlineManager.setOnline(false);
+    dispatchLogSet(seed, liveSetVars({ idempotencyKey: 'mid-outage' }));
+    await vi.waitFor(() =>
+      expect(seed.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1),
+    );
+    await persistOutboxNow(seed, { accountId: 'household-3', userId: null });
+
+    const client = newClient();
+    await restoreOutbox(client, scope);
+
+    expect(client.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1);
+    expect(await get(keyFor(scope))).toBeDefined();
+  });
+
+  it('the outbox scope pointer round-trips through localStorage', () => {
+    expect(getOutboxScope()).toBeNull();
+    setOutboxScope({ accountId: 42, userId: 7 });
+    expect(getOutboxScope()).toEqual({ accountId: '42', userId: '7' });
+    __resetOutboxScopeForTests();
+    expect(getOutboxScope()).toBeNull();
   });
 
   // The login-loop bug: restoreOutbox used to unconditionally re-dispatch every not-paused write

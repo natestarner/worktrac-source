@@ -13,7 +13,7 @@ import {
 } from '../api/auth';
 import { getAuthToken, isOfflineError, setAuthToken, setUnauthorizedHandler } from '../api/client';
 import { queryClient, resetQueryCache, clearOutboxMutations, flushOutbox } from '../lib/queryClient';
-import { clearOutbox, getOutboxAccountId, restoreOutbox, setOutboxAccountId } from '../lib/outboxPersistence';
+import { clearOutbox, getOutboxScope, restoreOutbox, setOutboxScope } from '../lib/outboxPersistence';
 import { clearAuthSnapshot, loadAuthSnapshot, saveAuthSnapshot } from '../lib/authSnapshot';
 import { requestPersistentStorage } from '../lib/durableStorage';
 import { markOnboardingPending } from '../lib/onboardingPending';
@@ -68,10 +68,23 @@ export const BOOT_STALL_AFTER_ATTEMPTS = 3;
 // that persist a harmless no-op against the NEW account's (legitimately empty) key instead.
 // Returns whether an actual switch happened, so the caller knows whether it's worth also calling
 // restoreOutbox for the newly-adopted account's own persisted writes.
-function adoptOutboxAccount(accountId) {
-  const prior = getOutboxAccountId();
-  const switched = Boolean(prior) && accountId != null && String(prior) !== String(accountId);
-  setOutboxAccountId(accountId);
+//
+// ⚠️ SCOPED BY (account, LOGIN), not by account alone. Two members of the SAME household can now
+// sign in on one device, and under an account-only comparison this saw no change between them --
+// so it did not evict, and member B inherited member A's queued writes. B's token would then
+// replay them onto A's data, where the person guards refuse them: A's work, stuck as dead writes
+// in B's outbox, gone from A's screen.
+function adoptOutboxScope(accountId, userId) {
+  const prior = getOutboxScope();
+  const switched =
+    Boolean(prior?.accountId)
+    && accountId != null
+    && (String(prior.accountId) !== String(accountId)
+      // A null prior userId is a pre-member-logins device on its first authenticated load after the
+      // upgrade. That is NOT a switch -- it is the same login gaining an id -- and treating it as
+      // one would evict the writes the migration exists to preserve.
+      || (prior.userId != null && userId != null && String(prior.userId) !== String(userId)));
+  setOutboxScope({ accountId, userId });
   if (switched) clearOutboxMutations();
   return switched;
 }
@@ -115,7 +128,7 @@ async function verifyNewSession(token) {
   // Only now is discarding safe. The QUERY cache still has to go -- account-shared keys (catalog,
   // tags) carry no accountId, so a second household on this device must never read the first's --
   // but a sign-in that never completed must not cost the CURRENT session its offline copy.
-  // Deliberately does NOT touch the outbox (see resetQueryCache's own comment); adoptOutboxAccount
+  // Deliberately does NOT touch the outbox (see resetQueryCache's own comment); adoptOutboxScope
   // at each call site handles that, same household or not.
   resetQueryCache();
   clearAuthSnapshot();
@@ -174,7 +187,7 @@ export function AuthProvider({ children }) {
           // can still boot into the app, and mark durable storage so the offline cache isn't
           // evicted.
           saveAuthSnapshot(data);
-          adoptOutboxAccount(data.account?.id);
+          adoptOutboxScope(data.account?.id, data.user?.id);
           requestPersistentStorage();
           setState({ status: 'authenticated', offline: false, ...data });
         })
@@ -187,7 +200,7 @@ export function AuthProvider({ children }) {
           // /login.
           const snapshot = loadAuthSnapshot();
           if (isOfflineError(error) && snapshot) {
-            adoptOutboxAccount(snapshot.account?.id);
+            adoptOutboxScope(snapshot.account?.id, snapshot.user?.id);
             requestPersistentStorage();
             setState({ status: 'authenticated', offline: true, ...snapshot });
           } else if (isOfflineError(error)) {
@@ -257,7 +270,7 @@ export function AuthProvider({ children }) {
     const { token } = await apiLogin({ email, password });
     const data = await verifyNewSession(token);
     saveAuthSnapshot(data);
-    const switchedAccount = adoptOutboxAccount(data.account?.id);
+    const switchedAccount = adoptOutboxScope(data.account?.id, data.user?.id);
     // Only restore when the account actually changed -- the same account's queued writes never left
     // the live mutation cache across a mere 401, and restoring again would duplicate them.
     if (switchedAccount) await restoreOutbox(queryClient);
@@ -288,7 +301,7 @@ export function AuthProvider({ children }) {
     markOnboardingPending(data.account?.id);
     // A brand-new account has no queued writes of its own, but a PREVIOUS household's outbox may
     // still be sitting in memory on this shared device -- same protection as login() above.
-    const switchedAccount = adoptOutboxAccount(data.account?.id);
+    const switchedAccount = adoptOutboxScope(data.account?.id, data.user?.id);
     if (switchedAccount) await restoreOutbox(queryClient);
     flushOutbox();
     requestPersistentStorage();

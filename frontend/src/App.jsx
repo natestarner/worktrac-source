@@ -103,7 +103,7 @@ export default function App() {
       onSuccess={async () => {
         // The query cache (optimistic rows included) has just been restored. Bring back the temp->real
         // exercise AND set id maps and any queued writes -- for whichever account was last known to
-        // own the outbox (see outboxPersistence.js's getOutboxAccountId; this runs before AuthContext
+        // own the outbox (see outboxPersistence.js's getOutboxScope; this runs before AuthContext
         // has even confirmed identity, so it relies on that synchronous localStorage pointer, not
         // React state) -- then, if online, replay them; if offline, they stay queued and the
         // onlineManager subscription above flushes them on reconnect. Both id maps load first so a
