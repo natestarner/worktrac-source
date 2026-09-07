@@ -37,6 +37,7 @@ const SECTIONS = [
   { id: 'trends', title: 'Trends', group: 'Looking back' },
   { id: 'personal', title: 'Notes, tags and favorites', group: 'Making it yours' },
   { id: 'settings', title: 'Settings', group: 'Making it yours' },
+  { id: 'logins', title: 'Giving someone their own login', group: 'Making it yours' },
   { id: 'plan', title: 'Free and Pro', group: 'Making it yours' },
   { id: 'data', title: 'Import and export', group: 'Making it yours' },
   { id: 'offline', title: 'Losing the connection', group: 'When things go wrong' },
@@ -678,6 +679,80 @@ export default function HelpTab() {
           confirmation dialog offers exactly that. It also asks you to type <T>DELETE</T> and to
           enter your password, so a device someone left signed in can&rsquo;t erase the household.
         </p>
+      </Section>
+
+      {/* ⚠️ THIS SECTION IS A PROMISE, NOT A DESCRIPTION.
+          Three sentences here are load-bearing and are asserted in code elsewhere:
+            "Their workouts stay"        -> MembershipInviteService.revoke deletes a membership,
+                                            never a person and never training data.
+            "You can't see or set their
+             password"                   -> there is no CHANGE_ANY_PASSWORD permission, deliberately.
+            "They can't change anyone
+             else's workouts"            -> AccountRole never grants MEMBER WRITE_OTHER_PEOPLE,
+                                            under any visibility setting.
+          If any of those ever stops being true, this copy changes in the same commit. */}
+      <Section id="logins" title="Giving someone their own login">
+        <p className="help-lede">
+          Everyone in the household can share one login and tap between people &mdash; that is the
+          iPad-at-the-squat-rack setup, and it still works exactly as it always did. But an older
+          kid with their own phone can have their own sign-in instead.
+        </p>
+        <p>
+          <T>Profile</T> &rarr; <T>Logins</T>, then <T>Enable login</T> next to their name. You
+          enter their email address; they get a link and choose their own password. Until they
+          accept, their row says <T>Invited</T>. This is a Pro feature.
+        </p>
+
+        <HelpTable
+          head={['They can', 'They cannot']}
+          rows={[
+            ['Log their own workouts, on their own phone', "Change anyone else's workouts"],
+            ['See everyone in the household', 'Add or remove people'],
+            ['Add an exercise or tag to the shared list', 'Delete a shared exercise or tag'],
+            ['Rename their own name and rest timer', 'Change the household name or units'],
+            ['Change their own password', 'Import, export everything, or see billing'],
+          ]}
+        />
+
+        <Note title="You can never see or set their password">
+          <p>
+            Not by design and not by accident &mdash; there is no screen anywhere in Huddle that
+            lets one person set another&rsquo;s password. If they forget it they use
+            <T>Forgot password</T>, exactly as you would. What you can do is send the invite again,
+            or remove their login.
+          </p>
+        </Note>
+
+        <Note title="Removing a login keeps the person and everything they logged">
+          <p>
+            <T>Remove</T> takes away their ability to sign in. It does not delete them, their
+            workouts, their history or their PRs &mdash; all of that stays in the household and you
+            keep seeing it, exactly as before they had a login.
+          </p>
+          <p>
+            One thing to know: if their phone is offline when you remove them, anything they logged
+            and haven&rsquo;t synced yet may never arrive. There is no way around that &mdash; their
+            phone can&rsquo;t be reached. If it matters, wait until they&rsquo;re back on a
+            connection.
+          </p>
+        </Note>
+
+        <Note title="If a household goes back to Free">
+          <p>
+            Member logins pause. Nobody is deleted and nothing is lost &mdash; their workouts and
+            everyone else&rsquo;s stay exactly where they are, and the household keeps working from
+            the main login. Go back to Pro and their sign-in starts working again on its own.
+          </p>
+        </Note>
+
+        <Note title="Setting one up for a child">
+          <p>
+            A login needs an email address, which means a child&rsquo;s login involves collecting
+            their email and a password from them. If they&rsquo;re under 13, set it up together with
+            a parent or guardian and use an address one of you can reach. You stay in control
+            either way: only you can create a login, and only you can remove one.
+          </p>
+        </Note>
       </Section>
 
       <Section id="plan" title="Free and Pro">
