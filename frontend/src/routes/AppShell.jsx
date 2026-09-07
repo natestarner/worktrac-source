@@ -21,6 +21,7 @@ import OfflineBanner from '../components/shared/OfflineBanner';
 import ConnectionTroubleBanner from '../components/shared/ConnectionTroubleBanner';
 import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
 import ErrorBoundary from '../components/shared/ErrorBoundary';
+import ReadOnlyPersonNotice from '../components/shared/ReadOnlyPersonNotice';
 import NoActivePersonScreen from '../components/shared/NoActivePersonScreen';
 import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator';
 import WelcomeModal from '../components/onboarding/WelcomeModal';
@@ -261,6 +262,10 @@ export default function AppShell() {
           strict-mode violation for the two Handbook e2e specs. */}
       <main className="tab-panel" id="main-content" style={{ margin: '0 auto' }}>
         {screenTitle ? <h1 className="sr-only">{screenTitle}</h1> : null}
+        {/* Mounted once here rather than on each tab, so a member looking at someone else's data
+            gets the same explanation on every screen and no tab can forget it. Renders null for
+            an owner, and for a member looking at their own data. */}
+        <ReadOnlyPersonNotice />
         {/* Scoped to the tab panel, not the whole shell, so a crashing tab leaves the header,
             person pills and tab nav usable -- the person can switch away and keep working
             instead of losing the app. `resetKey` (not `key`) clears a previous tab's error on

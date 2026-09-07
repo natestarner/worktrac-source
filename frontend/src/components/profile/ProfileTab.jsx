@@ -8,12 +8,15 @@ import { removePerson } from '../../api/people';
 import EditPersonModal from './EditPersonModal';
 import DeleteAccountModal from './DeleteAccountModal';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import { useAccountAccess } from '../../hooks/useAccountAccess';
 
 export default function ProfileTab() {
   const { user, account, people, refreshPeople } = useAuth();
+  const { isMember, selfPersonId } = useAccountAccess();
   const { openConfirm } = useUI();
   const navigate = useNavigate();
   const primary = people.find((p) => p.isPrimary);
+  const self = people.find((p) => String(p.id) === String(selfPersonId));
   const [editingPerson, setEditingPerson] = useState(null);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const { run } = useGatedMutation();
@@ -38,13 +41,30 @@ export default function ProfileTab() {
         &larr; Back
       </button>
 
-      <SectionLabel>Account holder</SectionLabel>
+      {/* "Account holder" is the owner's framing and is actively wrong for a member: user.email
+          is the MEMBER's own address, so that heading would sit above their email describing
+          somebody else. A member gets their own identity instead.
+
+          Neither variant names the owner. Doing so would need a new field on MembershipDto -- /me
+          returns no owner name today -- and widening an auth response is not something to slip in
+          alongside a UI change. Flagged in the plan for Nate. */}
+      <SectionLabel>{isMember ? 'You' : 'Account holder'}</SectionLabel>
       <div style={cardStyle}>
-        <Field label="Name" value={primary?.name} />
+        <Field label="Name" value={isMember ? self?.name : primary?.name} />
         <Field label="Household" value={account?.name} />
         <Field label="Email" value={user?.email} last />
       </div>
 
+      {/* Everything below is household management, which is MANAGE_PEOPLE / DELETE_ACCOUNT and
+          therefore owner-only. Hidden rather than disabled: a member has no path to any of it, so
+          showing a greyed-out roster of controls they can never use is noise that also invites
+          "why not?". Disabling is for something you could do under other circumstances -- see
+          ReadOnlyWrap, which is exactly that case.
+
+          The server refuses all of it regardless (PersonController's MANAGE_PEOPLE, and
+          AccountController's DELETE_ACCOUNT); this only stops the client offering it. */}
+      {!isMember && (
+        <>
       <SectionLabel>People</SectionLabel>
       <div style={cardStyle}>
         {people.map((p, i) => (
@@ -108,6 +128,9 @@ export default function ProfileTab() {
           </OfflineDisabledWrap>
         </div>
       </div>
+
+        </>
+      )}
 
       {editingPerson && <EditPersonModal person={editingPerson} onClose={() => setEditingPerson(null)} />}
       {showDeleteAccount && <DeleteAccountModal onClose={() => setShowDeleteAccount(false)} />}
