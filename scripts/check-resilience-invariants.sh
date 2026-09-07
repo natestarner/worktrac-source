@@ -227,7 +227,11 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 # behaviour rather than an API. Losing the error is exactly right here -- the caller cannot act on
 # it, the person loses nothing they can perceive beyond a missing tick, and tryHaptic still RETURNS
 # which route it took so a test (and a human) can see what happened.
-EXPECTED_LIB_SWALLOWS=47
+# 51 since the outbox was re-keyed by (account, login) for member logins: migrationDone /
+# markMigrated each swallow an unreadable-storage read, and the per-account adoption's copy+delete
+# are best-effort because readOutboxKey returns the entries either way. Every one of them is
+# commented at its site with why losing that error cannot lose a queued write.
+EXPECTED_LIB_SWALLOWS=51
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

@@ -83,6 +83,9 @@ function migrationDone(accountId) {
   try {
     return localStorage.getItem(`${MIGRATED_PREFIX}${accountId}`) === '1';
   } catch {
+    // Unreadable storage (private mode, disabled site data) means "not migrated", which retries the
+    // adoption rather than skipping it. Losing writes is the failure that matters here; re-adopting
+    // an already-adopted key is a no-op, since adoption deletes it.
     return false;
   }
 }
@@ -180,6 +183,10 @@ async function readOutboxKey(key, scope) {
       const perAccount = await get(perAccountKey);
       markMigrated(accountId);
       if (perAccount?.mutations?.length) {
+        // Both swallowed: the adoption is best-effort, and the entries are RETURNED below
+        // regardless. A failed copy means this restore still replays them and the next one tries
+        // the adoption again; a failed delete means the old key lingers harmlessly behind the
+        // tombstone. Neither can lose a write, which is the only outcome that would matter.
         await set(key, perAccount).catch(() => {});
         await del(perAccountKey).catch(() => {});
         return perAccount;

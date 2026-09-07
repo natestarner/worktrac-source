@@ -50,9 +50,21 @@ See `docs/incidents/2026-08-01-outbox-reorder-enqueueseq.md`.
 - `flushOutbox`'s stuck retry restarts the same `Mutation` object in place (`m.execute(...)`)
   instead of remove-and-recreate (which always re-registers at the end of the array). Safe only
   because a terminal-`'error'` mutation's retryer has fully settled, unlike a `'pending'` one.
-- Persisted to its **own** IndexedDB key (`worktrac-outbox:<accountId>`), deliberately separate
-  from the query cache's persister, so neither the query cache's `maxAge` nor an app-update `buster` bump
-  can silently drop a queued write.
+- Persisted to its **own** IndexedDB key (`worktrac-outbox:<accountId>:<userId>`), deliberately
+  separate from the query cache's persister, so neither the query cache's `maxAge` nor an
+  app-update `buster` bump can silently drop a queued write.
+- **⚠️ The key is scoped by (account, LOGIN), not by account.** Two members of one household can
+  sign in on the same device; under an account-only key both resolved to the same store and
+  `adoptOutboxScope` saw no change between them, so member B's restore loaded member A's queued
+  writes and replayed them under B's token — where the person guards refuse them. A's work, stuck
+  as dead writes in B's outbox. `adoptOutboxScope` keeps the **flip-pointer-before-evicting**
+  ordering (below), and deliberately does **not** treat a null prior `userId` as a switch: that is
+  a pre-upgrade device gaining an id on its first authenticated load, i.e. the same login.
+- **The per-account → composite migration is TOMBSTONED, and that bound is load-bearing.** The
+  per-account key is shared by the whole household, so an unbounded fallback would hand it to
+  whichever member signed in next — reintroducing the leak through the migration meant to prevent
+  it. It is sound because at migration time the only login that account has ever had on this device
+  is the one that wrote those entries.
 - **Retries forever on transient failure** (`shouldRetryWrite`): 5xx, timeout, or statusless
   network error backs off (capped 30s) but never gives up. Only a definitive **4xx** — or a dead
   dependency, below — stops retrying, since a write that can never succeed would
@@ -231,7 +243,7 @@ corrects it on the next refetch; **offline nothing can**, so it stands for the w
 `endedSessions.js` closes this with a **synchronous localStorage marker** written before the cache
 clear (`EndWorkoutConfirmModal`), which `useLiveSession` consults. localStorage specifically
 because the write cannot be beaten by a reload — the same reasoning as `offlineMode.js`'s manual
-pin and `outboxPersistence.js`'s account pointer. The marker is never cleared and needs no
+pin and `outboxPersistence.js`'s scope pointer. The marker is never cleared and needs no
 clearing: it suppresses exactly one id, and session ids are never reused.
 
 **Any other cache entry whose staleness would be actively wrong rather than merely old needs the
