@@ -24,6 +24,12 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -180,6 +186,34 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             assertThat(unknownAddress.get("status").asText()).isEqualTo("INVITED");
             assertThat(knownAddress.fieldNames()).toIterable()
                     .containsExactlyInAnyOrderElementsOf(() -> unknownAddress.fieldNames());
+        }
+
+        /**
+         * ⚠️ The invitation is worthless if the email never leaves, and NOTHING ELSE IN THIS SUITE
+         * would notice: every other test here reads the invite row (or plants its token) straight
+         * out of the database, and so does the e2e via {@code /api/auth/test/pending-invite}. So
+         * the flow was green end to end while sending nothing at all.
+         *
+         * <p>That is exactly the shape the async-email contract forbids — "didn't run" and "ran
+         * fine" indistinguishable from outside — so the send gets its own assertion. See
+         * {@code MembershipInviteService#announce} for the cause.
+         */
+        @Test
+        void theInvitationEmailIsActuallySent() throws Exception {
+            String samEmail = "sam-" + suffix + "@example.com";
+
+            invite(samPersonId, samEmail);
+
+            // The link is built for THIS invitation -- the assertion that would catch an email
+            // going out carrying somebody else's token.
+            verify(emailService, timeout(2000)).joinUrl(eq(pendingInviteId(samPersonId)), anyString());
+
+            // joinUrl is nullable() rather than anyString() only because EmailService is itself the
+            // mock: its own joinUrl therefore answers null, and that null is what reaches this
+            // call. A property of the double, not of the code under test.
+            verify(emailService, timeout(2000))
+                    .sendMembershipInvite(eq(samEmail), eq("Sam"), anyString(), anyString(),
+                            nullable(String.class), anyBoolean());
         }
 
         @Test

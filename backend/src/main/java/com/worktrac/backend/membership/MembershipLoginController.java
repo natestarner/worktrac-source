@@ -4,7 +4,6 @@ import com.worktrac.backend.security.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,13 +29,10 @@ public class MembershipLoginController {
 
     private final MembershipInviteService inviteService;
     private final CurrentUser currentUser;
-    private final ApplicationEventPublisher events;
 
-    public MembershipLoginController(MembershipInviteService inviteService, CurrentUser currentUser,
-                                      ApplicationEventPublisher events) {
+    public MembershipLoginController(MembershipInviteService inviteService, CurrentUser currentUser) {
         this.inviteService = inviteService;
         this.currentUser = currentUser;
-        this.events = events;
     }
 
     public record InviteRequest(@NotBlank @Email String email) {
@@ -56,25 +52,16 @@ public class MembershipLoginController {
      * Anything richer here is a user-enumeration oracle; see {@link MembershipInviteService}'s
      * class comment for the full reasoning.
      *
-     * <p>The email goes out on an {@code AFTER_COMMIT} listener, so a slow or failing send can
-     * never roll back the invitation itself — the same ordering registration uses.
+     * <p>The email is dispatched by the service, on an {@code AFTER_COMMIT} listener, so a slow or
+     * failing send can never roll back the invitation itself — the same ordering registration
+     * uses. It is deliberately NOT published from here: an {@code AFTER_COMMIT} listener discards
+     * anything published once the service transaction has committed, which is exactly the bug
+     * {@code MembershipInviteService#announce} documents.
      */
     @PostMapping("/{personId}/invite")
     @RequiresPermission(Permission.MANAGE_LOGINS)
     public PersonLoginDto invite(@PathVariable Long personId, @Valid @RequestBody InviteRequest request) {
-        AccountAccess access = currentUser.access();
-        MembershipInviteService.IssuedInvite issued = inviteService.invite(access, personId, request.email());
-        MembershipInvite invite = issued.invite();
-
-        events.publishEvent(new MembershipInviteIssuedEvent(
-                invite.getEmail(),
-                invite.getPerson().getName(),
-                invite.getAccount().getName(),
-                inviteService.ownerNameFor(access.accountId()),
-                issued.rawToken(),
-                invite.getId(),
-                issued.recipientHasAccount()));
-
+        MembershipInvite invite = inviteService.invite(currentUser.access(), personId, request.email()).invite();
         return new PersonLoginDto(personId, invite.getPerson().getName(),
                 PersonLoginDto.INVITED, invite.getEmail());
     }

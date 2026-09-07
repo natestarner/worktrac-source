@@ -13,6 +13,7 @@ import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -72,6 +73,7 @@ public class MembershipInviteService {
     private final PersonService personService;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -82,6 +84,7 @@ public class MembershipInviteService {
                                     PersonService personService,
                                     UserRepository userRepository,
                                     PasswordEncoder passwordEncoder,
+                                    ApplicationEventPublisher events,
                                     Clock clock) {
         this.inviteRepository = inviteRepository;
         this.membershipRepository = membershipRepository;
@@ -90,6 +93,7 @@ public class MembershipInviteService {
         this.personService = personService;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -193,19 +197,56 @@ public class MembershipInviteService {
         }
 
         Optional<MembershipInvite> existing = inviteRepository.findPendingFor(access.accountId(), personId);
+        IssuedInvite issued;
         if (existing.isPresent()) {
-            return resend(existing.get(), email, now);
+            issued = resend(existing.get(), email, now);
+        } else {
+            String rawToken = generateToken();
+            Account account = accountRepository.getReferenceById(access.accountId());
+            MembershipInvite invite = inviteRepository.save(new MembershipInvite(
+                    account, person, email, passwordEncoder.encode(rawToken),
+                    now.plus(LIFETIME), now, access.userId()));
+
+            log.info("Invite issued for person {} in account {} by user {}",
+                    personId, access.accountId(), access.userId());
+            issued = new IssuedInvite(invite, rawToken, userRepository.findByEmail(email).isPresent());
         }
 
-        String rawToken = generateToken();
-        Account account = accountRepository.getReferenceById(access.accountId());
-        MembershipInvite invite = inviteRepository.save(new MembershipInvite(
-                account, person, email, passwordEncoder.encode(rawToken),
-                now.plus(LIFETIME), now, access.userId()));
+        // A fresh invite and a resend both send an email, and both announce from HERE -- see
+        // announce() for why the controller cannot.
+        announce(issued, access.accountId());
+        return issued;
+    }
 
-        log.info("Invite issued for person {} in account {} by user {}",
-                personId, access.accountId(), access.userId());
-        return new IssuedInvite(invite, rawToken, userRepository.findByEmail(email).isPresent());
+    /**
+     * Publishes the event that sends the invitation email.
+     *
+     * <p>⚠️ <b>THIS MUST RUN INSIDE THE TRANSACTION, and it is not a style choice.</b> The listener
+     * is {@code @TransactionalEventListener(AFTER_COMMIT)}, which with the default
+     * {@code fallbackExecution = false} <b>silently discards</b> any event published while no
+     * transaction is active. Publishing from the controller — after this {@code @Transactional}
+     * method has already returned and committed — therefore sent no email at all: no exception, no
+     * log line, and a 200 response carrying {@code INVITED}. The invitation existed and was
+     * perfectly valid; nobody was ever told about it.
+     *
+     * <p>It was written that way first and <b>nothing went red</b>, because every other test here
+     * reads the invite row straight out of the database, and so does the e2e via
+     * {@code /api/auth/test/pending-invite}. {@code MembershipInviteTest} pins it now.
+     *
+     * <p>Every other publisher in this codebase — {@code RegistrationService},
+     * {@code PasswordResetService}, {@code ContactMessageService} — already publishes from inside
+     * its transactional service method. This is that same shape, not a new one.
+     */
+    private void announce(IssuedInvite issued, Long accountId) {
+        MembershipInvite invite = issued.invite();
+        events.publishEvent(new MembershipInviteIssuedEvent(
+                invite.getEmail(),
+                invite.getPerson().getName(),
+                invite.getAccount().getName(),
+                ownerNameFor(accountId),
+                issued.rawToken(),
+                invite.getId(),
+                issued.recipientHasAccount()));
     }
 
     /**
