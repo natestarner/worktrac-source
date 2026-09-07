@@ -128,6 +128,7 @@ public class MembershipInviteService {
 
         Map<Long, String> emailByPerson = new HashMap<>();
         Map<Long, String> statusByPerson = new HashMap<>();
+        Map<Long, Instant> lockedUntilByPerson = new HashMap<>();
 
         for (AccountMembership membership : membershipRepository.findByAccount_Id(accountId)) {
             if (membership.getPerson() == null) {
@@ -135,6 +136,11 @@ public class MembershipInviteService {
             }
             statusByPerson.put(membership.getPerson().getId(), PersonLoginDto.ACTIVE);
             emailByPerson.put(membership.getPerson().getId(), membership.getUser().getEmail());
+            // Only while it is STILL in force -- a lapsed lockout is not something the owner needs
+            // to see, and showing one would have them "fixing" a login that already works.
+            if (membership.getUser().isLockedAt(clock.instant())) {
+                lockedUntilByPerson.put(membership.getPerson().getId(), membership.getUser().getLockedUntil());
+            }
         }
 
         Instant now = clock.instant();
@@ -164,7 +170,8 @@ public class MembershipInviteService {
                         emailByPerson.get(person.id()),
                         // Objects.equals, not ==: both sides are boxed Longs, and selfPersonId is
                         // legitimately null for a membership not bound to a person.
-                        Objects.equals(person.id(), access.selfPersonId())))
+                        Objects.equals(person.id(), access.selfPersonId()),
+                        lockedUntilByPerson.get(person.id())))
                 .toList();
     }
 
@@ -404,6 +411,40 @@ public class MembershipInviteService {
                 ownerNameFor(invite.getAccount().getId())));
 
         return membership;
+    }
+
+    /**
+     * Clears a member's login lockout, so they can try again immediately.
+     *
+     * <p>The fourth of the owner's four levers — invite, resend, revoke, unlock — and the only one
+     * that is purely an act of help. <b>It grants nothing.</b> A lockout is a throttle on guessing,
+     * not a credential, so clearing it cannot let the owner in as that member and cannot reveal
+     * anything about their password. That is what makes it safe to give an owner, when setting a
+     * password is not.
+     *
+     * <p>The member always had a self-service route (wait fifteen minutes, or reset their own
+     * password), so this exists because the OWNER is the support desk: a teenager locked out
+     * mid-workout asks the person standing next to them, not their inbox.
+     *
+     * <p>Idempotent and quiet: unlocking somebody who is not locked is a no-op, because the owner's
+     * intent ("let them try again") is already true and a 404 would only invite a retry. Same
+     * reasoning as revoke's 204.
+     */
+    @Transactional
+    public void clearLockout(AccountAccess access, Long personId) {
+        personService.requireVisiblePerson(personId, access);
+
+        membershipRepository.findByAccount_IdAndPerson_Id(access.accountId(), personId)
+                .map(AccountMembership::getUser)
+                .ifPresent(user -> {
+                    if (user.getLockedUntil() == null) {
+                        return;
+                    }
+                    user.clearLoginLockout();
+                    userRepository.save(user);
+                    log.info("Login lockout cleared for person {} in account {} by user {}",
+                            personId, access.accountId(), access.userId());
+                });
     }
 
     /**

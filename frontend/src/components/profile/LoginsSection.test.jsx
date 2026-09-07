@@ -1,9 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LoginsSection from './LoginsSection';
-import { listLogins, inviteLogin, revokeLogin } from '../../api/logins';
+import { listLogins, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
 
-vi.mock('../../api/logins', () => ({ listLogins: vi.fn(), inviteLogin: vi.fn(), revokeLogin: vi.fn() }));
+vi.mock('../../api/logins', () => ({
+  listLogins: vi.fn(),
+  inviteLogin: vi.fn(),
+  revokeLogin: vi.fn(),
+  unlockLogin: vi.fn(),
+}));
 
 const showToast = vi.fn();
 // Runs the confirm callback immediately AND records the message, so a test can assert both the
@@ -40,6 +45,7 @@ describe('LoginsSection', () => {
     listLogins.mockResolvedValue(ROWS);
     inviteLogin.mockResolvedValue({});
     revokeLogin.mockResolvedValue(undefined);
+    unlockLogin.mockResolvedValue(undefined);
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -202,6 +208,54 @@ describe('LoginsSection', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Remove login' }));
 
     await waitFor(() => expect(showToast).toHaveBeenCalledWith('Invite withdrawn.'));
+  });
+
+
+  // ── A locked-out member ─────────────────────────────────────────────────────────────────────
+
+  const LOCKED_ROW = {
+    personId: 4,
+    personName: 'Robin',
+    status: 'ACTIVE',
+    email: 'robin@example.com',
+    isSelf: false,
+    lockedUntil: '2026-09-08T10:15:00Z',
+  };
+
+  /**
+   * ⚠️ Shown BESIDE the status, not instead of it. A locked login is still a login and clears
+   * itself in fifteen minutes, so collapsing the two would leave the owner unable to see "they
+   * have a login AND cannot use it right now" -- which is exactly the situation they are being
+   * asked about when somebody says signing in is broken.
+   */
+  it('shows a locked member as locked without hiding that they have a login', async () => {
+    listLogins.mockResolvedValue([LOCKED_ROW]);
+    render(<LoginsSection />);
+
+    expect(await screen.findByText('LOCKED')).toBeInTheDocument();
+    expect(screen.getByText('HAS LOGIN')).toBeInTheDocument();
+  });
+
+  // The owner is the support desk here: without a control, their only answer is "wait a quarter of
+  // an hour", which is not an answer somebody mid-workout wants.
+  it('lets the owner clear the lockout', async () => {
+    listLogins.mockResolvedValue([LOCKED_ROW]);
+    render(<LoginsSection />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Unlock' }));
+
+    await waitFor(() => expect(unlockLogin).toHaveBeenCalledWith(4));
+    expect(listLogins).toHaveBeenCalledTimes(2);
+    expect(showToast).toHaveBeenCalledWith('Robin can try signing in again.');
+  });
+
+  // No lockout, no control -- an Unlock button on a working login is a control that does nothing.
+  it('offers no unlock control when nobody is locked out', async () => {
+    render(<LoginsSection />);
+
+    await screen.findByText('Nate');
+    expect(screen.queryByRole('button', { name: 'Unlock' })).not.toBeInTheDocument();
+    expect(screen.queryByText('LOCKED')).not.toBeInTheDocument();
   });
 
 });

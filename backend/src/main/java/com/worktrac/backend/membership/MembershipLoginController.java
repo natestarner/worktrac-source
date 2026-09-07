@@ -67,8 +67,10 @@ public class MembershipLoginController {
         // isSelf is false by construction: inviting yourself is impossible here -- the viewer
         // already holds the login they would be inviting, and invite() refuses a person who has
         // one with a 409 before reaching this line.
+        // lockedUntil is null by construction: an invitation has no user behind it yet, so there is
+        // no lockout to report.
         return new PersonLoginDto(personId, invite.getPerson().getName(),
-                PersonLoginDto.INVITED, invite.getEmail(), false);
+                PersonLoginDto.INVITED, invite.getEmail(), false, null);
     }
 
     /**
@@ -78,6 +80,20 @@ public class MembershipLoginController {
      * <p>Answers 204 whether or not there was anything to revoke: the intent ("this person should
      * not have a login") is true either way, and a 404 would only invite a retry.
      */
+    /**
+     * Clears a member's login lockout — the owner acting as the support desk.
+     *
+     * <p>204 whether or not they were locked: the owner's intent ("let them try again") is true
+     * either way, and a 404 would only invite a retry. It grants nothing — see
+     * {@code MembershipInviteService#clearLockout}.
+     */
+    @PostMapping("/{personId}/unlock")
+    @RequiresPermission(Permission.MANAGE_LOGINS)
+    public ResponseEntity<Void> unlock(@PathVariable Long personId) {
+        inviteService.clearLockout(currentUser.access(), personId);
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/{personId}")
     @RequiresPermission(Permission.MANAGE_LOGINS)
     public ResponseEntity<Void> revoke(@PathVariable Long personId) {

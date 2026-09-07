@@ -52,12 +52,11 @@ public record MembershipDto(String accountRole, Long personId, boolean membersSe
      */
     public static MembershipDto from(AccountMembership membership, String ownerName,
                                       boolean accountIsPro) {
-        boolean paused = membership.getAccountRole() == AccountRole.MEMBER && !accountIsPro;
         return new MembershipDto(
                 membership.getAccountRole().name(),
                 membership.getPerson() == null ? null : membership.getPerson().getId(),
                 membership.getAccount().isMembersSeeEveryone(),
                 ownerName,
-                (paused ? MembershipStatus.PAUSED_PLAN : MembershipStatus.ACTIVE).name());
+                MembershipStatus.forRole(membership.getAccountRole(), accountIsPro).name());
     }
 }

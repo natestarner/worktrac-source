@@ -4,7 +4,7 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import Modal from '../shared/Modal';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useUI } from '../../context/UIContext';
-import { listLogins, inviteLogin, revokeLogin } from '../../api/logins';
+import { listLogins, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
 
 /**
  * The owner's login manager: who in this household can sign in, and inviting the ones who cannot.
@@ -62,6 +62,18 @@ export default function LoginsSection() {
       errorMessage: "Couldn't remove that login.",
       // The one refusal here is "you can't remove your own login", which says what to do instead.
       showServerMessage: true,
+    },
+  );
+
+  const unlock = run(
+    async (row) => {
+      await unlockLogin(row.personId);
+      showToast(`${row.personName} can try signing in again.`);
+      await load();
+    },
+    {
+      offlineMessage: 'Unlocking a login needs a connection.',
+      errorMessage: "Couldn't unlock that login.",
     },
   );
 
@@ -123,6 +135,21 @@ export default function LoginsSection() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
               {row.status === 'ACTIVE' && <span style={activeBadgeStyle}>HAS LOGIN</span>}
               {row.status === 'INVITED' && <span style={invitedBadgeStyle}>INVITED</span>}
+              {/* Orthogonal to status, deliberately: an ACTIVE login that is locked is still a
+                  login, and it clears itself in fifteen minutes. Collapsing the two would leave
+                  the owner unable to see "they have a login AND cannot use it right now" -- which
+                  is the single most common reason a member says signing in is broken, and the
+                  whole reason this is surfaced rather than emailed. */}
+              {row.lockedUntil && (
+                <span style={lockedBadgeStyle}>LOCKED</span>
+              )}
+              {row.lockedUntil && (
+                <OfflineDisabledWrap message="Unlocking a login needs a connection.">
+                  <button onClick={() => unlock(row)} style={linkStyle}>
+                    Unlock
+                  </button>
+                </OfflineDisabledWrap>
+              )}
               {row.status !== 'ACTIVE' && (
                 <OfflineDisabledWrap message="Sending an invite needs a connection.">
                   <button onClick={() => setInvitingPerson(row)} style={linkStyle}>
@@ -242,6 +269,16 @@ const badgeBase = {
 
 const activeBadgeStyle = { ...badgeBase, background: 'var(--color-subtle-bg)', color: 'var(--color-muted)' };
 const invitedBadgeStyle = { ...badgeBase, background: 'var(--color-accent-soft, var(--color-subtle-bg))', color: 'var(--color-accent-text)' };
+
+const lockedBadgeStyle = {
+  padding: '2px 8px',
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--color-border)',
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  color: 'var(--color-muted)',
+};
 
 const removeLinkStyle = {
   background: 'none',

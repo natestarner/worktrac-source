@@ -1,5 +1,7 @@
 package com.worktrac.backend.membership;
 
+import java.time.Instant;
+
 /**
  * One row of the owner's Logins list: a person in the household, and where their login stands.
  *
@@ -24,6 +26,16 @@ package com.worktrac.backend.membership;
  * typed it in the first place, so showing it back is not new information — and without it they
  * cannot tell which of two similar addresses they used.
  *
+ * <p>⚠️ <b>{@code lockedUntil} is NOT a fourth status</b>, and that distinction matters. A lockout
+ * is temporary and orthogonal: an {@code ACTIVE} login that is locked is still a login, and it
+ * un-locks itself in fifteen minutes. Folding it into {@code status} would make the owner's screen
+ * unable to say "they have a login AND cannot use it right now", which is the one thing they need
+ * to know when somebody tells them signing in is broken.
+ *
+ * <p>Null when not locked, and null once the lockout has expired — the field answers "is this
+ * person locked out RIGHT NOW", not "were they ever". The owner is the support desk here; without
+ * this they are blind to the single most common reason a member says "it won't let me in".
+ *
  * <p>{@code isSelf} marks the viewer's own row, and exists so the client can withhold <b>Remove</b>
  * there. An owner removing their own login is refused server-side (409) because nothing in the app
  * could put it back and a household with no owner has nobody who can invite one — but a button
@@ -32,7 +44,7 @@ package com.worktrac.backend.membership;
  * the payload that distinguishes "me" from "somebody else here".
  */
 public record PersonLoginDto(Long personId, String personName, String status, String email,
-                             boolean isSelf) {
+                             boolean isSelf, Instant lockedUntil) {
 
     public static final String NONE = "NONE";
     public static final String INVITED = "INVITED";

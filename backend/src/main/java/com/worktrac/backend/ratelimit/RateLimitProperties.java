@@ -38,9 +38,28 @@ public class RateLimitProperties {
     //
     // ⚠️ THE NARROWEST BUCKET, and the one that actually bounds guessing at a single account.
     //
-    // 10/hour against ONE ADDRESS. A household re-authenticating never comes close: even a whole
+    // 20/hour against ONE ADDRESS. A household re-authenticating never comes close: even a whole
     // family on several devices is a handful of logins a day, and they are spread across different
     // addresses now that each member has their own.
+    //
+    // ⚠️ <b>IT MUST STAY ABOVE AuthService.MAX_FAILED_LOGINS (10), and that is a correctness
+    // constraint rather than a tuning preference.</b> The account lockout and this bucket are
+    // triggered by the same attempts, but only the lockout is cleared by a password reset
+    // (PasswordResetService.confirmReset -> clearLoginLockout). Set equal to the lockout ceiling,
+    // hitting the lockout necessarily empties this bucket too -- so somebody who forgot their
+    // password, tripped the lockout, and reset it as instructed would then be refused by the rate
+    // limiter for the rest of the hour, and the lockout message
+    //
+    //     "Too many failed attempts. Try again in a few minutes, or reset your password to get
+    //      back in right away."
+    //
+    // would be a lie at the exact moment it is read. Twenty leaves the lockout as the thing a real
+    // account hits first, with headroom to sign in immediately afterwards. Pinned by
+    // LoginPerEmailRateLimitTest#aPasswordResetLetsSomebodyStraightBackIn.
+    //
+    // The bucket still does its own job: for an address with NO account there is no lockout at all,
+    // so this is the only per-address bound that exists there -- which is exactly the case the
+    // enumeration rule below is about.
     //
     // It is what makes the per-IP bound safe to RAISE. Before member logins, per-IP at 60 was
     // doing two jobs -- bounding guessing and bounding load -- and doing the first badly, since an
@@ -52,7 +71,7 @@ public class RateLimitProperties {
     // oracle -- exactly what DUMMY_HASH and PasswordResetService's non-enumerating design exist to
     // close, reintroduced through the rate limiter instead of the response. See
     // AuthService.checkLoginAllowed, where it is consumed BEFORE the user lookup for that reason.
-    private int loginPerEmailPerHour = 10;
+    private int loginPerEmailPerHour = 20;
 
     // Now a pure DoS/CPU bound rather than an anti-guessing one -- that job moved to the per-email
     // bucket above, which does it far better. Raised 60 -> 300 because the old value was shaped by

@@ -719,7 +719,7 @@ export default function HelpTab() {
             Not by design and not by accident &mdash; there is no screen anywhere in Huddle that
             lets one person set another&rsquo;s password. If they forget it they use
             <T>Forgot password</T>, exactly as you would. What you can do is send the invite again,
-            or remove their login.
+            unlock them if too many wrong tries locked them out, or remove their login.
           </p>
         </Note>
 
