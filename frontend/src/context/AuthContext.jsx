@@ -12,6 +12,7 @@ import {
   resetPassword as apiResetPassword,
   startSession as apiStartSession,
 } from '../api/auth';
+import { changePassword as apiChangePassword } from '../api/password';
 import { acceptInvite as apiAcceptInvite } from '../api/logins';
 import { getAuthToken, isOfflineError, setAuthToken, setUnauthorizedHandler } from '../api/client';
 import { queryClient, resetQueryCache, clearOutboxMutations, flushOutbox } from '../lib/queryClient';
@@ -352,6 +353,28 @@ export function AuthProvider({ children }) {
     await establishSession(token);
   }, [establishSession]);
 
+  /**
+   * Changes this login's own password, then re-establishes the session from the token that comes
+   * back.
+   *
+   * ⚠️ The `establishSession` call is NOT optional bookkeeping. Changing a password bumps
+   * token_version server-side, which invalidates every token this user holds -- including the one
+   * that just made this request. Storing the response's token any other way, or not storing it at
+   * all, signs the person out on their next request as a direct result of having succeeded.
+   *
+   * It is the same sequence as a login rather than a lighter "swap the token" path for the reason
+   * switchHousehold gives: establishSession is the one way into a session, and a fifth private copy
+   * of its six ordered steps is exactly how confirmEmail nearly missed the outbox re-scoping.
+   *
+   * Note this is NOT freshLogin-neutral -- establishSession sets freshLogin, so every person's
+   * last-open tab resets to Log. Accepted rather than worked around: adding a flag to suppress it
+   * would be a second way through this function, and the cost is one tab reset on a rare action.
+   */
+  const changeOwnPassword = useCallback(async ({ currentPassword, newPassword }) => {
+    const { token } = await apiChangePassword({ currentPassword, newPassword });
+    await establishSession(token);
+  }, [establishSession]);
+
   // Starts the pending registration (sends a verification code) -- no account exists yet, so
   // this does not log the user in. That happens in confirmEmail below, once the code checks
   // out and the account is actually created.
@@ -425,6 +448,7 @@ export function AuthProvider({ children }) {
         chooseHousehold,
         acceptInvite,
         switchHousehold,
+        changeOwnPassword,
         register,
         confirmEmail,
         resendCode,

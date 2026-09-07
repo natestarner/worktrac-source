@@ -27,6 +27,22 @@ public enum Permission {
     VIEW_OTHER_PEOPLE,
     WRITE_OTHER_PEOPLE,
 
+    // ── Self-scoped, but answerable from the AccountAccess alone ─────────────────────────────
+    /**
+     * Change YOUR OWN password, having proved you know the current one.
+     *
+     * Held by every role, and that is the point rather than an oversight: it is the permission
+     * that has no owner-only counterpart anywhere. An owner may invite, revoke and unlock a member
+     * — but there is deliberately no CHANGE_ANY_PASSWORD, because an owner who can set a member's
+     * password can impersonate them, which is exactly what a teenager will object to and a terrible
+     * story for a future Team tier.
+     *
+     * <p>⚠️ The member's Profile page carries the sentence "{owner} cannot see or set your
+     * password" as a standing promise. THIS is what makes it true. If a permission to set somebody
+     * else's password is ever added, that copy has to change in the same commit.
+     */
+    CHANGE_OWN_PASSWORD,
+
     // ── Household-scoped ─────────────────────────────────────────────────────────────────────
     /** Add or remove a person, and rename/configure someone who is not you. */
     MANAGE_PEOPLE,
