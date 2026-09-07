@@ -110,8 +110,8 @@ public class AdminService {
     @Transactional(readOnly = true)
     public List<AdminAccountDto> listAccounts() {
         Map<Long, String> primaryNameByAccount = toStringMap(personRepository.primaryNameGroupedByAccount());
-        Map<Long, String> emailByAccount = toStringMap(userRepository.emailGroupedByAccount());
-        Map<Long, String> roleByAccount = toStringMap(userRepository.roleGroupedByAccount());
+        Map<Long, String> emailByAccount = toStringMap(userRepository.ownerEmailGroupedByAccount());
+        Map<Long, String> roleByAccount = toStringMap(userRepository.ownerRoleGroupedByAccount());
         Map<Long, Long> peopleCountByAccount = toLongMap(personRepository.countGroupedByAccount());
         Map<Long, Long> sessionCountByAccount = toLongMap(workoutSessionRepository.countGroupedByAccount());
         Map<Long, Long> setCountByAccount = toLongMap(workoutSetRepository.countGroupedByAccount());
@@ -163,7 +163,7 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public List<AdminPersonDto> listPeople() {
-        Map<Long, String> emailByAccount = toStringMap(userRepository.emailGroupedByAccount());
+        Map<Long, String> emailByAccount = toStringMap(userRepository.ownerEmailGroupedByAccount());
 
         return personRepository.findAllWithAccount().stream()
                 .map(person -> toAdminPersonDto(person, emailByAccount))

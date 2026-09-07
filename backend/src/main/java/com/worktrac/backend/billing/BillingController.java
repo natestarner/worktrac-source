@@ -97,7 +97,11 @@ public class BillingController {
             // unwind, since each carries its own subscriptions and payment methods.
             String customerId = subscription.getStripeCustomerId();
             if (customerId == null) {
-                String email = userRepository.findByAccount_Id(accountId)
+                // The OWNER's address specifically. Receipts and dunning mail must reach whoever is
+                // paying -- a member's inbox is neither the right destination nor stable, since
+                // members come and go while the owner is the billing relationship.
+                String email = userRepository.findOwners(accountId).stream()
+                        .findFirst()
                         .map(user -> user.getEmail())
                         .orElse(null);
                 customerId = stripeService.createCustomer(accountId, email,

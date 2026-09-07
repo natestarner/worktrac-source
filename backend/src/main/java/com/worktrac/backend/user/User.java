@@ -1,14 +1,10 @@
 package com.worktrac.backend.user;
 
-import com.worktrac.backend.account.Account;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -16,6 +12,12 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
+// ONE credential per human, and deliberately nothing about which household they belong to.
+//
+// users.account_id used to live here, which made one email mean one household forever. That moved
+// to account_memberships in V63 so a single password can reach several accounts -- a kid who later
+// pays for their own, or a parent who also coaches a team. The column is still on the table
+// (nullable, unread) until phase 7 drops it; see V65 for why that is two releases rather than one.
 @Entity
 @Table(name = "users")
 public class User {
@@ -23,10 +25,6 @@ public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "account_id", nullable = false)
-    private Account account;
 
     @Column(nullable = false, length = 255)
     private String email;
@@ -63,8 +61,7 @@ public class User {
     protected User() {
     }
 
-    public User(Account account, String email, String passwordHash) {
-        this.account = account;
+    public User(String email, String passwordHash) {
         this.email = email;
         this.passwordHash = passwordHash;
     }
@@ -78,10 +75,6 @@ public class User {
 
     public Long getId() {
         return id;
-    }
-
-    public Account getAccount() {
-        return account;
     }
 
     public String getEmail() {

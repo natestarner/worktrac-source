@@ -8,6 +8,8 @@ import com.worktrac.backend.common.LockedException;
 import com.worktrac.backend.common.TooManyRequestsException;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.config.AdminProperties;
+import com.worktrac.backend.membership.AccountMembership;
+import com.worktrac.backend.membership.AccountMembershipRepository;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonDto;
 import com.worktrac.backend.person.PersonRepository;
@@ -58,13 +60,14 @@ public class AuthService {
     private final AdminProperties adminProperties;
     private final SubscriptionService subscriptionService;
     private final LoginRateLimiter loginRateLimiter;
+    private final AccountMembershipRepository membershipRepository;
     private final Clock clock;
 
     public AuthService(AccountRepository accountRepository, UserRepository userRepository,
                         PersonRepository personRepository, PasswordEncoder passwordEncoder,
                         JwtService jwtService, AdminProperties adminProperties,
                         SubscriptionService subscriptionService, LoginRateLimiter loginRateLimiter,
-                        Clock clock) {
+                        AccountMembershipRepository membershipRepository, Clock clock) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
@@ -73,6 +76,7 @@ public class AuthService {
         this.adminProperties = adminProperties;
         this.subscriptionService = subscriptionService;
         this.loginRateLimiter = loginRateLimiter;
+        this.membershipRepository = membershipRepository;
         this.clock = clock;
     }
 
@@ -119,11 +123,31 @@ public class AuthService {
 
         user.clearLoginLockout();
         reconcileAdminRole(user);
-        Account account = user.getAccount();
-        Person primaryPerson = personRepository.findByAccount_IdOrderByCreatedAtAsc(account.getId()).stream()
-                .filter(Person::isPrimary)
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Account has no primary person: " + account.getId()));
+
+        // Which household is this login signing in to? Phase 2 has exactly one membership per
+        // user, because the only thing that creates one is registration. Phase 6 turns two-or-more
+        // into an account picker; until then the oldest is the only one and taking it is exact.
+        //
+        // Zero is not a "shouldn't happen" -- it is what a revoked member sees, and it must not be
+        // an enumeration oracle: they proved the password, so telling them their access is gone
+        // reveals nothing they didn't already know.
+        List<AccountMembership> memberships = membershipRepository.findByUser_IdOrderByCreatedAtAscIdAsc(user.getId());
+        if (memberships.isEmpty()) {
+            log.warn("Login for {} from ip {} succeeded but the user has no membership", email, ipAddress);
+            throw new UnauthorizedException("That login is no longer attached to a household.");
+        }
+        AccountMembership membership = memberships.get(0);
+        Account account = membership.getAccount();
+
+        // The membership's own person when it has one, falling back to the account's primary. The
+        // fallback matters for accounts created before V64 attached a person, and for an owner
+        // whose person was removed -- neither should be unable to sign in.
+        Person primaryPerson = membership.getPerson() != null
+                ? membership.getPerson()
+                : personRepository.findByAccount_IdOrderByCreatedAtAsc(account.getId()).stream()
+                        .filter(Person::isPrimary)
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalStateException("Account has no primary person: " + account.getId()));
 
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole(), user.getTokenVersion());
         return new AuthResponse(token, UserDto.from(user),
