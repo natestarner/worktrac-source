@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import AppShellSkeleton from './AppShellSkeleton';
 import AddPersonModal from './AddPersonModal';
+import { useAccountAccess } from '../../hooks/useAccountAccess';
 
 // What AppShell renders instead of `null` when there is no active person.
 //
@@ -25,8 +26,14 @@ import AddPersonModal from './AddPersonModal';
 //     the first time the people list is empty, and appStatePersistence writes that SYNCHRONOUSLY,
 //     so every later boot starts here too. This branch is the exit -- it explains the state and
 //     offers the one action that resolves it.
+//
+// A MEMBER reaches the empty branch by a different route -- `people` is the SERVER-FILTERED
+// visible set, so a member whose own person was removed sees an empty list even though the
+// household is full. "Add a person" is MANAGE_PEOPLE and would 403 for them, so offering it would
+// leave them tapping a button that cannot work, in the one state they cannot get out of.
 export default function NoActivePersonScreen({ people }) {
   const [showAddPerson, setShowAddPerson] = useState(false);
+  const { isMember } = useAccountAccess();
 
   if (people.length > 0) {
     return <AppShellSkeleton />;
@@ -55,16 +62,19 @@ export default function NoActivePersonScreen({ people }) {
         }}
       >
         <div style={{ fontSize: 'var(--text-lg)', fontWeight: 'var(--weight-semibold)', marginBottom: 'var(--space-2)' }}>
-          No one to log for yet
+          {isMember ? 'Nothing to show yet' : 'No one to log for yet'}
         </div>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-5)' }}>
-          This household has no people set up on this device. Add someone to start logging &mdash;
-          anything you&rsquo;ve already logged is still saved and will sync.
+          {isMember
+            ? "Your login isn't attached to anyone in this household right now. The household owner can sort that out. Anything you've already logged is still saved."
+            : 'This household has no people set up on this device. Add someone to start logging — anything you’ve already logged is still saved and will sync.'}
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button type="button" onClick={() => setShowAddPerson(true)} className="btn btn-primary btn-lg pressable">
-            Add a person
-          </button>
+          {!isMember && (
+            <button type="button" onClick={() => setShowAddPerson(true)} className="btn btn-primary btn-lg pressable">
+              Add a person
+            </button>
+          )}
           {/* A real navigation, not a client-side one -- the same reasoning as
               CriticalErrorFallback's: signing back in re-reads the people list from the server,
               which is the other thing that resolves this state. */}
