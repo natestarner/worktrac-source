@@ -85,7 +85,14 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       const updated = await updateExercise(exercise.id, { name: trimmed });
       onSaved(updated);
     },
-    { errorMessage: "Couldn't save — check your connection and try again." },
+    {
+      errorMessage: "Couldn't save — check your connection and try again.",
+      // A rename can now be refused for a reason the person can act on: they may not own the
+      // exercise (403), or other people have already logged against it (409, naming the owner to
+      // ask). Those sentences are written for a person and are the whole point of the refusal --
+      // replacing them with "check your connection" would be actively misleading.
+      showServerMessage: true,
+    },
   );
 
   // A caller that needs a real, already-synced exercise id (the Routines form sends the created

@@ -288,6 +288,8 @@ public class RegistrationService {
 
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole(), user.getTokenVersion());
         return AuthResponse.signedIn(token, UserDto.from(user), AccountDto.from(account, BillingPlan.FREE),
-                MembershipDto.from(membership), PersonDto.from(person));
+                // null: this registrant IS the household's owner, so there is nobody else to
+                // name. See AuthService.ownerNameForMember.
+                MembershipDto.from(membership, null), PersonDto.from(person));
     }
 }

@@ -59,6 +59,24 @@ public interface AccountMembershipRepository extends JpaRepository<AccountMember
             """)
     List<AccountMembership> findOwners(@Param("accountId") Long accountId);
 
+    /**
+     * The household owner's person NAME, and nothing else about them.
+     *
+     * <p>Returns names rather than entities because every caller wants exactly one string, and
+     * because keeping it that narrow is the point: a member is told who to ask, never given an
+     * email, an id, or anything they could act on outside the app.
+     *
+     * <p>A list with an explicit ORDER BY rather than a single result: the schema permits more than
+     * one OWNER membership even though the app never creates one, and an unordered single-result
+     * query would throw for such an account instead of picking deterministically. Same reasoning as
+     * V64's primary-person subquery. Empty when the account has no owner, or none with a person —
+     * both of which callers must render as "nobody named".
+     */
+    @Query("SELECT m.person.name FROM AccountMembership m "
+            + "WHERE m.account.id = :accountId AND m.accountRole = :role AND m.person IS NOT NULL "
+            + "ORDER BY m.createdAt ASC, m.id ASC")
+    List<String> findOwnerPersonNames(@Param("accountId") Long accountId, @Param("role") AccountRole role);
+
     void deleteByAccount_Id(Long accountId);
 
     void deleteByAccount_IdIn(List<Long> accountIds);

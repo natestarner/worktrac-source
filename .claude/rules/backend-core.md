@@ -69,6 +69,31 @@ one as a record literal.
   `PersonExerciseService.setTags` **and** the importer), and `CsvImportService.write`, which invents
   exercises for names the household does not have. That last one is why `write` takes an
   `AccountAccess` rather than a bare `accountId`.
+- **⚠ A member may rename a shared resource only while nobody ELSE is using it, and the refusal is
+  a 409, not a 403.** An exercise or tag is household-wide, so its name is the label on everyone's
+  history; having created it does not make it yours forever. `ExerciseService.update` and
+  `TagService.rename` check
+  `existsByExercise_IdAndPerson_IdNot` / `isTagAppliedByAnotherPerson` against
+  `AccountAccess.requireSelfPersonId()`.
+  - **"Unused" means nobody OTHER than you** — deliberately not "no rows at all". Using your own
+    exercise must not cost you the ability to fix your own typo; the harm is relabelling somebody
+    else's history.
+  - **The OWNER is exempt** (`EDIT_ANY_SHARED_RESOURCE`), and that is load-bearing rather than
+    incidental: they are the remedy the refusal points at. Block them and the message has nobody to
+    send you to.
+  - **403 and 409 are different diagnoses and must not be collapsed.** 403 is "not yours"; 409 is
+    "yours, but in use". They point at different fixes, and only 409 has a remedy to offer.
+    `MemberPermissionsTest` pins them apart.
+  - **`requireSelfPersonId()` throws rather than returning null**, because a null person would make
+    `person_id <> ?` match every row and report "used by nobody" — waving through exactly the
+    rename the check exists to refuse. Failing open is the one direction that must not happen.
+  - Safe to refuse at all only because rename is a **gated (online-only)** write; a definitive 4xx
+    on a durable write would be discarded, not shown.
+- **`MembershipDto.ownerName` is resolved for MEMBERS only.** An owner does not need telling who
+  the owner is, and resolving it for them would add a query to `/me` — the hottest endpoint in the
+  app — for every existing user, all of whom are owners. It is a NAME and nothing more: no email,
+  no id, nothing a member could act on outside the app. Null is legitimate (no owner membership, or
+  one with no person) and every consumer must render that as naming nobody rather than "null".
 - **⚠ Neither creation path may ever throw on a permission.** `ExerciseService.add` and
   `TagService.getOrCreate` deliberately contain no check at all: MEMBER holds
   `CREATE_SHARED_RESOURCE` unconditionally, so the annotation is the whole gate. These are durable
