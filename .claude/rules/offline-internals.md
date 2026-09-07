@@ -50,9 +50,42 @@ See `docs/incidents/2026-08-01-outbox-reorder-enqueueseq.md`.
 - `flushOutbox`'s stuck retry restarts the same `Mutation` object in place (`m.execute(...)`)
   instead of remove-and-recreate (which always re-registers at the end of the array). Safe only
   because a terminal-`'error'` mutation's retryer has fully settled, unlike a `'pending'` one.
-- Persisted to its **own** IndexedDB key (`worktrac-outbox:<accountId>`), deliberately separate
-  from the query cache's persister, so neither the query cache's `maxAge` nor an app-update `buster` bump
-  can silently drop a queued write.
+- Persisted to its **own** IndexedDB key (`worktrac-outbox:<accountId>:<userId>`), deliberately
+  separate from the query cache's persister, so neither the query cache's `maxAge` nor an
+  app-update `buster` bump can silently drop a queued write.
+- **⚠️ The key is scoped by (account, LOGIN), not by account.** Two members of one household can
+  sign in on the same device; under an account-only key both resolved to the same store and
+  `adoptOutboxScope` saw no change between them, so member B's restore loaded member A's queued
+  writes and replayed them under B's token — where the person guards refuse them. A's work, stuck
+  as dead writes in B's outbox. `adoptOutboxScope` keeps the **flip-pointer-before-evicting**
+  ordering (below), and deliberately does **not** treat a null prior `userId` as a switch: that is
+  a pre-upgrade device gaining an id on its first authenticated load, i.e. the same login.
+- **⚠ `persistOutboxNow` may only DELETE a key the live cache has been reconciled with.** An
+  empty mutation cache has two possible meanings — "this login's queue is empty" and "this
+  login's queue has not been loaded yet" — and only the first licenses a delete. The module
+  tracks the last key it wrote or that `restoreOutbox` read (`reconciledKey`); an empty cache
+  against any other key persists nothing.
+
+  Without it, the hand-over window destroys data. `adoptOutboxScope` flips the pointer to the
+  **incoming** login and only then evicts the outgoing one's mutations; that eviction fires the
+  persistence subscription with an empty cache and a pointer already naming the newcomer, so the
+  delete landed on the newcomer's own key — the writes `restoreOutbox` was about to hand back
+  to them, a beat later. Two members of one household on one device hit it whenever both had work
+  queued: the second to sign in destroyed the first's, silently, and it surfaced only on the return
+  trip as work that looked like it had never been saved.
+
+  **A suspend-during-hand-over flag cannot replace this.** The mutation cache notifies through
+  `notifyManager`'s `setTimeout(0)` scheduler, so the callback lands after any window a caller
+  could hold open; the question has to be answerable from the event itself. Skipping a delete is
+  also the safe direction — the key still holds exactly what the next restore will load, and a
+  replayed write is idempotency-keyed. Pinned by `outboxPersistence.test.js`'s "an empty cache
+  never deletes a key it has not been reconciled with" and end to end by
+  `member-device-handoff.spec.ts`.
+- **The per-account → composite migration is TOMBSTONED, and that bound is load-bearing.** The
+  per-account key is shared by the whole household, so an unbounded fallback would hand it to
+  whichever member signed in next — reintroducing the leak through the migration meant to prevent
+  it. It is sound because at migration time the only login that account has ever had on this device
+  is the one that wrote those entries.
 - **Retries forever on transient failure** (`shouldRetryWrite`): 5xx, timeout, or statusless
   network error backs off (capped 30s) but never gives up. Only a definitive **4xx** — or a dead
   dependency, below — stops retrying, since a write that can never succeed would
@@ -231,7 +264,7 @@ corrects it on the next refetch; **offline nothing can**, so it stands for the w
 `endedSessions.js` closes this with a **synchronous localStorage marker** written before the cache
 clear (`EndWorkoutConfirmModal`), which `useLiveSession` consults. localStorage specifically
 because the write cannot be beaten by a reload — the same reasoning as `offlineMode.js`'s manual
-pin and `outboxPersistence.js`'s account pointer. The marker is never cleared and needs no
+pin and `outboxPersistence.js`'s scope pointer. The marker is never cleared and needs no
 clearing: it suppresses exactly one id, and session ids are never reused.
 
 **Any other cache entry whose staleness would be actively wrong rather than merely old needs the

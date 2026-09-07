@@ -41,8 +41,8 @@ to signed-out, blank, silently-lost, or a spinner over a request that will never
 | **Reload / cold boot at an arbitrary instant** | The query persister is throttled at 1s — anything changed inside that window was never written |
 | **Service-worker silent forced reload** | `swUpdate.js`'s `tryForceUpdate` reloads on ordinary navigation whenever a new build exists — i.e. **always just after a deploy** |
 | **Storage unavailable / evicted** | Private mode, quota, disabled storage. Persistence modules swallow this and degrade to in-memory |
-| **Multi-tab / multi-device** | One shared `worktrac-outbox:<accountId>` IndexedDB key |
-| **Person or account switch mid-outage** | `adoptOutboxAccount()`'s ordering is load-bearing; per-person isolation must hold while writes are queued |
+| **Multi-tab / multi-device** | One shared `worktrac-outbox:<accountId>:<userId>` IndexedDB key |
+| **Person, LOGIN or account switch mid-outage** | `adoptOutboxScope()`'s ordering is load-bearing (flip the pointer, *then* evict); per-person isolation must hold while writes are queued, and two members of one household on one device must not inherit each other's queue |
 
 ### D. State restored from an earlier world
 | Condition | What makes it distinct |

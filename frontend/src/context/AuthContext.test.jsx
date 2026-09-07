@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from './AuthContext';
 import { confirmEmail as apiConfirmEmail, login as apiLogin, me as apiMe, register as apiRegister } from '../api/auth';
 import { getAuthToken, setAuthToken } from '../api/client';
 import { clearOutboxMutations, flushOutbox } from '../lib/queryClient';
-import { __resetOutboxAccountForTests, setOutboxAccountId } from '../lib/outboxPersistence';
+import { __resetOutboxScopeForTests, setOutboxScope } from '../lib/outboxPersistence';
 import { isOnboardingPending } from '../lib/onboardingPending';
 
 vi.mock('../api/auth', () => ({
@@ -59,12 +59,12 @@ describe('AuthContext register/confirmEmail split', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getAuthToken.mockReturnValue(null);
-    __resetOutboxAccountForTests();
+    __resetOutboxScopeForTests();
     localStorage.clear();
   });
 
   afterEach(() => {
-    __resetOutboxAccountForTests();
+    __resetOutboxScopeForTests();
     localStorage.clear();
   });
 
@@ -123,14 +123,14 @@ describe('AuthContext login outbox account adoption', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getAuthToken.mockReturnValue(null);
-    __resetOutboxAccountForTests();
+    __resetOutboxScopeForTests();
     localStorage.clear();
     apiLogin.mockResolvedValue({ token: 'tok-456' });
     apiMe.mockResolvedValue({ user: { email: 'alex@example.com' }, account: { id: 5 }, people: [{ id: 1 }] });
   });
 
   afterEach(() => {
-    __resetOutboxAccountForTests();
+    __resetOutboxScopeForTests();
     localStorage.clear();
   });
 
@@ -147,7 +147,7 @@ describe('AuthContext login outbox account adoption', () => {
   });
 
   it('the SAME account logging back in (e.g. after a 401) does not evict the live outbox', async () => {
-    setOutboxAccountId(5); // this account already owns whatever's in the live mutation cache
+    setOutboxScope({ accountId: 5, userId: 1 }); // this login already owns what's in the live mutation cache
     renderHarness();
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
 
@@ -159,7 +159,7 @@ describe('AuthContext login outbox account adoption', () => {
   });
 
   it('a DIFFERENT account logging in evicts whatever the prior account left in the live outbox', async () => {
-    setOutboxAccountId(999); // a different household's queued writes are still sitting in memory
+    setOutboxScope({ accountId: 999, userId: 42 }); // another household's queued writes are still in memory
     renderHarness();
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
 

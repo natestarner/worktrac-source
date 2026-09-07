@@ -204,6 +204,14 @@ public class TestSupportController {
             return ResponseEntity.notFound().build();
         }
 
+        // A person can hold at most one login (UX_account_memberships_account_person). Without
+        // this check the insert violates that index and GlobalExceptionHandler answers 503 -- an
+        // honest response to a DataAccessException, but it tells a test author nothing. The usual
+        // cause is naming the OWNER's own person, which already has a membership.
+        if (membershipRepository.findByAccount_IdAndPerson_Id(account.get().getId(), person.get().getId()).isPresent()) {
+            return ResponseEntity.status(409).build();
+        }
+
         String normalised = memberEmail.trim().toLowerCase();
         User member = userRepository.findByEmail(normalised)
                 .orElseGet(() -> userRepository.save(new User(normalised, passwordEncoder.encode(password))));

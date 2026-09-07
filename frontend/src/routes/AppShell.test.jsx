@@ -566,3 +566,81 @@ describe('AppShell never renders an empty #root', () => {
     expect(screen.getByRole('button', { name: 'Add a person' })).toBeInTheDocument();
   });
 });
+
+// Which person the app opens on with nothing persisted for this login yet -- the state EVERY
+// member's first sign-in is in, and the state the per-login app-state re-key puts them in on a
+// device a sibling has already used.
+describe('AppShell default active person', () => {
+  const household = [
+    { id: 7, name: 'Nate', isPrimary: true },
+    { id: 8, name: 'Sam' },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useUI.mockReturnValue(baseUI());
+    migrateLegacyRestTimerPrefs.mockResolvedValue(false);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("opens a member on their OWN person, not the household's primary", () => {
+    useAuth.mockReturnValue({
+      people: household,
+      refreshPeople: vi.fn(),
+      membership: { accountRole: "MEMBER", personId: 8 },
+    });
+    const appState = baseAppState({ activePersonId: null });
+    useAppState.mockReturnValue(appState);
+
+    renderShell();
+
+    // Sam, not Nate. Picking the primary here greys out every write control on arrival, so the
+    // app reads as broken before it reads as read-only.
+    expect(appState.selectPerson).toHaveBeenCalledWith(8);
+  });
+
+  it("opens an owner on the household's primary, exactly as before", () => {
+    useAuth.mockReturnValue({
+      people: household,
+      refreshPeople: vi.fn(),
+      membership: { accountRole: "OWNER", personId: 7 },
+    });
+    const appState = baseAppState({ activePersonId: null });
+    useAppState.mockReturnValue(appState);
+
+    renderShell();
+
+    expect(appState.selectPerson).toHaveBeenCalledWith(7);
+  });
+
+  // A v1 auth snapshot carries no membership at all (useAccountAccess reports null and fails
+  // open), and so does a membership never pointed at a person. Both must land on the old
+  // expression rather than on nobody.
+  it('falls back to the primary when the login is not tied to a person', () => {
+    useAuth.mockReturnValue({ people: household, refreshPeople: vi.fn(), membership: null });
+    const appState = baseAppState({ activePersonId: null });
+    useAppState.mockReturnValue(appState);
+
+    renderShell();
+
+    expect(appState.selectPerson).toHaveBeenCalledWith(7);
+  });
+
+  // A member whose own person is somehow not in the visible list (mid-refresh, or removed while
+  // they were offline) must still get a screen -- the blank-frame failure this whole gate exists
+  // to prevent.
+  it("falls back when the member's own person is not in the visible list", () => {
+    useAuth.mockReturnValue({
+      people: household,
+      refreshPeople: vi.fn(),
+      membership: { accountRole: "MEMBER", personId: 999 },
+    });
+    const appState = baseAppState({ activePersonId: null });
+    useAppState.mockReturnValue(appState);
+
+    renderShell();
+
+    expect(appState.selectPerson).toHaveBeenCalledWith(7);
+  });
+});
