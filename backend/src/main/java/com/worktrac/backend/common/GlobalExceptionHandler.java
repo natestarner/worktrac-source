@@ -56,7 +56,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ApiError> handleForbidden(ForbiddenException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiError.of(403, ex.getMessage()));
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiError.of(403, ex.getMessage(), ex.getCode()));
     }
 
     @ExceptionHandler(ConflictException.class)

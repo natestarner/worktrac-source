@@ -1,5 +1,6 @@
 package com.worktrac.backend.membership;
 
+import com.worktrac.backend.billing.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -27,12 +29,17 @@ class AccountAccessServiceTest {
     private static final int TOKEN_VERSION = 3;
 
     private AccountMembershipRepository repository;
+    private SubscriptionService subscriptionService;
     private AccountAccessService service;
 
     @BeforeEach
     void setUp() {
         repository = mock(AccountMembershipRepository.class);
-        service = new AccountAccessService(repository);
+        // Pro by default -- these cases are about caching and invalidation, not entitlement.
+        // The pause itself is covered by MemberLoginPauseTest against a real household.
+        subscriptionService = mock(SubscriptionService.class);
+        when(subscriptionService.isPro(anyLong())).thenReturn(true);
+        service = new AccountAccessService(repository, subscriptionService);
         stub(USER, ACCOUNT, AccountRole.OWNER, 100L, TOKEN_VERSION);
     }
 

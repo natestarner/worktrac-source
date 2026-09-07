@@ -1,6 +1,7 @@
 package com.worktrac.backend.billing;
 
 import com.worktrac.backend.account.Account;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,10 +39,13 @@ public class SubscriptionService {
             EnumSet.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE);
 
     private final SubscriptionRepository subscriptionRepository;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    public SubscriptionService(SubscriptionRepository subscriptionRepository, Clock clock) {
+    public SubscriptionService(SubscriptionRepository subscriptionRepository,
+                                ApplicationEventPublisher events, Clock clock) {
         this.subscriptionRepository = subscriptionRepository;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -148,7 +152,17 @@ public class SubscriptionService {
         // set independently.
         subscription.setPlan(isPro(subscription) ? BillingPlan.PRO : BillingPlan.FREE);
         subscription.setUpdatedAt(clock.instant());
-        return subscriptionRepository.save(subscription);
+        Subscription saved = subscriptionRepository.save(subscription);
+
+        // Member logins are gated on this household being Pro, and that answer is cached per login
+        // for a minute (AccountAccessService). Without this, a re-upgrade leaves somebody who has
+        // just paid looking at a "your login is paused" screen for up to another minute -- which is
+        // precisely when they conclude it did not work. Published from HERE because this method is
+        // the single choke point all three plan-changing paths already funnel through: the Stripe
+        // webhook, the billing controller's sync, and the reconciliation watchdog.
+        events.publishEvent(new AccountPlanChangedEvent(saved.getAccount().getId()));
+
+        return saved;
     }
 
     // Used by the reconciliation watchdog to find subscriptions whose paid period has lapsed while

@@ -40,7 +40,19 @@ public record AccountAccess(
          */
         Long selfPersonId,
         /** accounts.members_see_everyone. Forced true for Pro/Family; the Team tier's seam. */
-        boolean membersSeeEveryone) {
+        boolean membersSeeEveryone,
+        /**
+         * Whether the HOUSEHOLD is on Pro — {@code SubscriptionService.isPro}, resolved once per
+         * cache load rather than per request.
+         *
+         * <p>⚠️ Not stored anywhere. It is derived from a subscription's state, including a
+         * time-dependent branch (a cancelled subscription stays Pro until its paid period ends,
+         * with no webhook to announce that). So this value can be up to the cache TTL stale, and
+         * that is accepted: a member keeps working for at most another minute after a plan lapses.
+         * Erring in that direction is deliberate — the opposite error locks somebody out of the
+         * app mid-workout over a billing edge the household may not even know about yet.
+         */
+        boolean accountIsPro) {
 
     public AccountAccess {
         Objects.requireNonNull(userId, "userId");
@@ -50,6 +62,24 @@ public record AccountAccess(
 
     public boolean has(Permission permission) {
         return accountRole.permissions(membersSeeEveryone).contains(permission);
+    }
+
+    /**
+     * Whether this login may be used at all right now, as opposed to what it may do.
+     *
+     * <p>⚠️ <b>An OWNER is never paused, and that is not a courtesy — it is what makes the pause
+     * recoverable.</b> Downgrading suspends the member logins; the owner keeps full access to the
+     * whole household, which is both the shared-iPad flow the product started as and the only way
+     * anybody can get back to Pro. Pausing the owner too would lock the household out of the
+     * screen that un-pauses it.
+     *
+     * <p>Checked from {@code PermissionInterceptor} before any permission, because it is a
+     * different question: not "may you do this" but "may you do anything".
+     */
+    public MembershipStatus status() {
+        return accountRole == AccountRole.MEMBER && !accountIsPro
+                ? MembershipStatus.PAUSED_PLAN
+                : MembershipStatus.ACTIVE;
     }
 
     /** True when this login IS the given person, rather than merely able to act on them. */
@@ -121,6 +151,8 @@ public record AccountAccess(
      * are already exercised in production before a MEMBER can exist.
      */
     public static AccountAccess ownerOf(Long userId, Long accountId) {
-        return new AccountAccess(userId, accountId, null, AccountRole.OWNER, null, true);
+        // accountIsPro true: an OWNER's status() ignores it entirely, so the value is arbitrary --
+        // but true is the one that cannot mislead a reader into thinking owners can be paused.
+        return new AccountAccess(userId, accountId, null, AccountRole.OWNER, null, true, true);
     }
 }

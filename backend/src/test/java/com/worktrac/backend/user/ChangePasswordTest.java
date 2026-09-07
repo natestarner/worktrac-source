@@ -174,6 +174,13 @@ class ChangePasswordTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("name", "Sam"))))
                 .andExpect(status().isOk());
+        // Pro first: member logins are Pro-only, and a paused member 403s on every route.
+        mockMvc.perform(post("/api/auth/test/billing-plan")
+                        .header("X-E2E-Test-Key", "local-dev-only-e2e-test-key-do-not-use-elsewhere")
+                        .param("email", email)
+                        .param("plan", "PRO"))
+                .andExpect(status().isNoContent());
+
         mockMvc.perform(post("/api/auth/test/member")
                         .header("X-E2E-Test-Key", "local-dev-only-e2e-test-key-do-not-use-elsewhere")
                         .param("ownerEmail", email)
