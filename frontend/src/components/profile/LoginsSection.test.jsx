@@ -133,21 +133,21 @@ describe('LoginsSection', () => {
    * being safe. `isSelf` is what the client has to go on: every row here is a person in the
    * viewer's own household.
    */
-  it('offers Remove for other people but never for the viewer themselves', async () => {
+  it('offers Remove login for other people but never for the viewer themselves', async () => {
     render(<LoginsSection />);
 
     await screen.findByText('Nate');
     // Alex (invited) and Robin (active) can be removed; Nate is the viewer.
-    expect(screen.getAllByRole('button', { name: 'Remove' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Remove login' })).toHaveLength(2);
   });
 
   // Nothing to withdraw and no login to take away -- the control would have no meaning.
-  it('offers no Remove for somebody who has no login at all', async () => {
+  it('offers no Remove login for somebody who has no login at all', async () => {
     listLogins.mockResolvedValue([ROWS[1]]);
     render(<LoginsSection />);
 
     await screen.findByText('Sam');
-    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove login' })).not.toBeInTheDocument();
   });
 
   /**
@@ -164,7 +164,7 @@ describe('LoginsSection', () => {
     listLogins.mockResolvedValue([ROWS[3]]);
     render(<LoginsSection />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove login' }));
 
     const [message] = openConfirm.mock.calls[0];
     expect(message).toMatch(/workouts stay/i);
@@ -177,7 +177,7 @@ describe('LoginsSection', () => {
     listLogins.mockResolvedValue([ROWS[2]]);
     render(<LoginsSection />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove login' }));
 
     const [message] = openConfirm.mock.calls[0];
     expect(message).toMatch(/link in their email stops working/i);
@@ -188,7 +188,7 @@ describe('LoginsSection', () => {
     listLogins.mockResolvedValue([ROWS[3]]);
     render(<LoginsSection />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove login' }));
 
     await waitFor(() => expect(revokeLogin).toHaveBeenCalledWith(4));
     expect(listLogins).toHaveBeenCalledTimes(2);
@@ -199,7 +199,7 @@ describe('LoginsSection', () => {
     listLogins.mockResolvedValue([ROWS[2]]);
     render(<LoginsSection />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove login' }));
 
     await waitFor(() => expect(showToast).toHaveBeenCalledWith('Invite withdrawn.'));
   });

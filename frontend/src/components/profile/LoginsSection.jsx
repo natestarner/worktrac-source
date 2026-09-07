@@ -82,7 +82,10 @@ export default function LoginsSection() {
         + `household — only their ability to sign in goes away. If they're offline right now, `
         + `anything they haven't synced yet may not make it.`
       : `Withdraw the invite for ${row.personName}? The link in their email stops working.`;
-    openConfirm(message, () => removeLogin(row));
+    // Not "Delete": this dialog's whole job is telling the owner nothing is deleted.
+    openConfirm(message, () => removeLogin(row), {
+      confirmLabel: row.status === 'ACTIVE' ? 'Remove login' : 'Withdraw invite',
+    });
   }
 
   if (!rows) return null;
@@ -132,8 +135,13 @@ export default function LoginsSection() {
                   (409), so this only stops the client offering a control that can only fail. */}
               {row.status !== 'NONE' && !row.isSelf && (
                 <OfflineDisabledWrap message="Removing a login needs a connection.">
+                  {/* ⚠️ "Remove login", never bare "Remove". The People roster higher up this same
+                      screen has its own Remove, and THAT one deletes the person along with every
+                      session, set and routine they own. Two identically-named controls on one
+                      screen, one destructive and one not, is a mis-tap waiting to happen -- and the
+                      one word the owner reads is the only thing distinguishing them. */}
                   <button onClick={() => confirmRemove(row)} style={removeLinkStyle}>
-                    Remove
+                    Remove login
                   </button>
                 </OfflineDisabledWrap>
               )}
