@@ -29,8 +29,19 @@ public enum RegistrationEventType {
     // "did ACS accept it" -- and it earns audit coverage for the same reason password reset did:
     // an invitation that silently never arrives is indistinguishable, from the owner's side, from
     // one the recipient is ignoring.
+    // The invite's "started" marker, recorded when the row is committed. The watchdog pairs it
+    // with the SENT/FAILED types below -- without a started event there is nothing to reconcile
+    // against, and a dispatch that never ran would leave no trace at all.
+    MEMBER_INVITE_STARTED,
+    MEMBER_INVITE_DISPATCH_MISSING,
     MEMBER_INVITE_EMAIL_SENT,
     MEMBER_INVITE_EMAIL_FAILED,
+    MEMBER_JOINED_EMAIL_SENT,
+    MEMBER_JOINED_EMAIL_FAILED,
+    MEMBER_ACCEPTED_OWNER_EMAIL_SENT,
+    MEMBER_ACCEPTED_OWNER_EMAIL_FAILED,
+    MEMBER_REVOKED_EMAIL_SENT,
+    MEMBER_REVOKED_EMAIL_FAILED,
 
     // Level 1: did ACS accept the send?
     VERIFICATION_EMAIL_SENT,

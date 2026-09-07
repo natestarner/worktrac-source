@@ -53,13 +53,13 @@
     <section class="section">
       <div class="container--narrow legal">
         <h1 class="section__title">Privacy Policy</h1>
-        <p class="legal__meta">Last updated 28 August 2026</p>
+        <p class="legal__meta">Last updated 7 September 2026</p>
 
         <p class="prose prose--lead">Huddle is a small product built for households. We collect what the app needs to work and nothing else. <strong>We do not sell your data, we do not advertise in the app, and we do not track you around the internet.</strong></p>
 
         <h2>What we collect</h2>
         <ul class="prose">
-          <li><strong>Your account:</strong> the email address you register with, your household name, and the names of the people you add.</li>
+          <li><strong>Your account:</strong> the email address you register with, your household name, and the names of the people you add. If you give someone in your household their own sign-in, we also collect their email address and a password they choose. We store passwords only as a one-way hash &mdash; nobody at Huddle can read one, including the person who set up the household.</li>
           <li><strong>What you log:</strong> exercises, sets, weights, reps, durations, rest times, notes, routines and personal records.</li>
           <li><strong>Operational records:</strong> timestamps, error diagnostics and a per-install correlation id, so we can work out what went wrong when something breaks.</li>
           <li><strong>If you subscribe:</strong> a Stripe customer identifier and your subscription status. <strong>We never see or store your card number.</strong></li>
@@ -68,7 +68,7 @@
         <p class="prose">We do not ask for your date of birth, your weight, or any health information beyond the numbers you choose to log as workouts.</p>
 
         <h2>Why we collect it</h2>
-        <p class="prose">To run the app: to show you your own workouts and keep each person's separate, to sign you in, to take payment if you choose Pro, to email you a verification code or tell you a payment failed, and to fix problems. That is the whole list.</p>
+        <p class="prose">To run the app: to show you your own workouts and keep each person's separate, to sign you in, to invite someone to their own sign-in and tell them when it is created or removed, to take payment if you choose Pro, to email you a verification code or tell you a payment failed, and to fix problems. That is the whole list.</p>
 
         <h2>Who else touches it</h2>
         <ul class="prose">
@@ -80,8 +80,18 @@
 
         <h2>Children</h2>
         <p class="prose">This matters to us, because Huddle was built for a parent and his kids.</p>
-        <p class="prose"><strong>Children do not have accounts here.</strong> A household has exactly one login, held by an adult. Everyone else, including children, is a profile inside that account, with no login, no email address and no way to sign in. Only the adult account holder enters and controls that information, and we do not knowingly collect anything directly from a child.</p>
-        <p class="prose">If you are a parent and want a profile and its workouts removed, delete the person in the app, or write to us and we will do it.</p>
+        <p class="prose"><strong>By default, a household has one login held by an adult.</strong> Everyone else, including children, is a profile inside that account &mdash; no login, no email address, no way to sign in. Only the adult account holder enters and controls that information.</p>
+        <p class="prose"><strong>An account holder can choose to give someone in their household their own sign-in.</strong> That does mean an email address and a password for the person receiving it, and if that person is a child, it means we hold those details for a child. We think the honest thing is to say exactly how that works rather than bury it:</p>
+        <ul class="prose">
+          <li><strong>Only the adult account holder can create one.</strong> There is no way for anyone to sign themselves up into an existing household, and no way to create a household as a child without an email address of their own.</li>
+          <li><strong>Only the adult account holder can remove one</strong>, at any time, from the app, without contacting us.</li>
+          <li><strong>The account holder can see everything that person logs.</strong> A sign-in is not a private space; it is a way to use the app from your own phone.</li>
+          <li><strong>The account holder cannot see or set their password.</strong> There is no screen anywhere in Huddle that lets one person set another's password.</li>
+          <li><strong>We collect nothing extra because of it.</strong> An email address, a password hash, and the same workout data any profile has. No date of birth, no age, no health information.</li>
+        </ul>
+        <p class="prose">Because creating and removing these sign-ins is entirely in the account holder's hands, we treat the adult who runs the household as the person consenting on a child's behalf. <strong>If you are that adult, please set one up together with the child rather than for them, and use an address you can reach.</strong> The app says the same thing at the moment you create one.</p>
+        <p class="prose">We do not knowingly let a child under 13 create a household of their own. If you believe a child has registered their own account without a parent, write to us and we will delete it.</p>
+        <p class="prose">If you are a parent and want a profile, a sign-in, or the workouts under either removed: remove the login or delete the person in the app, or write to us and we will do it.</p>
 
         <h2>Your rights, and how to use them</h2>
         <p class="prose">Most of these are self-serve, because waiting on support to get your own data is not our idea of a right:</p>

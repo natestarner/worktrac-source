@@ -12,6 +12,16 @@ paths:
   - "frontend/src/utils/exerciseDuplicates.js"
   - "frontend/src/hooks/useRequireOnline.js"
   - "frontend/src/hooks/useGatedMutation.js"
+  # Member logins. The handbook now states, as fact, who can see and do what in a household --
+  # so the code that decides those answers has to load this rule. Without these five, somebody
+  # could change who a member may write to, or what an owner may do to a login, and never be
+  # shown the page that promises otherwise.
+  - "backend/src/main/java/com/worktrac/backend/membership/**"
+  - "backend/src/main/java/com/worktrac/backend/person/**"
+  - "backend/src/main/java/com/worktrac/backend/user/**"
+  - "backend/src/main/java/com/worktrac/backend/account/**"
+  - "frontend/src/context/**"
+  - "frontend/src/components/profile/**"
 ---
 
 # The end-user handbook states these rules as fact

@@ -1,12 +1,16 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LoginsSection from './LoginsSection';
-import { listLogins, inviteLogin } from '../../api/logins';
+import { listLogins, inviteLogin, revokeLogin } from '../../api/logins';
 
-vi.mock('../../api/logins', () => ({ listLogins: vi.fn(), inviteLogin: vi.fn() }));
+vi.mock('../../api/logins', () => ({ listLogins: vi.fn(), inviteLogin: vi.fn(), revokeLogin: vi.fn() }));
 
 const showToast = vi.fn();
-vi.mock('../../context/UIContext', () => ({ useUI: () => ({ showToast }) }));
+// Runs the confirm callback immediately AND records the message, so a test can assert both the
+// wording the owner is shown and the call it authorises. ConfirmDialog's own behaviour is tested
+// separately.
+const openConfirm = vi.fn((message, onConfirm) => onConfirm());
+vi.mock('../../context/UIContext', () => ({ useUI: () => ({ showToast, openConfirm }) }));
 
 // The gate's own offline/error behaviour has its own tests; here it is a pass-through so these
 // cases are about what the section renders and sends.
@@ -24,9 +28,10 @@ vi.mock('../shared/Modal', () => ({
 }));
 
 const ROWS = [
-  { personId: 1, personName: 'Nate', status: 'ACTIVE', email: 'nate@example.com' },
-  { personId: 2, personName: 'Sam', status: 'NONE', email: null },
-  { personId: 3, personName: 'Alex', status: 'INVITED', email: 'alex@example.com' },
+  { personId: 1, personName: 'Nate', status: 'ACTIVE', email: 'nate@example.com', isSelf: true },
+  { personId: 2, personName: 'Sam', status: 'NONE', email: null, isSelf: false },
+  { personId: 3, personName: 'Alex', status: 'INVITED', email: 'alex@example.com', isSelf: false },
+  { personId: 4, personName: 'Robin', status: 'ACTIVE', email: 'robin@example.com', isSelf: false },
 ];
 
 describe('LoginsSection', () => {
@@ -34,6 +39,7 @@ describe('LoginsSection', () => {
     vi.clearAllMocks();
     listLogins.mockResolvedValue(ROWS);
     inviteLogin.mockResolvedValue({});
+    revokeLogin.mockResolvedValue(undefined);
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -42,7 +48,9 @@ describe('LoginsSection', () => {
     render(<LoginsSection />);
 
     expect(await screen.findByText('Nate')).toBeInTheDocument();
-    expect(screen.getByText('HAS LOGIN')).toBeInTheDocument();
+    // Two people hold a login in this fixture (the viewer and Robin), so this is getAllByText --
+    // the badge is per row, not a singleton.
+    expect(screen.getAllByText('HAS LOGIN')).toHaveLength(2);
     expect(screen.getByText('INVITED')).toBeInTheDocument();
   });
 
@@ -115,4 +123,85 @@ describe('LoginsSection', () => {
     expect(container).toBeEmptyDOMElement();
     expect(showToast).not.toHaveBeenCalled();
   });
+
+  // ── Removing a login ────────────────────────────────────────────────────────────────────────
+
+  /**
+   * ⚠️ The owner must not be offered Remove on their OWN row. The server refuses it (409) because
+   * nothing in the app could put that login back and a household with no owner has nobody left who
+   * can invite one -- so the button could only ever fail, which is a bug regardless of the server
+   * being safe. `isSelf` is what the client has to go on: every row here is a person in the
+   * viewer's own household.
+   */
+  it('offers Remove login for other people but never for the viewer themselves', async () => {
+    render(<LoginsSection />);
+
+    await screen.findByText('Nate');
+    // Alex (invited) and Robin (active) can be removed; Nate is the viewer.
+    expect(screen.getAllByRole('button', { name: 'Remove login' })).toHaveLength(2);
+  });
+
+  // Nothing to withdraw and no login to take away -- the control would have no meaning.
+  it('offers no Remove login for somebody who has no login at all', async () => {
+    listLogins.mockResolvedValue([ROWS[1]]);
+    render(<LoginsSection />);
+
+    await screen.findByText('Sam');
+    expect(screen.queryByRole('button', { name: 'Remove login' })).not.toBeInTheDocument();
+  });
+
+  /**
+   * ⚠️ Both sentences are load-bearing and neither is obvious.
+   *
+   * 1. Everything else on this screen that says "remove" deletes training data, so without saying
+   *    so an owner reasonably assumes this does too -- and hesitates over an access decision that
+   *    costs nothing.
+   * 2. A revoked member who is offline cannot be reached: on reconnect their token resolves to no
+   *    membership and the session tears down with their queued writes undeliverable. There is no
+   *    server-side fix, so the honest thing is to say it BEFORE they act, not after.
+   */
+  it('warns that the person and their workouts stay, and that offline work may not sync', async () => {
+    listLogins.mockResolvedValue([ROWS[3]]);
+    render(<LoginsSection />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove login' }));
+
+    const [message] = openConfirm.mock.calls[0];
+    expect(message).toMatch(/workouts stay/i);
+    expect(message).toMatch(/haven't synced/i);
+  });
+
+  // A withdrawn invitation is a different event: there is no queued work to lose, and the thing
+  // that changes is that the emailed link stops working.
+  it('says the link stops working when withdrawing an invitation instead', async () => {
+    listLogins.mockResolvedValue([ROWS[2]]);
+    render(<LoginsSection />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove login' }));
+
+    const [message] = openConfirm.mock.calls[0];
+    expect(message).toMatch(/link in their email stops working/i);
+    expect(message).not.toMatch(/haven't synced/i);
+  });
+
+  it('removes the login and reloads the list', async () => {
+    listLogins.mockResolvedValue([ROWS[3]]);
+    render(<LoginsSection />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove login' }));
+
+    await waitFor(() => expect(revokeLogin).toHaveBeenCalledWith(4));
+    expect(listLogins).toHaveBeenCalledTimes(2);
+    expect(showToast).toHaveBeenCalledWith('Login removed.');
+  });
+
+  it('calls the invitation withdrawn, not the login removed', async () => {
+    listLogins.mockResolvedValue([ROWS[2]]);
+    render(<LoginsSection />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove login' }));
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('Invite withdrawn.'));
+  });
+
 });

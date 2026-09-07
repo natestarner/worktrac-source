@@ -36,6 +36,7 @@ const SECTION_IDS = [
   'trends',
   'personal',
   'settings',
+  'logins',
   'plan',
   'data',
   'offline',

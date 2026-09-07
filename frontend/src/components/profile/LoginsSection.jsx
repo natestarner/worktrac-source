@@ -4,7 +4,7 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import Modal from '../shared/Modal';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useUI } from '../../context/UIContext';
-import { listLogins, inviteLogin } from '../../api/logins';
+import { listLogins, inviteLogin, revokeLogin } from '../../api/logins';
 
 /**
  * The owner's login manager: who in this household can sign in, and inviting the ones who cannot.
@@ -18,7 +18,7 @@ export default function LoginsSection() {
   const [rows, setRows] = useState(null);
   const [invitingPerson, setInvitingPerson] = useState(null);
   const { run } = useGatedMutation();
-  const { showToast } = useUI();
+  const { showToast, openConfirm } = useUI();
 
   const load = useCallback(async () => {
     try {
@@ -50,6 +50,43 @@ export default function LoginsSection() {
       showServerMessage: true,
     },
   );
+
+  const removeLogin = run(
+    async (row) => {
+      await revokeLogin(row.personId);
+      showToast(row.status === 'ACTIVE' ? 'Login removed.' : 'Invite withdrawn.');
+      await load();
+    },
+    {
+      offlineMessage: 'Removing a login needs a connection.',
+      errorMessage: "Couldn't remove that login.",
+      // The one refusal here is "you can't remove your own login", which says what to do instead.
+      showServerMessage: true,
+    },
+  );
+
+  /**
+   * ⚠️ The confirm names the two things that are NOT obvious, and both are load-bearing.
+   *
+   * 1. The person and their workouts stay. Everything else on this screen that says "remove"
+   *    deletes training data, so without this sentence an owner reasonably assumes this does too —
+   *    and hesitates over an access decision that costs nothing.
+   * 2. Work queued on THEIR device may never sync. A revoked member who is offline cannot be
+   *    reached; on reconnect their token resolves to no membership and the session tears down with
+   *    those writes undeliverable. There is no server-side fix (offline-internals.md), so the
+   *    honest thing is to say so before the owner acts, not after.
+   */
+  function confirmRemove(row) {
+    const message = row.status === 'ACTIVE'
+      ? `Remove ${row.personName}'s login? ${row.personName} and all of their workouts stay in this `
+        + `household — only their ability to sign in goes away. If they're offline right now, `
+        + `anything they haven't synced yet may not make it.`
+      : `Withdraw the invite for ${row.personName}? The link in their email stops working.`;
+    // Not "Delete": this dialog's whole job is telling the owner nothing is deleted.
+    openConfirm(message, () => removeLogin(row), {
+      confirmLabel: row.status === 'ACTIVE' ? 'Remove login' : 'Withdraw invite',
+    });
+  }
 
   if (!rows) return null;
 
@@ -90,6 +127,21 @@ export default function LoginsSection() {
                 <OfflineDisabledWrap message="Sending an invite needs a connection.">
                   <button onClick={() => setInvitingPerson(row)} style={linkStyle}>
                     {row.status === 'INVITED' ? 'Resend' : 'Enable login'}
+                  </button>
+                </OfflineDisabledWrap>
+              )}
+              {/* Not offered for the owner's own login: nothing in the app could put it back, and a
+                  household with no owner has nobody who can invite one. The server refuses it too
+                  (409), so this only stops the client offering a control that can only fail. */}
+              {row.status !== 'NONE' && !row.isSelf && (
+                <OfflineDisabledWrap message="Removing a login needs a connection.">
+                  {/* ⚠️ "Remove login", never bare "Remove". The People roster higher up this same
+                      screen has its own Remove, and THAT one deletes the person along with every
+                      session, set and routine they own. Two identically-named controls on one
+                      screen, one destructive and one not, is a mis-tap waiting to happen -- and the
+                      one word the owner reads is the only thing distinguishing them. */}
+                  <button onClick={() => confirmRemove(row)} style={removeLinkStyle}>
+                    Remove login
                   </button>
                 </OfflineDisabledWrap>
               )}
@@ -190,6 +242,16 @@ const badgeBase = {
 
 const activeBadgeStyle = { ...badgeBase, background: 'var(--color-subtle-bg)', color: 'var(--color-muted)' };
 const invitedBadgeStyle = { ...badgeBase, background: 'var(--color-accent-soft, var(--color-subtle-bg))', color: 'var(--color-accent-text)' };
+
+const removeLinkStyle = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  color: 'var(--color-danger)',
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: 'pointer',
+};
 
 const linkStyle = {
   background: 'none',

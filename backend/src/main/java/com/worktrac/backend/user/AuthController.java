@@ -139,8 +139,12 @@ public class AuthController {
      */
     @PostMapping("/accept-invite")
     public AuthResponse acceptInvite(@Valid @RequestBody AcceptInviteRequest request) {
+        // The two acceptance notices are published by the service, inside its own transaction --
+        // an AFTER_COMMIT listener discards anything published from out here, where accept() has
+        // already committed. See MembershipInviteService#announce.
         AccountMembership membership =
                 inviteService.accept(request.inviteId(), request.token(), request.password());
+
         return authService.startSession(membership.getUser().getId(), membership.getAccount().getId());
     }
 

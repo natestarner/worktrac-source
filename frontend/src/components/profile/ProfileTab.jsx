@@ -9,6 +9,7 @@ import EditPersonModal from './EditPersonModal';
 import DeleteAccountModal from './DeleteAccountModal';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
+import ChangePasswordSection from './ChangePasswordSection';
 import LoginsSection from './LoginsSection';
 
 export default function ProfileTab() {
@@ -72,6 +73,11 @@ export default function ProfileTab() {
           remove your login. <strong>They cannot see or set your password.</strong>
         </div>
       )}
+
+      {/* Above the household-management split on purpose: this is the one thing on this screen
+          every role can do, and for a member it is the ONLY thing. Putting it below would bury a
+          member's single action under a block that renders nothing for them. */}
+      <ChangePasswordSection />
 
       {/* Everything below is household management, which is MANAGE_PEOPLE / DELETE_ACCOUNT and
           therefore owner-only. Hidden rather than disabled: a member has no path to any of it, so

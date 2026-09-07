@@ -28,8 +28,10 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -145,6 +147,24 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             assertThat(logins).hasSize(2);
             // The owner's own person has a membership from registration; Sam has nothing yet.
             assertThat(logins.findValuesAsText("status")).containsExactlyInAnyOrder("ACTIVE", "NONE");
+        }
+
+        /**
+         * The client withholds <b>Remove</b> on the viewer's own row, and this flag is the only
+         * thing that lets it: every row here is a person in the viewer's own household, so nothing
+         * else in the payload separates "me" from "somebody else here". Without it the owner is
+         * offered a control that can only ever answer 409.
+         */
+        @Test
+        void marksTheViewersOwnRow() throws Exception {
+            JsonNode logins = json(mockMvc.perform(get("/api/account/logins")
+                    .header("Authorization", bearer(ownerToken))));
+
+            JsonNode nate = logins.get(0).get("personId").asLong() == samPersonId ? logins.get(1) : logins.get(0);
+            JsonNode sam = logins.get(0).get("personId").asLong() == samPersonId ? logins.get(0) : logins.get(1);
+
+            assertThat(nate.get("isSelf").asBoolean()).isTrue();
+            assertThat(sam.get("isSelf").asBoolean()).isFalse();
         }
 
         @Test
@@ -348,4 +368,213 @@ class MembershipInviteTest extends AbstractIntegrationTest {
                     .andExpect(status().isConflict());
         }
     }
+
+    @Nested
+    @DisplayName("revoking")
+    class Revoking {
+
+        private ResultActions revoke(long personId, String token) throws Exception {
+            return mockMvc.perform(delete("/api/account/logins/" + personId)
+                    .header("Authorization", bearer(token)));
+        }
+
+        /** Gives Sam a real, working login. Returns Sam's session token. */
+        private String makeSamAMember() throws Exception {
+            String email = "sam-" + suffix + "@example.com";
+            invite(samPersonId, email);
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+            return json(mockMvc.perform(post("/api/auth/accept-invite")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of(
+                            "inviteId", inviteId, "token", token, "password", "password123")))))
+                    .get("token").asText();
+        }
+
+        /**
+         * ⚠️ <b>THE PERSON AND THEIR TRAINING DATA STAY.</b> This is the assertion the whole
+         * feature's copy rests on: the revoke confirmation promises the owner that removing a login
+         * removes access and nothing else. If that ever stops being true, the promise becomes a
+         * lie at the exact moment somebody acts on it.
+         */
+        @Test
+        void removingALoginLeavesThePersonAndTheirWorkoutsAlone() throws Exception {
+            makeSamAMember();
+
+            revoke(samPersonId, ownerToken).andExpect(status().isNoContent());
+
+            JsonNode logins = json(mockMvc.perform(get("/api/account/logins")
+                    .header("Authorization", bearer(ownerToken))));
+            JsonNode sam = logins.get(0).get("personId").asLong() == samPersonId ? logins.get(0) : logins.get(1);
+
+            // Sam is still here, still visible to the owner -- just with no way to sign in.
+            assertThat(logins).hasSize(2);
+            assertThat(sam.get("personName").asText()).isEqualTo("Sam");
+            assertThat(sam.get("status").asText()).isEqualTo("NONE");
+        }
+
+        @Test
+        void aRevokedMembersTokenStopsWorking() throws Exception {
+            String samToken = makeSamAMember();
+            // It genuinely worked first -- otherwise the assertion below proves nothing.
+            mockMvc.perform(get("/api/auth/me").header("Authorization", bearer(samToken)))
+                    .andExpect(status().isOk());
+
+            revoke(samPersonId, ownerToken).andExpect(status().isNoContent());
+
+            mockMvc.perform(get("/api/auth/me").header("Authorization", bearer(samToken)))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        /**
+         * ⚠️ Revoking must NOT sign somebody out of their OTHER households.
+         *
+         * <p>This is why revoke calls {@code accountAccessService.invalidate(userId, accountId)}
+         * and deliberately does NOT bump {@code token_version}, which is per-USER. Bumping it would
+         * be the easy way to make the test above pass, and it would silently sign this person out
+         * of every unrelated household they belong to.
+         */
+        @Test
+        void revokingHereDoesNotTouchTheirOtherHousehold() throws Exception {
+            String email = "sam-" + suffix + "@example.com";
+            // Sam has their own household first, and a login in Nate's second.
+            RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Sam");
+            makeSamAMember();
+
+            revoke(samPersonId, ownerToken).andExpect(status().isNoContent());
+
+            // Signing in still works, and lands them in the household they still belong to.
+            JsonNode session = json(mockMvc.perform(post("/api/auth/login")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(
+                            Map.of("email", email, "password", "password123"))))
+                    .andExpect(status().isOk()));
+            assertThat(session.get("token").asText()).isNotBlank();
+            assertThat(session.get("membership").get("accountRole").asText()).isEqualTo("OWNER");
+        }
+
+        @Test
+        void withdrawingAPendingInviteKillsTheLink() throws Exception {
+            invite(samPersonId, "sam-" + suffix + "@example.com");
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+
+            revoke(samPersonId, ownerToken).andExpect(status().isNoContent());
+
+            // The emailed link is now worthless -- and answers the same way a wrong token does.
+            mockMvc.perform(post("/api/auth/accept-invite")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of(
+                                    "inviteId", inviteId, "token", token, "password", "password123"))))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        /**
+         * ⚠️ An owner must not be able to remove their own way in. Nothing in the app could put it
+         * back, and a household with no owner has nobody left who can invite one.
+         */
+        @Test
+        void anOwnerCannotRemoveTheirOwnLogin() throws Exception {
+            long ownPersonId = json(mockMvc.perform(get("/api/auth/me")
+                    .header("Authorization", bearer(ownerToken))))
+                    .get("membership").get("personId").asLong();
+
+            revoke(ownPersonId, ownerToken).andExpect(status().isConflict());
+
+            // ...and they are still signed in afterwards.
+            mockMvc.perform(get("/api/auth/me").header("Authorization", bearer(ownerToken)))
+                    .andExpect(status().isOk());
+        }
+
+        /**
+         * 204, not 404. The owner's intent -- "this person should not have a login" -- is already
+         * true, and a 404 would only invite a retry of an action that has nothing left to do.
+         */
+        @Test
+        void revokingSomebodyWithNoLoginSucceedsQuietly() throws Exception {
+            revoke(samPersonId, ownerToken).andExpect(status().isNoContent());
+
+            verify(emailService, never()).sendLoginRevoked(anyString(), anyString(), anyString(), anyBoolean());
+        }
+
+        @Test
+        void aPersonInAnotherHouseholdIs404NotAHint() throws Exception {
+            String strangerEmail = "stranger-" + suffix + "@example.com";
+            String strangerToken = RegistrationTestSupport
+                    .registerAndConfirm(mockMvc, objectMapper, testCodeCache, strangerEmail, "Robin")
+                    .get("token").asText();
+            long theirPersonId = json(mockMvc.perform(get("/api/auth/me")
+                    .header("Authorization", bearer(strangerToken))))
+                    .get("membership").get("personId").asLong();
+
+            revoke(theirPersonId, ownerToken).andExpect(status().isNotFound());
+        }
+
+        @Test
+        void aMemberCannotRevokeAnybody() throws Exception {
+            String samToken = makeSamAMember();
+
+            revoke(samPersonId, samToken).andExpect(status().isForbidden());
+        }
+
+        /**
+         * The notice is a security control, not a courtesy: without it somebody is silently signed
+         * out, and per {@code offline-internals.md} their queued offline writes can then never
+         * land. The two wordings differ, so the flag that picks between them is asserted too.
+         */
+        @Test
+        void aRemovedMemberIsTold() throws Exception {
+            makeSamAMember();
+
+            revoke(samPersonId, ownerToken).andExpect(status().isNoContent());
+
+            verify(emailService, timeout(2000)).sendLoginRevoked(
+                    eq("sam-" + suffix + "@example.com"), anyString(), eq("Nate"),
+                    eq(false));   // false = a real login was removed, not just an invitation
+        }
+
+        @Test
+        void aWithdrawnInviteSaysSoInsteadOfClaimingALoginWasRemoved() throws Exception {
+            invite(samPersonId, "sam-" + suffix + "@example.com");
+
+            revoke(samPersonId, ownerToken).andExpect(status().isNoContent());
+
+            verify(emailService, timeout(2000)).sendLoginRevoked(
+                    eq("sam-" + suffix + "@example.com"), anyString(), eq("Nate"),
+                    eq(true));    // true = there was never a login, only an invitation
+        }
+    }
+
+    @Nested
+    @DisplayName("acceptance notices")
+    class AcceptanceNotices {
+
+        /**
+         * ⚠️ THE TYPO DETECTOR, and the reason the owner's notice is a security control rather
+         * than a courtesy. A mistyped invite hands a stranger read access to the household's entire
+         * training history — visibility is forced ON — and <b>nothing else in the system would ever
+         * surface that</b>. The notice has to name the address that actually accepted.
+         */
+        @Test
+        void bothSidesAreToldWhenAnInviteIsAccepted() throws Exception {
+            String samEmail = "sam-" + suffix + "@example.com";
+            invite(samPersonId, samEmail);
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+
+            mockMvc.perform(post("/api/auth/accept-invite")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of(
+                                    "inviteId", inviteId, "token", token, "password", "password123"))))
+                    .andExpect(status().isOk());
+
+            // The member: which household they joined, and who runs it.
+            verify(emailService, timeout(2000))
+                    .sendAddedToHousehold(eq(samEmail), eq("Sam"), anyString(), eq("Nate"));
+            // The owner: WHICH ADDRESS accepted. That argument is the whole point.
+            verify(emailService, timeout(2000)).sendInviteAccepted(
+                    eq("owner-" + suffix + "@example.com"), eq(samEmail), eq("Sam"), anyString());
+        }
+    }
+
 }

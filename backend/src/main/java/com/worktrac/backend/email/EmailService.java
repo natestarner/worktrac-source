@@ -35,6 +35,7 @@ public class EmailService {
     private final EmailClient emailClient;
     private final String senderAddress;
     private final String membershipInviteTemplate;
+    private final String simpleNoticeTemplate;
     private final String appUrl;
     private final String logoUrl;
     private final int codeExpirationMinutes;
@@ -57,6 +58,7 @@ public class EmailService {
         this.passwordResetCodeTemplate = loadTemplate("templates/email/password-reset-code.html");
         this.passwordResetSuccessTemplate = loadTemplate("templates/email/password-reset-success.html");
         this.membershipInviteTemplate = loadTemplate("templates/email/membership-invite.html");
+        this.simpleNoticeTemplate = loadTemplate("templates/email/simple-notice.html");
         String noopPattern = properties.getE2eNoopRecipientPattern();
         this.e2eNoopRecipientPattern = (noopPattern == null || noopPattern.isBlank())
                 ? null
@@ -145,6 +147,94 @@ public class EmailService {
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;")
                 .replace("'", "&#39;");
+    }
+
+    /**
+     * To the new member, once they have joined: which household, and the way out.
+     *
+     * <p>Carries the one-click exit deliberately. Being added to somebody else's household with no
+     * visible way to leave is the shape of a trap regardless of intent, and this is the message
+     * they will still have in their inbox months later when they want it.
+     */
+    public String sendAddedToHousehold(String toEmail, String personName, String householdName,
+                                        String ownerName) {
+        String html = simpleNoticeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", escapeHtml("You're in " + householdName))
+                .replace("{{BODY}}", escapeHtml("You're now logging as " + personName + " in "
+                        + householdName + ". " + ownerName + " can see your workouts and can remove"
+                        + " your login, but cannot see or set your password.")
+                        + "<br><br>You can leave this household at any time from Profile &rarr; "
+                        + "Leave household.")
+                .replace("{{CTA_URL}}", appUrl)
+                .replace("{{CTA_LABEL}}", "Open Huddle");
+
+        return send(toEmail, "You've joined " + householdName + " on Huddle",
+                "You're now logging as " + personName + " in " + householdName + ". "
+                        + ownerName + " can see your workouts and can remove your login, but cannot"
+                        + " see or set your password. You can leave at any time from Profile."
+                        + " Open Huddle: " + appUrl,
+                html);
+    }
+
+    /**
+     * To the OWNER, when an invitation is accepted, NAMING the address that accepted it.
+     *
+     * <p>⚠️ This is the typo detector, and the reason it is not optional. A mistyped invite gives a
+     * stranger read access to the household's whole training history — visibility is forced on for
+     * Pro/Family — and nothing else in the system would ever surface it. The address has to be in
+     * the message; "somebody accepted" would be useless.
+     */
+    public String sendInviteAccepted(String toEmail, String memberEmail, String personName,
+                                      String householdName) {
+        String html = simpleNoticeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", escapeHtml(personName + " has a login now"))
+                .replace("{{BODY}}", escapeHtml(memberEmail) + " accepted your invitation and can now"
+                        + " sign in as " + escapeHtml(personName) + " in "
+                        + escapeHtml(householdName) + ".<br><br>If that address is not who you meant"
+                        + " to invite, remove the login from Profile &rarr; Logins straight away —"
+                        + " they can see everyone's workouts.")
+                .replace("{{CTA_URL}}", appUrl + "/app/profile")
+                .replace("{{CTA_LABEL}}", "Review logins");
+
+        return send(toEmail, personName + " accepted their Huddle login",
+                memberEmail + " accepted your invitation and can now sign in as " + personName
+                        + " in " + householdName + ". If that is not who you meant to invite, remove"
+                        + " the login from Profile > Logins straight away -- they can see everyone's"
+                        + " workouts. " + appUrl + "/app/profile",
+                html);
+    }
+
+    /**
+     * To the person who lost access.
+     *
+     * <p>⚠️ A security control, not a courtesy. Without it they are silently signed out, and their
+     * queued offline writes can then never land — see {@code offline-internals.md}. They deserve to
+     * know that before they wonder where their sets went.
+     */
+    public String sendLoginRevoked(String toEmail, String householdName, String ownerName,
+                                    boolean wasOnlyAnInvitation) {
+        String heading = wasOnlyAnInvitation
+                ? "Your invitation to " + householdName + " was withdrawn"
+                : "Your login for " + householdName + " was removed";
+        String body = wasOnlyAnInvitation
+                ? ownerName + " withdrew the invitation to join " + householdName + ". Nothing was"
+                        + " set up, and there is nothing you need to do."
+                : ownerName + " removed your login for " + householdName + ". Your workouts stay in"
+                        + " that household — they were never yours to take with you — and anything"
+                        + " you logged on a device that was offline may not have synced before"
+                        + " access ended. Your Huddle account and any other households are"
+                        + " unaffected.";
+
+        String html = simpleNoticeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", escapeHtml(heading))
+                .replace("{{BODY}}", escapeHtml(body))
+                .replace("{{CTA_URL}}", appUrl)
+                .replace("{{CTA_LABEL}}", "Open Huddle");
+
+        return send(toEmail, heading, body + " " + appUrl, html);
     }
 
     /**

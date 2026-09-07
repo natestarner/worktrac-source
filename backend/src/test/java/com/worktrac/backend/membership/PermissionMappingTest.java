@@ -45,6 +45,7 @@ class PermissionMappingTest {
             assertThat(AccountRole.MEMBER.permissions(true)).containsExactlyInAnyOrder(
                     Permission.VIEW_OWN_PERSON,
                     Permission.WRITE_OWN_PERSON,
+                    Permission.CHANGE_OWN_PASSWORD,
                     Permission.VIEW_OTHER_PEOPLE,
                     Permission.CREATE_SHARED_RESOURCE,
                     Permission.EDIT_OWN_SHARED_RESOURCE);
@@ -55,6 +56,7 @@ class PermissionMappingTest {
             assertThat(AccountRole.MEMBER.permissions(false)).containsExactlyInAnyOrder(
                     Permission.VIEW_OWN_PERSON,
                     Permission.WRITE_OWN_PERSON,
+                    Permission.CHANGE_OWN_PASSWORD,
                     Permission.CREATE_SHARED_RESOURCE,
                     Permission.EDIT_OWN_SHARED_RESOURCE);
         }

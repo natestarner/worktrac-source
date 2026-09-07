@@ -23,8 +23,16 @@ package com.worktrac.backend.membership;
  * <p>{@code email} is the address invited or signed in, and is null for {@code NONE}. The owner
  * typed it in the first place, so showing it back is not new information — and without it they
  * cannot tell which of two similar addresses they used.
+ *
+ * <p>{@code isSelf} marks the viewer's own row, and exists so the client can withhold <b>Remove</b>
+ * there. An owner removing their own login is refused server-side (409) because nothing in the app
+ * could put it back and a household with no owner has nobody who can invite one — but a button
+ * that can only ever fail is a bug in its own right, and the client cannot work this out alone:
+ * every row on this screen is a person in the viewer's own household, so there is nothing else in
+ * the payload that distinguishes "me" from "somebody else here".
  */
-public record PersonLoginDto(Long personId, String personName, String status, String email) {
+public record PersonLoginDto(Long personId, String personName, String status, String email,
+                             boolean isSelf) {
 
     public static final String NONE = "NONE";
     public static final String INVITED = "INVITED";
