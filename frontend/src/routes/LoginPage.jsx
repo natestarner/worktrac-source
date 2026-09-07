@@ -6,13 +6,22 @@ import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
 import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, chooseHousehold } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Set only when this credential belongs to two or more households. Holds the five-minute
+  // selection token.
+  //
+  // ⚠️ COMPONENT STATE, deliberately -- not a route, not router state, not storage. A selection
+  // token is a credential; router state survives in history and storage survives a reload, and
+  // this one should exist for exactly as long as the picker is on screen. A /choose-household
+  // route would also be meaningless when reached without it. See api/client.js's bearerOverride
+  // for the same argument one layer down.
+  const [choice, setChoice] = useState(null);
   const successMessage = location.state?.message;
 
   async function handleSubmit(e) {
@@ -20,13 +29,47 @@ export default function LoginPage() {
     setError('');
     setSubmitting(true);
     try {
-      await login(email, password);
+      const needsChoice = await login(email, password);
+      if (needsChoice) {
+        // Nothing has been signed in and nothing torn down -- whatever session this device already
+        // had is still intact, so abandoning the picker costs nothing.
+        setChoice(needsChoice);
+        return;
+      }
       navigate('/app/log');
     } catch (err) {
       setError(err.message || 'Could not log in');
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleChoose(accountId) {
+    setError('');
+    setSubmitting(true);
+    try {
+      await chooseHousehold(accountId, choice.selectionToken);
+      navigate('/app/log');
+    } catch (err) {
+      // The overwhelmingly likely failure is an expired selection token -- five minutes is short
+      // on purpose. Say what to do rather than what went wrong.
+      setError(err.message || 'That took too long — sign in again to pick a household.');
+      setChoice(null);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (choice) {
+    return (
+      <HouseholdPicker
+        households={choice.households}
+        onChoose={handleChoose}
+        onCancel={() => { setChoice(null); setError(''); }}
+        submitting={submitting}
+        error={error}
+      />
+    );
   }
 
   return (
@@ -139,6 +182,101 @@ export default function LoginPage() {
           </Link>
         </div>
       </form>
+    </main>
+  );
+}
+
+// Shown between "the password was right" and "you are signed in", when one credential belongs to
+// more than one household. Deliberately a plain list of buttons rather than a select: on a phone
+// two or three big targets beat a dropdown, and the whole screen exists to be tapped once.
+function HouseholdPicker({ households, onChoose, onCancel, submitting, error }) {
+  return (
+    <main
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--color-bg)',
+      }}
+    >
+      <div
+        style={{
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-xl)',
+          padding: 'var(--space-10) var(--space-8)',
+          width: 560,
+          maxWidth: '92vw',
+          textAlign: 'center',
+          boxShadow: 'var(--shadow-2), var(--elevation-hairline)',
+        }}
+      >
+        <picture>
+          <source srcSet={logoDark} media="(prefers-color-scheme: dark)" />
+          <img
+            src={logoLight}
+            alt="Huddle"
+            style={{ width: 216, maxWidth: '100%', height: 'auto', marginBottom: 32 }}
+          />
+        </picture>
+
+        <h1 style={{ fontSize: 'var(--text-lg)', marginBottom: 'var(--space-2)' }}>Choose a household</h1>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)' }}>
+          You&rsquo;re part of more than one. You can switch later from the account menu.
+        </p>
+
+        {error && (
+          <div role="alert" style={errorBannerStyle}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          {households.map((household) => (
+            <button
+              key={household.accountId}
+              type="button"
+              disabled={submitting}
+              onClick={() => onChoose(household.accountId)}
+              className="btn btn-lg btn-full pressable"
+              style={{
+                background: 'var(--color-subtle-bg)',
+                color: 'var(--color-text)',
+                border: '1px solid var(--color-border)',
+                textAlign: 'left',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 'var(--space-3)',
+              }}
+            >
+              <span style={{ fontWeight: 'var(--weight-semibold)' }}>{household.accountName}</span>
+              {/* Their own role, not a badge about the household -- it is the fastest way to tell
+                  "the one I run" from "the one I was invited to" when both are named after a
+                  family. */}
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', textTransform: 'lowercase' }}>
+                {household.accountRole === 'OWNER' ? 'you own this' : 'you\u2019re a member'}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            marginTop: 'var(--space-5)',
+            background: 'none',
+            border: 'none',
+            color: 'var(--color-muted)',
+            fontSize: 'var(--text-sm)',
+            cursor: 'pointer',
+          }}
+        >
+          Use a different login
+        </button>
+      </div>
     </main>
   );
 }

@@ -103,3 +103,46 @@ diagnostic, the specific rate limiter), not just an event-type label.
 `JwtService` carries the role; `JwtAuthenticationFilter` builds the authority from it. A token
 minted before the claim existed parses with role defaulting to **`USER`**, not failing closed to
 `ADMIN`. **Never invert that default.**
+
+## Login has TWO response shapes, and the common one must never move
+
+`POST /api/auth/login` answers with a session (`token` set, plus `account`/`membership`/`person`)
+when the credential resolves to exactly one membership — **byte-for-byte what it always did**,
+which is every household today. Two or more memberships answer `token: null` plus `households[]`
+and a `selectionToken`, and `POST /api/auth/session` mints the real thing from a chosen account id.
+
+- **The client branches on `token == null`, not a status field.** One nullable it already had to
+  read beats a second vocabulary both sides must agree on, and it fails safe: a client that ignores
+  `households` entirely sees a null token and reports a failed sign-in rather than acting on a
+  token it cannot use.
+- **Zero memberships stays a 401** with a specific message ("no longer attached to a household"),
+  not a 403 with a code. They proved the password, so this reveals nothing — and there is nothing
+  for the client to branch on.
+- **`POST /api/auth/session` serves BOTH finishing a login and switching household.** One route, so
+  the two cannot drift. No password on either path, which is why `AuthService.startSession`'s
+  membership lookup is the entire security of it. A household you are not in answers **404, not
+  403** — a 403 confirms the account id is real, which is an enumeration oracle spanning
+  households.
+
+### ⚠️ The selection token: a credential that is deliberately not a session
+
+`scp: "select"`, no `accountId`, five minutes. It buys exactly one thing — the right to call
+`POST /api/auth/session` — and `JwtService.parseToken` refuses **any** token carrying `scp`.
+
+- **That refusal must stay explicit.** A selection token also carries no `accountId`, so the null
+  guard would reject it anyway — which means the security of this design would rest on an
+  *absence*, one convenience field away ("let the picker preselect something") from silently
+  becoming a full 30-day session. **Deleting the `scp` check and re-running the suite still
+  passes**; `JwtServiceTest` mints the future mistake instead (`scp` **and** a valid `accountId`)
+  and is the only thing that goes red.
+- **Polarity is absent-means-FULL**, exactly like `role` and `tv`: every token minted before the
+  claim existed carries none and must keep working. Inverting it signs out every existing user at
+  deploy.
+- **`SelectionPrincipal` is a separate type from `AccountPrincipal` on purpose** — the compiler then
+  enforces what a comment could only ask for.
+- **It is never stored.** The client sends it through `api/client.js`'s per-call `bearerOverride`;
+  putting it in `localStorage` recreates the stranded-token shape of
+  `docs/incidents/2026-09-02-cold-backend-login-strands-the-device.md`, where boot cannot tell a
+  credential the server refuses by design from a live session whose server is briefly down.
+- `/api/auth/session` is `permitAll` in `SecurityConfig` **because** a selection token cannot
+  authenticate through the filter; it reads and validates the header itself.

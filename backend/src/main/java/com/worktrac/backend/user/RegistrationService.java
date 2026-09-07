@@ -287,7 +287,7 @@ public class RegistrationService {
         subscriptionService.createFreeSubscription(account);
 
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole(), user.getTokenVersion());
-        return new AuthResponse(token, UserDto.from(user), AccountDto.from(account, BillingPlan.FREE),
+        return AuthResponse.signedIn(token, UserDto.from(user), AccountDto.from(account, BillingPlan.FREE),
                 MembershipDto.from(membership), PersonDto.from(person));
     }
 }

@@ -42,7 +42,13 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/confirm-email",
+                        // /api/auth/session is permitAll because a SELECTION token cannot authenticate
+                        // through the filter by design (JwtService.parseToken refuses any token
+                        // carrying scp), so an authenticated matcher here would make finishing a
+                        // multi-household login impossible. The route reads and validates the
+                        // header itself -- see AuthController.startSession.
+                        .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/session",
+                                "/api/auth/confirm-email",
                                 "/api/auth/resend-code", "/api/auth/forgot-password", "/api/auth/reset-password",
                                 "/api/auth/resend-reset-code", "/api/auth/test/pending-code",
                                 "/api/auth/test/email-outcome",

@@ -1,4 +1,20 @@
 import { APIRequestContext, Page, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+
+// randomUUID, not Math.random(): these addresses are typed into a real login form, so CodeQL traces
+// the value into a credential context and reports js/insecure-randomness as HIGH severity -- which
+// it did, three times, on the phase 6 PR. Nothing here is a secret (the password is a shared
+// literal and the suffix only has to be unique), but a scanner that must be argued with on every
+// auth PR is worse than a one-line change that removes the question. Collision resistance across a
+// suite that registers hundreds of households per run is a free bonus.
+//
+// ⚠️ The `huddle+e2e-` PREFIX and the `@starner.co` domain are the halves that must NOT change --
+// TestDataCleanupService matches on them from an independently-maintained copy of the literal.
+// Only the unique suffix moved.
+function uniqueSuffix() {
+  return randomUUID().replace(/-/g, '').slice(0, 12);
+}
+
 
 // Registration now requires confirming a 6-digit emailed code before the account exists --
 // this can't read a real inbox, so it drives the same test-support endpoint the backend
@@ -41,7 +57,7 @@ export async function registerHousehold(
   options: RegisterHouseholdOptions = {},
 ): Promise<string> {
   const { emailOverride, keepWelcome = false } = options;
-  const email = emailOverride ?? `huddle+e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
+  const email = emailOverride ?? `huddle+e2e-${Date.now()}-${uniqueSuffix()}@starner.co`;
 
   await page.goto('/register');
   await page.getByPlaceholder('e.g. Alex').fill(personName);
@@ -113,13 +129,19 @@ export async function setBillingPlan(
 // invite flow does not exist yet (phase 7 builds it). What it creates is a REAL user and a REAL
 // membership, so a spec using this exercises the same AccountAccessService resolution and the same
 // guards a genuine member will hit.
+// memberEmailOverride attaches an EXISTING credential to this household instead of minting a new
+// one -- the shape that makes one login belong to two households, which is what phase 6 is about.
+// The backend reuses a matching user row rather than creating a second, and leaves its password
+// alone, so the caller must pass an address whose password is already the shared 'password123'.
 export async function addMemberLogin(
   page: Page,
   request: APIRequestContext,
   ownerEmail: string,
   personName: string,
+  memberEmailOverride?: string,
 ): Promise<{ email: string; password: string }> {
-  const email = `huddle+e2e-member-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
+  const email = memberEmailOverride
+    ?? `huddle+e2e-member-${Date.now()}-${uniqueSuffix()}@starner.co`;
   const password = 'password123';
 
   const configResponse = await request.get('/config.json');

@@ -1,7 +1,9 @@
 package com.worktrac.backend.user;
 
+import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.security.ClientIpResolver;
 import com.worktrac.backend.security.CurrentUser;
+import com.worktrac.backend.security.JwtService;
 import com.worktrac.backend.user.dto.AuthResponse;
 import com.worktrac.backend.user.dto.ConfirmEmailRequest;
 import com.worktrac.backend.user.dto.ForgotPasswordRequest;
@@ -12,6 +14,7 @@ import com.worktrac.backend.user.dto.RegisterStartedResponse;
 import com.worktrac.backend.user.dto.ResendCodeRequest;
 import com.worktrac.backend.user.dto.ResendResetCodeRequest;
 import com.worktrac.backend.user.dto.ResetPasswordRequest;
+import com.worktrac.backend.user.dto.StartSessionRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,13 +31,16 @@ public class AuthController {
     private final RegistrationService registrationService;
     private final PasswordResetService passwordResetService;
     private final CurrentUser currentUser;
+    private final JwtService jwtService;
 
     public AuthController(AuthService authService, RegistrationService registrationService,
-                           PasswordResetService passwordResetService, CurrentUser currentUser) {
+                           PasswordResetService passwordResetService, CurrentUser currentUser,
+                           JwtService jwtService) {
         this.authService = authService;
         this.registrationService = registrationService;
         this.passwordResetService = passwordResetService;
         this.currentUser = currentUser;
+        this.jwtService = jwtService;
     }
 
     @PostMapping("/register")
@@ -75,6 +81,44 @@ public class AuthController {
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
         return authService.login(request, ClientIpResolver.resolveClientIp(servletRequest));
+    }
+
+    /**
+     * Turns "who you are" into "signed in to this household". Two callers, one route:
+     * <ul>
+     *   <li><b>finishing a login</b> — the Authorization header carries the five-minute selection
+     *       token {@code /login} just handed back;</li>
+     *   <li><b>switching household</b> — it carries an ordinary session token.</li>
+     * </ul>
+     *
+     * <p><b>permitAll in SecurityConfig, and it has to be.</b> A selection token deliberately
+     * cannot authenticate through the filter — {@link JwtService#parseToken} refuses anything
+     * carrying {@code scp} — so if this route required authentication the finish-a-login case
+     * could never reach it. That is why the header is read and validated here by hand, and why
+     * neither branch below trusts anything but a signature this server produced.
+     *
+     * <p><b>No password.</b> Both paths are already-proved identity, which is exactly why
+     * {@code AuthService.startSession}'s membership lookup is the whole security of this endpoint:
+     * without it, any signed-in person could mint a token for any account id they typed.
+     */
+    @PostMapping("/session")
+    public AuthResponse startSession(@Valid @RequestBody StartSessionRequest request,
+                                      HttpServletRequest servletRequest) {
+        String header = servletRequest.getHeader("Authorization");
+        if (header == null || !header.startsWith("Bearer ")) {
+            throw new UnauthorizedException("Sign in again to choose a household.");
+        }
+        String token = header.substring(7);
+
+        // Selection token first: it is the narrower kind, and the one this route exists for.
+        // Falling through to a full token second is what makes "switch household" the same route
+        // rather than a near-duplicate of it.
+        Long userId = jwtService.parseSelectionToken(token)
+                .map(selection -> selection.userId())
+                .or(() -> jwtService.parseToken(token).map(principal -> principal.userId()))
+                .orElseThrow(() -> new UnauthorizedException("Sign in again to choose a household."));
+
+        return authService.startSession(userId, request.accountId());
     }
 
     @GetMapping("/me")

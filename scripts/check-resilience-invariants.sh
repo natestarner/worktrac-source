@@ -169,12 +169,18 @@ fi
 #    stops them GROWING while the refactor lands. Lower the number when you remove one; a count
 #    below the pin is also an error, so the pin can never silently drift out of date.
 # ---------------------------------------------------------------------------------------------
-# Five legitimately-distinct triggers: online transition, tab visibility, and boot restore
-# (App.jsx), plus login and confirmEmail (AuthContext.jsx). Each used to re-derive its own
+# Four legitimately-distinct triggers: online transition, tab visibility, and boot restore
+# (App.jsx), plus AuthContext's `establishSession`. Each used to re-derive its own
 # `if (onlineManager.isOnline())` gate; that precondition now lives inside flushOutbox alongside
-# the auth-token one, so these are bare calls. The pin remains because a SIXTH trigger is a design
+# the auth-token one, so these are bare calls. The pin remains because a FIFTH trigger is a design
 # decision -- when should a queued write be retried? -- and deserves to be noticed, not slipped in.
-EXPECTED_FLUSH_CALLERS=5
+#
+# Was 5 until phase 6. It dropped by CONSOLIDATION, not by losing a flush: login and confirmEmail
+# each carried their own copy of the six ordered steps that turn a token into a session, and both
+# now go through `establishSession` -- along with two new callers, the household picker and
+# switching household. All four still flush; there is simply one call site instead of two, and two
+# new entry points that could not have been added without one.
+EXPECTED_FLUSH_CALLERS=4
 ACTUAL_FLUSH_CALLERS=$(count_where '\bflushOutbox\(' outside "$SRC/lib/")
 if [ "$ACTUAL_FLUSH_CALLERS" -ne "$EXPECTED_FLUSH_CALLERS" ]; then
   fail "flushOutbox() call-site count is $ACTUAL_FLUSH_CALLERS, pinned at $EXPECTED_FLUSH_CALLERS"

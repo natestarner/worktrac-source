@@ -5,12 +5,14 @@ import com.worktrac.backend.account.AccountDto;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.LockedException;
+import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.common.TooManyRequestsException;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.config.AdminProperties;
 import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.membership.AccountMembership;
 import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.HouseholdChoiceDto;
 import com.worktrac.backend.membership.MembershipDto;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonDto;
@@ -142,6 +144,26 @@ public class AuthService {
             log.warn("Login for {} from ip {} succeeded but the user has no membership", email, ipAddress);
             throw new UnauthorizedException("That login is no longer attached to a household.");
         }
+
+        // Two or more households: the password is proved but the account is not chosen, so there is
+        // nothing to put in a token's accountId yet. Hand back the choices and a five-minute proof,
+        // and let POST /api/auth/session mint the real thing.
+        //
+        // ⚠️ Not an enumeration risk, and it is worth being precise about why: everything below is
+        // about the caller's OWN memberships, revealed only after their own password was accepted.
+        // Nothing here says anything about an address that failed, which is the thing DUMMY_HASH
+        // and the uniform failure path exist to protect.
+        //
+        // The one-household path below is untouched and returns byte-for-byte what it always has.
+        if (memberships.size() > 1) {
+            log.info("Login for {} from ip {} resolved to {} households; returning a picker",
+                    email, ipAddress, memberships.size());
+            return AuthResponse.chooseHousehold(
+                    UserDto.from(user),
+                    memberships.stream().map(HouseholdChoiceDto::from).toList(),
+                    jwtService.generateSelectionToken(user.getId(), user.getEmail(), user.getTokenVersion()));
+        }
+
         AccountMembership membership = memberships.get(0);
         Account account = membership.getAccount();
 
@@ -156,7 +178,45 @@ public class AuthService {
                         .orElseThrow(() -> new IllegalStateException("Account has no primary person: " + account.getId()));
 
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole(), user.getTokenVersion());
-        return new AuthResponse(token, UserDto.from(user),
+        return AuthResponse.signedIn(token, UserDto.from(user),
+                AccountDto.from(account, subscriptionService.planFor(account.getId())),
+                MembershipDto.from(membership),
+                PersonDto.from(primaryPerson));
+    }
+
+    /**
+     * Finishes a sign-in that needed a household chosen, and doubles as "switch household".
+     *
+     * <p>Takes a user that some caller has already authenticated — either by a selection token
+     * (finishing a login) or by a full session token (switching). <b>No password is involved
+     * either way</b>, which is why the membership check below is the entire security of this
+     * method: it is the only thing standing between a signed-in person and any account id they
+     * care to type.
+     *
+     * <p>404, not 403, for a household they are not in. A membership they do not hold is not
+     * information they are entitled to distinguish from one that does not exist — the same
+     * non-distinguishing shape {@code PersonService.requireVisiblePerson} uses one boundary in.
+     */
+    @Transactional
+    public AuthResponse startSession(Long userId, Long accountId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("That login is no longer valid."));
+
+        AccountMembership membership = membershipRepository
+                .findByAccount_IdAndUser_Id(accountId, userId)
+                .orElseThrow(() -> new NotFoundException("We couldn't find that household."));
+
+        Account account = membership.getAccount();
+        Person primaryPerson = membership.getPerson() != null
+                ? membership.getPerson()
+                : personRepository.findByAccount_IdOrderByCreatedAtAsc(account.getId()).stream()
+                        .filter(Person::isPrimary)
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalStateException("Account has no primary person: " + account.getId()));
+
+        String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(),
+                user.getRole(), user.getTokenVersion());
+        return AuthResponse.signedIn(token, UserDto.from(user),
                 AccountDto.from(account, subscriptionService.planFor(account.getId())),
                 MembershipDto.from(membership),
                 PersonDto.from(primaryPerson));
@@ -198,9 +258,18 @@ public class AuthService {
         // Through PersonService, so the visibility filter lives in exactly one place. Reading the
         // repository directly here would hand every member the full household roster through the
         // one endpoint the whole client bootstraps from.
+        // Every household this LOGIN belongs to, current one included -- so the account menu can
+        // offer "Switch household" only when there is somewhere to go. Scoped to the caller's own
+        // user id, so it reveals nothing but their own memberships.
+        List<HouseholdChoiceDto> households = membershipRepository
+                .findByUser_IdOrderByCreatedAtAscIdAsc(access.userId())
+                .stream()
+                .map(HouseholdChoiceDto::from)
+                .toList();
         return new MeResponse(UserDto.from(user),
                 AccountDto.from(account, subscriptionService.planFor(accountId)),
                 MembershipDto.from(access),
-                personService.list(access));
+                personService.list(access),
+                households);
     }
 }

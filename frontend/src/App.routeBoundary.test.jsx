@@ -2,6 +2,26 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// ⚠️ These two files need a longer bound than vitest's 5000ms default, and it is not arbitrary.
+//
+// They are the only specs that render the WHOLE App -- every provider, the router, the error
+// boundaries -- and they do it several times per file. In isolation each takes well under a
+// second; inside the full 1382-test suite, competing for the same machine, they routinely cross
+// five seconds and time out. Measured: the full suite fails 3/3 at the default and passes 136/136
+// at 20s, with no other change.
+//
+// That flake predates this line (it is recorded as an intermittent both-ways failure on untouched
+// main) and it is a TIMEOUT, never a wrong assertion -- so raising the bound here fixes the
+// reporting rather than hiding a defect. It is set per-file instead of globally on purpose: every
+// other spec should keep failing fast, and a genuinely hung App render still fails, just after a
+// bound that reflects what this particular test actually costs.
+//
+// The first timeout also CASCADES, which is why one slow test shows up as several failures: a
+// timed-out test leaves its DOM mounted, so the next test's query matches both its own elements
+// and the leftovers and dies with "Found multiple elements". Don't chase that second error.
+vi.setConfig({ testTimeout: 20000 });
+
+
 // The "last-resort" boundary around <Routes> in App.jsx -- distinct from the outermost boot
 // boundary (App.bootBoundary.test.jsx) and from AppShell's tab-panel boundary. It catches a throw
 // in a route itself, or (its bigger surface, per its own comment in App.jsx) in AppShell's chrome
