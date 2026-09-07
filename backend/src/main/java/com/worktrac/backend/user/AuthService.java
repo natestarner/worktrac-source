@@ -258,9 +258,18 @@ public class AuthService {
         // Through PersonService, so the visibility filter lives in exactly one place. Reading the
         // repository directly here would hand every member the full household roster through the
         // one endpoint the whole client bootstraps from.
+        // Every household this LOGIN belongs to, current one included -- so the account menu can
+        // offer "Switch household" only when there is somewhere to go. Scoped to the caller's own
+        // user id, so it reveals nothing but their own memberships.
+        List<HouseholdChoiceDto> households = membershipRepository
+                .findByUser_IdOrderByCreatedAtAscIdAsc(access.userId())
+                .stream()
+                .map(HouseholdChoiceDto::from)
+                .toList();
         return new MeResponse(UserDto.from(user),
                 AccountDto.from(account, subscriptionService.planFor(accountId)),
                 MembershipDto.from(access),
-                personService.list(access));
+                personService.list(access),
+                households);
     }
 }

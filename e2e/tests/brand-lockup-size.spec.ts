@@ -23,6 +23,23 @@ import { registerHousehold } from './support/auth';
 
 const logo = (page: Page) => page.locator('img[alt="Huddle"]');
 
+// ⚠️ Measure only once the image has actually LAID OUT, never straight after navigation.
+//
+// `boundingBox()` does not wait for an image to decode -- it returns whatever the box is at that
+// instant, and for an <img> whose height comes from the SVG's own viewBox that is legitimately
+// `0` until the file is decoded. Under full-suite load this loses often enough to matter: it has
+// twice produced `Expected: 201.9, Received: 0`, which reads exactly like an asset-crop regression
+// (the failure this whole spec exists to catch) and is nothing of the kind.
+//
+// Polling on the box itself rather than on `complete`/`naturalWidth` is deliberate: layout is what
+// the assertions below are about, and a decoded image whose box has not been computed yet would
+// still measure zero.
+async function laidOutLogo(page: Page) {
+  const img = logo(page);
+  await expect.poll(async () => (await img.boundingBox())?.height ?? 0).toBeGreaterThan(0);
+  return (await img.boundingBox())!;
+}
+
 // Measured against the pre-v3 assets, which is the baseline this change promised not to move.
 // Width is the derived axis in the header, so it gets the looser bound.
 const HEADER_HEIGHT = 52;
@@ -36,7 +53,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
     test('the auth screen lockup keeps the vertical space it always occupied', async ({ page }) => {
       await page.goto('/login');
-      const box = (await logo(page).boundingBox())!;
+      const box = await laidOutLogo(page);
 
       // Height is what matters here: it decides where the form below the logo starts. The old
       // asset rendered a 199.8px-tall box from width 445 (its ink was only 122x148 -- the file
@@ -51,7 +68,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       request,
     }) => {
       await registerHousehold(page, request, 'Alex');
-      const box = (await logo(page).boundingBox())!;
+      const box = await laidOutLogo(page);
 
       // The height is pinned in Header.jsx and must not drift; the width follows from the
       // asset's aspect ratio, so it is the number that moves if someone restores the kit's

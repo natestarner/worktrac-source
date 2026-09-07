@@ -77,11 +77,22 @@ export function isOfflineError(error) {
   return status >= 500;
 }
 
-async function request(path, { method = 'GET', body, isFormData = false, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+// `bearerOverride` sends a token WITHOUT storing it, for the one caller that holds a credential
+// which is deliberately not a session: the five-minute selection token from a multi-household
+// login (see api/auth.js startSession).
+//
+// ⚠️ It must never be stored via setAuthToken instead. A selection token in localStorage is the
+// stranded-token shape from docs/incidents/2026-09-02: the boot effect cannot tell a token it
+// cannot use from a live session whose server is briefly unreachable, so it would sit retrying
+// /me forever against a credential the server refuses by design. Passing it per-call keeps its
+// lifetime bounded by the one request that needs it.
+async function request(path, { method = 'GET', body, isFormData = false, timeoutMs = REQUEST_TIMEOUT_MS,
+                                bearerOverride } = {}) {
   const headers = {};
   if (!isFormData) headers['Content-Type'] = 'application/json';
   const hadToken = Boolean(token);
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (bearerOverride) headers['Authorization'] = `Bearer ${bearerOverride}`;
+  else if (token) headers['Authorization'] = `Bearer ${token}`;
   // Unconditional -- this is not a connectivity branch and must not become one. The backend puts
   // it in the MDC so every log line a request produces is attributable, which is what makes a
   // Contact Us bug report traceable to what actually happened. See lib/correlationId.js.

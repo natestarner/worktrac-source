@@ -113,13 +113,19 @@ export async function setBillingPlan(
 // invite flow does not exist yet (phase 7 builds it). What it creates is a REAL user and a REAL
 // membership, so a spec using this exercises the same AccountAccessService resolution and the same
 // guards a genuine member will hit.
+// memberEmailOverride attaches an EXISTING credential to this household instead of minting a new
+// one -- the shape that makes one login belong to two households, which is what phase 6 is about.
+// The backend reuses a matching user row rather than creating a second, and leaves its password
+// alone, so the caller must pass an address whose password is already the shared 'password123'.
 export async function addMemberLogin(
   page: Page,
   request: APIRequestContext,
   ownerEmail: string,
   personName: string,
+  memberEmailOverride?: string,
 ): Promise<{ email: string; password: string }> {
-  const email = `huddle+e2e-member-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
+  const email = memberEmailOverride
+    ?? `huddle+e2e-member-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
   const password = 'password123';
 
   const configResponse = await request.get('/config.json');

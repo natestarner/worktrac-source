@@ -231,4 +231,134 @@ describe('UserMenu', () => {
     openMenu();
     expect(screen.getByRole('menuitem', { name: 'Logout' })).toBeInTheDocument();
   });
+
+  // Switching household. The account menu is the only way in, so what it offers -- and what it says
+  // before it acts -- is the whole feature's surface.
+  describe('switch household', () => {
+    const TWO = [
+      { accountId: 1, accountName: "Nate's House", accountRole: 'OWNER' },
+      { accountId: 2, accountName: 'The Wilsons', accountRole: 'MEMBER' },
+    ];
+
+    function authWith(overrides = {}) {
+      return {
+        people: [],
+        logout: vi.fn(),
+        isAdmin: false,
+        account: { id: 1 },
+        households: TWO,
+        switchHousehold: vi.fn().mockResolvedValue(undefined),
+        ...overrides,
+      };
+    }
+
+    it('offers nothing to switch to when the login has one household', () => {
+      useAuth.mockReturnValue(authWith({ households: [TWO[0]] }));
+      renderMenu();
+      openMenu();
+
+      expect(screen.queryByRole('menuitem', { name: /Switch to/ })).not.toBeInTheDocument();
+    });
+
+    // An older auth snapshot carries no households at all. That must read as "nowhere to go" and
+    // hide the entry, not throw -- the field is additive and its absence is meaningful, which is
+    // why it needed no SNAPSHOT_VERSION bump.
+    it('hides the entry rather than erroring when households is absent', () => {
+      useAuth.mockReturnValue(authWith({ households: undefined }));
+      renderMenu();
+      openMenu();
+
+      expect(screen.queryByRole('menuitem', { name: /Switch to/ })).not.toBeInTheDocument();
+    });
+
+    it('lists the OTHER households by name, never the one already open', () => {
+      useAuth.mockReturnValue(authWith());
+      renderMenu();
+      openMenu();
+
+      expect(screen.getByRole('menuitem', { name: 'Switch to The Wilsons' })).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: /Switch to Nate/ })).not.toBeInTheDocument();
+    });
+
+    it('switches straight away when nothing is queued', async () => {
+      const auth = authWith();
+      useAuth.mockReturnValue(auth);
+      renderMenu();
+      openMenu();
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to The Wilsons' }));
+
+      await waitFor(() => expect(auth.switchHousehold).toHaveBeenCalledWith(2));
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/app/log'));
+    });
+
+    /**
+     * ⚠️ THE WORDING IS THE TEST. Logging out CLEARS this device's outbox, so its confirm says the
+     * work "will be lost". Switching household does not: the outgoing household's queued writes
+     * stay on their own IndexedDB key, so they are suspended and come back on switching back.
+     *
+     * Telling someone their work is about to be destroyed when it is not is its own kind of bug --
+     * it pushes people into waiting out a sync they never needed to wait for. This pins the two
+     * apart so a later tidy-up cannot collapse them into one message.
+     */
+    it('warns about SUSPENSION, not loss, when writes are still queued', async () => {
+      useAuth.mockReturnValue(authWith());
+      renderMenu();
+      queueOfflineWrite();
+      await waitFor(() => expect(getQueuedWriteCount(queryClient)).toBe(1));
+      openMenu();
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to The Wilsons' }));
+
+      const dialog = await screen.findByRole('alertdialog', { name: 'Unsynced changes' });
+      expect(dialog).toHaveTextContent(/stay saved here and sync when you switch back/i);
+      expect(dialog).not.toHaveTextContent(/lost/i);
+    });
+
+    it('does not switch until the queued-writes notice is acknowledged', async () => {
+      const auth = authWith();
+      useAuth.mockReturnValue(auth);
+      renderMenu();
+      queueOfflineWrite();
+      await waitFor(() => expect(getQueuedWriteCount(queryClient)).toBe(1));
+      openMenu();
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to The Wilsons' }));
+      await screen.findByRole('alertdialog', { name: 'Unsynced changes' });
+      expect(auth.switchHousehold).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Switch anyway' }));
+      await waitFor(() => expect(auth.switchHousehold).toHaveBeenCalledWith(2));
+    });
+
+    it('stays put when the notice is declined', async () => {
+      const auth = authWith();
+      useAuth.mockReturnValue(auth);
+      renderMenu();
+      queueOfflineWrite();
+      await waitFor(() => expect(getQueuedWriteCount(queryClient)).toBe(1));
+      openMenu();
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to The Wilsons' }));
+      await screen.findByRole('alertdialog', { name: 'Unsynced changes' });
+      fireEvent.click(screen.getByRole('button', { name: 'Stay here' }));
+
+      expect(auth.switchHousehold).not.toHaveBeenCalled();
+      expect(screen.getByRole('menuitem', { name: 'Switch to The Wilsons' })).toBeInTheDocument();
+    });
+
+    // A failed switch tore nothing down -- establishSession only commits after /me answers -- so
+    // the person is still in the household they were already in, and the menu is still usable.
+    it('leaves the session intact when the switch fails', async () => {
+      const auth = authWith({ switchHousehold: vi.fn().mockRejectedValue(new Error('offline')) });
+      useAuth.mockReturnValue(auth);
+      renderMenu();
+      openMenu();
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to The Wilsons' }));
+
+      await waitFor(() => expect(auth.switchHousehold).toHaveBeenCalled());
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+  });
 });
