@@ -47,6 +47,34 @@ one as a record literal.
   `PermissionInterceptor`; `personScoped = true` means a service guard does it; `anyMember = true`
   means any member of the account may call it. The exempt controllers are listed in that test with
   the mechanism that gates each instead.
+- **⚠ A permission an interceptor CANNOT decide must be annotated with the weaker one and refused
+  in the service — and `HandlerPermissionCoverageTest` will not notice if the service half is
+  dropped.** `PUT /api/exercises/{id}` and `PUT /api/tags/{id}` carry
+  `EDIT_OWN_SHARED_RESOURCE`, which every member holds, precisely so the interceptor lets them
+  through: it cannot know who created the row behind an `{id}`.
+  `AccountAccess.mayEditSharedResource(createdByUserId)` is what actually refuses, and the coverage
+  test asserts only that an annotation is **present**, never **which**. So deleting that service
+  check fails nothing and silently hands every member the household's whole catalog.
+  `MemberPermissionsTest`'s shared-resources block is the only thing pinning it — verified
+  non-vacuous by removing the check.
+- **Creator stamps (`exercises.created_by_user_id`, `tags.created_by_user_id`) are set once, at
+  construction, and never transferred.** Neither entity has a setter, and neither dedup branch in
+  `ExerciseService.add` (nor the find branch of `TagService.getOrCreate`) re-stamps the row it
+  returns: an offline replay of a create is not a claim of authorship, and re-stamping would move
+  who may rename it. A **null** stamp fails **closed** for a member and stays editable by the owner
+  through `EDIT_ANY_SHARED_RESOURCE` — see `V67`'s comment for the three ways a null legitimately
+  arises.
+- **Every path that can create a shared resource must stamp it, and there are four**, not the two
+  the endpoints suggest: `ExerciseService.add`, `TagService.getOrCreate` (reached from
+  `PersonExerciseService.setTags` **and** the importer), and `CsvImportService.write`, which invents
+  exercises for names the household does not have. That last one is why `write` takes an
+  `AccountAccess` rather than a bare `accountId`.
+- **⚠ Neither creation path may ever throw on a permission.** `ExerciseService.add` and
+  `TagService.getOrCreate` deliberately contain no check at all: MEMBER holds
+  `CREATE_SHARED_RESOURCE` unconditionally, so the annotation is the whole gate. These are durable
+  writes, and `shouldRetryWrite` treats a definitive 4xx as terminal — a 403 here would discard the
+  create permanently along with every set queued behind its temp exercise id. Same argument as the
+  quota check's placement after both dedup branches; do not add one above them.
 - **`PermissionInterceptor` throws `ForbiddenException`; it must never `setStatus`/`sendError`.**
   `sendError` re-dispatches to `/error`, which re-runs the stateless chain as anonymous and turns
   the 403 into a **401** — read by the frontend as "signed out". **MockMvc cannot catch this**

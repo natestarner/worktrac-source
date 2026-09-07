@@ -41,13 +41,15 @@ public class TagController {
     @PostMapping
     @RequiresPermission(Permission.CREATE_SHARED_RESOURCE)
     public TagDto create(@Valid @RequestBody TagRequest request) {
-        return tagService.create(currentUser.accountId(), request.name());
+        return tagService.create(currentUser.access(), request.name());
     }
 
+    // EDIT_OWN, not EDIT_ANY -- see ExerciseController's PUT for the full warning. The real
+    // decision is in TagService.rename.
     @PutMapping("/{tagId}")
-    @RequiresPermission(Permission.EDIT_ANY_SHARED_RESOURCE)
+    @RequiresPermission(Permission.EDIT_OWN_SHARED_RESOURCE)
     public TagDto rename(@PathVariable Long tagId, @Valid @RequestBody TagRequest request) {
-        return tagService.rename(currentUser.accountId(), tagId, request.name());
+        return tagService.rename(currentUser.access(), tagId, request.name());
     }
 
     @DeleteMapping("/{tagId}")

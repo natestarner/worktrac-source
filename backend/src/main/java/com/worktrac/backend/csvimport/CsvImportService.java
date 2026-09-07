@@ -143,7 +143,7 @@ public class CsvImportService {
         ImportBatch batch = importBatchRepository.save(new ImportBatch(person, user, request.filename(),
                 plan.totalSets(), plan.createdSessionCount(), plan.skippedDuplicates(), clock.instant()));
 
-        Written written = write(plan, person, account, access.accountId(), batch);
+        Written written = write(plan, person, account, access, batch);
 
         log.info("Imported {} sets into {} new and {} existing workouts for person {} (batch {}); "
                         + "{} rows were already present",
@@ -270,7 +270,12 @@ public class CsvImportService {
 
     // ── Writing ────────────────────────────────────────────────────────────────────────────────
 
-    private Written write(Plan plan, Person person, Account account, Long accountId, ImportBatch batch) {
+    // Takes the whole AccountAccess rather than a bare accountId because this is a CREATION path
+    // for two shared resources -- it invents exercises for names the household does not have, and
+    // (through applyImportedPersonalization) tags for labels it has not seen. Both carry a creator
+    // stamp now, so "where" is no longer enough; it has to know who.
+    private Written write(Plan plan, Person person, Account account, AccountAccess access, ImportBatch batch) {
+        Long accountId = access.accountId();
         Map<String, Exercise> byName = new HashMap<>();
         for (Exercise exercise : exerciseRepository.findVisibleToAccount(accountId)) {
             byName.putIfAbsent(key(exercise.getName()), exercise);
@@ -292,9 +297,13 @@ public class CsvImportService {
             Map<Long, String> sessionNotes = new LinkedHashMap<>();
 
             for (ParsedImport.ParsedRow row : planned.rows()) {
+                // Stamped with the importer. Import is IMPORT_DATA, which is owner-only, so today
+                // this is always the owner -- threaded through rather than hardcoded so the stamp
+                // stays true if that ever changes.
                 Exercise exercise = byName.computeIfAbsent(key(row.exerciseName()),
                         k -> exerciseRepository.save(new Exercise(account, row.exerciseName(), null,
-                                row.isHold() ? Exercise.TRACKING_TYPE_DURATION : Exercise.TRACKING_TYPE_STRENGTH)));
+                                row.isHold() ? Exercise.TRACKING_TYPE_DURATION : Exercise.TRACKING_TYPE_STRENGTH,
+                                access.userId())));
 
                 WorkoutSet set = new WorkoutSet(session, person, exercise, row.weight(), row.reps(),
                         row.durationSeconds(), row.unit(), row.restSeconds(), row.createdAt(), null);
@@ -334,8 +343,8 @@ public class CsvImportService {
             if (!p.hasAnything()) {
                 continue;
             }
-            var applied = personExerciseService.applyImportedPersonalization(accountId, person, p.exercise,
-                    p.note, p.favorite, List.copyOf(p.tags));
+            var applied = personExerciseService.applyImportedPersonalization(accountId, access.userId(),
+                    person, p.exercise, p.note, p.favorite, List.copyOf(p.tags));
             if (applied.noteApplied()) {
                 written.notesApplied++;
             }

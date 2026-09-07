@@ -58,6 +58,19 @@ public class Exercise {
     @Column(name = "client_key", length = 64, updatable = false)
     private String clientKey;
 
+    // Who in the household created this row, or null when nobody did (a preloaded global exercise)
+    // or nobody could be determined (a row written by the previous release during a rolling
+    // deploy; an account with no OWNER membership). See V67 for why null is meaningful here.
+    //
+    // A raw id, not a @ManyToOne User: the only question ever asked of it is "is this
+    // access.userId()", and mapping the association would drag the whole User aggregate into the
+    // catalog for a comparison. Same shape as BillingEvent.accountId and import_batch_id.
+    //
+    // Set once at construction, never mutated -- transferring authorship is not a thing the
+    // product does, and a setter would be the obvious way to do it by accident.
+    @Column(name = "created_by_user_id", updatable = false)
+    private Long createdByUserId;
+
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -74,10 +87,15 @@ public class Exercise {
     }
 
     public Exercise(Account account, String name, String clientKey, String trackingType) {
+        this(account, name, clientKey, trackingType, null);
+    }
+
+    public Exercise(Account account, String name, String clientKey, String trackingType, Long createdByUserId) {
         this.account = account;
         this.name = name;
         this.clientKey = clientKey;
         this.trackingType = trackingType;
+        this.createdByUserId = createdByUserId;
     }
 
     @PrePersist
@@ -121,6 +139,10 @@ public class Exercise {
 
     public void setDeleted(boolean deleted) {
         this.deleted = deleted;
+    }
+
+    public Long getCreatedByUserId() {
+        return createdByUserId;
     }
 
     public Instant getCreatedAt() {
