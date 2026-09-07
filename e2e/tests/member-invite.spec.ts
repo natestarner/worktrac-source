@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { loginAs, registerHousehold } from './support/auth';
+import { loginAs, registerHousehold, setBillingPlan } from './support/auth';
 import { logSetAt, pickExercise } from './support/exercises';
 
 /**
@@ -54,6 +54,7 @@ async function logout(page: Page) {
  */
 async function giveSamALogin(page: Page, request: APIRequestContext) {
   const ownerEmail = await registerHousehold(page, request, 'Nate');
+  await setBillingPlan(request, ownerEmail, 'PRO');
   await addPerson(page, 'Sam');
   // randomUUID, not Date.now(): two specs starting in the same millisecond on two
   // workers produced the same address, and the second one's invite went astray. The
@@ -79,6 +80,9 @@ async function giveSamALogin(page: Page, request: APIRequestContext) {
 test.describe('Enabling a member login', () => {
   test('an owner invites, the invitee joins, and lands as a member', async ({ page, request }) => {
     const ownerEmail = await registerHousehold(page, request, 'Nate');
+    // Inviting is refused on Free -- an invitation whose successful path is a paused
+    // login is a promise the product cannot keep.
+    await setBillingPlan(request, ownerEmail, 'PRO');
     await addPerson(page, 'Sam');
     const memberEmail = `huddle+e2e-member-${randomUUID().slice(0, 8)}@starner.co`;
 
@@ -126,6 +130,9 @@ test.describe('Enabling a member login', () => {
 
   test('the owner sees the login as active once it is accepted', async ({ page, request }) => {
     const ownerEmail = await registerHousehold(page, request, 'Nate');
+    // Inviting is refused on Free -- an invitation whose successful path is a paused
+    // login is a promise the product cannot keep.
+    await setBillingPlan(request, ownerEmail, 'PRO');
     await addPerson(page, 'Sam');
     const memberEmail = `huddle+e2e-member-${randomUUID().slice(0, 8)}@starner.co`;
 

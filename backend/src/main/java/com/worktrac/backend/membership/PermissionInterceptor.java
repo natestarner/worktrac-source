@@ -34,6 +34,16 @@ public class PermissionInterceptor implements HandlerInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(PermissionInterceptor.class);
 
+    /**
+     * The one refusal in the app the CLIENT acts on rather than merely displays.
+     *
+     * <p>A 403 is normally definitive, so the durable outbox reports the write as one that can
+     * never land. This one is the opposite: the household re-upgrades and the queued work lands by
+     * itself on the next flush. {@code isDeadWrite} carves it out by this exact string, so it is a
+     * contract with the frontend — {@code queryClient.test.js} pins it.
+     */
+    public static final String MEMBER_LOGIN_PAUSED = "MEMBER_LOGIN_PAUSED";
+
     private final CurrentUser currentUser;
 
     public PermissionInterceptor(CurrentUser currentUser) {
@@ -50,11 +60,36 @@ public class PermissionInterceptor implements HandlerInterceptor {
         // routes, the webhooks, and /api/admin/** (gated by hasRole at the filter chain). Handlers
         // that SHOULD carry one but don't are caught at build time by
         // HandlerPermissionCoverageTest, not silently allowed here.
-        if (required == null || required.value().length == 0) {
+        //
+        // ⚠️ This early return checks only for the annotation's ABSENCE, deliberately. An
+        // annotation with an empty value() is still under the mechanism -- personScoped and
+        // anyMember both look like that -- and it still has an authenticated principal, so
+        // currentUser.access() below is safe. The first cut returned early on
+        // `required.value().length == 0` too, which silently exempted every person-scoped route
+        // from the pause check: a paused member could still log sets, while /me correctly reported
+        // them paused. Those are the routes that matter most here.
+        if (required == null) {
             return true;
         }
 
         AccountAccess access = currentUser.access();
+
+        // Asked BEFORE any permission, because it is a different question: not "may you do this"
+        // but "may you do anything at all right now". See below for what stays open.
+        if (access.status() == MembershipStatus.PAUSED_PLAN && !isAllowedWhilePaused(request)) {
+            log.warn("Refused {} {} for account {} membership {}: member login paused (household is not Pro)",
+                    request.getMethod(), request.getRequestURI(), access.accountId(), access.membershipId());
+            throw new ForbiddenException(
+                    "This login is paused because the household is no longer on Pro."
+                            + " Nothing has been deleted — ask the household owner to upgrade.",
+                    MEMBER_LOGIN_PAUSED);
+        }
+
+        // personScoped / anyMember: nothing household-scoped left to check here.
+        if (required.value().length == 0) {
+            return true;
+        }
+
         for (Permission permission : required.value()) {
             if (!access.has(permission)) {
                 log.warn("Refused {} {} for account {} membership {} role {}: missing {}",
@@ -64,6 +99,38 @@ public class PermissionInterceptor implements HandlerInterceptor {
             }
         }
         return true;
+    }
+
+    /**
+     * The two routes a paused login may still call.
+     *
+     * <p>⚠️ <b>An allow-list, not a deny-list, and it is deliberately two entries long.</b> A
+     * deny-list would silently admit every route added later, which is precisely the class of
+     * mistake a pause must not make — a member whose household stopped paying would keep whatever
+     * the newest endpoint offers.
+     *
+     * <ul>
+     *   <li><b>{@code GET /api/auth/me}</b> is the single authority on being paused. It keeps
+     *   answering 200 so the client can render the paused screen from {@code membershipStatus}
+     *   rather than inferring it from a stray 403 — which matters because the client cannot tell
+     *   "paused" from "the backend is briefly unhappy" by status alone, and guessing wrong there
+     *   is the signed-out failure {@code docs/incidents/2026-07-27-db-outage-forced-logout.md}
+     *   describes. In practice it never even reaches here: {@code AuthController} carries no
+     *   {@code @RequiresPermission}, so this method returns early above. It is named anyway,
+     *   because the day somebody annotates that controller this stops being a coincidence.</li>
+     *   <li><b>{@code GET /api/billing/subscription}</b> so the paused screen can say what plan the
+     *   household is actually on. Without it the screen can state the problem but never confirm it
+     *   is fixed.</li>
+     * </ul>
+     *
+     * <p>Both are GETs. A paused login writes nothing, anywhere.
+     */
+    private boolean isAllowedWhilePaused(HttpServletRequest request) {
+        if (!"GET".equals(request.getMethod())) {
+            return false;
+        }
+        String path = request.getRequestURI();
+        return "/api/auth/me".equals(path) || "/api/billing/subscription".equals(path);
     }
 
     // Says who CAN do it rather than only that the caller can't, because in every case here the

@@ -33,7 +33,7 @@ class SubscriptionServiceTest {
     void setUp() {
         repository = mock(SubscriptionRepository.class);
         clock = new MutableClock();
-        service = new SubscriptionService(repository, clock);
+        service = new SubscriptionService(repository, mock(org.springframework.context.ApplicationEventPublisher.class), clock);
         account = new Account("Test Household");
     }
 

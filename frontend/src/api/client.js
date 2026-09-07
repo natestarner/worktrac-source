@@ -58,9 +58,13 @@ export function setUnauthorizedHandler(handler) {
 }
 
 class ApiError extends Error {
-  constructor(status, message) {
+  // `code` is the server's optional machine-readable reason (ApiError.java). It is set for exactly
+  // one refusal today -- MEMBER_LOGIN_PAUSED -- and exists because that 403 means the OPPOSITE of
+  // every other 403 for a queued write: recoverable, not definitive. See isDeadWrite.
+  constructor(status, message, code) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -148,7 +152,7 @@ async function request(path, { method = 'GET', body, isFormData = false, timeout
 
   if (!response.ok) {
     const message = (payload && payload.message) || 'Something went wrong on our end. Try again in a moment.';
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, message, payload && payload.code);
   }
   return payload;
 }

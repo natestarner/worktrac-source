@@ -160,11 +160,25 @@ public class TestSupportController {
         if (owned.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
+        Long accountId = owned.get(0).getAccount().getId();
         Subscription subscription = subscriptionService.getOrCreate(owned.get(0).getAccount());
         boolean pro = "PRO".equalsIgnoreCase(plan.trim());
         subscription.setComped(pro);
         subscription.setPlan(pro ? BillingPlan.PRO : BillingPlan.FREE);
         subscriptionRepository.save(subscription);
+
+        // Member logins are gated on the household being Pro, and that answer is cached per login
+        // for a minute -- so without this a test or an e2e that flips the plan then immediately
+        // acts as the member is testing the STALE plan, not the one it just set.
+        //
+        // ⚠️ Called DIRECTLY rather than by publishing AccountPlanChangedEvent, which is how
+        // production does it. This handler is not @Transactional, and the listener is
+        // @TransactionalEventListener(AFTER_COMMIT) -- with no transaction active the event is
+        // silently discarded and nothing would invalidate at all. (That exact mistake is what made
+        // phase 7a's invite email never send.) The production path is
+        // SubscriptionService.applyStripeState; AccountPlanChangedListenerTest covers it.
+        accountAccessService.invalidateAccount(accountId);
+
         return ResponseEntity.noContent().build();
     }
 

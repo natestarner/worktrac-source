@@ -182,7 +182,8 @@ public class AuthService {
         return AuthResponse.signedIn(token, UserDto.from(user),
                 AccountDto.from(account, subscriptionService.planFor(account.getId())),
                 MembershipDto.from(membership,
-                        ownerNameForMember(account.getId(), membership.getAccountRole())),
+                        ownerNameForMember(account.getId(), membership.getAccountRole()),
+                        subscriptionService.isPro(account.getId())),
                 PersonDto.from(primaryPerson));
     }
 
@@ -221,7 +222,8 @@ public class AuthService {
         return AuthResponse.signedIn(token, UserDto.from(user),
                 AccountDto.from(account, subscriptionService.planFor(account.getId())),
                 MembershipDto.from(membership,
-                        ownerNameForMember(account.getId(), membership.getAccountRole())),
+                        ownerNameForMember(account.getId(), membership.getAccountRole()),
+                        subscriptionService.isPro(account.getId())),
                 PersonDto.from(primaryPerson));
     }
 

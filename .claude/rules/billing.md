@@ -238,3 +238,26 @@ full reasoning; don't move it back in front of the deletes.
   `HistoryWindowNotice.test.jsx`.
 - **"Pro" is a substring of "Profile"**, `UserMenu`'s first item, in the same header subtree. Assert
   the badge with `exact: true` / an exact string, always.
+
+## ⚠️ A plan decides what a SCREEN shows — and, separately, what a LOGIN can do
+
+The line above ("a plan decides what a screen SHOWS, never what exists") was written about **data**,
+and it is still exactly true: no workout is hidden, moved or deleted by a downgrade, and Free's
+history window is a read filter over rows that are all still there.
+
+**Do not reuse that phrasing for member logins.** From phase 8 a plan genuinely decides what a
+LOGIN can do: a MEMBER in a household that is not Pro has `MembershipStatus.PAUSED_PLAN` and is
+refused on every route but `GET /api/auth/me` and `GET /api/billing/subscription`. That is a real
+capability gate, not a display rule, and describing it with the data sentence would make one of the
+two claims false.
+
+What the two DO share, and what must stay true of both:
+
+- **Nothing is deleted, and nothing is revoked.** The person, their history, their PRs and their
+  membership row all survive a downgrade untouched. Re-upgrading restores the login with no
+  re-invitation — that is why the block is a status rather than a membership deletion.
+- **Queued work is suspended, never discarded.** The 403 carries the code `MEMBER_LOGIN_PAUSED`
+  precisely so `isDeadWrite` can tell it apart from an ordinary definitive 403; without that
+  carve-out a paused member is told the sets they logged before the lapse can never sync.
+- **An OWNER is never paused.** They are the only one who can return the household to Pro, so
+  pausing them would lock everybody out of the screen that undoes it.

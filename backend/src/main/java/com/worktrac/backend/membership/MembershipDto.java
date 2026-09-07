@@ -21,24 +21,43 @@ package com.worktrac.backend.membership;
  * also carries the copy weight in the refusals a member can hit — "ask Nate to rename it" is only
  * actionable because this field exists.
  *
+ * <p><b>{@code status} is the ONE field here that is not merely chrome.</b> Everything else on
+ * this object stops the client offering a control the server would refuse; {@code PAUSED_PLAN}
+ * makes the client render a different screen entirely. That is deliberate: a paused login must
+ * learn it is paused from {@code /me} answering 200, not by inferring it from a 403 on some other
+ * request. The client cannot tell a refusal from a struggling backend by status alone, and
+ * guessing wrong there is the signed-out failure
+ * {@code docs/incidents/2026-07-27-db-outage-forced-logout.md} describes.
+ *
  * <p>Deliberately carries no permission list. The client needs "can I write to this person" and
  * "who can I see", both derivable from these three fields; shipping the full enum would put a
  * server-side vocabulary into every persisted auth snapshot, where it would then have to be
  * version-migrated every time the enum changed.
  */
 public record MembershipDto(String accountRole, Long personId, boolean membersSeeEveryone,
-                             String ownerName) {
+                             String ownerName, String status) {
 
     public static MembershipDto from(AccountAccess access, String ownerName) {
         return new MembershipDto(access.accountRole().name(), access.selfPersonId(),
-                access.membersSeeEveryone(), ownerName);
+                access.membersSeeEveryone(), ownerName, access.status().name());
     }
 
-    public static MembershipDto from(AccountMembership membership, String ownerName) {
+    /**
+     * The login-time variant, where no {@link AccountAccess} has been resolved yet.
+     *
+     * <p>{@code accountIsPro} is passed in rather than read off the membership because entitlement
+     * is not a column — it is derived from the subscription's state, including a time-dependent
+     * branch. Passing it keeps {@code SubscriptionService.isPro} the single authority instead of
+     * this DTO growing a second opinion about what Pro means.
+     */
+    public static MembershipDto from(AccountMembership membership, String ownerName,
+                                      boolean accountIsPro) {
+        boolean paused = membership.getAccountRole() == AccountRole.MEMBER && !accountIsPro;
         return new MembershipDto(
                 membership.getAccountRole().name(),
                 membership.getPerson() == null ? null : membership.getPerson().getId(),
                 membership.getAccount().isMembersSeeEveryone(),
-                ownerName);
+                ownerName,
+                (paused ? MembershipStatus.PAUSED_PLAN : MembershipStatus.ACTIVE).name());
     }
 }

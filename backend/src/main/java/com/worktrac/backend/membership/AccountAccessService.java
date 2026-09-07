@@ -2,6 +2,7 @@ package com.worktrac.backend.membership;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.worktrac.backend.billing.SubscriptionService;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -37,17 +38,37 @@ public class AccountAccessService {
     }
 
     private final AccountMembershipRepository membershipRepository;
+    private final SubscriptionService subscriptionService;
 
     // A negative result (no membership) is cached as an empty Optional rather than not cached at
     // all: a revoked login whose device keeps retrying must not turn into a database read per
     // request. Caffeine cannot store null, hence Optional as the value type.
-    private final Cache<AccessKey, Optional<AccountAccessRow>> rows = Caffeine.newBuilder()
+    private final Cache<AccessKey, Optional<CachedAccess>> rows = Caffeine.newBuilder()
             .expireAfterWrite(Duration.ofSeconds(60))
             .maximumSize(10_000)
             .build();
 
-    public AccountAccessService(AccountMembershipRepository membershipRepository) {
+    /**
+     * The membership row plus the household's plan.
+     *
+     * <p>⚠️ <b>{@code accountIsPro} is cached HERE rather than resolved per request, and that is
+     * the whole reason this record exists.</b> {@code SubscriptionService.isPro} is a database read,
+     * and phase 8 needs the answer on EVERY request — {@code PermissionInterceptor} asks whether a
+     * member is paused before it asks anything else. Calling it from {@code resolve()} would add a
+     * query per request to the app's hottest path and undo exactly what this cache is for.
+     *
+     * <p>Cached, it costs one extra read per cache MISS (so at most one a minute per login), and
+     * nothing on a hit. The staleness that buys is bounded by the same 60s TTL as the membership
+     * itself, and {@code invalidateAccount} makes a real plan change take effect immediately —
+     * see {@code AccountPlanChangedListener} for what calls it.
+     */
+    private record CachedAccess(AccountAccessRow row, boolean accountIsPro) {
+    }
+
+    public AccountAccessService(AccountMembershipRepository membershipRepository,
+                                 SubscriptionService subscriptionService) {
         this.membershipRepository = membershipRepository;
+        this.subscriptionService = subscriptionService;
     }
 
     /**
@@ -59,12 +80,16 @@ public class AccountAccessService {
      * unset falls through to the 401 the client already handles as an expired session.
      */
     public Optional<AccountAccess> resolve(Long userId, Long accountId, int tokenVersion) {
-        Optional<AccountAccessRow> row = rows.get(new AccessKey(userId, accountId),
-                key -> membershipRepository.findAccessRow(key.userId(), key.accountId()));
+        Optional<CachedAccess> cached = rows.get(new AccessKey(userId, accountId),
+                key -> membershipRepository.findAccessRow(key.userId(), key.accountId())
+                        // Resolved on the miss, inside the loader, so a hit stays a pure memory
+                        // read. See CachedAccess.
+                        .map(r -> new CachedAccess(r, subscriptionService.isPro(r.accountId()))));
 
-        return row.filter(r -> r.tokenVersion() == tokenVersion)
-                .map(r -> new AccountAccess(r.userId(), r.accountId(), r.membershipId(),
-                        r.accountRole(), r.personId(), r.membersSeeEveryone()));
+        return cached.filter(c -> c.row().tokenVersion() == tokenVersion)
+                .map(c -> new AccountAccess(c.row().userId(), c.row().accountId(),
+                        c.row().membershipId(), c.row().accountRole(), c.row().personId(),
+                        c.row().membersSeeEveryone(), c.accountIsPro()));
     }
 
     /** After a membership is created, removed, or has its role or person changed. */
@@ -84,7 +109,14 @@ public class AccountAccessService {
         rows.asMap().keySet().removeIf(key -> key.userId().equals(userId));
     }
 
-    /** After anything account-wide changes what its members may do (phase 3's visibility setting, phase 8's plan). */
+    /**
+     * After anything account-wide changes what its members may do — phase 3's visibility setting,
+     * and now the household's PLAN.
+     *
+     * <p>⚠️ Without this a downgrade would take up to 60s to bite and, far worse, a RE-UPGRADE
+     * would take up to 60s to lift: somebody who has just paid would keep seeing the paused screen
+     * with no way to tell whether it worked. {@code AccountPlanChangedListener} is what calls it.
+     */
     public void invalidateAccount(Long accountId) {
         rows.asMap().keySet().removeIf(key -> key.accountId().equals(accountId));
     }

@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BillingTab from './BillingTab';
+import { listLogins } from '../../api/logins';
 import { renderWithQuery } from '../../test/queryWrapper';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
@@ -26,10 +27,18 @@ vi.mock('../../api/billing', () => ({
 vi.mock('./EmbeddedCheckout', () => ({
   default: () => <div data-testid="stripe-embedded-checkout" />,
 }));
+vi.mock('../../api/logins', () => ({ listLogins: vi.fn() }));
 
-function render(account, subscription) {
-  useAuth.mockReturnValue({ account, refreshPeople: vi.fn().mockResolvedValue() });
+function render(account, subscription, { logins = [], membership } = {}) {
+  useAuth.mockReturnValue({
+    account,
+    refreshPeople: vi.fn().mockResolvedValue(),
+    // The real useAccountAccess reads this; an owner is the default because every existing case
+    // in this file is one.
+    membership: membership ?? { accountRole: 'OWNER', personId: 1, status: 'ACTIVE' },
+  });
   getSubscription.mockResolvedValue(subscription ?? null);
+  listLogins.mockResolvedValue(logins);
   return renderWithQuery(
     <MemoryRouter>
       <BillingTab />
@@ -240,4 +249,78 @@ describe('BillingTab', () => {
     ));
     expect(screen.queryByText('Welcome to Huddle Pro')).not.toBeInTheDocument();
   });
+
+  // ── Warning an owner before they downgrade ──────────────────────────────────────────────────
+
+  const PRO_ACCOUNT = { name: 'Starner', plan: 'PRO' };
+  const PRO_SUB = { pro: true, status: 'ACTIVE', currentPeriodEnd: '2027-01-01T00:00:00Z' };
+
+  /**
+   * ⚠️ This is the LAST screen of ours an owner sees before they can downgrade. Cancelling happens
+   * in Stripe's hosted portal, which we do not control and cannot add a confirmation step to — so
+   * if the warning is not here, it is nowhere, and an owner finds out that other people's logins
+   * stopped working from those people.
+   */
+  it('warns, by name and by count, whose logins a downgrade would pause', async () => {
+    render(PRO_ACCOUNT, PRO_SUB, {
+      logins: [
+        { personId: 1, personName: 'Nate', status: 'ACTIVE', isSelf: true },
+        { personId: 2, personName: 'Sam', status: 'ACTIVE', isSelf: false },
+        { personId: 3, personName: 'Alex', status: 'ACTIVE', isSelf: false },
+      ],
+    });
+
+    expect(await screen.findByText(/2 personal logins will stop working/)).toBeInTheDocument();
+    // Named, not just counted -- "Sam and Alex" is actionable where "2 members" is not.
+    expect(screen.getByText(/Sam and Alex/)).toBeInTheDocument();
+    // And the reassurance travels with it, or the warning reads as a threat to their data.
+    expect(screen.getByText(/Nothing is deleted/)).toBeInTheDocument();
+  });
+
+  // The owner's own login is never paused by a downgrade, so counting it would overstate the cost
+  // of cancelling -- and in a household with no member logins at all, by exactly one.
+  it('never counts the owner’s own login', async () => {
+    render(PRO_ACCOUNT, PRO_SUB, {
+      logins: [{ personId: 1, personName: 'Nate', status: 'ACTIVE', isSelf: true }],
+    });
+
+    await screen.findByText('Huddle Pro');
+    expect(screen.queryByText(/will stop working/)).not.toBeInTheDocument();
+  });
+
+  // An outstanding invitation has nobody signing in yet, so there is nothing to pause.
+  it('counts only accepted logins, not outstanding invitations', async () => {
+    render(PRO_ACCOUNT, PRO_SUB, {
+      logins: [
+        { personId: 1, personName: 'Nate', status: 'ACTIVE', isSelf: true },
+        { personId: 2, personName: 'Sam', status: 'INVITED', isSelf: false },
+      ],
+    });
+
+    await screen.findByText('Huddle Pro');
+    expect(screen.queryByText(/will stop working/)).not.toBeInTheDocument();
+  });
+
+  it('says it in the singular for one login', async () => {
+    render(PRO_ACCOUNT, PRO_SUB, {
+      logins: [{ personId: 2, personName: 'Sam', status: 'ACTIVE', isSelf: false }],
+    });
+
+    expect(await screen.findByText(/1 personal login will stop working/)).toBeInTheDocument();
+  });
+
+  /**
+   * ⚠️ /api/account/logins requires MANAGE_LOGINS, which is owner-only, so asking as a member is a
+   * request the app already knows will 403. Not making it is the same rule as not offering a
+   * control that can only fail.
+   */
+  it('never asks for the login list as a member', async () => {
+    render(PRO_ACCOUNT, PRO_SUB, {
+      membership: { accountRole: 'MEMBER', personId: 2, status: 'ACTIVE' },
+    });
+
+    await screen.findByText('Huddle Pro');
+    expect(listLogins).not.toHaveBeenCalled();
+  });
+
 });
