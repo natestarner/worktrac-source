@@ -1,5 +1,6 @@
 package com.worktrac.backend.membership;
 
+import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.support.AbstractIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -7,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.List;
 import java.util.Map;
@@ -51,6 +53,16 @@ class MembershipBackfillTest extends AbstractIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    // ⚠️ REQUIRED IN EVERY INTEGRATION TEST, even one that sends no mail. EmailService's real
+    // constructor builds a live Azure EmailClient from app.email.connection-string, which is empty
+    // in CI -- so without this the whole ApplicationContext fails to load with
+    // "'connectionString' cannot be an empty string" and every test in the class errors.
+    //
+    // It passes locally without this only because a developer machine has the variable set from
+    // the dev stack, which makes this a local-vs-CI divergence that green local runs cannot catch.
+    @MockitoBean
+    private EmailService emailService;
 
     @BeforeEach
     void clean() {
