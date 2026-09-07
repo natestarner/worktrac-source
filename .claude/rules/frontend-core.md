@@ -244,6 +244,18 @@ account-only comparison it reports "already hydrated" the instant a second membe
 `<Outlet/>` through against the first member's restored state — the same one-frame-early render the
 gate exists to prevent, one identity dimension over.
 
+**⚠️ With nothing persisted, `AppShell` opens on the VIEWER's person, not the household's
+primary.** `people.find((p) => p.isPrimary)` names the household's primary person, who for a member
+is somebody else — so `selfPersonId` (from `useAccountAccess`) is tried first, with the primary as
+the fallback. Nothing changes for an owner, whose membership points at the primary anyway.
+
+That empty-state is not an edge case here: it is **every member's first sign-in**, and every one
+after on a device where the app-state key is now per-login. Getting it wrong greys out every write
+control on arrival, so the app reads as broken before it reads as read-only. A null `selfPersonId`
+(a v1 snapshot, or a membership with no person) must keep falling through to the old expression
+rather than to no person at all — `AppShell.test.jsx`'s "default active person" block pins all
+three cases.
+
 ### `lastTab` is the one exception to "always restore where they left off"
 
 A mid-session reload must resume the persisted tab, but an actual login/registration must land

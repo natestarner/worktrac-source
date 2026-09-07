@@ -9,6 +9,7 @@ import { migrateLegacyRestTimerPrefs } from '../lib/restTimerMigration';
 import { tryForceUpdate } from '../lib/swUpdate';
 import { clearOnboardingPending, isOnboardingPending } from '../lib/onboardingPending';
 import { useOfflineCacheWarming } from '../hooks/useOfflineCacheWarming';
+import { useAccountAccess } from '../hooks/useAccountAccess';
 import { screenTitleFor } from '../utils/screenTitle';
 import Header from '../components/layout/Header';
 import PersonPillBar from '../components/layout/PersonPillBar';
@@ -32,6 +33,7 @@ export default function AppShell() {
   const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId, restTimersByPerson, setRestTimer } =
     useAppState();
   const { restTimers, startRestTimer, tour, startTour, onboardingDeferred, releaseOnboarding } = useUI();
+  const { selfPersonId } = useAccountAccess();
   const [showWelcome, setShowWelcome] = useState(false);
   const accountId = account?.id;
 
@@ -80,12 +82,25 @@ export default function AppShell() {
   // render. See useOfflineCacheWarming.js for the full trigger list.
   useOfflineCacheWarming(people);
 
+  // Which person the app opens on when nothing is persisted for this login yet.
+  //
+  // WARNING: `isPrimary` is the HOUSEHOLD's primary person, not the viewer. For a member that is
+  // somebody else, so their very first sign-in on a device -- which is every member's first
+  // sign-in, and every one after the app-state re-key scoped that store per login -- landed them
+  // on the owner's screen with every write control greyed out. The app read as broken before it
+  // read as read-only.
+  //
+  // Their own person first, then the household's primary. Nothing changes for an owner: the
+  // backfill points their membership at the primary person, and a membership without one (or a v1
+  // snapshot, where useAccountAccess reports null) falls through to exactly the old expression.
   useEffect(() => {
     if (!activePersonId && people.length > 0) {
-      const primary = people.find((p) => p.isPrimary) || people[0];
+      const self =
+        selfPersonId == null ? null : people.find((p) => String(p.id) === String(selfPersonId));
+      const primary = self || people.find((p) => p.isPrimary) || people[0];
       selectPerson(primary.id);
     }
-  }, [activePersonId, people, selectPerson]);
+  }, [activePersonId, people, selectPerson, selfPersonId]);
 
   // One-time migration of the legacy per-device rest-timer localStorage flag to the account-side
   // preference, so anyone who'd turned it off before doesn't have it silently reset.
