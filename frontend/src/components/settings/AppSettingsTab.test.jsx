@@ -276,3 +276,55 @@ describe('AppSettingsTab offline gating', () => {
     });
   });
 });
+
+// A member's Settings is trimmed to what is actually theirs. Household-wide controls are hidden
+// rather than greyed: they are MANAGE_HOUSEHOLD / DELETE_SHARED_RESOURCE / IMPORT_DATA /
+// EXPORT_ACCOUNT_DATA, which a member can never hold, so a dead control would be pure noise.
+describe('AppSettingsTab as a member', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useUI.mockReturnValue({ openConfirm: vi.fn(), showToast: vi.fn() });
+    useTags.mockReturnValue({ tags: [{ id: 1, name: 'Push' }], isLoading: false });
+    listImports.mockResolvedValue([]);
+    useAuth.mockReturnValue({
+      account: { id: 1, defaultUnit: 'lb', plan: 'PRO' },
+      membership: { accountRole: 'MEMBER', personId: 2, membersSeeEveryone: true },
+      people: [
+        { id: 1, name: 'Nate', isPrimary: true, restTimerEnabled: true },
+        { id: 2, name: 'Samuel', isPrimary: false, restTimerEnabled: true },
+      ],
+      refreshPeople: vi.fn(),
+    });
+  });
+
+  // The value is genuinely useful to them -- it is what their own new sets get recorded in --
+  // while a dead switch communicates only that something is broken.
+  it('shows the household unit as a value, not a toggle', async () => {
+    renderTab();
+    expect(await screen.findByText('Set by the household owner.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'kg' })).not.toBeInTheDocument();
+  });
+
+  // A sibling's rest-timer preference is not information a member needs, and their own row must
+  // stay live -- turning the timer off mid-workout must not require the owner.
+  it('shows only their own rest-timer row, still interactive', async () => {
+    renderTab();
+    await screen.findByText('Samuel');
+    expect(screen.queryByText('Nate')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Rest timer Off for Samuel')).toBeEnabled();
+  });
+
+  it('hides the whole-household export and import section', async () => {
+    renderTab();
+    await screen.findByText('Samuel');
+    expect(screen.queryByRole('button', { name: 'Export all data' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Import data' })).not.toBeInTheDocument();
+  });
+
+  // Creating and applying tags stays open to members; only deleting a shared tag is owner-only.
+  it('hides the delete control on a shared tag', async () => {
+    renderTab();
+    expect(await screen.findByText('Push')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '\u00d7' })).not.toBeInTheDocument();
+  });
+});
