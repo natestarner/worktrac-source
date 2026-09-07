@@ -101,6 +101,73 @@ export async function setBillingPlan(
   expect(response.status(), `setBillingPlan failed -- check E2E_TEST_SUPPORT_KEY`).toBe(204);
 }
 
+// Gives an existing person in an existing household their own MEMBER login, and signs in as them.
+//
+// ⚠️ The email MUST come from the same generator registerHousehold uses. TestDataCleanupService
+// reaps e2e users by the `huddle+%@starner.co` pattern, and that pattern is an independently
+// maintained copy of the literal this file produces -- an address outside it leaves a real user
+// row in lower forever, surfacing much later as an unrelated FK failure during some other
+// cleanup. A member's user row in particular OUTLIVES the household it was invited to.
+//
+// Drives the same profile-gated, shared-secret test-support route as setBillingPlan, because the
+// invite flow does not exist yet (phase 7 builds it). What it creates is a REAL user and a REAL
+// membership, so a spec using this exercises the same AccountAccessService resolution and the same
+// guards a genuine member will hit.
+export async function addMemberLogin(
+  page: Page,
+  request: APIRequestContext,
+  ownerEmail: string,
+  personName: string,
+): Promise<{ email: string; password: string }> {
+  const email = `huddle+e2e-member-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
+  const password = 'password123';
+
+  const configResponse = await request.get('/config.json');
+  const { apiUrl } = await configResponse.json();
+  const params = new URLSearchParams({ ownerEmail, personName, memberEmail: email, password });
+  const response = await request.post(`${apiUrl}/api/auth/test/member?${params.toString()}`, {
+    headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' },
+  });
+  // 404 covers a wrong key, an unknown owner AND an unknown person name, so a typo in any of the
+  // three surfaces here rather than as a confusing assertion three lines into the spec.
+  expect(
+    response.status(),
+    `addMemberLogin failed for owner=${ownerEmail} person=${personName}. `
+      + '404 covers a wrong E2E_TEST_SUPPORT_KEY, an unknown owner AND an unknown person name, '
+      + `so check all three. Body: ${await response.text()}`,
+  ).toBe(204);
+
+  return { email, password };
+}
+
+// Flips accounts.members_see_everyone for one household. The product ships this forced ON with no
+// endpoint and no UI (see V66), so this profile-gated route is the ONLY way to exercise the OFF
+// path -- which is what keeps the Team-tier seam tested code rather than dead code.
+export async function setMemberVisibility(
+  request: APIRequestContext,
+  ownerEmail: string,
+  membersSeeEveryone: boolean,
+): Promise<void> {
+  const configResponse = await request.get('/config.json');
+  const { apiUrl } = await configResponse.json();
+  const params = new URLSearchParams({ ownerEmail, membersSeeEveryone: String(membersSeeEveryone) });
+  const response = await request.post(`${apiUrl}/api/auth/test/member-visibility?${params.toString()}`, {
+    headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' },
+  });
+  expect(response.status(), 'setMemberVisibility failed -- check E2E_TEST_SUPPORT_KEY').toBe(204);
+}
+
+// Signs in through the real login form, so a spec exercises the same path a member actually uses.
+export async function loginAs(page: Page, email: string, password: string): Promise<void> {
+  await page.goto('/login');
+  // LoginPage's placeholders are "Email"/"Password"; RegisterPage's are the you@example.com /
+  // "At least 8 characters" pair registerHousehold uses. They are different screens.
+  await page.getByPlaceholder('Email', { exact: true }).fill(email);
+  await page.getByPlaceholder('Password', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await expect(page).toHaveURL(/\/app\/log/);
+}
+
 // TestCodeCache (see TestCodeCache.java) is a plain in-memory map inside the running
 // container -- register() only returns after writing to it, so a lookup immediately after
 // should always find it. It's occasionally missing anyway: the lower backend scales to zero
