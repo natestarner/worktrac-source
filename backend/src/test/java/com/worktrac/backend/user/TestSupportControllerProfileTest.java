@@ -57,5 +57,15 @@ class TestSupportControllerProfileTest {
         // through account_memberships rather than users.account_id.
         context.registerBean(com.worktrac.backend.membership.AccountMembershipRepository.class,
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.membership.AccountMembershipRepository.class));
+        // Added with the member-login test-support routes, which mint a real membership and must
+        // evict the access cache so the new member is visible immediately rather than in <=60s.
+        context.registerBean(com.worktrac.backend.membership.AccountAccessService.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.membership.AccountAccessService.class));
+        context.registerBean(com.worktrac.backend.person.PersonRepository.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.person.PersonRepository.class));
+        context.registerBean(org.springframework.security.crypto.password.PasswordEncoder.class,
+                () -> org.mockito.Mockito.mock(org.springframework.security.crypto.password.PasswordEncoder.class));
+        context.registerBean(org.springframework.jdbc.core.JdbcTemplate.class,
+                () -> org.mockito.Mockito.mock(org.springframework.jdbc.core.JdbcTemplate.class));
     }
 }

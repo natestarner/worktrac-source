@@ -98,12 +98,21 @@ public class PersonService {
 
     // ── CRUD ──────────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * The people this login may see — everyone in the household, or just themselves.
+     *
+     * <p>This is the single source of "who exists" for the whole client: the person pill bar, the
+     * Profile page and cache warming all read it. Filtering HERE rather than at each of those means
+     * a member cannot learn who else is in the household from any of them, and a screen that
+     * forgets to filter cannot exist.
+     *
+     * <p>A member with no person attached sees an empty list rather than everyone. That is the
+     * fail-closed direction, and `NoActivePersonScreen` handles it as a real state.
+     */
     @Transactional(readOnly = true)
     public List<PersonDto> list(AccountAccess access) {
-        // Phase 3 filters this to visible people. Today VIEW_OTHER_PEOPLE is held by every real
-        // login (all are owners), so the filter would be a no-op and is deferred to the phase that
-        // can actually test it against a MEMBER.
         return personRepository.findByAccount_IdOrderByCreatedAtAsc(access.accountId()).stream()
+                .filter(person -> access.has(Permission.VIEW_OTHER_PEOPLE) || access.isSelf(person.getId()))
                 .map(PersonDto::from)
                 .toList();
     }

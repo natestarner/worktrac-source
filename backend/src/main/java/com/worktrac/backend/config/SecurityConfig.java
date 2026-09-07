@@ -46,7 +46,13 @@ public class SecurityConfig {
                                 "/api/auth/resend-code", "/api/auth/forgot-password", "/api/auth/reset-password",
                                 "/api/auth/resend-reset-code", "/api/auth/test/pending-code",
                                 "/api/auth/test/email-outcome",
-                                "/api/auth/test/billing-plan").permitAll()
+                                "/api/auth/test/billing-plan",
+                                // Both @Profile({"local","lower"}) AND shared-secret gated in
+                                // TestSupportController; permitAll here only means the security
+                                // chain does not additionally demand a JWT, which these have no way
+                                // to supply -- they exist to CREATE the login a test then signs in as.
+                                "/api/auth/test/member",
+                                "/api/auth/test/member-visibility").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         // Server-to-server (Azure Event Grid), no JWT possible -- gated instead
                         // by EmailDeliveryWebhookController's own query-param shared secret.

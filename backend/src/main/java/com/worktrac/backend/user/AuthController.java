@@ -79,6 +79,6 @@ public class AuthController {
 
     @GetMapping("/me")
     public MeResponse me() {
-        return authService.me(currentUser.userId(), currentUser.accountId());
+        return authService.me(currentUser.access());
     }
 }

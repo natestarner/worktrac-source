@@ -2,9 +2,15 @@ package com.worktrac.backend.user;
 
 import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.billing.Subscription;
+import com.worktrac.backend.account.Account;
+import com.worktrac.backend.membership.AccountAccessService;
 import com.worktrac.backend.membership.AccountMembership;
 import com.worktrac.backend.membership.AccountMembershipRepository;
 import com.worktrac.backend.membership.AccountRole;
+import com.worktrac.backend.person.Person;
+import com.worktrac.backend.person.PersonRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import com.worktrac.backend.billing.SubscriptionRepository;
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.config.EmailProperties;
@@ -48,9 +54,17 @@ public class TestSupportController {
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionService subscriptionService;
     private final AccountMembershipRepository membershipRepository;
+    private final AccountAccessService accountAccessService;
+    private final PersonRepository personRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JdbcTemplate jdbcTemplate;
 
     public TestSupportController(TestCodeCache testCodeCache, EmailProperties emailProperties,
                                   AccountMembershipRepository membershipRepository,
+                                  AccountAccessService accountAccessService,
+                                  PersonRepository personRepository,
+                                  PasswordEncoder passwordEncoder,
+                                  JdbcTemplate jdbcTemplate,
                                   RegistrationEventRepository registrationEventRepository,
                                   UserRepository userRepository,
                                   SubscriptionRepository subscriptionRepository,
@@ -62,6 +76,10 @@ public class TestSupportController {
         this.subscriptionRepository = subscriptionRepository;
         this.subscriptionService = subscriptionService;
         this.membershipRepository = membershipRepository;
+        this.accountAccessService = accountAccessService;
+        this.personRepository = personRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @GetMapping("/api/auth/test/pending-code")
@@ -153,4 +171,86 @@ public class TestSupportController {
                 expectedKey.getBytes(StandardCharsets.UTF_8),
                 suppliedKey.getBytes(StandardCharsets.UTF_8));
     }
+
+    // Mints a MEMBER login for an existing person in an existing household, so the e2e suite can
+    // exercise member permissions without the invite flow existing yet (phase 7 builds that).
+    //
+    // Same two independent gates as everything else here: @Profile({"local","lower"}) means the
+    // bean does not exist in production at all, and the shared-secret header is checked on top.
+    // Every failure is a 404, so an unauthenticated caller cannot confirm the route exists.
+    //
+    // It creates a REAL user + a REAL membership, so a test that passes here is exercising the
+    // same AccountAccessService resolution and the same guards a genuine member will hit -- not a
+    // special case built for tests.
+    @PostMapping("/api/auth/test/member")
+    public ResponseEntity<Void> createMemberLogin(
+            @RequestParam String ownerEmail,
+            @RequestParam String personName,
+            @RequestParam String memberEmail,
+            @RequestParam String password,
+            @RequestHeader(value = "X-E2E-Test-Key", required = false) String testKey) {
+        if (!keyMatches(testKey)) {
+            return ResponseEntity.notFound().build();
+        }
+        Optional<Account> account = ownedAccount(ownerEmail);
+        if (account.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        Optional<Person> person = personRepository
+                .findByAccount_IdOrderByCreatedAtAsc(account.get().getId()).stream()
+                .filter(p -> p.getName().equalsIgnoreCase(personName.trim()))
+                .findFirst();
+        if (person.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        String normalised = memberEmail.trim().toLowerCase();
+        User member = userRepository.findByEmail(normalised)
+                .orElseGet(() -> userRepository.save(new User(normalised, passwordEncoder.encode(password))));
+        if (membershipRepository.findByAccount_IdAndUser_Id(account.get().getId(), member.getId()).isEmpty()) {
+            membershipRepository.save(new AccountMembership(account.get(), member, person.get(), AccountRole.MEMBER));
+        }
+        // Without this the new membership is invisible for up to the cache's 60s TTL, which would
+        // make every member test flaky in exactly the way that wastes an afternoon.
+        accountAccessService.invalidateAccount(account.get().getId());
+        return ResponseEntity.noContent().build();
+    }
+
+    // Flips accounts.members_see_everyone for one household.
+    //
+    // ⚠️ A DIRECT UPDATE, on purpose. Account has NO setter for this column and no endpoint sets
+    // it -- that absence is what forces Pro/Family to "everyone sees everyone" by construction
+    // rather than by a check somebody could flip (see V66). Adding a setter for the benefit of
+    // tests would hand production code the very lever the design removes, so the mutation lives
+    // here instead, inside a controller whose bean does not exist outside local/lower.
+    //
+    // The Team tier is what adds a real setter, service method and toggle.
+    @PostMapping("/api/auth/test/member-visibility")
+    public ResponseEntity<Void> setMemberVisibility(
+            @RequestParam String ownerEmail,
+            @RequestParam boolean membersSeeEveryone,
+            @RequestHeader(value = "X-E2E-Test-Key", required = false) String testKey) {
+        if (!keyMatches(testKey)) {
+            return ResponseEntity.notFound().build();
+        }
+        Optional<Account> account = ownedAccount(ownerEmail);
+        if (account.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        jdbcTemplate.update("UPDATE accounts SET members_see_everyone = ? WHERE id = ?",
+                membersSeeEveryone ? 1 : 0, account.get().getId());
+        accountAccessService.invalidateAccount(account.get().getId());
+        return ResponseEntity.noContent().build();
+    }
+
+    // The household a login OWNS. Every route here drives state for the account under test, and a
+    // member's household is not theirs to change.
+    private Optional<Account> ownedAccount(String email) {
+        return userRepository.findByEmail(email.trim().toLowerCase())
+                .flatMap(user -> membershipRepository.findByUser_IdOrderByCreatedAtAscIdAsc(user.getId()).stream()
+                        .filter(m -> m.getAccountRole() == AccountRole.OWNER)
+                        .findFirst())
+                .map(AccountMembership::getAccount);
+    }
+
 }
