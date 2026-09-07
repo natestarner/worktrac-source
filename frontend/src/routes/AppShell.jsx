@@ -81,7 +81,7 @@ export default function AppShell() {
   // Proactively warms every person's logging-essentials data into the offline cache (not just
   // whichever person/tab is on screen), so a device hand-off mid-outage still has something to
   // render. See useOfflineCacheWarming.js for the full trigger list.
-  useOfflineCacheWarming(people);
+  useOfflineCacheWarming(people, { selfPersonId, activePersonId });
 
   // Which person the app opens on when nothing is persisted for this login yet.
   //

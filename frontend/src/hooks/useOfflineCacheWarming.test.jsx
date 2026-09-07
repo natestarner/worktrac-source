@@ -52,7 +52,13 @@ describe('useOfflineCacheWarming', () => {
   it('warms once on mount, flagged as the post-restore warm', () => {
     renderWithQuery(<Probe people={PEOPLE} />);
     expect(warmOfflineCache).toHaveBeenCalledTimes(1);
-    expect(warmOfflineCache).toHaveBeenCalledWith(expect.anything(), PEOPLE, { afterRestore: true });
+    expect(warmOfflineCache).toHaveBeenCalledWith(expect.anything(), PEOPLE, {
+      afterRestore: true,
+      // Threaded through so peopleToWarm can prioritise them once a household exceeds
+      // MAX_WARMED_PEOPLE. Null here because this probe passes neither.
+      selfPersonId: null,
+      activePersonId: null,
+    });
   });
 
   it('warms again on the online transition, WITHOUT the post-restore flag', () => {
@@ -65,7 +71,10 @@ describe('useOfflineCacheWarming', () => {
     onlineManager.setOnline(true);
     expect(warmOfflineCache).toHaveBeenCalledTimes(2);
     // By now the cache is whatever this page session fetched, so ordinary staleness applies.
-    expect(warmOfflineCache).toHaveBeenLastCalledWith(expect.anything(), PEOPLE);
+    expect(warmOfflineCache).toHaveBeenLastCalledWith(expect.anything(), PEOPLE, {
+      selfPersonId: null,
+      activePersonId: null,
+    });
   });
 
   it('warms again when the tab regains visibility while online', () => {

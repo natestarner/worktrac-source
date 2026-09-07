@@ -63,6 +63,11 @@ const COLUMNS = [
     },
   },
   { key: 'peopleCount', label: 'People' },
+  // A raw count, not a yes/no. Does this household use member logins is the question, but a
+  // household of 5 people with 1 login and one with 4 are different support conversations, and a
+  // flag flattens them. 1 is the ordinary case -- the owner's own -- so anything above it is the
+  // signal. Read-only, like everything else in this portal.
+  { key: 'loginCount', label: 'Logins' },
   { key: 'defaultUnit', label: 'Unit' },
   { key: 'sessionCount', label: 'Sessions' },
   { key: 'setCount', label: 'Sets' },
