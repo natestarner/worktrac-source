@@ -1,6 +1,7 @@
 package com.worktrac.backend.exercise;
 
 import com.worktrac.backend.common.NotFoundException;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.quota.QuotaService;
@@ -58,8 +59,8 @@ public class PersonExerciseService {
     // and fall back to the personalization-less catalog DTO), making it effectively invisible
     // right after saving it. See PersonExercise's class comment for the same invariant.
     @Transactional(readOnly = true)
-    public List<PersonExerciseDto> listForPerson(Long accountId, Long personId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public List<PersonExerciseDto> listForPerson(AccountAccess access, Long personId) {
+        Person person = personService.requireVisiblePerson(personId, access);
 
         Map<Long, PersonExercise> byExerciseId = new HashMap<>();
         Set<Long> pickerIds = new HashSet<>();
@@ -81,16 +82,16 @@ public class PersonExerciseService {
 
         return exerciseRepository.findAllById(pickerIds).stream()
                 .filter(ex -> !ex.isDeleted())
-                .filter(ex -> ex.isGlobal() || ex.getAccount().getId().equals(accountId))
+                .filter(ex -> ex.isGlobal() || ex.getAccount().getId().equals(access.accountId()))
                 .sorted(Comparator.comparing(Exercise::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(ex -> PersonExerciseDto.of(ex, byExerciseId.get(ex.getId())))
                 .toList();
     }
 
     @Transactional
-    public PersonExerciseDto setFavorite(Long accountId, Long personId, Long exerciseId, boolean favorite) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        Exercise exercise = requireVisibleExercise(accountId, exerciseId);
+    public PersonExerciseDto setFavorite(AccountAccess access, Long personId, Long exerciseId, boolean favorite) {
+        Person person = personService.requireWritablePerson(personId, access);
+        Exercise exercise = requireVisibleExercise(access.accountId(), exerciseId);
         PersonExercise pe = getOrCreate(person, exercise);
         pe.setFavorite(favorite);
         return PersonExerciseDto.of(exercise, pe);
@@ -100,14 +101,14 @@ public class PersonExerciseService {
     // person's tag set for this exercise is replaced with exactly those tags. An empty list
     // clears them.
     @Transactional
-    public PersonExerciseDto setTags(Long accountId, Long personId, Long exerciseId, List<String> tagNames) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        Exercise exercise = requireVisibleExercise(accountId, exerciseId);
+    public PersonExerciseDto setTags(AccountAccess access, Long personId, Long exerciseId, List<String> tagNames) {
+        Person person = personService.requireWritablePerson(personId, access);
+        Exercise exercise = requireVisibleExercise(access.accountId(), exerciseId);
         Set<Tag> resolved = new HashSet<>();
         if (tagNames != null) {
             for (String name : tagNames) {
                 if (name != null && !name.trim().isEmpty()) {
-                    resolved.add(tagService.getOrCreate(accountId, name));
+                    resolved.add(tagService.getOrCreate(access.accountId(), name));
                 }
             }
         }
@@ -120,9 +121,9 @@ public class PersonExerciseService {
     // The standing per-person note: a blank/whitespace-only value clears it back to null
     // rather than storing an empty string.
     @Transactional
-    public PersonExerciseDto setNote(Long accountId, Long personId, Long exerciseId, String note) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        Exercise exercise = requireVisibleExercise(accountId, exerciseId);
+    public PersonExerciseDto setNote(AccountAccess access, Long personId, Long exerciseId, String note) {
+        Person person = personService.requireWritablePerson(personId, access);
+        Exercise exercise = requireVisibleExercise(access.accountId(), exerciseId);
         PersonExercise pe = getOrCreate(person, exercise);
         String trimmed = note == null ? "" : note.trim();
         pe.setNote(trimmed.isEmpty() ? null : trimmed);
@@ -201,9 +202,9 @@ public class PersonExerciseService {
     }
 
     @Transactional(readOnly = true)
-    public List<PersonExerciseFieldDto> listCustomFields(Long accountId, Long personId, Long exerciseId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        requireVisibleExercise(accountId, exerciseId);
+    public List<PersonExerciseFieldDto> listCustomFields(AccountAccess access, Long personId, Long exerciseId) {
+        Person person = personService.requireVisiblePerson(personId, access);
+        requireVisibleExercise(access.accountId(), exerciseId);
         return personExerciseRepository.findByPerson_IdAndExercise_Id(person.getId(), exerciseId)
                 .map(pe -> personExerciseFieldRepository.findByPersonExercise_IdOrderBySortOrderAsc(pe.getId()).stream()
                         .map(PersonExerciseFieldDto::from)
@@ -212,14 +213,14 @@ public class PersonExerciseService {
     }
 
     @Transactional
-    public PersonExerciseFieldDto addCustomField(Long accountId, Long personId, Long exerciseId, String name) {
+    public PersonExerciseFieldDto addCustomField(AccountAccess access, Long personId, Long exerciseId, String name) {
         if (name == null || name.trim().isEmpty()) {
             throw new IllegalArgumentException("Field name must not be blank");
         }
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        Exercise exercise = requireVisibleExercise(accountId, exerciseId);
+        Person person = personService.requireWritablePerson(personId, access);
+        Exercise exercise = requireVisibleExercise(access.accountId(), exerciseId);
         PersonExercise pe = getOrCreate(person, exercise);
-        quotaService.requireCustomFieldCapacity(accountId,
+        quotaService.requireCustomFieldCapacity(access.accountId(),
                 personExerciseFieldRepository.countByPersonExercise_Id(pe.getId()));
         int nextOrder = personExerciseFieldRepository.findByPersonExercise_IdOrderBySortOrderAsc(pe.getId()).size();
         PersonExerciseField field = personExerciseFieldRepository.save(new PersonExerciseField(pe, name.trim(), nextOrder));
@@ -227,10 +228,10 @@ public class PersonExerciseService {
     }
 
     @Transactional
-    public PersonExerciseFieldDto updateCustomField(Long accountId, Long personId, Long exerciseId, Long fieldId,
+    public PersonExerciseFieldDto updateCustomField(AccountAccess access, Long personId, Long exerciseId, Long fieldId,
                                                      String name, String value) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        requireVisibleExercise(accountId, exerciseId);
+        Person person = personService.requireWritablePerson(personId, access);
+        requireVisibleExercise(access.accountId(), exerciseId);
         PersonExerciseField field = requireField(person, exerciseId, fieldId);
         if (name != null && !name.trim().isEmpty()) {
             field.setName(name.trim());
@@ -242,9 +243,9 @@ public class PersonExerciseService {
     }
 
     @Transactional
-    public void deleteCustomField(Long accountId, Long personId, Long exerciseId, Long fieldId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        requireVisibleExercise(accountId, exerciseId);
+    public void deleteCustomField(AccountAccess access, Long personId, Long exerciseId, Long fieldId) {
+        Person person = personService.requireWritablePerson(personId, access);
+        requireVisibleExercise(access.accountId(), exerciseId);
         personExerciseFieldRepository.delete(requireField(person, exerciseId, fieldId));
     }
 

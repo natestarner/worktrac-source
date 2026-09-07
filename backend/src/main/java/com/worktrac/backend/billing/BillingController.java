@@ -1,5 +1,7 @@
 package com.worktrac.backend.billing;
 
+import com.worktrac.backend.membership.RequiresPermission;
+import com.worktrac.backend.membership.Permission;
 import com.stripe.exception.StripeException;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
@@ -61,6 +63,7 @@ public class BillingController {
     // with no Stripe at all. A household on Free is still on Free, and answering 503 here would
     // make the billing screen unreadable in local development for no reason.
     @GetMapping("/subscription")
+    @RequiresPermission(anyMember = true)
     public SubscriptionDto subscription() {
         return subscriptionService.describe(currentUser.accountId());
     }
@@ -71,6 +74,7 @@ public class BillingController {
     // The client sends MONTH or YEAR -- never a Stripe price id. Accepting one from a browser would
     // let a caller check out against any price they cared to invent.
     @PostMapping("/checkout-session")
+    @RequiresPermission(Permission.MANAGE_BILLING)
     @Transactional
     public Map<String, String> createCheckoutSession(@Valid @RequestBody CheckoutRequest request) {
         requireStripe();
@@ -120,6 +124,7 @@ public class BillingController {
     // webhook -- is what makes the upgrade visible the instant the browser returns, which avoids
     // the classic "I paid and I'm still on Free" support ticket. The webhook is the backstop.
     @PostMapping("/checkout-session/{sessionId}/reconcile")
+    @RequiresPermission(Permission.MANAGE_BILLING)
     @Transactional
     public SubscriptionDto reconcileCheckout(@PathVariable String sessionId) {
         requireStripe();
@@ -159,6 +164,7 @@ public class BillingController {
     // only -- Stripe has no embedded variant -- so the frontend opens it in a NEW TAB, leaving the
     // installed PWA's own document alive behind it.
     @PostMapping("/portal-session")
+    @RequiresPermission(Permission.MANAGE_BILLING)
     public Map<String, String> createPortalSession() {
         requireStripe();
         Long accountId = currentUser.accountId();

@@ -7,6 +7,7 @@ import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.exercise.PersonExerciseService;
 import com.worktrac.backend.export.ExportRow;
 import com.worktrac.backend.export.WorkoutRowProjection;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.quota.QuotaService;
@@ -110,18 +111,18 @@ public class CsvImportService {
     }
 
     @Transactional(readOnly = true)
-    public ImportPreviewDto preview(Long accountId, Long personId, ImportRequest request) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        Account account = accountRepository.getReferenceById(accountId);
-        Plan plan = plan(accountId, person, account, request);
+    public ImportPreviewDto preview(AccountAccess access, Long personId, ImportRequest request) {
+        Person person = personService.requireWritablePerson(personId, access);
+        Account account = accountRepository.getReferenceById(access.accountId());
+        Plan plan = plan(access.accountId(), person, account, request);
         return plan.summarize(null, 0, 0, 0, 0, List.of(), 0);
     }
 
     @Transactional
-    public ImportPreviewDto commit(Long accountId, Long userId, Long personId, ImportRequest request) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        Account account = accountRepository.getReferenceById(accountId);
-        Plan plan = plan(accountId, person, account, request);
+    public ImportPreviewDto commit(AccountAccess access, Long personId, ImportRequest request) {
+        Person person = personService.requireWritablePerson(personId, access);
+        Account account = accountRepository.getReferenceById(access.accountId());
+        Plan plan = plan(access.accountId(), person, account, request);
 
         if (plan.totalSets() == 0) {
             // Nothing to record, and deliberately no batch row: a retried commit that finds
@@ -135,14 +136,14 @@ public class CsvImportService {
         // and refusing one would discard a durable write recording a workout somebody actually
         // did. Checked against the whole planned batch, so one file cannot vault the ceiling in a
         // single transaction.
-        quotaService.requireSetCapacity(accountId, workoutSetRepository.countByAccountId(accountId),
+        quotaService.requireSetCapacity(access.accountId(), workoutSetRepository.countByAccountId(access.accountId()),
                 plan.totalSets());
 
-        User user = userRepository.getReferenceById(userId);
+        User user = userRepository.getReferenceById(access.userId());
         ImportBatch batch = importBatchRepository.save(new ImportBatch(person, user, request.filename(),
                 plan.totalSets(), plan.createdSessionCount(), plan.skippedDuplicates(), clock.instant()));
 
-        Written written = write(plan, person, account, accountId, batch);
+        Written written = write(plan, person, account, access.accountId(), batch);
 
         log.info("Imported {} sets into {} new and {} existing workouts for person {} (batch {}); "
                         + "{} rows were already present",

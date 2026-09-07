@@ -1,6 +1,7 @@
 package com.worktrac.backend.security;
 
 import com.worktrac.backend.config.AdminProperties;
+import com.worktrac.backend.membership.AccountAccess;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -47,8 +48,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 if (!tokenVersionService.isCurrent(principal.userId(), principal.tokenVersion())) {
                     return;
                 }
+                // Resolve what this login may do, ONCE, before the principal is visible to any
+                // handler. Everything downstream reads it off the principal rather than looking it
+                // up again, so there is a single answer per request and one place to breakpoint
+                // when a permission decision surprises you.
+                //
+                // Phase 1: there is no account_memberships table yet, so an authenticated login is
+                // by definition its account's sole owner. Phase 2 replaces this one line with a
+                // cached membership lookup (AccountAccessService) and nothing else here changes.
+                var access = AccountAccess.ownerOf(principal.userId(), principal.accountId());
                 var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + effectiveRole(principal)));
-                var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
+                var authentication =
+                        new UsernamePasswordAuthenticationToken(principal.withAccess(access), null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
                 // Adds the user id to the log context now that a principal actually exists.
                 // RequestDiagnosticsFilter (registered ahead of this one) owns the correlation id

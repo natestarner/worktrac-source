@@ -4,6 +4,7 @@ import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.exercise.Exercise;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.exercise.PersonExerciseService;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.quota.QuotaService;
@@ -37,57 +38,57 @@ public class RoutineService {
     }
 
     @Transactional(readOnly = true)
-    public List<RoutineDto> list(Long accountId, Long personId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public List<RoutineDto> list(AccountAccess access, Long personId) {
+        Person person = personService.requireVisiblePerson(personId, access);
         return routineRepository.findByPerson_IdOrderBySortOrderAscIdAsc(person.getId()).stream()
                 .map(RoutineDto::from)
                 .toList();
     }
 
     @Transactional
-    public RoutineDto create(Long accountId, Long personId, RoutineRequest request) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        quotaService.requireRoutineCapacity(accountId, person.getId(),
+    public RoutineDto create(AccountAccess access, Long personId, RoutineRequest request) {
+        Person person = personService.requireWritablePerson(personId, access);
+        quotaService.requireRoutineCapacity(access.accountId(), person.getId(),
                 routineRepository.countByPerson_Id(person.getId()));
         Routine routine = new Routine(person, request.name().trim());
         routine.setSortOrder(nextSortOrder(person));
-        applyExercises(accountId, person, routine, request.exerciseIds());
+        applyExercises(access.accountId(), person, routine, request.exerciseIds());
         return RoutineDto.from(routineRepository.save(routine));
     }
 
     @Transactional
-    public RoutineDto update(Long accountId, Long personId, Long routineId, RoutineRequest request) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public RoutineDto update(AccountAccess access, Long personId, Long routineId, RoutineRequest request) {
+        Person person = personService.requireWritablePerson(personId, access);
         Routine routine = routineRepository.findByIdAndPerson_Id(routineId, person.getId())
                 .orElseThrow(() -> new NotFoundException("We couldn't find that routine."));
         routine.setName(request.name().trim());
         routine.getExercises().clear();
-        applyExercises(accountId, person, routine, request.exerciseIds());
+        applyExercises(access.accountId(), person, routine, request.exerciseIds());
         return RoutineDto.from(routine);
     }
 
     @Transactional
-    public void delete(Long accountId, Long personId, Long routineId) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public void delete(AccountAccess access, Long personId, Long routineId) {
+        Person person = personService.requireWritablePerson(personId, access);
         Routine routine = routineRepository.findByIdAndPerson_Id(routineId, person.getId())
                 .orElseThrow(() -> new NotFoundException("We couldn't find that routine."));
         routineRepository.delete(routine);
     }
 
     @Transactional
-    public List<RoutineDto> copy(Long accountId, Long personId, Long routineId, CopyRoutineRequest request) {
-        Person sourcePerson = personService.requireOwnedPerson(personId, accountId);
+    public List<RoutineDto> copy(AccountAccess access, Long personId, Long routineId, CopyRoutineRequest request) {
+        Person sourcePerson = personService.requireVisiblePerson(personId, access);
         Routine source = routineRepository.findByIdAndPerson_Id(routineId, sourcePerson.getId())
                 .orElseThrow(() -> new NotFoundException("We couldn't find that routine."));
 
         // Exercise visibility is account-scoped, not person-scoped, so resolve it once
         // and reuse the same list for every target person instead of re-validating per target.
-        List<Exercise> exercises = resolveVisibleExercises(accountId,
+        List<Exercise> exercises = resolveVisibleExercises(access.accountId(),
                 source.getExercises().stream().map(re -> re.getExercise().getId()).toList());
 
         List<RoutineDto> copies = new ArrayList<>();
         for (Long targetPersonId : request.targetPersonIds()) {
-            Person target = personService.requireOwnedPerson(targetPersonId, accountId);
+            Person target = personService.requireWritablePerson(targetPersonId, access);
             Routine copy = new Routine(target, source.getName());
             // The target's tail, not the source's -- a copy lands at the end of the list it is
             // arriving in. Re-read per target because each one has its own numbering, and
@@ -106,8 +107,8 @@ public class RoutineService {
     // refusing. IllegalArgumentException is a 400, which is terminal -- correct here, since this
     // is an online-gated write with no outbox behind it to retry.
     @Transactional
-    public List<RoutineDto> reorder(Long accountId, Long personId, ReorderRoutinesRequest request) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
+    public List<RoutineDto> reorder(AccountAccess access, Long personId, ReorderRoutinesRequest request) {
+        Person person = personService.requireWritablePerson(personId, access);
         List<Routine> existing = routineRepository.findByPerson_IdOrderBySortOrderAscIdAsc(person.getId());
 
         Map<Long, Routine> byId = new HashMap<>();

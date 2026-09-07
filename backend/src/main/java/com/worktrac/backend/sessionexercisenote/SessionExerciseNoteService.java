@@ -3,6 +3,7 @@ package com.worktrac.backend.sessionexercisenote;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.exercise.Exercise;
 import com.worktrac.backend.exercise.ExerciseRepository;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.workoutsession.WorkoutSession;
@@ -46,9 +47,9 @@ public class SessionExerciseNoteService {
     // any set that same workout) and not plumbed for now -- see the offline-active-loop
     // work that fixed the set-logging case for the full reasoning.
     @Transactional
-    public SessionExerciseNoteDto upsertLiveNote(Long accountId, Long personId, Long exerciseId, String note) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        Exercise exercise = requireVisibleExercise(accountId, exerciseId);
+    public SessionExerciseNoteDto upsertLiveNote(AccountAccess access, Long personId, Long exerciseId, String note) {
+        Person person = personService.requireWritablePerson(personId, access);
+        Exercise exercise = requireVisibleExercise(access.accountId(), exerciseId);
         WorkoutSession session = workoutSessionService.getOrCreateLiveSession(person);
         return upsert(session, exercise, note);
     }
@@ -57,17 +58,23 @@ public class SessionExerciseNoteService {
     // enforced via session -> person -> account, matching
     // WorkoutSetService.logSetIntoSession.
     @Transactional
-    public SessionExerciseNoteDto upsertSessionNote(Long accountId, Long sessionId, Long exerciseId, String note) {
-        WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, accountId)
+    public SessionExerciseNoteDto upsertSessionNote(AccountAccess access, Long sessionId, Long exerciseId, String note) {
+        WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, access.accountId())
                 .orElseThrow(() -> new NotFoundException("We couldn't find that workout."));
-        Exercise exercise = requireVisibleExercise(accountId, exerciseId);
+        // Child-id endpoint: the finder proves the session is in this ACCOUNT, not that the caller
+        // may write to the PERSON behind it. See WorkoutSessionService.editSession.
+        personService.requireWritablePerson(session.getPerson(), access, "We couldn't find that workout.");
+        Exercise exercise = requireVisibleExercise(access.accountId(), exerciseId);
         return upsert(session, exercise, note);
     }
 
     @Transactional(readOnly = true)
-    public Optional<SessionExerciseNoteDto> getNote(Long accountId, Long sessionId, Long exerciseId) {
-        workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, accountId)
+    public Optional<SessionExerciseNoteDto> getNote(AccountAccess access, Long sessionId, Long exerciseId) {
+        WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, access.accountId())
                 .orElseThrow(() -> new NotFoundException("We couldn't find that workout."));
+        // Read counterpart of the guard above -- visible, not writable, so a member can read a
+        // note on a workout they are allowed to see without being allowed to change it.
+        personService.requireVisiblePerson(session.getPerson(), access, "We couldn't find that workout.");
         return sessionExerciseNoteRepository.findBySession_IdAndExercise_Id(sessionId, exerciseId)
                 .map(n -> new SessionExerciseNoteDto(sessionId, exerciseId, n.getNote()));
     }

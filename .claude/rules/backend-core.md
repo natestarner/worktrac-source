@@ -16,6 +16,42 @@ Applies to all backend production code. Subsystem-specific rules load alongside 
   the whole app is `AdminController`/`AdminService`, which reads across every account on purpose.
   If you are writing a cross-account query anywhere else, it is a bug.
 
+### The account is no longer the whole boundary — `AccountAccess` is
+
+An account can hold more than one login, so "is this row in my account?" is now only half the
+question. `membership/AccountAccess` answers both halves and is resolved **once per request** by
+`JwtAuthenticationFilter`, then passed explicitly — services take it as a parameter rather than
+reaching into the security context, so the dependency stays in the signature and a test can build
+one as a record literal.
+
+- **Ask for a permission, never for a role.** `AccountRole.permissions()` is the *only* place in
+  the codebase that turns a role into authority; everything else calls `AccountAccess.has(...)`.
+  A second `role == OWNER` comparison anywhere is the bug — that map is what makes adding a
+  `COACH` role a one-file change instead of a 36-call-site one.
+- **Two person guards, and picking the wrong one is invisible.** `requireVisiblePerson` for reads,
+  `requireWritablePerson` for writes. They replaced `requireOwnedPerson`, which was deleted with
+  no compatibility shim precisely so every call site had to be re-classified by hand; if a rebase
+  reintroduces that name, it will fail to compile rather than quietly reopening the hole.
+- **Status codes carry meaning here.** Not in the account, or not visible → **404**, preserving the
+  pre-existing property that a caller cannot distinguish "doesn't exist" from "not yours". Visible
+  but not writable → **403**, because a 404 there is a lie the UI immediately contradicts.
+- **⚠️ An endpoint keyed on a CHILD id still needs a person guard.** `PATCH /api/sets/{setId}`,
+  `PATCH /api/sessions/{sessionId}` and friends prove tenancy by walking the FK chain up to the
+  *account* — that says nothing about which person owns the row. Use the already-loaded
+  `requireVisiblePerson(person, access, message)` / `requireWritablePerson(person, access, message)`
+  overloads, passing the *caller's* not-found message (the caller was asking for a set, not a
+  person). `WorkoutSetService.findDuplicate` is the same trap one step further removed: it resolves
+  an idempotency key account-wide, so it must check the found row's person before returning it.
+- **Every handler under `/api/**` carries `@RequiresPermission`**, enforced at build time by
+  `HandlerPermissionCoverageTest`. Household-scoped permissions are checked declaratively by
+  `PermissionInterceptor`; `personScoped = true` means a service guard does it; `anyMember = true`
+  means any member of the account may call it. The exempt controllers are listed in that test with
+  the mechanism that gates each instead.
+- **`PermissionInterceptor` throws `ForbiddenException`; it must never `setStatus`/`sendError`.**
+  `sendError` re-dispatches to `/error`, which re-runs the stateless chain as anonymous and turns
+  the 403 into a **401** — read by the frontend as "signed out". **MockMvc cannot catch this**
+  (no container-level error dispatch), so that guarantee is pinned by a Playwright assertion.
+
 ## Time
 
 - Use the injected `Clock` bean (`config/ClockConfig.java`), **never `Instant.now()`**. This is
