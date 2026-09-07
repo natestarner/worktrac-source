@@ -20,8 +20,15 @@ import { markOnboardingPending } from '../lib/onboardingPending';
 
 const AuthContext = createContext(null);
 
-const EMPTY = { status: 'loading', user: null, account: null, people: [], offline: false, bootStalled: false };
-const SIGNED_OUT = { status: 'unauthenticated', user: null, account: null, people: [], offline: false, bootStalled: false };
+// `membership` is what this login may do in this household -- see useAccountAccess. It flows in
+// with the rest of /me's response (state spreads ...data), so it needs no plumbing of its own; the
+// null defaults here just mean a consumer never reads `undefined` on a signed-out render.
+//
+// `people` is the VISIBLE people, filtered server-side by PersonService.list. There is deliberately
+// no client-side visibility filter to go with it: one filter, on the server, is what makes it
+// impossible for a screen to forget.
+const EMPTY = { status: 'loading', user: null, account: null, membership: null, people: [], offline: false, bootStalled: false };
+const SIGNED_OUT = { status: 'unauthenticated', user: null, account: null, membership: null, people: [], offline: false, bootStalled: false };
 
 // Backoff for retrying /me at boot when the server/DB is unreachable and there's no snapshot to
 // fall back to (see the boot effect below) -- capped, doubling delay, same shape as the durable

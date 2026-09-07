@@ -32,6 +32,7 @@ import EditSetModal from '../shared/EditSetModal';
 import ExerciseNoteModal from '../shared/ExerciseNoteModal';
 import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
+import ReadOnlyWrap from '../shared/ReadOnlyWrap';
 import { IconMore, IconNote, IconPencil, IconPin, IconStar, IconStarFilled, IconTrash } from '../shared/icons';
 import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
@@ -829,18 +830,25 @@ export default function ExerciseDetail({
                 each with a ~20px hit area. As IconButtons they share one 40px target and
                 one stroke weight. The aria-labels are unchanged -- e2e selects the note
                 button by "Edit note for this session". */}
-            <IconButton
-              onClick={handleToggleFavorite}
-              label={exercise.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              icon={exercise.isFavorite ? IconStarFilled : IconStar}
-              tone={exercise.isFavorite ? 'accent' : 'default'}
-            />
+            {/* Favoriting writes to person_exercise, so it belongs to whoever's screen this is.
+                ReadOnlyWrap nests INSIDE any offline wrapper by convention -- here there is none,
+                because favoriting is a durable outbox write and works offline. */}
+            <ReadOnlyWrap personId={personId}>
+              <IconButton
+                onClick={handleToggleFavorite}
+                label={exercise.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                icon={exercise.isFavorite ? IconStarFilled : IconStar}
+                tone={exercise.isFavorite ? 'accent' : 'default'}
+              />
+            </ReadOnlyWrap>
+            <ReadOnlyWrap personId={personId}>
             <IconButton
               onClick={() => setShowSessionNoteModal(true)}
               label={sessionNote ? 'Edit note for this session' : 'Add a note for this session'}
               icon={IconNote}
               tone={sessionNote ? 'accent' : 'default'}
             />
+            </ReadOnlyWrap>
             {/* Disabled until the exercise exists on the server. Everything behind this button is a
                 Tier-3 write that posts the exercise id straight to `api/*` -- rename, tags, setup
                 fields, delete -- and none of them resolve a temp id (unlike the durable writes,
@@ -1013,9 +1021,11 @@ export default function ExerciseDetail({
                 controls, and the wrapper's margin keeps them from touching. */}
             {isDuration && (
               <div style={{ marginBottom: 'var(--space-3)' }}>
+                <ReadOnlyWrap personId={personId}>
                 <Button onClick={handleToggleHold} variant="dark" size="lg" fullWidth>
                   {holdRunning ? `Stop timer · ${formatRestTime(runningHoldElapsed)}` : 'Start timer'}
                 </Button>
+                </ReadOnlyWrap>
               </div>
             )}
             {/* The screen's one primary action, and the only place size="lg" is used on
@@ -1024,6 +1034,9 @@ export default function ExerciseDetail({
                 brand accent rather than the darker --color-accent-strong the smaller
                 filled buttons need. It's also the easiest thing on the page to hit
                 mid-set, which is the whole point. */}
+            {/* The screen's one primary action, and the one that matters most here: a member
+                must never be able to log a set onto somebody else's history. */}
+            <ReadOnlyWrap personId={personId}>
             <Button onClick={handleLogSet} variant="primary" size="lg" fullWidth data-tour-anchor={TOUR_ANCHORS.LOG_SET}>
               <span
                 style={{
@@ -1036,6 +1049,7 @@ export default function ExerciseDetail({
                 {activePersonFirstName ? `Log set for ${activePersonFirstName}` : 'Log set'}
               </span>
             </Button>
+            </ReadOnlyWrap>
           </div>
         </div>
 
@@ -1143,17 +1157,24 @@ export default function ExerciseDetail({
                         // sweaty hands mid-set. Each now owns a 40px target.
                         // The labels stay exactly "Edit" and "Delete": ~40 e2e assertions
                         // select these by accessible name.
+                        // The labels stay exactly "Edit" and "Delete" -- ReadOnlyWrap clones the
+                        // control in place and adds no DOM node, so the ~40 e2e assertions that
+                        // select these by accessible name are unaffected.
                         <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
-                          <IconButton onClick={() => setEditingSet(set)} label="Edit" icon={IconPencil} tone="accent" />
-                          <IconButton
-                            onClick={() => openConfirm(
-                                'Delete this set? It stops counting toward your history, records and trends.',
-                                () => handleDeleteSet(set),
-                              )}
-                            label="Delete"
-                            icon={IconTrash}
-                            tone="danger"
-                          />
+                          <ReadOnlyWrap personId={personId}>
+                            <IconButton onClick={() => setEditingSet(set)} label="Edit" icon={IconPencil} tone="accent" />
+                          </ReadOnlyWrap>
+                          <ReadOnlyWrap personId={personId}>
+                            <IconButton
+                              onClick={() => openConfirm(
+                                  'Delete this set? It stops counting toward your history, records and trends.',
+                                  () => handleDeleteSet(set),
+                                )}
+                              label="Delete"
+                              icon={IconTrash}
+                              tone="danger"
+                            />
+                          </ReadOnlyWrap>
                         </div>
                       )}
                     </div>

@@ -16,6 +16,7 @@ import Skeleton from '../shared/Skeleton';
 import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import ReadOnlyWrap from '../shared/ReadOnlyWrap';
 import EmptyState from '../shared/EmptyState';
 import HistoryWindowNotice from '../shared/HistoryWindowNotice';
 import { windowLabel } from '../shared/historyWindowCopy';
@@ -129,11 +130,22 @@ function HistoryTabContent({ initialExerciseFilter }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
+        {/* ReadOnlyWrap nests INSIDE OfflineDisabledWrap so the read-only message wins when both
+            apply -- see ReadOnlyWrap's header. Telling a member this "needs a connection" would
+            send them hunting for signal over something no connection fixes. */}
         <OfflineDisabledWrap message="Logging a past workout needs a connection.">
-          <button onClick={() => setShowPastSessionModal(true)} className="btn btn-secondary btn-md pressable" style={secondaryButtonStyle}>
-            + Log a past workout
-          </button>
+          <ReadOnlyWrap personId={activePersonId}>
+            <button onClick={() => setShowPastSessionModal(true)} className="btn btn-secondary btn-md pressable" style={secondaryButtonStyle}>
+              + Log a past workout
+            </button>
+          </ReadOnlyWrap>
         </OfflineDisabledWrap>
+        {/* Deliberately NOT ReadOnlyWrapped. A per-person export is a READ of data the caller can
+            already see, and it follows VIEW server-side (ExportController's personScoped route) --
+            so a member can always take their own workouts out, and can export a sibling they are
+            allowed to see. The whole-household zip is the one that is owner-only; keeping the two
+            apart is what stops "members can see everyone" becoming "any member can walk out with
+            the household's complete history in one click". */}
         <OfflineDisabledWrap message="Exporting needs a connection.">
           <Button onClick={() => downloadPersonCsv(activePersonId)} variant="secondary" style={outlineButtonStyle}>
             Export data
@@ -234,9 +246,11 @@ function HistoryTabContent({ initialExerciseFilter }) {
               <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-muted)' }}>
                 {formatDateLabel(toLocalDateStr(session.startedAt))} &middot; {timeLabelFor(session)}
               </div>
-              <button onClick={() => handleEdit(session)} style={editLinkStyle}>
-                Edit
-              </button>
+              <ReadOnlyWrap personId={activePersonId}>
+                <button onClick={() => handleEdit(session)} style={editLinkStyle}>
+                  Edit
+                </button>
+              </ReadOnlyWrap>
             </div>
             <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '4px 20px' }}>
               {entries.map((entry, i) => {

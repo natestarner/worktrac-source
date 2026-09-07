@@ -17,6 +17,7 @@ import Skeleton from '../shared/Skeleton';
 import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import ReadOnlyWrap from '../shared/ReadOnlyWrap';
 import EmptyState from '../shared/EmptyState';
 import Card from '../shared/Card';
 import IconButton from '../shared/IconButton';
@@ -154,11 +155,15 @@ export default function RoutinesTab() {
 
   return (
     <div>
+      {/* ReadOnlyWrap nests INSIDE OfflineDisabledWrap throughout this file, so the read-only
+          message wins when both apply. See ReadOnlyWrap's header. */}
       {!reordering && (
         <OfflineDisabledWrap message="Creating a routine needs a connection.">
-          <button onClick={() => setModalRoutine(null)} data-tour-anchor={TOUR_ANCHORS.NEW_ROUTINE} style={newRoutineButtonStyle}>
-            + New routine
-          </button>
+          <ReadOnlyWrap personId={activePersonId}>
+            <button onClick={() => setModalRoutine(null)} data-tour-anchor={TOUR_ANCHORS.NEW_ROUTINE} style={newRoutineButtonStyle}>
+              + New routine
+            </button>
+          </ReadOnlyWrap>
         </OfflineDisabledWrap>
       )}
 
@@ -176,9 +181,11 @@ export default function RoutinesTab() {
                   A bare "Reorder" therefore matches this control AND all N handles the moment
                   the mode is open -- a strict-mode violation, and exactly the mutually-containing
                   labels frontend-core.md warns about. */}
+              <ReadOnlyWrap personId={activePersonId}>
               <button onClick={() => setDraftOrder(routines)} style={reorderToggleStyle}>
                 Reorder routines
               </button>
+              </ReadOnlyWrap>
             </OfflineDisabledWrap>
           )}
         </div>
@@ -263,6 +270,11 @@ export default function RoutinesTab() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{r.name}</div>
                 <div style={{ display: 'flex', gap: 14 }}>
+                  {/* Copy reads this person's routine and writes it to whoever is picked in the
+                      modal. The server guards both ends -- source is requireVisiblePerson, every
+                      target is requireWritablePerson -- so a member could legitimately copy a
+                      sibling's routine to THEMSELVES. That is a real use ("give me your program"),
+                      so this stays open, and the target list is what constrains it. */}
                   {hasOtherPeople && (
                     <OfflineDisabledWrap message="Copying a routine needs a connection.">
                       <button onClick={() => setCopyRoutine(r)} style={editLinkStyle}>
@@ -271,26 +283,34 @@ export default function RoutinesTab() {
                     </OfflineDisabledWrap>
                   )}
                   <OfflineDisabledWrap message="Editing a routine needs a connection.">
-                    <button onClick={() => setModalRoutine(r)} style={editLinkStyle}>
-                      Edit
-                    </button>
+                    <ReadOnlyWrap personId={activePersonId}>
+                      <button onClick={() => setModalRoutine(r)} style={editLinkStyle}>
+                        Edit
+                      </button>
+                    </ReadOnlyWrap>
                   </OfflineDisabledWrap>
                   <OfflineDisabledWrap message="Deleting a routine needs a connection.">
-                    <button
-                      onClick={() => openConfirm(`Delete "${r.name}"? This can't be undone.`, () => handleDelete(r))}
-                      style={deleteLinkStyle}
-                    >
-                      Delete
-                    </button>
+                    <ReadOnlyWrap personId={activePersonId}>
+                      <button
+                        onClick={() => openConfirm(`Delete "${r.name}"? This can't be undone.`, () => handleDelete(r))}
+                        style={deleteLinkStyle}
+                      >
+                        Delete
+                      </button>
+                    </ReadOnlyWrap>
                   </OfflineDisabledWrap>
                 </div>
               </div>
               <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 14 }}>
                 {r.exercises.map((e) => e.exerciseName).join(', ')}
               </div>
-              <button onClick={() => handleStart(r)} style={startButtonStyle}>
-                Start routine
-              </button>
+              {/* Starting a routine puts the app into logging mode for THIS person, so it is the
+                  front door to a write rather than a read. */}
+              <ReadOnlyWrap personId={activePersonId}>
+                <button onClick={() => handleStart(r)} style={startButtonStyle}>
+                  Start routine
+                </button>
+              </ReadOnlyWrap>
             </Card>
           ))}
         </div>

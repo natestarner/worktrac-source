@@ -99,4 +99,48 @@ describe('ProfileTab', () => {
 
     onlineManager.setOnline(true);
   });
+
+  // A member's Profile is a different screen, not the owner's with pieces greyed out. Household
+  // management is MANAGE_PEOPLE / DELETE_ACCOUNT and unreachable for them, so it is hidden --
+  // disabling is for something you could do under other circumstances.
+  describe('as a member', () => {
+    beforeEach(() => {
+      useAuth.mockReturnValue({
+        user: { id: 9, email: 'sam@example.com' },
+        account: { id: 1, name: "The Starners' household", defaultUnit: 'lb' },
+        membership: { accountRole: 'MEMBER', personId: 2, membersSeeEveryone: true },
+        people: [
+          { id: 1, name: 'Nate', isPrimary: true },
+          { id: 2, name: 'Samuel', isPrimary: false },
+        ],
+        refreshPeople,
+      });
+    });
+
+    // "Account holder" over the member's OWN email describes somebody else -- the bug this variant
+    // exists to fix.
+    it("shows their own identity, not the account holder's", () => {
+      render(<ProfileTab />);
+
+      expect(screen.getByText('You')).toBeInTheDocument();
+      expect(screen.queryByText('Account holder')).not.toBeInTheDocument();
+      expect(screen.getByText('Samuel')).toBeInTheDocument();
+      expect(screen.getByText('sam@example.com')).toBeInTheDocument();
+    });
+
+    it('hides the household roster and every control on it', () => {
+      render(<ProfileTab />);
+
+      expect(screen.queryByText('People')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+    });
+
+    it('hides the danger zone entirely', () => {
+      render(<ProfileTab />);
+
+      expect(screen.queryByText('Danger zone')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+    });
+  });
 });

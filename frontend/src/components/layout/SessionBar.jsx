@@ -9,6 +9,7 @@ import { DEFAULT_REST_TARGET_SECONDS } from '../../utils/restTarget';
 import { formatRestTime, formatTime } from '../../utils/datetime';
 import EndWorkoutConfirmModal from '../shared/EndWorkoutConfirmModal';
 import Button from '../shared/Button';
+import ReadOnlyWrap from '../shared/ReadOnlyWrap';
 import { IconTimer } from '../shared/icons';
 
 // The bottom chrome: one fixed bar carrying the active person's session state, their rest progress,
@@ -102,14 +103,19 @@ export default function SessionBar() {
         {/* Muted rather than the ghost variant's accent text, exactly as "End routine" is: this is a
             relocation of the old banner's control, not a promotion of it, and an accent-coloured
             control here would compete with "Log set" a few pixels above. */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowEndWorkoutConfirm(true)}
-          style={{ color: 'var(--color-muted)', flexShrink: 0 }}
-        >
-          End workout
-        </Button>
+        {/* Ending a workout closes someone's live session, so it follows the same rule as every
+            other write on their data. A member watching a sibling's session tick along must not be
+            able to end it. */}
+        <ReadOnlyWrap personId={activePersonId}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowEndWorkoutConfirm(true)}
+            style={{ color: 'var(--color-muted)', flexShrink: 0 }}
+          >
+            End workout
+          </Button>
+        </ReadOnlyWrap>
       </div>
 
       {showEndWorkoutConfirm && (
