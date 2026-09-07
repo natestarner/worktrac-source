@@ -61,6 +61,8 @@ There is already exactly one way to do each of these. **Adding a second is the b
 | Offline-capable write | `useDurableMutation` (component) / `dispatchDurableWrite`, `enqueueOutboxWrite` (non-component) | A bare `useMutation`, or calling `api/*` directly |
 | Online-only (Tier-3) write | `useGatedMutation` (the **only** caller of `useRequireOnline`) | Calling `api/*` directly; an ad-hoc `try/catch` + toast per call site; `useRequireOnline` on its own |
 | Disabling a Tier-3 entry point up front | `OfflineDisabledWrap` | Hand-rolled `disabled={!online}` |
+| Disabling a control that belongs to someone else | `ReadOnlyWrap` (nested INSIDE `OfflineDisabledWrap`) | A hand-rolled permission check, or a second message about connectivity |
+| "What may this login do here?" | `useAccountAccess` | Reading `membership` off `useAuth()` directly |
 | "Am I online?" | `useOnlineStatus` (never reflects lie-fi — deliberate) | `navigator.onLine`, a second connectivity flag |
 | "Is the backend struggling?" | `useConnectionTrouble` | Inspecting query error state by hand |
 | Ordering queued writes | `byEnqueueOrder` / `enqueueSeq` | TanStack's `submittedAt` — re-stamped on every re-execute |
@@ -85,6 +87,7 @@ is added here with a reason** — and none of these may be "simplified" away.
 |---|---|---|
 | `useRequireOnline` / `OfflineDisabledWrap` | Tier-3 writes refuse offline | Some (`createPastSession`) are **not idempotent** — queueing them would duplicate on replay |
 | `useOnlineStatus` | Reflects hard-offline and the pin, **never lie-fi** | Lie-fi must not disable Tier-3 controls; the server may still be answering |
+| `ReadOnlyWrap` vs `OfflineDisabledWrap` | When a control is **both** not-writable and offline, the read-only message wins | A control a member can *never* use must not claim it "needs a connection" — that sends someone hunting for signal in a basement over something no connection fixes. Not a connectivity branch: the precedence is structural (`ReadOnlyWrap` nests inside and ignores the offline props it is handed), so getting the nesting backwards fails loudly instead of producing the wrong message |
 | `offlineCacheWarm.js` | No-ops when offline | Warming is meaningless with no network |
 | `AuthContext` | `isOfflineError && snapshot` → degrade; real 4xx → sign out | The single highest-consequence branch in the app (`2026-07-27`) |
 | `ExerciseDetail.jsx` | `summaryQuery.isPaused \|\| isError` → derived summary | Hard-offline pauses, lie-fi errors; both need the derived value |
