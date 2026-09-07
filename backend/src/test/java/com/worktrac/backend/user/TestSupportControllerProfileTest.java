@@ -65,6 +65,10 @@ class TestSupportControllerProfileTest {
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.person.PersonRepository.class));
         context.registerBean(org.springframework.security.crypto.password.PasswordEncoder.class,
                 () -> org.mockito.Mockito.mock(org.springframework.security.crypto.password.PasswordEncoder.class));
+        // Added with the pending-invite lookup, which lets an e2e read the invite id + raw token
+        // for an address without going through a mailbox.
+        context.registerBean(com.worktrac.backend.membership.MembershipInviteRepository.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.membership.MembershipInviteRepository.class));
         context.registerBean(org.springframework.jdbc.core.JdbcTemplate.class,
                 () -> org.mockito.Mockito.mock(org.springframework.jdbc.core.JdbcTemplate.class));
     }

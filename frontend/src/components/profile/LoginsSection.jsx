@@ -201,14 +201,16 @@ const linkStyle = {
   cursor: 'pointer',
 };
 
+// Matches ImportDataModal's field label rather than the uppercase treatment on the auth pages.
+// The uppercase idiom belongs to <SectionLabel>, which is a heading ABOVE a group of content; the
+// two in-app modals an owner uses should also read the same as each other. check-design-primitives
+// enforces the first half of that.
 const labelStyle = {
   display: 'block',
   marginBottom: 6,
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 700,
   color: 'var(--color-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
 };
 
 const disclosureStyle = {
