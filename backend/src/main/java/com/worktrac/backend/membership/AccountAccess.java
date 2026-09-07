@@ -58,6 +58,38 @@ public record AccountAccess(
     }
 
     /**
+     * Whether this login may change a shared account resource -- an exercise or a tag -- given who
+     * created it.
+     *
+     * <p>Lives here, beside has() and isSelf(), because it is the same kind of question and because
+     * keeping it here keeps AccountRole the only place a role is ever consulted. The two call sites
+     * (ExerciseService.update, TagService.rename) act on different entity types, so the creator is
+     * passed as a bare id rather than the row.
+     *
+     * <p><b>A null creator answers FALSE for a member, and that polarity is deliberate.</b> Null
+     * means nobody in this household is recorded as having made the row: a preloaded global
+     * exercise, a row written by the previous release during a rolling deploy, or an account with
+     * no OWNER membership for V69 to attribute to. An owner still edits it through
+     * EDIT_ANY_SHARED_RESOURCE, so nothing becomes uneditable -- but a member never inherits a row
+     * nobody claims. Failing open here would hand every member every unattributed row in the
+     * household, which is precisely the wrong direction to be wrong in.
+     *
+     * <p>⚠️ This answers EDIT only. Deletion is DELETE_SHARED_RESOURCE and has no ownership
+     * component at all: a shared row that someone else's history already references is not the
+     * creator's alone to remove. Do not grow a "delete what you created" branch in here without
+     * that decision being made deliberately -- see the plan's Decisions table.
+     */
+    public boolean mayEditSharedResource(Long createdByUserId) {
+        if (has(Permission.EDIT_ANY_SHARED_RESOURCE)) {
+            return true;
+        }
+        return has(Permission.EDIT_OWN_SHARED_RESOURCE)
+                && userId != null
+                && createdByUserId != null
+                && createdByUserId.equals(userId);
+    }
+
+    /**
      * The access an account's owner has.
      *
      * Phase 1 has no account_memberships table yet, so every authenticated login is by definition

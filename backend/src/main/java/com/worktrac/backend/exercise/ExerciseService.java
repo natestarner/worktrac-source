@@ -3,6 +3,7 @@ package com.worktrac.backend.exercise;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.common.ForbiddenException;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.quota.QuotaService;
 import org.springframework.stereotype.Service;
@@ -34,8 +35,15 @@ public class ExerciseService {
                 .toList();
     }
 
+    // ⚠️ NO PERMISSION CHECK LIVES IN HERE, and that is structural rather than an oversight.
+    // MEMBER holds CREATE_SHARED_RESOURCE unconditionally, so the handler's annotation is the whole
+    // gate and every login that reaches this method is allowed to be here. That matters because
+    // this is a DURABLE write: shouldRetryWrite treats a definitive 4xx as terminal, so any 403
+    // raised here would discard the create for good, along with every set already queued behind
+    // its temp exercise id. See the quota comment further down, which is the same argument.
     @Transactional
-    public ExerciseDto add(Long accountId, ExerciseRequest request) {
+    public ExerciseDto add(AccountAccess access, ExerciseRequest request) {
+        Long accountId = access.accountId();
         // Idempotent create: a retried or offline-replayed create carrying the same client key
         // returns the already-committed exercise instead of inserting a second row. Blank/absent key
         // => no dedup (mirrors WorkoutSetService.findDuplicate). A filtered unique index (V43)
@@ -88,7 +96,11 @@ public class ExerciseService {
                 exerciseRepository.countByAccount_IdAndDeletedFalse(accountId));
 
         Account account = accountRepository.getReferenceById(accountId);
-        Exercise exercise = new Exercise(account, name, deduped ? clientKey : null, trackingType);
+        // Stamped only on the branch that genuinely inserts. Both dedup branches above return
+        // somebody else's existing row untouched -- re-attributing it to whoever happened to
+        // replay a create would quietly transfer authorship, and with it who may rename it.
+        Exercise exercise = new Exercise(account, name, deduped ? clientKey : null, trackingType,
+                access.userId());
         return ExerciseDto.from(exerciseRepository.save(exercise));
     }
 
@@ -97,10 +109,25 @@ public class ExerciseService {
     // setup fields via the per-person overlay, or add your own exercise. We therefore no
     // longer fork-on-edit; a global edit attempt is rejected outright.
     @Transactional
-    public ExerciseDto update(Long accountId, Long exerciseId, ExerciseRequest request) {
-        Exercise exercise = requireVisibleExercise(accountId, exerciseId);
+    public ExerciseDto update(AccountAccess access, Long exerciseId, ExerciseRequest request) {
+        Exercise exercise = requireVisibleExercise(access.accountId(), exerciseId);
         if (exercise.isGlobal()) {
             throw new ForbiddenException("Preloaded exercises can't be edited -- favorite it, or add your own");
+        }
+
+        // ⚠️ THIS IS THE ONLY THING STOPPING A MEMBER RENAMING THE WHOLE HOUSEHOLD'S CATALOG.
+        //
+        // The handler's annotation was EDIT_ANY_SHARED_RESOURCE (owner-only) and is now
+        // EDIT_OWN_SHARED_RESOURCE, which every member holds -- so the interceptor lets every
+        // member through to here on purpose, and this line is what refuses. HandlerPermissionCoverageTest
+        // asserts that an annotation is PRESENT, never which one, so it cannot catch this being
+        // dropped; MemberPermissionsTest is what pins it.
+        //
+        // 403, not 404, per the guard asymmetry: the exercise is genuinely visible to them -- it is
+        // in the shared catalog they search every day -- so pretending it does not exist is a lie
+        // the picker contradicts on the same screen.
+        if (!access.mayEditSharedResource(exercise.getCreatedByUserId())) {
+            throw new ForbiddenException("Only the person who added this exercise, or the account owner, can rename it");
         }
 
         exercise.setName(request.name().trim());
@@ -109,6 +136,12 @@ public class ExerciseService {
 
     // Deleting is only for an account's own exercises. Removing a preloaded exercise from your
     // picker is done by unfavoriting it, not by deleting the shared row.
+    //
+    // Deliberately still takes a bare accountId, and deliberately consults no creator stamp:
+    // DELETE_SHARED_RESOURCE is owner-only, so the handler's annotation is the entire decision and
+    // there is nothing here for an AccountAccess to answer. A shared row that other people's
+    // history already points at is not its creator's alone to remove -- see
+    // AccountAccess.mayEditSharedResource for why edit and delete part company here.
     @Transactional
     public void remove(Long accountId, Long exerciseId) {
         Exercise exercise = requireVisibleExercise(accountId, exerciseId);

@@ -1,6 +1,8 @@
 package com.worktrac.backend.tag;
 
 import com.worktrac.backend.common.ConflictException;
+import com.worktrac.backend.common.ForbiddenException;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.quota.QuotaService;
 import org.springframework.stereotype.Service;
@@ -34,15 +36,28 @@ public class TagService {
     }
 
     @Transactional
-    public TagDto create(Long accountId, String name) {
-        return TagDto.from(getOrCreate(accountId, name));
+    public TagDto create(AccountAccess access, String name) {
+        return TagDto.from(getOrCreate(access.accountId(), name, access.userId()));
     }
 
     @Transactional
-    public TagDto rename(Long accountId, Long tagId, String name) {
+    public TagDto rename(AccountAccess access, Long tagId, String name) {
+        Long accountId = access.accountId();
         String trimmed = requireName(name);
         Tag tag = tagRepository.findByIdAndAccount_Id(tagId, accountId)
                 .orElseThrow(() -> new NotFoundException("We couldn't find that tag."));
+
+        // The tag counterpart of ExerciseService.update's check, and the same warning applies: the
+        // handler's annotation went from EDIT_ANY_SHARED_RESOURCE to EDIT_OWN_SHARED_RESOURCE, so
+        // every member now reaches this method and only this line refuses them.
+        //
+        // Checked BEFORE the name-collision test below so a member probing for names cannot learn
+        // which tags the household already has from a 409-vs-403 difference on a tag that is not
+        // theirs to touch either way.
+        if (!access.mayEditSharedResource(tag.getCreatedByUserId())) {
+            throw new ForbiddenException("Only the person who added this tag, or the account owner, can rename it");
+        }
+
         if (!tag.getName().equalsIgnoreCase(trimmed)
                 && tagRepository.findByAccount_IdAndName(accountId, trimmed).isPresent()) {
             throw new ConflictException("A tag with that name already exists");
@@ -51,6 +66,9 @@ public class TagService {
         return TagDto.from(tag);
     }
 
+    // Deliberately still a bare accountId, and deliberately consults no creator stamp:
+    // DELETE_SHARED_RESOURCE is owner-only, so the handler's annotation is the entire decision.
+    // See AccountAccess.mayEditSharedResource for why edit and delete part company here.
     @Transactional
     public void delete(Long accountId, Long tagId) {
         Tag tag = tagRepository.findByIdAndAccount_Id(tagId, accountId)
@@ -71,8 +89,20 @@ public class TagService {
 
     // Find an existing tag by name (case-insensitively, per DB collation) or create one. This
     // is what makes free-text tagging create-on-the-fly without spawning "chest"/"Chest" dupes.
+    //
+    // ⚠️ NOT just the create endpoint. PersonExerciseService reaches this from setTags (a member
+    // tagging their own exercise) and from the importer, so it is the single point where a tag can
+    // enter the household vocabulary and therefore the only place worth stamping.
+    //
+    // createdByUserId is stamped ONLY on the create branch. Finding an existing tag must return it
+    // untouched: re-stamping would transfer authorship to whoever happened to type the name next,
+    // and with it who may rename it.
+    //
+    // No permission check here either, for ExerciseService.add's reason -- MEMBER holds
+    // CREATE_SHARED_RESOURCE unconditionally, and a 403 on this path would take down the durable
+    // write that triggered it.
     @Transactional
-    public Tag getOrCreate(Long accountId, String name) {
+    public Tag getOrCreate(Long accountId, String name, Long createdByUserId) {
         String trimmed = requireName(name);
         return tagRepository.findByAccount_IdAndName(accountId, trimmed)
                 .orElseGet(() -> {
@@ -80,7 +110,8 @@ public class TagService {
                     // refused, or a household at its ceiling could no longer re-apply tags it
                     // already has.
                     quotaService.requireTagCapacity(accountId, tagRepository.countByAccount_Id(accountId));
-                    return tagRepository.save(new Tag(accountRepository.getReferenceById(accountId), trimmed));
+                    return tagRepository.save(
+                            new Tag(accountRepository.getReferenceById(accountId), trimmed, createdByUserId));
                 });
     }
 

@@ -129,6 +129,28 @@ public class AccountDeletionService {
         personRepository.deleteByAccount_Id(accountId);
         exerciseRepository.deleteByAccount_Id(accountId);
         tagRepository.deleteByAccount_Id(accountId);
+        // Exercises and tags carry created_by_user_id (V67), whose foreign key to users is NO
+        // ACTION, so those rows must be gone from the database before the user delete below.
+        //
+        // ⚠️ HONEST STATUS: this flush is INSURANCE, not a fix for an observed bug, and no test
+        // fails without it -- measured, by removing it and running the full suite green.
+        // AccountDeletionTest already exercises the exact path (seedAccountData creates a custom
+        // exercise and a tag as the owner, and the owner's user row is one of the ones deleted
+        // below), so Hibernate's action queue is today emitting these deletes in an order that
+        // satisfies the new FK.
+        //
+        // It stays because that order is an internal detail of Hibernate's ActionQueue -- derived
+        // deletes only QUEUE entity removals, and the queue is ordered by entity type rather than
+        // by the order they were called in. Nothing in our code asks for the order we are relying
+        // on. The same assumption held right up until it didn't for account_memberships, where the
+        // failure was a 503 from an irreversible action. Two flushes are a rounding error on a path
+        // that runs once per household ever; re-deriving this after a Hibernate upgrade breaks it
+        // would not be.
+        //
+        // So: do not delete this as "unused" -- but equally, do not read it as proof of a bug that
+        // was ever seen here.
+        exerciseRepository.flush();
+        tagRepository.flush();
         // Only the logins this household was the last reason to keep. A credential can belong to
         // more than one household now, so deleting an account must never delete a login that is
         // still someone's way into another one.

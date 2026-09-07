@@ -38,13 +38,18 @@ public class ExerciseController {
     @PostMapping
     @RequiresPermission(Permission.CREATE_SHARED_RESOURCE)
     public ExerciseDto add(@Valid @RequestBody ExerciseRequest request) {
-        return exerciseService.add(currentUser.accountId(), request);
+        return exerciseService.add(currentUser.access(), request);
     }
 
+    // ⚠️ EDIT_OWN, not EDIT_ANY -- so this annotation admits every member, on purpose. An
+    // interceptor cannot know who created the row behind {exerciseId}, so the real decision moved
+    // into ExerciseService.update (AccountAccess.mayEditSharedResource). Loosening this without
+    // that check in place hands every member the whole household's catalog, and
+    // HandlerPermissionCoverageTest will not notice -- it asserts an annotation exists, not which.
     @PutMapping("/{exerciseId}")
-    @RequiresPermission(Permission.EDIT_ANY_SHARED_RESOURCE)
+    @RequiresPermission(Permission.EDIT_OWN_SHARED_RESOURCE)
     public ExerciseDto update(@PathVariable Long exerciseId, @Valid @RequestBody ExerciseRequest request) {
-        return exerciseService.update(currentUser.accountId(), exerciseId, request);
+        return exerciseService.update(currentUser.access(), exerciseId, request);
     }
 
     @DeleteMapping("/{exerciseId}")

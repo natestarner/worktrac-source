@@ -108,7 +108,7 @@ public class PersonExerciseService {
         if (tagNames != null) {
             for (String name : tagNames) {
                 if (name != null && !name.trim().isEmpty()) {
-                    resolved.add(tagService.getOrCreate(access.accountId(), name));
+                    resolved.add(tagService.getOrCreate(access.accountId(), name, access.userId()));
                 }
             }
         }
@@ -142,8 +142,12 @@ public class PersonExerciseService {
     // Returns what was actually applied, so the import summary can distinguish "we set your note"
     // from "you already had one".
     @Transactional
-    public PersonalizationApplied applyImportedPersonalization(Long accountId, Person person, Exercise exercise,
-                                                                String note, boolean favorite, List<String> tagNames) {
+    // importingUserId stamps any tag this import invents into the household vocabulary. Import is
+    // IMPORT_DATA, which is owner-only, so in practice this is always the owner -- passed through
+    // rather than assumed, so the stamp stays true if that ever changes.
+    public PersonalizationApplied applyImportedPersonalization(Long accountId, Long importingUserId, Person person,
+                                                                Exercise exercise, String note, boolean favorite,
+                                                                List<String> tagNames) {
         PersonExercise pe = getOrCreate(person, exercise);
 
         boolean noteApplied = false;
@@ -174,7 +178,7 @@ public class PersonExerciseService {
                     continue;
                 }
                 boolean isNewToAccount = tagService.find(accountId, name.trim()).isEmpty();
-                Tag tag = tagService.getOrCreate(accountId, name.trim());
+                Tag tag = tagService.getOrCreate(accountId, name.trim(), importingUserId);
                 pe.getTags().add(tag);
                 existing.add(tag.getName().toLowerCase(java.util.Locale.ROOT));
                 tagsAdded++;
