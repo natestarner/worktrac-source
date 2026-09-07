@@ -36,3 +36,13 @@ export function acceptInvite({ inviteId, token, password }) {
 export function revokeLogin(personId) {
   return apiClient.delete(`/api/account/logins/${personId}`);
 }
+
+// Clears a member's login lockout. The owner acting as the support desk -- a teenager locked out
+// mid-workout asks the person standing next to them, not their inbox.
+//
+// It grants nothing: a lockout is a throttle on guessing, not a credential, so clearing it cannot
+// let the owner in as that member. That is exactly why an owner may do this and may never set a
+// password. 204 whether or not they were locked.
+export function unlockLogin(personId) {
+  return apiClient.post(`/api/account/logins/${personId}/unlock`);
+}

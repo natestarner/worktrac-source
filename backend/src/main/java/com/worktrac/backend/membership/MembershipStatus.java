@@ -27,5 +27,21 @@ public enum MembershipStatus {
      * downgrade: deleting would be irreversible, would need re-inviting everybody on re-upgrade,
      * and would turn a billing lapse into data loss.
      */
-    PAUSED_PLAN
+    PAUSED_PLAN;
+
+    /**
+     * ⚠️ <b>THE ONLY PLACE THIS IS DERIVED.</b> Two callers need it and they must never disagree:
+     * {@link AccountAccess#status()} answers it per request (for {@code /me} and
+     * {@code PermissionInterceptor}), and {@code MembershipDto.from(AccountMembership, ...)}
+     * answers it at login, before any {@code AccountAccess} exists.
+     *
+     * <p>It shipped as two independent copies of the same expression. Nothing was wrong with either
+     * one — that is the point: a second home for one decision costs nothing until the decision
+     * changes, and then {@code /login} and {@code /me} disagree about whether somebody is paused
+     * while {@code /me} is documented as the single authority. Same rule as
+     * {@code AccountRole.permissions()} being the only role→authority map.
+     */
+    public static MembershipStatus forRole(AccountRole role, boolean accountIsPro) {
+        return role == AccountRole.MEMBER && !accountIsPro ? PAUSED_PLAN : ACTIVE;
+    }
 }

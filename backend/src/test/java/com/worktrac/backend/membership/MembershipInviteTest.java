@@ -548,6 +548,88 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             revoke(theirPersonId, ownerToken).andExpect(status().isNotFound());
         }
 
+        /**
+         * ⚠️ The owner is the support desk, and without this they are blind to the single most
+         * common reason a member says signing in is broken. Surfaced BESIDE the status rather than
+         * as a fourth one: a locked login is still ACTIVE, and clears itself in fifteen minutes.
+         */
+        @Test
+        void aLockedOutMemberIsVisibleToTheOwnerAndCanBeUnlocked() throws Exception {
+            String samToken = makeSamAMember();
+            String samEmail = "sam-" + suffix + "@example.com";
+
+            // Lock Sam out the way a real person would: forget the password.
+            for (int i = 0; i < 10; i++) {
+                mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("email", samEmail, "password", "wrong-password"))));
+            }
+
+            JsonNode logins = json(mockMvc.perform(get("/api/account/logins")
+                    .header("Authorization", bearer(ownerToken))));
+            JsonNode sam = logins.get(0).get("personId").asLong() == samPersonId ? logins.get(0) : logins.get(1);
+
+            assertThat(sam.get("lockedUntil").isNull()).isFalse();
+            // Still ACTIVE -- a lockout is orthogonal to having a login, not a replacement for it.
+            assertThat(sam.get("status").asText()).isEqualTo("ACTIVE");
+
+            mockMvc.perform(post("/api/account/logins/" + samPersonId + "/unlock")
+                            .header("Authorization", bearer(ownerToken)))
+                    .andExpect(status().isNoContent());
+
+            JsonNode after = json(mockMvc.perform(get("/api/account/logins")
+                    .header("Authorization", bearer(ownerToken))));
+            JsonNode samAfter = after.get(0).get("personId").asLong() == samPersonId ? after.get(0) : after.get(1);
+            assertThat(samAfter.get("lockedUntil").isNull()).isTrue();
+
+            // ...and Sam can actually sign in again, which is the point.
+            assertThat(samToken).isNotBlank();
+            mockMvc.perform(post("/api/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("email", samEmail, "password", "password123"))))
+                    .andExpect(status().isOk());
+        }
+
+        /**
+         * ⚠️ Unlocking GRANTS NOTHING. A lockout is a throttle on guessing, not a credential, so
+         * clearing it cannot let the owner in as that member — which is precisely why an owner may
+         * do this and may never set a password. The old password must still be the wrong one.
+         */
+        @Test
+        void unlockingDoesNotChangeOrRevealThePassword() throws Exception {
+            makeSamAMember();
+            String samEmail = "sam-" + suffix + "@example.com";
+
+            for (int i = 0; i < 10; i++) {
+                mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("email", samEmail, "password", "wrong-password"))));
+            }
+            mockMvc.perform(post("/api/account/logins/" + samPersonId + "/unlock")
+                            .header("Authorization", bearer(ownerToken)))
+                    .andExpect(status().isNoContent());
+
+            // A wrong password is still wrong -- 401, not a session.
+            mockMvc.perform(post("/api/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("email", samEmail, "password", "wrong-password"))))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        // Idempotent and quiet: the owner's intent ("let them try again") is already true.
+        @Test
+        void unlockingSomebodyWhoIsNotLockedIsANoOp() throws Exception {
+            makeSamAMember();
+
+            mockMvc.perform(post("/api/account/logins/" + samPersonId + "/unlock")
+                            .header("Authorization", bearer(ownerToken)))
+                    .andExpect(status().isNoContent());
+        }
+
         @Test
         void aMemberCannotRevokeAnybody() throws Exception {
             String samToken = makeSamAMember();

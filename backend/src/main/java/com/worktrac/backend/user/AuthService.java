@@ -48,7 +48,9 @@ public class AuthService {
     // just emailed and is fresh in someone's mind, while this guards a password a family shares
     // across devices and may genuinely fumble. Fifteen minutes is long enough to make guessing
     // pointless and short enough that nobody needs support to get back in.
-    private static final int MAX_FAILED_LOGINS = 10;
+    // Package-visible so RateLimitPropertiesTest can assert the per-email rate limit stays ABOVE
+    // it -- see that test for why the two numbers are a pair rather than independent knobs.
+    static final int MAX_FAILED_LOGINS = 10;
     private static final Duration LOCKOUT_DURATION = Duration.ofMinutes(15);
 
     // BCrypt hash of a value nothing can match, used to spend the same ~100ms on an unknown email

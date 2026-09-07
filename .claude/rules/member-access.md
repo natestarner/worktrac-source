@@ -56,7 +56,7 @@ imply otherwise.
 
 The same holds for the Pro pause, one step weaker: it does not even remove the membership.
 
-### ⚠️ An owner may invite, revoke and unlock. An owner may NEVER set a password.
+### ⚠️ An owner may invite, resend, revoke and unlock. An owner may NEVER set a password.
 
 There is no `CHANGE_ANY_PASSWORD` permission, no admin path, and no support path. The member's
 Profile page states this as a promise to them:
@@ -67,6 +67,13 @@ Profile page states this as a promise to them:
 `PasswordChangeService` and the absence of any sibling to it are what make that true. **If a
 control to set another person's password is ever added, that sentence changes in the same commit**
 — and so does the handbook, the privacy policy, and the invitation email, all of which carry it.
+
+**Unlock is the fourth lever, and it GRANTS NOTHING.** A lockout is a throttle on guessing, not
+a credential, so clearing one cannot let the owner in as that member and cannot reveal anything
+about their password. That asymmetry is exactly what makes unlock safe to hand an owner when
+setting a password is not, and `MembershipInviteTest#unlockingDoesNotChangeOrRevealThePassword`
+is what pins it. The member always had a self-service route (wait fifteen minutes, or reset
+their own password); this exists because the OWNER is the support desk.
 
 An owner who can set a member's password can impersonate that member. That is the whole argument,
 and it is why forgot-password (which proves control of the mailbox) is the only reset path.

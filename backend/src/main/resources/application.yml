@@ -93,7 +93,9 @@ app:
     # RateLimitProperties for why these are looser than the contact limits.
     # Narrowest bucket: attempts against ONE address, from anywhere. Consumed for every
     # submitted email whether or not an account exists -- see AuthService.checkLoginAllowed.
-    login-per-email-per-hour: ${APP_RATE_LIMIT_LOGIN_PER_EMAIL_PER_HOUR:10}
+    # Must stay ABOVE AuthService.MAX_FAILED_LOGINS (10), or the account lockout empties
+    # this bucket too and "reset your password to get back in right away" stops being true.
+    login-per-email-per-hour: ${APP_RATE_LIMIT_LOGIN_PER_EMAIL_PER_HOUR:20}
     login-per-ip-per-hour: ${APP_RATE_LIMIT_LOGIN_PER_IP_PER_HOUR:300}
     login-global-per-hour: ${APP_RATE_LIMIT_LOGIN_GLOBAL_PER_HOUR:2000}
     # Contact Us form (ContactRateLimiter). Tighter than the registration limits above because

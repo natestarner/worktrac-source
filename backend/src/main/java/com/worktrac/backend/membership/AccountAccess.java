@@ -77,9 +77,7 @@ public record AccountAccess(
      * different question: not "may you do this" but "may you do anything".
      */
     public MembershipStatus status() {
-        return accountRole == AccountRole.MEMBER && !accountIsPro
-                ? MembershipStatus.PAUSED_PLAN
-                : MembershipStatus.ACTIVE;
+        return MembershipStatus.forRole(accountRole, accountIsPro);
     }
 
     /** True when this login IS the given person, rather than merely able to act on them. */
