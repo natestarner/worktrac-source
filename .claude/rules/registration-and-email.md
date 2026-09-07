@@ -124,6 +124,50 @@ and a `selectionToken`, and `POST /api/auth/session` mints the real thing from a
   403** — a 403 confirms the account id is real, which is an enumeration oracle spanning
   households.
 
+## Member-login invites — what the OWNER must not be able to learn
+
+`POST /api/account/logins/{personId}/invite` (owner, `MANAGE_LOGINS`) creates a
+`membership_invites` row; `POST /api/auth/accept-invite` (permitAll) turns it into a membership.
+The table deliberately mirrors `pending_registrations`: BCrypt'd secret, expiry, attempt ceiling,
+resend cooldown.
+
+- **⚠️ BOTH invite paths require acceptance, and the two must be INDISTINGUISHABLE to the owner.**
+  Whether the invited address already has a Huddle account or not, the owner sees one outcome —
+  `INVITED` — and the membership exists only once the invitee acts. Attaching it immediately for a
+  known address would be a **user-enumeration oracle**: anyone with a household could type an
+  address and learn whether that person uses Huddle, through a route needing no password. It leaks
+  exactly what `PasswordResetService`'s non-enumerating design and `DUMMY_HASH` exist to hide.
+  The **email body** differs (choose a password vs. sign in with the one you have); nothing the
+  owner can observe does. `MembershipInviteTest` pins this by asserting the two responses carry
+  identical field sets.
+- **A fourth `PersonLoginDto` state meaning "activated instantly" would reintroduce that oracle.**
+  Three states exist — `NONE`, `INVITED`, `ACTIVE` — and an expired invite reads as `NONE`, because
+  showing it as pending leaves the owner waiting on something that can never be accepted.
+- **⚠️ Accept must survive the invited address registering its OWN household first.** By accept
+  time the user exists, so blindly creating one collides on the unique email index and fails an
+  otherwise-valid invitation. Accept looks the user up, creates only if genuinely absent, and
+  **never touches an existing user's password** — an invitation silently changing somebody's
+  credentials is the one thing a household owner must not be able to do.
+- **Every way an invitation can fail to authorize returns ONE refusal.** Wrong id, wrong token,
+  expired, already accepted, locked out — the same 401 with the same sentence. Distinguishing them
+  tells whoever holds a bad link which part to keep trying.
+- **A resend mints a NEW token**, so a link already in an inbox stops working. The usual reason to
+  resend is that the first went astray, and leaving both live doubles the window a mis-sent link is
+  usable. It also resets the attempt ceiling, which guards *one* secret.
+- **A failed invite email is NOT recoverable by resending.** The raw token exists only on the
+  `MembershipInviteIssuedEvent`; the row holds a BCrypt hash that cannot reproduce it. The owner
+  must re-issue. That is why the failure is audited (`MEMBER_INVITE_EMAIL_FAILED`) rather than
+  logged — from the owner's side, an invitation that never arrived is indistinguishable from one
+  the recipient is ignoring.
+- **The link carries an id AND a token** (`/join?i=<id>&t=<token>`). A BCrypt hash has a per-row
+  salt, so there is no equality to index and the token alone cannot find its row.
+- **⚠️ `membership_invites` has NO ACTION FKs to accounts, people AND users**, so both deletion
+  paths clear invites **first**, and both null `invited_by_user_id` for users being reaped — a
+  member's invitation in *another* household must survive their removal from this one.
+- **Names are HTML-escaped into the invite template.** Person, household and owner names are free
+  text the household typed; unescaped, a household name is a script injection into every invitee's
+  inbox.
+
 ### ⚠️ The selection token: a credential that is deliberately not a session
 
 `scp: "select"`, no `accountId`, five minutes. It buys exactly one thing — the right to call

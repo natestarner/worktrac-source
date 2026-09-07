@@ -23,6 +23,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.UUID;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 
 @Service
@@ -32,6 +34,7 @@ public class EmailService {
 
     private final EmailClient emailClient;
     private final String senderAddress;
+    private final String membershipInviteTemplate;
     private final String appUrl;
     private final String logoUrl;
     private final int codeExpirationMinutes;
@@ -53,6 +56,7 @@ public class EmailService {
         this.registrationSuccessTemplate = loadTemplate("templates/email/registration-success.html");
         this.passwordResetCodeTemplate = loadTemplate("templates/email/password-reset-code.html");
         this.passwordResetSuccessTemplate = loadTemplate("templates/email/password-reset-success.html");
+        this.membershipInviteTemplate = loadTemplate("templates/email/membership-invite.html");
         String noopPattern = properties.getE2eNoopRecipientPattern();
         this.e2eNoopRecipientPattern = (noopPattern == null || noopPattern.isBlank())
                 ? null
@@ -89,6 +93,75 @@ public class EmailService {
                 .replace("{{EXPIRATION_MINUTES}}", String.valueOf(codeExpirationMinutes));
 
         return send(toEmail, "Your Huddle password reset code", plainTextPasswordResetCode(code), html);
+    }
+
+    /**
+     * Invites someone to take over a person in a household as their own login.
+     *
+     * <p>⚠️ <b>The BODY differs by whether the recipient already has a Huddle account; nothing the
+     * OWNER sees does.</b> That asymmetry is the whole design — see
+     * {@code MembershipInviteService}'s class comment for why an owner-visible difference would be
+     * a user-enumeration oracle. Here it is only about giving the recipient the right instruction:
+     * one of them needs to choose a password, the other already has one.
+     *
+     * <p>Carries the transparency sentence — what the owner can and cannot do — because a member's
+     * first contact with this feature is this email, not the app. It says the same thing the
+     * Profile page does, deliberately.
+     */
+    public String sendMembershipInvite(String toEmail, String personName, String householdName,
+                                        String ownerName, String joinUrl, boolean recipientHasAccount) {
+        String actionSentence = recipientHasAccount
+                ? "Open the link below and sign in with the password you already use for Huddle."
+                : "Open the link below to choose a password and finish setting up your login.";
+        String buttonLabel = recipientHasAccount ? "Join " + householdName : "Set up my login";
+
+        String html = membershipInviteTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{JOIN_URL}}", joinUrl)
+                .replace("{{ACTION_SENTENCE}}", actionSentence)
+                .replace("{{BUTTON_LABEL}}", buttonLabel)
+                // Every one of these is somebody's typed text reaching an HTML document, so it is
+                // escaped rather than interpolated raw. OWNER_NAME and PERSON_NAME are person
+                // names and HOUSEHOLD_NAME is an account name -- all free text the household chose.
+                .replace("{{PERSON_NAME}}", escapeHtml(personName))
+                .replace("{{HOUSEHOLD_NAME}}", escapeHtml(householdName))
+                .replace("{{OWNER_NAME}}", escapeHtml(ownerName));
+
+        String plain = ownerName + " set up a Huddle login for you as " + personName
+                + " in " + householdName + ". " + actionSentence + " " + joinUrl
+                + "  This link expires in 7 days. " + ownerName + " can see your workouts and can"
+                + " remove your login, but cannot see or set your password.";
+
+        return send(toEmail, ownerName + " set up a Huddle login for you", plain, html);
+    }
+
+    // Minimal, and deliberately not a dependency: these values land in attribute-free text nodes
+    // in the template above, so the five XML predefined entities are the whole exposure. Ampersand
+    // first, or it would double-escape the others.
+    private static String escapeHtml(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
+
+    /**
+     * The link an invite email points at.
+     *
+     * <p>Built here because {@code appUrl} lives here — the one place that knows which origin the
+     * app is served from in this environment. A caller assembling it would need that config
+     * threaded to it, and would drift the moment a second caller appeared.
+     *
+     * <p>Carries the invite id AND the token: the id is the lookup (a BCrypt hash cannot be
+     * searched for), and the token is the proof. URL-encoded because the token is Base64URL and
+     * the id is a number, but the encoding is not optional — it is what stops a future token
+     * alphabet change silently breaking every link.
+     */
+    public String joinUrl(Long inviteId, String rawToken) {
+        return appUrl + "/join?i=" + URLEncoder.encode(String.valueOf(inviteId), StandardCharsets.UTF_8)
+                + "&t=" + URLEncoder.encode(rawToken, StandardCharsets.UTF_8);
     }
 
     public String sendPasswordResetSuccess(String toEmail) {

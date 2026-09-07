@@ -5,6 +5,8 @@ import com.worktrac.backend.billing.Subscription;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.membership.AccountAccessService;
 import com.worktrac.backend.membership.AccountMembership;
+import com.worktrac.backend.membership.MembershipInvite;
+import com.worktrac.backend.membership.MembershipInviteRepository;
 import com.worktrac.backend.membership.AccountMembershipRepository;
 import com.worktrac.backend.membership.AccountRole;
 import com.worktrac.backend.person.Person;
@@ -30,6 +32,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.Comparator;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -57,6 +61,7 @@ public class TestSupportController {
     private final AccountAccessService accountAccessService;
     private final PersonRepository personRepository;
     private final PasswordEncoder passwordEncoder;
+    private final MembershipInviteRepository inviteRepository;
     private final JdbcTemplate jdbcTemplate;
 
     public TestSupportController(TestCodeCache testCodeCache, EmailProperties emailProperties,
@@ -64,6 +69,7 @@ public class TestSupportController {
                                   AccountAccessService accountAccessService,
                                   PersonRepository personRepository,
                                   PasswordEncoder passwordEncoder,
+                                  MembershipInviteRepository inviteRepository,
                                   JdbcTemplate jdbcTemplate,
                                   RegistrationEventRepository registrationEventRepository,
                                   UserRepository userRepository,
@@ -79,6 +85,7 @@ public class TestSupportController {
         this.accountAccessService = accountAccessService;
         this.personRepository = personRepository;
         this.passwordEncoder = passwordEncoder;
+        this.inviteRepository = inviteRepository;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -249,6 +256,47 @@ public class TestSupportController {
                 membersSeeEveryone ? 1 : 0, account.get().getId());
         accountAccessService.invalidateAccount(account.get().getId());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * The outstanding invite for a household, with a token that will actually work.
+     *
+     * <p>⚠️ It does NOT return the real emailed token — nothing can. The raw value exists only on
+     * the send event, and the row holds a BCrypt hash with a per-row salt, so it cannot be read
+     * back or recomputed. This PLANTS a known token (replacing the hash) and returns it, which is
+     * the same trade {@code /pending-code} makes for registration codes.
+     *
+     * <p>What that costs is honest to state: the emailed link itself is not exercised. What it
+     * keeps is everything else — a real invite row, a real {@code matches()} check against a real
+     * BCrypt hash, a real expiry and attempt ceiling, and a real membership at the end.
+     *
+     * <p>Profile-gated and key-gated like every route here, so it exists in local/lower only.
+     */
+    @GetMapping("/api/auth/test/pending-invite")
+    public ResponseEntity<Map<String, Object>> pendingInvite(
+            @RequestParam String ownerEmail,
+            @RequestHeader(value = "X-E2E-Test-Key", required = false) String testKey) {
+        if (!keyMatches(testKey)) {
+            return ResponseEntity.notFound().build();
+        }
+        Optional<Account> account = ownedAccount(ownerEmail);
+        if (account.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        List<MembershipInvite> pending = inviteRepository.findPendingForAccount(account.get().getId());
+        if (pending.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        // The newest, so a resend in the same test reads as the one just sent.
+        MembershipInvite invite = pending.stream()
+                .max(Comparator.comparing(MembershipInvite::getId))
+                .orElseThrow();
+
+        String token = "e2e-invite-token-" + invite.getId();
+        jdbcTemplate.update("UPDATE membership_invites SET token_hash = ? WHERE id = ?",
+                passwordEncoder.encode(token), invite.getId());
+
+        return ResponseEntity.ok(Map.of("inviteId", invite.getId(), "token", token));
     }
 
     // The household a login OWNS. Every route here drives state for the account under test, and a

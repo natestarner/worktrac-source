@@ -9,10 +9,11 @@ import EditPersonModal from './EditPersonModal';
 import DeleteAccountModal from './DeleteAccountModal';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
+import LoginsSection from './LoginsSection';
 
 export default function ProfileTab() {
   const { user, account, people, refreshPeople } = useAuth();
-  const { isMember, selfPersonId } = useAccountAccess();
+  const { isMember, selfPersonId, ownerName } = useAccountAccess();
   const { openConfirm } = useUI();
   const navigate = useNavigate();
   const primary = people.find((p) => p.isPrimary);
@@ -45,15 +46,32 @@ export default function ProfileTab() {
           is the MEMBER's own address, so that heading would sit above their email describing
           somebody else. A member gets their own identity instead.
 
-          Neither variant names the owner. Doing so would need a new field on MembershipDto -- /me
-          returns no owner name today -- and widening an auth response is not something to slip in
-          alongside a UI change. Flagged in the plan for Nate. */}
+          A member also sees WHO the owner is -- MembershipDto.ownerName, resolved for members only.
+          It answers "who do I ask?", and it is what makes the refusals elsewhere actionable. */}
       <SectionLabel>{isMember ? 'You' : 'Account holder'}</SectionLabel>
       <div style={cardStyle}>
         <Field label="Name" value={isMember ? self?.name : primary?.name} />
         <Field label="Household" value={account?.name} />
-        <Field label="Email" value={user?.email} last />
+        <Field label="Email" value={user?.email} last={!isMember} />
+        {/* Only a member sees this, and only a member needs it: it answers "who do I ask?", and it
+            is the same person the refusals elsewhere in the app tell them to ask. ownerName is null
+            for an owner by design, so this row simply does not render for them. */}
+        {isMember && <Field label="Household owner" value={ownerName} last />}
       </div>
+
+      {/* The transparency line. Deliberately plain, deliberately above everything else a member can
+          do here, and deliberately the SAME sentence the invite email carries -- for a teenager
+          with their own login this is the whole trust story, and it must not read differently
+          depending on where they meet it.
+
+          ⚠️ If the owner's powers ever change, THIS SENTENCE changes with them. It is the reason
+          the owner gets invite/revoke controls but no password-setting control. */}
+      {isMember && (
+        <div style={transparencyStyle}>
+          {ownerName || 'The account owner'} owns this household. They can see your workouts and can
+          remove your login. <strong>They cannot see or set your password.</strong>
+        </div>
+      )}
 
       {/* Everything below is household management, which is MANAGE_PEOPLE / DELETE_ACCOUNT and
           therefore owner-only. Hidden rather than disabled: a member has no path to any of it, so
@@ -104,6 +122,8 @@ export default function ProfileTab() {
           </div>
         ))}
       </div>
+
+      <LoginsSection />
 
       <SectionLabel>Danger zone</SectionLabel>
       <div style={cardStyle}>
@@ -179,3 +199,13 @@ const badgeStyle = {
 
 const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent-text)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const deleteLinkStyle = { background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+
+const transparencyStyle = {
+  fontSize: 13,
+  lineHeight: 1.55,
+  color: 'var(--color-muted)',
+  background: 'var(--color-subtle-bg)',
+  borderRadius: 10,
+  padding: '12px 14px',
+  marginBottom: 24,
+};

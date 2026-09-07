@@ -47,8 +47,11 @@ public class SecurityConfig {
                         // carrying scp), so an authenticated matcher here would make finishing a
                         // multi-household login impossible. The route reads and validates the
                         // header itself -- see AuthController.startSession.
+                        // /api/auth/accept-invite is permitAll for the same reason as /session: the caller
+                        // has no session yet, and the emailed token IS the credential. The route
+                        // verifies it itself -- see MembershipInviteService.accept.
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/session",
-                                "/api/auth/confirm-email",
+                                "/api/auth/accept-invite", "/api/auth/confirm-email",
                                 "/api/auth/resend-code", "/api/auth/forgot-password", "/api/auth/reset-password",
                                 "/api/auth/resend-reset-code", "/api/auth/test/pending-code",
                                 "/api/auth/test/email-outcome",
@@ -58,7 +61,8 @@ public class SecurityConfig {
                                 // chain does not additionally demand a JWT, which these have no way
                                 // to supply -- they exist to CREATE the login a test then signs in as.
                                 "/api/auth/test/member",
-                                "/api/auth/test/member-visibility").permitAll()
+                                "/api/auth/test/member-visibility",
+                                "/api/auth/test/pending-invite").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         // Server-to-server (Azure Event Grid), no JWT possible -- gated instead
                         // by EmailDeliveryWebhookController's own query-param shared secret.

@@ -3,8 +3,11 @@ package com.worktrac.backend.user;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.security.ClientIpResolver;
 import com.worktrac.backend.security.CurrentUser;
+import com.worktrac.backend.membership.AccountMembership;
+import com.worktrac.backend.membership.MembershipInviteService;
 import com.worktrac.backend.security.JwtService;
 import com.worktrac.backend.user.dto.AuthResponse;
+import com.worktrac.backend.user.dto.AcceptInviteRequest;
 import com.worktrac.backend.user.dto.ConfirmEmailRequest;
 import com.worktrac.backend.user.dto.ForgotPasswordRequest;
 import com.worktrac.backend.user.dto.LoginRequest;
@@ -32,10 +35,12 @@ public class AuthController {
     private final PasswordResetService passwordResetService;
     private final CurrentUser currentUser;
     private final JwtService jwtService;
+    private final MembershipInviteService inviteService;
 
     public AuthController(AuthService authService, RegistrationService registrationService,
                            PasswordResetService passwordResetService, CurrentUser currentUser,
-                           JwtService jwtService) {
+                           JwtService jwtService, MembershipInviteService inviteService) {
+        this.inviteService = inviteService;
         this.authService = authService;
         this.registrationService = registrationService;
         this.passwordResetService = passwordResetService;
@@ -119,6 +124,24 @@ public class AuthController {
                 .orElseThrow(() -> new UnauthorizedException("Sign in again to choose a household."));
 
         return authService.startSession(userId, request.accountId());
+    }
+
+    /**
+     * Finishes an invitation and signs the invitee straight in.
+     *
+     * <p>permitAll, and it has to be: the caller has no session — acquiring one is the whole point.
+     * The emailed token is the credential, and {@code MembershipInviteService.accept} is what
+     * verifies it.
+     *
+     * <p>Returns a full session rather than bouncing to /login. Making someone type a password they
+     * may have just chosen, on a link they just proved they hold, adds a step and no security: the
+     * token already proved control of the invited mailbox.
+     */
+    @PostMapping("/accept-invite")
+    public AuthResponse acceptInvite(@Valid @RequestBody AcceptInviteRequest request) {
+        AccountMembership membership =
+                inviteService.accept(request.inviteId(), request.token(), request.password());
+        return authService.startSession(membership.getUser().getId(), membership.getAccount().getId());
     }
 
     @GetMapping("/me")

@@ -18,6 +18,7 @@ import RegisterPage from './routes/RegisterPage';
 import ConfirmEmailPage from './routes/ConfirmEmailPage';
 import ForgotPasswordPage from './routes/ForgotPasswordPage';
 import ResetPasswordPage from './routes/ResetPasswordPage';
+import JoinPage from './routes/JoinPage';
 import ProtectedRoute from './routes/ProtectedRoute';
 import AdminRoute from './routes/AdminRoute';
 import AppShell from './routes/AppShell';
@@ -146,6 +147,8 @@ export default function App() {
             <Route path="/confirm-email" element={<ConfirmEmailPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            {/* Where an invite email lands. Unauthenticated: acquiring a session is the point. */}
+            <Route path="/join" element={<JoinPage />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/app" element={<AppShell />}>
                 <Route index element={<Navigate to="log" replace />} />
