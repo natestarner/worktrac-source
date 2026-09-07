@@ -9,6 +9,8 @@ import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.person.PersonService;
+import com.worktrac.backend.registrationaudit.RegistrationAuditService;
+import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
 import org.slf4j.Logger;
@@ -73,7 +75,9 @@ public class MembershipInviteService {
     private final PersonService personService;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AccountAccessService accountAccessService;
     private final ApplicationEventPublisher events;
+    private final RegistrationAuditService auditService;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -84,7 +88,9 @@ public class MembershipInviteService {
                                     PersonService personService,
                                     UserRepository userRepository,
                                     PasswordEncoder passwordEncoder,
+                                    AccountAccessService accountAccessService,
                                     ApplicationEventPublisher events,
+                                    RegistrationAuditService auditService,
                                     Clock clock) {
         this.inviteRepository = inviteRepository;
         this.membershipRepository = membershipRepository;
@@ -93,7 +99,9 @@ public class MembershipInviteService {
         this.personService = personService;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.accountAccessService = accountAccessService;
         this.events = events;
+        this.auditService = auditService;
         this.clock = clock;
     }
 
@@ -169,6 +177,27 @@ public class MembershipInviteService {
                 .orElse("The account owner");
     }
 
+    /**
+     * The owner's EMAIL, for the one notice that goes to them.
+     *
+     * <p>Separate from {@link #ownerNameFor} deliberately: the name is chrome a member sees, the
+     * address is a send target and never leaves the server. Nothing hands a member the owner's
+     * email — see MembershipDto's comment.
+     */
+    @Transactional(readOnly = true)
+    public String ownerEmailFor(Long accountId) {
+        return membershipRepository.findOwners(accountId).stream()
+                .map(m -> m.getUser().getEmail())
+                .findFirst()
+                .orElse(null);
+    }
+
+    /** The household's own name, for the notices that have to say which household. */
+    @Transactional(readOnly = true)
+    public String householdNameFor(Long accountId) {
+        return accountRepository.findById(accountId).map(Account::getName).orElse("your household");
+    }
+
     /** What the caller needs to send the email. The raw token exists only in this object. */
     public record IssuedInvite(MembershipInvite invite, String rawToken, boolean recipientHasAccount) {
     }
@@ -212,33 +241,38 @@ public class MembershipInviteService {
             issued = new IssuedInvite(invite, rawToken, userRepository.findByEmail(email).isPresent());
         }
 
-        // A fresh invite and a resend both send an email, and both announce from HERE -- see
-        // announce() for why the controller cannot.
+        // Both paths announce, and they announce from HERE -- see announce()'s comment for why the
+        // controller cannot.
         announce(issued, access.accountId());
         return issued;
     }
 
     /**
-     * Publishes the event that sends the invitation email.
+     * Records the watchdog's start marker and publishes the event that sends the email.
      *
-     * <p>⚠️ <b>THIS MUST RUN INSIDE THE TRANSACTION, and it is not a style choice.</b> The listener
-     * is {@code @TransactionalEventListener(AFTER_COMMIT)}, which with the default
-     * {@code fallbackExecution = false} <b>silently discards</b> any event published while no
+     * <p>⚠️ <b>THIS MUST BE CALLED FROM INSIDE THE TRANSACTION, and it is not a style choice.</b>
+     * The listener is {@code @TransactionalEventListener(AFTER_COMMIT)}, which with the default
+     * {@code fallbackExecution = false} <b>silently discards</b> any event published when no
      * transaction is active. Publishing from the controller — after this {@code @Transactional}
-     * method has already returned and committed — therefore sent no email at all: no exception, no
-     * log line, and a 200 response carrying {@code INVITED}. The invitation existed and was
-     * perfectly valid; nobody was ever told about it.
+     * method has already returned and committed — therefore sends no email at all, with no
+     * exception, no log line and a 200 response. It shipped that way and nothing went red: every
+     * other test in {@code MembershipInviteTest} reads the invite row straight from the database,
+     * and so does the e2e via {@code /api/auth/test/pending-invite}.
      *
-     * <p>It was written that way first and <b>nothing went red</b>, because every other test here
-     * reads the invite row straight out of the database, and so does the e2e via
-     * {@code /api/auth/test/pending-invite}. {@code MembershipInviteTest} pins it now.
-     *
-     * <p>Every other publisher in this codebase — {@code RegistrationService},
-     * {@code PasswordResetService}, {@code ContactMessageService} — already publishes from inside
-     * its transactional service method. This is that same shape, not a new one.
+     * <p>{@code MembershipInviteTest#theInvitationEmailIsActuallySent} is the pin. Every other
+     * publisher in this codebase ({@code RegistrationService}, {@code PasswordResetService},
+     * {@code ContactMessageService}) already publishes from inside its transactional service
+     * method; this is that same shape, not a new one.
      */
     private void announce(IssuedInvite issued, Long accountId) {
         MembershipInvite invite = issued.invite();
+
+        // The watchdog's half of the pair: without a STARTED marker, an invite whose dispatch never
+        // ran leaves no trace at all -- "didn't run" and "ran fine" would look identical from
+        // outside, which is the one thing the async contract forbids. REQUIRES_NEW, so the marker
+        // is durable whether or not the invite itself goes on to commit.
+        auditService.record(invite.getEmail(), RegistrationEventType.MEMBER_INVITE_STARTED, null);
+
         events.publishEvent(new MembershipInviteIssuedEvent(
                 invite.getEmail(),
                 invite.getPerson().getName(),
@@ -330,7 +364,99 @@ public class MembershipInviteService {
         invite.accept(now);
         log.info("Invite {} accepted; membership {} created for account {}",
                 invite.getId(), membership.getId(), invite.getAccount().getId());
+
+        // Both notices ride one event -- see MembershipAcceptedEvent for why the OWNER's is a
+        // security control rather than a courtesy. Published here rather than from AuthController
+        // for the reason announce() spells out: an AFTER_COMMIT listener drops anything published
+        // with no transaction running.
+        //
+        // NOT published on the already-present branch above: no membership was created, so there is
+        // nothing to tell the owner about, and a second notice for a login they already know about
+        // would be the false alarm that teaches them to ignore the real one.
+        events.publishEvent(new MembershipAcceptedEvent(
+                user.getEmail(),
+                ownerEmailFor(invite.getAccount().getId()),
+                invite.getPerson().getName(),
+                invite.getAccount().getName(),
+                ownerNameFor(invite.getAccount().getId())));
+
         return membership;
+    }
+
+    /**
+     * Removes a login from this household, or withdraws an invitation that was never accepted.
+     *
+     * <p>Returns the email that lost access, so the caller can tell them — or empty when there was
+     * nothing to revoke, which is not an error: the owner's intent ("this person should not have a
+     * login") is already true.
+     *
+     * <p>⚠️ <b>THE PERSON AND EVERY SET THEY LOGGED STAY.</b> This deletes a membership, never a
+     * person and never training data. Sam losing their login must leave Sam, Sam's history and
+     * Sam's PRs exactly where they were, reachable by the owner as they were before the login
+     * existed. Anything else turns an access decision into data loss.
+     *
+     * <p>⚠️ <b>The user row survives too, when it is a way into another household.</b> A credential
+     * can belong to several households now, so revoking here must never sign somebody out of
+     * somewhere else — the same rule {@code AccountDeletionService} follows. A user left with zero
+     * memberships anywhere is NOT deleted either: they may hold a pending invitation elsewhere, and
+     * their own password-reset flow still has to work.
+     *
+     * <p><b>What this cannot do is reach a device that is offline.</b> A revoked member holding
+     * queued writes keeps them until they reconnect, at which point their token resolves to no
+     * membership and the session tears down with those writes undeliverable. There is no
+     * server-side fix — see {@code offline-internals.md} — so the confirmation warns the owner
+     * rather than pretending otherwise.
+     */
+    @Transactional
+    public Optional<String> revoke(AccountAccess access, Long personId) {
+        Long accountId = access.accountId();
+        // Through the guard so a person outside this household 404s rather than confirming they
+        // exist somewhere.
+        personService.requireVisiblePerson(personId, access);
+
+        Optional<String> revokedEmail = Optional.empty();
+        // Read BEFORE anything is deleted: afterwards a removed login and a withdrawn invitation
+        // look identical, and the notice has to say which. "Your login was removed" and "your
+        // invitation was withdrawn" mean different things to the person receiving them -- only the
+        // first implies queued offline work that may now never land.
+        boolean hadMembership = false;
+
+        Optional<AccountMembership> membership =
+                membershipRepository.findByAccount_IdAndPerson_Id(accountId, personId);
+        if (membership.isPresent()) {
+            // ⚠️ An owner must not be able to remove their own way in. Nothing else in the app can
+            // put it back, and a household with no owner has nobody who can invite one.
+            if (membership.get().getAccountRole() == AccountRole.OWNER) {
+                throw new ConflictException("You can't remove your own login. Delete the household instead.");
+            }
+            revokedEmail = Optional.of(membership.get().getUser().getEmail());
+            hadMembership = true;
+            membershipRepository.delete(membership.get());
+            // Immediately on this replica, and within the cache TTL everywhere else. token_version
+            // is deliberately NOT bumped: that is per-USER, so bumping it would sign them out of
+            // every other household too.
+            accountAccessService.invalidate(membership.get().getUser().getId(), accountId);
+            log.info("Membership revoked for person {} in account {}", personId, accountId);
+        }
+
+        // A pending invitation is revoked by the same action, and the owner should not have to know
+        // which state they were in to undo it.
+        Optional<MembershipInvite> pending = inviteRepository.findPendingFor(accountId, personId);
+        if (pending.isPresent()) {
+            if (revokedEmail.isEmpty()) {
+                revokedEmail = Optional.of(pending.get().getEmail());
+            }
+            inviteRepository.delete(pending.get());
+            log.info("Pending invite withdrawn for person {} in account {}", personId, accountId);
+        }
+
+        // Empty means there was nothing to revoke, which is not an error and not worth an email.
+        // Inside the transaction, per announce()'s comment.
+        boolean wasOnlyAnInvitation = !hadMembership;
+        revokedEmail.ifPresent(email -> events.publishEvent(new MembershipRevokedEvent(
+                email, householdNameFor(accountId), ownerNameFor(accountId), wasOnlyAnInvitation)));
+
+        return revokedEmail;
     }
 
     /**

@@ -1,6 +1,8 @@
 package com.worktrac.backend.email;
 
+import com.worktrac.backend.membership.MembershipAcceptedEvent;
 import com.worktrac.backend.membership.MembershipInviteIssuedEvent;
+import com.worktrac.backend.membership.MembershipRevokedEvent;
 import com.worktrac.backend.registrationaudit.RegistrationAuditService;
 import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.user.PasswordResetCodeIssuedEvent;
@@ -109,6 +111,49 @@ public class RegistrationEmailEventListener {
                 RegistrationEventType.MEMBER_INVITE_EMAIL_SENT,
                 RegistrationEventType.MEMBER_INVITE_EMAIL_FAILED,
                 "membership invite");
+    }
+
+    /**
+     * An invitation was accepted: TWO sends, to two people, for two different reasons.
+     *
+     * <p>They are separate {@code sendAndRecord} calls rather than one, because either can fail on
+     * its own and the audit trail has to say which. The owner's is the typo detector; the member's
+     * carries the household name and the way out.
+     */
+    @Async("emailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMembershipAccepted(MembershipAcceptedEvent event) {
+        sendAndRecord(event.memberEmail(),
+                () -> emailService.sendAddedToHousehold(event.memberEmail(), event.personName(),
+                        event.householdName(), event.ownerName()),
+                RegistrationEventType.MEMBER_JOINED_EMAIL_SENT,
+                RegistrationEventType.MEMBER_JOINED_EMAIL_FAILED,
+                "added to household");
+
+        sendAndRecord(event.ownerEmail(),
+                () -> emailService.sendInviteAccepted(event.ownerEmail(), event.memberEmail(),
+                        event.personName(), event.householdName()),
+                RegistrationEventType.MEMBER_ACCEPTED_OWNER_EMAIL_SENT,
+                RegistrationEventType.MEMBER_ACCEPTED_OWNER_EMAIL_FAILED,
+                "invite accepted (owner)");
+    }
+
+    /**
+     * A login was removed, or an invitation withdrawn.
+     *
+     * <p>⚠️ A security control rather than a courtesy: without it somebody is silently signed out,
+     * and their queued offline writes can then never land. Audited for the same reason — a notice
+     * that quietly failed to send would leave them with no explanation at all.
+     */
+    @Async("emailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMembershipRevoked(MembershipRevokedEvent event) {
+        sendAndRecord(event.memberEmail(),
+                () -> emailService.sendLoginRevoked(event.memberEmail(), event.householdName(),
+                        event.ownerName(), event.wasOnlyAnInvitation()),
+                RegistrationEventType.MEMBER_REVOKED_EMAIL_SENT,
+                RegistrationEventType.MEMBER_REVOKED_EMAIL_FAILED,
+                "login revoked");
     }
 
     // Common shape for all four handlers above: attempt the send; only a failure *of the send

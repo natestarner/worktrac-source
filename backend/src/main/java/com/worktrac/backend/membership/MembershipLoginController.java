@@ -4,6 +4,8 @@ import com.worktrac.backend.security.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -54,9 +56,9 @@ public class MembershipLoginController {
      *
      * <p>The email is dispatched by the service, on an {@code AFTER_COMMIT} listener, so a slow or
      * failing send can never roll back the invitation itself — the same ordering registration
-     * uses. It is deliberately NOT published from here: an {@code AFTER_COMMIT} listener discards
-     * anything published once the service transaction has committed, which is exactly the bug
-     * {@code MembershipInviteService#announce} documents.
+     * uses. It is deliberately NOT published from here: an {@code AFTER_COMMIT} listener silently
+     * discards anything published once the service transaction has already committed, which is
+     * exactly the bug {@code MembershipInviteService#announce} documents.
      */
     @PostMapping("/{personId}/invite")
     @RequiresPermission(Permission.MANAGE_LOGINS)
@@ -64,5 +66,19 @@ public class MembershipLoginController {
         MembershipInvite invite = inviteService.invite(currentUser.access(), personId, request.email()).invite();
         return new PersonLoginDto(personId, invite.getPerson().getName(),
                 PersonLoginDto.INVITED, invite.getEmail());
+    }
+
+    /**
+     * Removes a login, or withdraws an invitation that was never accepted — one action for both,
+     * because the owner should not have to know which state somebody was in to undo it.
+     *
+     * <p>Answers 204 whether or not there was anything to revoke: the intent ("this person should
+     * not have a login") is true either way, and a 404 would only invite a retry.
+     */
+    @DeleteMapping("/{personId}")
+    @RequiresPermission(Permission.MANAGE_LOGINS)
+    public ResponseEntity<Void> revoke(@PathVariable Long personId) {
+        inviteService.revoke(currentUser.access(), personId);
+        return ResponseEntity.noContent().build();
     }
 }

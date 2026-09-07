@@ -27,3 +27,12 @@ export function acceptInvite({ inviteId, token, password }) {
     { timeoutMs: AUTH_TIMEOUT_MS },
   );
 }
+
+// Removing a login, or withdrawing an invitation that was never accepted -- one call for both,
+// because the owner should not have to know which state somebody was in to undo it.
+//
+// 204 whether or not there was anything to revoke: the intent ("this person should not have a
+// login") is true either way, and a 404 would only invite a retry.
+export function revokeLogin(personId) {
+  return apiClient.delete(`/api/account/logins/${personId}`);
+}
