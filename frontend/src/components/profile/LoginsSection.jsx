@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import SectionLabel from '../shared/SectionLabel';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import Modal from '../shared/Modal';
@@ -13,8 +14,14 @@ import { listLogins, inviteLogin, revokeLogin, unlockLogin } from '../../api/log
  * above it in ProfileTab. A member has no path to any of this, so a greyed-out list of controls
  * they can never use is noise that also invites "why not?". Disabling is for something you could
  * do under other circumstances.
+ *
+ * `plan` (AccountDto.plan, chrome only — billing.md) is what lets Enable-login/Resend be replaced
+ * with a link to Pro on Free instead of opening an invite that `MembershipInviteService.invite`
+ * can only refuse. See member-access.md's "a control the server will refuse must not be offered" —
+ * this is bug #2 on that list. Fails OPEN on an unknown plan, same as `ProUpsell`/`PlanBadge`: a
+ * pre-billing snapshot must not cost a paying household the real control.
  */
-export default function LoginsSection() {
+export default function LoginsSection({ plan }) {
   const [rows, setRows] = useState(null);
   const [invitingPerson, setInvitingPerson] = useState(null);
   const { run } = useGatedMutation();
@@ -151,11 +158,24 @@ export default function LoginsSection() {
                 </OfflineDisabledWrap>
               )}
               {row.status !== 'ACTIVE' && (
-                <OfflineDisabledWrap message="Sending an invite needs a connection.">
-                  <button onClick={() => setInvitingPerson(row)} style={linkStyle}>
-                    {row.status === 'INVITED' ? 'Resend' : 'Enable login'}
-                  </button>
-                </OfflineDisabledWrap>
+                plan === 'FREE' ? (
+                  // Not OfflineDisabledWrap'd: like PlanBadge's "Go Pro", this is a navigation, not
+                  // a write, so it works offline and the gate belongs on the checkout button it
+                  // leads to. Reuses the header pill's own class rather than a new style object —
+                  // frontend-core.md's "a raw literal in a component is the bug" applies to a new
+                  // one-off treatment as much as to a hardcoded value. No HuddleMark here: billing.md
+                  // reserves the mark for badges naming Pro as a product, and a small text link
+                  // inside a dense row is exactly the "clutter" case it calls out.
+                  <Link to="/app/billing" className="pressable plan-badge plan-badge--upgrade">
+                    Unlock with Pro
+                  </Link>
+                ) : (
+                  <OfflineDisabledWrap message="Sending an invite needs a connection.">
+                    <button onClick={() => setInvitingPerson(row)} style={linkStyle}>
+                      {row.status === 'INVITED' ? 'Resend' : 'Enable login'}
+                    </button>
+                  </OfflineDisabledWrap>
+                )
               )}
               {/* Not offered for the owner's own login: nothing in the app could put it back, and a
                   household with no owner has nobody who can invite one. The server refuses it too

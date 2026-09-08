@@ -125,6 +125,33 @@ test.describe('billing', () => {
       await expect(page.getByRole('button', { name: 'Export all data' })).toBeVisible();
     });
 
+  // The gate at the point of use, not just at the point of failure. Enable login used to be
+  // offered regardless of plan, so a Free owner filled out the whole invite modal and only THEN
+  // got refused by a toast -- exactly the "control the server will refuse must not be offered"
+  // shape member-access.md calls out. The client already knows the plan, so it swaps the row's
+  // control for a link to Pro instead of a doomed round trip.
+  test('a Free household is offered Pro on the Logins row instead of Enable login', async ({ page, request }) => {
+    const email = await registerHousehold(page, request, 'Nate');
+
+    await page.getByRole('button', { name: '+ Add person' }).click();
+    await page.getByPlaceholder('Name', { exact: true }).fill('Sam');
+    await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Sam', exact: true }).first()).toBeVisible();
+
+    await openAccountMenu(page);
+    await page.getByRole('menuitem', { name: 'Profile' }).click();
+
+    await expect(page.getByRole('button', { name: 'Enable login' })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Unlock with Pro' }).click();
+    await expect(page).toHaveURL(/\/app\/billing/);
+
+    await setBillingPlan(request, email, 'PRO');
+    await page.goto('/app/profile');
+
+    await expect(page.getByRole('link', { name: 'Unlock with Pro' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Enable login' })).toBeVisible();
+  });
+
   // The handbook is a route inside the app precisely so it works with no signal, and it now has to
   // explain the plans. A deep link into the new section is API -- renaming the id breaks it.
   test('the handbook explains the plans at a stable anchor', async ({ page, request }) => {
