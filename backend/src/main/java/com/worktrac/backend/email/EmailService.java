@@ -37,6 +37,16 @@ public class EmailService {
     private final String membershipInviteTemplate;
     private final String simpleNoticeTemplate;
     private final String appUrl;
+    // ⚠️ `appUrl` (APP_EMAIL_APP_URL) is configured in every environment as a full "open the app
+    // here" link, NOT a bare origin -- lower and production both carry `.../app/log` (confirmed
+    // live in both via `az containerapp show`, 2026-09-08). The three oldest callers below use it
+    // exactly that way, verbatim, and that is correct: they just want to open the app somewhere
+    // reasonable. `appOrigin` is for the OTHER shape of caller -- one building its OWN path, which
+    // `appUrl + "/whatever"` cannot do safely once appUrl already carries one. `joinUrl` did exactly
+    // that and produced `.../app/log/join?...`, a path no route matches; the SPA's catch-all sent it
+    // to `/` -> `/app/log` -> (unauthenticated) `/login`, with nothing on screen explaining why. Same
+    // bug, same fix, in `sendInviteAccepted`'s `/app/profile` CTA.
+    private final String appOrigin;
     private final String logoUrl;
     private final int codeExpirationMinutes;
     private final String verificationCodeTemplate;
@@ -51,7 +61,8 @@ public class EmailService {
                 .buildClient();
         this.senderAddress = properties.getSenderAddress();
         this.appUrl = properties.getAppUrl();
-        this.logoUrl = logoUrlFrom(appUrl);
+        this.appOrigin = originOf(appUrl);
+        this.logoUrl = appOrigin + "/email/logo.png";
         this.codeExpirationMinutes = properties.getCodeExpirationMinutes();
         this.verificationCodeTemplate = loadTemplate("templates/email/verification-code.html");
         this.registrationSuccessTemplate = loadTemplate("templates/email/registration-success.html");
@@ -195,14 +206,14 @@ public class EmailService {
                         + escapeHtml(householdName) + ".<br><br>If that address is not who you meant"
                         + " to invite, remove the login from Profile &rarr; Logins straight away —"
                         + " they can see everyone's workouts.")
-                .replace("{{CTA_URL}}", appUrl + "/app/profile")
+                .replace("{{CTA_URL}}", appOrigin + "/app/profile")
                 .replace("{{CTA_LABEL}}", "Review logins");
 
         return send(toEmail, personName + " accepted their Huddle login",
                 memberEmail + " accepted your invitation and can now sign in as " + personName
                         + " in " + householdName + ". If that is not who you meant to invite, remove"
                         + " the login from Profile > Logins straight away -- they can see everyone's"
-                        + " workouts. " + appUrl + "/app/profile",
+                        + " workouts. " + appOrigin + "/app/profile",
                 html);
     }
 
@@ -240,17 +251,21 @@ public class EmailService {
     /**
      * The link an invite email points at.
      *
-     * <p>Built here because {@code appUrl} lives here — the one place that knows which origin the
-     * app is served from in this environment. A caller assembling it would need that config
+     * <p>Built here because {@code appOrigin} lives here — the one place that knows which origin
+     * the app is served from in this environment. A caller assembling it would need that config
      * threaded to it, and would drift the moment a second caller appeared.
      *
      * <p>Carries the invite id AND the token: the id is the lookup (a BCrypt hash cannot be
      * searched for), and the token is the proof. URL-encoded because the token is Base64URL and
      * the id is a number, but the encoding is not optional — it is what stops a future token
      * alphabet change silently breaking every link.
+     *
+     * <p>⚠️ Built on {@code appOrigin}, never bare {@code appUrl} — see that field's comment. Using
+     * {@code appUrl} here once produced {@code .../app/log/join?...}, a path no client-side route
+     * matches, which silently landed every invite link on the login screen with no error at all.
      */
     public String joinUrl(Long inviteId, String rawToken) {
-        return appUrl + "/join?i=" + URLEncoder.encode(String.valueOf(inviteId), StandardCharsets.UTF_8)
+        return appOrigin + "/join?i=" + URLEncoder.encode(String.valueOf(inviteId), StandardCharsets.UTF_8)
                 + "&t=" + URLEncoder.encode(rawToken, StandardCharsets.UTF_8);
     }
 
@@ -277,16 +292,17 @@ public class EmailService {
         return send(toEmails.toArray(new String[0]), subject, body, null);
     }
 
-    // Email clients need a real, absolute image URL (inline <svg> and data: URIs are both
-    // unreliable across Gmail/Outlook) -- rather than a separate config property to keep in
-    // sync with app-url per environment, the logo always lives at a fixed path on the same
-    // origin the app itself is served from.
-    private String logoUrlFrom(String appUrl) {
+    // The bare scheme+authority under whatever `appUrl` is configured as -- discards any path (see
+    // the `appOrigin` field comment for why that matters beyond just the logo). Email clients need
+    // a real, absolute image URL (inline <svg> and data: URIs are both unreliable across
+    // Gmail/Outlook), so the logo lives at a fixed path on this origin rather than a separate config
+    // property that would need to be kept in sync with app-url per environment.
+    private static String originOf(String url) {
         try {
-            URI uri = new URI(appUrl);
-            return uri.getScheme() + "://" + uri.getAuthority() + "/email/logo.png";
+            URI uri = new URI(url);
+            return uri.getScheme() + "://" + uri.getAuthority();
         } catch (URISyntaxException e) {
-            throw new IllegalStateException("app.email.app-url is not a valid URI: " + appUrl, e);
+            throw new IllegalStateException("app.email.app-url is not a valid URI: " + url, e);
         }
     }
 

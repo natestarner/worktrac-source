@@ -161,6 +161,14 @@ resend cooldown.
   the recipient is ignoring.
 - **The link carries an id AND a token** (`/join?i=<id>&t=<token>`). A BCrypt hash has a per-row
   salt, so there is no equality to index and the token alone cannot find its row.
+- **⚠️ Any email CTA that appends its OWN path must build on `EmailService.appOrigin`, never bare
+  `appUrl`.** `APP_EMAIL_APP_URL` is configured in every real environment as a full "open the app"
+  link WITH a path already on it (`.../app/log`, confirmed live in lower and production), not a
+  bare origin. `joinUrl()` once did `appUrl + "/join?..."` and produced `.../app/log/join?...`, a
+  path the SPA has no route for — its catch-all silently sent every invite link to `/login` with
+  nothing on screen to explain why. `appUrl` bare is still correct for the CTAs that just want to
+  "open the app somewhere reasonable" (`sendRegistrationSuccess`, `sendAddedToHousehold`,
+  `sendLoginRevoked`) — only a caller building a specific path of its own needs the origin.
 - **⚠️ `membership_invites` has NO ACTION FKs to accounts, people AND users**, so both deletion
   paths clear invites **first**, and both null `invited_by_user_id` for users being reaped — a
   member's invitation in *another* household must survive their removal from this one.
