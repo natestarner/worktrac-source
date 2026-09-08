@@ -110,13 +110,24 @@ Three shipped bugs of exactly this shape, all caught late:
 1. **Remove** appeared on the owner's own login row (`isSelf` was checked against a DTO that had no
    such field, so it was always true). The server's 409 was right; offering the button was not.
 2. **Enable login** was offered on Free, producing an invitation whose successful path was a paused
-   login.
+   login. `MembershipInviteService.invite` closed the dangerous half (a `ConflictException` before
+   anything is created — see its comment), but that alone left the CLIENT still offering
+   Enable-login/Resend on Free and turning the refusal into a toast, which is this rule with the
+   invitation removed but the doomed round trip still there.
 3. A member's **exercise rename** succeeded on rows they created and 403'd on the rest, with
    nothing to tell them which — traded "always fails" for "unpredictable", which is worse to use.
 
 The rule: if the client can know the answer, it must not render the control; if it genuinely
 cannot (rename, which depends on who created a row behind an `{id}`), the refusal must **say why
 and what to do instead**, via `useGatedMutation`'s `showServerMessage`.
+
+**#2's client half:** `LoginsSection` takes `plan` (`AccountDto.plan`, chrome only — same
+fail-open-on-unknown as `ProUpsell`/`PlanBadge`) and swaps Enable-login/Resend for a `Link` to
+`/app/billing` reading **"Unlock with Pro"** whenever `plan === 'FREE'`, reusing the header pill's
+own `.plan-badge--upgrade` class rather than a new style. Not `OfflineDisabledWrap`ped — it is a
+navigation, not a write, same as `PlanBadge`'s "Go Pro". "Unlock with Pro" is mutually
+non-containing with the header badge's "Go Pro"/"Pro" (`frontend-core.md`), which sits in the same
+DOM on this screen.
 
 ### The offline limit that has no fix, only honesty
 

@@ -129,7 +129,7 @@ export default function ProfileTab() {
         ))}
       </div>
 
-      <LoginsSection />
+      <LoginsSection plan={account?.plan} />
 
       <SectionLabel>Danger zone</SectionLabel>
       <div style={cardStyle}>

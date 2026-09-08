@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LoginsSection from './LoginsSection';
 import { listLogins, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
@@ -61,7 +62,8 @@ describe('LoginsSection', () => {
   });
 
   // Three states, not a boolean: the action differs per state, and "invited" must be
-  // distinguishable from "never asked" or the owner cannot tell waiting from not-done.
+  // distinguishable from "never asked" or the owner cannot tell waiting from not-done. No `plan`
+  // prop is passed -- this also pins the fail-open default (an unknown plan behaves like Pro).
   it('offers Enable login for nobody-yet and Resend for already-invited', async () => {
     render(<LoginsSection />);
 
@@ -77,6 +79,60 @@ describe('LoginsSection', () => {
 
     expect(await screen.findByText('HAS LOGIN')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Enable login|Resend/ })).not.toBeInTheDocument();
+  });
+
+  // ── On a Free household ─────────────────────────────────────────────────────────────────────
+  //
+  // `MembershipInviteService.invite` refuses on Free with a 409, so offering Enable-login/Resend
+  // here is exactly the "control the server will refuse" case member-access.md forbids -- the
+  // client already knows the plan and must not send the owner into a modal that can only fail.
+
+  it('offers a link to Pro instead of Enable login/Resend on Free', async () => {
+    render(
+      <MemoryRouter>
+        <LoginsSection plan="FREE" />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Sam');
+    // Both Sam (NONE) and Alex (INVITED) would otherwise get an invite control.
+    expect(screen.getAllByRole('link', { name: 'Unlock with Pro' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: /Enable login|Resend/ })).not.toBeInTheDocument();
+
+    screen.getAllByRole('link', { name: 'Unlock with Pro' }).forEach((link) => {
+      expect(link).toHaveAttribute('href', '/app/billing');
+    });
+  });
+
+  // A tap here must never open the invite modal -- that dialog's own copy ("Member logins are
+  // part of Pro...") is written for a household that CAN act on it, not one the server will
+  // refuse before anything is sent.
+  it('never opens the invite modal on Free', async () => {
+    render(
+      <MemoryRouter>
+        <LoginsSection plan="FREE" />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Sam');
+    fireEvent.click(screen.getAllByRole('link', { name: 'Unlock with Pro' })[0]);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(inviteLogin).not.toHaveBeenCalled();
+  });
+
+  // Someone who already has a login has nothing to unlock either -- Free changes what an
+  // ABSENT login offers, not what an existing one shows.
+  it('still offers no action at all for someone who already has a login, on Free', async () => {
+    listLogins.mockResolvedValue([ROWS[0]]);
+    render(
+      <MemoryRouter>
+        <LoginsSection plan="FREE" />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('HAS LOGIN')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Unlock with Pro' })).not.toBeInTheDocument();
   });
 
   /**
