@@ -1,5 +1,6 @@
 package com.worktrac.backend.user;
 
+import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.common.LockedException;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.membership.AccountAccessService;
@@ -88,7 +89,17 @@ public class PasswordChangeService {
             user.recordFailedLogin(MAX_FAILED_ATTEMPTS, now, LOCKOUT_DURATION);
             userRepository.save(user);
             log.warn("Password change refused for user {}: wrong current password", userId);
-            throw new UnauthorizedException("That isn't your current password.");
+            // NOT UnauthorizedException. This route is only reachable WITH a valid session token --
+            // api/client.js treats ANY 401 on a request that carried one as "the session itself is
+            // invalid" and force-signs-out to /login, discarding whatever message came with it
+            // (see its `hadToken` branch). That rule is deliberately blunt everywhere else it
+            // applies (a stale/revoked token), but it is wrong here: the bearer token is fine, and
+            // what failed is a SECOND credential this endpoint itself asked for. A 401 here silently
+            // signed the person out with no explanation, which read as "changing your password
+            // kicks you to the login screen" -- see docs/incidents/2026-09-09 for the repro. 403
+            // reaches ChangePasswordSection.jsx's `showServerMessage` path instead, exactly as the
+            // lockout case below already does at 423.
+            throw new ForbiddenException("That isn't your current password.");
         }
 
         user.updatePasswordHash(passwordEncoder.encode(request.newPassword()));
