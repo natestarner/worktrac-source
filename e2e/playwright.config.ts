@@ -47,10 +47,23 @@ const isDeployedEnv = resolveIsDeployed();
 // sessions") -- a suite that grabs half the box makes a sibling session's suite flaky, which is
 // the same problem one level up. Raise it with E2E_WORKERS=<n> when the machine is yours alone.
 //
-// A deployed target stays at 2 regardless of local cores: lower's Azure SQL is Basic tier and its
-// Container App scales to zero, so the constraint there is the environment, not this machine.
+// A deployed target ignores local cores entirely: lower's backend is a SINGLE Container App
+// replica (maxReplicas: 1, confirmed live via `az containerapp show`) sitting in front of an
+// Azure SQL Basic-tier database (5 DTUs -- the smallest paid tier) with Spring's default
+// 10-connection Hikari pool. None of that scales with the machine running Playwright, which is
+// why this branch was never derived from os.cpus() the way the local one is.
+//
+// Raised from 2 to 8 on 2026-09-08, as a deliberate, watched experiment -- not a fix for
+// anything. It was floated on the theory that fixing the local Vite-dying-mid-run bug
+// (`docs/incidents/2026-09-01-vite-dev-server-node-stack-corruption.md`) meant this could go up
+// too, but that bug was a Windows/Node dev-server stability issue and this job never runs a dev
+// server at all, local or otherwise -- the two are unrelated. The real constraint above hasn't
+// changed. If `e2e-tests` starts failing with connectivity-shaped errors on specs that aren't
+// about connectivity, that is this experiment overloading a single fixed-capacity backend, not a
+// code regression -- see e2e-tests.md's "an overloaded backend presents as offline, not slow".
+// Revert to 2 rather than chasing the specs.
 function resolveWorkerCount(): number {
-  if (isDeployedEnv) return 2;
+  if (isDeployedEnv) return 8;
 
   // Playwright resolves `workers` after this file is evaluated, and a CLI `--workers` overrides
   // whatever the config returns -- so read the same inputs it will, in its own precedence order.
@@ -87,8 +100,16 @@ const workerCount = resolveWorkerCount();
 // detection while restoring a literal 5s would have made local assertions three times tighter
 // than what the suite has been passing under -- a new source of flakiness introduced by a
 // bug fix. 12s + 1.5s/worker never lands below the value local has been living with.
+//
+// `assertionTimeout` used to hardcode 15s for a deployed target instead of computing it -- which
+// is exactly what this formula already evaluates to at workerCount=2, so it was quietly the same
+// number, just not derived. That was invisible while deployed workers was a fixed 2, but a flat
+// timeout while workers went to 8 would be precisely the "budget stays fixed while contention
+// goes up" failure the paragraph above exists to prevent -- now against a single Container App
+// replica instead of a whole local machine. Unifying onto one formula costs nothing at the old
+// value and scales correctly at the new one.
 const perTestTimeout = 30_000 + workerCount * 5_000;
-const assertionTimeout = isDeployedEnv ? 15_000 : 12_000 + workerCount * 1_500;
+const assertionTimeout = 12_000 + workerCount * 1_500;
 
 export default defineConfig({
   testDir: './tests',

@@ -39,7 +39,12 @@ Full narrative: `docs/architecture/testing.md`.
   reads the CLI flag too — but `E2E_WORKERS` is the documented knob, and the per-test/assertion
   time budgets are derived from whichever one you use, so the budget always matches the contention.
   The local default is `cores/4` (capped at 8), deliberately below Playwright's own `cores/2` so a
-  sibling worktree's suite still has room; a deployed target is pinned at 2 regardless.
+  sibling worktree's suite still has room; a deployed target ignores local cores entirely and is
+  hardcoded in `playwright.config.ts` -- raised from 2 to 8 on 2026-09-08 as a watched experiment
+  against lower's real, fixed constraint (a single Container App replica, Basic-tier/5-DTU SQL).
+  See that file's comment before touching it, and revert to 2 if `e2e-tests` starts failing with
+  connectivity-shaped errors on specs that aren't about connectivity -- that's the environment
+  saturating, not a code regression.
 - **The local stack is configured to absorb that parallelism — don't undo it.** `scripts/db.sh`
   sets `READ_COMMITTED_SNAPSHOT ON` (Azure SQL's default, a SQL Server container's non-default;
   without it `logLiveSet` deadlocks against itself under concurrency), `application-local.yml`
