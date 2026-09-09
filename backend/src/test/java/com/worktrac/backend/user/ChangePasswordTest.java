@@ -93,10 +93,17 @@ class ChangePasswordTest extends AbstractIntegrationTest {
      * <p>Without it, a borrowed unlocked phone is a permanent account takeover: whoever holds it
      * sets a password the owner does not know. A live session is proof of a device, not of a
      * person, and this is the one screen where that difference decides everything.
+     *
+     * <p>⚠️ 403, not 401. This route only 200s with a session token attached, and
+     * {@code api/client.js} treats ANY 401 on a token-bearing request as "the session is invalid"
+     * and force-signs-out to {@code /login} — correct for a stale/revoked token, wrong here, since
+     * the token is fine and it's the current-password field that didn't check out. A 401 silently
+     * kicked the person to the login screen with no explanation instead of showing this message;
+     * see {@code docs/incidents/2026-09-09-change-password-wrong-current-signs-out.md}.
      */
     @Test
     void aWrongCurrentPasswordIsRefusedAndChangesNothing() throws Exception {
-        change("not-my-password", "attacker-chosen", token).andExpect(status().isUnauthorized());
+        change("not-my-password", "attacker-chosen", token).andExpect(status().isForbidden());
 
         login("password123").andExpect(status().isOk());
         login("attacker-chosen").andExpect(status().isUnauthorized());

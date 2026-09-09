@@ -38,6 +38,7 @@ need the "why" or the debugging story.
 | 2026-09-02 | [The boot white screen, root-caused at last](2026-09-02-cold-backend-login-strands-the-device.md) — lower's cold start holds a request ~35s against a 15s client abort, so sign-in reliably tore down the auth snapshot and query cache without a replacement; `AppShell`'s `return null` was the blank `#root` itself | Frontend / resilience |
 | 2026-09-04 | [An orphaned edit wedged the outbox permanently](2026-09-04-outbox-wedged-by-orphaned-edit.md) — deleting a not-yet-synced set cancelled only its create, leaving an edit that retried forever and head-of-line-blocked the one serial scope, so nothing synced again; a definitive 4xx on an exercise create wedged it the same way | Offline |
 | 2026-09-08 | [A real invite email's link silently landed on the login screen](2026-09-08-invite-link-appurl-path-collision.md) — `joinUrl()` assumed `appUrl` was a bare origin; every real environment configures it with a path already on it, so the link resolved to a route nothing matches and the SPA's catch-all bounced it to `/login` with no explanation | Registration / email |
+| 2026-09-09 | [Entering the wrong current password signed the person out](2026-09-09-change-password-wrong-current-signs-out.md) — the wrong-current-password check answered 401, and `api/client.js` treats any 401 on a token-bearing request as "the session is invalid", so a fine session was torn down over a wrong answer to a question that had nothing to do with it | Auth |
 
 ## Adding a new incident
 

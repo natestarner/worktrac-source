@@ -187,6 +187,18 @@ Contact Us bug report could only be matched to the container logs by timestamp. 
   A DB/backend outage must always degrade to "queue and retry", never to "you are signed out".
   See `docs/incidents/2026-07-27-db-outage-forced-logout.md`.
 
+- **⚠️ On an already-authenticated route, `UnauthorizedException` (401) means ONE thing: this
+  token itself is no longer valid.** `api/client.js` reads it that bluntly on purpose — any 401
+  on a request that carried a bearer token clears it and force-navigates to `/login`, with no
+  per-route opt-out. That is correct for a stale/revoked token and wrong for anything else, so an
+  authenticated endpoint that separately checks a SECOND credential (a current password, say)
+  must never throw `UnauthorizedException` for that check failing — the token is fine, and 401
+  there silently signs the person out over a wrong answer to a question that had nothing to do
+  with their session. Use `ForbiddenException` (403) instead, the same way the sibling lockout
+  case on that same check already uses `LockedException` (423) rather than colliding on 401.
+  `PasswordChangeService`'s wrong-current-password branch is the worked example; see
+  `docs/incidents/2026-09-09-change-password-wrong-current-signs-out.md`.
+
 ## Validation strictness is a durability decision
 
 The frontend's `shouldRetryWrite` retries every failure **except** a 4xx outside `{408, 429}`. So a
