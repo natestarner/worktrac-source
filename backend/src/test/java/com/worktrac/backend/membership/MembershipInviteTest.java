@@ -362,6 +362,25 @@ class MembershipInviteTest extends AbstractIntegrationTest {
                     .andExpect(status().isUnauthorized());
         }
 
+        // AcceptInviteRequest's password is optional (null must keep validating), but a SUPPLIED
+        // one gets the same 8..200 floor as registration, reset and change-password. This DTO
+        // used to carry no @Size at all, so a one-character password sailed straight through.
+        @Test
+        void aTooShortPasswordIsRejected() throws Exception {
+            invite(samPersonId, "sam-" + suffix + "@example.com");
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+
+            mockMvc.perform(post("/api/auth/accept-invite")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("inviteId", inviteId, "token", token, "password", "short"))))
+                    .andExpect(status().isBadRequest());
+
+            // The rejected attempt must not have consumed the invitation -- the link still works.
+            accept(inviteId, token, "password123");
+        }
+
         @Test
         void aWrongTokenIsRefused() throws Exception {
             invite(samPersonId, "sam-" + suffix + "@example.com");

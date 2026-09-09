@@ -66,6 +66,20 @@ describe('JoinPage', () => {
     );
   });
 
+  // A too-short entry must be caught here, not just on the server -- the placeholder says "at
+  // least 8 characters" but nothing previously enforced it client-side.
+  it('rejects a too-short password without calling the server', async () => {
+    renderAt('?i=42&t=secret-token');
+
+    fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), {
+      target: { value: 'short' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Join household' }));
+
+    expect(await screen.findByText('Password must be at least 8 characters.')).toBeInTheDocument();
+    expect(acceptInvite).not.toHaveBeenCalled();
+  });
+
   // A truncated link (mail clients do wrap and cut them) is not a server refusal, so it must not
   // become a network call. Says what to do rather than what is wrong with the URL.
   it('explains a link that is missing its parts, without calling the server', async () => {

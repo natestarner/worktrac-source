@@ -5,6 +5,7 @@ import Spinner from '../components/shared/Spinner';
 import { errorBannerStyle, fieldLabelStyle } from './LoginPage';
 import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
 import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
+import { FIELD_LIMITS } from '../utils/fieldLimits';
 
 /**
  * Where an invite link lands: finish setting up a login and get signed straight in.
@@ -23,6 +24,7 @@ export default function JoinPage() {
   const { acceptInvite } = useAuth();
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -33,9 +35,20 @@ export default function JoinPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+
+    // Mirrors RegisterPage's floor -- but a BLANK password is valid here (it means "use the
+    // account I already have"), so only a non-empty, too-short entry is rejected. The server
+    // enforces the same 8-char minimum on whatever it actually receives; this just gives someone
+    // who typos a short password a field-level message instead of a round trip.
+    const trimmedPassword = password.trim();
+    if (trimmedPassword && trimmedPassword.length < 8) {
+      setPasswordError(true);
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await acceptInvite({ inviteId, token, password: password.trim() || undefined });
+      await acceptInvite({ inviteId, token, password: trimmedPassword || undefined });
       navigate('/app/log');
     } catch (err) {
       // The server says one thing for every way a link can fail — wrong, expired, already used,
@@ -84,10 +97,19 @@ export default function JoinPage() {
                 name="password"
                 autoComplete="new-password"
                 placeholder="At least 8 characters"
+                maxLength={FIELD_LIMITS.password}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) setPasswordError(false);
+                }}
+                aria-invalid={passwordError || undefined}
+                aria-describedby={passwordError ? 'password-error' : undefined}
+                className={`input ${passwordError ? 'input-invalid' : ''}`}
               />
+              {passwordError && (
+                <div id="password-error" style={fieldErrorStyle}>Password must be at least 8 characters.</div>
+              )}
             </div>
 
             <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ position: 'relative' }}>
@@ -134,6 +156,13 @@ const introStyle = {
   lineHeight: 1.55,
   color: 'var(--color-muted)',
   marginBottom: 'var(--space-5)',
+};
+
+const fieldErrorStyle = {
+  fontSize: 'var(--text-xs)',
+  fontWeight: 'var(--weight-semibold)',
+  color: 'var(--color-danger)',
+  marginTop: 'var(--space-1)',
 };
 
 const spinnerWrapStyle = {
