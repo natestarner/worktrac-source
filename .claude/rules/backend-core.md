@@ -89,6 +89,17 @@ one as a record literal.
     rename the check exists to refuse. Failing open is the one direction that must not happen.
   - Safe to refuse at all only because rename is a **gated (online-only)** write; a definitive 4xx
     on a durable write would be discarded, not shown.
+- **⚠ Delete follows the SAME shape as rename for tags, but NOT for exercises.** A member may
+  delete a tag they created once nobody else is using it — `DELETE_OWN_SHARED_RESOURCE` +
+  `AccountAccess.mayDeleteSharedResource` + `TagService.delete`'s own
+  `isTagAppliedByAnotherPerson` check, same 403-then-409 ordering as rename and for the same
+  probing reason. **Exercises have no member-facing delete at all** — `ExerciseController`'s
+  `DELETE` still carries only `DELETE_SHARED_RESOURCE` (owner-only, unconditional, no ownership
+  or in-use check, exactly as it always was). Don't generalize the tag rule onto exercises without
+  that being a deliberate decision: `DELETE_OWN_SHARED_RESOURCE` is a **narrower** grant alongside
+  `DELETE_SHARED_RESOURCE`, not a replacement for it, and `TagDto.deletable` is the server's own
+  precomputed answer to "would DELETE succeed for me right now" so the client never re-derives
+  authorship/in-use from raw ids.
 - **`MembershipDto.ownerName` is resolved for MEMBERS only.** An owner does not need telling who
   the owner is, and resolving it for them would add a query to `/me` — the hottest endpoint in the
   app — for every existing user, all of whom are owners. It is a NAME and nothing more: no email,
