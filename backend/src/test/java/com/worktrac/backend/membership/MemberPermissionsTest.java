@@ -415,18 +415,15 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
                     .andExpect(status().isForbidden());
         }
 
-        // Delete has NO ownership component, deliberately: a shared row that other people's history
-        // already points at is not its creator's alone to remove. So a member cannot delete even
-        // what they made -- refused by the interceptor, before the service runs.
+        // Exercises have no member-facing delete at all -- unlike tags (below), there is no
+        // DELETE_OWN counterpart for them: a shared row other people's history already points at
+        // is not its creator's alone to remove, and that stays true even for what they made.
+        // Refused by the interceptor, before the service runs.
         @Test
-        void aMemberMayNotDeleteEvenWhatTheyCreated() throws Exception {
+        void aMemberMayNotDeleteAnExerciseTheyCreated() throws Exception {
             long exerciseId = createExerciseAs(memberToken, "Sam's Curl");
-            long tagId = createTagAs(memberToken, "sam-pull");
 
             mockMvc.perform(delete("/api/exercises/" + exerciseId)
-                            .header("Authorization", bearer(memberToken)))
-                    .andExpect(status().isForbidden());
-            mockMvc.perform(delete("/api/tags/" + tagId)
                             .header("Authorization", bearer(memberToken)))
                     .andExpect(status().isForbidden());
         }
@@ -488,6 +485,127 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
         }
     }
 
+    /**
+     * Unlike exercises, tags now carry a delete rule shaped exactly like the rename rule: a member
+     * may remove a tag they created once nobody ELSE depends on it. {@code DELETE_OWN_SHARED_RESOURCE}
+     * is what lets the interceptor admit a member here at all; {@code TagService.delete} is what
+     * actually decides -- ownership first (403), in-use second (409), same ordering and same
+     * probing rationale as {@code TagService.rename}.
+     */
+    @Nested
+    @DisplayName("deleting a tag")
+    class DeletingATag {
+
+        private long createExerciseAs(String token, String name) throws Exception {
+            return json(mockMvc.perform(post("/api/exercises")
+                    .header("Authorization", bearer(token))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of("name", name)))))
+                    .get("id").asLong();
+        }
+
+        private long createTagAs(String token, String name) throws Exception {
+            return json(mockMvc.perform(post("/api/tags")
+                    .header("Authorization", bearer(token))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of("name", name)))))
+                    .get("id").asLong();
+        }
+
+        @Test
+        void aMemberMayDeleteAnUnusedTagTheyCreated() throws Exception {
+            long tagId = createTagAs(memberToken, "sam-pull");
+
+            mockMvc.perform(delete("/api/tags/" + tagId)
+                            .header("Authorization", bearer(memberToken)))
+                    .andExpect(status().isNoContent());
+        }
+
+        // The one that matters. 403 rather than 404 -- the tag IS visible to them, it is in the
+        // shared vocabulary they see every day -- so pretending it does not exist would be a lie
+        // the tags list contradicts on the same screen.
+        @Test
+        void aMemberMayNotDeleteSomebodyElsesTag() throws Exception {
+            long tagId = createTagAs(ownerToken, "nate-push");
+
+            mockMvc.perform(delete("/api/tags/" + tagId)
+                            .header("Authorization", bearer(memberToken)))
+                    .andExpect(status().isForbidden());
+        }
+
+        // ⚠️ Deliberately NOT "no exercises at all". Applying your own tag to your own exercise
+        // must not cost you the ability to remove your own tag -- the harm this rule prevents is
+        // deleting a tag out from under somebody ELSE's history.
+        @Test
+        void usingItYourselfDoesNotLockYourOwnDelete() throws Exception {
+            long exerciseId = createExerciseAs(memberToken, "Sam's Curl");
+            long tagId = createTagAs(memberToken, "sam-pull");
+            mockMvc.perform(put("/api/people/" + memberPersonId + "/exercises/" + exerciseId + "/tags")
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("tags", java.util.List.of("sam-pull")))))
+                    .andExpect(status().isOk());
+
+            mockMvc.perform(delete("/api/tags/" + tagId)
+                            .header("Authorization", bearer(memberToken)))
+                    .andExpect(status().isNoContent());
+        }
+
+        // The rule itself: the owner applies the member's tag to their own exercise, and it stops
+        // being the member's to delete -- a 409, not a 403, because it IS theirs, just in use.
+        @Test
+        void aMemberMayNotDeleteTheirOwnTagOnceSomebodyElseUsesIt() throws Exception {
+            long exerciseId = createExerciseAs(memberToken, "Shared Lift");
+            long tagId = createTagAs(memberToken, "sam-pull");
+            mockMvc.perform(put("/api/people/" + ownerPersonId + "/exercises/" + exerciseId + "/tags")
+                            .header("Authorization", bearer(ownerToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("tags", java.util.List.of("sam-pull")))))
+                    .andExpect(status().isOk());
+
+            mockMvc.perform(delete("/api/tags/" + tagId)
+                            .header("Authorization", bearer(memberToken)))
+                    .andExpect(status().isConflict());
+        }
+
+        // The owner keeps DELETE_SHARED_RESOURCE, which stays exactly as usage-unaware as it
+        // always was -- authorship and in-use constrain a MEMBER only.
+        @Test
+        void theOwnerMayStillDeleteATagEvenWhileSomebodyUsesIt() throws Exception {
+            long exerciseId = createExerciseAs(memberToken, "Shared Lift");
+            long tagId = createTagAs(memberToken, "sam-pull");
+            mockMvc.perform(put("/api/people/" + ownerPersonId + "/exercises/" + exerciseId + "/tags")
+                            .header("Authorization", bearer(ownerToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("tags", java.util.List.of("sam-pull")))))
+                    .andExpect(status().isOk());
+
+            mockMvc.perform(delete("/api/tags/" + tagId)
+                            .header("Authorization", bearer(ownerToken)))
+                    .andExpect(status().isNoContent());
+        }
+
+        // TagDto.deletable is what the client offers the control on -- it must answer the same
+        // question TagService.delete itself decides, or the button and the endpoint disagree.
+        @Test
+        void listMarksOnlyTheDeletableTagsForAMember() throws Exception {
+            long mine = createTagAs(memberToken, "sam-pull");
+            long theirs = createTagAs(ownerToken, "nate-push");
+
+            JsonNode tags = json(mockMvc.perform(get("/api/tags")
+                    .header("Authorization", bearer(memberToken))));
+
+            for (JsonNode tag : tags) {
+                boolean expected = tag.get("id").asLong() == mine;
+                assertThat(tag.get("deletable").asBoolean())
+                        .as("tag %s deletable", tag.get("name").asText())
+                        .isEqualTo(expected);
+            }
+            assertThat(tags).hasSize(2);
+            // Sanity: both ids were actually seen above, not silently skipped by an empty list.
+            assertThat(theirs).isPositive();
+        }
+    }
 
     /**
      * Renaming a shared row is allowed only while nobody ELSE is using it.

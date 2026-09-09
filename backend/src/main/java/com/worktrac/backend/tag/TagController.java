@@ -35,7 +35,7 @@ public class TagController {
     @GetMapping
     @RequiresPermission(anyMember = true)
     public List<TagDto> list() {
-        return tagService.list(currentUser.accountId());
+        return tagService.list(currentUser.access());
     }
 
     @PostMapping
@@ -52,10 +52,13 @@ public class TagController {
         return tagService.rename(currentUser.access(), tagId, request.name());
     }
 
+    // DELETE_OWN, not DELETE_SHARED_RESOURCE -- every member holds it, precisely so the
+    // interceptor lets them through: it cannot know who created the row behind a {tagId}, or
+    // whether anyone else has applied it. TagService.delete is what actually decides both.
     @DeleteMapping("/{tagId}")
-    @RequiresPermission(Permission.DELETE_SHARED_RESOURCE)
+    @RequiresPermission(Permission.DELETE_OWN_SHARED_RESOURCE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long tagId) {
-        tagService.delete(currentUser.accountId(), tagId);
+        tagService.delete(currentUser.access(), tagId);
     }
 }

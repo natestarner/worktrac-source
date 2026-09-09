@@ -160,6 +160,21 @@ describe('PersonPillBar rest ring', () => {
   });
 });
 
+// MANAGE_PEOPLE is owner-only, and the server refuses the create outright -- before this the
+// button rendered for a member, the modal opened, and Save landed on a 403 with no path forward.
+describe('PersonPillBar "+ Add person"', () => {
+  it('shows it for an owner', () => {
+    render(<PersonPillBar />);
+    expect(screen.getByRole('button', { name: '+ Add person' })).toBeInTheDocument();
+  });
+
+  it('hides it for a member, rather than offering a control the server will refuse', () => {
+    useAuth.mockReturnValue({ people, membership: { accountRole: 'MEMBER', personId: 2 } });
+    render(<PersonPillBar />);
+    expect(screen.queryByRole('button', { name: '+ Add person' })).not.toBeInTheDocument();
+  });
+});
+
 // Cheap and high-value: it's what stops a refactor silently deleting an attribute nothing else in
 // this file references. Asserted at BOTH household sizes because the bar changes DOM position
 // between them (AppShell.jsx) -- the attribute has to survive that move.

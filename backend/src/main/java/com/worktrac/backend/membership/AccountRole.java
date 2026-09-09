@@ -33,7 +33,8 @@ public enum AccountRole {
             // there is no owner-side counterpart to this one.
             Permission.CHANGE_OWN_PASSWORD,
             Permission.CREATE_SHARED_RESOURCE,
-            Permission.EDIT_OWN_SHARED_RESOURCE));
+            Permission.EDIT_OWN_SHARED_RESOURCE,
+            Permission.DELETE_OWN_SHARED_RESOURCE));
 
     private static final Set<Permission> MEMBER_SEEING_EVERYONE = memberSeeingEveryone();
 

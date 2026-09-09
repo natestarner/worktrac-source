@@ -123,16 +123,44 @@ public record AccountAccess(
      * nobody claims. Failing open here would hand every member every unattributed row in the
      * household, which is precisely the wrong direction to be wrong in.
      *
-     * <p>⚠️ This answers EDIT only. Deletion is DELETE_SHARED_RESOURCE and has no ownership
-     * component at all: a shared row that someone else's history already references is not the
-     * creator's alone to remove. Do not grow a "delete what you created" branch in here without
-     * that decision being made deliberately -- see the plan's Decisions table.
+     * <p>⚠️ This answers EDIT only -- see {@link #mayDeleteSharedResource} for deletion, which is
+     * a deliberately separate question: an exercise or tag being renamable by its creator does not
+     * by itself say who may remove it.
      */
     public boolean mayEditSharedResource(Long createdByUserId) {
         if (has(Permission.EDIT_ANY_SHARED_RESOURCE)) {
             return true;
         }
         return has(Permission.EDIT_OWN_SHARED_RESOURCE)
+                && userId != null
+                && createdByUserId != null
+                && createdByUserId.equals(userId);
+    }
+
+    /**
+     * Whether this login may delete a shared account resource -- an exercise or a tag -- given who
+     * created it.
+     *
+     * <p>Deliberately the ownership half only, mirroring {@link #mayEditSharedResource}'s shape:
+     * whether the row is additionally IN USE (a tag applied to somebody else's exercise, an
+     * exercise somebody else has logged against) is a separate, per-entity-type question that only
+     * the caller's own repository can answer, so the caller checks it itself -- exactly as {@code
+     * TagService.rename} already does for edits. See {@code TagService.delete}.
+     *
+     * <p>{@code DELETE_SHARED_RESOURCE} means "delete ANY", unconditionally, and stays exactly as
+     * usage-unaware as it always has -- the owner's pre-existing power, and the ONLY lever that
+     * exists at all for an exercise, which has no member-facing delete. {@code
+     * DELETE_OWN_SHARED_RESOURCE} is the narrower grant a MEMBER holds: theirs to remove, but only
+     * once nobody else depends on it.
+     *
+     * <p>A null creator answers FALSE for a member, same polarity and same reasoning as {@link
+     * #mayEditSharedResource}: an unattributed row is not anyone's to claim by omission.
+     */
+    public boolean mayDeleteSharedResource(Long createdByUserId) {
+        if (has(Permission.DELETE_SHARED_RESOURCE)) {
+            return true;
+        }
+        return has(Permission.DELETE_OWN_SHARED_RESOURCE)
                 && userId != null
                 && createdByUserId != null
                 && createdByUserId.equals(userId);

@@ -75,5 +75,18 @@ public enum Permission {
     /** Rename/retag a row this login created (exercises.created_by_user_id). */
     EDIT_OWN_SHARED_RESOURCE,
     EDIT_ANY_SHARED_RESOURCE,
-    DELETE_SHARED_RESOURCE
+    /**
+     * Delete ANY shared resource, unconditionally -- no ownership check, no in-use check. The
+     * owner's long-standing power over the whole catalog, unaffected by {@link
+     * #DELETE_OWN_SHARED_RESOURCE} existing: exercises still have no member-facing delete at all,
+     * so for them this remains the only way one is ever removed.
+     */
+    DELETE_SHARED_RESOURCE,
+    /**
+     * Delete a row this login created, once nobody else depends on it -- see {@code
+     * AccountAccess.mayDeleteSharedResource} and {@code TagService.delete}. Tags only, today:
+     * created-by-you plus not-used-by-anyone-else is a *narrower* grant than {@link
+     * #DELETE_SHARED_RESOURCE}, not a rename of it, so exercises are untouched and stay owner-only.
+     */
+    DELETE_OWN_SHARED_RESOURCE
 }

@@ -41,6 +41,22 @@ test.describe('Member logins', () => {
     const member = await addMemberLogin(page, request, ownerEmail, 'Sam');
     await loginAs(page, member.email, member.password);
 
+    // The account-menu trigger used to always print the household's PRIMARY person's name, which
+    // for a member is somebody else -- so this read "Nate" while actually signed in as Sam.
+    await expect(page.locator('.header-bar').getByRole('button', { name: /^Sam/ })).toBeVisible();
+
+    // MANAGE_PEOPLE is owner-only and the server refuses the create outright -- the control must
+    // not be offered at all, not merely fail once clicked.
+    await expect(page.getByRole('button', { name: '+ Add person' })).toHaveCount(0);
+
+    // Profile states plainly which role this login holds, rather than making someone infer it
+    // from which controls are missing.
+    await page.locator('.header-bar').getByRole('button', { name: /^Sam/ }).click();
+    await page.getByRole('menuitem', { name: 'Profile' }).click();
+    await expect(page.getByText('Role')).toBeVisible();
+    await expect(page.getByText('Member', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /Back/ }).click();
+
     // Asserted on History rather than Log: "Log set" only exists once an exercise is selected,
     // whereas "Log a past workout" sits on the tab itself, so this measures the read-only chrome
     // without also depending on the picker flow.
@@ -90,6 +106,46 @@ test.describe('Member logins', () => {
     // And the session survives it: still signed in, still on the app.
     await page.reload();
     await expect(page).toHaveURL(/\/app\//);
+  });
+
+  // The backend's DeletingATag block in MemberPermissionsTest covers every status code this can
+  // produce; what only a browser can prove is that the chrome actually matches: TagDto.deletable
+  // decides whether the × even renders, for a tag the member made vs. one they didn't.
+  test('a member can delete a tag they created while unused, but not the owner\'s', async ({ page, request }) => {
+    const ownerEmail = await registerHousehold(page, request, 'Nate');
+    await addPerson(page, 'Sam');
+
+    // The owner's own tag, created before switching -- the one a member must never be offered a
+    // delete control on.
+    await page.locator('.header-bar').getByRole('button').click();
+    await page.getByRole('menuitem', { name: 'App Settings' }).click();
+    await page.getByPlaceholder('New tag name').fill('nate-push');
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.getByText('nate-push')).toBeVisible();
+
+    const member = await addMemberLogin(page, request, ownerEmail, 'Sam');
+    await loginAs(page, member.email, member.password);
+
+    await page.locator('.header-bar').getByRole('button', { name: /^Sam/ }).click();
+    await page.getByRole('menuitem', { name: 'App Settings' }).click();
+
+    // Somebody else's tag: visible (it's shared), but no delete control offered at all.
+    await expect(page.getByText('nate-push')).toBeVisible();
+    await expect(page.getByRole('button', { name: '×', exact: true })).toHaveCount(0);
+
+    // Their own, and nobody has applied it yet: deletable.
+    await page.getByPlaceholder('New tag name').fill('sam-pull');
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(page.getByText('sam-pull')).toBeVisible();
+    await expect(page.getByRole('button', { name: '×', exact: true })).toHaveCount(1);
+
+    await page.getByRole('button', { name: '×', exact: true }).click();
+    await expect(page.getByRole('dialog')).toContainText('Delete tag "sam-pull"?');
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+
+    await expect(page.getByText('sam-pull')).toHaveCount(0);
+    // Untouched by any of the above.
+    await expect(page.getByText('nate-push')).toBeVisible();
   });
 
   // The Team-tier seam. The product ships visibility forced ON with no endpoint and no UI, so

@@ -52,6 +52,10 @@ export default function ProfileTab() {
       <SectionLabel>{isMember ? 'You' : 'Account holder'}</SectionLabel>
       <div style={cardStyle}>
         <Field label="Name" value={isMember ? self?.name : primary?.name} />
+        {/* AccountRole spelled out in the same plain language LoginsSection and the handbook use
+            ("Enable login", never "OWNER"/"MEMBER") -- this is the one place a person can just
+            look up which they are, rather than inferring it from which controls are missing. */}
+        <Field label="Role" value={isMember ? 'Member' : 'Account owner'} />
         <Field label="Household" value={account?.name} />
         <Field label="Email" value={user?.email} last={!isMember} />
         {/* Only a member sees this, and only a member needs it: it answers "who do I ask?", and it

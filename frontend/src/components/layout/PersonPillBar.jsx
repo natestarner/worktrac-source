@@ -4,6 +4,7 @@ import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useLiveSession } from '../../hooks/useLiveSession';
 import { useRestTimerPreference } from '../../hooks/useRestTimerPreference';
+import { useAccountAccess } from '../../hooks/useAccountAccess';
 import { DEFAULT_REST_TARGET_SECONDS } from '../../utils/restTarget';
 import AddPersonModal from '../shared/AddPersonModal';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
@@ -120,6 +121,7 @@ function PersonPill({ person, active, onSelect }) {
 export default function PersonPillBar() {
   const { people } = useAuth();
   const { activePersonId, selectPerson } = useAppState();
+  const { isMember } = useAccountAccess();
   const [showAddPerson, setShowAddPerson] = useState(false);
 
   return (
@@ -144,6 +146,13 @@ export default function PersonPillBar() {
         {people.map((p) => (
           <PersonPill key={p.id} person={p} active={p.id === activePersonId} onSelect={() => selectPerson(p.id)} />
         ))}
+        {/* MANAGE_PEOPLE is owner-only, and a member has no path to it at all -- the server's
+            PersonController refuses the create outright. Hidden rather than disabled, the same
+            call ProfileTab's People section already makes: a control the server will always
+            refuse is noise, not a courtesy (member-access.md's "a control the server will refuse
+            must not be offered"). Before this the button rendered for a member, the modal opened,
+            and Save landed on a 403 with no path forward. */}
+        {!isMember && (
         <OfflineDisabledWrap message="Adding a person needs a connection.">
           {/* The literal "+ " stays. It was tempting to swap it for the IconPlus glyph
               along with the emoji elsewhere, but a text plus is a standard button
@@ -170,6 +179,7 @@ export default function PersonPillBar() {
             + Add person
           </button>
         </OfflineDisabledWrap>
+        )}
       </div>
       {showAddPerson && <AddPersonModal onClose={() => setShowAddPerson(false)} />}
     </>

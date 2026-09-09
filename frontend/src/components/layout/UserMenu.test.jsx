@@ -86,6 +86,43 @@ describe('UserMenu', () => {
     expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.ACCOUNT_MENU}"]`)).not.toBeNull();
   });
 
+  // The trigger used to always print the household's PRIMARY person's name, which for a member is
+  // somebody else -- so a member signed in as themselves saw the OWNER's name in their own header,
+  // reading as "logged in as Nate" while actually signed in as Sam. It has to show the VIEWER, the
+  // same selfPersonId-first fallback AppShell already uses for the default active person.
+  it("shows the member's own name, not the household primary's", () => {
+    useAuth.mockReturnValue({
+      people: [
+        { id: 1, name: 'Nate', isPrimary: true },
+        { id: 2, name: 'Sam', isPrimary: false },
+      ],
+      membership: { accountRole: 'MEMBER', personId: 2 },
+      logout: vi.fn(),
+      isAdmin: false,
+    });
+    renderMenu();
+    // Regex, not an exact string: the trigger's accessible name also carries the disclosure
+    // triangle glyph, same as every other assertion on this button in this file.
+    expect(screen.getByRole('button', { name: /^Sam/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Nate/ })).not.toBeInTheDocument();
+  });
+
+  // An owner's membership carries no personId at all (an owner need not correspond to a person),
+  // so the fallback to the primary must still hold -- unaffected by this change.
+  it("falls back to the household primary's name for an owner", () => {
+    useAuth.mockReturnValue({
+      people: [
+        { id: 1, name: 'Nate', isPrimary: true },
+        { id: 2, name: 'Sam', isPrimary: false },
+      ],
+      membership: { accountRole: 'OWNER', personId: null },
+      logout: vi.fn(),
+      isAdmin: false,
+    });
+    renderMenu();
+    expect(screen.getByRole('button', { name: /^Nate/ })).toBeInTheDocument();
+  });
+
   it('does not show the Admin Portal item for a non-admin user', () => {
     useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false });
     renderMenu();
