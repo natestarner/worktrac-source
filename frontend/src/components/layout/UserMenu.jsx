@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { queryClient } from '../../lib/queryClient';
 import { getUnsyncedWriteCount } from '../../hooks/useOutboxCount';
+import { useAccountAccess } from '../../hooks/useAccountAccess';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 // `booting` is passed by AppShellSkeleton only. That skeleton renders a REAL Header so the
@@ -22,6 +23,7 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 // See docs/incidents/2026-08-13-e2e-parallel-flakiness.md.
 export default function UserMenu({ booting = false }) {
   const { people, logout, isAdmin, households, account, switchHousehold } = useAuth();
+  const { selfPersonId } = useAccountAccess();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -38,7 +40,14 @@ export default function UserMenu({ booting = false }) {
     (h) => String(h.accountId) !== String(account?.id),
   );
 
-  const primaryName = people.find((p) => p.isPrimary)?.name || 'Account';
+  // The VIEWER's own name, not the household's primary -- for a member those are different
+  // people, and showing the primary's name here read as "logged in as the owner" while actually
+  // signed in as the member. Same fallback order as AppShell's default-active-person pick
+  // (frontend-core.md): selfPersonId first, the primary as the fallback for an owner (whose
+  // membership has no person of its own) or a v1 snapshot predating member logins.
+  const displayName = people.find((p) => String(p.id) === String(selfPersonId))?.name
+    || people.find((p) => p.isPrimary)?.name
+    || 'Account';
 
   // No existing dropdown/click-outside primitive in the codebase (Modal.jsx is a
   // full-screen scrim, not an anchored menu) -- close on outside click or Escape.
@@ -156,7 +165,7 @@ export default function UserMenu({ booting = false }) {
           padding: 8,
         }}
       >
-        {primaryName}
+        {displayName}
         <span style={{ fontSize: 10, transform: open ? 'rotate(180deg)' : 'none' }}>&#9662;</span>
       </button>
 

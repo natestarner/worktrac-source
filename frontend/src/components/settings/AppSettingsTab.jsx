@@ -320,11 +320,13 @@ export default function AppSettingsTab() {
           tags.map((t) => (
             <div key={t.id} style={categoryChipStyle}>
               {t.name}
-              {/* DELETE_SHARED_RESOURCE is owner-only: a tag is shared across the whole
-                  household, so one member must not be able to strip it off everyone else's
-                  exercises. Creating and applying tags stays open to members. Hidden rather than
-                  disabled -- see ProfileTab for why an unreachable action is not greyed out. */}
-              {!isMember && (
+              {/* An owner may always delete any tag. A member may delete only one they created
+                  AND that nobody else has applied yet -- the same shape as the (unshipped-to-this-
+                  screen) rename rule, and the server is the one deciding it: `t.deletable` is
+                  TagDto's own answer to "would DELETE succeed for me right now", so this never
+                  re-derives authorship or in-use from raw ids. Hidden rather than disabled -- see
+                  ProfileTab for why a control the server would refuse is not greyed out instead. */}
+              {(!isMember || t.deletable) && (
               <OfflineDisabledWrap message="Deleting a tag needs a connection.">
                 <button
                   onClick={() => openConfirm(`Delete tag "${t.name}"? It will be removed from every exercise it's applied to.`, () => guardedDeleteTag(t))}

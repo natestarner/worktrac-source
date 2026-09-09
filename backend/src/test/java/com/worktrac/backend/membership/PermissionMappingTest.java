@@ -48,7 +48,8 @@ class PermissionMappingTest {
                     Permission.CHANGE_OWN_PASSWORD,
                     Permission.VIEW_OTHER_PEOPLE,
                     Permission.CREATE_SHARED_RESOURCE,
-                    Permission.EDIT_OWN_SHARED_RESOURCE);
+                    Permission.EDIT_OWN_SHARED_RESOURCE,
+                    Permission.DELETE_OWN_SHARED_RESOURCE);
         }
 
         @Test
@@ -58,7 +59,8 @@ class PermissionMappingTest {
                     Permission.WRITE_OWN_PERSON,
                     Permission.CHANGE_OWN_PASSWORD,
                     Permission.CREATE_SHARED_RESOURCE,
-                    Permission.EDIT_OWN_SHARED_RESOURCE);
+                    Permission.EDIT_OWN_SHARED_RESOURCE,
+                    Permission.DELETE_OWN_SHARED_RESOURCE);
         }
 
         // The single most important row in the table: "members can see everyone" is a VISIBILITY

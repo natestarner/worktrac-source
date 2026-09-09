@@ -41,13 +41,16 @@ public class TagService {
     }
 
     @Transactional(readOnly = true)
-    public List<TagDto> list(Long accountId) {
-        return tagRepository.findByAccount_IdOrderByNameAsc(accountId).stream().map(TagDto::from).toList();
+    public List<TagDto> list(AccountAccess access) {
+        return tagRepository.findByAccount_IdOrderByNameAsc(access.accountId()).stream()
+                .map(tag -> TagDto.from(tag, canDelete(access, tag)))
+                .toList();
     }
 
     @Transactional
     public TagDto create(AccountAccess access, String name) {
-        return TagDto.from(getOrCreate(access.accountId(), name, access.userId()));
+        Tag tag = getOrCreate(access.accountId(), name, access.userId());
+        return TagDto.from(tag, canDelete(access, tag));
     }
 
     @Transactional
@@ -87,17 +90,52 @@ public class TagService {
             throw new ConflictException("A tag with that name already exists");
         }
         tag.setName(trimmed);
-        return TagDto.from(tag);
+        return TagDto.from(tag, canDelete(access, tag));
     }
 
-    // Deliberately still a bare accountId, and deliberately consults no creator stamp:
-    // DELETE_SHARED_RESOURCE is owner-only, so the handler's annotation is the entire decision.
-    // See AccountAccess.mayEditSharedResource for why edit and delete part company here.
+    // A member may delete a tag they created once nobody else depends on it -- the delete
+    // counterpart of the rename rule above, and deliberately the same two checks in the same
+    // order for the same probing reason: ownership before in-use, so a tag that isn't theirs
+    // can't be told apart from one that is theirs-but-used by which status code comes back.
+    //
+    // The owner's DELETE_SHARED_RESOURCE remains exactly what it always was: no ownership check,
+    // no in-use check. Exercises have no member-facing delete at all -- ExerciseController's
+    // DELETE stays DELETE_SHARED_RESOURCE only, so this method's shape is tag-specific, not a
+    // template ExerciseService is expected to grow into.
     @Transactional
-    public void delete(Long accountId, Long tagId) {
+    public void delete(AccountAccess access, Long tagId) {
+        Long accountId = access.accountId();
         Tag tag = tagRepository.findByIdAndAccount_Id(tagId, accountId)
                 .orElseThrow(() -> new NotFoundException("We couldn't find that tag."));
+
+        if (!access.mayDeleteSharedResource(tag.getCreatedByUserId())) {
+            throw new ForbiddenException("Only the person who added this tag, or the account owner, can delete it");
+        }
+
+        // Only the member's narrower DELETE_OWN grant is usage-aware -- see
+        // AccountAccess.mayDeleteSharedResource. "Used" means applied by somebody OTHER than you,
+        // same polarity as rename: deleting your own tag off your own exercises is yours to do.
+        if (!access.has(Permission.DELETE_SHARED_RESOURCE)
+                && personExerciseRepository.isTagAppliedByAnotherPerson(tagId, access.requireSelfPersonId())) {
+            throw new ConflictException(SharedResourceMessages.inUse("tag",
+                    membershipRepository.findOwnerPersonNames(accountId, AccountRole.OWNER)));
+        }
+
         tagRepository.delete(tag);
+    }
+
+    // Whether ACCESS may delete THIS tag right now -- the same question the delete method above
+    // answers, computed here too so the client can decide whether to offer the control at all
+    // (TagDto.deletable) instead of discovering the refusal by clicking it
+    // (member-access.md's "a control the server will refuse must not be offered").
+    private boolean canDelete(AccountAccess access, Tag tag) {
+        if (!access.mayDeleteSharedResource(tag.getCreatedByUserId())) {
+            return false;
+        }
+        if (access.has(Permission.DELETE_SHARED_RESOURCE)) {
+            return true;
+        }
+        return !personExerciseRepository.isTagAppliedByAnotherPerson(tag.getId(), access.requireSelfPersonId());
     }
 
     // Whether this account already has a tag by this name, matched exactly the way getOrCreate

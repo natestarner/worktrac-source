@@ -321,10 +321,21 @@ describe('AppSettingsTab as a member', () => {
     expect(screen.queryByRole('button', { name: 'Import data' })).not.toBeInTheDocument();
   });
 
-  // Creating and applying tags stays open to members; only deleting a shared tag is owner-only.
-  it('hides the delete control on a shared tag', async () => {
+  // Creating and applying tags stays open to members. Deleting one they didn't create, or one
+  // somebody else has already applied, is not -- `deletable` is the server's own answer to "would
+  // DELETE succeed for me right now" (TagDto), so the client never re-derives that from raw ids.
+  it('hides the delete control on a tag they cannot delete', async () => {
+    useTags.mockReturnValue({ tags: [{ id: 1, name: 'Push', deletable: false }], isLoading: false });
     renderTab();
     expect(await screen.findByText('Push')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '\u00d7' })).not.toBeInTheDocument();
+  });
+
+  // The one they made, and nobody else has applied yet.
+  it('shows the delete control on a tag the member may delete', async () => {
+    useTags.mockReturnValue({ tags: [{ id: 1, name: 'Push', deletable: true }], isLoading: false });
+    renderTab();
+    expect(await screen.findByText('Push')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '\u00d7' })).toBeInTheDocument();
   });
 });
