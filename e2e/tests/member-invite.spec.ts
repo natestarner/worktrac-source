@@ -269,4 +269,34 @@ test.describe('Enabling a member login', () => {
     await expect(page).toHaveURL(/\/app\//);
   });
 
+  /**
+   * The exact bug reported live: a wrong CURRENT password silently signed the person out to
+   * /login instead of saying so. This route only ever 200s with a session token already attached
+   * -- see PasswordChangeService's comment -- so answering the mismatch with a 401 read to the
+   * client as "the session itself is invalid" and force-logged-out a session that was never in
+   * question. docs/incidents/2026-09-09-change-password-wrong-current-signs-out.md.
+   */
+  test('a wrong current password is refused in place, without signing the person out', async ({ page, request }) => {
+    const { memberEmail } = await giveSamALogin(page, request);
+
+    await openProfile(page);
+    await page.getByRole('button', { name: 'Change' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Current password').fill('not-the-right-password');
+    await dialog.getByLabel('New password', { exact: true }).fill('a-brand-new-one');
+    await dialog.getByLabel('Confirm new password').fill('a-brand-new-one');
+    await dialog.getByRole('button', { name: 'Change password' }).click();
+
+    await expect(page.getByRole('alert')).toContainText("That isn't your current password.");
+    // Still on the same screen, in the same dialog -- not bounced to /login.
+    await expect(page).toHaveURL(/\/app\//);
+    await expect(dialog).toBeVisible();
+
+    // The account is untouched: the original password still works.
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await logout(page);
+    await loginAs(page, memberEmail, 'password123');
+  });
+
 });

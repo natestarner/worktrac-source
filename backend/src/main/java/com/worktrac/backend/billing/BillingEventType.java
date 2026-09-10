@@ -31,5 +31,10 @@ public enum BillingEventType {
     RECONCILE_DRIFT_CORRECTED,
 
     // A subscription was cancelled because its household was deleted.
-    CANCELED_ON_ACCOUNT_DELETION
+    CANCELED_ON_ACCOUNT_DELETION,
+
+    // The welcome-to-Pro email (ProUpgradedEvent) was sent, or failed to send. Isolated from the
+    // audit WRITE the same way registration email outcomes are -- see ProUpgradeEmailEventListener.
+    PRO_WELCOME_EMAIL_SENT,
+    PRO_WELCOME_EMAIL_FAILED
 }

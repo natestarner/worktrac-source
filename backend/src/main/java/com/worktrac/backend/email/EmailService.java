@@ -269,6 +269,36 @@ public class EmailService {
                 + "&t=" + URLEncoder.encode(rawToken, StandardCharsets.UTF_8);
     }
 
+    /**
+     * The welcome-to-Pro email, sent at most once per household (see {@code Subscription} and
+     * {@code SubscriptionService.applyStripeState}).
+     *
+     * <p>Copy is deliberately the same line {@code ProCelebration} shows in-app the instant checkout
+     * completes ("Your whole history, every record, and import are unlocked") -- one derivation of
+     * what Pro buys, restated in two places rather than invented twice. See {@code planCopy.js}'s
+     * {@code PRO_BENEFITS} if that ever changes.
+     */
+    public String sendProWelcome(String toEmail) {
+        String html = simpleNoticeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", escapeHtml("Welcome to Huddle Pro"))
+                .replace("{{BODY}}", escapeHtml("Your whole history, every record, and import are "
+                        + "unlocked. Every workout you've logged, and everything you log from here, "
+                        + "stays on screen, all-time records and trends open up over any range, and "
+                        + "you can bring in old data from a spreadsheet whenever you're ready.")
+                        + "<br><br>Thanks for keeping Huddle going.")
+                .replace("{{CTA_URL}}", appUrl)
+                .replace("{{CTA_LABEL}}", "Open Huddle");
+
+        return send(toEmail, "Welcome to Huddle Pro",
+                "Your whole history, every record, and import are unlocked. Every workout you've"
+                        + " logged, and everything you log from here, stays on screen, all-time"
+                        + " records and trends open up over any range, and you can bring in old data"
+                        + " from a spreadsheet whenever you're ready. Thanks for keeping Huddle going."
+                        + " Open Huddle: " + appUrl,
+                html);
+    }
+
     public String sendPasswordResetSuccess(String toEmail) {
         String html = passwordResetSuccessTemplate.replace("{{LOGO_URL}}", logoUrl);
 
