@@ -202,6 +202,35 @@ test.describe('Member logins', () => {
     await expect(dialog.getByRole('button', { name: 'Delete this exercise' })).toHaveCount(0);
   });
 
+  // Everything behind Customize is a PER-PERSON write (standing note, tags, setup fields), so on a
+  // sibling's screen all of it 403s. Its two neighbours in that action row were ReadOnlyWrapped and
+  // this was not, which left a live button between two greyed ones opening a modal where nothing
+  // could save.
+  test('a member cannot open Customize on a sibling\'s screen', async ({ page, request }) => {
+    const ownerEmail = await registerHousehold(page, request, 'Nate');
+    await addPerson(page, 'Sam');
+
+    const member = await addMemberLogin(page, request, ownerEmail, 'Sam');
+    await loginAs(page, member.email, member.password);
+
+    // Their own screen: all three controls in the action row are live.
+    await pickExercise(page, 'Barbell Bench Press');
+    await expect(page.getByRole('button', { name: 'Customize this exercise' })).toBeEnabled();
+
+    // Switch to the sibling. Scoped to .app-chrome: the bare name also matches the account-menu
+    // trigger, which is a strict-mode violation (see the first test in this file).
+    await page.locator('.app-chrome').getByRole('button', { name: 'Nate', exact: true }).click();
+    await page.getByRole('link', { name: 'Log' }).click();
+    await pickExercise(page, 'Barbell Bench Press');
+
+    await expect(page.getByRole('status').filter({ hasText: 'Viewing Nate' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Customize this exercise' })).toBeDisabled();
+    // Asserted alongside its neighbours so the three read as one row -- those two were already
+    // wrapped, and the point is that this one now matches them.
+    await expect(page.getByRole('button', { name: /favorites/ })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /note for this session/ })).toBeDisabled();
+  });
+
   // The Team-tier seam. The product ships visibility forced ON with no endpoint and no UI, so
   // this profile-gated route is the only way to reach the OFF path -- which is what keeps it
   // exercised code rather than dead code waiting to rot.

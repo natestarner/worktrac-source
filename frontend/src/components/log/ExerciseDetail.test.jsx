@@ -1871,3 +1871,70 @@ describe('ExerciseDetail Customize is unavailable until the exercise exists on t
     expect(screen.getByRole('button', { name: /note for this session/ })).toBeEnabled();
   });
 });
+
+
+// Every write behind "Customize this exercise" is a PER-PERSON one -- standing note, tags, setup
+// fields, all PersonExerciseController/personScoped -- so on somebody ELSE's screen every one of
+// them 403s. Its two neighbours in that action row were ReadOnlyWrapped and this was not, which
+// left a live button between two greyed ones opening a modal where nothing could save. A member
+// looking at a sibling's Log screen could type a standing note, blur, and get "That didn't save."
+//
+// Driven through the REAL useAccountAccess by supplying a membership, rather than mocking the hook:
+// what is being pinned is that the wrap reaches the button, and a stubbed predicate would pass just
+// as happily against a component that never asked.
+describe('ExerciseDetail Customize is read-only on somebody else\u2019s screen', () => {
+  function mockCommon() {
+    vi.clearAllMocks();
+    useAppState.mockReturnValue(typedDraft());
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+  }
+
+  // personId 99 is somebody else: ExerciseDetail is rendered for person 7.
+  function asMemberViewingSomeoneElse() {
+    mockCommon();
+    useAuth.mockReturnValue({
+      account: { defaultUnit: 'lb' },
+      people: [],
+      membership: { accountRole: 'MEMBER', personId: 99 },
+    });
+  }
+
+  function asMemberOnTheirOwnScreen() {
+    mockCommon();
+    useAuth.mockReturnValue({
+      account: { defaultUnit: 'lb' },
+      people: [],
+      membership: { accountRole: 'MEMBER', personId: 7 },
+    });
+  }
+
+  it('disables Customize when the screen belongs to another person', () => {
+    asMemberViewingSomeoneElse();
+    renderExerciseDetail();
+
+    expect(screen.getByRole('button', { name: 'Customize this exercise' })).toBeDisabled();
+    // Its neighbours, which were already wrapped -- asserted alongside so the three read as one row.
+    expect(screen.getByRole('button', { name: /favorites/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /note for this session/ })).toBeDisabled();
+  });
+
+  it('disables the pinned standing note too, since it opens the same modal', () => {
+    asMemberViewingSomeoneElse();
+    renderExerciseDetail({ exercise: { ...exercise, note: 'Keep elbows tucked' } });
+
+    // Still readable -- only the route into the modal is closed.
+    expect(screen.getByText('Keep elbows tucked')).toBeInTheDocument();
+    expect(screen.getByText('Keep elbows tucked').closest('button')).toBeDisabled();
+  });
+
+  it('leaves Customize alone on the member\u2019s own screen', () => {
+    asMemberOnTheirOwnScreen();
+    renderExerciseDetail({ exercise: { ...exercise, note: 'Keep elbows tucked' } });
+
+    expect(screen.getByRole('button', { name: 'Customize this exercise' })).toBeEnabled();
+    expect(screen.getByText('Keep elbows tucked').closest('button')).toBeEnabled();
+  });
+});
