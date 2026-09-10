@@ -19,7 +19,16 @@ vi.mock('../../api/notes', () => ({
 
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 
-function renderModal(exercise) {
+const access = vi.hoisted(() => ({ current: {} }));
+vi.mock('../../hooks/useAccountAccess', () => ({
+  useAccountAccess: () => access.current,
+}));
+
+const asOwner = { isMember: false, ownerName: null };
+const asMember = { isMember: true, ownerName: 'Nate' };
+
+function renderModal(exercise, accountAccess = asOwner) {
+  access.current = accountAccess;
   return render(
     <ConfigureExerciseModal
       exercise={exercise}
@@ -41,11 +50,12 @@ describe('ConfigureExerciseModal ownership', () => {
   beforeEach(() => {
     onlineManager.setOnline(true);
     useUI.mockReturnValue({ showToast: vi.fn() });
+    access.current = asOwner;
   });
   afterEach(() => onlineManager.setOnline(true));
 
   it('shows "Created by you" plus rename + delete for your own exercise', () => {
-    renderModal({ id: 1, name: 'My Curl', isGlobal: false });
+    renderModal({ id: 1, name: 'My Curl', isGlobal: false, createdByYou: true, renamable: true });
 
     expect(screen.getByText('Created by you')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
@@ -59,6 +69,83 @@ describe('ConfigureExerciseModal ownership', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete this exercise' })).not.toBeInTheDocument();
   });
+
+  // The reported bug, both halves in one test: an owner opening a MEMBER's exercise used to be
+  // told they created it, because `isGlobal` was standing in for authorship.
+  it('names the real creator for an owner looking at a member’s exercise, and still lets them rename it', () => {
+    renderModal({ id: 3, name: 'Yoke Carry', isGlobal: false, createdByYou: false, createdByName: 'Sam', renamable: true });
+
+    expect(screen.getByText('Created by Sam')).toBeInTheDocument();
+    expect(screen.queryByText('Created by you')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete this exercise' })).toBeInTheDocument();
+  });
+
+  it('gives a member the name as plain text, and says who to ask, on somebody else’s exercise', () => {
+    renderModal(
+      { id: 4, name: 'Yoke Carry', isGlobal: false, createdByYou: false, createdByName: 'Nate', renamable: false },
+      asMember,
+    );
+
+    expect(screen.getByText('Created by Nate')).toBeInTheDocument();
+    expect(screen.getByText('Only Nate or the account owner can rename this exercise.')).toBeInTheDocument();
+    // The control is gone, not merely disabled -- and the name is still readable.
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Yoke Carry')).not.toBeInTheDocument();
+    expect(screen.getByText('Yoke Carry')).toBeInTheDocument();
+  });
+
+  it('tells a member whose own exercise is now in use to ask the owner, and offers the alternative', () => {
+    renderModal(
+      { id: 5, name: 'Sled Push', isGlobal: false, createdByYou: true, createdByName: 'Sam', renamable: false },
+      asMember,
+    );
+
+    expect(screen.getByText('Created by you')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Other people have already logged this, so only Nate can rename it now/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/add your own exercise instead/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+
+  // Delete is DELETE_SHARED_RESOURCE, which no member holds -- so it 403'd for every member on
+  // every exercise, including ones they created.
+  it('never offers Delete to a member, even on an exercise they created', () => {
+    renderModal(
+      { id: 6, name: 'Sled Push', isGlobal: false, createdByYou: true, renamable: true },
+      asMember,
+    );
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete this exercise' })).not.toBeInTheDocument();
+  });
+
+  it('names nobody when the creator is unknown, rather than claiming "you"', () => {
+    renderModal(
+      { id: 7, name: 'Old Row', isGlobal: false, createdByYou: false, createdByName: null, renamable: false },
+      asMember,
+    );
+
+    expect(screen.getByText('Household exercise')).toBeInTheDocument();
+    expect(screen.queryByText('Created by you')).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Only the person who added it or the account owner can rename this exercise.'),
+    ).toBeInTheDocument();
+  });
+
+  // ⚠️ resilience.md axis D: a PersonExerciseDto cached before these fields existed has NEITHER of
+  // them. It must degrade to the pre-change behaviour -- offer the control and let the server
+  // refuse -- never to locking somebody out of renaming their own exercise. Test the UPGRADE path,
+  // not just a fresh row.
+  it('falls open on a row cached before these fields existed', () => {
+    renderModal({ id: 8, name: 'My Curl', isGlobal: false }, asMember);
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('My Curl')).toBeInTheDocument();
+    expect(screen.queryByText('Created by you')).not.toBeInTheDocument();
+    expect(screen.getByText('Household exercise')).toBeInTheDocument();
+  });
 });
 
 describe('ConfigureExerciseModal standing note', () => {
@@ -66,6 +153,7 @@ describe('ConfigureExerciseModal standing note', () => {
     vi.clearAllMocks();
     onlineManager.setOnline(true);
     useUI.mockReturnValue({ showToast: vi.fn() });
+    access.current = asOwner;
   });
   afterEach(() => onlineManager.setOnline(true));
 
@@ -114,6 +202,10 @@ describe('ConfigureExerciseModal offline', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useUI.mockReturnValue({ showToast: vi.fn() });
+    // Must be an OWNER: these assert the Delete button is disabled, and it is hidden outright for
+    // a member. They also happen to carry no createdByYou/renamable at all, which is the axis-D
+    // fail-open path -- the Name input still renders, exactly as it did before those fields existed.
+    access.current = asOwner;
   });
   afterEach(() => onlineManager.setOnline(true));
 

@@ -717,6 +717,7 @@ export default function HelpTab() {
             ['Log their own workouts, on their own phone', "Change anyone else's workouts"],
             ['See everyone in the household', 'Add or remove people'],
             ['Add an exercise or tag to the shared list, or delete their own unused tag', 'Delete a shared exercise, or a tag someone else added or uses'],
+            ['Rename an exercise they added, until someone else logs it', 'Rename one somebody else added'],
             ['Rename their own name and rest timer', 'Change the household name or units'],
             ['Change their own password', 'Import, export everything, or see billing'],
           ]}

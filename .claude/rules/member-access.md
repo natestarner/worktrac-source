@@ -124,10 +124,57 @@ Three shipped bugs of exactly this shape, all caught late:
    invitation removed but the doomed round trip still there.
 3. A member's **exercise rename** succeeded on rows they created and 403'd on the rest, with
    nothing to tell them which — traded "always fails" for "unpredictable", which is worse to use.
+   **Closed by `ExerciseDto.renamable`** (below); the client no longer guesses.
+4. The same modal's **"Delete this exercise"** was offered to every member on every exercise,
+   including ones they created — `DELETE_SHARED_RESOURCE` is owner-only and unconditional, and
+   `ExerciseService.remove` consults no creator stamp, so it 403'd every time. This one needed no
+   server field at all: `isMember` alone answers it. A control can be wrong without being subtle.
+5. The same modal's **entry point** was live on somebody else's Log screen. Every write inside it
+   is per-person (`PersonExerciseController`, `personScoped`), so all of it 403'd — while the
+   favorite and session-note buttons either side of it were `ReadOnlyWrap`ped correctly. Fixed by
+   wrapping **both** routes in (the `…` button and the pinned standing-note button, which opens
+   the same modal). Note this is a *different question* from #3/#4 — see the table below.
 
 The rule: if the client can know the answer, it must not render the control; if it genuinely
-cannot (rename, which depends on who created a row behind an `{id}`), the refusal must **say why
-and what to do instead**, via `useGatedMutation`'s `showServerMessage`.
+cannot, the refusal must **say why and what to do instead**, via `useGatedMutation`'s
+`showServerMessage`.
+
+### ⚠️ Rename was the worked example of "genuinely cannot know". It is not any more.
+
+That sentence used to name exercise rename as the case the client could not decide, "because it
+depends on who created a row behind an `{id}`". The server always knew; it simply never said. It
+does now, and the two halves of the answer are handled differently **on purpose**:
+
+| Half | Nature | Where it is answered |
+|---|---|---|
+| **Authorship** — is this row mine, or am I the owner? | Static. A creator stamp set once and never transferred | `ExerciseDto.createdByYou` / `.createdByName` |
+| **In use** — has anybody ELSE logged against it since? | Dynamic; changes whenever a sibling logs a set | Folded into `ExerciseDto.renamable` |
+
+`renamable` carries **both**, so the control is never offered when it would be refused — the same
+contract `TagDto.deletable` has. One consequence has to be paid for deliberately: hiding the
+control also hides the 409's `SharedResourceMessages.inUse` sentence, which is the best copy in
+the feature because it offers a way forward. **`ConfigureExerciseModal` therefore carries that
+remedy itself** ("…or add your own exercise instead"). If you ever make `renamable` authorship-only
+again, that line has to go back to being the server's.
+
+**The server's 403/409 still stand and must not be deleted.** The client fails OPEN on an absent
+`renamable` (a DTO cached before the field existed — `resilience.md` axis D), so a stale row still
+reaches the endpoint, and the refusal is what explains it. `ExerciseAttributionResolver` mirrors
+`ExerciseService.update`'s three gates rather than sharing code with them; if the two ever drift,
+the write is refused and the person sees the server's own message, which is the safe direction.
+
+### Two ownership questions, and they take opposite treatments
+
+Both are this rule; confusing them produces the wrong fix.
+
+| Question | Example | Treatment | Why |
+|---|---|---|---|
+| **Who created this shared row?** | rename/delete an exercise | **Hide** | No member can *ever* rename somebody else's, so a greyed control "is noise that also invites 'why not?'" (`ProfileTab`) |
+| **Whose training data am I on?** | the Customize entry point | **Disable** (`ReadOnlyWrap`) | You *could* do it — by switching to your own person. That is precisely what `ReadOnlyWrap` is for |
+
+Do not extend `ReadOnlyWrap` to cover the first: it asks `canWritePerson(personId)`, which answers
+`true` for a shared catalog row, and its message ("You can only change your own workouts") would be
+a lie about one.
 
 **#2's client half:** `LoginsSection` takes `plan` (`AccountDto.plan`, chrome only — same
 fail-open-on-unknown as `ProUpsell`/`PlanBadge`) and swaps Enable-login/Resend for a `Link` to

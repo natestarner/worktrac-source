@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.Modifying;
@@ -59,6 +60,27 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     // nested path is exactly `person_id <> ?`, and person_id is NOT NULL, so there is no
     // three-valued-logic surprise here.
     boolean existsByExercise_IdAndPerson_IdNot(Long exerciseId, Long personId);
+
+    /**
+     * The same question as {@link #existsByExercise_IdAndPerson_IdNot}, asked about MANY exercises
+     * at once: which of these has somebody OTHER than this person logged against?
+     *
+     * <p>⚠️ ONE QUERY PER LIST CALL, NEVER PER ROW. The single-row form above is right on the
+     * rename write path, where there is exactly one exercise to ask about. Calling it while mapping
+     * a list is an N+1 across the whole catalog, which is why this exists.
+     *
+     * <p>Callers pass only the household's OWN exercise ids — a global (preloaded) exercise is
+     * never renamable by anyone, so including the ~200 of them would grow the IN clause for
+     * answers nothing reads. Callers must also short-circuit on an empty collection rather than
+     * issuing an empty IN.
+     *
+     * <p>{@code person_id} is NOT NULL, so {@code <>} has no three-valued-logic surprise here —
+     * same note as the single-row form.
+     */
+    @Query("SELECT DISTINCT ws.exercise.id FROM WorkoutSet ws "
+            + "WHERE ws.exercise.id IN :exerciseIds AND ws.person.id <> :personId")
+    List<Long> findIdsUsedByAnotherPerson(@Param("exerciseIds") Collection<Long> exerciseIds,
+                                          @Param("personId") Long personId);
 
     // Admin-only: [accountId, count] pairs across ALL accounts, consumed only by AdminService.
     @Query("SELECT ws.session.person.account.id, COUNT(ws) FROM WorkoutSet ws GROUP BY ws.session.person.account.id")

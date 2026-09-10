@@ -862,13 +862,22 @@ export default function ExerciseDetail({
                 sync instead of firing at an id the server has never seen.
                 Reachable online only since the create stopped waiting on a refetch before opening
                 this screen (#186); offline it was always reachable, and always broken. */}
-            <IconButton
-              onClick={() => setShowConfigureModal(true)}
-              label="Customize this exercise"
-              icon={IconMore}
-              disabled={isTempExerciseId(exercise.id)}
-              data-tour-anchor={TOUR_ANCHORS.CUSTOMIZE_EXERCISE}
-            />
+            {/* Everything inside the modal is a per-person write (standing note, tags, setup
+                fields -- PersonExerciseController, personScoped), so on somebody else's screen all
+                of it 403s. Its two neighbours above were wrapped and this was not, which left a
+                live button between two greyed ones opening a modal where nothing could save.
+                Disabled rather than hidden, unlike the rename controls inside: this one you CAN do,
+                by switching to your own person. Nothing is lost by blocking the entry point --
+                the tags and the standing note are both rendered inline just below. */}
+            <ReadOnlyWrap personId={personId}>
+              <IconButton
+                onClick={() => setShowConfigureModal(true)}
+                label="Customize this exercise"
+                icon={IconMore}
+                disabled={isTempExerciseId(exercise.id)}
+                data-tour-anchor={TOUR_ANCHORS.CUSTOMIZE_EXERCISE}
+              />
+            </ReadOnlyWrap>
           </div>
           {exercise.tags?.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
@@ -880,11 +889,15 @@ export default function ExerciseDetail({
             </div>
           )}
 
+          {/* Second entry point to the same modal -- wrapping only the "..." button would be
+              cosmetic. */}
           {exercise.note && (
-            <button onClick={() => setShowConfigureModal(true)} className="pressable" style={pinnedNoteStyle}>
-              <IconPin size={14} style={{ marginTop: 2, color: 'var(--color-faint)' }} />
-              <span>{exercise.note}</span>
-            </button>
+            <ReadOnlyWrap personId={personId}>
+              <button onClick={() => setShowConfigureModal(true)} className="pressable" style={pinnedNoteStyle}>
+                <IconPin size={14} style={{ marginTop: 2, color: 'var(--color-faint)' }} />
+                <span>{exercise.note}</span>
+              </button>
+            </ReadOnlyWrap>
           )}
 
           {sessionNote && (

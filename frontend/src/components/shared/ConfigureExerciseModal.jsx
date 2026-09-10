@@ -3,6 +3,7 @@ import SectionLabel from './SectionLabel';
 import { addCustomField, updateCustomField, removeCustomField, setExerciseTags, updateExercise } from '../../api/exercises';
 import { setPersistentNote } from '../../api/notes';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
+import { useAccountAccess } from '../../hooks/useAccountAccess';
 import Modal from './Modal';
 import OfflineNotice from './OfflineNotice';
 import { cancelButtonStyle } from './ConfirmDialog';
@@ -13,6 +14,15 @@ import { FIELD_LIMITS } from '../../utils/fieldLimits';
 // Setting a field's *value* still happens by tapping its pill on the exercise screen -- this
 // modal is about structure, not values. Preloaded exercises are shared and immutable, so they
 // show a "Preloaded exercise" badge and no rename/delete.
+//
+// ── WHO MAY RENAME IS NOT "IS IT GLOBAL" ──────────────────────────────────────────────────────
+// `isGlobal` means "preloaded across every account", NOT "created by this login". Reading it as
+// the latter badged every household exercise "Created by you" to everyone who opened it, and
+// offered a rename field on rows the server refuses (403 on blur, since the field auto-saves).
+// The answer now rides on the DTO: `createdByYou` names the creator, `renamable` is the server's
+// own precomputed "would PUT /api/exercises/{id} succeed for me right now" -- the same shape
+// TagDto.deletable has. See member-access.md's "a control the server will refuse must not be
+// offered".
 export default function ConfigureExerciseModal({
   exercise,
   personId,
@@ -26,7 +36,32 @@ export default function ConfigureExerciseModal({
   onExerciseChanged,
   onRequestDelete,
 }) {
-  const isOwn = exercise && !exercise.isGlobal;
+  const { isMember, ownerName } = useAccountAccess();
+  const isHousehold = !!exercise && !exercise.isGlobal;
+  // Chrome only, and it MUST fail open. `renamable` is undefined on a DTO cached before this field
+  // existed (resilience.md axis D), and `isMember` is false on a v1 auth snapshot -- both have to
+  // land on "offer it and let the server refuse", never on locking somebody out of renaming their
+  // own exercise. ExerciseService.update is still the authority, and its 403/409 still explains
+  // itself through showServerMessage below. `!== false` rather than `=== true` is the whole point.
+  const canRename = isHousehold && exercise.renamable !== false;
+  const mine = exercise?.createdByYou === true;
+  // isGlobal is tested FIRST: a global row carries createdByYou:false and createdByName:null, so
+  // any other ordering drops it into the neutral fallback.
+  const badgeText = exercise?.isGlobal
+    ? 'Preloaded exercise'
+    : mine
+      ? 'Created by you'
+      : exercise?.createdByName
+        ? `Created by ${exercise.createdByName}`
+        : 'Household exercise';
+  // Two reasons `renamable` can be false, pointing at two different people. Deliberately the app's
+  // own copy rather than a `renameBlockedReason` string on the DTO -- prose would land in every
+  // persisted cache entry, the argument RoutineDto.sortOrder already makes. The second sentence
+  // carries forward SharedResourceMessages.inUse's remedy, which hiding the control would
+  // otherwise discard, and degrades to "the account owner" the same way it does.
+  const renameHint = mine
+    ? `Other people have already logged this, so only ${ownerName || 'the account owner'} can rename it now — or add your own exercise instead.`
+    : `Only ${exercise?.createdByName || 'the person who added it'} or the account owner can rename this exercise.`;
   const [name, setName] = useState(exercise?.name || '');
   const [note, setNote] = useState(exercise?.note || '');
   const [newFieldName, setNewFieldName] = useState('');
@@ -143,12 +178,12 @@ export default function ConfigureExerciseModal({
     // landing on the dialog is an accepted landing spot, not a downgrade.
     <Modal width={360} onClose={onClose} title="Customize this exercise" initialFocus="dialog">
       <div style={{ marginBottom: 18 }}>
-        <span style={isOwn ? ownBadgeStyle : preloadedBadgeStyle}>{isOwn ? 'Created by you' : 'Preloaded exercise'}</span>
+        <span style={mine ? ownBadgeStyle : neutralBadgeStyle}>{badgeText}</span>
       </div>
 
       <OfflineNotice message="Editing needs a connection — your current setup is still shown below." />
 
-      {isOwn && (
+      {canRename && (
         <>
           <SectionLabel>Name</SectionLabel>
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
@@ -174,6 +209,19 @@ export default function ConfigureExerciseModal({
               Save
             </button>
           </div>
+        </>
+      )}
+
+      {/* Hidden rather than greyed out. Creator stamps are set once and never transferred, so
+          there are no circumstances under which this login could rename this row -- and per
+          ProfileTab, "disabling is for something you could do under other circumstances". The NAME
+          still shows, because it is genuinely useful to read; only the control goes. Same shape as
+          AppSettingsTab's owner-only unit, which renders the value plus who to ask. */}
+      {isHousehold && !canRename && (
+        <>
+          <SectionLabel>Name</SectionLabel>
+          <div style={readOnlyValueStyle}>{exercise.name}</div>
+          <div style={readOnlyHintStyle}>{renameHint}</div>
         </>
       )}
 
@@ -293,7 +341,13 @@ export default function ConfigureExerciseModal({
         </button>
       </div>
 
-      {isOwn && (
+      {/* Owner-only, and unconditionally so: DELETE_SHARED_RESOURCE has no DELETE_OWN counterpart
+          for exercises (a shared row other people's history points at is not its creator's alone to
+          remove -- backend-core.md), and ExerciseService.remove consults no creator stamp. So this
+          button 403'd for EVERY member on EVERY exercise, including ones they created themselves.
+          Hidden rather than disabled, per ProfileTab. `isMember` fails open on an unknown
+          membership, same as everywhere else -- the server is still what refuses. */}
+      {isHousehold && !isMember && (
         <button
           onClick={guardedRequestDelete}
           disabled={!online}
@@ -342,7 +396,28 @@ const ownBadgeStyle = {
   fontWeight: 700,
 };
 
-const preloadedBadgeStyle = {
+// The value of a field this login may not change, plus who can. Mirrors AppSettingsTab's
+// owner-only default-unit block: the value at reading weight, the authority beneath it in muted
+// small text. Deliberately NOT a bordered surface panel -- check-design-primitives.sh ratchets
+// hand-rolled cards, and a box here would read as a disabled input anyway.
+const readOnlyValueStyle = {
+  // --text-base (body), NOT --text-md: that one is reserved for inputs at the iOS zoom threshold,
+  // and this is deliberately not an input.
+  fontSize: 'var(--text-base)',
+  fontWeight: 'var(--weight-semibold)',
+  marginBottom: 'var(--space-1)',
+};
+
+const readOnlyHintStyle = {
+  fontSize: 'var(--text-xs)',
+  color: 'var(--color-muted)',
+  lineHeight: 1.4,
+  marginBottom: 20,
+};
+
+// Serves three cases now -- preloaded, somebody else's, and unattributed. Accent means "yours",
+// neutral means "not yours", at a glance.
+const neutralBadgeStyle = {
   display: 'inline-block',
   padding: '4px 10px',
   borderRadius: 999,

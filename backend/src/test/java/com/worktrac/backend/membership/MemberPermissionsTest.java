@@ -605,6 +605,179 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
             // Sanity: both ids were actually seen above, not silently skipped by an empty list.
             assertThat(theirs).isPositive();
         }
+
+        // -- ATTRIBUTION ON THE READ SIDE --------------------------------------------------------
+        // ExerciseDto/PersonExerciseDto's createdByName + createdByYou + renamable are what the
+        // client offers the rename control on. They must answer the same questions
+        // ExerciseService.update itself decides, or the field and the endpoint disagree -- the
+        // exact role TagDto.deletable plays above.
+
+        private JsonNode rowFrom(String url, String token, long exerciseId) throws Exception {
+            JsonNode rows = json(mockMvc.perform(get(url).header("Authorization", bearer(token))));
+            for (JsonNode row : rows) {
+                if (row.get("id").asLong() == exerciseId) {
+                    return row;
+                }
+            }
+            throw new AssertionError("exercise " + exerciseId + " was not in " + url);
+        }
+
+        private JsonNode catalogRow(String token, long exerciseId) throws Exception {
+            return rowFrom("/api/exercises", token, exerciseId);
+        }
+
+        private void logSetFor(String token, long personId, long exerciseId) throws Exception {
+            mockMvc.perform(post("/api/people/" + personId + "/live-sets")
+                            .header("Authorization", bearer(token))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("exerciseId", exerciseId, "weight", 100, "reps", 5))))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        void theCatalogNamesWhoAddedEachExerciseForAMember() throws Exception {
+            long theirs = createExerciseAs(ownerToken, "Nate Row");
+            long mine = createExerciseAs(memberToken, "Sam Curl");
+
+            JsonNode ownersRow = catalogRow(memberToken, theirs);
+            assertThat(ownersRow.get("createdByName").asText()).isEqualTo("Nate");
+            assertThat(ownersRow.get("createdByYou").asBoolean()).isFalse();
+            assertThat(ownersRow.get("renamable").asBoolean()).isFalse();
+
+            JsonNode ownRow = catalogRow(memberToken, mine);
+            assertThat(ownRow.get("createdByName").asText()).isEqualTo("Sam");
+            assertThat(ownRow.get("createdByYou").asBoolean()).isTrue();
+            assertThat(ownRow.get("renamable").asBoolean()).isTrue();
+        }
+
+        // THE REPORTED BUG. The modal read `!isGlobal` as authorship, so an owner opening an
+        // exercise a MEMBER created was told "Created by you". `renamable` is still true for them --
+        // they hold EDIT_ANY_SHARED_RESOURCE -- which is exactly why authorship needed its own
+        // field rather than being inferred from whether the control is offered.
+        @Test
+        void theOwnerIsNotToldTheyAddedAMembersExercise() throws Exception {
+            long id = createExerciseAs(memberToken, "Sam Curl");
+
+            JsonNode row = catalogRow(ownerToken, id);
+            assertThat(row.get("createdByYou").asBoolean()).isFalse();
+            assertThat(row.get("createdByName").asText()).isEqualTo("Sam");
+            assertThat(row.get("renamable").asBoolean()).isTrue();
+        }
+
+        // The in-use half of `renamable`, which is why it is not merely `createdByYou`. Mirrors
+        // RenameWhileUnused's 409 from the read side.
+        @Test
+        void somebodyElseLoggingAgainstItTakesAwayRenamable() throws Exception {
+            long id = createExerciseAs(memberToken, "Sam Curl");
+            assertThat(catalogRow(memberToken, id).get("renamable").asBoolean()).isTrue();
+
+            logSetFor(ownerToken, ownerPersonId, id);
+
+            JsonNode row = catalogRow(memberToken, id);
+            assertThat(row.get("renamable").asBoolean()).isFalse();
+            // Still theirs -- the badge must keep saying so even though the control is gone.
+            assertThat(row.get("createdByYou").asBoolean()).isTrue();
+            // And the owner stays exempt, since they are the remedy the refusal points at.
+            assertThat(catalogRow(ownerToken, id).get("renamable").asBoolean()).isTrue();
+        }
+
+        // Using your OWN exercise must not cost you the rename -- same carve-out the 409 makes.
+        @Test
+        void loggingAgainstYourOwnExerciseKeepsItRenamable() throws Exception {
+            long id = createExerciseAs(memberToken, "Sam Curl");
+            logSetFor(memberToken, memberPersonId, id);
+
+            assertThat(catalogRow(memberToken, id).get("renamable").asBoolean()).isTrue();
+        }
+
+        // A global row has no creator by design. It must name nobody rather than falling through
+        // to whoever happens to be asking.
+        @Test
+        void aPreloadedExerciseIsAttributedToNobody() throws Exception {
+            JsonNode rows = json(mockMvc.perform(get("/api/exercises")
+                    .header("Authorization", bearer(memberToken))));
+            JsonNode global = null;
+            for (JsonNode row : rows) {
+                if (row.get("isGlobal").asBoolean()) {
+                    global = row;
+                    break;
+                }
+            }
+            assertThat(global).as("the seeded catalog should contain a global exercise").isNotNull();
+            assertThat(global.get("createdByName").isNull()).isTrue();
+            assertThat(global.get("createdByYou").asBoolean()).isFalse();
+            assertThat(global.get("renamable").asBoolean()).isFalse();
+        }
+
+        // V67 lists three ways a household row's stamp is legitimately null, and a revoked login
+        // adds a fourth. It must name nobody -- and stay closed to the member, matching
+        // mayEditSharedResource's fail-closed answer (aMemberMayNotRenameAnUnattributedExercise).
+        @Test
+        void anUnattributedExerciseNamesNobodyAndStaysClosedToAMember() throws Exception {
+            long id = createExerciseAs(memberToken, "Sam Curl");
+            jdbc.update("UPDATE exercises SET created_by_user_id = NULL WHERE id = ?", id);
+
+            JsonNode row = catalogRow(memberToken, id);
+            assertThat(row.get("createdByName").isNull()).isTrue();
+            assertThat(row.get("createdByYou").asBoolean()).isFalse();
+            assertThat(row.get("renamable").asBoolean()).isFalse();
+
+            // The owner keeps it through EDIT_ANY_SHARED_RESOURCE.
+            assertThat(catalogRow(ownerToken, id).get("renamable").asBoolean()).isTrue();
+        }
+
+        // PersonExerciseDto is a SEPARATE mapper from ExerciseDto. Without this, one could be fixed
+        // and the other left behind -- and the picker row is the one the Log screen usually hands
+        // to the Customize modal.
+        @Test
+        void thePickerAgreesWithTheCatalogAboutWhoAddedAnExercise() throws Exception {
+            long id = createExerciseAs(ownerToken, "Nate Row");
+            mockMvc.perform(put("/api/people/" + memberPersonId + "/exercises/" + id + "/favorite")
+                            .header("Authorization", bearer(memberToken)))
+                    .andExpect(status().isOk());
+
+            JsonNode picker = rowFrom("/api/people/" + memberPersonId + "/exercises", memberToken, id);
+            JsonNode catalog = catalogRow(memberToken, id);
+
+            assertThat(picker.get("createdByName").asText()).isEqualTo(catalog.get("createdByName").asText());
+            assertThat(picker.get("createdByYou").asBoolean()).isEqualTo(catalog.get("createdByYou").asBoolean());
+            assertThat(picker.get("renamable").asBoolean()).isEqualTo(catalog.get("renamable").asBoolean());
+            assertThat(picker.get("createdByName").asText()).isEqualTo("Nate");
+            assertThat(picker.get("renamable").asBoolean()).isFalse();
+        }
+
+        // A just-created exercise must come back as the creator's own: CREATE_EXERCISE's onSettled
+        // swaps this very response over the optimistic row, so a wrong answer here would make an
+        // exercise you just added render as somebody else's the moment it synced.
+        @Test
+        void theCreateResponseAttributesTheExerciseToItsCreator() throws Exception {
+            JsonNode created = json(mockMvc.perform(post("/api/exercises")
+                    .header("Authorization", bearer(memberToken))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of("name", "Sam Sled Push")))));
+
+            assertThat(created.get("createdByYou").asBoolean()).isTrue();
+            assertThat(created.get("createdByName").asText()).isEqualTo("Sam");
+            assertThat(created.get("renamable").asBoolean()).isTrue();
+        }
+
+        // The dedup branches return a row the caller may not have created, and the stamp is
+        // deliberately never transferred -- so the attribution coming back must be RESOLVED, not
+        // assumed from who asked. Pairs with replayingACreateNeverTransfersAuthorship.
+        @Test
+        void aDedupedCreateReturnsTheOriginalAuthorsAttribution() throws Exception {
+            createExerciseAs(ownerToken, "Shared Row");
+
+            JsonNode replay = json(mockMvc.perform(post("/api/exercises")
+                    .header("Authorization", bearer(memberToken))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of("name", "Shared Row")))));
+
+            assertThat(replay.get("createdByYou").asBoolean()).isFalse();
+            assertThat(replay.get("createdByName").asText()).isEqualTo("Nate");
+            assertThat(replay.get("renamable").asBoolean()).isFalse();
+        }
     }
 
     /**
