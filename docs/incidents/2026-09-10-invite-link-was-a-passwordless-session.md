@@ -123,6 +123,39 @@ SecurityContext only holds a principal the filter fully validated, `tv` included
 `/session`'s hand-parsing into a new route would have reproduced this hole in the same commit that
 fixed the other one.
 
+## The root cause, and the third fix
+
+Both of the above were patches to instances. Asked whether *anything* should be reading credentials
+by hand, the honest answer turned out to be that hand-parsing was the symptom:
+
+> **"Valid" had two definitions and only one of them was reachable by name.**
+
+| | signature + expiry | `scp` refused | `accountId` present | `tv` vs the DB | live membership |
+|---|---|---|---|---|---|
+| `JwtService.parseToken` | ✅ | ✅ | ✅ | ❌ | ❌ |
+| going through the filter | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+The stronger half existed **only as inline code inside `JwtAuthenticationFilter`**. A route that
+cannot use the filter reaches for the only public thing available, gets the weak half, and nothing
+at the call site says so — `parseToken` reads as complete. `/session` wasn't careless; it was the
+first route to be in that position, and any future one would have made the identical mistake.
+
+So: **`TokenAuthenticator`** is now the single public answer to "is this valid right now, and whose
+is it?", called by the filter *and* by `/session`. `JwtService` keeps one job — minting and
+cryptographically reading tokens, no database — and its two parse methods are **package-private**.
+`TokenAuthenticator` sits in that package; `AuthController` does not, and can no longer compile a
+call to the weak half. Verified by writing the violation and watching javac refuse it.
+
+That third fix also closed a **second inconsistency nobody had noticed**: `/session` only ever
+checked the household being asked *for*, never the one the token was scoped *to*, so a token for a
+household its holder had been removed from still bought a session elsewhere. Now refused, like
+everywhere else in the app.
+
+**A guard test was considered and rejected** in favour of the visibility change. A test that
+asserts "only `TokenAuthenticator` calls `parseToken`" reports the mistake after someone makes it;
+package-private stops them making it. Prefer the compiler to a checklist wherever the boundary
+happens to line up with a package — here it did, for free.
+
 ## Takeaways
 
 1. **"Proves the link" and "proves the person" are different questions, and a bearer token in an
@@ -140,8 +173,13 @@ fixed the other one.
    and those checks are invisible at the call site, so nothing looks missing. `/api/auth/session`
    had a thorough comment explaining why it parses the header itself and said nothing about what
    that skipped, because the author was thinking about the *selection token* and not about `tv`.
-   Any future `permitAll` route that reads a bearer token by hand needs this list checked
-   explicitly: signature, expiry, `scp`, **`tv` against the live row**, and membership.
-6. **Prove the negative first.** Both `tv` tests assert the stale token is genuinely dead on `/me`
+   **The durable fix is not a checklist but a single named validator plus a visibility boundary**:
+   if the incomplete check cannot be called, it cannot be called by accident.
+6. **When a security property is enforced by "everyone remembers to call X", find out whether the
+   language can enforce it instead.** Package-private cost one keyword and is stronger than any
+   test, because it fails at compile time rather than at review time — and it lined up here only
+   because the boundary happened to match a package. Look for that alignment before writing a
+   guard test.
+7. **Prove the negative first.** Both `tv` tests assert the stale token is genuinely dead on `/me`
    before asserting `/session` refuses it. Without that line they would pass against a token that
    was simply expired, and guard nothing.

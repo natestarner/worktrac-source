@@ -6,7 +6,7 @@ import com.worktrac.backend.security.ClientIpResolver;
 import com.worktrac.backend.security.CurrentUser;
 
 import com.worktrac.backend.membership.MembershipInviteService;
-import com.worktrac.backend.security.JwtService;
+import com.worktrac.backend.security.TokenAuthenticator;
 import com.worktrac.backend.user.dto.AuthResponse;
 import com.worktrac.backend.user.dto.AcceptInviteRequest;
 import com.worktrac.backend.user.dto.InvitePreviewRequest;
@@ -37,18 +37,18 @@ public class AuthController {
     private final RegistrationService registrationService;
     private final PasswordResetService passwordResetService;
     private final CurrentUser currentUser;
-    private final JwtService jwtService;
+    private final TokenAuthenticator tokenAuthenticator;
     private final MembershipInviteService inviteService;
 
     public AuthController(AuthService authService, RegistrationService registrationService,
                            PasswordResetService passwordResetService, CurrentUser currentUser,
-                           JwtService jwtService, MembershipInviteService inviteService) {
+                           TokenAuthenticator tokenAuthenticator, MembershipInviteService inviteService) {
         this.inviteService = inviteService;
         this.authService = authService;
         this.registrationService = registrationService;
         this.passwordResetService = passwordResetService;
         this.currentUser = currentUser;
-        this.jwtService = jwtService;
+        this.tokenAuthenticator = tokenAuthenticator;
     }
 
     @PostMapping("/register")
@@ -100,24 +100,25 @@ public class AuthController {
      * </ul>
      *
      * <p><b>permitAll in SecurityConfig, and it has to be.</b> A selection token deliberately
-     * cannot authenticate through the filter — {@link JwtService#parseToken} refuses anything
-     * carrying {@code scp} — so if this route required authentication the finish-a-login case
-     * could never reach it. That is why the header is read and validated here by hand, and why
-     * neither branch below trusts anything but a signature this server produced.
+     * cannot authenticate through the filter, so if this route required authentication the
+     * finish-a-login case could never reach it. That is why the header is read here rather than
+     * taken from the SecurityContext.
      *
-     * <p><b>No password.</b> Both paths are already-proved identity, which is why
-     * {@code AuthService.startSession}'s two checks — the token version and the membership — are
-     * the whole security of this endpoint.
+     * <p>⚠️ <b>Reading the header is not the same as validating what is in it, and this route used
+     * to do the first and only half of the second.</b> It called {@code JwtService.parseToken}
+     * directly — signature and expiry, nothing from the database — so it accepted a token
+     * invalidated by a password change, and a token scoped to a household its holder had been
+     * removed from, minting a fresh 30-day session from either. Both are refused on every other
+     * route in the app, by the filter, using checks that lived inline inside it.
      *
-     * <p>⚠️ <b>THE TOKEN VERSION MUST TRAVEL WITH THE USER ID, and it did not.</b> Parsing the
-     * header here skips {@code JwtAuthenticationFilter}, and with it the only place that compares
-     * a token's {@code tv} claim against the live {@code users} row —
-     * {@link com.worktrac.backend.security.JwtService#parseToken} checks the signature and the
-     * expiry and nothing else. This route therefore accepted a token every other route had already
-     * refused and handed back a fresh 30-day one, which defeated revocation completely: changing a
-     * password because you believed you were compromised did not sign the attacker out, as long as
-     * they called this once. Both branches below carry {@code tokenVersion} for that reason, and
-     * {@code startSession} is what enforces it.
+     * <p>{@link TokenAuthenticator} is now the single answer to "is this valid right now", and the
+     * filter asks it the same question. {@code JwtService}'s parse methods are package-private, so
+     * this class can no longer reach the weak half even by accident — the compiler enforces what
+     * this comment can only ask for.
+     *
+     * <p><b>No password.</b> Both paths are already-proved identity, which is why the
+     * authenticator's answer plus {@code AuthService.startSession}'s membership lookup are the
+     * whole security of this endpoint.
      */
     @PostMapping("/session")
     public AuthResponse startSession(@Valid @RequestBody StartSessionRequest request,
@@ -126,30 +127,12 @@ public class AuthController {
         if (header == null || !header.startsWith("Bearer ")) {
             throw new UnauthorizedException("Sign in again to choose a household.");
         }
-        String token = header.substring(7);
 
-        // Selection token first: it is the narrower kind, and the one this route exists for.
-        // Falling through to a full token second is what makes "switch household" the same route
-        // rather than a near-duplicate of it.
-        TokenIdentity identity = jwtService.parseSelectionToken(token)
-                .map(selection -> new TokenIdentity(selection.userId(), selection.tokenVersion()))
-                .or(() -> jwtService.parseToken(token)
-                        .map(principal -> new TokenIdentity(principal.userId(), principal.tokenVersion())))
+        TokenAuthenticator.TokenIdentity identity = tokenAuthenticator
+                .authenticateForHouseholdChoice(header.substring(7))
                 .orElseThrow(() -> new UnauthorizedException("Sign in again to choose a household."));
 
         return authService.startSession(identity.userId(), identity.tokenVersion(), request.accountId());
-    }
-
-    /**
-     * The two claims this route needs from whichever kind of token it was handed.
-     *
-     * <p>{@code SelectionPrincipal} and {@code AccountPrincipal} are deliberately separate types
-     * with no common supertype — the compiler enforcing "a restricted token is never a session" is
-     * the point of that split, and giving them a shared interface to tidy this up would give it
-     * away. This record is the narrow union of what BOTH legitimately carry, built at the one call
-     * site allowed to accept either.
-     */
-    private record TokenIdentity(Long userId, int tokenVersion) {
     }
 
     /**
