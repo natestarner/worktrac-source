@@ -251,11 +251,18 @@ function HouseholdPicker({ households, onChoose, onCancel, submitting, error }) 
                 gap: 'var(--space-3)',
               }}
             >
-              <span style={{ fontWeight: 'var(--weight-semibold)' }}>{household.accountName}</span>
+              {/* .btn sets white-space: nowrap for ordinary short labels, which this composite
+                  one isn't -- a long household name plus the role label together can exceed the
+                  row's width. Flex items default to min-width: auto, so without overriding both,
+                  the name refuses to shrink or wrap and pushes the role label past the button
+                  (and on a narrow phone, past the card) instead of wrapping. */}
+              <span style={{ fontWeight: 'var(--weight-semibold)', whiteSpace: 'normal', overflowWrap: 'anywhere', minWidth: 0, flex: '1 1 auto' }}>
+                {household.accountName}
+              </span>
               {/* Their own role, not a badge about the household -- it is the fastest way to tell
                   "the one I run" from "the one I was invited to" when both are named after a
                   family. */}
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', textTransform: 'lowercase' }}>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', textTransform: 'lowercase', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 {household.accountRole === 'OWNER' ? 'you own this' : 'you\u2019re a member'}
               </span>
             </button>
