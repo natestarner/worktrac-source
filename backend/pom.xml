@@ -28,8 +28,13 @@
         <logback.version>1.5.35</logback.version>
         <!-- CVE-2026-59901/55831/55833/56745/56816 (netty-codec-compression/http/http3,
              fixed in 4.2.16.Final): override Spring Boot's managed 4.2.15.Final until the
-             parent BOM picks up the patched release itself. -->
-        <netty.version>4.2.16.Final</netty.version>
+             parent BOM picks up the patched release itself.
+             CVE-2026-75595 (netty-handler, CRITICAL, fixed in 4.2.17.Final): bumped again,
+             pulled in transitively via azure-core-http-netty, not a direct dependency, but this
+             property is what Maven's dependency mediation actually resolves it against. Landed
+             in Trivy's DB and failed `docker-build` on the first push after; nothing in this
+             repo changed to cause it (same shape as the tomcat override below). -->
+        <netty.version>4.2.17.Final</netty.version>
         <!-- CVE-2026-68525/65905/65182 (tomcat-embed-core, all CRITICAL, fixed in 11.0.25):
              override Spring Boot 4.1.0's managed 11.0.22 until the parent BOM picks up the
              patched release itself. Patch-only bump inside the same 11.0.x line, so no
