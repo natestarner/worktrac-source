@@ -47,11 +47,19 @@ public class SecurityConfig {
                         // carrying scp), so an authenticated matcher here would make finishing a
                         // multi-household login impossible. The route reads and validates the
                         // header itself -- see AuthController.startSession.
-                        // /api/auth/accept-invite is permitAll for the same reason as /session: the caller
-                        // has no session yet, and the emailed token IS the credential. The route
-                        // verifies it itself -- see MembershipInviteService.accept.
+                        // /api/auth/accept-invite and /api/auth/invite/preview are permitAll for the
+                        // same reason as /session: the caller has no session yet, and the emailed
+                        // token is what stands in for one. Each verifies that token itself -- see
+                        // MembershipInviteService.requireValidInvite.
+                        //
+                        // ⚠️ permitAll here does NOT mean unauthenticated. JwtAuthenticationFilter
+                        // still runs, so a caller who happens to be signed in arrives with a fully
+                        // validated principal -- which is exactly what lets accept-invite recognise
+                        // an invitee who is already signed in as the invited address without
+                        // hand-parsing (and under-validating) the header. See CurrentUser.optional.
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/session",
-                                "/api/auth/accept-invite", "/api/auth/confirm-email",
+                                "/api/auth/accept-invite", "/api/auth/invite/preview",
+                                "/api/auth/confirm-email",
                                 "/api/auth/resend-code", "/api/auth/forgot-password", "/api/auth/reset-password",
                                 "/api/auth/resend-reset-code", "/api/auth/test/pending-code",
                                 "/api/auth/test/email-outcome",

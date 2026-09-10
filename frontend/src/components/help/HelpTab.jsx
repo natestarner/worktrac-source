@@ -699,8 +699,16 @@ export default function HelpTab() {
         </p>
         <p>
           <T>Profile</T> &rarr; <T>Logins</T>, then <T>Enable login</T> next to their name. You
-          enter their email address; they get a link and choose their own password. Until they
-          accept, their row says <T>Invited</T>. This is a Pro feature.
+          enter their email address and they get a link. If that address is new to Huddle they
+          choose a password; if they already use Huddle they sign in with the password they
+          already have, and this household is added to their account alongside their own. Until
+          they accept, their row says <T>Invited</T>. This is a Pro feature.
+        </p>
+        <p>
+          Either way, <strong>the invitation only does anything once they act on it</strong>. The
+          link on its own is not a way into anybody&rsquo;s account &mdash; someone who already has
+          a Huddle password still has to enter it &mdash; and you see the same <T>Invited</T> row
+          whichever of the two it turns out to be.
         </p>
 
         <HelpTable

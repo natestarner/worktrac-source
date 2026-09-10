@@ -6,7 +6,7 @@ import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.ConflictException;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.common.TooManyRequestsException;
-import com.worktrac.backend.common.UnauthorizedException;
+import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.person.PersonService;
@@ -333,22 +333,71 @@ public class MembershipInviteService {
         return new IssuedInvite(invite, rawToken, userRepository.findByEmail(email).isPresent());
     }
 
+    /** What the /join screen needs to know before it can ask the right question. */
+    public record InvitePreview(String householdName, String personName, String email,
+                                 boolean recipientHasAccount) {
+    }
+
     /**
-     * Turns an accepted invitation into a real membership.
+     * Answers "what does this invitation want from me?" for the holder of a valid link.
      *
-     * <p>{@code password} is used only when the invited address has no account yet; for an address
-     * that already has one it is ignored entirely — see the race below.
+     * <p>The screen behind an invite link cannot be written without this. An address that already
+     * has a Huddle account must be asked to SIGN IN; one that does not must be asked to CHOOSE a
+     * password. The page previously offered a password field to both and told the reader to leave
+     * it blank if the first case applied — asking somebody to understand an implementation detail
+     * about themselves, and directly contradicting the invitation email, which tells that same
+     * reader to sign in with the password they already have.
      *
-     * <p>⚠️ <b>THE RACE THIS MUST SURVIVE.</b> An invited address can register its OWN household
-     * between the invite being sent and being accepted. By accept time the user exists, so creating
-     * one would collide on the unique email index and fail the whole operation — stranding an
-     * invitation that is perfectly valid. Accept therefore always looks the user up first and
-     * creates one only if it is genuinely absent, and never touches an existing user's password.
-     * Anything else would let an invitation silently change somebody's credentials, which is the
-     * one thing the owner must never be able to do.
+     * <p>⚠️ <b>WHY THIS IS NOT THE USER-ENUMERATION ORACLE THE CLASS COMMENT FORBIDS.</b> The
+     * oracle that matters is the <b>OWNER's</b>: anyone with a household typing an address and
+     * learning whether that person uses Huddle. Nothing here is reachable by an owner. The only
+     * caller is the holder of a valid {@code (inviteId, token)} pair, and that pair exists in
+     * exactly one place — the invited mailbox. The raw token goes straight from
+     * {@link #generateToken()} onto {@code MembershipInviteIssuedEvent} and into the email; the
+     * owner's own response is a hardcoded {@code INVITED} row that never carries it.
+     *
+     * <p>And the holder of that pair could already learn this, before this method existed, by
+     * POSTing accept with a blank password: a known address signed straight in, an unknown one
+     * answered "Choose a password to finish setting up your login." Reading your own invitation
+     * out of your own inbox is not enumeration. What must stay untouched — and does — is that
+     * {@code PersonLoginDto} keeps three states, that the invite response is identical either way,
+     * and that the email body is the only thing that differs.
+     *
+     * <p>Runs the SAME gauntlet as accepting, via {@link #requireValidInvite}, so a bad token costs
+     * an attempt here exactly as it does there and cannot be used as a free oracle for guessing.
      */
-    @Transactional
-    public AccountMembership accept(Long inviteId, String rawToken, String password) {
+    @Transactional(noRollbackFor = ForbiddenException.class)
+    public InvitePreview preview(Long inviteId, String rawToken) {
+        MembershipInvite invite = requireValidInvite(inviteId, rawToken);
+        return new InvitePreview(
+                invite.getAccount().getName(),
+                invite.getPerson().getName(),
+                invite.getEmail(),
+                userRepository.findByEmail(invite.getEmail()).isPresent());
+    }
+
+    /**
+     * Every check that stands between a link and the household behind it, in one place.
+     *
+     * <p>Shared by {@link #preview} and by the accept path in {@code AuthService}, so the two can
+     * never drift into disagreeing about which links are live.
+     *
+     * <p>⚠️ <b>{@code noRollbackFor} is load-bearing and was missing.</b> The bad-token branch
+     * increments {@code attemptCount} and then throws to report the failure, and Spring's default
+     * rollback-on-RuntimeException discarded that increment every single time — so the counter
+     * never advanced past zero in the database and the {@link #MAX_ATTEMPTS} ceiling had never
+     * once fired in production. {@code RegistrationService.confirmEmail} and
+     * {@code PasswordResetService.confirmReset} both carry this annotation with the same comment;
+     * this method was the one of the three that did not.
+     * {@code MembershipInviteTest#fiveWrongTokensLockTheInvitationOut} is the pin, and it fails
+     * (counter 0, not 5) with the annotation removed.
+     *
+     * <p>The ceiling is also what bounds the CPU an anonymous caller can spend here: it is checked
+     * BEFORE the BCrypt comparison, so a locked-out invitation costs a lookup rather than ~100ms
+     * of hashing.
+     */
+    @Transactional(noRollbackFor = ForbiddenException.class)
+    public MembershipInvite requireValidInvite(Long inviteId, String rawToken) {
         Instant now = clock.instant();
 
         // A wrong id and a wrong token answer identically: an invitation is a bearer credential, and
@@ -370,20 +419,41 @@ public class MembershipInviteService {
                     invite.getId(), invite.getAttemptCount(), MAX_ATTEMPTS);
             throw rejected();
         }
+        return invite;
+    }
 
-        User user = userRepository.findByEmail(invite.getEmail())
-                .orElseGet(() -> {
-                    if (password == null || password.isBlank()) {
-                        throw new UnauthorizedException("Choose a password to finish setting up your login.");
-                    }
-                    return userRepository.save(new User(invite.getEmail(), passwordEncoder.encode(password)));
-                });
+    /**
+     * Turns a validated invitation into a real membership, for a user whose identity is already
+     * proved.
+     *
+     * <p>⚠️ <b>THIS METHOD GRANTS ACCESS AND PROVES NOTHING.</b> Both halves of the proof happen
+     * before it is called — {@link #requireValidInvite} for the link, and {@code AuthService} for
+     * the person — and that split is deliberate. This used to be one method that verified the
+     * token and then, for an address that already had an account, attached the membership and
+     * handed back a full 30-day session <b>with no credential check at all</b>: whoever held the
+     * link could sign in as that person and, via {@code POST /api/auth/session}, reach every other
+     * household they belonged to. An invitation is a request to join a household, not a magic link
+     * into somebody's whole Huddle identity, and a household owner must not be able to cause one
+     * to be mailed to any address they can type. See {@code AuthService#acceptInvite}.
+     *
+     * <p>⚠️ <b>THE RACE THIS MUST SURVIVE.</b> An invited address can register its OWN household
+     * between the invite being sent and being accepted. By accept time the user exists, so creating
+     * one would collide on the unique email index and fail the whole operation — stranding an
+     * invitation that is perfectly valid. The caller therefore always looks the user up first and
+     * creates one only if it is genuinely absent, and never touches an existing user's password.
+     * Anything else would let an invitation silently change somebody's credentials, which is the
+     * one thing the owner must never be able to do.
+     */
+    @Transactional
+    public AccountMembership attach(MembershipInvite invite, User user) {
+        Instant now = clock.instant();
+        Long accountId = invite.getAccount().getId();
 
         // Between issue and accept, somebody may have given this person a login by another route.
         // The invitation is simply spent rather than an error: the outcome it asked for is already
         // true.
         Optional<AccountMembership> already = membershipRepository
-                .findByAccount_IdAndPerson_Id(invite.getAccount().getId(), invite.getPerson().getId());
+                .findByAccount_IdAndPerson_Id(accountId, invite.getPerson().getId());
         if (already.isPresent()) {
             invite.accept(now);
             return already.get();
@@ -393,7 +463,14 @@ public class MembershipInviteService {
                 invite.getAccount(), user, invite.getPerson(), AccountRole.MEMBER));
         invite.accept(now);
         log.info("Invite {} accepted; membership {} created for account {}",
-                invite.getId(), membership.getId(), invite.getAccount().getId());
+                invite.getId(), membership.getId(), accountId);
+
+        // ⚠️ Matters now that an ALREADY SIGNED-IN person can accept. AccountAccessService caches
+        // negative answers for 60s, so a user whose device had touched this household in the last
+        // minute -- a stale tab, a shared iPad, an eager prefetch -- would otherwise be refused for
+        // up to a minute inside a household they had just joined. Same axis as revoke's call: per
+        // (user, account), never invalidateUser, which would reach their other households too.
+        accountAccessService.invalidate(user.getId(), accountId);
 
         // Both notices ride one event -- see MembershipAcceptedEvent for why the OWNER's is a
         // security control rather than a courtesy. Published here rather than from AuthController
@@ -405,10 +482,10 @@ public class MembershipInviteService {
         // would be the false alarm that teaches them to ignore the real one.
         events.publishEvent(new MembershipAcceptedEvent(
                 user.getEmail(),
-                ownerEmailFor(invite.getAccount().getId()),
+                ownerEmailFor(accountId),
                 invite.getPerson().getName(),
                 invite.getAccount().getName(),
-                ownerNameFor(invite.getAccount().getId())));
+                ownerNameFor(accountId)));
 
         return membership;
     }
@@ -526,12 +603,26 @@ public class MembershipInviteService {
     /**
      * One refusal for every way an invitation can fail to authorize.
      *
-     * <p>Wrong id, wrong token, expired, already accepted, locked out — all the same 401 with the
-     * same sentence. Distinguishing them tells whoever holds a bad link which part to keep trying,
-     * and none of those distinctions helps a legitimate recipient, who can simply ask for another.
+     * <p>Wrong id, wrong token, expired, already accepted, locked out — all the same status with
+     * the same sentence. Distinguishing them tells whoever holds a bad link which part to keep
+     * trying, and none of those distinctions helps a legitimate recipient, who can simply ask for
+     * another.
+     *
+     * <p>⚠️ <b>403, and it must never go back to being a 401.</b> Both invite routes are
+     * {@code permitAll}, but the browser attaches whatever session token it holds to every request
+     * {@code api/client.js} makes — and that module reads ANY 401 on a token-bearing request as
+     * "your session expired", clearing the token and force-navigating to /login with no per-route
+     * opt-out. So a signed-in person who opened a stale, already-used or mistyped invite link was
+     * thrown out of their own working session and never even saw this sentence, which
+     * {@code JoinPage}'s catch had already been replaced by a redirect. Exactly the shape of
+     * {@code docs/incidents/2026-09-09-change-password-wrong-current-signs-out.md}: a second
+     * credential failing says nothing about the session that carried the request.
+     *
+     * <p>The invariant this must preserve is about the SENTENCE, not the number — that a bad-link
+     * holder cannot tell which part failed — and that is unchanged.
      */
-    private static UnauthorizedException rejected() {
-        return new UnauthorizedException("That invitation link is no longer valid. Ask for a new one.");
+    private static ForbiddenException rejected() {
+        return new ForbiddenException("That invitation link is no longer valid. Ask for a new one.");
     }
 
     private String generateToken() {

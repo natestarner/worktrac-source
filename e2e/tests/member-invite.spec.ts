@@ -159,15 +159,154 @@ test.describe('Enabling a member login', () => {
 
   // A link that is stale, truncated or already used says one thing, and it is the same thing --
   // distinguishing them tells whoever holds a bad link which part to keep trying.
+  //
+  // Said on ARRIVAL now, with no form to fill in first: the page asks the server what this
+  // invitation wants before it can ask the right question, so a dead link is known before anybody
+  // types a password into it.
   test('a bad invite link is refused without saying why', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
     await logout(page);
 
     await page.goto('/join?i=999999&t=not-a-real-token');
-    await page.getByRole('button', { name: 'Join household' }).click();
 
     await expect(page.getByRole('alert')).toContainText(/no longer valid/i);
+    await expect(page.getByRole('button', { name: 'Join household' })).toHaveCount(0);
     await expect(page).not.toHaveURL(/\/app\//);
+  });
+
+  /**
+   * ⚠️ THE HOLE THIS CLOSED, end to end.
+   *
+   * An address that already has a Huddle account used to be handed a full session on the strength
+   * of the emailed link alone -- no password, none asked for, one supplied silently ignored. Since
+   * `POST /api/auth/session` takes a session token, whoever held the link could then reach every
+   * household that person belonged to, their own included.
+   *
+   * So: the link alone gets you nowhere, the RIGHT password joins, and what greets you afterwards
+   * is the household picker -- the same screen a multi-household sign-in lands on, which is the
+   * whole reason this flow needs no journey of its own.
+   */
+  test('an invitee who already has a household must sign in, then picks where to go', async ({ page, request }) => {
+    // Sam already owns a household of their own.
+    const samEmail = await registerHousehold(page, request, 'Sam');
+    await logout(page);
+
+    // Nate invites that same address.
+    const ownerEmail = await registerHousehold(page, request, 'Nate');
+    await setBillingPlan(request, ownerEmail, 'PRO');
+    await addPerson(page, 'Sam');
+    await openProfile(page);
+    await page.getByRole('button', { name: 'Enable login' }).click();
+    await page.getByPlaceholder('them@example.com').fill(samEmail);
+    await page.getByRole('button', { name: 'Send invite' }).click();
+    // ⚠️ The owner sees exactly what they would for an unknown address. An owner-visible
+    // difference here is the user-enumeration oracle the whole invite design exists to avoid.
+    await expect(page.getByText('INVITED')).toBeVisible();
+
+    const { inviteId, token } = await latestInvite(request, ownerEmail);
+    await logout(page);
+    await page.goto(`/join?i=${inviteId}&t=${encodeURIComponent(token)}`);
+
+    // Asked to SIGN IN, not to choose a password -- and told which address was invited.
+    await expect(page.getByPlaceholder('Your Huddle password')).toBeVisible();
+    await expect(page.getByPlaceholder('At least 8 characters')).toHaveCount(0);
+    await expect(page.getByLabel('Email')).toHaveValue(samEmail);
+
+    // The wrong password joins nothing, and does not sign anybody out.
+    await page.getByPlaceholder('Your Huddle password').fill('not-sams-password');
+    await page.getByRole('button', { name: 'Join household' }).click();
+    await expect(page.getByRole('alert')).toContainText(/didn't match/i);
+    await expect(page).toHaveURL(/\/join/);
+
+    // The right one joins -- and lands on the picker rather than dropping them into a household
+    // they never chose.
+    await page.getByPlaceholder('Your Huddle password').fill('password123');
+    await page.getByRole('button', { name: 'Join household' }).click();
+    await expect(page.getByRole('heading', { name: /choose a household/i })).toBeVisible();
+    // Both are on offer, labelled with THEIR role in each -- registration names a household
+    // "<person>'s Household", so these are Sam's own and Nate's.
+    await expect(page.getByRole('button', { name: "Sam's Household" })).toContainText('you own this');
+    await expect(page.getByRole('button', { name: "Nate's Household" })).toContainText('you’re a member');
+
+    await page.getByRole('button', { name: "Nate's Household" }).click();
+    await expect(page).toHaveURL(/\/app\/log/);
+
+    // Both households are reachable from the account menu, which is where they were told to look.
+    await page.locator('.header-bar').getByRole('button').click();
+    await expect(page.getByRole('menuitem', { name: /Switch to/ })).toBeVisible();
+  });
+
+  /**
+   * ⚠️ A DEAD INVITE LINK MUST NOT SIGN A BYSTANDER OUT.
+   *
+   * Every invite refusal used to be a 401, and `api/client.js` reads ANY 401 on a request carrying
+   * a token as "your session expired" -- clearing it and force-navigating to /login, with no
+   * per-route opt-out. The browser attaches the session token to this call whether or not it is
+   * needed, so somebody signed in who opened a stale, mistyped or already-used link was thrown out
+   * of their own working session and never even saw the reason.
+   *
+   * ⚠️ The rest of this file CANNOT catch that: every other spec calls logout(page) before opening
+   * a link. Signed IN is the whole condition. Same shape as
+   * docs/incidents/2026-09-09-change-password-wrong-current-signs-out.md.
+   */
+  test('a dead invite link opened while signed in does not end that session', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+
+    // Deliberately NOT logged out.
+    await page.goto('/join?i=999999&t=not-a-real-token');
+    await expect(page.getByRole('alert')).toContainText(/no longer valid/i);
+
+    // Still signed in: back into the app with no sign-in step.
+    await page.goto('/app/log');
+    await expect(page).toHaveURL(/\/app\/log/);
+    await expect(page).not.toHaveURL(/\/login/);
+  });
+
+  /**
+   * ⚠️ NEVER SILENTLY SWAP IDENTITY. Accepting replaced the signed-in session wholesale, so
+   * opening Sam's link on Nate's iPad -- the likeliest way this ever happens -- signed Nate out and
+   * Sam in with no confirmation and nothing on screen to explain it.
+   */
+  test('an invite for somebody else names both people instead of swapping identity', async ({ page, request }) => {
+    const samEmail = await registerHousehold(page, request, 'Sam');
+    await logout(page);
+
+    const ownerEmail = await registerHousehold(page, request, 'Nate');
+    await setBillingPlan(request, ownerEmail, 'PRO');
+    await addPerson(page, 'Sam');
+    await openProfile(page);
+    await page.getByRole('button', { name: 'Enable login' }).click();
+    await page.getByPlaceholder('them@example.com').fill(samEmail);
+    await page.getByRole('button', { name: 'Send invite' }).click();
+    await expect(page.getByText('INVITED')).toBeVisible();
+
+    // Nate stays signed in and opens Sam's link on his own device.
+    const { inviteId, token } = await latestInvite(request, ownerEmail);
+    await page.goto(`/join?i=${inviteId}&t=${encodeURIComponent(token)}`);
+
+    await expect(page.getByText(/This invitation is for/)).toBeVisible();
+    await expect(page.getByRole('button', { name: `Sign in as ${samEmail}` })).toBeVisible();
+    // Nothing offered to accept it as the wrong person.
+    await expect(page.getByRole('button', { name: 'Join household' })).toHaveCount(0);
+
+    // Staying put leaves Nate exactly where he was, and the invitation still live.
+    await page.getByRole('button', { name: `Stay signed in as ${ownerEmail}` }).click();
+    await expect(page).toHaveURL(/\/app\/log/);
+    await openProfile(page);
+    await expect(page.getByText('INVITED')).toBeVisible();
+
+    // The other door: signing out of Nate's session must land on the JOIN form, not bounce to
+    // /login. /join sits outside ProtectedRoute and logout() does not navigate, so the link stays
+    // usable in place -- otherwise "sign in as somebody else" would throw the invitation away.
+    await page.goto(`/join?i=${inviteId}&t=${encodeURIComponent(token)}`);
+    await page.getByRole('button', { name: `Sign in as ${samEmail}` }).click();
+    await expect(page).toHaveURL(/\/join/);
+    await expect(page.getByPlaceholder('Your Huddle password')).toBeVisible();
+
+    // And it still works from there.
+    await page.getByPlaceholder('Your Huddle password').fill('password123');
+    await page.getByRole('button', { name: 'Join household' }).click();
+    await expect(page.getByRole('heading', { name: /choose a household/i })).toBeVisible();
   });
 
   /**

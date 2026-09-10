@@ -78,6 +78,14 @@ their own password); this exists because the OWNER is the support desk.
 An owner who can set a member's password can impersonate that member. That is the whole argument,
 and it is why forgot-password (which proves control of the mailbox) is the only reset path.
 
+**⚠️ An invitation attaches a MEMBERSHIP. It never authenticates on its own.** The corollary of
+the sentence above, and it was violated for a while: accepting handed an address that already had
+a Huddle account a full 30-day session with no credential check, so an owner could cause a
+reset-strength magic link into somebody's whole identity to be mailed to any address they typed.
+An existing address now proves itself — its password, or a session already belonging to it — before
+anything attaches. A brand-new address is unchanged: it is *setting* a password, and the emailed
+token is the only credential it can have. Details and the pins: `registration-and-email.md`.
+
 ### ⚠️ Member logins are Pro-only, so EVERY test that mints one must set the household Pro first
 
 Registration creates a **Free** subscription. A MEMBER in a Free household is `PAUSED_PLAN` and is

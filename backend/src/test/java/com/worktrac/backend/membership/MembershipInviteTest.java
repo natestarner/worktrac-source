@@ -19,6 +19,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 import java.util.Map;
 import java.util.UUID;
@@ -304,14 +305,44 @@ class MembershipInviteTest extends AbstractIntegrationTest {
     @DisplayName("accepting")
     class Accepting {
 
-        private JsonNode accept(long inviteId, String token, String password) throws Exception {
+        private ResultActions post(long inviteId, String token, String password, String sessionToken)
+                throws Exception {
             Map<String, Object> body = password == null
                     ? Map.of("inviteId", inviteId, "token", token)
                     : Map.of("inviteId", inviteId, "token", token, "password", password);
-            return json(mockMvc.perform(post("/api/auth/accept-invite")
+            var request = MockMvcRequestBuilders.post("/api/auth/accept-invite")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(body))));
+                    .content(objectMapper.writeValueAsString(body));
+            if (sessionToken != null) {
+                request = request.header("Authorization", bearer(sessionToken));
+            }
+            return mockMvc.perform(request);
         }
+
+        private JsonNode accept(long inviteId, String token, String password) throws Exception {
+            return json(post(inviteId, token, password, null).andExpect(status().isOk()));
+        }
+
+        private JsonNode preview(long inviteId, String token) throws Exception {
+            return json(mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/invite/preview")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of("inviteId", inviteId, "token", token))))
+                    .andExpect(status().isOk()));
+        }
+
+        /** An invitation for Sam, ready to accept. Returns {inviteId, rawToken}. */
+        private long[] pendingInviteFor(String email) throws Exception {
+            invite(samPersonId, email);
+            long inviteId = pendingInviteId(samPersonId);
+            plantKnownToken(inviteId);
+            return new long[]{inviteId};
+        }
+
+        private boolean samHasAMembership() {
+            return inviteRepository.findById(pendingInviteId(samPersonId)).isPresent();
+        }
+
+        // ── The unchanged path: a brand-new address is SETTING a password ────────────────────
 
         @Test
         void aNewAddressChoosesAPasswordAndIsSignedStraightIn() throws Exception {
@@ -321,11 +352,83 @@ class MembershipInviteTest extends AbstractIntegrationTest {
 
             JsonNode session = accept(inviteId, token, "password123");
 
+            // One membership, so no picker: signed straight in, byte-for-byte as before.
             assertThat(session.get("token").asText()).isNotBlank();
+            assertThat(session.get("households").isNull()).isTrue();
             assertThat(session.get("membership").get("accountRole").asText()).isEqualTo("MEMBER");
             assertThat(session.get("membership").get("personId").asLong()).isEqualTo(samPersonId);
             // The transparency line's data: a member is told who the owner is.
             assertThat(session.get("membership").get("ownerName").asText()).isEqualTo("Nate");
+        }
+
+        // ── An address that already has a login must PROVE it ────────────────────────────────
+
+        /**
+         * ⚠️ <b>THE HOLE THIS CLOSED, and the single most important test in this file.</b>
+         *
+         * <p>Accepting used to hand an already-registered address a full 30-day session on the
+         * strength of the emailed link alone — no password, none asked for, one supplied silently
+         * ignored. Since {@code POST /api/auth/session} takes a session token, whoever held that
+         * link could then reach every other household that person belonged to, their own included.
+         * Any household owner could cause such a link to be mailed to any address they could type.
+         *
+         * <p>Both halves matter: the refusal, and that <b>no membership was created</b>. A version
+         * that refused the response but attached the membership anyway would still have handed the
+         * household away.
+         */
+        @Test
+        void anExistingAddressCannotJoinWithoutItsPassword() throws Exception {
+            String email = "sam-" + suffix + "@example.com";
+            RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Sam");
+            invite(samPersonId, email);
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+
+            // No password at all.
+            post(inviteId, token, null, null).andExpect(status().isForbidden());
+            // The wrong one.
+            post(inviteId, token, "not-their-password", null).andExpect(status().isForbidden());
+
+            // Nothing was attached, and the invitation is still live for the real Sam.
+            assertThat(inviteRepository.findById(inviteId).orElseThrow().isAccepted()).isFalse();
+            JsonNode logins = json(mockMvc.perform(get("/api/account/logins")
+                    .header("Authorization", bearer(ownerToken))));
+            JsonNode sam = logins.get(0).get("personId").asLong() == samPersonId ? logins.get(0) : logins.get(1);
+            assertThat(sam.get("status").asText()).isEqualTo("INVITED");
+        }
+
+        /**
+         * The right password joins — and lands on the household picker rather than in a household,
+         * because this credential now belongs to two. That is the SAME shape {@code /login} returns
+         * for a multi-household credential, deliberately: no new response vocabulary, and the
+         * screen they get is the one they would have seen on their next sign-in anyway.
+         */
+        @Test
+        void anExistingAddressJoinsWithItsPasswordAndGetsThePicker() throws Exception {
+            String email = "sam-" + suffix + "@example.com";
+            RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Sam");
+            invite(samPersonId, email);
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+
+            JsonNode response = accept(inviteId, token, RegistrationTestSupport.PASSWORD);
+
+            assertThat(response.get("token").isNull()).isTrue();
+            assertThat(response.get("selectionToken").asText()).isNotBlank();
+            assertThat(response.get("households")).hasSize(2);
+            // Their own household and the one they just joined, in that order (oldest first).
+            assertThat(response.get("households").get(0).get("accountRole").asText()).isEqualTo("OWNER");
+            assertThat(response.get("households").get(1).get("accountRole").asText()).isEqualTo("MEMBER");
+
+            // And the selection token really finishes the job.
+            long joinedAccountId = response.get("households").get(1).get("accountId").asLong();
+            JsonNode session = json(mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/session")
+                    .header("Authorization", bearer(response.get("selectionToken").asText()))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(Map.of("accountId", joinedAccountId))))
+                    .andExpect(status().isOk()));
+            assertThat(session.get("token").asText()).isNotBlank();
+            assertThat(session.get("membership").get("accountRole").asText()).isEqualTo("MEMBER");
         }
 
         /**
@@ -333,8 +436,9 @@ class MembershipInviteTest extends AbstractIntegrationTest {
          * out and being accepted. By accept time the user exists, so creating one would collide on
          * the unique email index and fail an otherwise-valid invitation.
          *
-         * <p>And the supplied password must be IGNORED: an invitation silently changing somebody's
-         * existing credentials is the one thing a household owner must never be able to do.
+         * <p>And an invitation must never CHANGE those credentials: a household owner being able to
+         * overwrite somebody's password is the one thing this design must not allow. Proving the
+         * password is now how you join; it is still not a way to set one.
          */
         @Test
         void anAddressThatRegisteredMeanwhileKeepsItsOwnPassword() throws Exception {
@@ -346,20 +450,225 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             // They register their own household first, with their own password.
             RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Sam");
 
-            accept(inviteId, token, "a-different-password");
+            // Joining with their real password works...
+            accept(inviteId, token, RegistrationTestSupport.PASSWORD);
 
-            // Their ORIGINAL password still works...
-            mockMvc.perform(post("/api/auth/login")
+            // ...their ORIGINAL password still works at /login...
+            mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
-                                    Map.of("email", email, "password", "password123"))))
+                                    Map.of("email", email, "password", RegistrationTestSupport.PASSWORD))))
                     .andExpect(status().isOk());
-            // ...and the one supplied to accept does not.
-            mockMvc.perform(post("/api/auth/login")
+            // ...and nothing about accepting invented a second one.
+            mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     Map.of("email", email, "password", "a-different-password"))))
                     .andExpect(status().isUnauthorized());
+        }
+
+        /**
+         * The invitee is already signed in as the invited address — a shared iPad, or the second
+         * household on their own phone. Their session is the proof, and it is the STRONGER of the
+         * two: it reached the security context only after JwtAuthenticationFilter checked the
+         * signature, refused any {@code scp}, and resolved {@code tv} against the live user row.
+         */
+        @Test
+        void anInviteeAlreadySignedInJoinsWithNoPassword() throws Exception {
+            String email = "sam-" + suffix + "@example.com";
+            String samToken = RegistrationTestSupport
+                    .registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Sam")
+                    .get("token").asText();
+            invite(samPersonId, email);
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+
+            JsonNode response = json(post(inviteId, token, null, samToken).andExpect(status().isOk()));
+
+            assertThat(response.get("token").isNull()).isTrue();
+            assertThat(response.get("households")).hasSize(2);
+        }
+
+        /**
+         * ⚠️ Being signed in as SOMEBODY ELSE proves nothing about the invitee, and must not be
+         * mistaken for proof. The client's job here is to offer to switch; the server's job is to
+         * refuse — and, in particular, not to silently swap the signed-in identity, which is what
+         * this route did before it asked for anything.
+         */
+        @Test
+        void aSignedInStrangerCannotJoinOnTheInviteesBehalf() throws Exception {
+            String email = "sam-" + suffix + "@example.com";
+            RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Sam");
+            invite(samPersonId, email);
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+
+            // Somebody else entirely, signed in on this device.
+            String strangerToken = RegistrationTestSupport.registerAndConfirm(
+                            mockMvc, objectMapper, testCodeCache, "stranger-" + suffix + "@example.com", "Alex")
+                    .get("token").asText();
+
+            post(inviteId, token, null, strangerToken).andExpect(status().isForbidden());
+            post(inviteId, token, "guessing", strangerToken).andExpect(status().isForbidden());
+
+            assertThat(inviteRepository.findById(inviteId).orElseThrow().isAccepted()).isFalse();
+            // The stranger's own session is untouched -- it was never the credential in question.
+            mockMvc.perform(get("/api/auth/me").header("Authorization", bearer(strangerToken)))
+                    .andExpect(status().isOk());
+        }
+
+        /**
+         * A wrong password here costs an attempt against the SAME ten-strike lockout as /login,
+         * because otherwise this route is an unthrottled password oracle sitting next to the
+         * throttled one.
+         *
+         * <p>⚠️ Asserted against the user row, never by driving a 429: integration tests run under
+         * {@code @ActiveProfiles("local")}, where every rate limit is 100000, so a limiter-based
+         * assertion here would pass whether or not the code called the limiter at all.
+         */
+        @Test
+        void aWrongPasswordCountsTowardTheOrdinaryLoginLockout() throws Exception {
+            String email = "sam-" + suffix + "@example.com";
+            RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Sam");
+            invite(samPersonId, email);
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+
+            post(inviteId, token, "wrong-password-1", null).andExpect(status().isForbidden());
+            post(inviteId, token, "wrong-password-2", null).andExpect(status().isForbidden());
+
+            Integer attempts = jdbc.queryForObject(
+                    "SELECT failed_login_attempts FROM users WHERE email = ?", Integer.class, email);
+            assertThat(attempts).isEqualTo(2);
+
+            // A missing password is NOT an attempt -- it carried no guess, so it must not be able
+            // to lock the invitee out of their own account.
+            post(inviteId, token, null, null).andExpect(status().isForbidden());
+            assertThat(jdbc.queryForObject(
+                    "SELECT failed_login_attempts FROM users WHERE email = ?", Integer.class, email))
+                    .isEqualTo(2);
+
+            // And the right one still clears it.
+            accept(inviteId, token, RegistrationTestSupport.PASSWORD);
+            assertThat(jdbc.queryForObject(
+                    "SELECT failed_login_attempts FROM users WHERE email = ?", Integer.class, email))
+                    .isZero();
+        }
+
+        // ── Preview ──────────────────────────────────────────────────────────────────────────
+
+        /**
+         * The whole reason preview exists: the screen cannot ask the right question without it.
+         *
+         * <p>Answering this to the holder of a valid token is not the enumeration oracle the invite
+         * design forbids — that one is the OWNER's, and an owner never sees this token. See
+         * {@code MembershipInviteService#preview}. {@code anExistingAccountIsIndistinguishableFromANewOne}
+         * is the test that keeps the owner's view closed, and it must stay green alongside this one.
+         */
+        @Test
+        void previewSaysSignInForAKnownAddressAndSetPasswordForANewOne() throws Exception {
+            String email = "sam-" + suffix + "@example.com";
+            invite(samPersonId, email);
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+
+            JsonNode unknown = preview(inviteId, token);
+            assertThat(unknown.get("mode").asText()).isEqualTo("SET_PASSWORD");
+            assertThat(unknown.get("householdName").asText()).isNotBlank();
+            assertThat(unknown.get("personName").asText()).isEqualTo("Sam");
+            assertThat(unknown.get("email").asText()).isEqualTo(email);
+
+            RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Sam");
+
+            assertThat(preview(inviteId, token).get("mode").asText()).isEqualTo("SIGN_IN");
+        }
+
+        /** Preview runs the same gauntlet as accepting, so it cannot be a free guessing oracle. */
+        @Test
+        void aBadTokenOnPreviewBurnsAnAttemptAndRefusesLikeAccept() throws Exception {
+            invite(samPersonId, "sam-" + suffix + "@example.com");
+            long inviteId = pendingInviteId(samPersonId);
+            plantKnownToken(inviteId);
+
+            mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/invite/preview")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("inviteId", inviteId, "token", "not-the-token"))))
+                    .andExpect(status().isForbidden());
+
+            assertThat(inviteRepository.findById(inviteId).orElseThrow().getAttemptCount()).isEqualTo(1);
+        }
+
+        // ── The refusals ─────────────────────────────────────────────────────────────────────
+
+        /**
+         * ⚠️ <b>NEITHER ROUTE MAY ANSWER 401, and this is not a cosmetic preference.</b>
+         *
+         * <p>Both are permitAll, but the browser attaches whatever session token it holds to every
+         * request {@code api/client.js} makes — and that module reads ANY 401 on a token-bearing
+         * request as "your session expired", clearing the token and force-navigating to /login with
+         * no per-route opt-out. So a signed-in person who opened a stale or already-used invite
+         * link was thrown out of their own working session and never saw the reason.
+         *
+         * <p>Asserted WITH a live session attached, because that is the only shape that can
+         * reproduce it — the same reason the pre-existing e2e could not catch this at all
+         * ({@code member-invite.spec.ts} logs out before opening the link).
+         */
+        @Test
+        void noInviteRefusalEverAnswers401() throws Exception {
+            String bystanderToken = RegistrationTestSupport.registerAndConfirm(
+                            mockMvc, objectMapper, testCodeCache, "bystander-" + suffix + "@example.com", "Alex")
+                    .get("token").asText();
+
+            invite(samPersonId, "sam-" + suffix + "@example.com");
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+
+            // A wrong token, an unknown invite id, and -- once spent -- a replayed link.
+            post(inviteId, "not-the-token", null, bystanderToken).andExpect(status().isForbidden());
+            post(999_999_999L, token, null, bystanderToken).andExpect(status().isForbidden());
+            accept(inviteId, token, "password123");
+            post(inviteId, token, null, bystanderToken).andExpect(status().isForbidden());
+
+            mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/invite/preview")
+                            .header("Authorization", bearer(bystanderToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("inviteId", inviteId, "token", token))))
+                    .andExpect(status().isForbidden());
+
+            // The bystander is still signed in -- which is the entire point.
+            mockMvc.perform(get("/api/auth/me").header("Authorization", bearer(bystanderToken)))
+                    .andExpect(status().isOk());
+        }
+
+        /**
+         * ⚠️ The attempt ceiling on the emailed token, which had <b>never once fired</b>.
+         *
+         * <p>The bad-token branch increments {@code attemptCount} and then throws, and without
+         * {@code noRollbackFor} Spring rolled that increment back every single time — so the
+         * counter sat at zero forever and {@code MAX_ATTEMPTS} was decorative.
+         * {@code RegistrationService} and {@code PasswordResetService} both carry the annotation
+         * for exactly this; the invite path was the one of the three that did not.
+         *
+         * <p>Remove {@code noRollbackFor} from {@code requireValidInvite} and this fails at the
+         * counter assertion (0, not 5) — verified.
+         */
+        @Test
+        void fiveWrongTokensLockTheInvitationOut() throws Exception {
+            invite(samPersonId, "sam-" + suffix + "@example.com");
+            long inviteId = pendingInviteId(samPersonId);
+            String token = plantKnownToken(inviteId);
+
+            for (int i = 0; i < 5; i++) {
+                post(inviteId, "not-the-token", null, null).andExpect(status().isForbidden());
+            }
+
+            assertThat(inviteRepository.findById(inviteId).orElseThrow().getAttemptCount()).isEqualTo(5);
+
+            // Ceiling reached: even the RIGHT token is now refused, and the ceiling is checked
+            // before the BCrypt comparison so a locked-out invite costs no hashing either.
+            post(inviteId, token, "password123", null).andExpect(status().isForbidden());
         }
 
         // AcceptInviteRequest's password is optional (null must keep validating), but a SUPPLIED
@@ -371,11 +680,7 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             long inviteId = pendingInviteId(samPersonId);
             String token = plantKnownToken(inviteId);
 
-            mockMvc.perform(post("/api/auth/accept-invite")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(
-                                    Map.of("inviteId", inviteId, "token", token, "password", "short"))))
-                    .andExpect(status().isBadRequest());
+            post(inviteId, token, "short", null).andExpect(status().isBadRequest());
 
             // The rejected attempt must not have consumed the invitation -- the link still works.
             accept(inviteId, token, "password123");
@@ -387,11 +692,7 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             long inviteId = pendingInviteId(samPersonId);
             plantKnownToken(inviteId);
 
-            mockMvc.perform(post("/api/auth/accept-invite")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(
-                                    Map.of("inviteId", inviteId, "token", "not-the-token"))))
-                    .andExpect(status().isUnauthorized());
+            post(inviteId, "not-the-token", null, null).andExpect(status().isForbidden());
         }
 
         // An invitation is single-use. Replaying a link that already worked must not mint a second
@@ -403,11 +704,7 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             String token = plantKnownToken(inviteId);
             accept(inviteId, token, "password123");
 
-            mockMvc.perform(post("/api/auth/accept-invite")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(
-                                    Map.of("inviteId", inviteId, "token", token))))
-                    .andExpect(status().isUnauthorized());
+            post(inviteId, token, null, null).andExpect(status().isForbidden());
         }
 
         // One login per person (UX_account_memberships_account_person). Reads as a conflict rather
@@ -418,14 +715,13 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             long inviteId = pendingInviteId(samPersonId);
             accept(inviteId, plantKnownToken(inviteId), "password123");
 
-            mockMvc.perform(post("/api/account/logins/" + samPersonId + "/invite")
+            mockMvc.perform(MockMvcRequestBuilders.post("/api/account/logins/" + samPersonId + "/invite")
                             .header("Authorization", bearer(ownerToken))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(Map.of("email", "again@example.com"))))
                     .andExpect(status().isConflict());
         }
     }
-
     @Nested
     @DisplayName("revoking")
     class Revoking {
@@ -519,11 +815,13 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             revoke(samPersonId, ownerToken).andExpect(status().isNoContent());
 
             // The emailed link is now worthless -- and answers the same way a wrong token does.
+            // 403 rather than 401 so a withdrawn link opened by somebody who happens to be signed
+            // in cannot tear their session down; see MembershipInviteService.rejected.
             mockMvc.perform(post("/api/auth/accept-invite")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(Map.of(
                                     "inviteId", inviteId, "token", token, "password", "password123"))))
-                    .andExpect(status().isUnauthorized());
+                    .andExpect(status().isForbidden());
         }
 
         /**
