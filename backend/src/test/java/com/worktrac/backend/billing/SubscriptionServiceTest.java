@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Nested;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -13,6 +14,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 // The entitlement derivation is the highest-consequence logic in billing: it decides what a paying
@@ -26,14 +29,19 @@ class SubscriptionServiceTest {
 
     private SubscriptionRepository repository;
     private MutableClock clock;
+    private ApplicationEventPublisher events;
     private SubscriptionService service;
     private Account account;
 
     @BeforeEach
     void setUp() {
         repository = mock(SubscriptionRepository.class);
+        // save() echoes back whatever it was given -- applyStripeState reads the id and account off
+        // its return value, so a bare mock() (which defaults to null) would NPE there.
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         clock = new MutableClock();
-        service = new SubscriptionService(repository, mock(org.springframework.context.ApplicationEventPublisher.class), clock);
+        events = mock(ApplicationEventPublisher.class);
+        service = new SubscriptionService(repository, events, clock);
         account = new Account("Test Household");
     }
 
@@ -186,6 +194,92 @@ class SubscriptionServiceTest {
             assertThat(dto.plan()).isEqualTo(BillingPlan.PRO);
             // The raw status still travels, because the screen needs it to explain WHY.
             assertThat(dto.status()).isEqualTo(SubscriptionStatus.PAST_DUE);
+        }
+    }
+
+    @Nested
+    @DisplayName("applyStripeState: the welcome-to-Pro email fires at most once, ever")
+    class ProUpgradeEmail {
+
+        private StripeSubscriptionState state(SubscriptionStatus status) {
+            return new StripeSubscriptionState("cus_1", "sub_1", "price_1", status,
+                    BillingInterval.MONTH, null, false);
+        }
+
+        // The one case this whole mechanism exists for: a household's first-ever transition into
+        // Pro must tell somebody, exactly once.
+        @Test
+        void freeToActivePublishesTheUpgradeEventAndStampsTheColumn() {
+            Subscription subscription = subscription(SubscriptionStatus.FREE);
+
+            Subscription saved = service.applyStripeState(subscription, state(SubscriptionStatus.ACTIVE));
+
+            verify(events).publishEvent(any(ProUpgradedEvent.class));
+            assertThat(saved.getProWelcomeSentAt()).isNotNull();
+        }
+
+        // A renewal, a card update, Portal-initiated changes -- applyStripeState runs on every one
+        // of these for an already-Pro household. None of them may re-fire the welcome.
+        @Test
+        void activeToActiveDoesNotRepublish() {
+            Subscription subscription = subscription(SubscriptionStatus.ACTIVE);
+            subscription.setProWelcomeSentAt(clock.instant());
+
+            service.applyStripeState(subscription, state(SubscriptionStatus.ACTIVE));
+
+            verify(events, never()).publishEvent(any(ProUpgradedEvent.class));
+        }
+
+        // The checkout-reconcile path (BillingController) and the webhook both call
+        // applyStripeState for the same real-world upgrade -- a redelivered event or the browser
+        // returning before the webhook lands. The column, not just the wasPro/nowPro comparison, is
+        // what must stop the second one: this pins that the guard is `!wasPro && nowPro && column ==
+        // null` and not merely `!wasPro && nowPro`, by forcing the column to already be set on an
+        // otherwise-identical FREE -> ACTIVE transition.
+        @Test
+        void anAlreadyStampedRowNeverRepublishesEvenAcrossARealTransition() {
+            Subscription subscription = subscription(SubscriptionStatus.FREE);
+            subscription.setProWelcomeSentAt(clock.instant().minus(Duration.ofDays(1)));
+
+            service.applyStripeState(subscription, state(SubscriptionStatus.ACTIVE));
+
+            verify(events, never()).publishEvent(any(ProUpgradedEvent.class));
+        }
+
+        // PAST_DUE is already Pro (isPro's own dunning-grace case) -- recovering FROM it back to
+        // ACTIVE is not an upgrade and must not re-welcome someone whose card was simply retried.
+        @Test
+        void pastDueRecoveringToActiveDoesNotRepublish() {
+            Subscription subscription = subscription(SubscriptionStatus.PAST_DUE);
+            subscription.setProWelcomeSentAt(clock.instant());
+
+            service.applyStripeState(subscription, state(SubscriptionStatus.ACTIVE));
+
+            verify(events, never()).publishEvent(any(ProUpgradedEvent.class));
+        }
+
+        // AccountPlanChangedEvent keeps firing unconditionally regardless -- this feature must not
+        // have narrowed that one, which member-login pausing depends on.
+        @Test
+        void theUnconditionalPlanChangedEventStillFiresAlongsideIt() {
+            Subscription subscription = subscription(SubscriptionStatus.FREE);
+
+            service.applyStripeState(subscription, state(SubscriptionStatus.ACTIVE));
+
+            verify(events).publishEvent(any(AccountPlanChangedEvent.class));
+            verify(events).publishEvent(any(ProUpgradedEvent.class));
+        }
+
+        // A downgrade (or anything that isn't a Free/lapsed -> Pro transition) must never stamp the
+        // column -- doing so would silently disable a real future welcome for that household.
+        @Test
+        void aNonUpgradeLeavesTheColumnUntouched() {
+            Subscription subscription = subscription(SubscriptionStatus.ACTIVE);
+
+            Subscription saved = service.applyStripeState(subscription, state(SubscriptionStatus.CANCELED));
+
+            assertThat(saved.getProWelcomeSentAt()).isNull();
+            verify(events, never()).publishEvent(any(ProUpgradedEvent.class));
         }
     }
 }

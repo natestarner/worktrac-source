@@ -156,6 +156,26 @@ today just `.plan-badge--pro`. Every other caller sits on a theme-following surf
 default. `HuddleMark` is always `aria-hidden`, so it never touches the accessible name beside it,
 which is what keeps the non-containment rule intact.
 
+## The welcome-to-Pro email fires exactly once, ever
+
+`Subscription.proWelcomeSentAt` (V72) is the idempotency mechanism, not the `wasPro`/`nowPro`
+comparison beside it in `applyStripeState` — that comparison is exactly the one
+`AccountPlanChangedEvent`'s own javadoc explains why it avoids computing (getting it subtly wrong
+fails silently). Here it is worth doing anyway because the failure mode is a missed or duplicated
+welcome email rather than a minute of stale cache, and the null-checked column is what keeps a
+wrong comparison from ever double-sending: the email only goes out while the column is still null,
+regardless of how many times `applyStripeState` runs for the same household afterward (a renewal,
+a redelivered webhook, the reconciliation watchdog self-healing a missed one).
+
+- **`ProUpgradedEvent` is published from `applyStripeState` only on that first transition** — never
+  for a comp grant (`CompBootstrap`). A comped household was never charged, and the email's copy
+  ("thanks for keeping Huddle going") presumes a purchase just happened.
+- **`ProUpgradeEmailEventListener` records outcomes to `billing_events`**, not the registration
+  audit trail, even though it is structurally the same "send after commit, off the request thread,
+  record either way" shape as `RegistrationEmailEventListener` — same reasoning as
+  `ContactEmailEventListener` being its own component: the natural audit sink here is
+  account-keyed, and `billing_events` already is.
+
 ## Reserved words: `billing_plan` and `billing_interval`
 
 Both `PLAN` and `INTERVAL` are reserved in T-SQL, and an unbracketed one fails the migration

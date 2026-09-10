@@ -138,6 +138,13 @@ public class SubscriptionService {
     // irrelevant and lets a missed event self-heal on the next one.
     @Transactional
     public Subscription applyStripeState(Subscription subscription, StripeSubscriptionState state) {
+        // Captured before anything below mutates the row -- the whole basis for firstUpgrade further
+        // down. AccountPlanChangedEvent (below) deliberately skips this comparison because getting
+        // it wrong fails silently; this one is worth it anyway because a welcome email's failure
+        // mode (missed or duplicated) is worse than a cache staying stale an extra minute, and
+        // ProWelcomeSentAt is what keeps a wrong comparison here from ever double-sending.
+        boolean wasPro = isPro(subscription);
+
         subscription.setStripeSubscriptionId(state.stripeSubscriptionId());
         subscription.setStripePriceId(state.stripePriceId());
         subscription.setStatus(state.status());
@@ -150,8 +157,19 @@ public class SubscriptionService {
         // plan is the derived answer materialized for cheap reads (the admin list, AccountDto).
         // isPro stays the authority -- this is a cache of it, computed here so the two cannot be
         // set independently.
-        subscription.setPlan(isPro(subscription) ? BillingPlan.PRO : BillingPlan.FREE);
+        boolean nowPro = isPro(subscription);
+        subscription.setPlan(nowPro ? BillingPlan.PRO : BillingPlan.FREE);
         subscription.setUpdatedAt(clock.instant());
+
+        // The welcome email fires at most once per account, ever -- the null check is what makes
+        // that exact rather than best-effort even if a future edit gets wasPro/nowPro subtly wrong,
+        // and it is why a renewal (Pro -> Pro) or a PAST_DUE recovery (both already Pro) never
+        // re-triggers it.
+        boolean firstUpgrade = !wasPro && nowPro && subscription.getProWelcomeSentAt() == null;
+        if (firstUpgrade) {
+            subscription.setProWelcomeSentAt(clock.instant());
+        }
+
         Subscription saved = subscriptionRepository.save(subscription);
 
         // Member logins are gated on this household being Pro, and that answer is cached per login
@@ -161,6 +179,10 @@ public class SubscriptionService {
         // the single choke point all three plan-changing paths already funnel through: the Stripe
         // webhook, the billing controller's sync, and the reconciliation watchdog.
         events.publishEvent(new AccountPlanChangedEvent(saved.getAccount().getId()));
+
+        if (firstUpgrade) {
+            events.publishEvent(new ProUpgradedEvent(saved.getAccount().getId()));
+        }
 
         return saved;
     }
