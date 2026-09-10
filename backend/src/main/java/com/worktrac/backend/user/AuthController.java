@@ -105,9 +105,19 @@ public class AuthController {
      * could never reach it. That is why the header is read and validated here by hand, and why
      * neither branch below trusts anything but a signature this server produced.
      *
-     * <p><b>No password.</b> Both paths are already-proved identity, which is exactly why
-     * {@code AuthService.startSession}'s membership lookup is the whole security of this endpoint:
-     * without it, any signed-in person could mint a token for any account id they typed.
+     * <p><b>No password.</b> Both paths are already-proved identity, which is why
+     * {@code AuthService.startSession}'s two checks — the token version and the membership — are
+     * the whole security of this endpoint.
+     *
+     * <p>⚠️ <b>THE TOKEN VERSION MUST TRAVEL WITH THE USER ID, and it did not.</b> Parsing the
+     * header here skips {@code JwtAuthenticationFilter}, and with it the only place that compares
+     * a token's {@code tv} claim against the live {@code users} row —
+     * {@link com.worktrac.backend.security.JwtService#parseToken} checks the signature and the
+     * expiry and nothing else. This route therefore accepted a token every other route had already
+     * refused and handed back a fresh 30-day one, which defeated revocation completely: changing a
+     * password because you believed you were compromised did not sign the attacker out, as long as
+     * they called this once. Both branches below carry {@code tokenVersion} for that reason, and
+     * {@code startSession} is what enforces it.
      */
     @PostMapping("/session")
     public AuthResponse startSession(@Valid @RequestBody StartSessionRequest request,
@@ -121,12 +131,25 @@ public class AuthController {
         // Selection token first: it is the narrower kind, and the one this route exists for.
         // Falling through to a full token second is what makes "switch household" the same route
         // rather than a near-duplicate of it.
-        Long userId = jwtService.parseSelectionToken(token)
-                .map(selection -> selection.userId())
-                .or(() -> jwtService.parseToken(token).map(principal -> principal.userId()))
+        TokenIdentity identity = jwtService.parseSelectionToken(token)
+                .map(selection -> new TokenIdentity(selection.userId(), selection.tokenVersion()))
+                .or(() -> jwtService.parseToken(token)
+                        .map(principal -> new TokenIdentity(principal.userId(), principal.tokenVersion())))
                 .orElseThrow(() -> new UnauthorizedException("Sign in again to choose a household."));
 
-        return authService.startSession(userId, request.accountId());
+        return authService.startSession(identity.userId(), identity.tokenVersion(), request.accountId());
+    }
+
+    /**
+     * The two claims this route needs from whichever kind of token it was handed.
+     *
+     * <p>{@code SelectionPrincipal} and {@code AccountPrincipal} are deliberately separate types
+     * with no common supertype — the compiler enforcing "a restricted token is never a session" is
+     * the point of that split, and giving them a shared interface to tidy this up would give it
+     * away. This record is the narrow union of what BOTH legitimately carry, built at the one call
+     * site allowed to accept either.
+     */
+    private record TokenIdentity(Long userId, int tokenVersion) {
     }
 
     /**

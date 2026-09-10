@@ -116,6 +116,14 @@ public class PasswordChangeService {
         accountAccessService.invalidateUser(user.getId());
 
         log.info("Password changed for user {}", userId);
-        return authService.startSession(userId, accountId);
+        // The token version this caller just MINTED, not the one the request arrived with -- that
+        // one is now deliberately stale and startSession would (correctly) refuse it, signing the
+        // person out as a direct result of succeeding.
+        //
+        // Deliberately passed through the ordinary parameter rather than given a bypass overload:
+        // one entry point that always checks is harder to misuse than two where one skips the
+        // check, and this caller has already proved the current password, which is a stronger
+        // claim than any token version.
+        return authService.startSession(userId, user.getTokenVersion(), accountId);
     }
 }

@@ -119,10 +119,36 @@ and a `selectionToken`, and `POST /api/auth/session` mints the real thing from a
   not a 403 with a code. They proved the password, so this reveals nothing — and there is nothing
   for the client to branch on.
 - **`POST /api/auth/session` serves BOTH finishing a login and switching household.** One route, so
-  the two cannot drift. No password on either path, which is why `AuthService.startSession`'s
-  membership lookup is the entire security of it. A household you are not in answers **404, not
-  403** — a 403 confirms the account id is real, which is an enumeration oracle spanning
-  households.
+  the two cannot drift. No password on either path, which is why `AuthService.startSession`'s two
+  checks — **the token version, then the membership** — are the entire security of it. A household
+  you are not in answers **404, not 403** — a 403 confirms the account id is real, which is an
+  enumeration oracle spanning households.
+- **⚠️ THIS ROUTE MUST CHECK `token_version` ITSELF, and for a long time it did not.** Every other
+  route gets that check free from `JwtAuthenticationFilter` (via `AccountAccessService.resolve`),
+  which is what makes a password change actually revoke every token a user holds. This one parses
+  the Authorization header by hand — it has to, since a selection token cannot authenticate through
+  the filter — and **`JwtService.parseToken` validates the signature and the expiry and nothing
+  else**. So the route swapped a token every other route already refused for a fresh 30-day one:
+  *changing your password because you believed you were compromised did not sign the attacker out*,
+  as long as they called this once. Proven live before the fix (`/me` → 401, `/session` → 200 with
+  a working token).
+  - **Both branches carry it** — a selection token has a `tv` claim too, and is minted against the
+    value current at login, so a password changed from another device while the picker is on screen
+    must invalidate it.
+  - **401 here is correct and is not the trap `backend-core.md` warns about**: what failed *is* the
+    token that made the request, not a second credential alongside it.
+  - Checked **before** the membership lookup, so a revoked token cannot be told apart from a wrong
+    account id — answering 404 first would confirm the token still works.
+  - **Polarity is absent-means-CURRENT**, like `role` and `scp`: a token minted before the claim
+    existed parses as 0 and matches a never-bumped row. Inverting it signs out every user at deploy.
+  - `PasswordChangeService` passes the version it just **minted**, not the request's — deliberately
+    through the ordinary parameter rather than a bypass overload, since one entry point that always
+    checks is harder to misuse than two where one skips it.
+  - `HouseholdSwitchTest#aTokenRevokedByAPasswordChangeCannotBeSwappedForAFreshOne` and
+    `#aSelectionTokenIsRefusedOnceThePasswordChangesUnderIt` are the pins; both assert the stale
+    token is genuinely dead on `/me` first, or they would prove nothing.
+  - **Membership revocation was never affected** — `startSession` has always checked
+    `findByAccount_IdAndUser_Id`. This was specifically the `token_version` axis.
 
 ## Member-login invites — what the OWNER must not be able to learn
 

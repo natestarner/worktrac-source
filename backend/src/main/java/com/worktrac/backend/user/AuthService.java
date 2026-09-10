@@ -352,10 +352,37 @@ public class AuthService {
      * non-distinguishing shape {@code PersonService.requireVisiblePerson} uses one boundary in.
      */
     @Transactional
-    public AuthResponse startSession(Long userId, Long accountId) {
+    public AuthResponse startSession(Long userId, int tokenVersion, Long accountId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UnauthorizedException("That login is no longer valid."));
 
+        // ⚠️ THE CHECK EVERY OTHER ROUTE GETS FOR FREE, AND THIS ONE HAS TO MAKE ITSELF.
+        //
+        // JwtAuthenticationFilter refuses any token whose tv no longer matches the users row (via
+        // AccountAccessService.resolve), which is what makes a password change actually revoke
+        // every token that user holds. This route bypasses the filter by design -- a selection
+        // token deliberately cannot authenticate through it -- and JwtService.parseToken checks
+        // only the signature and the expiry. Without this line the route swapped a token every
+        // other route already refused for a brand-new 30-day one, so "change your password because
+        // you think you are compromised" did not sign the attacker out at all.
+        //
+        // 401 is exactly right and is NOT the trap backend-core.md warns about: what failed here IS
+        // the token that made the request, not a second credential alongside it, so "your session
+        // is over" is the honest reading and api/client.js's sign-out is the correct response.
+        //
+        // Polarity is absent-means-CURRENT, like the role and scp claims: a token minted before the
+        // tv claim existed parses as 0 and matches a never-bumped row, so existing sessions keep
+        // working. Never invert that -- it would sign out every user at deploy.
+        if (user.getTokenVersion() != tokenVersion) {
+            log.warn("Session refused for user {}: token version {} is stale (current {})",
+                    userId, tokenVersion, user.getTokenVersion());
+            throw new UnauthorizedException("That login is no longer valid.");
+        }
+
+        // Checked SECOND, and the order is deliberate: a stale token is 401 ("this credential is
+        // over") while a household you are not in is 404 ("no such thing"), and answering 404 to a
+        // revoked token would tell its holder the token still works and only the account id is
+        // wrong. See the method comment for why this one is 404 rather than 403.
         AccountMembership membership = membershipRepository
                 .findByAccount_IdAndUser_Id(accountId, userId)
                 .orElseThrow(() -> new NotFoundException("We couldn't find that household."));

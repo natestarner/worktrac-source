@@ -93,6 +93,36 @@ And the e2e could not have caught #1 or #2 by construction: every invite spec ca
   shapes a sign-in does — and somebody who now belongs to two households lands on the **existing**
   household picker rather than a new journey.
 
+## The second hole, found while reading the first
+
+Checking whether the invite path could safely read identity off the Authorization header turned up
+that `POST /api/auth/session` already did — and skipped a check because of it.
+
+`JwtService.parseToken` validates a token's **signature and expiry**. It does **not** compare the
+`tv` claim to `users.token_version`; `JwtAuthenticationFilter` does that separately, via
+`AccountAccessService.resolve`. `/api/auth/session` is `permitAll` and parses the header itself —
+it must, because a selection token deliberately cannot authenticate through that filter — so it
+never got the second half. Proven live against local before the fix:
+
+```
+GET  /api/auth/me      with a password-change-revoked token -> 401   (correctly refused)
+POST /api/auth/session with that same token                 -> 200, and the token it minted works
+```
+
+So a password change did not revoke anything, for anyone who called `/session` once. That is the
+whole purpose of `token_version`, defeated by the one route that bypasses the filter enforcing it.
+Membership revocation was unaffected — `startSession` has always checked the membership.
+
+Fixed by carrying `tokenVersion` out of **both** principal kinds and comparing it in
+`startSession`, before the membership lookup so a revoked token cannot be distinguished from a
+wrong account id. `PasswordChangeService` passes the version it just minted, through the ordinary
+parameter rather than a bypass overload.
+
+**This is why the invite path reads `CurrentUser.optional()` instead of the header.** The
+SecurityContext only holds a principal the filter fully validated, `tv` included. Copying
+`/session`'s hand-parsing into a new route would have reproduced this hole in the same commit that
+fixed the other one.
+
 ## Takeaways
 
 1. **"Proves the link" and "proves the person" are different questions, and a bearer token in an
@@ -106,3 +136,12 @@ And the e2e could not have caught #1 or #2 by construction: every invite spec ca
 4. **When a counter-and-throw pattern exists three times, check all three.** Two had
    `noRollbackFor` with a comment explaining why; the third silently did not, and no test noticed
    because none asserted the counter.
+5. **A route that opts out of the filter chain opts out of every check the filter was doing** —
+   and those checks are invisible at the call site, so nothing looks missing. `/api/auth/session`
+   had a thorough comment explaining why it parses the header itself and said nothing about what
+   that skipped, because the author was thinking about the *selection token* and not about `tv`.
+   Any future `permitAll` route that reads a bearer token by hand needs this list checked
+   explicitly: signature, expiry, `scp`, **`tv` against the live row**, and membership.
+6. **Prove the negative first.** Both `tv` tests assert the stale token is genuinely dead on `/me`
+   before asserting `/session` refuses it. Without that line they would pass against a token that
+   was simply expired, and guard nothing.
