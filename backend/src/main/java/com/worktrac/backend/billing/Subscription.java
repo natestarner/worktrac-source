@@ -70,6 +70,14 @@ public class Subscription {
     @Column(nullable = false)
     private boolean comped;
 
+    // NULL until the welcome-to-Pro email has gone out; set exactly once. This IS the idempotency
+    // mechanism -- SubscriptionService.applyStripeState only sends that email while this column is
+    // still null, so a redelivered webhook or a later renewal can never trigger a second one. See
+    // .claude/rules/billing.md.
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
+    @Column(name = "pro_welcome_sent_at")
+    private Instant proWelcomeSentAt;
+
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -169,6 +177,14 @@ public class Subscription {
 
     public void setComped(boolean comped) {
         this.comped = comped;
+    }
+
+    public Instant getProWelcomeSentAt() {
+        return proWelcomeSentAt;
+    }
+
+    public void setProWelcomeSentAt(Instant proWelcomeSentAt) {
+        this.proWelcomeSentAt = proWelcomeSentAt;
     }
 
     public Instant getCreatedAt() {
