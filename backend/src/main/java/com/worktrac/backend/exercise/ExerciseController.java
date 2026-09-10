@@ -32,7 +32,7 @@ public class ExerciseController {
     @GetMapping
     @RequiresPermission(anyMember = true)
     public List<ExerciseDto> list() {
-        return exerciseService.list(currentUser.accountId());
+        return exerciseService.list(currentUser.access());
     }
 
     @PostMapping

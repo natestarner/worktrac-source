@@ -77,6 +77,28 @@ public interface AccountMembershipRepository extends JpaRepository<AccountMember
             + "ORDER BY m.createdAt ASC, m.id ASC")
     List<String> findOwnerPersonNames(@Param("accountId") Long accountId, @Param("role") AccountRole role);
 
+    /**
+     * Every login in this household paired with its person's NAME, for one list render.
+     *
+     * <p>⚠️ ONE QUERY PER LIST CALL, NEVER PER ROW. {@code ExerciseService.list} maps the whole
+     * catalog visible to an account — several hundred rows once the preloaded exercises are in —
+     * so a per-row creator lookup is an N+1 across all of them. Callers build this map once and
+     * index into it while mapping.
+     *
+     * <p>Memberships with no person are excluded, and the caller renders that absence as naming
+     * nobody rather than printing "null" — the same contract {@link #findOwnerPersonNames} carries.
+     *
+     * <p>⚠️ A REVOKED LOGIN VANISHES FROM THIS MAP, and rows it created become unattributed. That
+     * is correct rather than lossy: revoking deletes the {@code account_memberships} row, which is
+     * the only thing linking that user to a person in this household, while the person and all
+     * their training data stay (see member-access.md). An unattributed row simply names nobody.
+     */
+    @Query("SELECT new com.worktrac.backend.membership.MemberPersonName(m.user.id, m.person.name) "
+            + "FROM AccountMembership m "
+            + "WHERE m.account.id = :accountId AND m.person IS NOT NULL "
+            + "ORDER BY m.createdAt ASC, m.id ASC")
+    List<MemberPersonName> findPersonNamesByUser(@Param("accountId") Long accountId);
+
     void deleteByAccount_Id(Long accountId);
 
     void deleteByAccount_IdIn(List<Long> accountIds);

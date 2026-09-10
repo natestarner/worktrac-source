@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { addMemberLogin, loginAs, registerHousehold, setMemberVisibility } from './support/auth';
+import { addOwnExercise, backToPicker, pickExercise } from './support/exercises';
 
 // The modal's field is placeholder "Name" and its confirm button is scoped to the dialog, because
 // "Add" alone also matches controls behind it.
@@ -146,6 +147,59 @@ test.describe('Member logins', () => {
     await expect(page.getByText('sam-pull')).toHaveCount(0);
     // Untouched by any of the above.
     await expect(page.getByText('nate-push')).toBeVisible();
+  });
+
+  // The Customize modal used to read `isGlobal` as authorship, so EVERY household exercise was
+  // badged "Created by you" to whoever opened it -- and the rename field was offered on rows the
+  // server refuses, auto-saving on blur straight into a 403. ExerciseDto.renamable is the server's
+  // own answer now, the same role TagDto.deletable plays in the tag test above.
+  //
+  // ⚠️ Every assertion is scoped to the dialog. The exercise name is in ExerciseDetail's heading
+  // behind the modal, and the creator's name is on the person pills -- both make a bare getByText
+  // a strict-mode violation.
+  test("a member is told who added an exercise, and is not offered a rename they cannot make", async ({ page, request }) => {
+    const ownerEmail = await registerHousehold(page, request, 'Nate');
+    await addPerson(page, 'Sam');
+
+    // The owner's own exercise, created before the member exists.
+    await addOwnExercise(page, 'Yoke Carry Press');
+    await expect(page.getByRole('button', { name: 'Customize this exercise' })).toBeVisible();
+
+    const member = await addMemberLogin(page, request, ownerEmail, 'Sam');
+    await loginAs(page, member.email, member.password);
+
+    // Somebody else's exercise: named, and read-only.
+    await pickExercise(page, 'Yoke Carry Press');
+    await page.getByRole('button', { name: 'Customize this exercise' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Created by Nate');
+    await expect(dialog).not.toContainText('Created by you');
+    // The name is still readable -- only the control is gone, not the information.
+    await expect(dialog).toContainText('Yoke Carry Press');
+    await expect(dialog).toContainText('Only Nate or the account owner can rename this exercise.');
+    await expect(dialog.getByRole('button', { name: 'Save' })).toHaveCount(0);
+    // The point of the change: the name is TEXT, not a disabled textbox. Asserted directly on the
+    // live values, because "is it in a field" is exactly what an absent Save button cannot prove.
+    await expect
+      .poll(async () =>
+        dialog
+          .locator('input, textarea')
+          .evaluateAll((els, name) => els.some((el) => (el as HTMLInputElement).value === name), 'Yoke Carry Press'),
+      )
+      .toBe(false);
+    // Delete is DELETE_SHARED_RESOURCE -- owner-only and unconditional, so no member ever gets it.
+    await expect(dialog.getByRole('button', { name: 'Delete this exercise' })).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Done' }).click();
+
+    // Their own, which nobody else has logged: theirs to rename, and still no delete.
+    await backToPicker(page);
+    await addOwnExercise(page, 'Sam Sled Push');
+    await page.getByRole('button', { name: 'Customize this exercise' }).click();
+
+    await expect(dialog).toContainText('Created by you');
+    await expect(dialog.getByRole('button', { name: 'Save' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Delete this exercise' })).toHaveCount(0);
   });
 
   // The Team-tier seam. The product ships visibility forced ON with no endpoint and no UI, so

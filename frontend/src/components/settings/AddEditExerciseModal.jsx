@@ -219,6 +219,12 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       isGlobal: false,
       isFavorite: true,
       tags: [],
+      // You just made it, and nobody else can have logged against it yet -- so the Customize modal
+      // reads it as yours while the create is still queued, instead of falling back to the
+      // unattributed "Household exercise" badge with no Name field. Replaced wholesale by the
+      // server's row when CREATE_EXERCISE's onSettled reconciles.
+      createdByYou: true,
+      renamable: true,
       optimistic: true,
     };
     insertOptimisticExercise(queryClient, personId, tempExercise);
