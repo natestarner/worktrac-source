@@ -123,6 +123,14 @@ public class EmailService {
      */
     public String sendMembershipInvite(String toEmail, String personName, String householdName,
                                         String ownerName, String joinUrl, boolean recipientHasAccount) {
+        // ⚠️ These two sentences are now LITERALLY TRUE, and they were not always. The
+        // already-have-an-account branch has said "sign in with the password you already use"
+        // since it was written, while the screen behind the link offered one password field to
+        // everybody and the server ignored whatever an existing address typed into it -- handing
+        // over a full session on the strength of the emailed link alone. The email described the
+        // right design before the code implemented it; /join and AuthService.acceptInvite now
+        // match it. Keep the two halves in step: this branch is the promise the sign-in screen
+        // keeps.
         String actionSentence = recipientHasAccount
                 ? "Open the link below and sign in with the password you already use for Huddle."
                 : "Open the link below to choose a password and finish setting up your login.";

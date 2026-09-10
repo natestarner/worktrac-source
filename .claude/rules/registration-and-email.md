@@ -119,10 +119,36 @@ and a `selectionToken`, and `POST /api/auth/session` mints the real thing from a
   not a 403 with a code. They proved the password, so this reveals nothing — and there is nothing
   for the client to branch on.
 - **`POST /api/auth/session` serves BOTH finishing a login and switching household.** One route, so
-  the two cannot drift. No password on either path, which is why `AuthService.startSession`'s
-  membership lookup is the entire security of it. A household you are not in answers **404, not
-  403** — a 403 confirms the account id is real, which is an enumeration oracle spanning
-  households.
+  the two cannot drift. No password on either path, which is why `AuthService.startSession`'s two
+  checks — **the token version, then the membership** — are the entire security of it. A household
+  you are not in answers **404, not 403** — a 403 confirms the account id is real, which is an
+  enumeration oracle spanning households.
+- **⚠️ THIS ROUTE MUST CHECK `token_version` ITSELF, and for a long time it did not.** Every other
+  route gets that check free from `JwtAuthenticationFilter` (via `AccountAccessService.resolve`),
+  which is what makes a password change actually revoke every token a user holds. This one parses
+  the Authorization header by hand — it has to, since a selection token cannot authenticate through
+  the filter — and **`JwtService.parseToken` validates the signature and the expiry and nothing
+  else**. So the route swapped a token every other route already refused for a fresh 30-day one:
+  *changing your password because you believed you were compromised did not sign the attacker out*,
+  as long as they called this once. Proven live before the fix (`/me` → 401, `/session` → 200 with
+  a working token).
+  - **Both branches carry it** — a selection token has a `tv` claim too, and is minted against the
+    value current at login, so a password changed from another device while the picker is on screen
+    must invalidate it.
+  - **401 here is correct and is not the trap `backend-core.md` warns about**: what failed *is* the
+    token that made the request, not a second credential alongside it.
+  - Checked **before** the membership lookup, so a revoked token cannot be told apart from a wrong
+    account id — answering 404 first would confirm the token still works.
+  - **Polarity is absent-means-CURRENT**, like `role` and `scp`: a token minted before the claim
+    existed parses as 0 and matches a never-bumped row. Inverting it signs out every user at deploy.
+  - `PasswordChangeService` passes the version it just **minted**, not the request's — deliberately
+    through the ordinary parameter rather than a bypass overload, since one entry point that always
+    checks is harder to misuse than two where one skips it.
+  - `HouseholdSwitchTest#aTokenRevokedByAPasswordChangeCannotBeSwappedForAFreshOne` and
+    `#aSelectionTokenIsRefusedOnceThePasswordChangesUnderIt` are the pins; both assert the stale
+    token is genuinely dead on `/me` first, or they would prove nothing.
+  - **Membership revocation was never affected** — `startSession` has always checked
+    `findByAccount_IdAndUser_Id`. This was specifically the `token_version` axis.
 
 ## Member-login invites — what the OWNER must not be able to learn
 
@@ -148,9 +174,65 @@ resend cooldown.
   otherwise-valid invitation. Accept looks the user up, creates only if genuinely absent, and
   **never touches an existing user's password** — an invitation silently changing somebody's
   credentials is the one thing a household owner must not be able to do.
+- **⚠️ THE EMAILED TOKEN PROVES THE LINK, NEVER THE PERSON.** An address that already has a login
+  must prove itself before the membership attaches, and there are exactly two ways: its
+  **password**, checked through `AuthService.verifyCredentials` so it carries the same rate limits
+  and the same ten-strike lockout as `/login`; or an **existing session belonging to that same
+  address**, read via `CurrentUser.optional()`.
+  - This was not always so. Accept used to mint a **full 30-day session for a known address with no
+    credential check at all** — and since `/api/auth/session` takes a session token, its holder
+    could then reach every other household that person belonged to, their own included. Any owner
+    could cause a link with that power to be mailed to any address they could type, live 7 days,
+    re-sendable 5 times. `MembershipInviteTest#anExistingAddressCannotJoinWithoutItsPassword` is
+    the pin, and it asserts **no membership is created**, not just that the response is refused.
+  - **Read the session through `CurrentUser.optional()`, never by parsing the header.**
+    `JwtService.parseToken` does **not** compare `tv` to the database — `JwtAuthenticationFilter`
+    does, separately — so hand-parsing accepts a token a password reset already invalidated.
+    `/api/auth/session` must parse by hand (a selection token cannot reach the filter); nothing
+    else may borrow that shape.
+  - Being signed in as **somebody else** proves nothing about the invitee and is refused. The
+    client offers to switch; it must never swap identity silently.
+  - A **missing** password is refused before `verifyCredentials`, so it costs the invitee no
+    attempt — otherwise replaying the link is a way to lock them out of their own account without
+    guessing a character. A **wrong** one still counts.
+- **⚠️ `POST /api/auth/invite/preview` is token-gated, and that is what keeps it from being the
+  forbidden oracle.** It answers `SIGN_IN` vs `SET_PASSWORD` so `/join` can ask the right question
+  instead of offering one password field to everybody with "leave it blank if…". The oracle the
+  bullet above forbids is the **owner's**, and an owner never sees this token — the raw value goes
+  from `generateToken()` straight onto the event and into the email, and the owner's own response
+  is a hardcoded `INVITED` row. The holder could already learn this by POSTing accept with a blank
+  password. It runs the same `requireValidInvite` gauntlet, so a bad token burns an attempt here
+  too and it cannot be a free guessing oracle.
+- **⚠️ Accept and login share `AuthService.sessionOrPicker`**, so accepting returns the SAME two
+  `AuthResponse` shapes a sign-in does — one membership signs straight in, two or more return the
+  household picker plus a selection token. That is why joining needs no journey of its own: the
+  client reads the same `token == null` it already read, and `JoinPage` renders the same
+  `components/auth/HouseholdPicker` `LoginPage` does.
+- **⚠️ NEITHER invite route may answer 401 — both refuse with 403 (and 423 when locked).** They are
+  `permitAll`, but the browser attaches whatever session token it holds, and `api/client.js` reads
+  **any** 401 on a token-bearing request as "your session expired": it clears the token and
+  force-navigates to `/login`, with no per-route opt-out. So a signed-in person opening a stale or
+  already-used link was thrown out of their own working session and never saw the reason. Same
+  shape as `docs/incidents/2026-09-09-change-password-wrong-current-signs-out.md`.
+  `MembershipInviteTest#noInviteRefusalEverAnswers401` and the e2e
+  *"a dead invite link opened while signed in does not end that session"* pin it — the latter is
+  the only test that can, since every other invite spec logs out before opening a link.
 - **Every way an invitation can fail to authorize returns ONE refusal.** Wrong id, wrong token,
-  expired, already accepted, locked out — the same 401 with the same sentence. Distinguishing them
-  tells whoever holds a bad link which part to keep trying.
+  expired, already accepted, locked out — the same status with the same sentence. Distinguishing
+  them tells whoever holds a bad link which part to keep trying. The invariant is about the
+  **sentence**, not the number; the number is 403 for the reason above.
+- **⚠️ `requireValidInvite` needs `noRollbackFor`, and the attempt ceiling is inert without it.**
+  The bad-token branch increments `attemptCount` and then throws; Spring's default
+  rollback-on-RuntimeException discarded that increment **every time**, so the counter never left
+  zero and `MAX_ATTEMPTS` had never once fired in production. `RegistrationService.confirmEmail`
+  and `PasswordResetService.confirmReset` both carry the annotation with the same comment; the
+  invite path was the one of the three that did not.
+  `MembershipInviteTest#fiveWrongTokensLockTheInvitationOut` fails (counter 0, not 5) without it.
+  The ceiling is checked **before** the BCrypt compare, so it also bounds the CPU an anonymous
+  caller can spend on these two permitAll routes.
+- **Accept must `accountAccessService.invalidate(userId, accountId)`.** It did not, which was
+  survivable only while every accepter was signed out. A signed-in joiner whose device touched the
+  household in the last 60s would otherwise be refused inside a household they had just joined.
 - **A resend mints a NEW token**, so a link already in an inbox stops working. The usual reason to
   resend is that the first went astray, and leaving both live doubles the window a mis-sent link is
   usable. It also resets the attempt ceiling, which guards *one* secret.

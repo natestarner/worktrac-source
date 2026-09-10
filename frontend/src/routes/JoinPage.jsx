@@ -1,74 +1,171 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { isOfflineError } from '../api/client';
 import Spinner from '../components/shared/Spinner';
-import { errorBannerStyle, fieldLabelStyle } from './LoginPage';
+import HouseholdPicker from '../components/auth/HouseholdPicker';
+import { authCardStyle, authPageStyle, errorBannerStyle, fieldLabelStyle } from '../components/auth/authStyles';
 import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
 import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
 import { FIELD_LIMITS } from '../utils/fieldLimits';
 
 /**
- * Where an invite link lands: finish setting up a login and get signed straight in.
+ * Where an invite link lands.
  *
- * <p>Mirrors ResetPasswordPage — same shape, same framing, and for the same reason: both are
- * "you followed a link from your email, now finish the thing".
+ * ⚠️ THE SCREEN ASKS THE RIGHT QUESTION, which it previously could not. It used to offer a
+ * password field to everybody and tell the reader to leave it blank if they already had a Huddle
+ * account — asking somebody to understand an implementation detail about themselves, and saying
+ * the opposite of the invitation email, which tells that same reader to sign in with the password
+ * they already have. `POST /api/auth/invite/preview` answers which case this is, gated by the
+ * emailed token; see MembershipInviteService.preview for why that is not the user-enumeration
+ * oracle the invite design forbids.
  *
- * ⚠️ THE PASSWORD FIELD IS ALWAYS OFFERED, and that is deliberate. The server ignores it when the
- * invited address already has an account, and the client CANNOT know which case it is in — asking
- * would mean an endpoint that answers "does this address have an account", which is the exact
- * user-enumeration oracle the whole invite design avoids. So the page asks once, the server
- * decides, and somebody who already has an account simply has their entry ignored.
+ * Four states, and the last two exist because a signed-in visitor was not handled at all:
+ *
+ *   SET_PASSWORD                  a new address, choosing a password. Unchanged.
+ *   SIGN_IN, signed out           an existing address, PROVING the password it already has.
+ *   SIGN_IN, signed in as them    their session is the proof; no password field at all.
+ *   SIGN_IN, signed in as someone else
+ *                                 named plainly, with both doors offered. This route silently
+ *                                 swapped the signed-in identity before, on a shared iPad, with no
+ *                                 confirmation.
+ *
+ * On success this renders the SHARED HouseholdPicker whenever the response carries no token —
+ * exactly what LoginPage does with the same `{ households, selectionToken }`. Somebody who already
+ * had a household now has two, so that picker is the screen they would have met on their very next
+ * sign-in anyway. Reusing it is the whole reason joining needs no journey of its own.
  */
 export default function JoinPage() {
   const [params] = useSearchParams();
-  const { acceptInvite } = useAuth();
+  const { acceptInvite, previewInvite, chooseHousehold, logout, user, status } = useAuth();
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // What the invitation wants: null while loading, or { mode, householdName, personName, email }.
+  const [invitation, setInvitation] = useState(null);
+  // Set only when accepting left this credential in two or more households. Holds the five-minute
+  // selection token, in COMPONENT STATE for the reason LoginPage spells out: it is a credential,
+  // and it should exist for exactly as long as the picker is on screen.
+  const [choice, setChoice] = useState(null);
 
   const inviteId = params.get('i');
   const token = params.get('t');
   const linkIsIncomplete = !inviteId || !token;
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  // Signing in is the only thing that can change who we are mid-flow, and `status` settles before
+  // the invitee could act on it. Compared case-insensitively because the server normalises the
+  // invited address to lower case and a session's email is whatever was typed at registration.
+  const signedInEmail = status === 'authenticated' ? (user?.email ?? null) : null;
+  const invitationIsForMe =
+    signedInEmail != null
+    && invitation?.email != null
+    && signedInEmail.toLowerCase() === invitation.email.toLowerCase();
+
+  useEffect(() => {
+    if (linkIsIncomplete) return undefined;
+    let cancelled = false;
     setError('');
+    previewInvite({ inviteId, token })
+      .then((preview) => {
+        if (!cancelled) setInvitation(preview);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        // ⚠️ A link we could not CHECK is not a link we know to be bad. Saying "no longer valid"
+        // for a cold start or a dead connection tells somebody holding a perfectly good invitation
+        // to go ask for another one -- and lower's measured ~35s cold start against a 45s bound
+        // makes that a routine occurrence, not an edge case.
+        setError(isOfflineError(err)
+          ? 'Couldn’t reach Huddle to check this invitation. Check your connection and try again.'
+          : (err.message || 'That invitation link is no longer valid. Ask for a new one.'));
+      });
+    return () => { cancelled = true; };
+  }, [inviteId, token, linkIsIncomplete, previewInvite]);
 
-    // Mirrors RegisterPage's floor -- but a BLANK password is valid here (it means "use the
-    // account I already have"), so only a non-empty, too-short entry is rejected. The server
-    // enforces the same 8-char minimum on whatever it actually receives; this just gives someone
-    // who typos a short password a field-level message instead of a round trip.
-    const trimmedPassword = password.trim();
-    if (trimmedPassword && trimmedPassword.length < 8) {
-      setPasswordError(true);
-      return;
-    }
-
+  async function submit(withPassword) {
+    setError('');
     setSubmitting(true);
     try {
-      await acceptInvite({ inviteId, token, password: trimmedPassword || undefined });
+      const needsChoice = await acceptInvite({ inviteId, token, password: withPassword });
+      if (needsChoice) {
+        setChoice(needsChoice);
+        return;
+      }
       navigate('/app/log');
     } catch (err) {
-      // The server says one thing for every way a link can fail — wrong, expired, already used,
-      // locked out. Distinguishing them would tell whoever holds a bad link which part to keep
-      // trying, and helps a legitimate recipient not at all: they can simply ask for another.
       setError(err.message || 'That invitation link is no longer valid. Ask for a new one.');
     } finally {
       setSubmitting(false);
     }
   }
 
+  function handleSubmit(e) {
+    e.preventDefault();
+
+    const trimmedPassword = password.trim();
+    // The server enforces the same 8-character floor on whatever it receives; this just saves a
+    // round trip for an obvious typo. It applies to BOTH modes now: setting a password and proving
+    // one. No password this app has ever issued is shorter than 8 characters, so a short entry
+    // cannot be a real credential either way.
+    if (trimmedPassword.length < 8) {
+      setPasswordError(true);
+      return;
+    }
+    submit(trimmedPassword);
+  }
+
+  async function handleChoose(accountId) {
+    setError('');
+    setSubmitting(true);
+    try {
+      await chooseHousehold(accountId, choice.selectionToken);
+      navigate('/app/log');
+    } catch (err) {
+      // Almost always an expired selection token -- five minutes is short on purpose. The
+      // membership is already attached, so there is nothing to redo: signing in reaches it.
+      setError(err.message || 'That took too long — sign in again to pick a household.');
+      setChoice(null);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // ── Joined. Which household now? The same picker a multi-household login lands on. ──────────
+  if (choice) {
+    return (
+      <HouseholdPicker
+        households={choice.households}
+        onChoose={handleChoose}
+        submitting={submitting}
+        error={error}
+        heading="You’re in — choose a household"
+        intro="You’re part of more than one now. You can switch between them any time from the account menu."
+      />
+    );
+  }
+
+  const mode = invitation?.mode;
+  const householdName = invitation?.householdName;
+
   return (
-    <main style={pageStyle}>
-      <form onSubmit={handleSubmit} style={cardStyle}>
+    <main style={authPageStyle}>
+      <form onSubmit={handleSubmit} style={authCardStyle}>
         <picture>
           <source srcSet={logoDark} media="(prefers-color-scheme: dark)" />
           <img src={logoLight} alt="Huddle" style={{ width: 216, maxWidth: '100%', height: 'auto', marginBottom: 32 }} />
         </picture>
 
-        <h1 style={headingStyle}>Set up your login</h1>
+        <h1 style={headingStyle}>
+          {householdName ? `Join ${householdName}` : 'Join a household'}
+        </h1>
+
+        {error && (
+          <div role="alert" style={errorBannerStyle}>
+            {error}
+          </div>
+        )}
 
         {linkIsIncomplete ? (
           // Missing halves of the link is not a server refusal, so it never reaches the API. Says
@@ -76,18 +173,91 @@ export default function JoinPage() {
           <div role="alert" style={errorBannerStyle}>
             This link is missing part of its address. Open the full link from your invitation email.
           </div>
+        ) : !invitation ? (
+          // Nothing to ask until we know which question this is. The error above stands on its own
+          // when the check itself failed.
+          !error && (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 'var(--space-6)' }}>
+              <Spinner />
+            </div>
+          )
+        ) : signedInEmail && !invitationIsForMe ? (
+          // ⚠️ NEVER SILENTLY SWAP IDENTITY. Accepting used to replace the signed-in session
+          // wholesale, so opening Sam's link on Nate's iPad signed Nate out and Sam in with no
+          // confirmation and nothing on screen to explain it.
+          <>
+            <p style={introStyle}>
+              This invitation is for <strong>{invitation.email}</strong>, but you’re signed in as{' '}
+              <strong>{signedInEmail}</strong>.
+            </p>
+            <button
+              type="button"
+              onClick={() => logout()}
+              className="btn btn-primary btn-lg btn-full pressable"
+            >
+              Sign in as {invitation.email}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/app/log')}
+              className="btn btn-lg btn-full pressable"
+              style={{ marginTop: 'var(--space-3)', background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+            >
+              Stay signed in as {signedInEmail}
+            </button>
+            <p style={{ ...introStyle, marginTop: 'var(--space-5)', marginBottom: 0 }}>
+              The invitation stays valid either way.
+            </p>
+          </>
+        ) : invitationIsForMe ? (
+          // Their own session is the proof, and a stronger one than a password: it reached the
+          // server's security context only after its signature, scope and token version all
+          // checked out. So there is nothing to type.
+          <>
+            <p style={introStyle}>
+              You’re signed in as <strong>{signedInEmail}</strong>. Joining adds {householdName} to
+              your account — the household you’re in now stays exactly as it is.
+            </p>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => submit(undefined)}
+              className="btn btn-primary btn-lg btn-full pressable"
+              style={{ position: 'relative' }}
+            >
+              <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Join household</span>
+              {submitting && (
+                <span style={spinnerWrapStyle}>
+                  <Spinner color="currentColor" />
+                </span>
+              )}
+            </button>
+          </>
         ) : (
           <>
             <p style={introStyle}>
-              Choose a password to finish. If you already have a Huddle account with this address,
-              leave it blank and we&rsquo;ll use the password you already have.
+              {mode === 'SIGN_IN'
+                ? `You already have a Huddle account. Sign in and ${householdName} is added to it — anything you already track stays exactly where it is.`
+                : `${invitation.personName}, choose a password to finish setting up your login.`}
             </p>
 
-            {error && (
-              <div role="alert" style={errorBannerStyle}>
-                {error}
-              </div>
-            )}
+            {/* Read-only, and shown for both modes: it tells the reader WHICH address was invited,
+                which is the difference between "this is mine" and "this went to the wrong person".
+                Not an input they can change -- the invitation names one address and only that
+                address can accept it. */}
+            <div style={{ textAlign: 'left', marginBottom: 'var(--space-4)' }}>
+              <label htmlFor="join-email" style={fieldLabelStyle}>Email</label>
+              <input
+                type="email"
+                id="join-email"
+                name="email"
+                autoComplete="username"
+                readOnly
+                value={invitation.email}
+                className="input"
+                style={{ color: 'var(--color-muted)' }}
+              />
+            </div>
 
             <div style={{ textAlign: 'left', marginBottom: 'var(--space-4)' }}>
               <label htmlFor="password" style={fieldLabelStyle}>Password</label>
@@ -95,8 +265,10 @@ export default function JoinPage() {
                 type="password"
                 id="password"
                 name="password"
-                autoComplete="new-password"
-                placeholder="At least 8 characters"
+                // current-password when proving one, new-password when setting one: this is what
+                // decides whether a password manager offers to fill or to save.
+                autoComplete={mode === 'SIGN_IN' ? 'current-password' : 'new-password'}
+                placeholder={mode === 'SIGN_IN' ? 'Your Huddle password' : 'At least 8 characters'}
                 maxLength={FIELD_LIMITS.password}
                 value={password}
                 onChange={(e) => {
@@ -120,31 +292,20 @@ export default function JoinPage() {
                 </span>
               )}
             </button>
+
+            {mode === 'SIGN_IN' && (
+              <div style={{ marginTop: 'var(--space-4)' }}>
+                <Link to="/forgot-password" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)' }}>
+                  Forgot your password?
+                </Link>
+              </div>
+            )}
           </>
         )}
       </form>
     </main>
   );
 }
-
-const pageStyle = {
-  minHeight: '100vh',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: 'var(--color-bg)',
-};
-
-const cardStyle = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-xl)',
-  padding: 'var(--space-10) var(--space-8)',
-  width: 560,
-  maxWidth: '92vw',
-  textAlign: 'center',
-  boxShadow: 'var(--shadow-2), var(--elevation-hairline)',
-};
 
 const headingStyle = {
   fontSize: 'var(--text-lg)',

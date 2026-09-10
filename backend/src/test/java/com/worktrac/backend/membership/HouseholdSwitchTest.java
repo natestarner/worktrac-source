@@ -122,6 +122,86 @@ class HouseholdSwitchTest extends AbstractIntegrationTest {
         assertThat(choice.has("plan")).isFalse();
     }
 
+    /**
+     * ⚠️ <b>A REVOKED TOKEN MUST NOT BE EXCHANGEABLE FOR A LIVE ONE.</b>
+     *
+     * <p>Changing a password bumps {@code users.token_version}, and every ordinary route refuses a
+     * token whose {@code tv} no longer matches — {@code JwtAuthenticationFilter} resolves it
+     * against the live row on every request. {@code POST /api/auth/session} is {@code permitAll}
+     * and parses the header <b>itself</b>, because a selection token deliberately cannot
+     * authenticate through that filter; and {@code JwtService.parseToken} checks the signature and
+     * the expiry but <b>not</b> {@code tv} against the database.
+     *
+     * <p>So this one route handed back a fresh 30-day token in exchange for a token every other
+     * route had already refused, which defeats the revocation entirely: changing your password
+     * because you believe you are compromised did not sign the attacker out, as long as they
+     * called this route once.
+     *
+     * <p>Asserted in three parts, and all three matter: the old token is genuinely dead elsewhere
+     * (or the rest proves nothing), this route refuses it, and no usable token comes back.
+     */
+    @Test
+    void aTokenRevokedByAPasswordChangeCannotBeSwappedForAFreshOne() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String soloEmail = "revoked-" + suffix + "@example.com";
+        JsonNode registered = RegistrationTestSupport
+                .registerAndConfirm(mockMvc, objectMapper, testCodeCache, soloEmail, "Casey");
+        String staleToken = registered.get("token").asText();
+        long accountId = registered.get("account").get("id").asLong();
+
+        mockMvc.perform(post("/api/user/password")
+                        .header("Authorization", "Bearer " + staleToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "currentPassword", password, "newPassword", "a-brand-new-password"))))
+                .andExpect(status().isOk());
+
+        // It really is dead everywhere else -- otherwise the assertion below proves nothing.
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + staleToken))
+                .andExpect(status().isUnauthorized());
+
+        // ...and this route must agree, rather than minting a replacement.
+        mockMvc.perform(post("/api/auth/session")
+                        .header("Authorization", "Bearer " + staleToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("accountId", accountId))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * ⚠️ The same hole through the SELECTION token, which is the branch this route exists for.
+     *
+     * <p>A selection token carries {@code tv} too, and is minted at login against the value that
+     * was current then. Someone who reaches the picker, then has their password changed from
+     * another device before choosing, must not be able to finish the sign-in — the picker is a
+     * half-finished sign-in, and the credential behind it has just been revoked.
+     */
+    @Test
+    void aSelectionTokenIsRefusedOnceThePasswordChangesUnderIt() throws Exception {
+        JsonNode picker = login(sharedEmail);
+        String selectionToken = picker.get("selectionToken").asText();
+
+        // Meanwhile, on another device, the password changes.
+        JsonNode signedIn = json(mockMvc.perform(post("/api/auth/session")
+                .header("Authorization", "Bearer " + selectionToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("accountId", firstAccountId))))
+                .andExpect(status().isOk()));
+        mockMvc.perform(post("/api/user/password")
+                        .header("Authorization", "Bearer " + signedIn.get("token").asText())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "currentPassword", password, "newPassword", "a-brand-new-password"))))
+                .andExpect(status().isOk());
+
+        // The selection token was minted before that bump, so it is stale now.
+        mockMvc.perform(post("/api/auth/session")
+                        .header("Authorization", "Bearer " + selectionToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("accountId", secondAccountId))))
+                .andExpect(status().isUnauthorized());
+    }
+
     // The overwhelmingly common path, and the one that must not have changed shape because a rare
     // one now exists.
     @Test

@@ -1,13 +1,16 @@
 package com.worktrac.backend.user;
 
 import com.worktrac.backend.common.UnauthorizedException;
+import com.worktrac.backend.security.AccountPrincipal;
 import com.worktrac.backend.security.ClientIpResolver;
 import com.worktrac.backend.security.CurrentUser;
-import com.worktrac.backend.membership.AccountMembership;
+
 import com.worktrac.backend.membership.MembershipInviteService;
 import com.worktrac.backend.security.JwtService;
 import com.worktrac.backend.user.dto.AuthResponse;
 import com.worktrac.backend.user.dto.AcceptInviteRequest;
+import com.worktrac.backend.user.dto.InvitePreviewRequest;
+import com.worktrac.backend.user.dto.InvitePreviewResponse;
 import com.worktrac.backend.user.dto.ConfirmEmailRequest;
 import com.worktrac.backend.user.dto.ForgotPasswordRequest;
 import com.worktrac.backend.user.dto.LoginRequest;
@@ -102,9 +105,19 @@ public class AuthController {
      * could never reach it. That is why the header is read and validated here by hand, and why
      * neither branch below trusts anything but a signature this server produced.
      *
-     * <p><b>No password.</b> Both paths are already-proved identity, which is exactly why
-     * {@code AuthService.startSession}'s membership lookup is the whole security of this endpoint:
-     * without it, any signed-in person could mint a token for any account id they typed.
+     * <p><b>No password.</b> Both paths are already-proved identity, which is why
+     * {@code AuthService.startSession}'s two checks — the token version and the membership — are
+     * the whole security of this endpoint.
+     *
+     * <p>⚠️ <b>THE TOKEN VERSION MUST TRAVEL WITH THE USER ID, and it did not.</b> Parsing the
+     * header here skips {@code JwtAuthenticationFilter}, and with it the only place that compares
+     * a token's {@code tv} claim against the live {@code users} row —
+     * {@link com.worktrac.backend.security.JwtService#parseToken} checks the signature and the
+     * expiry and nothing else. This route therefore accepted a token every other route had already
+     * refused and handed back a fresh 30-day one, which defeated revocation completely: changing a
+     * password because you believed you were compromised did not sign the attacker out, as long as
+     * they called this once. Both branches below carry {@code tokenVersion} for that reason, and
+     * {@code startSession} is what enforces it.
      */
     @PostMapping("/session")
     public AuthResponse startSession(@Valid @RequestBody StartSessionRequest request,
@@ -118,34 +131,75 @@ public class AuthController {
         // Selection token first: it is the narrower kind, and the one this route exists for.
         // Falling through to a full token second is what makes "switch household" the same route
         // rather than a near-duplicate of it.
-        Long userId = jwtService.parseSelectionToken(token)
-                .map(selection -> selection.userId())
-                .or(() -> jwtService.parseToken(token).map(principal -> principal.userId()))
+        TokenIdentity identity = jwtService.parseSelectionToken(token)
+                .map(selection -> new TokenIdentity(selection.userId(), selection.tokenVersion()))
+                .or(() -> jwtService.parseToken(token)
+                        .map(principal -> new TokenIdentity(principal.userId(), principal.tokenVersion())))
                 .orElseThrow(() -> new UnauthorizedException("Sign in again to choose a household."));
 
-        return authService.startSession(userId, request.accountId());
+        return authService.startSession(identity.userId(), identity.tokenVersion(), request.accountId());
     }
 
     /**
-     * Finishes an invitation and signs the invitee straight in.
+     * The two claims this route needs from whichever kind of token it was handed.
      *
-     * <p>permitAll, and it has to be: the caller has no session — acquiring one is the whole point.
-     * The emailed token is the credential, and {@code MembershipInviteService.accept} is what
-     * verifies it.
+     * <p>{@code SelectionPrincipal} and {@code AccountPrincipal} are deliberately separate types
+     * with no common supertype — the compiler enforcing "a restricted token is never a session" is
+     * the point of that split, and giving them a shared interface to tidy this up would give it
+     * away. This record is the narrow union of what BOTH legitimately carry, built at the one call
+     * site allowed to accept either.
+     */
+    private record TokenIdentity(Long userId, int tokenVersion) {
+    }
+
+    /**
+     * What the /join screen needs before it can ask the right question: does this address already
+     * have a Huddle account, and which household is inviting it?
      *
-     * <p>Returns a full session rather than bouncing to /login. Making someone type a password they
-     * may have just chosen, on a link they just proved they hold, adds a step and no security: the
-     * token already proved control of the invited mailbox.
+     * <p>permitAll, and gated by the emailed token rather than by a session — the caller may have
+     * neither. See {@code MembershipInviteService.preview} for why answering this to the holder of
+     * a valid link is not the user-enumeration oracle the invite design forbids: the oracle that
+     * matters is the OWNER's, and an owner never sees this token.
+     *
+     * <p>POST rather than GET so the token stays out of access logs and Referer headers. The SPA's
+     * own {@code /join?t=…} URL never reaches this server; a {@code GET ?t=…} here would.
+     */
+    @PostMapping("/invite/preview")
+    public InvitePreviewResponse previewInvite(@Valid @RequestBody InvitePreviewRequest request) {
+        MembershipInviteService.InvitePreview preview =
+                inviteService.preview(request.inviteId(), request.token());
+        return InvitePreviewResponse.from(preview);
+    }
+
+    /**
+     * Finishes an invitation: attaches the membership and answers with a session, or with the
+     * household picker when this credential now belongs to more than one household.
+     *
+     * <p>permitAll, and it has to be: the ordinary caller has no session — acquiring one is the
+     * whole point.
+     *
+     * <p>⚠️ <b>The emailed token proves the LINK, never the PERSON.</b> This route used to treat
+     * the two as the same thing and hand an already-registered address a full session on the
+     * strength of the link alone; see {@code AuthService#acceptInvite} for what that let anyone
+     * holding the link reach. All three identity decisions live in that method — this one only
+     * gathers what it needs to make them.
+     *
+     * <p>{@code currentUser.optional()}, not the Authorization header: the header alone is not
+     * proof of anything. {@code JwtAuthenticationFilter} runs on permitAll routes too, and a
+     * principal reaches the context only after its signature, its {@code scp} absence and its
+     * {@code tv} against the live user row have all checked out. Hand-parsing here — as
+     * {@code /session} above must, for a reason that does not apply to this route — would accept a
+     * token a password reset had already invalidated.
      */
     @PostMapping("/accept-invite")
-    public AuthResponse acceptInvite(@Valid @RequestBody AcceptInviteRequest request) {
-        // The two acceptance notices are published by the service, inside its own transaction --
-        // an AFTER_COMMIT listener discards anything published from out here, where accept() has
-        // already committed. See MembershipInviteService#announce.
-        AccountMembership membership =
-                inviteService.accept(request.inviteId(), request.token(), request.password());
-
-        return authService.startSession(membership.getUser().getId(), membership.getAccount().getId());
+    public AuthResponse acceptInvite(@Valid @RequestBody AcceptInviteRequest request,
+                                      HttpServletRequest servletRequest) {
+        // The two acceptance notices are published inside the service's transaction -- an
+        // AFTER_COMMIT listener discards anything published from out here, after it has committed.
+        // See MembershipInviteService#announce.
+        return authService.acceptInvite(request,
+                ClientIpResolver.resolveClientIp(servletRequest),
+                currentUser.optional().map(AccountPrincipal::userId).orElse(null));
     }
 
     @GetMapping("/me")

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { errorBannerStyle, inputStyle, primaryButtonStyle } from './LoginPage';
+import { errorBannerStyle, inputStyle, primaryButtonStyle } from '../components/auth/authStyles';
 import Spinner from '../components/shared/Spinner';
 import { FIELD_LIMITS } from '../utils/fieldLimits';
 
