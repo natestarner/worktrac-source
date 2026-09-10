@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -56,6 +57,8 @@ class HouseholdSwitchTest extends AbstractIntegrationTest {
     private String password;
     private long firstAccountId;
     private long secondAccountId;
+    private String otherOwnerToken;
+    private long samPersonId;
 
     /**
      * One credential in two households. Built by registering household A, then having household B's
@@ -76,13 +79,14 @@ class HouseholdSwitchTest extends AbstractIntegrationTest {
         JsonNode second = RegistrationTestSupport
                 .registerAndConfirm(mockMvc, objectMapper, testCodeCache, otherOwnerEmail, "Nate");
         secondAccountId = second.get("account").get("id").asLong();
-        String otherOwnerToken = second.get("token").asText();
+        otherOwnerToken = second.get("token").asText();
 
-        mockMvc.perform(post("/api/people")
+        samPersonId = json(mockMvc.perform(post("/api/people")
                         .header("Authorization", "Bearer " + otherOwnerToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("name", "Sam"))))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk()))
+                .get("id").asLong();
 
         mockMvc.perform(post("/api/auth/test/member")
                         .header("X-E2E-Test-Key", "local-dev-only-e2e-test-key-do-not-use-elsewhere")
@@ -120,6 +124,55 @@ class HouseholdSwitchTest extends AbstractIntegrationTest {
         assertThat(choice.has("accountName")).isTrue();
         assertThat(choice.has("accountRole")).isTrue();
         assertThat(choice.has("plan")).isFalse();
+    }
+
+    /**
+     * ⚠️ <b>A token for a household you were REMOVED from is not a key to anywhere else.</b>
+     *
+     * <p>The membership half of the same rule as the token-version tests below, and the last place
+     * {@code /api/auth/session} disagreed with the rest of the app. Every other route refuses this
+     * token outright — {@code JwtAuthenticationFilter} resolves the membership named in its
+     * {@code accountId} claim on every request, and a revoked one resolves to nothing. This route
+     * parsed the header itself and only ever checked the household being asked FOR, so a token
+     * scoped to a household its holder had been removed from still bought a session somewhere else.
+     *
+     * <p>Not a lockout, and worth being precise about that: the 401 signs them out, and signing in
+     * again lands them on the picker with the households they DO still belong to. What changes is
+     * that a revoked token stops being the credential that gets them there.
+     */
+    @Test
+    void aTokenForAHouseholdYouWereRemovedFromCannotMintASessionElsewhere() throws Exception {
+        // Sign in to the household where this login is a MEMBER, and hold that token.
+        JsonNode picker = login(sharedEmail);
+        JsonNode inSecond = json(mockMvc.perform(post("/api/auth/session")
+                .header("Authorization", "Bearer " + picker.get("selectionToken").asText())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("accountId", secondAccountId))))
+                .andExpect(status().isOk()));
+        String memberToken = inSecond.get("token").asText();
+
+        // It genuinely works first, or the rest of this proves nothing.
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + memberToken))
+                .andExpect(status().isOk());
+
+        // The owner of that household removes the login.
+        mockMvc.perform(delete("/api/account/logins/" + samPersonId)
+                        .header("Authorization", "Bearer " + otherOwnerToken))
+                .andExpect(status().isNoContent());
+
+        // Dead everywhere else...
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + memberToken))
+                .andExpect(status().isUnauthorized());
+
+        // ...and it must not buy a session in the household they still own, either.
+        mockMvc.perform(post("/api/auth/session")
+                        .header("Authorization", "Bearer " + memberToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("accountId", firstAccountId))))
+                .andExpect(status().isUnauthorized());
+
+        // Signing in again is the way back, and it still works.
+        assertThat(login(sharedEmail).get("token").asText()).isNotBlank();
     }
 
     /**

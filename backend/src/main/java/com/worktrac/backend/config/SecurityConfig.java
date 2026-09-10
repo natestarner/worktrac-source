@@ -2,9 +2,8 @@ package com.worktrac.backend.config;
 
 import com.worktrac.backend.security.AuthRequestLoggingFilter;
 import com.worktrac.backend.security.JwtAuthenticationFilter;
-import com.worktrac.backend.security.JwtService;
+import com.worktrac.backend.security.TokenAuthenticator;
 import com.worktrac.backend.security.RequestDiagnosticsFilter;
-import com.worktrac.backend.membership.AccountAccessService;
 import com.worktrac.backend.security.RequestSizeLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,10 +26,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService,
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                     TokenAuthenticator tokenAuthenticator,
                                                      CorsConfigurationSource corsConfigurationSource,
                                                      RequestLimitProperties requestLimitProperties,
-                                                     AccountAccessService accountAccessService,
                                                      AdminProperties adminProperties) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
@@ -45,8 +44,10 @@ public class SecurityConfig {
                         // /api/auth/session is permitAll because a SELECTION token cannot authenticate
                         // through the filter by design (JwtService.parseToken refuses any token
                         // carrying scp), so an authenticated matcher here would make finishing a
-                        // multi-household login impossible. The route reads and validates the
-                        // header itself -- see AuthController.startSession.
+                        // multi-household login impossible. The route reads the header itself and
+                        // hands it to TokenAuthenticator -- the SAME validator this filter uses, so
+                        // "cannot use the filter" no longer means "gets a weaker check". It did
+                        // once; see TokenAuthenticator's header.
                         // /api/auth/accept-invite and /api/auth/invite/preview are permitAll for the
                         // same reason as /session: the caller has no session yet, and the emailed
                         // token is what stands in for one. Each verifies that token itself -- see
@@ -104,7 +105,7 @@ public class SecurityConfig {
                 // reaches a controller is still tagged with its correlation id in the logs. Same
                 // "must be positioned relative to an already-registered filter" constraint as
                 // above, hence relative to AuthRequestLoggingFilter rather than to the chain head.
-                .addFilterBefore(new JwtAuthenticationFilter(jwtService, accountAccessService, adminProperties),
+                .addFilterBefore(new JwtAuthenticationFilter(tokenAuthenticator, adminProperties),
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new AuthRequestLoggingFilter(), JwtAuthenticationFilter.class)
                 .addFilterBefore(new RequestDiagnosticsFilter(), AuthRequestLoggingFilter.class)
