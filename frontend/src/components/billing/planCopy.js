@@ -35,4 +35,5 @@ export const PRO_BENEFITS = [
   { id: 'history', label: 'Your whole history: every workout, for as long as you keep it' },
   { id: 'records', label: 'All-time records and trends over any range' },
   { id: 'import', label: 'Import past workouts from a spreadsheet or another app' },
+  { id: 'logins', label: 'A personal login for anyone in the household who wants one' },
 ];

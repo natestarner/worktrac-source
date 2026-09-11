@@ -766,8 +766,8 @@ export default function HelpTab() {
 
       <Section id="plan" title="Free and Pro">
         <p className="help-lede">
-          Free is free for good. Not a trial that runs out. Pro adds your whole history and
-          the ability to bring old workouts in.
+          Free is free for good. Not a trial that runs out. Pro adds your whole history, the
+          ability to bring old workouts in, and a personal login for anyone who wants one.
         </p>
 
         <HelpTable
@@ -780,6 +780,7 @@ export default function HelpTab() {
             ['Export all your data', 'Yes', 'Yes'],
             ['History, PRs and trends', 'Last 90 days', 'Everything'],
             ['Import past workouts', 'No', 'Yes'],
+            ['A personal login for each person', 'No', 'Yes'],
           ]}
         />
 
