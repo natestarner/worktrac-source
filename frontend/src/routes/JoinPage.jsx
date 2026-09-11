@@ -194,16 +194,18 @@ export default function JoinPage() {
               type="button"
               onClick={() => logout()}
               className="btn btn-primary btn-lg btn-full pressable"
+              title={`Sign in as ${invitation.email}`}
             >
-              Sign in as {invitation.email}
+              <span style={buttonLabelStyle}>Sign in as {invitation.email}</span>
             </button>
             <button
               type="button"
               onClick={() => navigate('/app/log')}
               className="btn btn-lg btn-full pressable"
               style={{ marginTop: 'var(--space-3)', background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+              title={`Stay signed in as ${signedInEmail}`}
             >
-              Stay signed in as {signedInEmail}
+              <span style={buttonLabelStyle}>Stay signed in as {signedInEmail}</span>
             </button>
             <p style={{ ...introStyle, marginTop: 'var(--space-5)', marginBottom: 0 }}>
               The invitation stays valid either way.
@@ -317,6 +319,22 @@ const introStyle = {
   lineHeight: 1.55,
   color: 'var(--color-muted)',
   marginBottom: 'var(--space-5)',
+};
+
+// Sign-in-as/stay-signed-in-as buttons embed an arbitrary-length email straight into the label.
+// .btn is display:inline-flex + white-space:nowrap with no overflow handling of its own, and a
+// bare text child can't be targeted with text-overflow -- it needs a real element so the browser
+// has something to shrink and ellipsize. overflow:hidden here also resolves this span's automatic
+// flex min-width to 0, which is what lets it shrink below the email's full width instead of
+// pushing the button (and the text bleeding out of it) past the card's edge. Same pattern as
+// LoginsSection.jsx's emailStyle. The full address is still the button's accessible name and its
+// `title`, so nothing is lost -- only the on-screen line is shortened.
+const buttonLabelStyle = {
+  display: 'block',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  maxWidth: '100%',
 };
 
 const fieldErrorStyle = {
