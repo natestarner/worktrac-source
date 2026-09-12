@@ -17,7 +17,7 @@ import static org.mockito.Mockito.verify;
  * how phase 7a's invitation email came to never send.
  *
  * <p>So the assertion worth making is not "the listener invalidates" (unit, below) but "the
- * publish actually reaches it". {@code MemberLoginPauseTest#resumingProUnpausesTheLoginImmediately}
+ * publish actually reaches it". {@code MemberLoginPauseTest#resumingPlusUnpausesTheLoginImmediately}
  * is the end-to-end half of that, against a real household through the real HTTP stack.
  *
  * <p>{@code SubscriptionService.applyStripeState} — the single choke point all three production
@@ -36,7 +36,7 @@ class AccountPlanChangedListenerTest {
 
         // invalidateAccount, not invalidateUser: a plan belongs to the household, and every login
         // in it is affected. invalidateUser would clear the wrong axis -- one person across all
-        // THEIR households, leaving the other members of this one still cached as Pro.
+        // THEIR households, leaving the other members of this one still cached as Plus.
         verify(accessService).invalidateAccount(42L);
     }
 }

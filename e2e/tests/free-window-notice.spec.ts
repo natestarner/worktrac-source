@@ -7,7 +7,7 @@ import { forEachConnectivityMode } from './support/parity';
 // truncated screen that looks complete.
 //
 // The acute case this closes, which log-past-workout.spec.ts flagged and worked around by forcing
-// the household to Pro: log a past workout at an out-of-window date, tap Done, and land on History
+// the household to Plus: log a past workout at an out-of-window date, tap Done, and land on History
 // reading "No workouts logged yet" -- about a workout the app had just saved.
 //
 // Deliberately NO setBillingPlan call anywhere in this file. registerHousehold leaves a household
@@ -114,7 +114,7 @@ test.describe('The Free-tier window names the rest of your history', () => {
   //
   // Asserted here rather than only in help.spec.ts because this is the path someone actually takes:
   // help.spec.ts proves the deep link works, this proves THIS control uses one that resolves.
-  test('"How Free and Pro differ" lands on the plan section of the handbook', async ({
+  test('"How Free and Plus differ" lands on the plan section of the handbook', async ({
     page,
     request,
   }) => {
@@ -122,11 +122,11 @@ test.describe('The Free-tier window names the rest of your history', () => {
     await logAnOutOfWindowWorkout(page);
 
     await page.getByRole('button', { name: 'About your full history' }).click();
-    await page.getByRole('dialog').getByRole('link', { name: 'How Free and Pro differ' }).click();
+    await page.getByRole('dialog').getByRole('link', { name: 'How Free and Plus differ' }).click();
 
     await expect(page).toHaveURL(/\/app\/help#plan/);
 
-    const heading = page.getByRole('heading', { name: 'Free and Pro' });
+    const heading = page.getByRole('heading', { name: 'Free and Plus' });
     await expect(heading).toBeVisible();
 
     const chrome = await page.locator('.app-chrome').boundingBox();

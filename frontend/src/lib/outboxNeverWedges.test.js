@@ -173,8 +173,8 @@ describe('a failing backend never costs a queued write', () => {
   /**
    * ⚠️ Pinned directly beside the 401 case above, because it is the same argument.
    *
-   * A member login is paused when the household leaves Pro, and every write then 403s. Nothing has
-   * been deleted and the membership still exists, so the moment the household is Pro again
+   * A member login is paused when the household leaves Plus, and every write then 403s. Nothing has
+   * been deleted and the membership still exists, so the moment the household is Plus again
    * flushOutbox re-executes the write and it lands. Reporting it dead would tell somebody the sets
    * they logged before the plan lapsed can never sync — and offer them the Discard that makes it
    * true.

@@ -35,7 +35,7 @@ else belongs where it already is, next to the code it constrains:
 |---|---|
 | Guards, permissions, `AccountAccess`, the 404/403 asymmetry, shared-resource ownership | `backend-core.md` |
 | Invites, the enumeration oracle, the selection token, the async email pipeline | `registration-and-email.md` |
-| The Pro pause, and why "a plan decides what a screen shows" needed a second sentence | `billing.md` |
+| The Plus pause, and why "a plan decides what a screen shows" needed a second sentence | `billing.md` |
 | Outbox/app-state keying by `(account, login)`, the hand-over delete guard | `offline-internals.md` |
 | `ReadOnlyWrap` precedence, the viewer's default person, persisted-state scoping | `frontend-core.md` |
 | What the handbook promises members and owners | `user-facing-help.md` |
@@ -54,7 +54,7 @@ promises. **Anything that makes revoke destructive breaks three documents at onc
 confirm dialog's own button was renamed away from "Delete" specifically so the word could not
 imply otherwise.
 
-The same holds for the Pro pause, one step weaker: it does not even remove the membership.
+The same holds for the Plus pause, one step weaker: it does not even remove the membership.
 
 ### ⚠️ An owner may invite, resend, revoke and unlock. An owner may NEVER set a password.
 
@@ -86,7 +86,7 @@ An existing address now proves itself — its password, or a session already bel
 anything attaches. A brand-new address is unchanged: it is *setting* a password, and the emailed
 token is the only credential it can have. Details and the pins: `registration-and-email.md`.
 
-### ⚠️ Member logins are Pro-only, so EVERY test that mints one must set the household Pro first
+### ⚠️ Member logins are Plus-only, so EVERY test that mints one must set the household Plus first
 
 Registration creates a **Free** subscription. A MEMBER in a Free household is `PAUSED_PLAN` and is
 refused on every route but `GET /api/auth/me` and `GET /api/billing/subscription` — correctly. So a
@@ -94,10 +94,10 @@ test that registers a household and then mints a member is testing the pause, wh
 says.
 
 - **e2e:** done centrally in `addMemberLogin` (`e2e/tests/support/auth.ts`), so a new spec cannot
-  forget. A spec driving the real invite flow instead must call `setBillingPlan(..., 'PRO')` itself
+  forget. A spec driving the real invite flow instead must call `setBillingPlan(..., 'PLUS')` itself
   — inviting is refused on Free (409).
 - **Backend:** `MembershipInviteTest`, `MemberPermissionsTest` and `ChangePasswordTest` each set
-  `PRO` in their setup. Seventeen e2e specs and twelve backend tests failed at once when the pause
+  `PLUS` in their setup. Seventeen e2e specs and twelve backend tests failed at once when the pause
   landed; every one of them was this.
 
 ### ⚠️ Revoking must never sign somebody out of their OTHER households
@@ -177,11 +177,11 @@ Do not extend `ReadOnlyWrap` to cover the first: it asks `canWritePerson(personI
 a lie about one.
 
 **#2's client half:** `LoginsSection` takes `plan` (`AccountDto.plan`, chrome only — same
-fail-open-on-unknown as `ProUpsell`/`PlanBadge`) and swaps Enable-login/Resend for a `Link` to
-`/app/billing` reading **"Unlock with Pro"** whenever `plan === 'FREE'`, reusing the header pill's
+fail-open-on-unknown as `PlusUpsell`/`PlanBadge`) and swaps Enable-login/Resend for a `Link` to
+`/app/billing` reading **"Unlock with Plus"** whenever `plan === 'FREE'`, reusing the header pill's
 own `.plan-badge--upgrade` class rather than a new style. Not `OfflineDisabledWrap`ped — it is a
-navigation, not a write, same as `PlanBadge`'s "Go Pro". "Unlock with Pro" is mutually
-non-containing with the header badge's "Go Pro"/"Pro" (`frontend-core.md`), which sits in the same
+navigation, not a write, same as `PlanBadge`'s "Go Plus". "Unlock with Plus" is mutually
+non-containing with the header badge's "Go Plus"/"Plus" (`frontend-core.md`), which sits in the same
 DOM on this screen.
 
 ### The offline limit that has no fix, only honesty

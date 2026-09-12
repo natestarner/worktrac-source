@@ -5,7 +5,7 @@ package com.worktrac.backend.billing;
  * state, {@code SubscriptionService.applyStripeState}.
  *
  * <p>"May have": it is published on every apply rather than only on a real transition, because
- * working out whether entitlement actually flipped means comparing {@code isPro} before and after,
+ * working out whether entitlement actually flipped means comparing {@code isPlus} before and after,
  * and getting that comparison subtly wrong fails SILENTLY — the cache simply keeps answering the
  * old value until it expires. Publishing unconditionally makes the failure mode "invalidated a
  * cache entry we did not need to", which costs one database read.

@@ -1,5 +1,5 @@
 // The plan vocabulary, in one place, so the billing screen, the handbook and any future upgrade
-// prompt cannot drift apart about what Pro actually buys. Same "one derivation, several consumers"
+// prompt cannot drift apart about what Plus actually buys. Same "one derivation, several consumers"
 // rule the Trends metric copy follows (see .claude/rules/user-facing-help.md).
 //
 // PRICES ARE A REPRESENTATION AT THE POINT OF SALE. These strings and the marketing page's pricing
@@ -29,8 +29,8 @@ export const PRICING = {
 // the screen they pay on.
 export const INTERVAL_ORDER = ['YEAR', 'MONTH'];
 
-// What Pro buys. Export is deliberately NOT here -- it is free on both plans, and listing it as a
-// Pro benefit would be false at the point of sale.
+// What Plus buys. Export is deliberately NOT here -- it is free on both plans, and listing it as a
+// Plus benefit would be false at the point of sale.
 export const PRO_BENEFITS = [
   { id: 'history', label: 'Your whole history: every workout, for as long as you keep it' },
   { id: 'records', label: 'All-time records and trends over any range' },

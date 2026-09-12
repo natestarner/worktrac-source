@@ -354,7 +354,7 @@ class AccountDeletionTest extends AbstractIntegrationTest {
     //
     //   - Cancelling is an external side effect that cannot roll back. Done before the deletes,
     //     any failure below left the household with their subscription cancelled and their account
-    //     intact -- Pro gone, data kept, told the operation failed.
+    //     intact -- Plus gone, data kept, told the operation failed.
     //   - The canceller records its outcome as a BillingEvent, described in its own comments as
     //     the only remaining record of what needs cancelling by hand. AccountDeletionService
     //     clears billing_events, so an event written beforehand was deleted by the very

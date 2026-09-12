@@ -20,7 +20,7 @@ import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
 import ImportDataModal from './ImportDataModal';
-import ProUpsell from '../shared/ProUpsell';
+import PlusUpsell from '../shared/PlusUpsell';
 import LegalLinks from '../shared/LegalLinks';
 import { APP_BUILD } from '../../lib/appBuild';
 import { invalidateAfterImport } from '../../lib/queryClient';
@@ -35,11 +35,11 @@ export default function AppSettingsTab() {
   const { account, people, refreshPeople } = useAuth();
   // The derived entitlement, carried in the auth snapshot -- so this reads correctly on a cold
   // offline boot rather than depending on a request that may not have come back. An UNKNOWN plan
-  // (a snapshot written before billing shipped) is treated as Pro here on purpose: showing the
+  // (a snapshot written before billing shipped) is treated as Plus here on purpose: showing the
   // real control and letting the server answer is far better than telling a paying household its
   // own import is unavailable.
   const plan = account?.plan;
-  const isPro = plan !== 'FREE';
+  const isPlus = plan !== 'FREE';
   const { isMember, selfPersonId } = useAccountAccess();
   const { openConfirm } = useUI();
   const offlinePinned = useOfflinePin();
@@ -396,17 +396,17 @@ export default function AppSettingsTab() {
           Bring workouts in from a CSV or Excel file: one this app exported, or a spreadsheet of your
           own. You choose who it belongs to, and see exactly what will be added before anything is saved.
         </div>
-        {/* Importing is a Pro feature, so a Free household gets the explanation INSTEAD of a
+        {/* Importing is a Plus feature, so a Free household gets the explanation INSTEAD of a
             button that would 403. Exporting above is deliberately not gated on either plan --
             every household can always take its own data out. */}
-        {isPro ? (
+        {isPlus ? (
           <OfflineDisabledWrap message="Importing needs a connection.">
             <Button onClick={() => setShowImportModal(true)} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               Import data
             </Button>
           </OfflineDisabledWrap>
         ) : (
-          <ProUpsell plan={plan}>Importing past workouts is part of Pro.</ProUpsell>
+          <PlusUpsell plan={plan}>Importing past workouts is part of Plus.</PlusUpsell>
         )}
 
         {imports.length > 0 && (

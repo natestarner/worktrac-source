@@ -2,7 +2,7 @@ package com.worktrac.backend.email;
 
 import com.worktrac.backend.billing.BillingAuditService;
 import com.worktrac.backend.billing.BillingEventType;
-import com.worktrac.backend.billing.ProUpgradedEvent;
+import com.worktrac.backend.billing.PlusUpgradedEvent;
 import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -20,7 +20,7 @@ import static org.mockito.Mockito.when;
 // Pure unit tests (no Spring context), same shape as RegistrationEmailEventListenerTest: calls the
 // @Async/@TransactionalEventListener method directly and synchronously -- those annotations only
 // govern how Spring dispatches the call, not the method body under test here.
-class ProUpgradeEmailEventListenerTest {
+class PlusUpgradeEmailEventListenerTest {
 
     // Built and stubbed as its OWN statement, always BEFORE the when(...) that consumes it --
     // ownerNamed() does its own mock()/when()/thenReturn() cycle, and calling it directly inside
@@ -37,14 +37,14 @@ class ProUpgradeEmailEventListenerTest {
         EmailService emailService = mock(EmailService.class);
         UserRepository userRepository = mock(UserRepository.class);
         BillingAuditService auditService = mock(BillingAuditService.class);
-        ProUpgradeEmailEventListener listener =
-                new ProUpgradeEmailEventListener(emailService, userRepository, auditService);
+        PlusUpgradeEmailEventListener listener =
+                new PlusUpgradeEmailEventListener(emailService, userRepository, auditService);
 
         User owner = ownerNamed("owner@example.com");
         when(userRepository.findOwners(42L)).thenReturn(List.of(owner));
-        when(emailService.sendProWelcome("owner@example.com")).thenReturn("msg-1");
+        when(emailService.sendPlusWelcome("owner@example.com")).thenReturn("msg-1");
 
-        listener.onProUpgraded(new ProUpgradedEvent(42L));
+        listener.onPlusUpgraded(new PlusUpgradedEvent(42L));
 
         verify(auditService).record(42L, BillingEventType.PRO_WELCOME_EMAIL_SENT, "msg-1");
         verify(auditService, never()).record(any(), eq(BillingEventType.PRO_WELCOME_EMAIL_FAILED), any());
@@ -55,15 +55,15 @@ class ProUpgradeEmailEventListenerTest {
         EmailService emailService = mock(EmailService.class);
         UserRepository userRepository = mock(UserRepository.class);
         BillingAuditService auditService = mock(BillingAuditService.class);
-        ProUpgradeEmailEventListener listener =
-                new ProUpgradeEmailEventListener(emailService, userRepository, auditService);
+        PlusUpgradeEmailEventListener listener =
+                new PlusUpgradeEmailEventListener(emailService, userRepository, auditService);
 
         User owner = ownerNamed("owner@example.com");
         when(userRepository.findOwners(42L)).thenReturn(List.of(owner));
         doThrow(new RuntimeException("ACS send did not succeed: status=FAILED code=Throttled"))
-                .when(emailService).sendProWelcome("owner@example.com");
+                .when(emailService).sendPlusWelcome("owner@example.com");
 
-        listener.onProUpgraded(new ProUpgradedEvent(42L));
+        listener.onPlusUpgraded(new PlusUpgradedEvent(42L));
 
         verify(auditService).record(eq(42L), eq(BillingEventType.PRO_WELCOME_EMAIL_FAILED), any());
         verify(auditService, never()).record(any(), eq(BillingEventType.PRO_WELCOME_EMAIL_SENT), any());
@@ -76,14 +76,14 @@ class ProUpgradeEmailEventListenerTest {
         EmailService emailService = mock(EmailService.class);
         UserRepository userRepository = mock(UserRepository.class);
         BillingAuditService auditService = mock(BillingAuditService.class);
-        ProUpgradeEmailEventListener listener =
-                new ProUpgradeEmailEventListener(emailService, userRepository, auditService);
+        PlusUpgradeEmailEventListener listener =
+                new PlusUpgradeEmailEventListener(emailService, userRepository, auditService);
 
         when(userRepository.findOwners(99L)).thenReturn(List.of());
 
-        listener.onProUpgraded(new ProUpgradedEvent(99L));
+        listener.onPlusUpgraded(new PlusUpgradedEvent(99L));
 
-        verify(emailService, never()).sendProWelcome(any());
+        verify(emailService, never()).sendPlusWelcome(any());
         verify(auditService).record(eq(99L), eq(BillingEventType.PRO_WELCOME_EMAIL_FAILED), any());
     }
 
@@ -94,17 +94,17 @@ class ProUpgradeEmailEventListenerTest {
         EmailService emailService = mock(EmailService.class);
         UserRepository userRepository = mock(UserRepository.class);
         BillingAuditService auditService = mock(BillingAuditService.class);
-        ProUpgradeEmailEventListener listener =
-                new ProUpgradeEmailEventListener(emailService, userRepository, auditService);
+        PlusUpgradeEmailEventListener listener =
+                new PlusUpgradeEmailEventListener(emailService, userRepository, auditService);
 
         User owner = ownerNamed("owner@example.com");
         when(userRepository.findOwners(7L)).thenReturn(List.of(owner));
-        when(emailService.sendProWelcome("owner@example.com")).thenReturn("msg-9");
+        when(emailService.sendPlusWelcome("owner@example.com")).thenReturn("msg-9");
         doThrow(new RuntimeException("DB hiccup"))
                 .when(auditService).record(7L, BillingEventType.PRO_WELCOME_EMAIL_SENT, "msg-9");
 
         // Must not throw out of the listener method itself.
-        listener.onProUpgraded(new ProUpgradedEvent(7L));
+        listener.onPlusUpgraded(new PlusUpgradedEvent(7L));
 
         verify(auditService, never()).record(eq(7L), eq(BillingEventType.PRO_WELCOME_EMAIL_FAILED), any());
     }

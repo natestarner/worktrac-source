@@ -89,14 +89,14 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
                 .content(objectMapper.writeValueAsString(Map.of("name", "Sam")))))
                 .get("id").asLong();
 
-        // ⚠️ Pro FIRST. Member logins are a Pro feature, so from phase 8 a member in a Free
+        // ⚠️ Plus FIRST. Member logins are a Plus feature, so from phase 8 a member in a Free
         // household is PAUSED and every request below would 403 before reaching the check it is
         // actually about. Registration creates a Free subscription, so without this line the whole
         // class tests the pause instead of what it says it tests.
         mockMvc.perform(post("/api/auth/test/billing-plan")
                         .header("X-E2E-Test-Key", "local-dev-only-e2e-test-key-do-not-use-elsewhere")
                         .param("email", ownerEmail)
-                        .param("plan", "PRO"))
+                        .param("plan", "PLUS"))
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(post("/api/auth/test/member")

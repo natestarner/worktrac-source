@@ -136,8 +136,8 @@ public class TestSupportController {
     // means the bean does not exist in production, and the shared-secret header is checked on top
     // of that. Every failure is a 404, so an unauthenticated caller cannot confirm the route exists.
     //
-    // It writes `comped` rather than a fake ACTIVE subscription: a comped household is Pro through
-    // the same single derivation as a paying one (SubscriptionService.isPro), so a test that passes
+    // It writes `comped` rather than a fake ACTIVE subscription: a comped household is Plus through
+    // the same single derivation as a paying one (SubscriptionService.isPlus), so a test that passes
     // here is exercising the real entitlement path, not a special case built for tests.
     @PostMapping("/api/auth/test/billing-plan")
     public ResponseEntity<Void> setBillingPlan(
@@ -162,12 +162,12 @@ public class TestSupportController {
         }
         Long accountId = owned.get(0).getAccount().getId();
         Subscription subscription = subscriptionService.getOrCreate(owned.get(0).getAccount());
-        boolean pro = "PRO".equalsIgnoreCase(plan.trim());
+        boolean pro = "PLUS".equalsIgnoreCase(plan.trim());
         subscription.setComped(pro);
-        subscription.setPlan(pro ? BillingPlan.PRO : BillingPlan.FREE);
+        subscription.setPlan(pro ? BillingPlan.PLUS : BillingPlan.FREE);
         subscriptionRepository.save(subscription);
 
-        // Member logins are gated on the household being Pro, and that answer is cached per login
+        // Member logins are gated on the household being Plus, and that answer is cached per login
         // for a minute -- so without this a test or an e2e that flips the plan then immediately
         // acts as the member is testing the STALE plan, not the one it just set.
         //
@@ -248,7 +248,7 @@ public class TestSupportController {
     // Flips accounts.members_see_everyone for one household.
     //
     // ⚠️ A DIRECT UPDATE, on purpose. Account has NO setter for this column and no endpoint sets
-    // it -- that absence is what forces Pro/Family to "everyone sees everyone" by construction
+    // it -- that absence is what forces Plus/Family to "everyone sees everyone" by construction
     // rather than by a check somebody could flip (see V66). Adding a setter for the benefit of
     // tests would hand production code the very lever the design removes, so the mutation lives
     // here instead, inside a controller whose bean does not exist outside local/lower.

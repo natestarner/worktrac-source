@@ -70,7 +70,7 @@ test.describe('Handbook', () => {
   // ARRIVING at a section id, rather than clicking through to it. The ids are advertised as deep
   // links in HelpTab.jsx's own header, and neither entry path scrolled on its own: a full load
   // looks for #plan before React has rendered it and does not retry, and a client-side <Link>
-  // never scrolls at all. So "How Free and Pro differ" opened the handbook at the top of a very
+  // never scrolls at all. So "How Free and Plus differ" opened the handbook at the top of a very
   // long page -- measured, the target heading sat at y=12447 with scrollY still 0.
   //
   // Asserted the same way as the contents-link test above: the heading must clear the sticky
@@ -83,7 +83,7 @@ test.describe('Handbook', () => {
     await registerHousehold(page, request, 'Curie');
     await page.goto('/app/help#plan');
 
-    const heading = page.getByRole('heading', { name: 'Free and Pro' });
+    const heading = page.getByRole('heading', { name: 'Free and Plus' });
     await expect(heading).toBeVisible();
 
     const chrome = await page.locator('.app-chrome').boundingBox();

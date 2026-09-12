@@ -32,7 +32,7 @@ export function windowLabel(windowStart, now = Date.now()) {
 // workouts are saved but hidden on Free", which casts the app as the thing keeping someone from
 // their own training -- true of the window, but the wrong posture for a product whose central
 // promise is that it never deletes anything. "Your full history has 47 more workouts" says the same
-// thing as a fact about them, and leaves the invitation to the "See Pro" link beside it.
+// thing as a fact about them, and leaves the invitation to the "See Plus" link beside it.
 //
 // Singular is spelled out rather than left as "1 more workouts" -- this is the sentence asking
 // someone for money, and it should read like someone wrote it.

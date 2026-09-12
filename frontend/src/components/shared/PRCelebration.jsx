@@ -4,7 +4,7 @@ import { useUI } from '../../context/UIContext';
 // colour used to be #15803D, and it was the last cool hue left anywhere in the app's decorative
 // surface; index.css's toast comment already makes the argument ('a saturated success green is the
 // one hue in the palette that has nothing else to talk to'). All three read on the scrim, which is
-// the same rgba(28,27,25,0.55) in both themes. ProCelebration.jsx carries an identical copy on
+// the same rgba(28,27,25,0.55) in both themes. PlusCelebration.jsx carries an identical copy on
 // purpose -- keep them in step.
 const CONFETTI_SPECS = [
   { left: 6, color: '#E8734A', delay: 0.0 },

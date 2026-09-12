@@ -19,7 +19,7 @@ that actually holds the auth token, had no `globalHeaders` block at all.
 | `X-Content-Type-Options: nosniff` | A response being re-interpreted as a type it did not declare. |
 | `Strict-Transport-Security` | A first-visit downgrade to plaintext. |
 | `Referrer-Policy: strict-origin-when-cross-origin` | Leaking in-app paths to third parties. |
-| `Permissions-Policy` | Silently available device APIs the app never uses. **`payment=(self)` and not `()`** — Stripe's embedded checkout runs inside the app's own document, so denying payment outright breaks upgrading to Pro. |
+| `Permissions-Policy` | Silently available device APIs the app never uses. **`payment=(self)` and not `()`** — Stripe's embedded checkout runs inside the app's own document, so denying payment outright breaks upgrading to Plus. |
 
 ## The token makes framing worse than it looks
 

@@ -35,10 +35,10 @@ class AccountAccessServiceTest {
     @BeforeEach
     void setUp() {
         repository = mock(AccountMembershipRepository.class);
-        // Pro by default -- these cases are about caching and invalidation, not entitlement.
+        // Plus by default -- these cases are about caching and invalidation, not entitlement.
         // The pause itself is covered by MemberLoginPauseTest against a real household.
         subscriptionService = mock(SubscriptionService.class);
-        when(subscriptionService.isPro(anyLong())).thenReturn(true);
+        when(subscriptionService.isPlus(anyLong())).thenReturn(true);
         service = new AccountAccessService(repository, subscriptionService);
         stub(USER, ACCOUNT, AccountRole.OWNER, 100L, TOKEN_VERSION);
     }

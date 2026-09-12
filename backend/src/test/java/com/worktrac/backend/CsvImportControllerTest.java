@@ -82,7 +82,7 @@ class CsvImportControllerTest extends AbstractIntegrationTest {
         JsonNode registerJson = RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, "Nate");
         token = registerJson.get("token").asText();
         personId = registerJson.get("person").get("id").asLong();
-        // Importing is a Pro feature. These tests are about the import itself, so the plan is
+        // Importing is a Plus feature. These tests are about the import itself, so the plan is
         // stated out loud rather than left as an assumption the gate would now break.
         BillingTestSupport.makePro(subscriptionRepository, registerJson.get("account").get("id").asLong());
     }

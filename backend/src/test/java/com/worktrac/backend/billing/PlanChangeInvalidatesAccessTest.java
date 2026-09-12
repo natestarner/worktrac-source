@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * ⚠️ <b>THE WIRING TEST, and it is the only thing that actually covers it.</b>
  *
- * <p>{@code AccountAccessService} caches whether a household is Pro for 60 seconds, and a member
+ * <p>{@code AccountAccessService} caches whether a household is Plus for 60 seconds, and a member
  * login is paused when it is not. {@code AccountPlanChangedListener} is what makes a real plan
  * change take effect immediately instead of a minute later. Its body is one line and could hardly
  * be wrong; what CAN be wrong — silently, with a 200 response and no log line — is the event never
@@ -91,7 +91,7 @@ class PlanChangeInvalidatesAccessTest extends AbstractIntegrationTest {
         AccountMembership membership = membershipRepository.save(
                 new AccountMembership(account, member, person, AccountRole.MEMBER));
 
-        // Start Pro (comped is Pro through the same single derivation a paying household uses),
+        // Start Plus (comped is Plus through the same single derivation a paying household uses),
         // then prime the cache by resolving once.
         Subscription subscription = subscriptionService.getOrCreate(account);
         subscription.setComped(true);
@@ -109,7 +109,7 @@ class PlanChangeInvalidatesAccessTest extends AbstractIntegrationTest {
                     "cus_" + suffix, "sub_" + suffix, "price_" + suffix,
                     SubscriptionStatus.CANCELED, BillingInterval.MONTH,
                     // A period that ended yesterday: cancelled AND past its paid window, which is
-                    // the one combination isPro answers false for.
+                    // the one combination isPlus answers false for.
                     Instant.now().minus(1, ChronoUnit.DAYS), false));
         });
 

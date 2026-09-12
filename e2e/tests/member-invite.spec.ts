@@ -54,7 +54,7 @@ async function logout(page: Page) {
  */
 async function giveSamALogin(page: Page, request: APIRequestContext) {
   const ownerEmail = await registerHousehold(page, request, 'Nate');
-  await setBillingPlan(request, ownerEmail, 'PRO');
+  await setBillingPlan(request, ownerEmail, 'PLUS');
   await addPerson(page, 'Sam');
   // randomUUID, not Date.now(): two specs starting in the same millisecond on two
   // workers produced the same address, and the second one's invite went astray. The
@@ -82,7 +82,7 @@ test.describe('Enabling a member login', () => {
     const ownerEmail = await registerHousehold(page, request, 'Nate');
     // Inviting is refused on Free -- an invitation whose successful path is a paused
     // login is a promise the product cannot keep.
-    await setBillingPlan(request, ownerEmail, 'PRO');
+    await setBillingPlan(request, ownerEmail, 'PLUS');
     await addPerson(page, 'Sam');
     const memberEmail = `huddle+e2e-member-${randomUUID().slice(0, 8)}@starner.co`;
 
@@ -95,7 +95,7 @@ test.describe('Enabling a member login', () => {
     // The disclosure is on screen BEFORE the address field -- this is where somebody decides to
     // hand a login to a child, so it is where it has to be said.
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText(/part of Pro/i);
+    await expect(dialog).toContainText(/part of Plus/i);
     await expect(dialog).toContainText(/never be able to see or set their password/i);
     await expect(dialog).toContainText(/under 13/i);
 
@@ -132,7 +132,7 @@ test.describe('Enabling a member login', () => {
     const ownerEmail = await registerHousehold(page, request, 'Nate');
     // Inviting is refused on Free -- an invitation whose successful path is a paused
     // login is a promise the product cannot keep.
-    await setBillingPlan(request, ownerEmail, 'PRO');
+    await setBillingPlan(request, ownerEmail, 'PLUS');
     await addPerson(page, 'Sam');
     const memberEmail = `huddle+e2e-member-${randomUUID().slice(0, 8)}@starner.co`;
 
@@ -193,7 +193,7 @@ test.describe('Enabling a member login', () => {
 
     // Nate invites that same address.
     const ownerEmail = await registerHousehold(page, request, 'Nate');
-    await setBillingPlan(request, ownerEmail, 'PRO');
+    await setBillingPlan(request, ownerEmail, 'PLUS');
     await addPerson(page, 'Sam');
     await openProfile(page);
     await page.getByRole('button', { name: 'Enable login' }).click();
@@ -272,7 +272,7 @@ test.describe('Enabling a member login', () => {
     await logout(page);
 
     const ownerEmail = await registerHousehold(page, request, 'Nate');
-    await setBillingPlan(request, ownerEmail, 'PRO');
+    await setBillingPlan(request, ownerEmail, 'PLUS');
     await addPerson(page, 'Sam');
     await openProfile(page);
     await page.getByRole('button', { name: 'Enable login' }).click();

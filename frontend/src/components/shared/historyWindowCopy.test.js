@@ -21,7 +21,7 @@ describe('windowDays / windowLabel', () => {
     expect(windowLabel(thirtyDaysAgo, NOW)).toBe('the last 30 days');
   });
 
-  // Pro reports a null floor, and nothing that reads it may render "the last null days".
+  // Plus reports a null floor, and nothing that reads it may render "the last null days".
   it('degrades rather than inventing a number when there is no floor', () => {
     expect(windowDays(null, NOW)).toBeNull();
     expect(windowDays(undefined, NOW)).toBeNull();
@@ -38,7 +38,7 @@ describe('fullHistorySentence', () => {
   // Deliberate posture, not incidental phrasing. An earlier draft ("saved but hidden on Free")
   // cast the app as the thing keeping someone from their own training -- the wrong voice for a
   // product whose central promise is that it never deletes anything. The invitation belongs to the
-  // "See Pro" link beside the sentence, not to the sentence.
+  // "See Plus" link beside the sentence, not to the sentence.
   it('states what the person has, never what the app is withholding', () => {
     for (const n of [1, 2, 47]) {
       expect(fullHistorySentence(n)).toContain('Your full history');
@@ -59,7 +59,7 @@ describe('rangeReachesPastWindow', () => {
     expect(rangeReachesPastWindow(260, NINETY_DAYS_AGO, NOW)).toBe(true);
   });
 
-  it('is false with no floor, so Pro never sees a range caveat', () => {
+  it('is false with no floor, so Plus never sees a range caveat', () => {
     expect(rangeReachesPastWindow(260, null, NOW)).toBe(false);
   });
 });

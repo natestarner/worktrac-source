@@ -87,8 +87,8 @@ public class BillingController {
 
         // Refuse when the household is already entitled. Without this, two devices (or two taps in
         // two tabs) can each open a checkout and end up with a household paying twice.
-        if (subscriptionService.isPro(subscription)) {
-            throw new ForbiddenException("This household already has Pro.");
+        if (subscriptionService.isPlus(subscription)) {
+            throw new ForbiddenException("This household already has Plus.");
         }
 
         try {

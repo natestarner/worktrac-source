@@ -11,7 +11,7 @@ package com.worktrac.backend.membership;
  * <p><b>This drives chrome only.</b> The server has already decided; every list is filtered and
  * every write is guarded before anything here is sent. What it buys is a client that doesn't offer
  * a control it knows will be refused — the same relationship {@code AccountDto.plan} has with
- * {@code SubscriptionService.isPro}, and it carries the same warning: never treat it as the
+ * {@code SubscriptionService.isPlus}, and it carries the same warning: never treat it as the
  * authority, and never re-derive a permission from it that the server didn't state.
  *
  * <p><b>{@code ownerName} answers "who do I ask?"</b> — the household owner's person name, or null
@@ -47,8 +47,8 @@ public record MembershipDto(String accountRole, Long personId, boolean membersSe
      *
      * <p>{@code accountIsPro} is passed in rather than read off the membership because entitlement
      * is not a column — it is derived from the subscription's state, including a time-dependent
-     * branch. Passing it keeps {@code SubscriptionService.isPro} the single authority instead of
-     * this DTO growing a second opinion about what Pro means.
+     * branch. Passing it keeps {@code SubscriptionService.isPlus} the single authority instead of
+     * this DTO growing a second opinion about what Plus means.
      */
     public static MembershipDto from(AccountMembership membership, String ownerName,
                                       boolean accountIsPro) {

@@ -82,13 +82,13 @@ class MembershipInviteTest extends AbstractIntegrationTest {
                 .registerAndConfirm(mockMvc, objectMapper, testCodeCache, "owner-" + suffix + "@example.com", "Nate")
                 .get("token").asText();
 
-        // ⚠️ Pro FIRST. Member logins are a Pro feature and inviting is refused on Free, so a
+        // ⚠️ Plus FIRST. Member logins are a Plus feature and inviting is refused on Free, so a
         // freshly-registered (therefore Free) household would 409 on every invite below. The one
         // test that cares about that refusal downgrades explicitly.
         mockMvc.perform(post("/api/auth/test/billing-plan")
                         .header("X-E2E-Test-Key", "local-dev-only-e2e-test-key-do-not-use-elsewhere")
                         .param("email", "owner-" + suffix + "@example.com")
-                        .param("plan", "PRO"))
+                        .param("plan", "PLUS"))
                 .andExpect(status().isNoContent());
 
         accountId = json(mockMvc.perform(get("/api/auth/me")
@@ -253,7 +253,7 @@ class MembershipInviteTest extends AbstractIntegrationTest {
          * end.
          *
          * <p>409, not 403: they hold MANAGE_LOGINS perfectly well and will be able to do exactly
-         * this the moment the household is Pro. A 403 would say "not you", which is the wrong
+         * this the moment the household is Plus. A 403 would say "not you", which is the wrong
          * diagnosis and points at the wrong fix.
          */
         @Test

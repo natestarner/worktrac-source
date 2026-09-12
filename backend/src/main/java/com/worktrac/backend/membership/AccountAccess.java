@@ -39,14 +39,14 @@ public record AccountAccess(
          * Null is legitimate: an owner need not correspond to a person at all.
          */
         Long selfPersonId,
-        /** accounts.members_see_everyone. Forced true for Pro/Family; the Team tier's seam. */
+        /** accounts.members_see_everyone. Forced true for Plus/Family; the Team tier's seam. */
         boolean membersSeeEveryone,
         /**
-         * Whether the HOUSEHOLD is on Pro — {@code SubscriptionService.isPro}, resolved once per
+         * Whether the HOUSEHOLD is on Plus — {@code SubscriptionService.isPlus}, resolved once per
          * cache load rather than per request.
          *
          * <p>⚠️ Not stored anywhere. It is derived from a subscription's state, including a
-         * time-dependent branch (a cancelled subscription stays Pro until its paid period ends,
+         * time-dependent branch (a cancelled subscription stays Plus until its paid period ends,
          * with no webhook to announce that). So this value can be up to the cache TTL stale, and
          * that is accepted: a member keeps working for at most another minute after a plan lapses.
          * Erring in that direction is deliberate — the opposite error locks somebody out of the
@@ -70,7 +70,7 @@ public record AccountAccess(
      * <p>⚠️ <b>An OWNER is never paused, and that is not a courtesy — it is what makes the pause
      * recoverable.</b> Downgrading suspends the member logins; the owner keeps full access to the
      * whole household, which is both the shared-iPad flow the product started as and the only way
-     * anybody can get back to Pro. Pausing the owner too would lock the household out of the
+     * anybody can get back to Plus. Pausing the owner too would lock the household out of the
      * screen that un-pauses it.
      *
      * <p>Checked from {@code PermissionInterceptor} before any permission, because it is a

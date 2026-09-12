@@ -77,10 +77,10 @@ public class PermissionInterceptor implements HandlerInterceptor {
         // Asked BEFORE any permission, because it is a different question: not "may you do this"
         // but "may you do anything at all right now". See below for what stays open.
         if (access.status() == MembershipStatus.PAUSED_PLAN && !isAllowedWhilePaused(request)) {
-            log.warn("Refused {} {} for account {} membership {}: member login paused (household is not Pro)",
+            log.warn("Refused {} {} for account {} membership {}: member login paused (household is not Plus)",
                     request.getMethod(), request.getRequestURI(), access.accountId(), access.membershipId());
             throw new ForbiddenException(
-                    "This login is paused because the household is no longer on Pro."
+                    "This login is paused because the household is no longer on Plus."
                             + " Nothing has been deleted — ask the household owner to upgrade.",
                     MEMBER_LOGIN_PAUSED);
         }

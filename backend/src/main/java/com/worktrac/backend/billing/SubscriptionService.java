@@ -12,20 +12,20 @@ import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
 
-// The one place "is this household Pro?" is answered, for the whole application.
+// The one place "is this household Plus?" is answered, for the whole application.
 //
-// ENTITLEMENT IS DERIVED, NEVER STORED. There is deliberately no is_pro column to read. One
+// ENTITLEMENT IS DERIVED, NEVER STORED. There is deliberately no is_plus column to read. One
 // expression gets four otherwise-separate cases right, and splitting it into a stored flag would
 // turn each of them into something to keep in sync:
 //
-//   1. PAST_DUE still counts as Pro. Stripe is retrying the card (Smart Retries); cutting access
+//   1. PAST_DUE still counts as Plus. Stripe is retrying the card (Smart Retries); cutting access
 //      mid-dunning is how a recoverable payment failure becomes a cancellation. The person keeps
 //      what they are paying for while Stripe sorts the card out.
-//   2. CANCELED counts as Pro until currentPeriodEnd. They bought that period.
-//   3. Expiry happens BY THE CLOCK. A cancelled subscription stops being Pro when the period ends,
+//   2. CANCELED counts as Plus until currentPeriodEnd. They bought that period.
+//   3. Expiry happens BY THE CLOCK. A cancelled subscription stops being Plus when the period ends,
 //      whether or not Stripe's subscription.deleted webhook ever arrives. (The ACTIVE case is the
 //      one the clock cannot save -- that is what SubscriptionReconciliationWatchdog is for.)
-//   4. comped grants Pro with no Stripe object at all, so founding households need no second code
+//   4. comped grants Plus with no Stripe object at all, so founding households need no second code
 //      path anywhere downstream.
 //
 // A MISSING ROW MEANS FREE, never an error. Every account gets a row at registration and V56
@@ -49,15 +49,15 @@ public class SubscriptionService {
         this.clock = clock;
     }
 
-    // THE derivation. Everything that gates on Pro calls this -- never a status comparison of its
+    // THE derivation. Everything that gates on Plus calls this -- never a status comparison of its
     // own, and never a stored flag.
-    public boolean isPro(Long accountId) {
+    public boolean isPlus(Long accountId) {
         return subscriptionRepository.findByAccountId(accountId)
-                .map(this::isPro)
+                .map(this::isPlus)
                 .orElse(false);
     }
 
-    public boolean isPro(Subscription subscription) {
+    public boolean isPlus(Subscription subscription) {
         if (subscription == null) {
             return false;
         }
@@ -75,7 +75,7 @@ public class SubscriptionService {
                 && subscription.getCurrentPeriodEnd().isAfter(clock.instant());
     }
 
-    // How far back a household may SEE. Pro sees everything (null floor); Free sees the trailing
+    // How far back a household may SEE. Plus sees everything (null floor); Free sees the trailing
     // window. THE ROWS ARE NEVER TOUCHED -- this is a read filter and nothing else, which is what
     // makes the marketing promise ("Your workouts are never deleted on Free") literally true and
     // what makes re-subscribing restore everything instantly. See .claude/rules/billing.md.
@@ -87,10 +87,10 @@ public class SubscriptionService {
     public static final Duration FREE_HISTORY_WINDOW = Duration.ofDays(90);
 
     public Instant historyFloor(Long accountId) {
-        return isPro(accountId) ? null : clock.instant().minus(FREE_HISTORY_WINDOW);
+        return isPlus(accountId) ? null : clock.instant().minus(FREE_HISTORY_WINDOW);
     }
 
-    // True when `moment` is visible to this household. Null floor (Pro) admits everything, and a
+    // True when `moment` is visible to this household. Null floor (Plus) admits everything, and a
     // null moment is admitted too -- a row with no timestamp is a data problem, not something to
     // silently hide behind a paywall.
     public static boolean isVisible(Instant floor, Instant moment) {
@@ -98,7 +98,7 @@ public class SubscriptionService {
     }
 
     public BillingPlan planFor(Long accountId) {
-        return isPro(accountId) ? BillingPlan.PRO : BillingPlan.FREE;
+        return isPlus(accountId) ? BillingPlan.PLUS : BillingPlan.FREE;
     }
 
     public Optional<Subscription> findByAccountId(Long accountId) {
@@ -106,10 +106,10 @@ public class SubscriptionService {
     }
 
     // What the billing screen reads. A household with no row renders as Free rather than erroring,
-    // for the same reason isPro does.
+    // for the same reason isPlus does.
     public SubscriptionDto describe(Long accountId) {
         return subscriptionRepository.findByAccountId(accountId)
-                .map(subscription -> SubscriptionDto.from(subscription, isPro(subscription)))
+                .map(subscription -> SubscriptionDto.from(subscription, isPlus(subscription)))
                 .orElseGet(SubscriptionDto::free);
     }
 
@@ -142,8 +142,8 @@ public class SubscriptionService {
         // down. AccountPlanChangedEvent (below) deliberately skips this comparison because getting
         // it wrong fails silently; this one is worth it anyway because a welcome email's failure
         // mode (missed or duplicated) is worse than a cache staying stale an extra minute, and
-        // ProWelcomeSentAt is what keeps a wrong comparison here from ever double-sending.
-        boolean wasPro = isPro(subscription);
+        // PlusWelcomeSentAt is what keeps a wrong comparison here from ever double-sending.
+        boolean wasPlus = isPlus(subscription);
 
         subscription.setStripeSubscriptionId(state.stripeSubscriptionId());
         subscription.setStripePriceId(state.stripePriceId());
@@ -155,24 +155,24 @@ public class SubscriptionService {
             subscription.setStripeCustomerId(state.stripeCustomerId());
         }
         // plan is the derived answer materialized for cheap reads (the admin list, AccountDto).
-        // isPro stays the authority -- this is a cache of it, computed here so the two cannot be
+        // isPlus stays the authority -- this is a cache of it, computed here so the two cannot be
         // set independently.
-        boolean nowPro = isPro(subscription);
-        subscription.setPlan(nowPro ? BillingPlan.PRO : BillingPlan.FREE);
+        boolean nowPlus = isPlus(subscription);
+        subscription.setPlan(nowPlus ? BillingPlan.PLUS : BillingPlan.FREE);
         subscription.setUpdatedAt(clock.instant());
 
         // The welcome email fires at most once per account, ever -- the null check is what makes
-        // that exact rather than best-effort even if a future edit gets wasPro/nowPro subtly wrong,
-        // and it is why a renewal (Pro -> Pro) or a PAST_DUE recovery (both already Pro) never
+        // that exact rather than best-effort even if a future edit gets wasPlus/nowPlus subtly wrong,
+        // and it is why a renewal (Plus -> Plus) or a PAST_DUE recovery (both already Plus) never
         // re-triggers it.
-        boolean firstUpgrade = !wasPro && nowPro && subscription.getProWelcomeSentAt() == null;
+        boolean firstUpgrade = !wasPlus && nowPlus && subscription.getPlusWelcomeSentAt() == null;
         if (firstUpgrade) {
-            subscription.setProWelcomeSentAt(clock.instant());
+            subscription.setPlusWelcomeSentAt(clock.instant());
         }
 
         Subscription saved = subscriptionRepository.save(subscription);
 
-        // Member logins are gated on this household being Pro, and that answer is cached per login
+        // Member logins are gated on this household being Plus, and that answer is cached per login
         // for a minute (AccountAccessService). Without this, a re-upgrade leaves somebody who has
         // just paid looking at a "your login is paused" screen for up to another minute -- which is
         // precisely when they conclude it did not work. Published from HERE because this method is
@@ -181,7 +181,7 @@ public class SubscriptionService {
         events.publishEvent(new AccountPlanChangedEvent(saved.getAccount().getId()));
 
         if (firstUpgrade) {
-            events.publishEvent(new ProUpgradedEvent(saved.getAccount().getId()));
+            events.publishEvent(new PlusUpgradedEvent(saved.getAccount().getId()));
         }
 
         return saved;
