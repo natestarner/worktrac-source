@@ -29,7 +29,7 @@ export function UIProvider({ children }) {
   const [tour, setTour] = useState(null);
 
   // Suppresses the first-run welcome modal while a brand-new household is parked on the billing
-  // screen, having arrived from marketing's "Go Pro". A modal interrupting someone who came here
+  // screen, having arrived from marketing's "Go Plus". A modal interrupting someone who came here
   // intending to pay is the wrong order: the tour goes AFTER the money decision, whichever way it
   // resolves.
   //

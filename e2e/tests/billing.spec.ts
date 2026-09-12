@@ -3,7 +3,7 @@ import { registerHousehold, setBillingPlan } from './support/auth';
 
 // The account dropdown is reached by scoping to .header-bar rather than matching the account
 // holder's name, which varies per test -- the same idiom admin.spec.ts uses, and for the same
-// reason. Note PlanBadge now also lives in that bar: on both Free and Pro it renders a LINK (not
+// reason. Note PlanBadge now also lives in that bar: on both Free and Plus it renders a LINK (not
 // a button), so the "only button in the header" assumption those specs rely on still holds.
 async function openAccountMenu(page) {
   await page.locator('.header-bar').getByRole('button').click();
@@ -16,14 +16,14 @@ async function openAccountMenu(page) {
 // real entitlement derivation rather than a fixture, and the suite needs no Stripe credentials in
 // any environment. Driving Stripe's own card form would be testing Stripe, slowly and flakily.
 test.describe('billing', () => {
-  test('a Free household is offered Pro, with yearly leading', async ({ page, request }) => {
+  test('a Free household is offered Plus, with yearly leading', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
 
     await openAccountMenu(page);
     await page.getByRole('menuitem', { name: 'Plan & billing' }).click();
 
     await expect(page).toHaveURL(/\/app\/billing/);
-    await expect(page.getByRole('button', { name: 'Upgrade to Pro' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Upgrade to Plus' })).toBeVisible();
     // Yearly leads because the marketing pricing card headlines $29/year -- the price must not
     // change shape between the page they just read and the screen they pay on.
     await expect(page.getByRole('radio', { name: /Yearly/ })).toBeChecked();
@@ -32,30 +32,30 @@ test.describe('billing', () => {
     await expect(page.getByRole('button', { name: /Start with Free/ })).toBeVisible();
   });
 
-  test('the header offers Go Pro on Free and says Pro once upgraded', async ({ page, request }) => {
+  test('the header offers Go Plus on Free and says Plus once upgraded', async ({ page, request }) => {
     const email = await registerHousehold(page, request, 'Nate');
 
-    // "Go Pro" in the header and "Upgrade to Pro" on the billing screen are deliberately
+    // "Go Plus" in the header and "Upgrade to Plus" on the billing screen are deliberately
     // non-containing: Playwright matches accessible names as a case-insensitive substring, so a
     // shared name would make every assertion on either one ambiguous.
-    await expect(page.getByRole('link', { name: 'Go Pro' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Go Plus' })).toBeVisible();
 
-    await setBillingPlan(request, email, 'PRO');
+    await setBillingPlan(request, email, 'PLUS');
     await page.reload();
 
-    await expect(page.getByRole('link', { name: 'Go Pro' })).toHaveCount(0);
-    // exact:true -- "Pro" is a substring of "Profile", which is the account menu's first item and
+    await expect(page.getByRole('link', { name: 'Go Plus' })).toHaveCount(0);
+    // exact:true -- "Plus" is a substring of "Profile", which is the account menu's first item and
     // lives in this same header.
-    await expect(page.getByText('Pro', { exact: true })).toBeVisible();
+    await expect(page.getByText('Plus', { exact: true })).toBeVisible();
   });
 
-  test('clicking the header Pro badge opens the billing screen', async ({ page, request }) => {
+  test('clicking the header Plus badge opens the billing screen', async ({ page, request }) => {
     const email = await registerHousehold(page, request, 'Nate');
-    await setBillingPlan(request, email, 'PRO');
+    await setBillingPlan(request, email, 'PLUS');
     await page.goto('/app/log');
 
-    // exact:true -- see the comment on the earlier test; "Pro" is also a substring of "Profile".
-    await page.getByRole('link', { name: 'Pro', exact: true }).first().click();
+    // exact:true -- see the comment on the earlier test; "Plus" is also a substring of "Profile".
+    await page.getByRole('link', { name: 'Plus', exact: true }).first().click();
 
     await expect(page).toHaveURL(/\/app\/billing/);
   });
@@ -83,7 +83,7 @@ test.describe('billing', () => {
 
     await page.route('**/api/billing/checkout-session/*/reconcile', async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 300));
-      await route.fulfill({ json: { plan: 'PRO', status: 'ACTIVE', pro: true } });
+      await route.fulfill({ json: { plan: 'PLUS', status: 'ACTIVE', pro: true } });
     });
 
     // A real top-level navigation, not client-side routing -- this is what Stripe's return_url
@@ -91,37 +91,37 @@ test.describe('billing', () => {
     // rather than via a client-side search-param update.
     await page.goto('/app/billing?checkout=cs_test_fake_session_id');
 
-    await expect(page.getByText('Welcome to Huddle Pro')).toBeVisible();
+    await expect(page.getByText('Welcome to Huddle Plus')).toBeVisible();
   });
 
-  test('a Pro household sees its plan rather than an upgrade', async ({ page, request }) => {
+  test('a Plus household sees its plan rather than an upgrade', async ({ page, request }) => {
     const email = await registerHousehold(page, request, 'Nate');
-    await setBillingPlan(request, email, 'PRO');
+    await setBillingPlan(request, email, 'PLUS');
 
     await page.goto('/app/billing');
 
-    await expect(page.getByText('Huddle Pro')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Upgrade to Pro' })).toHaveCount(0);
+    await expect(page.getByText('Huddle Plus')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Upgrade to Plus' })).toHaveCount(0);
   });
 
-  // The gates, from the outside. Both halves matter: the Pro feature is withheld, and the thing
+  // The gates, from the outside. Both halves matter: the Plus feature is withheld, and the thing
   // that must NEVER be withheld is still there.
-  test('importing is offered to Pro and explained to Free, while export is always offered',
+  test('importing is offered to Plus and explained to Free, while export is always offered',
     async ({ page, request }) => {
       const email = await registerHousehold(page, request, 'Nate');
 
       await page.goto('/app/settings');
       await expect(page.getByRole('button', { name: 'Import data' })).toHaveCount(0);
-      await expect(page.getByText(/Importing past workouts is part of Pro/)).toBeVisible();
+      await expect(page.getByText(/Importing past workouts is part of Plus/)).toBeVisible();
       // ⚠️ Exporting is free on BOTH plans. A household must always be able to take its own data
       // out, and the privacy policy's self-serve data rights depend on this staying true.
       await expect(page.getByRole('button', { name: 'Export all data' })).toBeVisible();
 
-      await setBillingPlan(request, email, 'PRO');
+      await setBillingPlan(request, email, 'PLUS');
       await page.reload();
 
       await expect(page.getByRole('button', { name: 'Import data' })).toBeVisible();
-      await expect(page.getByText(/part of Pro/)).toHaveCount(0);
+      await expect(page.getByText(/part of Plus/)).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Export all data' })).toBeVisible();
     });
 
@@ -129,8 +129,8 @@ test.describe('billing', () => {
   // offered regardless of plan, so a Free owner filled out the whole invite modal and only THEN
   // got refused by a toast -- exactly the "control the server will refuse must not be offered"
   // shape member-access.md calls out. The client already knows the plan, so it swaps the row's
-  // control for a link to Pro instead of a doomed round trip.
-  test('a Free household is offered Pro on the Logins row instead of Enable login', async ({ page, request }) => {
+  // control for a link to Plus instead of a doomed round trip.
+  test('a Free household is offered Plus on the Logins row instead of Enable login', async ({ page, request }) => {
     const email = await registerHousehold(page, request, 'Nate');
 
     await page.getByRole('button', { name: '+ Add person' }).click();
@@ -142,13 +142,13 @@ test.describe('billing', () => {
     await page.getByRole('menuitem', { name: 'Profile' }).click();
 
     await expect(page.getByRole('button', { name: 'Enable login' })).toHaveCount(0);
-    await page.getByRole('link', { name: 'Unlock with Pro' }).click();
+    await page.getByRole('link', { name: 'Unlock with Plus' }).click();
     await expect(page).toHaveURL(/\/app\/billing/);
 
-    await setBillingPlan(request, email, 'PRO');
+    await setBillingPlan(request, email, 'PLUS');
     await page.goto('/app/profile');
 
-    await expect(page.getByRole('link', { name: 'Unlock with Pro' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Unlock with Plus' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Enable login' })).toBeVisible();
   });
 
@@ -159,7 +159,7 @@ test.describe('billing', () => {
 
     await page.goto('/app/help#plan');
 
-    await expect(page.getByRole('heading', { name: 'Free and Pro' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Free and Plus' })).toBeVisible();
     // The claim is "a plan decides what a screen SHOWS, never what exists" -- see billing.md. This
     // used to assert "hidden, not removed", which described the app as concealing someone's own
     // training on the very page promising it never deletes anything.

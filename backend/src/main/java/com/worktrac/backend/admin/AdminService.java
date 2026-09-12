@@ -148,10 +148,10 @@ public class AdminService {
                         lastActivityByAccount.get(account.getId()),
                         // Derived entitlement, not the stored `plan` column: subscriptionService
                         // is the one place that question is answered, and a cancelled household
-                        // still inside its paid period is Pro here for the same reason it is
+                        // still inside its paid period is Plus here for the same reason it is
                         // everywhere else.
-                        subscriptionService.isPro(subscriptionByAccount.get(account.getId()))
-                                ? BillingPlan.PRO : BillingPlan.FREE,
+                        subscriptionService.isPlus(subscriptionByAccount.get(account.getId()))
+                                ? BillingPlan.PLUS : BillingPlan.FREE,
                         subscriptionField(subscriptionByAccount, account, Subscription::getStatus,
                                 SubscriptionStatus.FREE),
                         subscriptionField(subscriptionByAccount, account, Subscription::getBillingInterval, null),

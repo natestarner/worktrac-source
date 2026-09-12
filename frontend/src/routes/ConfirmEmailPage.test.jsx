@@ -66,15 +66,15 @@ describe('ConfirmEmailPage', () => {
     await waitFor(() => expect(confirmEmail).toHaveBeenCalledWith({ email: 'alex@example.com', code: '123456' }));
     expect(mockNavigate).toHaveBeenCalledWith('/app/log');
     // An ordinary registration must NOT defer the welcome modal -- it is the whole first-run
-    // experience, and suppressing it here would silently cost every non-Go-Pro household the tour.
+    // experience, and suppressing it here would silently cost every non-Go-Plus household the tour.
     expect(deferOnboarding).not.toHaveBeenCalled();
   });
 
-  // The marketing "Go Pro" path. Two things change and nothing else: where they land, and that the
+  // The marketing "Go Plus" path. Two things change and nothing else: where they land, and that the
   // first-run welcome modal waits until the billing decision resolves. A tour interrupting someone
   // who arrived intending to pay is the wrong order.
-  it('lands a Go Pro registration on billing, with the welcome modal deferred', async () => {
-    renderWithEmail('alex@example.com', { wantsPro: true });
+  it('lands a Go Plus registration on billing, with the welcome modal deferred', async () => {
+    renderWithEmail('alex@example.com', { wantsPlus: true });
 
     fireEvent.change(screen.getByPlaceholderText('123456'), { target: { value: '123456' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
@@ -89,7 +89,7 @@ describe('ConfirmEmailPage', () => {
     const order = [];
     deferOnboarding.mockImplementation(() => order.push('defer'));
     mockNavigate.mockImplementation(() => order.push('navigate'));
-    renderWithEmail('alex@example.com', { wantsPro: true });
+    renderWithEmail('alex@example.com', { wantsPlus: true });
 
     fireEvent.change(screen.getByPlaceholderText('123456'), { target: { value: '123456' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));

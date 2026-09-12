@@ -11,7 +11,7 @@ import { localDateTimeToIso, localDateTimeToMs, toLocalDateStr, toLocalTimeStr }
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
-import ProUpsell from '../shared/ProUpsell';
+import PlusUpsell from '../shared/PlusUpsell';
 import { windowLabel } from '../shared/historyWindowCopy';
 
 export default function PastSessionModal({ onClose }) {
@@ -32,7 +32,7 @@ export default function PastSessionModal({ onClose }) {
   // something that actually happened, which is the opposite of "nothing is deleted, ever".
   //
   // The boundary comes from the server's windowStart, never a client-side 90 days, so this warning
-  // and the clamp it describes cannot disagree. An unknown window (Pro, or no answer yet) means no
+  // and the clamp it describes cannot disagree. An unknown window (Plus, or no answer yet) means no
   // warning: windowStart is non-null for every Free household, so absence here is never a Free
   // household being silently missed.
   //
@@ -84,10 +84,10 @@ export default function PastSessionModal({ onClose }) {
       </div>
       {outsideWindow && (
         <div style={{ marginBottom: 12 }}>
-          <ProUpsell plan={account?.plan}>
+          <PlusUpsell plan={account?.plan}>
             That&rsquo;s outside {windowLabel(windowStart)}, which is what History, PRs and Trends
             show on Free. The workout still saves to your full history.
-          </ProUpsell>
+          </PlusUpsell>
         </div>
       )}
       {!online && (

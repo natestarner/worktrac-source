@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 // ⚠️ CHROME ONLY. The server has already decided: every list is filtered by PersonService.list and
 // every write is refused by requireWritablePerson before anything here is consulted. What this
 // buys is a client that does not offer a control it knows will be refused. It is the same
-// relationship AccountDto.plan has with SubscriptionService.isPro, and it carries the same
+// relationship AccountDto.plan has with SubscriptionService.isPlus, and it carries the same
 // warning -- never treat it as the authority, and never derive a permission from it that the
 // server did not state.
 //
@@ -41,7 +41,7 @@ export function useAccountAccess() {
     isMember,
     isOwner: !isMember,
     /**
-     * This login is suspended because the household is no longer on Pro.
+     * This login is suspended because the household is no longer on Plus.
      *
      * ⚠️ Unlike everything else on this hook, this is NOT chrome. It decides which screen renders
      * at all — see `PausedLoginScreen`. /me is the single authority for it and keeps answering 200

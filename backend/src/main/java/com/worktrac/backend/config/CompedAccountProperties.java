@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-// The founding households that keep Pro for free. Set per-environment via COMPED_EMAILS, exactly
+// The founding households that keep Plus for free. Set per-environment via COMPED_EMAILS, exactly
 // the way ADMIN_EMAILS works -- and deliberately NOT as a Flyway migration, for two reasons:
 //
 //   1. These are other people's personal email addresses. A migration would write them into git

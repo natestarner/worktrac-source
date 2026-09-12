@@ -38,7 +38,7 @@ public class StripeService {
 
     // Stripe's own vocabulary, mapped once. An unrecognised status fails loudly HERE rather than
     // being guessed at somewhere downstream -- and it maps to INCOMPLETE (not entitled) rather than
-    // ACTIVE, because guessing generously about a status we do not understand gives Pro away.
+    // ACTIVE, because guessing generously about a status we do not understand gives Plus away.
     private static SubscriptionStatus mapStatus(String stripeStatus) {
         if (stripeStatus == null) return SubscriptionStatus.INCOMPLETE;
         return switch (stripeStatus) {

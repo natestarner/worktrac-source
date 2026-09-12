@@ -13,9 +13,9 @@ export default function ConfirmEmailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const email = location.state?.email;
-  // Set when this registration came from marketing's "Go Pro" (see RegisterPage). It changes two
+  // Set when this registration came from marketing's "Go Plus" (see RegisterPage). It changes two
   // things and nothing else: where they land, and whether the first-run welcome modal waits.
-  const wantsPro = location.state?.wantsPro === true;
+  const wantsPlus = location.state?.wantsPlus === true;
 
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState(false);
@@ -50,7 +50,7 @@ export default function ConfirmEmailPage() {
     setSubmitting(true);
     try {
       await confirmEmail({ email, code: trimmedCode });
-      if (wantsPro) {
+      if (wantsPlus) {
         // Defer BEFORE navigating: AppShell reads the gate in an effect keyed on the account, and
         // that effect runs as soon as the shell mounts. Setting it after the navigation would race
         // the modal it exists to suppress.

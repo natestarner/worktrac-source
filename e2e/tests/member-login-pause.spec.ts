@@ -3,7 +3,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { loginAs, registerHousehold, setBillingPlan } from './support/auth';
 
 /**
- * Member logins are a Pro feature. Dropping to Free PAUSES them; going back to Pro resumes them.
+ * Member logins are a Plus feature. Dropping to Free PAUSES them; going back to Plus resumes them.
  *
  * ⚠️ Every assertion here is really about the same distinction: a PAUSE, not a punishment. Nothing
  * is deleted, no membership is revoked, and no queued write is discarded. If any of that stops
@@ -32,10 +32,10 @@ async function logout(page: Page) {
   await expect(page).toHaveURL(/\/login/);
 }
 
-/** A Pro household with a working member login. Leaves the page signed in AS THE MEMBER. */
+/** A Plus household with a working member login. Leaves the page signed in AS THE MEMBER. */
 async function proHouseholdWithAMember(page: Page, request: APIRequestContext) {
   const ownerEmail = await registerHousehold(page, request, 'Nate');
-  await setBillingPlan(request, ownerEmail, 'PRO');
+  await setBillingPlan(request, ownerEmail, 'PLUS');
   await page.reload();
 
   await page.getByRole('button', { name: '+ Add person' }).click();
@@ -60,7 +60,7 @@ async function proHouseholdWithAMember(page: Page, request: APIRequestContext) {
   return { ownerEmail, memberEmail };
 }
 
-test.describe('A member login when the household leaves Pro', () => {
+test.describe('A member login when the household leaves Plus', () => {
   /**
    * ⚠️ The whole app is replaced, and the reassurance is the point. The honest fear on being told
    * your login stopped working is that a lapsed payment cost you your training history.
@@ -73,7 +73,7 @@ test.describe('A member login when the household leaves Pro', () => {
 
     await expect(page.getByText(/Your login is paused/i)).toBeVisible();
     await expect(page.getByText(/Nothing has been deleted/i)).toBeVisible();
-    await expect(page.getByText(/Nate can turn Pro back on/)).toBeVisible();
+    await expect(page.getByText(/Nate can turn Plus back on/)).toBeVisible();
 
     // No app behind it -- there is nothing here they could use, and every control would 403.
     await expect(page.getByRole('link', { name: 'Log' })).toHaveCount(0);
@@ -85,14 +85,14 @@ test.describe('A member login when the household leaves Pro', () => {
    * ⚠️ THE RECOVERY, and the reason this is a pause rather than a revocation. No re-invitation, no
    * re-created person, nothing to restore -- the same login simply starts working again.
    */
-  test('going back to Pro resumes the same login, with no re-invitation', async ({ page, request }) => {
+  test('going back to Plus resumes the same login, with no re-invitation', async ({ page, request }) => {
     const { ownerEmail } = await proHouseholdWithAMember(page, request);
 
     await setBillingPlan(request, ownerEmail, 'FREE');
     await page.reload();
     await expect(page.getByText(/Your login is paused/i)).toBeVisible();
 
-    await setBillingPlan(request, ownerEmail, 'PRO');
+    await setBillingPlan(request, ownerEmail, 'PLUS');
     await page.reload();
 
     // Straight back into the app, on their own person.
@@ -104,7 +104,7 @@ test.describe('A member login when the household leaves Pro', () => {
 
   /**
    * ⚠️ The owner is never paused, and it is not a courtesy: they are the only person who can put
-   * the household back on Pro. Pausing them would lock everyone out of the screen that undoes it.
+   * the household back on Plus. Pausing them would lock everyone out of the screen that undoes it.
    */
   test('the owner keeps full access, and still sees the member and their data', async ({ page, request }) => {
     const { ownerEmail } = await proHouseholdWithAMember(page, request);

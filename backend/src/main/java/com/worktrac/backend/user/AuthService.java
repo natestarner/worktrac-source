@@ -334,7 +334,7 @@ public class AuthService {
                 AccountDto.from(account, subscriptionService.planFor(account.getId())),
                 MembershipDto.from(membership,
                         ownerNameForMember(account.getId(), membership.getAccountRole()),
-                        subscriptionService.isPro(account.getId())),
+                        subscriptionService.isPlus(account.getId())),
                 PersonDto.from(primaryPerson));
     }
 

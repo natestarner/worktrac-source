@@ -13,26 +13,26 @@ enforced by a unique index (V56).
 
 ## Entitlement is DERIVED, never stored
 
-`SubscriptionService.isPro` is the only place the question "is this household Pro?" is answered:
+`SubscriptionService.isPlus` is the only place the question "is this household Plus?" is answered:
 
 ```
-isPro = status ∈ { ACTIVE, TRIALING, PAST_DUE }
+isPlus = status ∈ { ACTIVE, TRIALING, PAST_DUE }
       OR (status == CANCELED AND current_period_end > now)
       OR comped
 ```
 
-One expression gets four otherwise-separate cases right. **Do not replace it with an `is_pro`
+One expression gets four otherwise-separate cases right. **Do not replace it with an `is_plus`
 column**, and do not let a caller compare statuses itself — each of these becomes a place to drift:
 
-1. **PAST_DUE is still Pro.** Stripe is retrying the card; cutting access mid-dunning turns a
+1. **PAST_DUE is still Plus.** Stripe is retrying the card; cutting access mid-dunning turns a
    recoverable payment failure into a cancellation.
-2. **CANCELED is Pro until `current_period_end`.** They bought that period.
+2. **CANCELED is Plus until `current_period_end`.** They bought that period.
 3. **Expiry happens by the clock**, so a cancelled household downgrades whether or not
    `subscription.deleted` ever arrives.
-4. **`comped`** grants Pro with no Stripe object, so founding households need no second code path.
+4. **`comped`** grants Plus with no Stripe object, so founding households need no second code path.
 
 `subscriptions.billing_plan` is a materialized cache of the derivation, written only by
-`applyStripeState` so the two cannot be set independently. `isPro` stays the authority.
+`applyStripeState` so the two cannot be set independently. `isPlus` stays the authority.
 
 **A missing subscription row means FREE, never an error.** Registration creates one and V56
 backfilled the rest, so it should be unreachable — but a read of workout history must not fail
@@ -46,7 +46,7 @@ every gate reads the subscription row directly. That separation is what stops an
 from downgrading anyone, which is the `resilience.md` failure this feature is most likely to cause.
 
 `PlanBadge` renders **nothing** for an unknown plan. An auth snapshot written before billing shipped
-has no `plan` key, and showing "Go Pro" to someone who already pays is the worst outcome available
+has no `plan` key, and showing "Go Plus" to someone who already pays is the worst outcome available
 here. Absence is the safe default; it self-corrects on the next `/me`.
 
 ## No billing state may ever destroy workout data
@@ -81,7 +81,7 @@ about a workout the app had just saved.
 - **Say what the person HAS, never what the app is withholding.** "Your full history has 47 more
   workouts" — not "47 workouts are hidden on Free", which was the first draft and casts the app as
   the thing keeping someone from their own training. That is the wrong posture for a product whose
-  central promise is that it never deletes anything, and the invitation belongs to the "See Pro"
+  central promise is that it never deletes anything, and the invitation belongs to the "See Plus"
   link beside the sentence rather than to the sentence. Pinned in `historyWindowCopy.test.js`.
 
   **This governs EVERY surface, not just that one sentence.** It was written for
@@ -102,14 +102,14 @@ about a workout the app had just saved.
   the specs for no reader's benefit. Just never let the field name leak into a sentence.
 - **The notice carries no mark; the explainer's benefits block does.** See "The mark names the
   PRODUCT" below for the convention and why the sentence about someone's own data is excluded.
-- **`HistoryWindowNotice` is the one way any screen says this**, and it composes `ProUpsell` rather
+- **`HistoryWindowNotice` is the one way any screen says this**, and it composes `PlusUpsell` rather
   than replacing it, so "one way to ask for an upgrade" still holds. Three fail-closed gates:
   unknown plan, unanswered query, or a zero count all render **nothing** — which is why a Free
   household inside the window sees no change anywhere in the app.
 - **`PastSessionModal` warns, it does not block.** No `min` on the date input and no disabled
   button: the workout genuinely is saved and returns on upgrade, so refusing it would turn a display
   limit into a data-entry limit and contradict "nothing is deleted, ever".
-- **`HistoryWindowModal` is a modal, and `ProUpsell`'s header says never to use one.** The
+- **`HistoryWindowModal` is a modal, and `PlusUpsell`'s header says never to use one.** The
   distinction is solicited vs unsolicited — that rule forbids an upgrade prompt that *interrupts*.
   This one only ever opens from an explicit tap on "About your full history". Nothing may be
   changed to open it automatically.
@@ -122,43 +122,43 @@ about a workout the app had just saved.
 
 ## The mark names the PRODUCT, not the entitlement
 
-`HuddleMark` leads every phrase that names Huddle Pro as a product, on **both** plans:
-`PlanBadge`'s two pills, `BillingTab`'s "Huddle Pro" plan heading, `ProCelebration`, and
-`HistoryWindowModal`'s benefits block. So "Go Pro" reads as *go Huddle Pro* rather than as a generic
+`HuddleMark` leads every phrase that names Huddle Plus as a product, on **both** plans:
+`PlanBadge`'s two pills, `BillingTab`'s "Huddle Plus" plan heading, `PlusCelebration`, and
+`HistoryWindowModal`'s benefits block. So "Go Plus" reads as *go Huddle Plus* rather than as a generic
 upsell.
 
-This **supersedes** an earlier reading in which the mark meant "you have Pro" and Free households
+This **supersedes** an earlier reading in which the mark meant "you have Plus" and Free households
 got an aspirational outline star instead. The star is gone. What signals possession now is the
-**pill**, not the glyph — `.plan-badge--pro`'s fixed bright identity colours against
+**pill**, not the glyph — `.plan-badge--plus`'s fixed bright identity colours against
 `.plan-badge--upgrade`'s transparent outline.
 
 Where it does **not** go, and each exclusion is load-bearing:
 
-- **Inside a control label** — "Upgrade to Pro", "See Pro". A four-colour glyph inside a filled
-  primary button or a small text link is clutter, and "logo Pro" only parses as a unit when *Pro*
+- **Inside a control label** — "Upgrade to Plus", "See Plus". A four-colour glyph inside a filled
+  primary button or a small text link is clutter, and "logo Plus" only parses as a unit when *Plus*
   opens the phrase. `PlanBadge`'s pills are the exception because a badge **is** a brand chip.
-- **In handbook prose.** `HelpTab` says "Pro" dozens of times mid-sentence; marks there would be
+- **In handbook prose.** `HelpTab` says "Plus" dozens of times mid-sentence; marks there would be
   confetti, and `getByText` concatenates only DIRECT text children (`frontend-core.md`).
-- **On a sentence that doesn't name Pro.** `HistoryWindowNotice`'s line is about the person's own
+- **On a sentence that doesn't name Plus.** `HistoryWindowNotice`'s line is about the person's own
   data; a mark on it is decoration, and decoration is how a quiet inline note starts reading as an
-  ad — the one thing `ProUpsell` exists to prevent.
+  ad — the one thing `PlusUpsell` exists to prevent.
 
-**No image wordmark.** "Pro" is nearly always a word inside a label, so an image would break the
+**No image wordmark.** "Plus" is nearly always a word inside a label, so an image would break the
 accessible names the non-containment rule depends on, could not inherit the app's font/size/colour,
 and would reintroduce the hardcoded light/dark hairline `HuddleMark` was drawn inline to escape.
-`docs/brand/README.md` also forbids respacing the lockup, so a real "Huddle Pro" lockup has to come
+`docs/brand/README.md` also forbids respacing the lockup, so a real "Huddle Plus" lockup has to come
 from the brand kit rather than being assembled here. Compose it from `HuddleMark` + live text. An
 asset is only the answer for surfaces that cannot compose — email (hence `public/email/logo.png`),
 marketing, social cards.
 
 **Hairline**: pass `hairline="#bdb6af"` only where the ground stays light in **both** schemes —
-today just `.plan-badge--pro`. Every other caller sits on a theme-following surface and takes the
+today just `.plan-badge--plus`. Every other caller sits on a theme-following surface and takes the
 default. `HuddleMark` is always `aria-hidden`, so it never touches the accessible name beside it,
 which is what keeps the non-containment rule intact.
 
-## The welcome-to-Pro email fires exactly once, ever
+## The welcome-to-Plus email fires exactly once, ever
 
-`Subscription.proWelcomeSentAt` (V72) is the idempotency mechanism, not the `wasPro`/`nowPro`
+`Subscription.plusWelcomeSentAt` (V72) is the idempotency mechanism, not the `wasPlus`/`nowPlus`
 comparison beside it in `applyStripeState` — that comparison is exactly the one
 `AccountPlanChangedEvent`'s own javadoc explains why it avoids computing (getting it subtly wrong
 fails silently). Here it is worth doing anyway because the failure mode is a missed or duplicated
@@ -167,10 +167,10 @@ wrong comparison from ever double-sending: the email only goes out while the col
 regardless of how many times `applyStripeState` runs for the same household afterward (a renewal,
 a redelivered webhook, the reconciliation watchdog self-healing a missed one).
 
-- **`ProUpgradedEvent` is published from `applyStripeState` only on that first transition** — never
+- **`PlusUpgradedEvent` is published from `applyStripeState` only on that first transition** — never
   for a comp grant (`CompBootstrap`). A comped household was never charged, and the email's copy
   ("thanks for keeping Huddle going") presumes a purchase just happened.
-- **`ProUpgradeEmailEventListener` records outcomes to `billing_events`**, not the registration
+- **`PlusUpgradeEmailEventListener` records outcomes to `billing_events`**, not the registration
   audit trail, even though it is structurally the same "send after commit, off the request thread,
   record either way" shape as `RegistrationEmailEventListener` — same reasoning as
   `ContactEmailEventListener` being its own component: the natural audit sink here is
@@ -201,7 +201,7 @@ forgotten bracket from the same error.
   (`BillingAuditService.recordIfFirstSeen`). Do not add a check-then-insert beside it — it has a
   race the index does not, and a second mechanism for one job is the bug.
 - **Every billing endpoint must answer honestly when Stripe is unconfigured** — an explicit 503,
-  never a 500 and never a silent "not Pro". Config is empty by default so an unconfigured
+  never a 500 and never a silent "not Plus". Config is empty by default so an unconfigured
   environment rejects rather than defaults open, the same posture as `EMAIL_DELIVERY_WEBHOOK_KEY`.
 - **Billing writes are Tier-3**: `useGatedMutation` + `OfflineDisabledWrap`, never the durable
   outbox. They are not idempotent, and a queued payment replayed across an outage is exactly what
@@ -209,7 +209,7 @@ forgotten bracket from the same error.
   household never requests `js.stripe.com` and the app keeps no third-party boot dependency.
 - **`PlanBadge`'s Free control is NOT `OfflineDisabledWrap`ped** — it is a navigation, not a write.
   Client-side routing works offline; the gate belongs on the checkout button it leads to. Both
-  plan states are links now (Pro badge included, since paying earns a piece of chrome that
+  plan states are links now (Plus badge included, since paying earns a piece of chrome that
   actually goes somewhere) — neither is `OfflineDisabledWrap`ped, same reasoning either way.
 - **`BillingTab`'s checkout-reconcile effect (`?checkout=cs_...`) must NOT use a `cancelled` flag
   from a cleanup closure to guard its success path.** React.StrictMode double-invokes this effect
@@ -245,18 +245,18 @@ full reasoning; don't move it back in front of the deletes.
 
 ## Label collisions this feature creates
 
-- Header badge is **"Go Pro"**; the billing screen's primary button is **"Upgrade to Pro"**. A Free
+- Header badge is **"Go Plus"**; the billing screen's primary button is **"Upgrade to Plus"**. A Free
   household on `/app/billing` has both on screen, and a shared accessible name makes every
   Playwright `getByRole` on it a strict-mode violation. "Upgrade" alone would be worse — a substring
   of the other, matching both.
 - The window notice adds three more, and all six have to stay mutually non-containing:
-  `ProUpsell`'s **"See Pro"**, the notice's **"About your full history"**, and — inside
+  `PlusUpsell`'s **"See Plus"**, the notice's **"About your full history"**, and — inside
   `HistoryWindowModal`, which opens with the notice and the header badge both still in the DOM —
-  **"Unlock full history"** and **"How Free and Pro differ"**, alongside `Modal`'s own **"Close"**.
+  **"Unlock full history"** and **"How Free and Plus differ"**, alongside `Modal`'s own **"Close"**.
   Note "About your full history" and "Unlock full history" share the words *full history* without
   either containing the other, which is what the rule actually requires. Pinned in
   `HistoryWindowNotice.test.jsx`.
-- **"Pro" is a substring of "Profile"**, `UserMenu`'s first item, in the same header subtree. Assert
+- **"Plus" is a substring of "Profile"**, `UserMenu`'s first item, in the same header subtree. Assert
   the badge with `exact: true` / an exact string, always.
 
 ## ⚠️ A plan decides what a SCREEN shows — and, separately, what a LOGIN can do
@@ -266,7 +266,7 @@ and it is still exactly true: no workout is hidden, moved or deleted by a downgr
 history window is a read filter over rows that are all still there.
 
 **Do not reuse that phrasing for member logins.** From phase 8 a plan genuinely decides what a
-LOGIN can do: a MEMBER in a household that is not Pro has `MembershipStatus.PAUSED_PLAN` and is
+LOGIN can do: a MEMBER in a household that is not Plus has `MembershipStatus.PAUSED_PLAN` and is
 refused on every route but `GET /api/auth/me` and `GET /api/billing/subscription`. That is a real
 capability gate, not a display rule, and describing it with the data sentence would make one of the
 two claims false.
@@ -279,5 +279,5 @@ What the two DO share, and what must stay true of both:
 - **Queued work is suspended, never discarded.** The 403 carries the code `MEMBER_LOGIN_PAUSED`
   precisely so `isDeadWrite` can tell it apart from an ordinary definitive 403; without that
   carve-out a paused member is told the sets they logged before the lapse can never sync.
-- **An OWNER is never paused.** They are the only one who can return the household to Pro, so
+- **An OWNER is never paused.** They are the only one who can return the household to Plus, so
   pausing them would lock everybody out of the screen that undoes it.

@@ -35,7 +35,7 @@ always brand-exact. Full table: `docs/architecture/design-system.md`.
 **2. The hairline follows the GROUND, not the viewer's theme.** The cream circle is ~1.1:1 on a
 white surface and needs the outline to exist at all; on a dark surface it is high-contrast on its
 own and the brand sheet drops the outline. Most grounds in the app follow the viewer's scheme, so
-`--brand-mark-hairline` (`#bdb6af` light, `transparent` dark) is right for them. `.plan-badge--pro`
+`--brand-mark-hairline` (`#bdb6af` light, `transparent` dark) is right for them. `.plan-badge--plus`
 is the exception — its pill is a fixed light gradient in *both* schemes, so it passes
 `HuddleMark`'s `hairline` prop explicitly. A theme-keyed hairline there would erase the outline in
 dark mode and dissolve the circle into the pill.

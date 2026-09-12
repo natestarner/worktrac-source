@@ -5,7 +5,7 @@ import { forEachConnectivityMode } from './support/parity';
 
 // The account dropdown is reached by scoping to .header-bar rather than matching the account
 // holder's name, which varies per test -- the same idiom admin.spec.ts uses, and for the same
-// reason. Note PlanBadge now also lives in that bar: on both Free and Pro it renders a LINK (not
+// reason. Note PlanBadge now also lives in that bar: on both Free and Plus it renders a LINK (not
 // a button), so the "only button in the header" assumption those specs rely on still holds.
 async function openAccountMenu(page) {
   await page.locator('.header-bar').getByRole('button').click();
@@ -22,13 +22,13 @@ async function openAccountMenu(page) {
 // The assert body deliberately does not branch on ctx.mode. If it ever needs to, that is a real
 // divergence and belongs on the register in .claude/rules/resilience.md.
 
-forEachConnectivityMode<{ email: string }>('a Pro household reads as Pro', {
+forEachConnectivityMode<{ email: string }>('a Plus household reads as Plus', {
   setup: async (page, request) => {
     const email = await registerHousehold(page, request, 'Nate');
-    await setBillingPlan(request, email, 'PRO');
+    await setBillingPlan(request, email, 'PLUS');
     // Reload while still online so the snapshot carries the new plan into the degraded modes.
     await page.reload();
-    await expect(page.getByText('Pro', { exact: true })).toBeVisible();
+    await expect(page.getByText('Plus', { exact: true })).toBeVisible();
     return { email };
   },
   navigate: async (page) => {
@@ -43,12 +43,12 @@ forEachConnectivityMode<{ email: string }>('a Pro household reads as Pro', {
     // be true online.
   },
   assert: async (page) => {
-    await expect(page.getByText('Huddle Pro')).toBeVisible();
+    await expect(page.getByText('Huddle Plus')).toBeVisible();
     // The upgrade offer must never appear for a household that already pays -- including when the
     // subscription request cannot complete, which is exactly what three of these four modes do.
-    await expect(page.getByRole('button', { name: 'Upgrade to Pro' })).toHaveCount(0);
-    // exact:true -- "Pro" is a substring of "Profile" in the same header.
-    await expect(page.getByText('Pro', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Upgrade to Plus' })).toHaveCount(0);
+    // exact:true -- "Plus" is a substring of "Profile" in the same header.
+    await expect(page.getByText('Plus', { exact: true }).first()).toBeVisible();
   },
 });
 
@@ -66,8 +66,8 @@ forEachConnectivityMode<{ email: string }>('a Free household reads as Free', {
     // The offer is present in every mode. Whether it can be ACTED on differs by mode -- that is
     // the gate, and it is asserted separately below rather than smuggled in here, because a
     // mode-dependent assertion in this body would defeat the point of the file.
-    await expect(page.getByRole('button', { name: 'Upgrade to Pro' })).toBeVisible();
-    await expect(page.getByText('Huddle Pro')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Upgrade to Plus' })).toBeVisible();
+    await expect(page.getByText('Huddle Plus')).toHaveCount(0);
   },
 });
 
@@ -83,7 +83,7 @@ test('upgrading refuses offline rather than queueing a payment', async ({ page, 
   await openAccountMenu(page);
   await page.getByRole('menuitem', { name: 'Plan & billing' }).click();
 
-  const upgrade = page.getByRole('button', { name: 'Upgrade to Pro' });
+  const upgrade = page.getByRole('button', { name: 'Upgrade to Plus' });
   await expect(upgrade).toBeEnabled();
 
   await goHardOffline(page);

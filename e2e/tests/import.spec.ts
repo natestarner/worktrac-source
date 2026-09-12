@@ -9,13 +9,13 @@ import { pickExercise, logSetAt } from './support/exercises';
 // convention, and a spec that carries its own CSV inline says what it is testing without a second
 // file to open.
 
-// Importing is a Pro feature. Every case in this file is about the import itself rather than
+// Importing is a Plus feature. Every case in this file is about the import itself rather than
 // about billing, so the plan is stated once here instead of being an assumption each spec would
 // silently depend on. setBillingPlan writes the same `comped` flag a founding household uses, so
 // these still run through the real entitlement derivation.
 async function registerAsPro(page, request, name: string) {
   const email = await registerHousehold(page, request, name);
-  await setBillingPlan(request, email, 'PRO');
+  await setBillingPlan(request, email, 'PLUS');
   await page.reload();
   return email;
 }

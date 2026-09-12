@@ -46,10 +46,10 @@ test.describe('marketing landing page', () => {
     await page.goto('/#pricing');
 
     const pricing = page.locator('#pricing');
-    // exact:true throughout -- "Free" and "Pro" appear inside longer strings all over this
+    // exact:true throughout -- "Free" and "Plus" appear inside longer strings all over this
     // section, and a substring match collides with them.
     await expect(pricing.getByText('Free', { exact: true }).first()).toBeVisible();
-    await expect(pricing.getByText('Pro', { exact: true }).first()).toBeVisible();
+    await expect(pricing.getByText('Plus', { exact: true }).first()).toBeVisible();
     await expect(pricing.getByText('$0', { exact: true })).toBeVisible();
     await expect(pricing.getByText('$29', { exact: true })).toBeVisible();
 
@@ -58,7 +58,7 @@ test.describe('marketing landing page', () => {
     await expect(pricing.getByText(/90 days/).first()).toBeVisible();
     await expect(pricing.getByText(/never deleted on Free/)).toBeVisible();
 
-    // Import SHIPPED (PR #200) and is now gated on Pro, so the "Coming soon" badge that used to
+    // Import SHIPPED (PR #200) and is now gated on Plus, so the "Coming soon" badge that used to
     // be asserted here is gone. What replaces it is the stronger claim: the page must contain no
     // future-tense hedging at all, because every row on it is now enforced in the product.
     await expect(pricing.getByText('Coming soon')).toHaveCount(0);
@@ -72,7 +72,7 @@ test.describe('marketing landing page', () => {
     await expect(exportRow.getByRole('img', { name: 'Included', exact: true })).toHaveCount(2);
     await expect(exportRow.getByRole('img', { name: 'Not included', exact: true })).toHaveCount(0);
 
-    // Import is the Pro line: one tick, on the Pro side only.
+    // Import is the Plus line: one tick, on the Plus side only.
     const importRow = pricing.locator('tr', { hasText: 'Import past workouts' });
     await expect(importRow.getByRole('img', { name: 'Included', exact: true })).toHaveCount(1);
     await expect(importRow.getByRole('img', { name: 'Not included', exact: true })).toHaveCount(1);
@@ -81,11 +81,11 @@ test.describe('marketing landing page', () => {
   test('the hero offers both plans, and the legal pages are reachable', async ({ page }) => {
     await page.goto('/');
 
-    // "Go Pro" appears twice on the page (hero and pricing card), so this is scoped to the hero
+    // "Go Plus" appears twice on the page (hero and pricing card), so this is scoped to the hero
     // rather than matched globally -- an unscoped getByRole would be a strict-mode violation.
     const hero = page.locator('.hero');
     await expect(hero.getByRole('link', { name: 'Start free' })).toBeVisible();
-    await expect(hero.getByRole('link', { name: 'Go Pro' })).toBeVisible();
+    await expect(hero.getByRole('link', { name: 'Go Plus' })).toBeVisible();
 
     // Taking payment without these is not something to discover in production.
     const footer = page.locator('.site-footer');

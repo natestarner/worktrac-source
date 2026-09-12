@@ -93,17 +93,17 @@ export async function registerHousehold(
   return email;
 }
 
-// Puts a household on Pro (or back on Free) without Stripe existing at all -- the same escape
+// Puts a household on Plus (or back on Free) without Stripe existing at all -- the same escape
 // hatch e2eNoopRecipientPattern provides for real email sends, and the reason this suite needs no
 // Stripe credentials in any environment.
 //
-// The backend writes `comped`, so a household set Pro here is entitled through the SAME single
-// derivation a paying one uses (SubscriptionService.isPro). A spec that passes against this is
+// The backend writes `comped`, so a household set Plus here is entitled through the SAME single
+// derivation a paying one uses (SubscriptionService.isPlus). A spec that passes against this is
 // exercising the real entitlement path rather than a fixture built for tests.
 export async function setBillingPlan(
   request: APIRequestContext,
   email: string,
-  plan: 'FREE' | 'PRO',
+  plan: 'FREE' | 'PLUS',
 ): Promise<void> {
   const configResponse = await request.get('/config.json');
   const { apiUrl } = await configResponse.json();
@@ -144,12 +144,12 @@ export async function addMemberLogin(
     ?? `huddle+e2e-member-${Date.now()}-${uniqueSuffix()}@starner.co`;
   const password = 'password123';
 
-  // ⚠️ Pro FIRST. Member logins are a Pro feature: from phase 8 a member in a Free household is
+  // ⚠️ Plus FIRST. Member logins are a Plus feature: from phase 8 a member in a Free household is
   // PAUSED and refused on every route, so a spec that minted one against a freshly-registered
   // (therefore Free) household would be testing the pause rather than whatever it says it tests.
   // Registration creates a Free subscription, so this is needed for every caller, and doing it
   // here rather than in each spec is what stops the next one forgetting.
-  await setBillingPlan(request, ownerEmail, 'PRO');
+  await setBillingPlan(request, ownerEmail, 'PLUS');
 
   const configResponse = await request.get('/config.json');
   const { apiUrl } = await configResponse.json();

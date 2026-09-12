@@ -240,11 +240,11 @@ public class MembershipInviteService {
         // showServerMessage), so they are told the actual reason rather than "that didn't save".
         //
         // A CONFLICT rather than a FORBIDDEN: they hold MANAGE_LOGINS perfectly well, and will be
-        // able to do exactly this the moment the household is Pro. 403 would say "not you", which
+        // able to do exactly this the moment the household is Plus. 403 would say "not you", which
         // is the wrong diagnosis and points at the wrong fix.
-        if (!subscriptionService.isPro(access.accountId())) {
+        if (!subscriptionService.isPlus(access.accountId())) {
             throw new ConflictException(
-                    "Personal logins are part of Huddle Pro. Upgrade and you can invite "
+                    "Personal logins are part of Huddle Plus. Upgrade and you can invite "
                             + person.getName() + " straight away.");
         }
 

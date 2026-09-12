@@ -4,7 +4,7 @@
 //
 // - Registers nate@starner.co (bypassing the real inbox via TestSupportController, the same
 //   mechanism e2e/tests/support/auth.ts uses) ONLY if it doesn't already exist.
-// - Grants Pro via the same test-only escape hatch billing e2e specs use (no Stripe involved).
+// - Grants Plus via the same test-only escape hatch billing e2e specs use (no Stripe involved).
 // - Imports several weeks of synthetic history through the real CSV import endpoint -- the same
 //   path a person uses from App Settings -- ONLY on the run that just created the account.
 //
@@ -108,13 +108,13 @@ async function registerAndConfirm() {
   return json(confirmResponse);
 }
 
-async function grantPro() {
+async function grantPlus() {
   const response = await fetch(
-    `${BASE}/api/auth/test/billing-plan?email=${encodeURIComponent(EMAIL)}&plan=PRO`,
+    `${BASE}/api/auth/test/billing-plan?email=${encodeURIComponent(EMAIL)}&plan=PLUS`,
     { method: 'POST', headers: { 'X-E2E-Test-Key': TEST_KEY } },
   );
   if (!response.ok) {
-    throw new Error(`Granting Pro failed: ${response.status} ${await response.text()}`);
+    throw new Error(`Granting Plus failed: ${response.status} ${await response.text()}`);
   }
 }
 
@@ -184,15 +184,15 @@ async function main() {
 
   const existing = await login();
   if (existing) {
-    console.log('  Already registered -- ensuring Pro and leaving existing history as-is.');
-    await grantPro();
+    console.log('  Already registered -- ensuring Plus and leaving existing history as-is.');
+    await grantPlus();
     console.log(`  Ready. Log in locally with ${EMAIL} / ${PASSWORD}.`);
     return;
   }
 
   console.log('  Registering...');
   const auth = await registerAndConfirm();
-  await grantPro();
+  await grantPlus();
 
   console.log('  Importing ~8 weeks of history...');
   const result = await importHistory(auth.token, auth.person.id);

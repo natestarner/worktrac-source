@@ -20,8 +20,8 @@ import java.time.Instant;
 // One row per account (accounts is the billable entity -- one household, one login, many people,
 // no seats). See V56 for the schema and why account_id is UNIQUE.
 //
-// This holds what STRIPE said. It deliberately carries no "is_pro" column: entitlement is derived
-// from status + currentPeriodEnd + comped by SubscriptionService.isPro, which is the only place
+// This holds what STRIPE said. It deliberately carries no "is_plus" column: entitlement is derived
+// from status + currentPeriodEnd + comped by SubscriptionService.isPlus, which is the only place
 // that question is answered. Adding a stored flag here would turn four correct cases (past-due
 // grace, cancelled-but-paid-through, clock-based expiry needing no webhook, comped) into four
 // things to keep in sync.
@@ -65,18 +65,18 @@ public class Subscription {
     @Column(name = "cancel_at_period_end", nullable = false)
     private boolean cancelAtPeriodEnd;
 
-    // Grants Pro with no Stripe object behind it -- how founding households are kept whole when the
+    // Grants Plus with no Stripe object behind it -- how founding households are kept whole when the
     // Free-tier window lands, without coupon codes, a card prompt, or an admin write action.
     @Column(nullable = false)
     private boolean comped;
 
-    // NULL until the welcome-to-Pro email has gone out; set exactly once. This IS the idempotency
+    // NULL until the welcome-to-Plus email has gone out; set exactly once. This IS the idempotency
     // mechanism -- SubscriptionService.applyStripeState only sends that email while this column is
     // still null, so a redelivered webhook or a later renewal can never trigger a second one. See
     // .claude/rules/billing.md.
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
-    @Column(name = "pro_welcome_sent_at")
-    private Instant proWelcomeSentAt;
+    @Column(name = "plus_welcome_sent_at")
+    private Instant plusWelcomeSentAt;
 
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -179,12 +179,12 @@ public class Subscription {
         this.comped = comped;
     }
 
-    public Instant getProWelcomeSentAt() {
-        return proWelcomeSentAt;
+    public Instant getPlusWelcomeSentAt() {
+        return plusWelcomeSentAt;
     }
 
-    public void setProWelcomeSentAt(Instant proWelcomeSentAt) {
-        this.proWelcomeSentAt = proWelcomeSentAt;
+    public void setPlusWelcomeSentAt(Instant plusWelcomeSentAt) {
+        this.plusWelcomeSentAt = plusWelcomeSentAt;
     }
 
     public Instant getCreatedAt() {

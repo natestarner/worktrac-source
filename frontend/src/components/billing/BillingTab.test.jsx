@@ -60,7 +60,7 @@ describe('BillingTab', () => {
   it('offers the upgrade with yearly preselected on a Free household', async () => {
     render({ id: 1, plan: 'FREE' });
 
-    expect(await screen.findByRole('button', { name: 'Upgrade to Pro' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Upgrade to Plus' })).toBeInTheDocument();
     // Yearly leads because the marketing pricing card headlines $29/year -- the price must not
     // change shape between the page they just read and the screen they pay on.
     expect(screen.getByRole('radio', { name: /Yearly/ })).toBeChecked();
@@ -71,7 +71,7 @@ describe('BillingTab', () => {
   // whether to pay had no way to actually read what they were agreeing to.
   it('links "Terms" and "Privacy Policy" in the fine print to the marketing site', async () => {
     render({ id: 1, plan: 'FREE' });
-    await screen.findByRole('button', { name: 'Upgrade to Pro' });
+    await screen.findByRole('button', { name: 'Upgrade to Plus' });
 
     expect(screen.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', 'https://huddle.fitness/terms.html');
     expect(screen.getByRole('link', { name: 'Privacy Policy' })).toHaveAttribute(
@@ -81,7 +81,7 @@ describe('BillingTab', () => {
   });
 
   // Free is permanent, so deferring costs nothing -- this is an equal-weight escape, not fine
-  // print, especially for someone routed here straight from marketing's "Go Pro".
+  // print, especially for someone routed here straight from marketing's "Go Plus".
   it('offers a way to stay on Free', async () => {
     render({ id: 1, plan: 'FREE' });
 
@@ -92,23 +92,23 @@ describe('BillingTab', () => {
   // so a midnight-UTC instant is the previous day for anyone west of Greenwich and this assertion
   // would pass or fail depending on who ran it. Midday is the same local date everywhere anyone
   // will realistically run these tests.
-  it('shows the renewal date for an active Pro household', async () => {
+  it('shows the renewal date for an active Plus household', async () => {
     render(
-      { id: 1, plan: 'PRO' },
-      { plan: 'PRO', status: 'ACTIVE', pro: true, currentPeriodEnd: '2026-09-27T12:00:00Z' },
+      { id: 1, plan: 'PLUS' },
+      { plan: 'PLUS', status: 'ACTIVE', pro: true, currentPeriodEnd: '2026-09-27T12:00:00Z' },
     );
 
     expect(await screen.findByText(/Renews Sep 27, 2026/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Upgrade to Pro' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Upgrade to Plus' })).not.toBeInTheDocument();
   });
 
   // The reassurance that makes cancelling non-frightening: they keep everything through the
   // period they already paid for.
   it('says "until", not "renews", once a subscription is cancelling', async () => {
     render(
-      { id: 1, plan: 'PRO' },
+      { id: 1, plan: 'PLUS' },
       {
-        plan: 'PRO',
+        plan: 'PLUS',
         status: 'CANCELED',
         pro: true,
         cancelAtPeriodEnd: true,
@@ -116,21 +116,21 @@ describe('BillingTab', () => {
       },
     );
 
-    expect(await screen.findByText(/Pro until Sep 27, 2026/)).toBeInTheDocument();
+    expect(await screen.findByText(/Plus until Sep 27, 2026/)).toBeInTheDocument();
     expect(screen.getByText(/you keep everything until then/)).toBeInTheDocument();
   });
 
   // Access continues through Stripe's retry window, so this is a nudge to fix the card rather
   // than a lockout -- cutting access mid-dunning turns a recoverable failure into a cancellation.
-  it('nudges a past-due household without taking Pro away', async () => {
-    render({ id: 1, plan: 'PRO' }, { plan: 'PRO', status: 'PAST_DUE', pro: true });
+  it('nudges a past-due household without taking Plus away', async () => {
+    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'PAST_DUE', pro: true });
 
     expect(await screen.findByText(/couldn.t take your last payment/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Manage billing' })).toBeInTheDocument();
   });
 
   it('tells a comped household it is on the house, with nothing to manage', async () => {
-    render({ id: 1, plan: 'PRO' }, { plan: 'PRO', status: 'FREE', pro: true, comped: true });
+    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'FREE', pro: true, comped: true });
 
     expect(await screen.findByText(/on the house/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Manage billing' })).not.toBeInTheDocument();
@@ -138,8 +138,8 @@ describe('BillingTab', () => {
 
   // THE degraded case. The plan comes from the auth snapshot, which is present on a cold offline
   // boot -- so an unreachable server must never make a paying household look Free.
-  it('still shows Pro when the subscription request fails', async () => {
-    useAuth.mockReturnValue({ account: { id: 1, plan: 'PRO' }, refreshPeople: vi.fn() });
+  it('still shows Plus when the subscription request fails', async () => {
+    useAuth.mockReturnValue({ account: { id: 1, plan: 'PLUS' }, refreshPeople: vi.fn() });
     getSubscription.mockRejectedValue(new Error('network'));
 
     renderWithQuery(
@@ -148,14 +148,14 @@ describe('BillingTab', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Huddle Pro')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Upgrade to Pro' })).not.toBeInTheDocument();
+    expect(await screen.findByText('Huddle Plus')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Upgrade to Plus' })).not.toBeInTheDocument();
   });
 
   // Tier-3: a payment is not idempotent, so it must be refused up front rather than queued.
   it('disables the upgrade offline and never reaches the network', async () => {
     render({ id: 1, plan: 'FREE' });
-    const upgrade = await screen.findByRole('button', { name: 'Upgrade to Pro' });
+    const upgrade = await screen.findByRole('button', { name: 'Upgrade to Plus' });
 
     onlineManager.setOnline(false);
 
@@ -166,7 +166,7 @@ describe('BillingTab', () => {
   it('opens the Stripe portal in a new tab rather than navigating away', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     createPortalSession.mockResolvedValue({ url: 'https://billing.stripe.com/session/test' });
-    render({ id: 1, plan: 'PRO' }, { plan: 'PRO', status: 'ACTIVE', pro: true });
+    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', pro: true });
 
     fireEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
 
@@ -185,7 +185,7 @@ describe('BillingTab', () => {
     createCheckoutSession.mockResolvedValue({ clientSecret: 'cs_secret', publishableKey: 'pk_test' });
     render({ id: 1, plan: 'FREE' });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Pro' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
 
     expect(await screen.findByTestId('stripe-embedded-checkout')).toBeInTheDocument();
     expect(createCheckoutSession).toHaveBeenCalledWith('YEAR');
@@ -197,8 +197,8 @@ describe('BillingTab', () => {
   it('celebrates a successful checkout, then releases onboarding only once dismissed', async () => {
     const releaseOnboarding = vi.fn();
     useUI.mockReturnValue({ releaseOnboarding, showToast: vi.fn() });
-    useAuth.mockReturnValue({ account: { id: 1, plan: 'PRO' }, refreshPeople: vi.fn().mockResolvedValue() });
-    getSubscription.mockResolvedValue({ plan: 'PRO', status: 'ACTIVE', pro: true });
+    useAuth.mockReturnValue({ account: { id: 1, plan: 'PLUS' }, refreshPeople: vi.fn().mockResolvedValue() });
+    getSubscription.mockResolvedValue({ plan: 'PLUS', status: 'ACTIVE', pro: true });
     reconcileCheckout.mockResolvedValue({});
 
     renderWithQuery(
@@ -207,14 +207,14 @@ describe('BillingTab', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText('Welcome to Huddle Pro')).toBeInTheDocument();
+    expect(await screen.findByText('Welcome to Huddle Plus')).toBeInTheDocument();
     expect(reconcileCheckout).toHaveBeenCalledWith('cs_test123');
     expect(releaseOnboarding).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByText('Welcome to Huddle Pro'));
+    fireEvent.click(screen.getByText('Welcome to Huddle Plus'));
 
     expect(releaseOnboarding).toHaveBeenCalled();
-    expect(screen.queryByText('Welcome to Huddle Pro')).not.toBeInTheDocument();
+    expect(screen.queryByText('Welcome to Huddle Plus')).not.toBeInTheDocument();
   });
 
   // A real StrictMode double-invoke race (mount -> cleanup -> mount racing an in-flight
@@ -247,12 +247,12 @@ describe('BillingTab', () => {
       'Payment received. Your plan will update shortly.',
       { tone: 'info' },
     ));
-    expect(screen.queryByText('Welcome to Huddle Pro')).not.toBeInTheDocument();
+    expect(screen.queryByText('Welcome to Huddle Plus')).not.toBeInTheDocument();
   });
 
   // ── Warning an owner before they downgrade ──────────────────────────────────────────────────
 
-  const PRO_ACCOUNT = { name: 'Starner', plan: 'PRO' };
+  const PRO_ACCOUNT = { name: 'Starner', plan: 'PLUS' };
   const PRO_SUB = { pro: true, status: 'ACTIVE', currentPeriodEnd: '2027-01-01T00:00:00Z' };
 
   /**
@@ -284,7 +284,7 @@ describe('BillingTab', () => {
       logins: [{ personId: 1, personName: 'Nate', status: 'ACTIVE', isSelf: true }],
     });
 
-    await screen.findByText('Huddle Pro');
+    await screen.findByText('Huddle Plus');
     expect(screen.queryByText(/will stop working/)).not.toBeInTheDocument();
   });
 
@@ -297,7 +297,7 @@ describe('BillingTab', () => {
       ],
     });
 
-    await screen.findByText('Huddle Pro');
+    await screen.findByText('Huddle Plus');
     expect(screen.queryByText(/will stop working/)).not.toBeInTheDocument();
   });
 
@@ -319,7 +319,7 @@ describe('BillingTab', () => {
       membership: { accountRole: 'MEMBER', personId: 2, status: 'ACTIVE' },
     });
 
-    await screen.findByText('Huddle Pro');
+    await screen.findByText('Huddle Plus');
     expect(listLogins).not.toHaveBeenCalled();
   });
 

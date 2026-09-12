@@ -1058,7 +1058,7 @@ input[type='search']::-webkit-search-results-decoration {
   }
 }
 
-/* A dark fill couldn't get brighter without either failing AA behind "Pro" (--color-accent alone
+/* A dark fill couldn't get brighter without either failing AA behind "Plus" (--color-accent alone
    is 3.44:1 and fails at this size -- frontend-core.md) or burying HuddleMark's own colours in a
    same-toned background. So this pill flips the approach entirely and keeps its own FIXED bright
    identity colours regardless of theme -- literals, not tokens, the same deliberate exception
@@ -1070,7 +1070,7 @@ input[type='search']::-webkit-search-results-decoration {
    Text is the LIGHT-MODE hex of --color-accent-text, pinned rather than left as the token (dark
    mode's variant is tuned for a dark background, which this deliberately never is) -- 5.33:1
    against white, the same already-documented number that token carries against --color-surface. */
-.plan-badge--pro {
+.plan-badge--plus {
   color: #a8532c;
   background: linear-gradient(135deg, #ffffff 0%, #fdf1e6 100%);
   border: 1px solid var(--color-accent);

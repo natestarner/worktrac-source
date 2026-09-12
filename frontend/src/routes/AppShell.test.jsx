@@ -411,7 +411,7 @@ describe('AppShell welcome modal', () => {
     expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
   });
 
-  // The billing deferral. A household that registered via marketing's "Go Pro" is routed straight
+  // The billing deferral. A household that registered via marketing's "Go Plus" is routed straight
   // to /app/billing, and the welcome modal must not interrupt them mid-purchase -- the tour comes
   // AFTER the money decision. The durable flag (lib/onboardingPending.js) is deliberately NOT
   // touched by any of this: it still says "this account has never been onboarded", which stays
@@ -606,7 +606,7 @@ describe('AppShell paused member login', () => {
     expect(container.querySelector('[data-chrome="person"]')).toBeNull();
   });
 
-  // The owner is never paused: they are the only one who can get the household back to Pro, and
+  // The owner is never paused: they are the only one who can get the household back to Plus, and
   // the server never sends PAUSED_PLAN for them anyway.
   it('does not paint it for an owner', () => {
     useAuth.mockReturnValue({

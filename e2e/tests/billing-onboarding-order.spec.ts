@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { fetchPendingCode } from './support/auth';
 
-// The order of the first-run experience for someone who arrived from marketing's "Go Pro".
+// The order of the first-run experience for someone who arrived from marketing's "Go Plus".
 //
 // They land on the billing screen, and the welcome modal WAITS until the billing decision
 // resolves -- a tour interrupting someone mid-purchase is the wrong order. This is the likeliest
@@ -11,12 +11,12 @@ import { fetchPendingCode } from './support/auth';
 // Registration is driven inline rather than through registerHousehold, because that helper starts
 // at /register with no query string and dismisses the welcome modal unconditionally -- both of
 // which are the things under test here.
-test.describe('Go Pro registration', () => {
+test.describe('Go Plus registration', () => {
   test('lands on billing with the welcome modal deferred, then shows it once the decision resolves',
     async ({ page, request }) => {
       const email = `huddle+e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
 
-      // The marketing "Go Pro" button links exactly here.
+      // The marketing "Go Plus" button links exactly here.
       await page.goto('/register?plan=pro');
       await page.getByPlaceholder('e.g. Alex').fill('Nate');
       await page.getByPlaceholder('you@example.com').fill(email);
@@ -32,7 +32,7 @@ test.describe('Go Pro registration', () => {
 
       // Landed on billing rather than Log, because they came here intending to pay.
       await expect(page).toHaveURL(/\/app\/billing/);
-      await expect(page.getByRole('button', { name: 'Upgrade to Pro' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Upgrade to Plus' })).toBeVisible();
 
       // ⚠️ toHaveCount(0), NOT a passing isVisible() check. isVisible() has no auto-waiting, so it
       // returns false while the modal is merely still mounting -- it would pass against a

@@ -141,7 +141,7 @@ public class CsvExportService {
     // That reduce was quadratic: string concatenation copies the whole accumulated result once
     // per row, so a full history cost O(n^2) in bytes moved. At 20,000 sets -- one import file's
     // worth, and a household can hold far more -- producing a ~3 MB file moved tens of gigabytes
-    // through memory and pinned a CPU for the duration. Export is deliberately NOT Pro-gated
+    // through memory and pinned a CPU for the duration. Export is deliberately NOT Plus-gated
     // (every household can always take its data out), so this was reachable on Free, and getRaw
     // allows it 60 seconds, so the client waits rather than aborting. Repeated calls were a
     // straightforward way for one account to burn the container's CPU.

@@ -19,7 +19,7 @@ public record SubscriptionDto(
 
     public static SubscriptionDto from(Subscription subscription, boolean pro) {
         return new SubscriptionDto(
-                pro ? BillingPlan.PRO : BillingPlan.FREE,
+                pro ? BillingPlan.PLUS : BillingPlan.FREE,
                 subscription.getStatus(),
                 subscription.getBillingInterval(),
                 subscription.getCurrentPeriodEnd(),

@@ -945,4 +945,4 @@ never tagged — which is why it is a separate change with its own discovery pro
 Also found while sizing this and left alone: `searchExercises` explicitly never caps its result
 count (a one-letter query renders every match as a full row) and ignores the person's own usage;
 `GET /api/people/{id}/history` returns every session with every set as a bare array, unbounded for
-Pro; and nothing in the app is paginated on either side.
+Plus; and nothing in the app is paginated on either side.

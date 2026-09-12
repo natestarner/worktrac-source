@@ -38,7 +38,7 @@ const SECTIONS = [
   { id: 'personal', title: 'Notes, tags and favorites', group: 'Making it yours' },
   { id: 'settings', title: 'Settings', group: 'Making it yours' },
   { id: 'logins', title: 'Giving someone their own login', group: 'Making it yours' },
-  { id: 'plan', title: 'Free and Pro', group: 'Making it yours' },
+  { id: 'plan', title: 'Free and Plus', group: 'Making it yours' },
   { id: 'data', title: 'Import and export', group: 'Making it yours' },
   { id: 'offline', title: 'Losing the connection', group: 'When things go wrong' },
   { id: 'trouble', title: 'Getting help', group: 'When things go wrong' },
@@ -52,7 +52,7 @@ export default function HelpTab() {
   const { startTour } = useUI();
 
   // ARRIVING at /app/help#plan has to land on that section. Nothing else makes it happen, and the
-  // section ids are advertised as deep links right above -- so "How Free and Pro differ"
+  // section ids are advertised as deep links right above -- so "How Free and Plus differ"
   // (HistoryWindowModal) navigated to the handbook and left the reader at the top of a very long
   // page, twelve thousand pixels above the answer. Measured: scrollY stayed 0 with the target
   // heading at y=12447.
@@ -436,7 +436,7 @@ export default function HelpTab() {
         </p>
         <p>
           On <T>Free</T> this shows the last 90 days. Everything before that is still saved in your
-          full history. See <a href="#plan">Free and Pro</a>.
+          full history. See <a href="#plan">Free and Plus</a>.
         </p>
 
         <h3 className="help-h3">Finding something</h3>
@@ -485,9 +485,9 @@ export default function HelpTab() {
           shouldn&rsquo;t have counted removes it from the board.
         </p>
         <p>
-          On <T>Free</T> the board covers the last 90 days; <T>Pro</T> makes it all-time. Either
+          On <T>Free</T> the board covers the last 90 days; <T>Plus</T> makes it all-time. Either
           way, a set is only badged as a PR if it beats <strong>everything</strong> you have logged.
-          See <a href="#plan">Free and Pro</a>.
+          See <a href="#plan">Free and Plus</a>.
         </p>
         <p>
           Sort three ways: <strong>Most recent</strong> (the default: what got better lately),{' '}
@@ -565,7 +565,7 @@ export default function HelpTab() {
           </p>
           <p>
             On <T>Free</T> the grid still spans six months, but only the last 90 days can be filled
-            in. That is as far back as Free shows. See <a href="#plan">Free and Pro</a>.
+            in. That is as far back as Free shows. See <a href="#plan">Free and Plus</a>.
           </p>
         </Note>
 
@@ -702,7 +702,7 @@ export default function HelpTab() {
           enter their email address and they get a link. If that address is new to Huddle they
           choose a password; if they already use Huddle they sign in with the password they
           already have, and this household is added to their account alongside their own. Until
-          they accept, their row says <T>Invited</T>. This is a Pro feature.
+          they accept, their row says <T>Invited</T>. This is a Plus feature.
         </p>
         <p>
           Either way, <strong>the invitation only does anything once they act on it</strong>. The
@@ -750,7 +750,7 @@ export default function HelpTab() {
           <p>
             Member logins pause. Nobody is deleted and nothing is lost &mdash; their workouts and
             everyone else&rsquo;s stay exactly where they are, and the household keeps working from
-            the main login. Go back to Pro and their sign-in starts working again on its own.
+            the main login. Go back to Plus and their sign-in starts working again on its own.
           </p>
         </Note>
 
@@ -764,14 +764,14 @@ export default function HelpTab() {
         </Note>
       </Section>
 
-      <Section id="plan" title="Free and Pro">
+      <Section id="plan" title="Free and Plus">
         <p className="help-lede">
-          Free is free for good. Not a trial that runs out. Pro adds your whole history, the
+          Free is free for good. Not a trial that runs out. Plus adds your whole history, the
           ability to bring old workouts in, and a personal login for anyone who wants one.
         </p>
 
         <HelpTable
-          head={['', 'Free', 'Pro']}
+          head={['', 'Free', 'Plus']}
           rows={[
             ['People in your household', 'Everyone', 'Everyone'],
             ['Workouts, sets and exercises', 'Unlimited', 'Unlimited'],
@@ -788,7 +788,7 @@ export default function HelpTab() {
           <p>
             On Free, History, PRs and Trends <strong>show the last 90 days</strong>. Everything
             older is still saved &mdash; every set stays exactly where it was, and the moment you
-            subscribe your whole history is on screen again. If you later cancel, you keep Pro until
+            subscribe your whole history is on screen again. If you later cancel, you keep Plus until
             the period you paid for ends, and then those screens go back to 90 days.{' '}
             <strong>Your history never changes; only how much of it is on screen does.</strong>
           </p>
@@ -814,7 +814,7 @@ export default function HelpTab() {
 
         <h3 className="help-h3">Changing your plan</h3>
         <p>
-          Your account menu &rarr; <T>Plan &amp; billing</T> shows what you&rsquo;re on. Pro is
+          Your account menu &rarr; <T>Plan &amp; billing</T> shows what you&rsquo;re on. Plus is
           $3.99 a month or $29 a year. Payments are handled by Stripe. The app never sees
           your card. <T>Manage billing</T> opens Stripe in a new tab to change a card, download
           receipts, switch between monthly and yearly, or cancel.
@@ -846,7 +846,7 @@ export default function HelpTab() {
           <T>App Settings</T> &rarr; <T>Import data</T> takes a CSV or Excel file: one Huddle
           exported, or a spreadsheet you kept yourself. You choose whose workouts it is, and you see
           exactly what will be added before anything is saved. Importing is part of{' '}
-          <T>Pro</T> (see <a href="#plan">Free and Pro</a>).
+          <T>Plus</T> (see <a href="#plan">Free and Plus</a>).
         </p>
         <p>Three columns are required:</p>
         <HelpTable

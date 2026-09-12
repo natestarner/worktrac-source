@@ -89,7 +89,7 @@ class TrendsControllerTest extends AbstractIntegrationTest {
         personId = registerJson.get("person").get("id").asLong();
         // Several cases here deliberately seed sessions months back -- to prove the heatmap window
         // is independent of the range toggle, and that hasAnyHistory tells a brand-new person from
-        // a lapsed one. Both are Pro behaviours now, so the plan is stated rather than assumed.
+        // a lapsed one. Both are Plus behaviours now, so the plan is stated rather than assumed.
         // The Free-tier window has its own coverage in FreeTierHistoryWindowTest.
         BillingTestSupport.makePro(subscriptionRepository, registerJson.get("account").get("id").asLong());
 
