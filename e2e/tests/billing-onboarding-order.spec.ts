@@ -17,7 +17,7 @@ test.describe('Go Plus registration', () => {
       const email = `huddle+e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
 
       // The marketing "Go Plus" button links exactly here.
-      await page.goto('/register?plan=pro');
+      await page.goto('/register?plan=plus');
       await page.getByPlaceholder('e.g. Alex').fill('Nate');
       await page.getByPlaceholder('you@example.com').fill(email);
       await page.getByPlaceholder('At least 8 characters').fill('password123');
