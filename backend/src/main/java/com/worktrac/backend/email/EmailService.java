@@ -23,6 +23,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.UUID;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.regex.Pattern;
 
 @Service
@@ -32,7 +34,19 @@ public class EmailService {
 
     private final EmailClient emailClient;
     private final String senderAddress;
+    private final String membershipInviteTemplate;
+    private final String simpleNoticeTemplate;
     private final String appUrl;
+    // ⚠️ `appUrl` (APP_EMAIL_APP_URL) is configured in every environment as a full "open the app
+    // here" link, NOT a bare origin -- lower and production both carry `.../app/log` (confirmed
+    // live in both via `az containerapp show`, 2026-09-08). The three oldest callers below use it
+    // exactly that way, verbatim, and that is correct: they just want to open the app somewhere
+    // reasonable. `appOrigin` is for the OTHER shape of caller -- one building its OWN path, which
+    // `appUrl + "/whatever"` cannot do safely once appUrl already carries one. `joinUrl` did exactly
+    // that and produced `.../app/log/join?...`, a path no route matches; the SPA's catch-all sent it
+    // to `/` -> `/app/log` -> (unauthenticated) `/login`, with nothing on screen explaining why. Same
+    // bug, same fix, in `sendInviteAccepted`'s `/app/profile` CTA.
+    private final String appOrigin;
     private final String logoUrl;
     private final int codeExpirationMinutes;
     private final String verificationCodeTemplate;
@@ -47,12 +61,15 @@ public class EmailService {
                 .buildClient();
         this.senderAddress = properties.getSenderAddress();
         this.appUrl = properties.getAppUrl();
-        this.logoUrl = logoUrlFrom(appUrl);
+        this.appOrigin = originOf(appUrl);
+        this.logoUrl = appOrigin + "/email/logo.png";
         this.codeExpirationMinutes = properties.getCodeExpirationMinutes();
         this.verificationCodeTemplate = loadTemplate("templates/email/verification-code.html");
         this.registrationSuccessTemplate = loadTemplate("templates/email/registration-success.html");
         this.passwordResetCodeTemplate = loadTemplate("templates/email/password-reset-code.html");
         this.passwordResetSuccessTemplate = loadTemplate("templates/email/password-reset-success.html");
+        this.membershipInviteTemplate = loadTemplate("templates/email/membership-invite.html");
+        this.simpleNoticeTemplate = loadTemplate("templates/email/simple-notice.html");
         String noopPattern = properties.getE2eNoopRecipientPattern();
         this.e2eNoopRecipientPattern = (noopPattern == null || noopPattern.isBlank())
                 ? null
@@ -91,6 +108,205 @@ public class EmailService {
         return send(toEmail, "Your Huddle password reset code", plainTextPasswordResetCode(code), html);
     }
 
+    /**
+     * Invites someone to take over a person in a household as their own login.
+     *
+     * <p>⚠️ <b>The BODY differs by whether the recipient already has a Huddle account; nothing the
+     * OWNER sees does.</b> That asymmetry is the whole design — see
+     * {@code MembershipInviteService}'s class comment for why an owner-visible difference would be
+     * a user-enumeration oracle. Here it is only about giving the recipient the right instruction:
+     * one of them needs to choose a password, the other already has one.
+     *
+     * <p>Carries the transparency sentence — what the owner can and cannot do — because a member's
+     * first contact with this feature is this email, not the app. It says the same thing the
+     * Profile page does, deliberately.
+     */
+    public String sendMembershipInvite(String toEmail, String personName, String householdName,
+                                        String ownerName, String joinUrl, boolean recipientHasAccount) {
+        // ⚠️ These two sentences are now LITERALLY TRUE, and they were not always. The
+        // already-have-an-account branch has said "sign in with the password you already use"
+        // since it was written, while the screen behind the link offered one password field to
+        // everybody and the server ignored whatever an existing address typed into it -- handing
+        // over a full session on the strength of the emailed link alone. The email described the
+        // right design before the code implemented it; /join and AuthService.acceptInvite now
+        // match it. Keep the two halves in step: this branch is the promise the sign-in screen
+        // keeps.
+        String actionSentence = recipientHasAccount
+                ? "Open the link below and sign in with the password you already use for Huddle."
+                : "Open the link below to choose a password and finish setting up your login.";
+        String buttonLabel = recipientHasAccount ? "Join " + householdName : "Set up my login";
+
+        String html = membershipInviteTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{JOIN_URL}}", joinUrl)
+                .replace("{{ACTION_SENTENCE}}", actionSentence)
+                .replace("{{BUTTON_LABEL}}", buttonLabel)
+                // Every one of these is somebody's typed text reaching an HTML document, so it is
+                // escaped rather than interpolated raw. OWNER_NAME and PERSON_NAME are person
+                // names and HOUSEHOLD_NAME is an account name -- all free text the household chose.
+                .replace("{{PERSON_NAME}}", escapeHtml(personName))
+                .replace("{{HOUSEHOLD_NAME}}", escapeHtml(householdName))
+                .replace("{{OWNER_NAME}}", escapeHtml(ownerName));
+
+        String plain = ownerName + " set up a Huddle login for you as " + personName
+                + " in " + householdName + ". " + actionSentence + " " + joinUrl
+                + "  This link expires in 7 days. " + ownerName + " can see your workouts and can"
+                + " remove your login, but cannot see or set your password.";
+
+        return send(toEmail, ownerName + " set up a Huddle login for you", plain, html);
+    }
+
+    // Minimal, and deliberately not a dependency: these values land in attribute-free text nodes
+    // in the template above, so the five XML predefined entities are the whole exposure. Ampersand
+    // first, or it would double-escape the others.
+    private static String escapeHtml(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
+
+    /**
+     * To the new member, once they have joined: which household, and the way out.
+     *
+     * <p>Carries the one-click exit deliberately. Being added to somebody else's household with no
+     * visible way to leave is the shape of a trap regardless of intent, and this is the message
+     * they will still have in their inbox months later when they want it.
+     */
+    public String sendAddedToHousehold(String toEmail, String personName, String householdName,
+                                        String ownerName) {
+        String html = simpleNoticeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", escapeHtml("You're in " + householdName))
+                .replace("{{BODY}}", escapeHtml("You're now logging as " + personName + " in "
+                        + householdName + ". " + ownerName + " can see your workouts and can remove"
+                        + " your login, but cannot see or set your password.")
+                        + "<br><br>You can leave this household at any time from Profile &rarr; "
+                        + "Leave household.")
+                .replace("{{CTA_URL}}", appUrl)
+                .replace("{{CTA_LABEL}}", "Open Huddle");
+
+        return send(toEmail, "You've joined " + householdName + " on Huddle",
+                "You're now logging as " + personName + " in " + householdName + ". "
+                        + ownerName + " can see your workouts and can remove your login, but cannot"
+                        + " see or set your password. You can leave at any time from Profile."
+                        + " Open Huddle: " + appUrl,
+                html);
+    }
+
+    /**
+     * To the OWNER, when an invitation is accepted, NAMING the address that accepted it.
+     *
+     * <p>⚠️ This is the typo detector, and the reason it is not optional. A mistyped invite gives a
+     * stranger read access to the household's whole training history — visibility is forced on for
+     * Plus/Family — and nothing else in the system would ever surface it. The address has to be in
+     * the message; "somebody accepted" would be useless.
+     */
+    public String sendInviteAccepted(String toEmail, String memberEmail, String personName,
+                                      String householdName) {
+        String html = simpleNoticeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", escapeHtml(personName + " has a login now"))
+                .replace("{{BODY}}", escapeHtml(memberEmail) + " accepted your invitation and can now"
+                        + " sign in as " + escapeHtml(personName) + " in "
+                        + escapeHtml(householdName) + ".<br><br>If that address is not who you meant"
+                        + " to invite, remove the login from Profile &rarr; Logins straight away —"
+                        + " they can see everyone's workouts.")
+                .replace("{{CTA_URL}}", appOrigin + "/app/profile")
+                .replace("{{CTA_LABEL}}", "Review logins");
+
+        return send(toEmail, personName + " accepted their Huddle login",
+                memberEmail + " accepted your invitation and can now sign in as " + personName
+                        + " in " + householdName + ". If that is not who you meant to invite, remove"
+                        + " the login from Profile > Logins straight away -- they can see everyone's"
+                        + " workouts. " + appOrigin + "/app/profile",
+                html);
+    }
+
+    /**
+     * To the person who lost access.
+     *
+     * <p>⚠️ A security control, not a courtesy. Without it they are silently signed out, and their
+     * queued offline writes can then never land — see {@code offline-internals.md}. They deserve to
+     * know that before they wonder where their sets went.
+     */
+    public String sendLoginRevoked(String toEmail, String householdName, String ownerName,
+                                    boolean wasOnlyAnInvitation) {
+        String heading = wasOnlyAnInvitation
+                ? "Your invitation to " + householdName + " was withdrawn"
+                : "Your login for " + householdName + " was removed";
+        String body = wasOnlyAnInvitation
+                ? ownerName + " withdrew the invitation to join " + householdName + ". Nothing was"
+                        + " set up, and there is nothing you need to do."
+                : ownerName + " removed your login for " + householdName + ". Your workouts stay in"
+                        + " that household — they were never yours to take with you — and anything"
+                        + " you logged on a device that was offline may not have synced before"
+                        + " access ended. Your Huddle account and any other households are"
+                        + " unaffected.";
+
+        String html = simpleNoticeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", escapeHtml(heading))
+                .replace("{{BODY}}", escapeHtml(body))
+                .replace("{{CTA_URL}}", appUrl)
+                .replace("{{CTA_LABEL}}", "Open Huddle");
+
+        return send(toEmail, heading, body + " " + appUrl, html);
+    }
+
+    /**
+     * The link an invite email points at.
+     *
+     * <p>Built here because {@code appOrigin} lives here — the one place that knows which origin
+     * the app is served from in this environment. A caller assembling it would need that config
+     * threaded to it, and would drift the moment a second caller appeared.
+     *
+     * <p>Carries the invite id AND the token: the id is the lookup (a BCrypt hash cannot be
+     * searched for), and the token is the proof. URL-encoded because the token is Base64URL and
+     * the id is a number, but the encoding is not optional — it is what stops a future token
+     * alphabet change silently breaking every link.
+     *
+     * <p>⚠️ Built on {@code appOrigin}, never bare {@code appUrl} — see that field's comment. Using
+     * {@code appUrl} here once produced {@code .../app/log/join?...}, a path no client-side route
+     * matches, which silently landed every invite link on the login screen with no error at all.
+     */
+    public String joinUrl(Long inviteId, String rawToken) {
+        return appOrigin + "/join?i=" + URLEncoder.encode(String.valueOf(inviteId), StandardCharsets.UTF_8)
+                + "&t=" + URLEncoder.encode(rawToken, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * The welcome-to-Plus email, sent at most once per household (see {@code Subscription} and
+     * {@code SubscriptionService.applyStripeState}).
+     *
+     * <p>Copy is deliberately the same line {@code PlusCelebration} shows in-app the instant checkout
+     * completes ("Your whole history, every record, and import are unlocked") -- one derivation of
+     * what Plus buys, restated in two places rather than invented twice. See {@code planCopy.js}'s
+     * {@code PRO_BENEFITS} if that ever changes.
+     */
+    public String sendPlusWelcome(String toEmail) {
+        String html = simpleNoticeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", escapeHtml("Welcome to Huddle Plus"))
+                .replace("{{BODY}}", escapeHtml("Your whole history, every record, and import are "
+                        + "unlocked. Every workout you've logged, and everything you log from here, "
+                        + "stays on screen, all-time records and trends open up over any range, and "
+                        + "you can bring in old data from a spreadsheet whenever you're ready.")
+                        + "<br><br>Thanks for keeping Huddle going.")
+                .replace("{{CTA_URL}}", appUrl)
+                .replace("{{CTA_LABEL}}", "Open Huddle");
+
+        return send(toEmail, "Welcome to Huddle Plus",
+                "Your whole history, every record, and import are unlocked. Every workout you've"
+                        + " logged, and everything you log from here, stays on screen, all-time"
+                        + " records and trends open up over any range, and you can bring in old data"
+                        + " from a spreadsheet whenever you're ready. Thanks for keeping Huddle going."
+                        + " Open Huddle: " + appUrl,
+                html);
+    }
+
     public String sendPasswordResetSuccess(String toEmail) {
         String html = passwordResetSuccessTemplate.replace("{{LOGO_URL}}", logoUrl);
 
@@ -114,16 +330,17 @@ public class EmailService {
         return send(toEmails.toArray(new String[0]), subject, body, null);
     }
 
-    // Email clients need a real, absolute image URL (inline <svg> and data: URIs are both
-    // unreliable across Gmail/Outlook) -- rather than a separate config property to keep in
-    // sync with app-url per environment, the logo always lives at a fixed path on the same
-    // origin the app itself is served from.
-    private String logoUrlFrom(String appUrl) {
+    // The bare scheme+authority under whatever `appUrl` is configured as -- discards any path (see
+    // the `appOrigin` field comment for why that matters beyond just the logo). Email clients need
+    // a real, absolute image URL (inline <svg> and data: URIs are both unreliable across
+    // Gmail/Outlook), so the logo lives at a fixed path on this origin rather than a separate config
+    // property that would need to be kept in sync with app-url per environment.
+    private static String originOf(String url) {
         try {
-            URI uri = new URI(appUrl);
-            return uri.getScheme() + "://" + uri.getAuthority() + "/email/logo.png";
+            URI uri = new URI(url);
+            return uri.getScheme() + "://" + uri.getAuthority();
         } catch (URISyntaxException e) {
-            throw new IllegalStateException("app.email.app-url is not a valid URI: " + appUrl, e);
+            throw new IllegalStateException("app.email.app-url is not a valid URI: " + url, e);
         }
     }
 

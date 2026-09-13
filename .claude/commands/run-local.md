@@ -71,7 +71,7 @@ database this worktree is using; note them for the next step. It's safe to re-ru
 including while a previous run's servers (for this same worktree) are still up.
 
 With `~/.huddle-stripe-env` absent and the Stripe CLI not logged in, billing still degrades to an
-honest 503 (comped/test-support Pro, per the seed step below, needs none of this) — this step is
+honest 503 (comped/test-support Plus, per the seed step below, needs none of this) — this step is
 additive, not a new requirement for the rest of `/run-local` to work.
 
 ### 3. Poll for readiness
@@ -92,11 +92,11 @@ than retrying blindly.
 node scripts/seed-local-account.mjs
 ```
 Run once both ports actually answer. Registers `nate@starner.co` (bypassing the real inbox via
-`TestSupportController`, only in `local`/`lower`), grants it Pro, and imports several weeks of
+`TestSupportController`, only in `local`/`lower`), grants it Plus, and imports several weeks of
 synthetic history through the real CSV import endpoint — but **only the first time**, on the run
 that just created the account. On every later `/run-local` for this same worktree it finds the
 account already there (the database persists across `up.sh` restarts) and does nothing but
-confirm Pro. This is what lets local testing start from an account with real history already in
+confirm Plus. This is what lets local testing start from an account with real history already in
 it instead of a blank registration every time.
 
 Never fails the overall command: the script itself warns and exits 0 on any problem, so a hiccup

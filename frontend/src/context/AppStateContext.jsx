@@ -260,7 +260,7 @@ export function reducer(state, action) {
 const AppStateContext = createContext(null);
 
 export function AppStateProvider({ children }) {
-  const { status, account, people, freshLogin } = useAuth();
+  const { status, account, user, people, freshLogin } = useAuth();
   const [state, dispatch] = useReducer(reducer, initialState);
   // WHICH account's slice is currently in `state`, not merely "did a hydration finish". A plain
   // boolean could not answer the question ProtectedRoute actually asks, because the
@@ -271,9 +271,20 @@ export function AppStateProvider({ children }) {
   // .claude/rules/resilience.md rules out. Comparing account ids closes that frame by
   // construction. `undefined` (no hydration yet) can never equal a real accountId; `null` is a
   // real value here, since an offline boot from a snapshot with no account still hydrates.
-  const [hydratedAccountId, setHydratedAccountId] = useState(undefined);
+  //
+  // ⚠️ Scoped to the LOGIN, not the account. Two members of one household have different persisted
+  // slices under the same accountId, so an account-only comparison reports "already hydrated" the
+  // instant member B signs in after member A -- letting <Outlet/> through against A's restored
+  // state, which is the same one-frame-early render this gate exists to prevent, one identity
+  // dimension over.
+  const [hydratedScope, setHydratedScope] = useState(undefined);
   const accountId = account?.id ?? null;
-  const hydrated = status !== 'authenticated' || hydratedAccountId === accountId;
+  const userId = user?.id ?? null;
+  // A plain string so the comparison stays a `===`. `undefined` (never hydrated) can never equal
+  // it; `null` account is a real value, since an offline boot from a snapshot with no account
+  // still hydrates.
+  const scopeKey = accountId == null ? null : `${accountId}:${userId ?? ''}`;
+  const hydrated = status !== 'authenticated' || hydratedScope === scopeKey;
 
   // Rehydrate this account's persisted per-person state once we know which account we're in.
   // First paint is gated on this completing (ProtectedRoute shows the AppShell skeleton) so a
@@ -281,7 +292,7 @@ export function AppStateProvider({ children }) {
   useEffect(() => {
     let cancelled = false;
     if (status !== 'authenticated') return undefined; // nothing to hydrate on login/public pages
-    loadAppState(accountId)
+    loadAppState(accountId, userId)
       // loadAppState swallows every storage failure internally and resolves to null, so this can't
       // currently reject. Belt-and-braces anyway: an unhandled rejection here would leave
       // `hydrated` false forever, which ProtectedRoute renders as a skeleton that never resolves.
@@ -294,7 +305,7 @@ export function AppStateProvider({ children }) {
           byPerson: loaded?.byPerson ?? {},
           resetTab: freshLogin,
         });
-        setHydratedAccountId(accountId);
+        setHydratedScope(scopeKey);
       });
     return () => {
       cancelled = true;
@@ -304,7 +315,9 @@ export function AppStateProvider({ children }) {
     // including it would needlessly re-run this effect (and flash the hydrate skeleton) whenever the
     // online-reconcile effect later resets `freshLogin` to falsy on the same authenticated session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, accountId]);
+    // userId/scopeKey belong here: a member signing in after a sibling changes neither status
+    // nor accountId, and without them the effect would never re-run to load THEIR slice.
+  }, [status, accountId, userId, scopeKey]);
 
   // Prune slices for removed people (and recover a dangling activePersonId) whenever the people
   // list changes, and right after hydration.
@@ -327,8 +340,8 @@ export function AppStateProvider({ children }) {
   // this race no matter where the write was fired from.
   useEffect(() => {
     if (status !== 'authenticated' || !hydrated) return;
-    saveAppState(accountId, { activePersonId: state.activePersonId, byPerson: state.byPerson });
-  }, [state, accountId, status, hydrated]);
+    saveAppState(accountId, userId, { activePersonId: state.activePersonId, byPerson: state.byPerson });
+  }, [state, accountId, userId, status, hydrated]);
 
   const actions = useMemo(
     () => ({

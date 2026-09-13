@@ -39,8 +39,20 @@ public record AccountAccess(
          * Null is legitimate: an owner need not correspond to a person at all.
          */
         Long selfPersonId,
-        /** accounts.members_see_everyone. Forced true for Pro/Family; the Team tier's seam. */
-        boolean membersSeeEveryone) {
+        /** accounts.members_see_everyone. Forced true for Plus/Family; the Team tier's seam. */
+        boolean membersSeeEveryone,
+        /**
+         * Whether the HOUSEHOLD is on Plus — {@code SubscriptionService.isPlus}, resolved once per
+         * cache load rather than per request.
+         *
+         * <p>⚠️ Not stored anywhere. It is derived from a subscription's state, including a
+         * time-dependent branch (a cancelled subscription stays Plus until its paid period ends,
+         * with no webhook to announce that). So this value can be up to the cache TTL stale, and
+         * that is accepted: a member keeps working for at most another minute after a plan lapses.
+         * Erring in that direction is deliberate — the opposite error locks somebody out of the
+         * app mid-workout over a billing edge the household may not even know about yet.
+         */
+        boolean accountIsPro) {
 
     public AccountAccess {
         Objects.requireNonNull(userId, "userId");
@@ -52,9 +64,106 @@ public record AccountAccess(
         return accountRole.permissions(membersSeeEveryone).contains(permission);
     }
 
+    /**
+     * Whether this login may be used at all right now, as opposed to what it may do.
+     *
+     * <p>⚠️ <b>An OWNER is never paused, and that is not a courtesy — it is what makes the pause
+     * recoverable.</b> Downgrading suspends the member logins; the owner keeps full access to the
+     * whole household, which is both the shared-iPad flow the product started as and the only way
+     * anybody can get back to Plus. Pausing the owner too would lock the household out of the
+     * screen that un-pauses it.
+     *
+     * <p>Checked from {@code PermissionInterceptor} before any permission, because it is a
+     * different question: not "may you do this" but "may you do anything".
+     */
+    public MembershipStatus status() {
+        return MembershipStatus.forRole(accountRole, accountIsPro);
+    }
+
     /** True when this login IS the given person, rather than merely able to act on them. */
     public boolean isSelf(Long personId) {
         return selfPersonId != null && selfPersonId.equals(personId);
+    }
+
+    /**
+     * The person this login IS, insisting there is one.
+     *
+     * <p>For the checks that ask "has anyone OTHER than me used this", where the person id becomes
+     * a {@code <> :personId} comparison. A null there would not fail — it would match every row and
+     * report "used by nobody", quietly waving through exactly the rename the check exists to
+     * refuse. So this fails loudly instead of failing open.
+     *
+     * <p>Only ever reached for a MEMBER (an owner short-circuits on
+     * {@code EDIT_ANY_SHARED_RESOURCE} first), and a member always has a person —
+     * {@code UX_account_memberships_account_person} is what makes that true. An
+     * {@code IllegalStateException} here means that invariant broke, which is a 500 and correctly
+     * so: it is not a request the caller can fix.
+     */
+    public Long requireSelfPersonId() {
+        if (selfPersonId == null) {
+            throw new IllegalStateException("Membership has no person: " + membershipId);
+        }
+        return selfPersonId;
+    }
+
+    /**
+     * Whether this login may change a shared account resource -- an exercise or a tag -- given who
+     * created it.
+     *
+     * <p>Lives here, beside has() and isSelf(), because it is the same kind of question and because
+     * keeping it here keeps AccountRole the only place a role is ever consulted. The two call sites
+     * (ExerciseService.update, TagService.rename) act on different entity types, so the creator is
+     * passed as a bare id rather than the row.
+     *
+     * <p><b>A null creator answers FALSE for a member, and that polarity is deliberate.</b> Null
+     * means nobody in this household is recorded as having made the row: a preloaded global
+     * exercise, a row written by the previous release during a rolling deploy, or an account with
+     * no OWNER membership for V69 to attribute to. An owner still edits it through
+     * EDIT_ANY_SHARED_RESOURCE, so nothing becomes uneditable -- but a member never inherits a row
+     * nobody claims. Failing open here would hand every member every unattributed row in the
+     * household, which is precisely the wrong direction to be wrong in.
+     *
+     * <p>⚠️ This answers EDIT only -- see {@link #mayDeleteSharedResource} for deletion, which is
+     * a deliberately separate question: an exercise or tag being renamable by its creator does not
+     * by itself say who may remove it.
+     */
+    public boolean mayEditSharedResource(Long createdByUserId) {
+        if (has(Permission.EDIT_ANY_SHARED_RESOURCE)) {
+            return true;
+        }
+        return has(Permission.EDIT_OWN_SHARED_RESOURCE)
+                && userId != null
+                && createdByUserId != null
+                && createdByUserId.equals(userId);
+    }
+
+    /**
+     * Whether this login may delete a shared account resource -- an exercise or a tag -- given who
+     * created it.
+     *
+     * <p>Deliberately the ownership half only, mirroring {@link #mayEditSharedResource}'s shape:
+     * whether the row is additionally IN USE (a tag applied to somebody else's exercise, an
+     * exercise somebody else has logged against) is a separate, per-entity-type question that only
+     * the caller's own repository can answer, so the caller checks it itself -- exactly as {@code
+     * TagService.rename} already does for edits. See {@code TagService.delete}.
+     *
+     * <p>{@code DELETE_SHARED_RESOURCE} means "delete ANY", unconditionally, and stays exactly as
+     * usage-unaware as it always has -- the owner's pre-existing power, and the ONLY lever that
+     * exists at all for an exercise, which has no member-facing delete. {@code
+     * DELETE_OWN_SHARED_RESOURCE} is the narrower grant a MEMBER holds: theirs to remove, but only
+     * once nobody else depends on it.
+     *
+     * <p>A null creator answers FALSE for a member, same polarity and same reasoning as {@link
+     * #mayEditSharedResource}: an unattributed row is not anyone's to claim by omission.
+     */
+    public boolean mayDeleteSharedResource(Long createdByUserId) {
+        if (has(Permission.DELETE_SHARED_RESOURCE)) {
+            return true;
+        }
+        return has(Permission.DELETE_OWN_SHARED_RESOURCE)
+                && userId != null
+                && createdByUserId != null
+                && createdByUserId.equals(userId);
     }
 
     /**
@@ -68,6 +177,8 @@ public record AccountAccess(
      * are already exercised in production before a MEMBER can exist.
      */
     public static AccountAccess ownerOf(Long userId, Long accountId) {
-        return new AccountAccess(userId, accountId, null, AccountRole.OWNER, null, true);
+        // accountIsPro true: an OWNER's status() ignores it entirely, so the value is arbitrary --
+        // but true is the one that cannot mislead a reader into thinking owners can be paused.
+        return new AccountAccess(userId, accountId, null, AccountRole.OWNER, null, true, true);
     }
 }

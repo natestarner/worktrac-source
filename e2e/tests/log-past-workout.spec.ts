@@ -7,7 +7,7 @@ import { pickExercise } from './support/exercises';
 // past session" banner, then Done back to History and confirm it landed correctly.
 test.describe('Log a past workout', () => {
   test('create a retroactive session, edit its sets and date, and see it in History', async ({ page, request }) => {
-    // Pro, because the retroactive date below is months back -- outside the Free tier's 90-day
+    // Plus, because the retroactive date below is months back -- outside the Free tier's 90-day
     // window, which would correctly hide the session this spec then asserts is in History. The
     // round trip is what is being tested, not the window.
     //
@@ -17,7 +17,7 @@ test.describe('Log a past workout', () => {
     // explains itself afterwards. So this line is a deliberate choice of subject, not a
     // workaround -- keep it, or this spec starts testing the window instead of the round trip.
     const email = await registerHousehold(page, request, 'Jamie');
-    await setBillingPlan(request, email, 'PRO');
+    await setBillingPlan(request, email, 'PLUS');
     await page.reload();
 
     await page.getByRole('link', { name: 'History' }).click();

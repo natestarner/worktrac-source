@@ -21,6 +21,15 @@ import org.springframework.stereotype.Component;
 public class QuotaProperties {
 
     // A household is a family, not an organisation. Five is generous; twenty is absurd.
+    //
+    // ⚠️ AND TWENTY BLOCKS A TEAM OUTRIGHT. A coach with 30 athletes cannot get past this, so it is
+    // a hard ceiling on the Team tier rather than a safety margin. Deliberately NOT raised here:
+    // the number is only half the question, and the other half -- whether a 30-person roster is a
+    // "household" at all, or a different entity with its own billing, its own visibility rules and
+    // its own invite flow -- is a product decision nobody has made yet. Raising it quietly would
+    // ship the answer "a team is just a big family" by accident, and every seam built so far
+    // (members_see_everyone, the permission map, AccountRole) exists precisely so that question can
+    // be answered deliberately later.
     private int peoplePerAccount = 20;
 
     // Own exercises only -- the preloaded global catalog does not count against anyone.

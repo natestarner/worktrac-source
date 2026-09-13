@@ -3,6 +3,8 @@ import SectionLabel from '../shared/SectionLabel';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
+import { useAccountAccess } from '../../hooks/useAccountAccess';
+import { listLogins } from '../../api/logins';
 import { useUI } from '../../context/UIContext';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import {
@@ -19,7 +21,7 @@ import HuddleMark from '../shared/HuddleMark';
 import LegalLinks from '../shared/LegalLinks';
 import PlanChooser from './PlanChooser';
 import EmbeddedCheckout from './EmbeddedCheckout';
-import ProCelebration from './ProCelebration';
+import PlusCelebration from './PlusCelebration';
 import { PRO_BENEFITS } from './planCopy';
 
 // The household's plan, and where an upgrade happens.
@@ -27,7 +29,7 @@ import { PRO_BENEFITS } from './planCopy';
 // Reads the plan from TWO places on purpose, and they answer different questions:
 //   - `account.plan` (AuthContext, carried in the auth snapshot) is the DERIVED entitlement. It is
 //     available on a cold offline boot with no network, so this screen always knows whether the
-//     household is Pro.
+//     household is Plus.
 //   - the `subscription` query carries the raw Stripe status, which is what decides the WORDING --
 //     "renews" vs "ends" vs "we could not take your payment". It is allowed to be absent; the
 //     screen degrades to the entitlement alone rather than blanking.
@@ -49,6 +51,28 @@ export default function BillingTab() {
   // mechanism table exists to prevent.
   const { pending, run } = useGatedMutation();
 
+  const { isOwner } = useAccountAccess();
+
+  // Who would lose their sign-in if this household went back to Free -- the numbers behind the
+  // notice above "Manage billing". `enabled` is filled in below, once isPlus is known.
+  const loginsQuery = useQuery({
+    queryKey: queryKeys.accountLogins(),
+    queryFn: listLogins,
+    // Owner-only, and only while Plus. /api/account/logins requires MANAGE_LOGINS, so asking as a
+    // member is a guaranteed 403; and a household that is not Plus has no working member logins to
+    // warn about. Not offering a request the app knows will be refused is the same rule as not
+    // offering a control that can only fail.
+    enabled: isOwner && account?.plan === 'PLUS',
+    staleTime: 60_000,
+  });
+
+  // ACTIVE only. An outstanding invitation has nobody signing in yet, so it has nothing to pause;
+  // and isSelf excludes the owner's own login, which a downgrade never touches.
+  const pausableLogins = (loginsQuery.data || []).filter(
+    (row) => row.status === 'ACTIVE' && !row.isSelf,
+  );
+
+
   // NOTE: leaving this screen is NOT what releases the deferral -- AppShell does that, keyed on the
   // route. An unmount cleanup here was the obvious implementation and it is wrong: StrictMode
   // double-invokes effects (mount -> cleanup -> mount), so the cleanup fired immediately while the
@@ -57,7 +81,7 @@ export default function BillingTab() {
   // events" failure, which is this codebase's usual signature for an unexpected overlay.
   //
   // What DOES belong here is the release after a successful payment (below) -- specifically once
-  // ProCelebration is dismissed, not the instant the reconcile resolves. The tour comes after the
+  // PlusCelebration is dismissed, not the instant the reconcile resolves. The tour comes after the
   // money decision AND after the celebration of it; releasing any earlier would let the welcome
   // modal stack a second overlay on top of a celebration nobody asked to see behind it yet.
   const releaseRef = useRef(releaseOnboarding);
@@ -73,7 +97,7 @@ export default function BillingTab() {
   // The entitlement answer, in preference order: the snapshot (always present, works offline),
   // then the query. Never `false` merely because a request has not come back yet -- that would be
   // the "unreachable server downgrades you" failure the contract forbids.
-  const isPro = plan === 'PRO' || subscription?.pro === true;
+  const isPlus = plan === 'PLUS' || subscription?.pro === true;
 
   // Stripe returns the browser to /app/billing?checkout=cs_... The backend reads that session
   // directly and applies it, so the upgrade is visible immediately rather than waiting on a
@@ -180,8 +204,13 @@ export default function BillingTab() {
             Back to plans
           </Button>
         </>
-      ) : isPro ? (
-        <ProSummary subscription={subscription} pending={pending} onManage={handleManageBilling} />
+      ) : isPlus ? (
+        <PlusSummary
+          subscription={subscription}
+          pending={pending}
+          onManage={handleManageBilling}
+          pausableLogins={pausableLogins}
+        />
       ) : (
         <FreeSummary
           interval={interval}
@@ -192,12 +221,12 @@ export default function BillingTab() {
         />
       )}
 
-      {showCelebration && <ProCelebration onDismiss={handleDismissCelebration} />}
+      {showCelebration && <PlusCelebration onDismiss={handleDismissCelebration} />}
     </div>
   );
 }
 
-function ProSummary({ subscription, pending, onManage }) {
+function PlusSummary({ subscription, pending, onManage, pausableLogins = [] }) {
   const cancelling = subscription?.cancelAtPeriodEnd === true;
   const periodEnd = subscription?.currentPeriodEnd;
   const comped = subscription?.comped === true;
@@ -207,31 +236,53 @@ function ProSummary({ subscription, pending, onManage }) {
     <>
       <SectionLabel>Your plan</SectionLabel>
       <div style={cardStyle}>
-        {/* The mark, not the wordmark: "Huddle Pro" is already spelled out beside it, and the
+        {/* The mark, not the wordmark: "Huddle Plus" is already spelled out beside it, and the
             horizontal lockup would repeat the word. aria-hidden inside HuddleMark, so a screen
             reader hears the heading once rather than twice. */}
         <div style={planTitleRowStyle}>
           <HuddleMark size={40} />
-          <div style={planHeadingStyle}>Huddle Pro</div>
+          <div style={planHeadingStyle}>Huddle Plus</div>
         </div>
         <p style={mutedLineStyle}>
           {comped
-            ? 'Your household has Pro on the house, with our thanks for being here early.'
+            ? 'Your household has Plus on the house, with our thanks for being here early.'
             : renewalLine(cancelling, periodEnd)}
         </p>
         {/* Access continues through Stripe's retry window, so this is a nudge rather than a
-            lockout -- see SubscriptionService.isPro for why cutting access mid-dunning is wrong. */}
+            lockout -- see SubscriptionService.isPlus for why cutting access mid-dunning is wrong. */}
         {pastDue && (
           <p style={warningLineStyle}>
-            We couldn&rsquo;t take your last payment. Update your card to keep Pro.
+            We couldn&rsquo;t take your last payment. Update your card to keep Plus.
           </p>
         )}
       </div>
 
-      <SectionLabel>What Pro includes</SectionLabel>
+      <SectionLabel>What Plus includes</SectionLabel>
       <div style={cardStyle}>
         <BenefitList />
       </div>
+
+      {/* ⚠️ Said HERE, and here is the only place it can be said.
+          Cancelling happens in Stripe's hosted portal, which we do not control and cannot add a
+          confirmation step to -- so "Manage billing" is the last screen of ours an owner sees
+          before they can downgrade. An owner who does not know that other people's logins stop
+          working will find out from those people.
+
+          Counted, not generic: "2 logins" is actionable where "any member logins" is not, and the
+          two names make it concrete. Rendered only when there is somebody to affect, so a
+          single-login household never sees a warning about a thing it does not use. */}
+      {pausableLogins.length > 0 && (
+        <div style={pauseNoticeStyle}>
+          <strong>
+            {pausableLogins.length === 1
+              ? '1 personal login will stop working'
+              : `${pausableLogins.length} personal logins will stop working`}
+          </strong>{' '}
+          if this household goes back to Free &mdash; {formatNames(pausableLogins)} would no longer
+          be able to sign in on their own device. Nothing is deleted: their workouts stay, you keep
+          seeing everything, and their logins start working again the moment you return to Plus.
+        </div>
+      )}
 
       {!comped && (
         <OfflineDisabledWrap message="Managing your plan needs a connection.">
@@ -249,7 +300,7 @@ function ProSummary({ subscription, pending, onManage }) {
 function renewalLine(cancelling, periodEnd) {
   if (!periodEnd) return 'Everything in Huddle, with no limits.';
   return cancelling
-    ? `Pro until ${formatDate(periodEnd)}: you keep everything until then.`
+    ? `Plus until ${formatDate(periodEnd)}: you keep everything until then.`
     : `Renews ${formatDate(periodEnd)}.`;
 }
 
@@ -264,16 +315,16 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
         </p>
       </div>
 
-      <SectionLabel>Upgrade to Pro</SectionLabel>
+      <SectionLabel>Upgrade to Plus</SectionLabel>
       <div style={cardStyle}>
         <PlanChooser value={interval} onChange={onIntervalChange} />
         <BenefitList />
         {/* The one variant="primary" on this screen. The header's own control is a quiet outlined
-            badge labelled "Go Pro" precisely so it does not compete with this, and so the two
+            badge labelled "Go Plus" precisely so it does not compete with this, and so the two
             never share an accessible name. */}
         <OfflineDisabledWrap message="Upgrading needs a connection.">
           <Button variant="primary" size="lg" fullWidth onClick={onUpgrade} disabled={pending}>
-            Upgrade to Pro
+            Upgrade to Plus
           </Button>
         </OfflineDisabledWrap>
         <p style={finePrintStyle}>
@@ -281,7 +332,7 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
         </p>
       </div>
 
-      {/* Equal-weight, not fine print. Someone who arrived from marketing's "Go Pro" was routed
+      {/* Equal-weight, not fine print. Someone who arrived from marketing's "Go Plus" was routed
           straight here, and Free is permanent -- deferring costs them nothing. */}
       <Button variant="ghost" fullWidth onClick={onStartFree}>
         Start with Free, decide later
@@ -397,4 +448,22 @@ const finePrintStyle = {
   color: 'var(--color-muted)',
   margin: 'var(--space-3) 0 0 0',
   textAlign: 'center',
+};
+
+// "Sam", "Sam and Alex", "Sam, Alex and Robin" -- the shapes a household of 2-5 actually produces.
+function formatNames(rows) {
+  const names = rows.map((row) => row.personName);
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+const pauseNoticeStyle = {
+  margin: '0 0 var(--space-4)',
+  padding: 'var(--space-4)',
+  borderRadius: 'var(--radius-md)',
+  border: '1px solid var(--color-border)',
+  background: 'var(--color-surface)',
+  fontSize: 14,
+  lineHeight: 1.6,
+  color: 'var(--color-muted)',
 };

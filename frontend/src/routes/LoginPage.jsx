@@ -2,17 +2,34 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/shared/Spinner';
+import HouseholdPicker from '../components/auth/HouseholdPicker';
+import {
+  authCardStyle,
+  authPageStyle,
+  errorBannerStyle,
+  fieldLabelStyle,
+  successBannerStyle,
+} from '../components/auth/authStyles';
 import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
 import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, chooseHousehold } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // Set only when this credential belongs to two or more households. Holds the five-minute
+  // selection token.
+  //
+  // ⚠️ COMPONENT STATE, deliberately -- not a route, not router state, not storage. A selection
+  // token is a credential; router state survives in history and storage survives a reload, and
+  // this one should exist for exactly as long as the picker is on screen. A /choose-household
+  // route would also be meaningless when reached without it. See api/client.js's bearerOverride
+  // for the same argument one layer down.
+  const [choice, setChoice] = useState(null);
   const successMessage = location.state?.message;
 
   async function handleSubmit(e) {
@@ -20,7 +37,13 @@ export default function LoginPage() {
     setError('');
     setSubmitting(true);
     try {
-      await login(email, password);
+      const needsChoice = await login(email, password);
+      if (needsChoice) {
+        // Nothing has been signed in and nothing torn down -- whatever session this device already
+        // had is still intact, so abandoning the picker costs nothing.
+        setChoice(needsChoice);
+        return;
+      }
       navigate('/app/log');
     } catch (err) {
       setError(err.message || 'Could not log in');
@@ -29,29 +52,37 @@ export default function LoginPage() {
     }
   }
 
+  async function handleChoose(accountId) {
+    setError('');
+    setSubmitting(true);
+    try {
+      await chooseHousehold(accountId, choice.selectionToken);
+      navigate('/app/log');
+    } catch (err) {
+      // The overwhelmingly likely failure is an expired selection token -- five minutes is short
+      // on purpose. Say what to do rather than what went wrong.
+      setError(err.message || 'That took too long — sign in again to pick a household.');
+      setChoice(null);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (choice) {
+    return (
+      <HouseholdPicker
+        households={choice.households}
+        onChoose={handleChoose}
+        onCancel={() => { setChoice(null); setError(''); }}
+        submitting={submitting}
+        error={error}
+      />
+    );
+  }
+
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--color-bg)',
-      }}
-    >
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-xl)',
-          padding: 'var(--space-10) var(--space-8)',
-          width: 560,
-          maxWidth: '92vw',
-          textAlign: 'center',
-          boxShadow: 'var(--shadow-2), var(--elevation-hairline)',
-        }}
-      >
+    <main style={authPageStyle}>
+      <form onSubmit={handleSubmit} style={authCardStyle}>
         <picture>
           <source srcSet={logoDark} media="(prefers-color-scheme: dark)" />
           <img
@@ -72,8 +103,6 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Was rendering on --color-pr-bg -- the personal-record celebration peach. A
-            failure and an achievement must never share a colour. */}
         {error && (
           <div role="alert" style={errorBannerStyle}>
             {error}
@@ -142,48 +171,3 @@ export default function LoginPage() {
     </main>
   );
 }
-
-// Shared by the other four auth pages. inputStyle is kept as a thin wrapper over the
-// .input class rather than deleted, because those pages compose it with per-field
-// overrides; the 16px font size lives in the class and must stay there or iOS Safari
-// zooms the viewport on focus.
-export const inputStyle = {
-  marginBottom: 'var(--space-3)',
-};
-
-export const primaryButtonStyle = {
-  marginTop: 'var(--space-2)',
-};
-
-export const fieldLabelStyle = {
-  display: 'block',
-  marginBottom: 'var(--space-1)',
-  fontSize: 'var(--text-xs)',
-  fontWeight: 'var(--weight-semibold)',
-  color: 'var(--color-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: 'var(--tracking-label)',
-};
-
-const bannerBase = {
-  borderRadius: 'var(--radius-md)',
-  padding: 'var(--space-3) var(--space-4)',
-  fontSize: 'var(--text-sm)',
-  marginBottom: 'var(--space-4)',
-  textAlign: 'left',
-  border: '1px solid transparent',
-};
-
-export const successBannerStyle = {
-  ...bannerBase,
-  background: 'var(--color-success-bg)',
-  borderColor: 'var(--color-success)',
-  color: 'var(--color-text)',
-};
-
-export const errorBannerStyle = {
-  ...bannerBase,
-  background: 'var(--color-danger-bg)',
-  borderColor: 'var(--color-danger-border)',
-  color: 'var(--color-danger)',
-};

@@ -66,7 +66,7 @@ describe('PastSessionModal and the Free-tier window', () => {
     });
 
     expect(screen.getByText(WARNING)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'See Pro' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'See Plus' })).toBeInTheDocument();
   });
 
   // ⚠️ WARN, NEVER BLOCK. The workout genuinely is saved and comes back on upgrade; a `min` on the
@@ -83,8 +83,8 @@ describe('PastSessionModal and the Free-tier window', () => {
     expect(dateInput).not.toHaveAttribute('min');
   });
 
-  it('says nothing to a Pro household, which has no window at all', () => {
-    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }], account: { plan: 'PRO' } });
+  it('says nothing to a Plus household, which has no window at all', () => {
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }], account: { plan: 'PLUS' } });
     useHistoryWindow.mockReturnValue({
       historyWindow: { windowStart: null, hiddenSessions: 0, earliestHiddenAt: null },
     });

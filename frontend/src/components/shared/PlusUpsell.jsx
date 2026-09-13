@@ -17,19 +17,19 @@ import { Link } from 'react-router-dom';
 // reach the 44px touch target; a control nested in the paragraph cannot without wrecking the line.
 // It is deliberately NOT a second upgrade path: keep it to explanation, or this stops being one way
 // to ask and becomes two.
-export default function ProUpsell({ plan, children, action }) {
+export default function PlusUpsell({ plan, children, action }) {
   if (plan !== 'FREE') return null;
 
   return (
     <div style={wrapStyle}>
       <p style={textStyle}>{children}</p>
       {action}
-      {/* "See Pro" -- deliberately not "Upgrade to Pro" (the billing screen's primary button) or
-          "Go Pro" (the header badge). Playwright matches accessible names as a case-insensitive
+      {/* "See Plus" -- deliberately not "Upgrade to Plus" (the billing screen's primary button) or
+          "Go Plus" (the header badge). Playwright matches accessible names as a case-insensitive
           substring, so three controls that can share a screen need three mutually non-containing
           names. See .claude/rules/frontend-core.md. */}
       <Link to="/app/billing" className="pressable" style={linkStyle}>
-        See Pro
+        See Plus
       </Link>
     </div>
   );

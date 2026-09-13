@@ -43,6 +43,13 @@ describe('ProfileTab', () => {
     expect(screen.getAllByText('Nate').length).toBeGreaterThan(0);
   });
 
+  it('shows the role as Account owner', () => {
+    render(<ProfileTab />);
+
+    expect(screen.getByText('Role')).toBeInTheDocument();
+    expect(screen.getByText('Account owner')).toBeInTheDocument();
+  });
+
   it('lists everyone on the account with a PRIMARY badge on the primary person', () => {
     render(<ProfileTab />);
 
@@ -126,6 +133,13 @@ describe('ProfileTab', () => {
       expect(screen.queryByText('Account holder')).not.toBeInTheDocument();
       expect(screen.getByText('Samuel')).toBeInTheDocument();
       expect(screen.getByText('sam@example.com')).toBeInTheDocument();
+    });
+
+    it('shows the role as Member', () => {
+      render(<ProfileTab />);
+
+      expect(screen.getByText('Role')).toBeInTheDocument();
+      expect(screen.getByText('Member')).toBeInTheDocument();
     });
 
     it('hides the household roster and every control on it', () => {

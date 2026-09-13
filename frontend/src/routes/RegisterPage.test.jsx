@@ -65,15 +65,15 @@ describe('RegisterPage validation', () => {
       }),
     );
     expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
-      state: { email: 'alex@example.com', wantsPro: false },
+      state: { email: 'alex@example.com', wantsPlus: false },
     });
   });
 
-  // marketing/index.html's "Go Pro" button links to /register?plan=pro. The parameter is a hint
+  // marketing/index.html's "Go Plus" button links to /register?plan=plus. The parameter is a hint
   // about where to land after confirming an email -- it grants nothing, so anything other than the
   // exact value is ignored rather than treated as intent.
-  it('carries ?plan=pro through to confirm-email so the household lands on billing', async () => {
-    renderPage('/register?plan=pro');
+  it('carries ?plan=plus through to confirm-email so the household lands on billing', async () => {
+    renderPage('/register?plan=plus');
 
     fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Alex' } });
     fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'alex@example.com' } });
@@ -82,13 +82,13 @@ describe('RegisterPage validation', () => {
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
-        state: { email: 'alex@example.com', wantsPro: true },
+        state: { email: 'alex@example.com', wantsPlus: true },
       }),
     );
   });
 
-  it('ignores a plan parameter that is not exactly "pro"', async () => {
-    renderPage('/register?plan=PRO&plan=enterprise');
+  it('ignores a plan parameter that is not exactly "plus"', async () => {
+    renderPage('/register?plan=PLUS&plan=enterprise');
 
     fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Alex' } });
     fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'alex@example.com' } });
@@ -97,7 +97,7 @@ describe('RegisterPage validation', () => {
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
-        state: { email: 'alex@example.com', wantsPro: false },
+        state: { email: 'alex@example.com', wantsPlus: false },
       }),
     );
   });

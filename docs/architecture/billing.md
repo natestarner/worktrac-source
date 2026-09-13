@@ -2,9 +2,9 @@
 
 Invariants: `.claude/rules/billing.md`. This file is the reasoning behind them.
 
-## What Pro is
+## What Plus is
 
-`huddle.fitness` sells Pro at $3.99/month or $29/year. Pro buys two things:
+`huddle.fitness` sells Plus at $3.99/month or $29/year. Plus buys two things:
 
 - **History, PRs and trends with no 90-day window.**
 - **Importing past workouts.**
@@ -12,7 +12,7 @@ Invariants: `.claude/rules/billing.md`. This file is the reasoning behind them.
 Everything else is free forever, **including full data export on both plans**. That last one is a
 deliberate reversal of an earlier draft, and it removed more than it added: no self-serve
 GDPR/CCPA gap, no admin export endpoint to make a privacy-policy commitment keepable, and no second
-entitlement predicate (`canExport`) diverging from `isPro`. Export mainly appeals to people who
+entitlement predicate (`canExport`) diverging from `isPlus`. Export mainly appeals to people who
 intend to leave, and gating the exit is the weakest thing to charge for. It also resolved a latent
 contradiction — `HelpTab.jsx` already tells people to "export your data first" before deleting an
 account, advice that would have been impossible to follow for exactly the Free users most likely to
@@ -20,13 +20,13 @@ be deleting.
 
 ## Why entitlement is derived rather than stored
 
-The obvious design is an `is_pro` column. It is wrong in four separate ways, and the derivation in
-`SubscriptionService.isPro` gets all four right in one expression — see the rule file for the
+The obvious design is an `is_plus` column. It is wrong in four separate ways, and the derivation in
+`SubscriptionService.isPlus` gets all four right in one expression — see the rule file for the
 enumeration. The short version: entitlement is a function of *status and time*, and any stored copy
 of it is stale the moment the clock moves.
 
 The most consequential of the four is that **expiry happens by the clock, not by a webhook**. A
-cancelled household stops being Pro when its paid period ends whether or not Stripe's
+cancelled household stops being Plus when its paid period ends whether or not Stripe's
 `subscription.deleted` ever arrives. That removes an entire class of "the webhook was missed and
 now the data is wrong" bug — for cancellations. It does *not* cover an `ACTIVE` subscription whose
 deletion event never arrives, which is why `SubscriptionReconciliationWatchdog` exists: the same
@@ -94,15 +94,15 @@ The **read** is the harder half, and it is answered structurally rather than def
   that cannot reach the server still sees the right plan, because the answer never depended on the
   request succeeding — and `offlineCacheWarm` warms whatever the server already clamped, so a Free
   household's cached history looks identical online and off.
-- **A former Pro who downgrades keeps a fuller cache until it refetches.** That is leniency in the
-  safe direction. Do not add a cache purge on downgrade: stale-toward-Pro costs nothing, while
+- **A former Plus who downgrades keeps a fuller cache until it refetches.** That is leniency in the
+  safe direction. Do not add a cache purge on downgrade: stale-toward-Plus costs nothing, while
   stale-toward-Free locks someone out of what they paid for — the exact "degraded ⇒ blank" outcome
   the contract forbids.
 - **An unknown plan renders nothing**, rather than guessing Free. See `PlanBadge`.
 
 ## The welcome-modal deferral
 
-A household arriving from marketing's "Go Pro" is routed to `/app/billing` after confirming their
+A household arriving from marketing's "Go Plus" is routed to `/app/billing` after confirming their
 email, and the first-run welcome modal is suppressed until that decision resolves — a tour
 interrupting someone mid-purchase is the wrong order.
 
@@ -152,8 +152,8 @@ The clamp shipped correct and silent, and silent was the bug. Two shapes of it:
 
 - **The acute one.** A Free household taps "+ Log a past workout", picks a date months back, logs
   the sets, taps Done — and lands on History reading *"No workouts logged yet."* The work is saved
-  and returns with Pro, but the app has just told them it does not exist. `log-past-workout.spec.ts`
-  flagged this in a comment and worked around it by forcing the household to Pro.
+  and returns with Plus, but the app has just told them it does not exist. `log-past-workout.spec.ts`
+  flagged this in a comment and worked around it by forcing the household to Plus.
 - **The chronic one.** Any Free household past ~90 days of use. History simply ends, the PR board
   can be missing whole exercises, and the Trends range toggle offers "All" while the charts cover 90
   days. Nothing on screen said so.
@@ -166,7 +166,7 @@ all three clamped screens ask the same question and only one of them reads the h
 widening `/history` from a bare array to an object would break every persisted query cache written
 by an older build — the axis-D case in `resilience.md`.
 
-Pro short-circuits with no query at all (a null floor means nothing is filtered, so there is nothing
+Plus short-circuits with no query at all (a null floor means nothing is filtered, so there is nothing
 to count). Free runs one `COUNT` + `MIN` aggregate with an `EXISTS` sub-select — never a second
 full-history load, which `trends.md` forbids outright.
 
@@ -183,7 +183,7 @@ last 90 days" is a policy, and a reader cannot tell whether it covers two workou
 The **voice** took a second pass. The first draft read "47 earlier workouts are saved but hidden on
 Free", which is accurate and still wrong: it casts the app as the thing standing between someone and
 their own training, in a product whose central promise is that it never deletes anything. Naming the
-data as theirs — and leaving the invitation to the "See Pro" link beside it — says the same thing
+data as theirs — and leaving the invitation to the "See Plus" link beside it — says the same thing
 without the app taking the role of gatekeeper. `historyWindowCopy.test.js` pins the posture, not
 just the string.
 
@@ -193,24 +193,24 @@ A second pass settled this too, and it moved the meaning of the mark itself.
 
 It used to signal **entitlement**: `PlanBadge` gave a paying household the four circles and a Free
 household an outline star — "aspirational, not achieved". That reads fine in the header and nowhere
-else, because every other place the product is named ("Huddle Pro" on the billing screen, the
+else, because every other place the product is named ("Huddle Plus" on the billing screen, the
 celebration, an upsell's benefits list) is talking about the *product*, not about who owns it.
 
 So the mark now names the product, on both plans, and possession is carried by the **pill** instead:
-`.plan-badge--pro`'s fixed bright identity colours against `.plan-badge--upgrade`'s transparent
-outline. "Go Pro" reads as *go Huddle Pro*.
+`.plan-badge--plus`'s fixed bright identity colours against `.plan-badge--upgrade`'s transparent
+outline. "Go Plus" reads as *go Huddle Plus*.
 
-The exclusions are where the convention earns its keep. Not inside a control label — "logo Pro" only
-parses as a unit when *Pro* opens the phrase, and a four-colour glyph inside a filled primary button
-is clutter. Not in handbook prose, which says "Pro" dozens of times mid-sentence. And not on
+The exclusions are where the convention earns its keep. Not inside a control label — "logo Plus" only
+parses as a unit when *Plus* opens the phrase, and a four-colour glyph inside a filled primary button
+is clutter. Not in handbook prose, which says "Plus" dozens of times mid-sentence. And not on
 `HistoryWindowNotice`'s line, which names the person's own data rather than the product: a mark
 there is decoration, and decoration is how a quiet inline note starts reading as an advertisement.
 
-**Not an image wordmark**, either. "Pro" is nearly always a word inside a label, so an image would
+**Not an image wordmark**, either. "Plus" is nearly always a word inside a label, so an image would
 break the accessible names the non-containment rule depends on, could not inherit the app's font,
 size or colour, and would reintroduce exactly the hardcoded light/dark hairline that `HuddleMark`
 was redrawn inline to escape. The brand sheet also forbids respacing the lockup, so a genuine
-"Huddle Pro" lockup would have to come from the kit. An asset is the right answer only for surfaces
+"Huddle Plus" lockup would have to come from the kit. An asset is the right answer only for surfaces
 that cannot compose one — email, marketing, social cards. That is also why `hiddenSessions` applies exactly the same "has sets" filter
 `getHistory` does — an inflated count would be worse than no count.
 
@@ -287,5 +287,5 @@ makes exactly one mistake possible:
 > create the live-mode product, prices, portal and webhook endpoint, and only then promote.
 
 An unconfigured environment fails safe in the sense that matters — it refuses rather than granting
-Pro to everyone — but "fails safe" is not the same as "is fine", and this is the one combination
+Plus to everyone — but "fails safe" is not the same as "is fine", and this is the one combination
 worth checking by hand before pushing to `production`.

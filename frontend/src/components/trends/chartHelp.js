@@ -54,7 +54,11 @@ export function exerciseTrendHelp(metric) {
   const spec = metricSpec(metric);
   return {
     label: 'What the progress chart shows',
-    title: 'Exercise progress',
+    // Named for the metric currently selected (e.g. "Top weight"), not a generic "Exercise
+    // progress" -- the lines below are specific to whichever of the five metrics is on screen,
+    // and a fixed title read as if they applied to all of them. Mirrors weeklyMetricHelp's use of
+    // spec.label as the identifying half of its own title.
+    title: spec.label,
     lines: [
       'One dot per workout session that included this exercise, not one per day. Two sessions in the same day give you two dots.',
       spec.dotMeaning,

@@ -411,7 +411,7 @@ describe('AppShell welcome modal', () => {
     expect(screen.queryByTestId('welcome-modal')).not.toBeInTheDocument();
   });
 
-  // The billing deferral. A household that registered via marketing's "Go Pro" is routed straight
+  // The billing deferral. A household that registered via marketing's "Go Plus" is routed straight
   // to /app/billing, and the welcome modal must not interrupt them mid-purchase -- the tour comes
   // AFTER the money decision. The durable flag (lib/onboardingPending.js) is deliberately NOT
   // touched by any of this: it still says "this account has never been onboarded", which stays
@@ -564,5 +564,158 @@ describe('AppShell never renders an empty #root', () => {
     // A real navigation, like CriticalErrorFallback's -- signing back in re-reads the people list.
     expect(screen.getByRole('link', { name: 'Go to login' })).toHaveAttribute('href', '/login');
     expect(screen.getByRole('button', { name: 'Add a person' })).toBeInTheDocument();
+  });
+});
+
+// Which person the app opens on with nothing persisted for this login yet -- the state EVERY
+// member's first sign-in is in, and the state the per-login app-state re-key puts them in on a
+// device a sibling has already used.
+describe('AppShell paused member login', () => {
+  const household = [
+    { id: 7, name: 'Nate', isPrimary: true },
+    { id: 8, name: 'Sam' },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useUI.mockReturnValue(baseUI());
+    migrateLegacyRestTimerPrefs.mockResolvedValue(false);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  /**
+   * ⚠️ It replaces the app rather than disabling parts of it. A paused login is refused on EVERY
+   * route, so leaving the normal screens up renders an app whose every control fails -- and fires
+   * requests the server has already decided to refuse.
+   */
+  it('replaces the whole app with the paused screen, chrome included', () => {
+    useAuth.mockReturnValue({
+      people: household,
+      refreshPeople: vi.fn(),
+      user: { email: 'sam@example.com' },
+      membership: { accountRole: 'MEMBER', personId: 8, status: 'PAUSED_PLAN' },
+    });
+    useAppState.mockReturnValue(baseAppState({ activePersonId: 8 }));
+
+    const { container } = renderShell();
+
+    expect(screen.getByText(/Your login is paused/i)).toBeInTheDocument();
+    // No tabs, no person bar, no header -- there is nothing here they could use.
+    expect(container.querySelector('[data-chrome="tabs"]')).toBeNull();
+    expect(container.querySelector('[data-chrome="person"]')).toBeNull();
+  });
+
+  // The owner is never paused: they are the only one who can get the household back to Plus, and
+  // the server never sends PAUSED_PLAN for them anyway.
+  it('does not paint it for an owner', () => {
+    useAuth.mockReturnValue({
+      people: household,
+      refreshPeople: vi.fn(),
+      user: { email: 'nate@example.com' },
+      membership: { accountRole: 'OWNER', personId: 7, status: 'ACTIVE' },
+    });
+    useAppState.mockReturnValue(baseAppState({ activePersonId: 7 }));
+
+    const { container } = renderShell();
+
+    expect(screen.queryByText(/Your login is paused/i)).not.toBeInTheDocument();
+    expect(container.querySelector('[data-chrome="tabs"]')).not.toBeNull();
+  });
+
+  /**
+   * ⚠️ Fails OPEN, like every other read in useAccountAccess. A v1 auth snapshot carries no
+   * membership at all, and an absent status must mean NOT paused -- the alternative locks somebody
+   * out of the entire app over a field they cannot do anything about. The server refuses every
+   * request regardless, so being wrong here costs one 403 rather than a wrongly-bricked app.
+   */
+  it('does not paint it when the status is simply unknown', () => {
+    useAuth.mockReturnValue({
+      people: household,
+      refreshPeople: vi.fn(),
+      user: { email: 'nate@example.com' },
+      membership: null,
+    });
+    useAppState.mockReturnValue(baseAppState({ activePersonId: 7 }));
+
+    const { container } = renderShell();
+
+    expect(screen.queryByText(/Your login is paused/i)).not.toBeInTheDocument();
+    expect(container.querySelector('[data-chrome="tabs"]')).not.toBeNull();
+  });
+});
+
+describe('AppShell default active person', () => {
+  const household = [
+    { id: 7, name: 'Nate', isPrimary: true },
+    { id: 8, name: 'Sam' },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useUI.mockReturnValue(baseUI());
+    migrateLegacyRestTimerPrefs.mockResolvedValue(false);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("opens a member on their OWN person, not the household's primary", () => {
+    useAuth.mockReturnValue({
+      people: household,
+      refreshPeople: vi.fn(),
+      membership: { accountRole: "MEMBER", personId: 8 },
+    });
+    const appState = baseAppState({ activePersonId: null });
+    useAppState.mockReturnValue(appState);
+
+    renderShell();
+
+    // Sam, not Nate. Picking the primary here greys out every write control on arrival, so the
+    // app reads as broken before it reads as read-only.
+    expect(appState.selectPerson).toHaveBeenCalledWith(8);
+  });
+
+  it("opens an owner on the household's primary, exactly as before", () => {
+    useAuth.mockReturnValue({
+      people: household,
+      refreshPeople: vi.fn(),
+      membership: { accountRole: "OWNER", personId: 7 },
+    });
+    const appState = baseAppState({ activePersonId: null });
+    useAppState.mockReturnValue(appState);
+
+    renderShell();
+
+    expect(appState.selectPerson).toHaveBeenCalledWith(7);
+  });
+
+  // A v1 auth snapshot carries no membership at all (useAccountAccess reports null and fails
+  // open), and so does a membership never pointed at a person. Both must land on the old
+  // expression rather than on nobody.
+  it('falls back to the primary when the login is not tied to a person', () => {
+    useAuth.mockReturnValue({ people: household, refreshPeople: vi.fn(), membership: null });
+    const appState = baseAppState({ activePersonId: null });
+    useAppState.mockReturnValue(appState);
+
+    renderShell();
+
+    expect(appState.selectPerson).toHaveBeenCalledWith(7);
+  });
+
+  // A member whose own person is somehow not in the visible list (mid-refresh, or removed while
+  // they were offline) must still get a screen -- the blank-frame failure this whole gate exists
+  // to prevent.
+  it("falls back when the member's own person is not in the visible list", () => {
+    useAuth.mockReturnValue({
+      people: household,
+      refreshPeople: vi.fn(),
+      membership: { accountRole: "MEMBER", personId: 999 },
+    });
+    const appState = baseAppState({ activePersonId: null });
+    useAppState.mockReturnValue(appState);
+
+    renderShell();
+
+    expect(appState.selectPerson).toHaveBeenCalledWith(7);
   });
 });

@@ -62,7 +62,7 @@ being altered rather than themed.
 white surface and needs the outline to exist at all; on a dark surface it is high-contrast on its
 own and the brand sheet drops the outline. `--brand-mark-hairline` carries that per scheme
 (`#bdb6af` / `transparent`), which is right for every ground that follows the viewer's setting.
-`.plan-badge--pro` is the exception: its pill is a fixed light gradient in **both** schemes, so it
+`.plan-badge--plus` is the exception: its pill is a fixed light gradient in **both** schemes, so it
 passes `HuddleMark`'s `hairline` prop explicitly. Keying it to the theme there would erase the
 outline in dark mode and dissolve the circle into the pill.
 

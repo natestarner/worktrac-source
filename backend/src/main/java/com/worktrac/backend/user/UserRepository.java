@@ -70,6 +70,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
     void deleteByEmailLike(@Param("pattern") String pattern);
 
     /**
+     * The ids {@link #deleteByEmailLike} is about to remove.
+     *
+     * <p>Needed because {@code membership_invites.invited_by_user_id} is a NO ACTION FK and a
+     * member's user row can be reaped while an invitation they SENT in another household is still
+     * outstanding. That stamp has to be cleared first, and selecting before deleting is the only
+     * way to know which ids those are.
+     */
+    @Query("SELECT u.id FROM User u WHERE u.email LIKE :pattern")
+    List<Long> findIdsByEmailLike(@Param("pattern") String pattern);
+
+    /**
      * Users left with no membership at all, for deletion after a household is removed.
      *
      * <p>The other half of the split above: deleting an account must not delete a credential that

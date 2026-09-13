@@ -59,21 +59,84 @@ function personWarmTargets(personId) {
   ];
 }
 
-// Proactively fills the query cache for every person in the household, not just whichever
+/**
+ * How many people the warm fans out over, at most.
+ *
+ * ⚠️ THIS IS A REDUCTION, and the trade is deliberate. The warm used to cover EVERY person in the
+ * household unconditionally -- six queries each, so a 30-athlete team would fire 182 prefetches on
+ * every boot, every reconnect, every tab-focus and every five-minute tick. That is untenable at
+ * Team-tier scale and was never sized for it.
+ *
+ * <p>What it costs: in a household larger than this cap, a device hand-off to somebody outside the
+ * warmed set has nothing cached if connectivity drops before their screens are ever visited. That
+ * is a real regression for that person, accepted because the alternative is a prefetch storm that
+ * degrades the app for everyone.
+ *
+ * <p>Six is chosen so **nothing changes for the households this product actually has today** -- a
+ * family of 2-5 is entirely inside the cap, so their warm is byte-for-byte what it was.
+ */
+export const MAX_WARMED_PEOPLE = 6;
+
+/**
+ * Who to warm, in priority order: the viewer, then whoever is on screen, then the rest.
+ *
+ * ⚠️ <b>The plan called for "most-recently-active first" and that is NOT what this does</b>, because
+ * the data does not exist: {@code PersonDto} carries no last-active timestamp, and inventing one
+ * client-side from the query cache would be circular (the cache is what we are deciding how to
+ * fill). Rather than approximate recency badly, the two people who are certainly worth warming are
+ * named explicitly and the remainder keep the household's own order.
+ *
+ * <p>At Team-tier scale that remainder is the part worth improving, and it is the seam to do it at:
+ * add a real signal to the roster and sort here. For a family it is moot -- everyone fits.
+ */
+export function peopleToWarm(people, { selfPersonId = null, activePersonId = null } = {}) {
+  const byPriority = [];
+  const seen = new Set();
+
+  const take = (id) => {
+    if (id == null || seen.has(String(id))) return;
+    const person = people.find((p) => String(p.id) === String(id));
+    if (!person) return;
+    seen.add(String(person.id));
+    byPriority.push(person);
+  };
+
+  // The viewer first: it is the one person guaranteed to be worth having, and for a member it is
+  // the only person they can write to.
+  take(selfPersonId);
+  // Then whoever is on screen -- the same person for an owner who has not switched, in which case
+  // `seen` makes this a no-op.
+  take(activePersonId);
+
+  for (const person of people) {
+    if (byPriority.length >= MAX_WARMED_PEOPLE) break;
+    take(person.id);
+  }
+
+  return byPriority.slice(0, MAX_WARMED_PEOPLE);
+}
+
+// Proactively fills the query cache for the people most likely to be needed, not just whichever
 // person/tab is currently on screen, so a device hand-off (a sibling picks up the iPad) has
 // something to render if connectivity drops before that person's own screens are ever visited.
+// Bounded by MAX_WARMED_PEOPLE -- see peopleToWarm for what that costs and why.
 // Fire-and-forget: never awaited by any render path, never throws into the UI -- a failed warm
 // just leaves that entry unwarmed for the next trigger to retry.
 // `afterRestore` is set only by the boot warm (see useOfflineCacheWarming), which runs once the
 // persisted cache has finished hydrating. It downgrades staleTime to 0 for the
 // refreshAfterRestore keys above, so they refetch rather than being skipped as still-fresh.
-export async function warmOfflineCache(queryClient, people, { afterRestore = false } = {}) {
+export async function warmOfflineCache(
+  queryClient,
+  people,
+  { afterRestore = false, selfPersonId = null, activePersonId = null } = {},
+) {
   if (!onlineManager.isOnline() || !people || people.length === 0) return;
 
   const targets = [
     { queryKey: queryKeys.exercises(), queryFn: listExercises },
     { queryKey: queryKeys.tags(), queryFn: listTags },
-    ...people.flatMap((person) => personWarmTargets(person.id)),
+    ...peopleToWarm(people, { selfPersonId, activePersonId })
+      .flatMap((person) => personWarmTargets(person.id)),
   ];
 
   await Promise.allSettled(

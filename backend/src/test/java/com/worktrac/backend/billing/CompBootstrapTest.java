@@ -21,7 +21,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-// Founding households keep Pro free. A plain unit test -- this is list handling plus one flag, and
+// Founding households keep Plus free. A plain unit test -- this is list handling plus one flag, and
 // none of it needs a database.
 class CompBootstrapTest {
 
@@ -73,7 +73,7 @@ class CompBootstrapTest {
         bootstrap.run(null);
 
         assertThat(subscription.isComped()).isTrue();
-        assertThat(subscription.getPlan()).isEqualTo(BillingPlan.PRO);
+        assertThat(subscription.getPlan()).isEqualTo(BillingPlan.PLUS);
     }
 
     // The list is written by a human into an env var, so it will arrive with stray whitespace and

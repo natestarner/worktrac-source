@@ -27,6 +27,22 @@ public enum Permission {
     VIEW_OTHER_PEOPLE,
     WRITE_OTHER_PEOPLE,
 
+    // ── Self-scoped, but answerable from the AccountAccess alone ─────────────────────────────
+    /**
+     * Change YOUR OWN password, having proved you know the current one.
+     *
+     * Held by every role, and that is the point rather than an oversight: it is the permission
+     * that has no owner-only counterpart anywhere. An owner may invite, revoke and unlock a member
+     * — but there is deliberately no CHANGE_ANY_PASSWORD, because an owner who can set a member's
+     * password can impersonate them, which is exactly what a teenager will object to and a terrible
+     * story for a future Team tier.
+     *
+     * <p>⚠️ The member's Profile page carries the sentence "{owner} cannot see or set your
+     * password" as a standing promise. THIS is what makes it true. If a permission to set somebody
+     * else's password is ever added, that copy has to change in the same commit.
+     */
+    CHANGE_OWN_PASSWORD,
+
     // ── Household-scoped ─────────────────────────────────────────────────────────────────────
     /** Add or remove a person, and rename/configure someone who is not you. */
     MANAGE_PEOPLE,
@@ -59,5 +75,18 @@ public enum Permission {
     /** Rename/retag a row this login created (exercises.created_by_user_id). */
     EDIT_OWN_SHARED_RESOURCE,
     EDIT_ANY_SHARED_RESOURCE,
-    DELETE_SHARED_RESOURCE
+    /**
+     * Delete ANY shared resource, unconditionally -- no ownership check, no in-use check. The
+     * owner's long-standing power over the whole catalog, unaffected by {@link
+     * #DELETE_OWN_SHARED_RESOURCE} existing: exercises still have no member-facing delete at all,
+     * so for them this remains the only way one is ever removed.
+     */
+    DELETE_SHARED_RESOURCE,
+    /**
+     * Delete a row this login created, once nobody else depends on it -- see {@code
+     * AccountAccess.mayDeleteSharedResource} and {@code TagService.delete}. Tags only, today:
+     * created-by-you plus not-used-by-anyone-else is a *narrower* grant than {@link
+     * #DELETE_SHARED_RESOURCE}, not a rename of it, so exercises are untouched and stay owner-only.
+     */
+    DELETE_OWN_SHARED_RESOURCE
 }

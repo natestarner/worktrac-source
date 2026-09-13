@@ -45,9 +45,11 @@ class PermissionMappingTest {
             assertThat(AccountRole.MEMBER.permissions(true)).containsExactlyInAnyOrder(
                     Permission.VIEW_OWN_PERSON,
                     Permission.WRITE_OWN_PERSON,
+                    Permission.CHANGE_OWN_PASSWORD,
                     Permission.VIEW_OTHER_PEOPLE,
                     Permission.CREATE_SHARED_RESOURCE,
-                    Permission.EDIT_OWN_SHARED_RESOURCE);
+                    Permission.EDIT_OWN_SHARED_RESOURCE,
+                    Permission.DELETE_OWN_SHARED_RESOURCE);
         }
 
         @Test
@@ -55,8 +57,10 @@ class PermissionMappingTest {
             assertThat(AccountRole.MEMBER.permissions(false)).containsExactlyInAnyOrder(
                     Permission.VIEW_OWN_PERSON,
                     Permission.WRITE_OWN_PERSON,
+                    Permission.CHANGE_OWN_PASSWORD,
                     Permission.CREATE_SHARED_RESOURCE,
-                    Permission.EDIT_OWN_SHARED_RESOURCE);
+                    Permission.EDIT_OWN_SHARED_RESOURCE,
+                    Permission.DELETE_OWN_SHARED_RESOURCE);
         }
 
         // The single most important row in the table: "members can see everyone" is a VISIBILITY
@@ -114,7 +118,7 @@ class PermissionMappingTest {
     class Access {
 
         private AccountAccess member(boolean seesEveryone, Long selfPersonId) {
-            return new AccountAccess(7L, 3L, 11L, AccountRole.MEMBER, selfPersonId, seesEveryone);
+            return new AccountAccess(7L, 3L, 11L, AccountRole.MEMBER, selfPersonId, seesEveryone, true);
         }
 
         @Test
@@ -148,11 +152,11 @@ class PermissionMappingTest {
 
         @Test
         void refusesToBeBuiltWithoutAnIdentity() {
-            assertThatThrownBy(() -> new AccountAccess(null, 3L, 11L, AccountRole.MEMBER, 5L, true))
+            assertThatThrownBy(() -> new AccountAccess(null, 3L, 11L, AccountRole.MEMBER, 5L, true, true))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new AccountAccess(7L, null, 11L, AccountRole.MEMBER, 5L, true))
+            assertThatThrownBy(() -> new AccountAccess(7L, null, 11L, AccountRole.MEMBER, 5L, true, true))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new AccountAccess(7L, 3L, 11L, null, 5L, true))
+            assertThatThrownBy(() -> new AccountAccess(7L, 3L, 11L, null, 5L, true, true))
                     .isInstanceOf(NullPointerException.class);
         }
     }

@@ -5,6 +5,8 @@ import com.worktrac.backend.billing.Subscription;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.membership.AccountAccessService;
 import com.worktrac.backend.membership.AccountMembership;
+import com.worktrac.backend.membership.MembershipInvite;
+import com.worktrac.backend.membership.MembershipInviteRepository;
 import com.worktrac.backend.membership.AccountMembershipRepository;
 import com.worktrac.backend.membership.AccountRole;
 import com.worktrac.backend.person.Person;
@@ -30,6 +32,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.Comparator;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -57,6 +61,7 @@ public class TestSupportController {
     private final AccountAccessService accountAccessService;
     private final PersonRepository personRepository;
     private final PasswordEncoder passwordEncoder;
+    private final MembershipInviteRepository inviteRepository;
     private final JdbcTemplate jdbcTemplate;
 
     public TestSupportController(TestCodeCache testCodeCache, EmailProperties emailProperties,
@@ -64,6 +69,7 @@ public class TestSupportController {
                                   AccountAccessService accountAccessService,
                                   PersonRepository personRepository,
                                   PasswordEncoder passwordEncoder,
+                                  MembershipInviteRepository inviteRepository,
                                   JdbcTemplate jdbcTemplate,
                                   RegistrationEventRepository registrationEventRepository,
                                   UserRepository userRepository,
@@ -79,6 +85,7 @@ public class TestSupportController {
         this.accountAccessService = accountAccessService;
         this.personRepository = personRepository;
         this.passwordEncoder = passwordEncoder;
+        this.inviteRepository = inviteRepository;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -129,8 +136,8 @@ public class TestSupportController {
     // means the bean does not exist in production, and the shared-secret header is checked on top
     // of that. Every failure is a 404, so an unauthenticated caller cannot confirm the route exists.
     //
-    // It writes `comped` rather than a fake ACTIVE subscription: a comped household is Pro through
-    // the same single derivation as a paying one (SubscriptionService.isPro), so a test that passes
+    // It writes `comped` rather than a fake ACTIVE subscription: a comped household is Plus through
+    // the same single derivation as a paying one (SubscriptionService.isPlus), so a test that passes
     // here is exercising the real entitlement path, not a special case built for tests.
     @PostMapping("/api/auth/test/billing-plan")
     public ResponseEntity<Void> setBillingPlan(
@@ -153,11 +160,25 @@ public class TestSupportController {
         if (owned.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
+        Long accountId = owned.get(0).getAccount().getId();
         Subscription subscription = subscriptionService.getOrCreate(owned.get(0).getAccount());
-        boolean pro = "PRO".equalsIgnoreCase(plan.trim());
+        boolean pro = "PLUS".equalsIgnoreCase(plan.trim());
         subscription.setComped(pro);
-        subscription.setPlan(pro ? BillingPlan.PRO : BillingPlan.FREE);
+        subscription.setPlan(pro ? BillingPlan.PLUS : BillingPlan.FREE);
         subscriptionRepository.save(subscription);
+
+        // Member logins are gated on the household being Plus, and that answer is cached per login
+        // for a minute -- so without this a test or an e2e that flips the plan then immediately
+        // acts as the member is testing the STALE plan, not the one it just set.
+        //
+        // ⚠️ Called DIRECTLY rather than by publishing AccountPlanChangedEvent, which is how
+        // production does it. This handler is not @Transactional, and the listener is
+        // @TransactionalEventListener(AFTER_COMMIT) -- with no transaction active the event is
+        // silently discarded and nothing would invalidate at all. (That exact mistake is what made
+        // phase 7a's invite email never send.) The production path is
+        // SubscriptionService.applyStripeState; AccountPlanChangedListenerTest covers it.
+        accountAccessService.invalidateAccount(accountId);
+
         return ResponseEntity.noContent().build();
     }
 
@@ -204,6 +225,14 @@ public class TestSupportController {
             return ResponseEntity.notFound().build();
         }
 
+        // A person can hold at most one login (UX_account_memberships_account_person). Without
+        // this check the insert violates that index and GlobalExceptionHandler answers 503 -- an
+        // honest response to a DataAccessException, but it tells a test author nothing. The usual
+        // cause is naming the OWNER's own person, which already has a membership.
+        if (membershipRepository.findByAccount_IdAndPerson_Id(account.get().getId(), person.get().getId()).isPresent()) {
+            return ResponseEntity.status(409).build();
+        }
+
         String normalised = memberEmail.trim().toLowerCase();
         User member = userRepository.findByEmail(normalised)
                 .orElseGet(() -> userRepository.save(new User(normalised, passwordEncoder.encode(password))));
@@ -219,7 +248,7 @@ public class TestSupportController {
     // Flips accounts.members_see_everyone for one household.
     //
     // ⚠️ A DIRECT UPDATE, on purpose. Account has NO setter for this column and no endpoint sets
-    // it -- that absence is what forces Pro/Family to "everyone sees everyone" by construction
+    // it -- that absence is what forces Plus/Family to "everyone sees everyone" by construction
     // rather than by a check somebody could flip (see V66). Adding a setter for the benefit of
     // tests would hand production code the very lever the design removes, so the mutation lives
     // here instead, inside a controller whose bean does not exist outside local/lower.
@@ -241,6 +270,47 @@ public class TestSupportController {
                 membersSeeEveryone ? 1 : 0, account.get().getId());
         accountAccessService.invalidateAccount(account.get().getId());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * The outstanding invite for a household, with a token that will actually work.
+     *
+     * <p>⚠️ It does NOT return the real emailed token — nothing can. The raw value exists only on
+     * the send event, and the row holds a BCrypt hash with a per-row salt, so it cannot be read
+     * back or recomputed. This PLANTS a known token (replacing the hash) and returns it, which is
+     * the same trade {@code /pending-code} makes for registration codes.
+     *
+     * <p>What that costs is honest to state: the emailed link itself is not exercised. What it
+     * keeps is everything else — a real invite row, a real {@code matches()} check against a real
+     * BCrypt hash, a real expiry and attempt ceiling, and a real membership at the end.
+     *
+     * <p>Profile-gated and key-gated like every route here, so it exists in local/lower only.
+     */
+    @GetMapping("/api/auth/test/pending-invite")
+    public ResponseEntity<Map<String, Object>> pendingInvite(
+            @RequestParam String ownerEmail,
+            @RequestHeader(value = "X-E2E-Test-Key", required = false) String testKey) {
+        if (!keyMatches(testKey)) {
+            return ResponseEntity.notFound().build();
+        }
+        Optional<Account> account = ownedAccount(ownerEmail);
+        if (account.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        List<MembershipInvite> pending = inviteRepository.findPendingForAccount(account.get().getId());
+        if (pending.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        // The newest, so a resend in the same test reads as the one just sent.
+        MembershipInvite invite = pending.stream()
+                .max(Comparator.comparing(MembershipInvite::getId))
+                .orElseThrow();
+
+        String token = "e2e-invite-token-" + invite.getId();
+        jdbcTemplate.update("UPDATE membership_invites SET token_hash = ? WHERE id = ?",
+                passwordEncoder.encode(token), invite.getId());
+
+        return ResponseEntity.ok(Map.of("inviteId", invite.getId(), "token", token));
     }
 
     // The household a login OWNS. Every route here drives state for the account under test, and a

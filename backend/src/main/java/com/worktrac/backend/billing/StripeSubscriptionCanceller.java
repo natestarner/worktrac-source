@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 // It used to be one method called BEFORE the deletes. That was wrong in a way only the failure
 // path revealed: cancelling Stripe is an external side effect that cannot roll back, so any
 // failure in the deletion transaction left the household with their subscription cancelled and
-// their account fully intact -- they lost the Pro they were paying for and kept the data they
+// their account fully intact -- they lost the Plus they were paying for and kept the data they
 // asked to erase. Running after commit means the money is only ever stopped for an account that
 // actually went away.
 //

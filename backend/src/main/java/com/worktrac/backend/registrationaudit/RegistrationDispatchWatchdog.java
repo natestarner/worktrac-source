@@ -11,7 +11,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
-// Safety net for registration-email-dispatch failure modes nobody has specifically anticipated
+// Safety net for ASYNC EMAIL DISPATCH failure modes across every flow in WATCHED below
+// (registration, and member-login invites) --
+// originally registration-only failure modes nobody has specifically anticipated
 // (the process being killed mid-dispatch, a future bug that stops RegistrationEmailEventListener
 // from ever running) -- everything else in this package assumes one of the known code paths
 // actually runs and records an outcome; this instead periodically asks the DB directly whether a
@@ -35,10 +37,39 @@ public class RegistrationDispatchWatchdog {
     static final Duration GRACE_PERIOD = Duration.ofMinutes(2);
     static final Duration LOOKBACK_WINDOW = Duration.ofMinutes(30);
 
-    private static final Set<RegistrationEventType> RESOLVED_TYPES = Set.of(
-            RegistrationEventType.VERIFICATION_EMAIL_SENT,
-            RegistrationEventType.VERIFICATION_EMAIL_FAILED,
-            RegistrationEventType.REGISTRATION_EMAIL_DISPATCH_MISSING);
+    /**
+     * One row per async email flow this watchdog reconciles.
+     *
+     * <p>⚠️ <b>GENERALIZED RATHER THAN DUPLICATED, deliberately.</b> Adding a second watchdog for
+     * member invites would mean two schedules, two grace periods and two chances for one of them to
+     * silently stop running — and "no async mechanism may have a path where 'didn't run' and 'ran
+     * fine' look the same from outside" is not satisfied by a mechanism that only covers one flow.
+     * A new flow is a row here, not a new class.
+     *
+     * <p>Each row's {@code resolved} set includes its OWN missing-type, so a flow already flagged
+     * once is not re-flagged (and re-alerted) on every subsequent run.
+     */
+    record Watched(RegistrationEventType started,
+                   Set<RegistrationEventType> resolved,
+                   RegistrationEventType missing,
+                   String description) {
+    }
+
+    private static final List<Watched> WATCHED = List.of(
+            new Watched(
+                    RegistrationEventType.REGISTER_STARTED,
+                    Set.of(RegistrationEventType.VERIFICATION_EMAIL_SENT,
+                            RegistrationEventType.VERIFICATION_EMAIL_FAILED,
+                            RegistrationEventType.REGISTRATION_EMAIL_DISPATCH_MISSING),
+                    RegistrationEventType.REGISTRATION_EMAIL_DISPATCH_MISSING,
+                    "VERIFICATION_EMAIL_SENT/FAILED"),
+            new Watched(
+                    RegistrationEventType.MEMBER_INVITE_STARTED,
+                    Set.of(RegistrationEventType.MEMBER_INVITE_EMAIL_SENT,
+                            RegistrationEventType.MEMBER_INVITE_EMAIL_FAILED,
+                            RegistrationEventType.MEMBER_INVITE_DISPATCH_MISSING),
+                    RegistrationEventType.MEMBER_INVITE_DISPATCH_MISSING,
+                    "MEMBER_INVITE_EMAIL_SENT/FAILED"));
 
     private final RegistrationEventRepository repository;
     private final RegistrationAuditService auditService;
@@ -57,21 +88,23 @@ public class RegistrationDispatchWatchdog {
         Instant windowStart = now.minus(LOOKBACK_WINDOW);
         Instant windowEnd = now.minus(GRACE_PERIOD);
 
-        List<RegistrationEvent> started = repository.findByEventTypeAndCreatedAtBetween(
-                RegistrationEventType.REGISTER_STARTED, windowStart, windowEnd);
+        for (Watched watched : WATCHED) {
+            List<RegistrationEvent> started = repository.findByEventTypeAndCreatedAtBetween(
+                    watched.started(), windowStart, windowEnd);
 
-        for (RegistrationEvent event : started) {
-            boolean resolved = repository.existsByEmailAndEventTypeInAndCreatedAtGreaterThanEqual(
-                    event.getEmail(), RESOLVED_TYPES, event.getCreatedAt());
-            if (resolved) {
-                continue;
+            for (RegistrationEvent event : started) {
+                boolean resolved = repository.existsByEmailAndEventTypeInAndCreatedAtGreaterThanEqual(
+                        event.getEmail(), watched.resolved(), event.getCreatedAt());
+                if (resolved) {
+                    continue;
+                }
+                log.warn("{} for {} started at {} has no email outcome recorded within {}",
+                        watched.started(), event.getEmail(), event.getCreatedAt(), GRACE_PERIOD);
+                auditService.record(event.getEmail(), watched.missing(),
+                        "No " + watched.description() + " recorded within " + GRACE_PERIOD.toMinutes()
+                                + " minutes of " + watched.started() + " at " + event.getCreatedAt(),
+                        null);
             }
-            log.warn("Registration for {} started at {} has no verification-email outcome recorded within {}",
-                    event.getEmail(), event.getCreatedAt(), GRACE_PERIOD);
-            auditService.record(event.getEmail(), RegistrationEventType.REGISTRATION_EMAIL_DISPATCH_MISSING,
-                    "No VERIFICATION_EMAIL_SENT/FAILED recorded within " + GRACE_PERIOD.toMinutes()
-                            + " minutes of REGISTER_STARTED at " + event.getCreatedAt(),
-                    null);
         }
     }
 }

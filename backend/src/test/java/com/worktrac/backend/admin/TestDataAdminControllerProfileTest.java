@@ -73,6 +73,8 @@ class TestDataAdminControllerProfileTest {
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.csvimport.ImportBatchCleanup.class));
         context.registerBean(com.worktrac.backend.billing.SubscriptionRepository.class,
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.billing.SubscriptionRepository.class));
+        context.registerBean(com.worktrac.backend.membership.MembershipInviteRepository.class,
+                () -> org.mockito.Mockito.mock(com.worktrac.backend.membership.MembershipInviteRepository.class));
         context.registerBean(com.worktrac.backend.billing.BillingEventRepository.class,
                 () -> org.mockito.Mockito.mock(com.worktrac.backend.billing.BillingEventRepository.class));
         context.registerBean(com.worktrac.backend.membership.AccountMembershipRepository.class,

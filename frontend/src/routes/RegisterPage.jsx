@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { errorBannerStyle, inputStyle, primaryButtonStyle } from './LoginPage';
+import { errorBannerStyle, inputStyle, primaryButtonStyle } from '../components/auth/authStyles';
 import Spinner from '../components/shared/Spinner';
 import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
 import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
@@ -11,13 +11,13 @@ import { FIELD_LIMITS } from '../utils/fieldLimits';
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  // marketing/index.html's "Go Pro" button links here as /register?plan=pro. Carrying that intent
+  // marketing/index.html's "Go Plus" button links here as /register?plan=plus. Carrying that intent
   // through registration is what lets a household who arrived wanting to pay land on the billing
   // screen after confirming their email, rather than on Log with no idea where to go next.
   // Anything other than the exact value is ignored -- this is a hint from a URL, not a
   // capability, and it grants nothing.
   const [searchParams] = useSearchParams();
-  const wantsPro = searchParams.get('plan') === 'pro';
+  const wantsPlus = searchParams.get('plan') === 'plus';
   const [personName, setPersonName] = useState('');
   const [accountName, setAccountName] = useState('');
   const [email, setEmail] = useState('');
@@ -61,7 +61,7 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       await register({ accountName, email: trimmedEmail, password, personName: trimmedPersonName });
-      navigate('/confirm-email', { state: { email: trimmedEmail, wantsPro } });
+      navigate('/confirm-email', { state: { email: trimmedEmail, wantsPlus } });
     } catch (err) {
       setError(err.message || 'Could not register');
     } finally {

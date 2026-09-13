@@ -30,7 +30,7 @@ const COLUMNS = [
   {
     // Both plan AND status, because they answer different questions: `plan` is the derived
     // entitlement (what this household can do), `subscriptionStatus` is Stripe's own view (why).
-    // A household showing PRO / PAST_DUE is mid-dunning and still entitled -- collapsing the two
+    // A household showing PLUS / PAST_DUE is mid-dunning and still entitled -- collapsing the two
     // would hide exactly the state worth noticing during support.
     key: 'plan',
     label: 'Plan',
@@ -41,8 +41,8 @@ const COLUMNS = [
           fontWeight: 700,
           padding: '2px 8px',
           borderRadius: 6,
-          background: row.plan === 'PRO' ? 'var(--color-pr-bg)' : 'var(--color-subtle-bg)',
-          color: row.plan === 'PRO' ? 'var(--color-pr-text)' : 'var(--color-muted)',
+          background: row.plan === 'PLUS' ? 'var(--color-pr-bg)' : 'var(--color-subtle-bg)',
+          color: row.plan === 'PLUS' ? 'var(--color-pr-text)' : 'var(--color-muted)',
         }}
         title={row.comped ? 'Comped -- no Stripe subscription behind this' : row.stripeCustomerId || ''}
       >
@@ -63,6 +63,11 @@ const COLUMNS = [
     },
   },
   { key: 'peopleCount', label: 'People' },
+  // A raw count, not a yes/no. Does this household use member logins is the question, but a
+  // household of 5 people with 1 login and one with 4 are different support conversations, and a
+  // flag flattens them. 1 is the ordinary case -- the owner's own -- so anything above it is the
+  // signal. Read-only, like everything else in this portal.
+  { key: 'loginCount', label: 'Logins' },
   { key: 'defaultUnit', label: 'Unit' },
   { key: 'sessionCount', label: 'Sessions' },
   { key: 'setCount', label: 'Sets' },

@@ -91,7 +91,12 @@ app:
     global-email-sends-per-hour: ${APP_RATE_LIMIT_GLOBAL_EMAIL_SENDS_PER_HOUR:30}
     # Login (LoginRateLimiter). /api/auth/login had no throttle at all before this -- see
     # RateLimitProperties for why these are looser than the contact limits.
-    login-per-ip-per-hour: ${APP_RATE_LIMIT_LOGIN_PER_IP_PER_HOUR:60}
+    # Narrowest bucket: attempts against ONE address, from anywhere. Consumed for every
+    # submitted email whether or not an account exists -- see AuthService.checkLoginAllowed.
+    # Must stay ABOVE AuthService.MAX_FAILED_LOGINS (10), or the account lockout empties
+    # this bucket too and "reset your password to get back in right away" stops being true.
+    login-per-email-per-hour: ${APP_RATE_LIMIT_LOGIN_PER_EMAIL_PER_HOUR:20}
+    login-per-ip-per-hour: ${APP_RATE_LIMIT_LOGIN_PER_IP_PER_HOUR:300}
     login-global-per-hour: ${APP_RATE_LIMIT_LOGIN_GLOBAL_PER_HOUR:2000}
     # Contact Us form (ContactRateLimiter). Tighter than the registration limits above because
     # that endpoint is authenticated -- see RateLimitProperties for the sizing reasoning.
@@ -117,7 +122,7 @@ app:
     # deploy repo's Container App env vars, never hardcoded here.
     emails: ${ADMIN_EMAILS:}
   billing:
-    # Founding households that keep Pro free, by email. Deliberately an env var rather than a
+    # Founding households that keep Plus free, by email. Deliberately an env var rather than a
     # Flyway migration: these are other people's personal addresses and have no business in git
     # history, and comping someone later should be a config change rather than a new migration.
     # Set from a deploy SECRET, not a plaintext workflow value. Empty by default -- an environment
