@@ -52,7 +52,7 @@ public class AccountAccessService {
      * The membership row plus the household's plan.
      *
      * <p>⚠️ <b>{@code accountIsPro} is cached HERE rather than resolved per request, and that is
-     * the whole reason this record exists.</b> {@code SubscriptionService.isPro} is a database read,
+     * the whole reason this record exists.</b> {@code SubscriptionService.isPlus} is a database read,
      * and phase 8 needs the answer on EVERY request — {@code PermissionInterceptor} asks whether a
      * member is paused before it asks anything else. Calling it from {@code resolve()} would add a
      * query per request to the app's hottest path and undo exactly what this cache is for.
@@ -84,7 +84,7 @@ public class AccountAccessService {
                 key -> membershipRepository.findAccessRow(key.userId(), key.accountId())
                         // Resolved on the miss, inside the loader, so a hit stays a pure memory
                         // read. See CachedAccess.
-                        .map(r -> new CachedAccess(r, subscriptionService.isPro(r.accountId()))));
+                        .map(r -> new CachedAccess(r, subscriptionService.isPlus(r.accountId()))));
 
         return cached.filter(c -> c.row().tokenVersion() == tokenVersion)
                 .map(c -> new AccountAccess(c.row().userId(), c.row().accountId(),

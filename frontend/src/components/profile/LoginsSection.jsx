@@ -16,9 +16,9 @@ import { listLogins, inviteLogin, revokeLogin, unlockLogin } from '../../api/log
  * do under other circumstances.
  *
  * `plan` (AccountDto.plan, chrome only — billing.md) is what lets Enable-login/Resend be replaced
- * with a link to Pro on Free instead of opening an invite that `MembershipInviteService.invite`
+ * with a link to Plus on Free instead of opening an invite that `MembershipInviteService.invite`
  * can only refuse. See member-access.md's "a control the server will refuse must not be offered" —
- * this is bug #2 on that list. Fails OPEN on an unknown plan, same as `ProUpsell`/`PlanBadge`: a
+ * this is bug #2 on that list. Fails OPEN on an unknown plan, same as `PlusUpsell`/`PlanBadge`: a
  * pre-billing snapshot must not cost a paying household the real control.
  */
 export default function LoginsSection({ plan }) {
@@ -112,7 +112,11 @@ export default function LoginsSection({ plan }) {
   return (
     <>
       <SectionLabel>Logins</SectionLabel>
-      <div style={cardStyle}>
+      {/* data-testid because a managed login's name collides with PersonPillBar's own button for
+          that same person -- both legitimately render "Sam" whenever a household has 2+ people,
+          so an unscoped getByText('Sam') is ambiguous the instant both have mounted. See the
+          e2e spec's own comment for the incident this papered over locally by pure timing luck. */}
+      <div style={cardStyle} data-testid="logins-list">
         <div style={introStyle}>
           Give someone their own email and password so they can log their own workouts. They&rsquo;ll
           see everyone&rsquo;s workouts but can only change their own.
@@ -159,15 +163,15 @@ export default function LoginsSection({ plan }) {
               )}
               {row.status !== 'ACTIVE' && (
                 plan === 'FREE' ? (
-                  // Not OfflineDisabledWrap'd: like PlanBadge's "Go Pro", this is a navigation, not
+                  // Not OfflineDisabledWrap'd: like PlanBadge's "Go Plus", this is a navigation, not
                   // a write, so it works offline and the gate belongs on the checkout button it
                   // leads to. Reuses the header pill's own class rather than a new style object —
                   // frontend-core.md's "a raw literal in a component is the bug" applies to a new
                   // one-off treatment as much as to a hardcoded value. No HuddleMark here: billing.md
-                  // reserves the mark for badges naming Pro as a product, and a small text link
+                  // reserves the mark for badges naming Plus as a product, and a small text link
                   // inside a dense row is exactly the "clutter" case it calls out.
                   <Link to="/app/billing" className="pressable plan-badge plan-badge--upgrade">
-                    Unlock with Pro
+                    Unlock with Plus
                   </Link>
                 ) : (
                   <OfflineDisabledWrap message="Sending an invite needs a connection.">
@@ -221,7 +225,7 @@ function InviteModal({ person, onCancel, onSend }) {
       {/* ⚠️ Stated BEFORE the email field, deliberately -- these are the things worth knowing
           before you type somebody's address, not after. The plan calls for all three. */}
       <ul style={disclosureStyle}>
-        <li>Member logins are part of Pro. If this household goes back to Free the login stops
+        <li>Member logins are part of Plus. If this household goes back to Free the login stops
           working until you upgrade again — {person.personName}&rsquo;s workouts are never deleted
           either way.</li>
         <li>You can see their workouts and can remove their login at any time. You will never be

@@ -13,7 +13,7 @@ import {
   startSession as apiStartSession,
 } from '../api/auth';
 import { changePassword as apiChangePassword } from '../api/password';
-import { acceptInvite as apiAcceptInvite } from '../api/logins';
+import { acceptInvite as apiAcceptInvite, previewInvite as apiPreviewInvite } from '../api/logins';
 import { getAuthToken, isOfflineError, setAuthToken, setUnauthorizedHandler } from '../api/client';
 import { queryClient, resetQueryCache, clearOutboxMutations, flushOutbox } from '../lib/queryClient';
 import { clearOutbox, getOutboxScope, restoreOutbox, setOutboxScope } from '../lib/outboxPersistence';
@@ -321,16 +321,38 @@ export function AuthProvider({ children }) {
   }, [establishSession]);
 
   /**
-   * Finishes an invitation and signs the new member straight in.
+   * Finishes an invitation.
+   *
+   * ⚠️ Returns EXACTLY what `login` returns, and that is the whole design: null once signed in, or
+   * `{ households, selectionToken }` when this credential now belongs to two or more households
+   * and one has to be chosen first. Accepting an invitation as somebody who already had a
+   * household leaves them with two, so the screen they need next is the household picker they
+   * would have seen on their very next sign-in anyway -- not a toast, not a confirmation page, and
+   * not an automatic jump into a household nobody asked to be moved to.
+   *
+   * The server says which by returning `token == null`, the same nullable `login` already had to
+   * read. A brand-new address still has exactly one membership and is signed straight in.
    *
    * Goes through establishSession like every other way into a session -- the outbox re-scoping in
    * particular is not optional here: this device may well be the OWNER's, with the owner's queued
    * writes still in memory, and a member must never inherit them.
    */
   const acceptInvite = useCallback(async ({ inviteId, token, password }) => {
-    const { token: sessionToken } = await apiAcceptInvite({ inviteId, token, password });
-    await establishSession(sessionToken);
+    const response = await apiAcceptInvite({ inviteId, token, password });
+    if (!response.token) {
+      // Nothing has been torn down. The membership IS attached at this point -- that part is done
+      // and durable -- but whatever session this device already had is still intact and still
+      // usable, so abandoning the picker costs nothing but a trip through the account menu later.
+      return { households: response.households ?? [], selectionToken: response.selectionToken };
+    }
+    await establishSession(response.token);
+    return null;
   }, [establishSession]);
+
+  /** What the /join screen needs before it can ask the right question. Reads nothing, changes nothing. */
+  const previewInvite = useCallback(({ inviteId, token }) => {
+    return apiPreviewInvite({ inviteId, token });
+  }, []);
 
   /** Finishes a login that needed a household chosen. */
   const chooseHousehold = useCallback(async (accountId, selectionToken) => {
@@ -447,6 +469,7 @@ export function AuthProvider({ children }) {
         login,
         chooseHousehold,
         acceptInvite,
+        previewInvite,
         switchHousehold,
         changeOwnPassword,
         register,

@@ -219,11 +219,11 @@ describe('AppSettingsTab offline gating', () => {
     expect(updateDefaultUnit).not.toHaveBeenCalled();
   });
 
-  // Importing is a Pro feature and the backend answers 403, so a Free household must get the
+  // Importing is a Plus feature and the backend answers 403, so a Free household must get the
   // explanation INSTEAD of a control -- offering a button that cannot work is the "spinner over a
   // request that will never succeed" shape the degraded-conditions contract forbids.
   describe('the import entry point', () => {
-    it('offers Pro instead of a button on a Free household', () => {
+    it('offers Plus instead of a button on a Free household', () => {
       useAuth.mockReturnValue({
         account: { defaultUnit: 'lb', plan: 'FREE' },
         people: [],
@@ -232,20 +232,20 @@ describe('AppSettingsTab offline gating', () => {
       renderTab();
 
       expect(screen.queryByRole('button', { name: 'Import data' })).not.toBeInTheDocument();
-      expect(screen.getByText(/Importing past workouts is part of Pro/)).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'See Pro' })).toHaveAttribute('href', '/app/billing');
+      expect(screen.getByText(/Importing past workouts is part of Plus/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'See Plus' })).toHaveAttribute('href', '/app/billing');
     });
 
-    it('offers the real control on a Pro household', () => {
+    it('offers the real control on a Plus household', () => {
       useAuth.mockReturnValue({
-        account: { defaultUnit: 'lb', plan: 'PRO' },
+        account: { defaultUnit: 'lb', plan: 'PLUS' },
         people: [],
         refreshPeople: vi.fn(),
       });
       renderTab();
 
       expect(screen.getByRole('button', { name: 'Import data' })).toBeInTheDocument();
-      expect(screen.queryByText(/part of Pro/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/part of Plus/)).not.toBeInTheDocument();
     });
 
     // EXPORTING IS NOT GATED, on either plan. This is the assertion that stops someone "tidying"
@@ -287,7 +287,7 @@ describe('AppSettingsTab as a member', () => {
     useTags.mockReturnValue({ tags: [{ id: 1, name: 'Push' }], isLoading: false });
     listImports.mockResolvedValue([]);
     useAuth.mockReturnValue({
-      account: { id: 1, defaultUnit: 'lb', plan: 'PRO' },
+      account: { id: 1, defaultUnit: 'lb', plan: 'PLUS' },
       membership: { accountRole: 'MEMBER', personId: 2, membersSeeEveryone: true },
       people: [
         { id: 1, name: 'Nate', isPrimary: true, restTimerEnabled: true },

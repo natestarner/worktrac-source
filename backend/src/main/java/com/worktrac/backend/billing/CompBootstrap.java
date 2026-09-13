@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
 
-// Grants Pro, free and permanently, to the founding households listed in COMPED_EMAILS -- the
+// Grants Plus, free and permanently, to the founding households listed in COMPED_EMAILS -- the
 // people who were using Huddle before it had a paid plan. Modelled directly on AdminBootstrap,
 // which does the same job for ADMIN_EMAILS.
 //
@@ -87,15 +87,15 @@ public class CompBootstrap implements ApplicationRunner {
             return false;
         }
         subscription.setComped(true);
-        // plan is a materialized cache of the derivation, so it moves with it. isPro stays the
+        // plan is a materialized cache of the derivation, so it moves with it. isPlus stays the
         // authority and already returns true for a comped household.
-        subscription.setPlan(BillingPlan.PRO);
+        subscription.setPlan(BillingPlan.PLUS);
         subscriptionRepository.save(subscription);
         return true;
     }
 
     // A household comped in the database but no longer on the list is drift worth seeing. It is
-    // NOT corrected here -- see the class comment for why silently revoking Pro is the one thing
+    // NOT corrected here -- see the class comment for why silently revoking Plus is the one thing
     // this must never do.
     private void warnAboutRevokedComps(Set<String> compedEmails) {
         for (Subscription subscription : subscriptionRepository.findByCompedTrue()) {

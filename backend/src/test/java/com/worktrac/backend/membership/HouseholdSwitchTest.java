@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -56,6 +57,8 @@ class HouseholdSwitchTest extends AbstractIntegrationTest {
     private String password;
     private long firstAccountId;
     private long secondAccountId;
+    private String otherOwnerToken;
+    private long samPersonId;
 
     /**
      * One credential in two households. Built by registering household A, then having household B's
@@ -76,13 +79,14 @@ class HouseholdSwitchTest extends AbstractIntegrationTest {
         JsonNode second = RegistrationTestSupport
                 .registerAndConfirm(mockMvc, objectMapper, testCodeCache, otherOwnerEmail, "Nate");
         secondAccountId = second.get("account").get("id").asLong();
-        String otherOwnerToken = second.get("token").asText();
+        otherOwnerToken = second.get("token").asText();
 
-        mockMvc.perform(post("/api/people")
+        samPersonId = json(mockMvc.perform(post("/api/people")
                         .header("Authorization", "Bearer " + otherOwnerToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("name", "Sam"))))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk()))
+                .get("id").asLong();
 
         mockMvc.perform(post("/api/auth/test/member")
                         .header("X-E2E-Test-Key", "local-dev-only-e2e-test-key-do-not-use-elsewhere")
@@ -120,6 +124,135 @@ class HouseholdSwitchTest extends AbstractIntegrationTest {
         assertThat(choice.has("accountName")).isTrue();
         assertThat(choice.has("accountRole")).isTrue();
         assertThat(choice.has("plan")).isFalse();
+    }
+
+    /**
+     * ⚠️ <b>A token for a household you were REMOVED from is not a key to anywhere else.</b>
+     *
+     * <p>The membership half of the same rule as the token-version tests below, and the last place
+     * {@code /api/auth/session} disagreed with the rest of the app. Every other route refuses this
+     * token outright — {@code JwtAuthenticationFilter} resolves the membership named in its
+     * {@code accountId} claim on every request, and a revoked one resolves to nothing. This route
+     * parsed the header itself and only ever checked the household being asked FOR, so a token
+     * scoped to a household its holder had been removed from still bought a session somewhere else.
+     *
+     * <p>Not a lockout, and worth being precise about that: the 401 signs them out, and signing in
+     * again lands them on the picker with the households they DO still belong to. What changes is
+     * that a revoked token stops being the credential that gets them there.
+     */
+    @Test
+    void aTokenForAHouseholdYouWereRemovedFromCannotMintASessionElsewhere() throws Exception {
+        // Sign in to the household where this login is a MEMBER, and hold that token.
+        JsonNode picker = login(sharedEmail);
+        JsonNode inSecond = json(mockMvc.perform(post("/api/auth/session")
+                .header("Authorization", "Bearer " + picker.get("selectionToken").asText())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("accountId", secondAccountId))))
+                .andExpect(status().isOk()));
+        String memberToken = inSecond.get("token").asText();
+
+        // It genuinely works first, or the rest of this proves nothing.
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + memberToken))
+                .andExpect(status().isOk());
+
+        // The owner of that household removes the login.
+        mockMvc.perform(delete("/api/account/logins/" + samPersonId)
+                        .header("Authorization", "Bearer " + otherOwnerToken))
+                .andExpect(status().isNoContent());
+
+        // Dead everywhere else...
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + memberToken))
+                .andExpect(status().isUnauthorized());
+
+        // ...and it must not buy a session in the household they still own, either.
+        mockMvc.perform(post("/api/auth/session")
+                        .header("Authorization", "Bearer " + memberToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("accountId", firstAccountId))))
+                .andExpect(status().isUnauthorized());
+
+        // Signing in again is the way back, and it still works.
+        assertThat(login(sharedEmail).get("token").asText()).isNotBlank();
+    }
+
+    /**
+     * ⚠️ <b>A REVOKED TOKEN MUST NOT BE EXCHANGEABLE FOR A LIVE ONE.</b>
+     *
+     * <p>Changing a password bumps {@code users.token_version}, and every ordinary route refuses a
+     * token whose {@code tv} no longer matches — {@code JwtAuthenticationFilter} resolves it
+     * against the live row on every request. {@code POST /api/auth/session} is {@code permitAll}
+     * and parses the header <b>itself</b>, because a selection token deliberately cannot
+     * authenticate through that filter; and {@code JwtService.parseToken} checks the signature and
+     * the expiry but <b>not</b> {@code tv} against the database.
+     *
+     * <p>So this one route handed back a fresh 30-day token in exchange for a token every other
+     * route had already refused, which defeats the revocation entirely: changing your password
+     * because you believe you are compromised did not sign the attacker out, as long as they
+     * called this route once.
+     *
+     * <p>Asserted in three parts, and all three matter: the old token is genuinely dead elsewhere
+     * (or the rest proves nothing), this route refuses it, and no usable token comes back.
+     */
+    @Test
+    void aTokenRevokedByAPasswordChangeCannotBeSwappedForAFreshOne() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String soloEmail = "revoked-" + suffix + "@example.com";
+        JsonNode registered = RegistrationTestSupport
+                .registerAndConfirm(mockMvc, objectMapper, testCodeCache, soloEmail, "Casey");
+        String staleToken = registered.get("token").asText();
+        long accountId = registered.get("account").get("id").asLong();
+
+        mockMvc.perform(post("/api/user/password")
+                        .header("Authorization", "Bearer " + staleToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "currentPassword", password, "newPassword", "a-brand-new-password"))))
+                .andExpect(status().isOk());
+
+        // It really is dead everywhere else -- otherwise the assertion below proves nothing.
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + staleToken))
+                .andExpect(status().isUnauthorized());
+
+        // ...and this route must agree, rather than minting a replacement.
+        mockMvc.perform(post("/api/auth/session")
+                        .header("Authorization", "Bearer " + staleToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("accountId", accountId))))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * ⚠️ The same hole through the SELECTION token, which is the branch this route exists for.
+     *
+     * <p>A selection token carries {@code tv} too, and is minted at login against the value that
+     * was current then. Someone who reaches the picker, then has their password changed from
+     * another device before choosing, must not be able to finish the sign-in — the picker is a
+     * half-finished sign-in, and the credential behind it has just been revoked.
+     */
+    @Test
+    void aSelectionTokenIsRefusedOnceThePasswordChangesUnderIt() throws Exception {
+        JsonNode picker = login(sharedEmail);
+        String selectionToken = picker.get("selectionToken").asText();
+
+        // Meanwhile, on another device, the password changes.
+        JsonNode signedIn = json(mockMvc.perform(post("/api/auth/session")
+                .header("Authorization", "Bearer " + selectionToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("accountId", firstAccountId))))
+                .andExpect(status().isOk()));
+        mockMvc.perform(post("/api/user/password")
+                        .header("Authorization", "Bearer " + signedIn.get("token").asText())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "currentPassword", password, "newPassword", "a-brand-new-password"))))
+                .andExpect(status().isOk());
+
+        // The selection token was minted before that bump, so it is stale now.
+        mockMvc.perform(post("/api/auth/session")
+                        .header("Authorization", "Bearer " + selectionToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("accountId", secondAccountId))))
+                .andExpect(status().isUnauthorized());
     }
 
     // The overwhelmingly common path, and the one that must not have changed shape because a rare

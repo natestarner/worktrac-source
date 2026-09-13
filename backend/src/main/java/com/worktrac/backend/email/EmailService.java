@@ -123,6 +123,14 @@ public class EmailService {
      */
     public String sendMembershipInvite(String toEmail, String personName, String householdName,
                                         String ownerName, String joinUrl, boolean recipientHasAccount) {
+        // ⚠️ These two sentences are now LITERALLY TRUE, and they were not always. The
+        // already-have-an-account branch has said "sign in with the password you already use"
+        // since it was written, while the screen behind the link offered one password field to
+        // everybody and the server ignored whatever an existing address typed into it -- handing
+        // over a full session on the strength of the emailed link alone. The email described the
+        // right design before the code implemented it; /join and AuthService.acceptInvite now
+        // match it. Keep the two halves in step: this branch is the promise the sign-in screen
+        // keeps.
         String actionSentence = recipientHasAccount
                 ? "Open the link below and sign in with the password you already use for Huddle."
                 : "Open the link below to choose a password and finish setting up your login.";
@@ -193,7 +201,7 @@ public class EmailService {
      *
      * <p>⚠️ This is the typo detector, and the reason it is not optional. A mistyped invite gives a
      * stranger read access to the household's whole training history — visibility is forced on for
-     * Pro/Family — and nothing else in the system would ever surface it. The address has to be in
+     * Plus/Family — and nothing else in the system would ever surface it. The address has to be in
      * the message; "somebody accepted" would be useless.
      */
     public String sendInviteAccepted(String toEmail, String memberEmail, String personName,
@@ -267,6 +275,36 @@ public class EmailService {
     public String joinUrl(Long inviteId, String rawToken) {
         return appOrigin + "/join?i=" + URLEncoder.encode(String.valueOf(inviteId), StandardCharsets.UTF_8)
                 + "&t=" + URLEncoder.encode(rawToken, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * The welcome-to-Plus email, sent at most once per household (see {@code Subscription} and
+     * {@code SubscriptionService.applyStripeState}).
+     *
+     * <p>Copy is deliberately the same line {@code PlusCelebration} shows in-app the instant checkout
+     * completes ("Your whole history, every record, and import are unlocked") -- one derivation of
+     * what Plus buys, restated in two places rather than invented twice. See {@code planCopy.js}'s
+     * {@code PRO_BENEFITS} if that ever changes.
+     */
+    public String sendPlusWelcome(String toEmail) {
+        String html = simpleNoticeTemplate
+                .replace("{{LOGO_URL}}", logoUrl)
+                .replace("{{HEADING}}", escapeHtml("Welcome to Huddle Plus"))
+                .replace("{{BODY}}", escapeHtml("Your whole history, every record, and import are "
+                        + "unlocked. Every workout you've logged, and everything you log from here, "
+                        + "stays on screen, all-time records and trends open up over any range, and "
+                        + "you can bring in old data from a spreadsheet whenever you're ready.")
+                        + "<br><br>Thanks for keeping Huddle going.")
+                .replace("{{CTA_URL}}", appUrl)
+                .replace("{{CTA_LABEL}}", "Open Huddle");
+
+        return send(toEmail, "Welcome to Huddle Plus",
+                "Your whole history, every record, and import are unlocked. Every workout you've"
+                        + " logged, and everything you log from here, stays on screen, all-time"
+                        + " records and trends open up over any range, and you can bring in old data"
+                        + " from a spreadsheet whenever you're ready. Thanks for keeping Huddle going."
+                        + " Open Huddle: " + appUrl,
+                html);
     }
 
     public String sendPasswordResetSuccess(String toEmail) {

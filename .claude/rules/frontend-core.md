@@ -45,7 +45,7 @@ Full reasoning: `docs/architecture/design-system.md`.
 - **The mark's hairline follows the GROUND, not the theme.** `--brand-mark-hairline` is
   `#bdb6af` on light and `transparent` on dark, which is right for any ground that follows
   `prefers-color-scheme`. A ground that stays light in **both** schemes (today only
-  `.plan-badge--pro`) must pass `HuddleMark`'s `hairline` prop explicitly, or the cream circle
+  `.plan-badge--plus`) must pass `HuddleMark`'s `hairline` prop explicitly, or the cream circle
   loses its outline in dark mode and dissolves into the pill.
 - **The lockup SVGs in `assets/` carry a cropped `viewBox`** so the header keeps `height: 52`.
   Re-exporting them from the kit's own canvas silently shrinks the mark and grows the header

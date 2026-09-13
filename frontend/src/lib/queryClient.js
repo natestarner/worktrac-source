@@ -126,7 +126,7 @@ export const FAVORITE_MUTATION_KEY = ['favorite'];
 // docs/architecture/resilience.md, axis B.
 const RETRYABLE_4XX = new Set([408, 429]);
 
-// The server's code for "this login is paused because the household left Pro"
+// The server's code for "this login is paused because the household left Plus"
 // (PermissionInterceptor.MEMBER_LOGIN_PAUSED). A contract with the backend, so the string is
 // literal on both sides and each names the other.
 export const MEMBER_LOGIN_PAUSED = 'MEMBER_LOGIN_PAUSED';
@@ -199,7 +199,7 @@ export function isDeadWrite({ status, errorStatus, errorCode, errorTerminal }) {
   if (errorStatus === 401) return false;
   // ⚠️ A paused member login's 403 means the OPPOSITE of every other 403 here. The household went
   // back to Free, so the write is refused -- but nothing was deleted and the membership still
-  // exists, so the moment they are Pro again flushOutbox re-executes it and the work lands. Same
+  // exists, so the moment they are Plus again flushOutbox re-executes it and the work lands. Same
   // carve-out and same reasoning as 401 above: both are "not right now", not "never".
   //
   // Reported dead, a member who logged sets before the plan lapsed would be told those sets can

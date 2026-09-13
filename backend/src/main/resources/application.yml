@@ -122,7 +122,7 @@ app:
     # deploy repo's Container App env vars, never hardcoded here.
     emails: ${ADMIN_EMAILS:}
   billing:
-    # Founding households that keep Pro free, by email. Deliberately an env var rather than a
+    # Founding households that keep Plus free, by email. Deliberately an env var rather than a
     # Flyway migration: these are other people's personal addresses and have no business in git
     # history, and comping someone later should be a config change rather than a new migration.
     # Set from a deploy SECRET, not a plaintext workflow value. Empty by default -- an environment

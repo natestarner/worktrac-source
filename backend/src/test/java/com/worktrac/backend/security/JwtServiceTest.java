@@ -129,6 +129,50 @@ class JwtServiceTest {
     }
 
     /**
+     * ⚠️ <b>THE DEPLOY-DAY TRAP, pinned at last.</b>
+     *
+     * <p>{@code tv} is compared against the live {@code users} row on every request, and a
+     * never-bumped row reads <b>0</b>. Every token minted before the claim existed carries none at
+     * all, so "absent" has to parse as 0 — anything else makes every one of those tokens mismatch
+     * and signs out <b>every existing user at the moment of deploy</b>.
+     *
+     * <p>Nothing asserted this. The polarity was documented in three comments and enforced by a
+     * single {@code == null ? 0 :} that any refactor could have quietly changed, and the entire
+     * suite would still have passed: every other test mints its tokens through {@code JwtService},
+     * which always writes the claim. Only a token built WITHOUT it, by hand, can catch this — which
+     * is exactly the shape of token this defends.
+     *
+     * <p>It matters more since {@code TokenAuthenticator} made this check reachable from a second
+     * caller ({@code POST /api/auth/session}): the blast radius of getting it wrong is now every
+     * route, not just the filtered ones.
+     */
+    @Test
+    void aTokenWithNoVersionClaimReadsAsZeroAndKeepsWorking() {
+        JwtService jwtService = newJwtService();
+        SecretKey key = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
+        Instant now = Instant.now();
+
+        String legacy = Jwts.builder()
+                .subject("11")
+                .claim("accountId", 4L)
+                .claim("email", "before-tv-existed@example.com")
+                .claim("role", "USER")
+                // No "tv" claim at all -- this is what a token minted before V59 looks like.
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(30, ChronoUnit.DAYS)))
+                .signWith(key)
+                .compact();
+
+        var parsed = jwtService.parseToken(legacy);
+
+        assertTrue(parsed.isPresent(), "a pre-tv token must still parse, or every existing "
+                + "session dies at deploy");
+        // 0, so it MATCHES a never-bumped users row. Not -1, not a sentinel: the number has to be
+        // the one the database holds for somebody who has never changed their password.
+        assertEquals(0, parsed.get().tokenVersion());
+    }
+
+    /**
      * The other half of the polarity, and the reason absent-means-full is not laziness: every token
      * minted before {@code scp} existed carries none, and all of them have to keep working for
      * their full thirty days. Inverting this would sign out every existing user at deploy — the

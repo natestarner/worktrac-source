@@ -159,3 +159,49 @@ test.describe('One login, two households', () => {
     await expect(page.getByRole('menuitem', { name: 'Logout' })).toBeVisible();
   });
 });
+
+test.describe('Household picker on a narrow phone', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  // Long owner names are realistic, not contrived: the default household name is
+  // `${personName}'s Household` (RegistrationService), and paired with the role label ("you own
+  // this" / "you're a member") on the same row via justify-content: space-between, that alone was
+  // enough to overflow a phone-width button -- .btn's white-space: nowrap plus flex's default
+  // min-width: auto meant neither span could shrink or wrap, so the text painted past the button
+  // and, for the second household, past the card itself.
+  test('long household names wrap instead of bleeding past the card', async ({ page, request }) => {
+    const sharedEmail = await registerHousehold(page, request, 'Montgomery');
+    await logout(page);
+
+    const otherOwnerEmail = await registerHousehold(page, request, 'Wellington');
+    await addPerson(page, 'Sam');
+    await addMemberLogin(page, request, otherOwnerEmail, 'Sam', sharedEmail);
+    await logout(page);
+
+    await page.goto('/login');
+    await page.getByPlaceholder('Email', { exact: true }).fill(sharedEmail);
+    await page.getByPlaceholder('Password', { exact: true }).fill('password123');
+    await page.getByRole('button', { name: 'Log in' }).click();
+    await expect(page.getByRole('heading', { name: 'Choose a household' })).toBeVisible();
+
+    const card = page.locator('main > div');
+    const cardBox = await card.boundingBox();
+    expect(cardBox).not.toBeNull();
+
+    const buttons = page.getByRole('button', { name: /you own this|you.re a member/ });
+    await expect(buttons).toHaveCount(2);
+    for (const button of await buttons.all()) {
+      // scrollWidth vs clientWidth catches content a flex row refused to shrink or wrap -- the
+      // button element itself never grows past 100%; it's the overflowing spans inside it that
+      // painted outside its border, which a bounding-box check on the button alone would miss.
+      const scrollWidth = await button.evaluate((el) => el.scrollWidth);
+      const clientWidth = await button.evaluate((el) => el.clientWidth);
+      expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+
+      // And nothing the button paints may land outside the card that holds it.
+      const box = await button.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x + box!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 0.5);
+    }
+  });
+});

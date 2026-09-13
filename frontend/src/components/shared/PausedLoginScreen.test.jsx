@@ -35,7 +35,7 @@ describe('PausedLoginScreen', () => {
   it('names the owner as the person who can undo it', () => {
     render(<PausedLoginScreen />);
 
-    expect(screen.getByText(/Nate can turn Pro back on/)).toBeInTheDocument();
+    expect(screen.getByText(/Nate can turn Plus back on/)).toBeInTheDocument();
   });
 
   // ownerName is legitimately null (a household with no owner membership, or one with no person).
@@ -44,7 +44,7 @@ describe('PausedLoginScreen', () => {
     accessValue = { ownerName: null };
     render(<PausedLoginScreen />);
 
-    expect(screen.getByText(/The household owner can turn Pro back on/)).toBeInTheDocument();
+    expect(screen.getByText(/The household owner can turn Plus back on/)).toBeInTheDocument();
     expect(screen.queryByText(/null/)).not.toBeInTheDocument();
   });
 

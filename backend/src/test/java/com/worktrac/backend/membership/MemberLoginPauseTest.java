@@ -28,11 +28,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Member logins are a Pro feature, and dropping to Free PAUSES them.
+ * Member logins are a Plus feature, and dropping to Free PAUSES them.
  *
  * <p>⚠️ <b>A pause, not a punishment.</b> Nothing is deleted, no membership is revoked, and no
  * queued write is discarded. The member's person, history and PRs stay exactly where they are and
- * the owner still sees all of it; when the household is Pro again the login resumes on its own.
+ * the owner still sees all of it; when the household is Plus again the login resumes on its own.
  * Every test here is really an assertion about that distinction.
  *
  * <p>⚠️ <b>Do not reuse billing.md's line "a plan decides what a screen SHOWS, never what exists".
@@ -41,7 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * two would make one of them false.
  */
 @AutoConfigureMockMvc
-@DisplayName("a member login when the household is not Pro")
+@DisplayName("a member login when the household is not Plus")
 class MemberLoginPauseTest extends AbstractIntegrationTest {
 
     private static final String TEST_KEY = "local-dev-only-e2e-test-key-do-not-use-elsewhere";
@@ -68,7 +68,7 @@ class MemberLoginPauseTest extends AbstractIntegrationTest {
     private long memberPersonId;
 
     @BeforeEach
-    void setUpProHouseholdWithAMember() throws Exception {
+    void setUpPlusHouseholdWithAMember() throws Exception {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
         ownerEmail = "owner-" + suffix + "@example.com";
         String memberEmail = "member-" + suffix + "@example.com";
@@ -77,7 +77,7 @@ class MemberLoginPauseTest extends AbstractIntegrationTest {
                 .registerAndConfirm(mockMvc, objectMapper, testCodeCache, ownerEmail, "Nate")
                 .get("token").asText();
 
-        setPlan("PRO");
+        setPlan("PLUS");
 
         memberPersonId = json(mockMvc.perform(post("/api/people")
                 .header("Authorization", bearer(ownerToken))
@@ -202,7 +202,7 @@ class MemberLoginPauseTest extends AbstractIntegrationTest {
         /**
          * ⚠️ THE PERSON, THEIR DATA AND THEIR MEMBERSHIP ALL SURVIVE. This is what makes it a pause
          * rather than a revocation: nothing has to be re-invited, re-created or restored on the way
-         * back to Pro.
+         * back to Plus.
          */
         @Test
         void theMembershipItselfIsNotRevoked() throws Exception {
@@ -229,11 +229,11 @@ class MemberLoginPauseTest extends AbstractIntegrationTest {
          * plan the cache has already answered for.
          */
         @Test
-        void resumingProUnpausesTheLoginImmediately() throws Exception {
+        void resumingPlusUnpausesTheLoginImmediately() throws Exception {
             setPlan("FREE");
             logASet(memberToken).andExpect(status().isForbidden());
 
-            setPlan("PRO");
+            setPlan("PLUS");
 
             logASet(memberToken).andExpect(status().isOk());
             JsonNode me = json(mockMvc.perform(get("/api/auth/me").header("Authorization", bearer(memberToken))));

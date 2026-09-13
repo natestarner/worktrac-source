@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -26,23 +27,34 @@ public class ExerciseService {
     private final QuotaService quotaService;
     private final WorkoutSetRepository workoutSetRepository;
     private final AccountMembershipRepository membershipRepository;
+    private final ExerciseAttributionResolver attributionResolver;
 
     public ExerciseService(ExerciseRepository exerciseRepository, AccountRepository accountRepository,
                             QuotaService quotaService, WorkoutSetRepository workoutSetRepository,
-                            AccountMembershipRepository membershipRepository) {
+                            AccountMembershipRepository membershipRepository,
+                            ExerciseAttributionResolver attributionResolver) {
         this.exerciseRepository = exerciseRepository;
         this.accountRepository = accountRepository;
         this.quotaService = quotaService;
         this.workoutSetRepository = workoutSetRepository;
         this.membershipRepository = membershipRepository;
+        this.attributionResolver = attributionResolver;
     }
 
     // The full catalog visible to this account, used for search. Grouping/favoriting is now
     // per-person (see PersonExerciseService); this is just the searchable pool.
+    //
+    // Takes an AccountAccess rather than a bare accountId because the rows it returns now carry a
+    // per-login answer (who added this, may I rename it). Same reason CsvImportService.write takes
+    // one -- see .claude/rules/backend-core.md.
     @Transactional(readOnly = true)
-    public List<ExerciseDto> list(Long accountId) {
-        return exerciseRepository.findVisibleToAccount(accountId).stream()
-                .map(ExerciseDto::from)
+    public List<ExerciseDto> list(AccountAccess access) {
+        List<Exercise> exercises = exerciseRepository.findVisibleToAccount(access.accountId());
+        // ⚠️ Resolved ONCE, outside the mapping below. Per-row it is an N+1 across the whole
+        // catalog -- see ExerciseAttributionResolver.
+        Map<Long, ExerciseAttribution> attribution = attributionResolver.resolve(access, exercises);
+        return exercises.stream()
+                .map(exercise -> ExerciseDto.from(exercise, attribution.get(exercise.getId())))
                 .toList();
     }
 
@@ -64,7 +76,10 @@ public class ExerciseService {
         if (deduped) {
             Optional<Exercise> existing = exerciseRepository.findByClientKeyAndAccount_Id(clientKey, accountId);
             if (existing.isPresent()) {
-                return ExerciseDto.from(existing.get());
+                // Resolved, never assumed: a replayed create returns a row this caller may not
+                // have created, and the stamp was deliberately not transferred above.
+                return ExerciseDto.from(existing.get(),
+                        attributionResolver.resolveOne(access, existing.get()));
             }
         }
         // IllegalArgumentException is the app's existing route to an honest 400
@@ -96,7 +111,9 @@ public class ExerciseService {
         List<Exercise> sameNameAndMeasure =
                 exerciseRepository.findVisibleByNameAndTrackingType(accountId, name, trackingType);
         if (!sameNameAndMeasure.isEmpty()) {
-            return ExerciseDto.from(sameNameAndMeasure.get(0));
+            // Same as the idempotency branch: this row is whoever's it already was.
+            Exercise existing = sameNameAndMeasure.get(0);
+            return ExerciseDto.from(existing, attributionResolver.resolveOne(access, existing));
         }
 
         // Deliberately here, AFTER both dedup branches above. A create that resolves to an
@@ -112,7 +129,11 @@ public class ExerciseService {
         // replay a create would quietly transfer authorship, and with it who may rename it.
         Exercise exercise = new Exercise(account, name, deduped ? clientKey : null, trackingType,
                 access.userId());
-        return ExerciseDto.from(exerciseRepository.save(exercise));
+        // ⚠️ Real attribution, not a placeholder: CREATE_EXERCISE's onSettled swaps this response
+        // over the optimistic row, so a wrong answer here makes a just-created exercise render as
+        // somebody else's.
+        Exercise saved = exerciseRepository.save(exercise);
+        return ExerciseDto.from(saved, attributionResolver.resolveOne(access, saved));
     }
 
     // Editing is only for an account's own exercises. Preloaded (global) exercises are shared
@@ -170,7 +191,7 @@ public class ExerciseService {
         }
 
         exercise.setName(request.name().trim());
-        return ExerciseDto.from(exercise);
+        return ExerciseDto.from(exercise, attributionResolver.resolveOne(access, exercise));
     }
 
     // Deleting is only for an account's own exercises. Removing a preloaded exercise from your

@@ -189,7 +189,7 @@ public class AccountDeletionService {
     //
     // Cancelling at Stripe is an external side effect that cannot roll back. Done before the
     // deletes, any failure further down left the household with their subscription cancelled and
-    // their account fully intact -- they lost the Pro they were paying for and kept the data they
+    // their account fully intact -- they lost the Plus they were paying for and kept the data they
     // asked to erase, having been told the operation failed. Running it on afterCommit means it
     // only ever fires for an account that actually went away.
     //

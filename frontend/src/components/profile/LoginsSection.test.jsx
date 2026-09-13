@@ -63,7 +63,7 @@ describe('LoginsSection', () => {
 
   // Three states, not a boolean: the action differs per state, and "invited" must be
   // distinguishable from "never asked" or the owner cannot tell waiting from not-done. No `plan`
-  // prop is passed -- this also pins the fail-open default (an unknown plan behaves like Pro).
+  // prop is passed -- this also pins the fail-open default (an unknown plan behaves like Plus).
   it('offers Enable login for nobody-yet and Resend for already-invited', async () => {
     render(<LoginsSection />);
 
@@ -87,7 +87,7 @@ describe('LoginsSection', () => {
   // here is exactly the "control the server will refuse" case member-access.md forbids -- the
   // client already knows the plan and must not send the owner into a modal that can only fail.
 
-  it('offers a link to Pro instead of Enable login/Resend on Free', async () => {
+  it('offers a link to Plus instead of Enable login/Resend on Free', async () => {
     render(
       <MemoryRouter>
         <LoginsSection plan="FREE" />
@@ -96,16 +96,16 @@ describe('LoginsSection', () => {
 
     await screen.findByText('Sam');
     // Both Sam (NONE) and Alex (INVITED) would otherwise get an invite control.
-    expect(screen.getAllByRole('link', { name: 'Unlock with Pro' })).toHaveLength(2);
+    expect(screen.getAllByRole('link', { name: 'Unlock with Plus' })).toHaveLength(2);
     expect(screen.queryByRole('button', { name: /Enable login|Resend/ })).not.toBeInTheDocument();
 
-    screen.getAllByRole('link', { name: 'Unlock with Pro' }).forEach((link) => {
+    screen.getAllByRole('link', { name: 'Unlock with Plus' }).forEach((link) => {
       expect(link).toHaveAttribute('href', '/app/billing');
     });
   });
 
   // A tap here must never open the invite modal -- that dialog's own copy ("Member logins are
-  // part of Pro...") is written for a household that CAN act on it, not one the server will
+  // part of Plus...") is written for a household that CAN act on it, not one the server will
   // refuse before anything is sent.
   it('never opens the invite modal on Free', async () => {
     render(
@@ -115,7 +115,7 @@ describe('LoginsSection', () => {
     );
 
     await screen.findByText('Sam');
-    fireEvent.click(screen.getAllByRole('link', { name: 'Unlock with Pro' })[0]);
+    fireEvent.click(screen.getAllByRole('link', { name: 'Unlock with Plus' })[0]);
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(inviteLogin).not.toHaveBeenCalled();
@@ -132,7 +132,7 @@ describe('LoginsSection', () => {
     );
 
     expect(await screen.findByText('HAS LOGIN')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Unlock with Pro' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Unlock with Plus' })).not.toBeInTheDocument();
   });
 
   /**
@@ -141,12 +141,12 @@ describe('LoginsSection', () => {
    * do, and the under-13 guidance. This is the screen where somebody decides to hand a login to a
    * child, so it is the screen that has to say it.
    */
-  it('states the Pro, transparency and under-13 disclosures before asking for an address', async () => {
+  it('states the Plus, transparency and under-13 disclosures before asking for an address', async () => {
     render(<LoginsSection />);
     fireEvent.click(await screen.findByRole('button', { name: 'Enable login' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Enable login for Sam' });
-    expect(dialog).toHaveTextContent(/part of Pro/i);
+    expect(dialog).toHaveTextContent(/part of Plus/i);
     expect(dialog).toHaveTextContent(/never deleted/i);
     expect(dialog).toHaveTextContent(/never be able to see or set their password/i);
     expect(dialog).toHaveTextContent(/under 13/i);

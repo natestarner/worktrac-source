@@ -14,7 +14,7 @@ import java.time.Instant;
 //
 // Both `plan` and `status` are exposed because they answer different questions: `plan` is the
 // derived entitlement (what this household can do), `status` is Stripe's own view (why). A
-// household showing PRO/PAST_DUE is mid-dunning and still entitled -- collapsing the two would hide
+// household showing PLUS/PAST_DUE is mid-dunning and still entitled -- collapsing the two would hide
 // exactly the state worth noticing.
 public record AdminAccountDto(
         Long id,

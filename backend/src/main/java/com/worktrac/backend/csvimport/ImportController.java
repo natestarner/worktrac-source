@@ -81,16 +81,16 @@ public class ImportController {
         return ResponseEntity.ok(importUndoService.undo(currentUser.access(), personId, batchId));
     }
 
-    // Importing is a Pro feature. Note which routes DON'T call this: `list` and `undo` stay open to
-    // everyone on purpose. A household that imported while Pro and then let it lapse must still be
+    // Importing is a Plus feature. Note which routes DON'T call this: `list` and `undo` stay open to
+    // everyone on purpose. A household that imported while Plus and then let it lapse must still be
     // able to see what they brought in and take it back out -- gating the exit would strand their
     // own data behind a paywall, which is the opposite of what the Free tier promises.
     //
     // Exporting is not gated at all, on either plan, for the same reason: every household can
     // always take its complete data out. See .claude/rules/billing.md.
     private void requirePro() {
-        if (!subscriptionService.isPro(currentUser.accountId())) {
-            throw new ForbiddenException("Importing past workouts is a Pro feature.");
+        if (!subscriptionService.isPlus(currentUser.accountId())) {
+            throw new ForbiddenException("Importing past workouts is a Plus feature.");
         }
     }
 }

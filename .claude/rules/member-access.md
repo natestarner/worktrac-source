@@ -35,7 +35,7 @@ else belongs where it already is, next to the code it constrains:
 |---|---|
 | Guards, permissions, `AccountAccess`, the 404/403 asymmetry, shared-resource ownership | `backend-core.md` |
 | Invites, the enumeration oracle, the selection token, the async email pipeline | `registration-and-email.md` |
-| The Pro pause, and why "a plan decides what a screen shows" needed a second sentence | `billing.md` |
+| The Plus pause, and why "a plan decides what a screen shows" needed a second sentence | `billing.md` |
 | Outbox/app-state keying by `(account, login)`, the hand-over delete guard | `offline-internals.md` |
 | `ReadOnlyWrap` precedence, the viewer's default person, persisted-state scoping | `frontend-core.md` |
 | What the handbook promises members and owners | `user-facing-help.md` |
@@ -54,7 +54,7 @@ promises. **Anything that makes revoke destructive breaks three documents at onc
 confirm dialog's own button was renamed away from "Delete" specifically so the word could not
 imply otherwise.
 
-The same holds for the Pro pause, one step weaker: it does not even remove the membership.
+The same holds for the Plus pause, one step weaker: it does not even remove the membership.
 
 ### ⚠️ An owner may invite, resend, revoke and unlock. An owner may NEVER set a password.
 
@@ -78,7 +78,15 @@ their own password); this exists because the OWNER is the support desk.
 An owner who can set a member's password can impersonate that member. That is the whole argument,
 and it is why forgot-password (which proves control of the mailbox) is the only reset path.
 
-### ⚠️ Member logins are Pro-only, so EVERY test that mints one must set the household Pro first
+**⚠️ An invitation attaches a MEMBERSHIP. It never authenticates on its own.** The corollary of
+the sentence above, and it was violated for a while: accepting handed an address that already had
+a Huddle account a full 30-day session with no credential check, so an owner could cause a
+reset-strength magic link into somebody's whole identity to be mailed to any address they typed.
+An existing address now proves itself — its password, or a session already belonging to it — before
+anything attaches. A brand-new address is unchanged: it is *setting* a password, and the emailed
+token is the only credential it can have. Details and the pins: `registration-and-email.md`.
+
+### ⚠️ Member logins are Plus-only, so EVERY test that mints one must set the household Plus first
 
 Registration creates a **Free** subscription. A MEMBER in a Free household is `PAUSED_PLAN` and is
 refused on every route but `GET /api/auth/me` and `GET /api/billing/subscription` — correctly. So a
@@ -86,10 +94,10 @@ test that registers a household and then mints a member is testing the pause, wh
 says.
 
 - **e2e:** done centrally in `addMemberLogin` (`e2e/tests/support/auth.ts`), so a new spec cannot
-  forget. A spec driving the real invite flow instead must call `setBillingPlan(..., 'PRO')` itself
+  forget. A spec driving the real invite flow instead must call `setBillingPlan(..., 'PLUS')` itself
   — inviting is refused on Free (409).
 - **Backend:** `MembershipInviteTest`, `MemberPermissionsTest` and `ChangePasswordTest` each set
-  `PRO` in their setup. Seventeen e2e specs and twelve backend tests failed at once when the pause
+  `PLUS` in their setup. Seventeen e2e specs and twelve backend tests failed at once when the pause
   landed; every one of them was this.
 
 ### ⚠️ Revoking must never sign somebody out of their OTHER households
@@ -116,17 +124,64 @@ Three shipped bugs of exactly this shape, all caught late:
    invitation removed but the doomed round trip still there.
 3. A member's **exercise rename** succeeded on rows they created and 403'd on the rest, with
    nothing to tell them which — traded "always fails" for "unpredictable", which is worse to use.
+   **Closed by `ExerciseDto.renamable`** (below); the client no longer guesses.
+4. The same modal's **"Delete this exercise"** was offered to every member on every exercise,
+   including ones they created — `DELETE_SHARED_RESOURCE` is owner-only and unconditional, and
+   `ExerciseService.remove` consults no creator stamp, so it 403'd every time. This one needed no
+   server field at all: `isMember` alone answers it. A control can be wrong without being subtle.
+5. The same modal's **entry point** was live on somebody else's Log screen. Every write inside it
+   is per-person (`PersonExerciseController`, `personScoped`), so all of it 403'd — while the
+   favorite and session-note buttons either side of it were `ReadOnlyWrap`ped correctly. Fixed by
+   wrapping **both** routes in (the `…` button and the pinned standing-note button, which opens
+   the same modal). Note this is a *different question* from #3/#4 — see the table below.
 
 The rule: if the client can know the answer, it must not render the control; if it genuinely
-cannot (rename, which depends on who created a row behind an `{id}`), the refusal must **say why
-and what to do instead**, via `useGatedMutation`'s `showServerMessage`.
+cannot, the refusal must **say why and what to do instead**, via `useGatedMutation`'s
+`showServerMessage`.
+
+### ⚠️ Rename was the worked example of "genuinely cannot know". It is not any more.
+
+That sentence used to name exercise rename as the case the client could not decide, "because it
+depends on who created a row behind an `{id}`". The server always knew; it simply never said. It
+does now, and the two halves of the answer are handled differently **on purpose**:
+
+| Half | Nature | Where it is answered |
+|---|---|---|
+| **Authorship** — is this row mine, or am I the owner? | Static. A creator stamp set once and never transferred | `ExerciseDto.createdByYou` / `.createdByName` |
+| **In use** — has anybody ELSE logged against it since? | Dynamic; changes whenever a sibling logs a set | Folded into `ExerciseDto.renamable` |
+
+`renamable` carries **both**, so the control is never offered when it would be refused — the same
+contract `TagDto.deletable` has. One consequence has to be paid for deliberately: hiding the
+control also hides the 409's `SharedResourceMessages.inUse` sentence, which is the best copy in
+the feature because it offers a way forward. **`ConfigureExerciseModal` therefore carries that
+remedy itself** ("…or add your own exercise instead"). If you ever make `renamable` authorship-only
+again, that line has to go back to being the server's.
+
+**The server's 403/409 still stand and must not be deleted.** The client fails OPEN on an absent
+`renamable` (a DTO cached before the field existed — `resilience.md` axis D), so a stale row still
+reaches the endpoint, and the refusal is what explains it. `ExerciseAttributionResolver` mirrors
+`ExerciseService.update`'s three gates rather than sharing code with them; if the two ever drift,
+the write is refused and the person sees the server's own message, which is the safe direction.
+
+### Two ownership questions, and they take opposite treatments
+
+Both are this rule; confusing them produces the wrong fix.
+
+| Question | Example | Treatment | Why |
+|---|---|---|---|
+| **Who created this shared row?** | rename/delete an exercise | **Hide** | No member can *ever* rename somebody else's, so a greyed control "is noise that also invites 'why not?'" (`ProfileTab`) |
+| **Whose training data am I on?** | the Customize entry point | **Disable** (`ReadOnlyWrap`) | You *could* do it — by switching to your own person. That is precisely what `ReadOnlyWrap` is for |
+
+Do not extend `ReadOnlyWrap` to cover the first: it asks `canWritePerson(personId)`, which answers
+`true` for a shared catalog row, and its message ("You can only change your own workouts") would be
+a lie about one.
 
 **#2's client half:** `LoginsSection` takes `plan` (`AccountDto.plan`, chrome only — same
-fail-open-on-unknown as `ProUpsell`/`PlanBadge`) and swaps Enable-login/Resend for a `Link` to
-`/app/billing` reading **"Unlock with Pro"** whenever `plan === 'FREE'`, reusing the header pill's
+fail-open-on-unknown as `PlusUpsell`/`PlanBadge`) and swaps Enable-login/Resend for a `Link` to
+`/app/billing` reading **"Unlock with Plus"** whenever `plan === 'FREE'`, reusing the header pill's
 own `.plan-badge--upgrade` class rather than a new style. Not `OfflineDisabledWrap`ped — it is a
-navigation, not a write, same as `PlanBadge`'s "Go Pro". "Unlock with Pro" is mutually
-non-containing with the header badge's "Go Pro"/"Pro" (`frontend-core.md`), which sits in the same
+navigation, not a write, same as `PlanBadge`'s "Go Plus". "Unlock with Plus" is mutually
+non-containing with the header badge's "Go Plus"/"Plus" (`frontend-core.md`), which sits in the same
 DOM on this screen.
 
 ### The offline limit that has no fix, only honesty

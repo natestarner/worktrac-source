@@ -93,8 +93,12 @@ public class JwtService {
      * contract is "is this a usable session", and the answer for a selection token must stay a flat
      * no. A caller has to reach for this by name, which is a decision someone makes on purpose
      * rather than a boolean they pass by accident.
+     *
+     * <p>⚠️ <b>Package-private — see {@link #parseToken}.</b> This reads the CLAIMS and checks
+     * nothing that lives in the database; {@link TokenAuthenticator} is the only thing that may
+     * call it, and it adds the token-version check on the way past.
      */
-    public Optional<SelectionPrincipal> parseSelectionToken(String token) {
+    Optional<SelectionPrincipal> parseSelectionToken(String token) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(key)
@@ -114,8 +118,26 @@ public class JwtService {
         }
     }
 
-    // Empty on any invalid/expired/malformed token -- callers treat that as "not authenticated."
-    public Optional<AccountPrincipal> parseToken(String token) {
+    /**
+     * Reads a session token's CLAIMS. Empty on anything invalid, expired, malformed or restricted.
+     *
+     * <p>⚠️ <b>THIS IS HALF OF VALIDATION, AND ITS VISIBILITY IS WHAT SAYS SO.</b> It verifies the
+     * signature, the expiry, the absence of {@code scp} and the presence of {@code accountId} — all
+     * of which are answerable from the token alone. It does <b>not</b> compare {@code tv} to the
+     * live {@code users} row and does not check that the membership still exists, because it
+     * touches no database at all.
+     *
+     * <p>It was public, and its name reads as complete, so {@code AuthController} used it as if it
+     * were: {@code POST /api/auth/session} accepted password-revoked tokens and tokens for
+     * households their holder had been removed from, minting fresh 30-day sessions from both. See
+     * {@link TokenAuthenticator}, which is now the only caller — this being package-private is what
+     * makes that true by compilation rather than by convention, since every consumer outside
+     * {@code ..security} can no longer name it.
+     *
+     * <p><b>Do not widen this back to public</b>, and do not add a public wrapper that returns its
+     * result unchanged. Both re-open the same hole, and neither would fail a test.
+     */
+    Optional<AccountPrincipal> parseToken(String token) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(key)

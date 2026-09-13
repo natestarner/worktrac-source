@@ -30,7 +30,7 @@ const COLUMNS = [
   {
     // Both plan AND status, because they answer different questions: `plan` is the derived
     // entitlement (what this household can do), `subscriptionStatus` is Stripe's own view (why).
-    // A household showing PRO / PAST_DUE is mid-dunning and still entitled -- collapsing the two
+    // A household showing PLUS / PAST_DUE is mid-dunning and still entitled -- collapsing the two
     // would hide exactly the state worth noticing during support.
     key: 'plan',
     label: 'Plan',
@@ -41,8 +41,8 @@ const COLUMNS = [
           fontWeight: 700,
           padding: '2px 8px',
           borderRadius: 6,
-          background: row.plan === 'PRO' ? 'var(--color-pr-bg)' : 'var(--color-subtle-bg)',
-          color: row.plan === 'PRO' ? 'var(--color-pr-text)' : 'var(--color-muted)',
+          background: row.plan === 'PLUS' ? 'var(--color-pr-bg)' : 'var(--color-subtle-bg)',
+          color: row.plan === 'PLUS' ? 'var(--color-pr-text)' : 'var(--color-muted)',
         }}
         title={row.comped ? 'Comped -- no Stripe subscription behind this' : row.stripeCustomerId || ''}
       >

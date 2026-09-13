@@ -184,7 +184,7 @@ public class WorkoutSessionService {
     // What the Free-tier window is currently hiding from this person, so the three clamped screens
     // (History, PRs, Trends) can say so instead of quietly rendering a partial view.
     //
-    // Pro short-circuits with NO QUERY AT ALL: a null floor means nothing is filtered anywhere, so
+    // Plus short-circuits with NO QUERY AT ALL: a null floor means nothing is filtered anywhere, so
     // there is nothing to count and nothing to say. Free runs one aggregate -- never a second
     // full-history load.
     //

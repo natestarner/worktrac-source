@@ -100,6 +100,26 @@ one as a record literal.
   `DELETE_SHARED_RESOURCE`, not a replacement for it, and `TagDto.deletable` is the server's own
   precomputed answer to "would DELETE succeed for me right now" so the client never re-derives
   authorship/in-use from raw ids.
+- **⚠ `ExerciseDto`/`PersonExerciseDto` carry the rename-side twin of `TagDto.deletable`.**
+  `renamable` answers "would `PUT /api/exercises/{id}` succeed for me right now" and reproduces
+  **all three** of `ExerciseService.update`'s gates; `createdByName` + `createdByYou` answer "who
+  added this". Three things about them are load-bearing:
+  - **`ExerciseAttributionResolver` is the single derivation, and it is BATCHED.**
+    `ExerciseService.list` maps the whole visible catalog, so asking either question per row is an
+    N+1 across several hundred rows. Both lookups run once, before the mapping — keep every call
+    to it **outside** the `.stream()`. The in-use query is skipped entirely for an owner (exempt
+    via `EDIT_ANY_SHARED_RESOURCE`) and asks only about the household's OWN ids, never the ~200
+    global rows that are unrenamable by definition.
+  - **It MIRRORS `update`'s gates rather than sharing code with them.** The service still refuses
+    on its own terms, so a drift refuses the write and shows the server's message — the safe
+    direction. Both are pinned in `MemberPermissionsTest`.
+  - **`createdByName` is a NAME and nothing more**, exactly like `MembershipDto.ownerName`, and
+    resolves through one `AccountMembershipRepository.findPersonNamesByUser` per list call. Null is
+    legitimate — a global row, V67's three null-stamp cases, or a **revoked login**, whose rows lose
+    their name because revoke deletes the only membership linking that user to a person here. Every
+    consumer renders that as naming nobody.
+  - `ExerciseService.list` takes an **`AccountAccess`**, not a bare `accountId`, because its rows
+    now carry a per-login answer — same reason `CsvImportService.write` does.
 - **`MembershipDto.ownerName` is resolved for MEMBERS only.** An owner does not need telling who
   the owner is, and resolving it for them would add a query to `/me` — the hottest endpoint in the
   app — for every existing user, all of whom are owners. It is a NAME and nothing more: no email,

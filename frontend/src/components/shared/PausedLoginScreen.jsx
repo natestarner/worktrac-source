@@ -2,7 +2,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
 
 /**
- * What a member sees when their household is no longer on Pro.
+ * What a member sees when their household is no longer on Plus.
  *
  * ⚠️ <b>This replaces the app rather than disabling parts of it, and that is the whole point.</b>
  * A paused login is refused on every route, so leaving the normal screens up would render an app
@@ -34,7 +34,7 @@ export default function PausedLoginScreen() {
         <h1 style={titleStyle}>Your login is paused</h1>
 
         <p style={bodyStyle}>
-          Personal logins are part of Huddle Pro, and this household isn&rsquo;t on Pro right now.
+          Personal logins are part of Huddle Plus, and this household isn&rsquo;t on Plus right now.
         </p>
 
         {/* The sentence people actually need. Stated plainly and early, not buried under the
@@ -45,7 +45,7 @@ export default function PausedLoginScreen() {
         </p>
 
         <p style={bodyStyle}>
-          {owner} can turn Pro back on, and your login will start working again straight away
+          {owner} can turn Plus back on, and your login will start working again straight away
           &mdash; you won&rsquo;t need a new invitation.
         </p>
 

@@ -7,16 +7,28 @@ import jakarta.validation.constraints.Size;
 /**
  * Finishing an invitation.
  *
- * <p>{@code password} is optional on purpose: it is required only when the invited address has no
- * Huddle account yet. For an address that already has one it is ignored entirely — an invitation
- * must never be able to change somebody's existing credentials, which is the single thing a
- * household owner must not be able to do.
+ * <p>{@code password} means one of two completely different things depending on the invited
+ * address, and {@code POST /api/auth/invite/preview} is what tells the client which:
  *
- * <p>{@code @Size} alone (no {@code @NotBlank}) is deliberate: {@code null} must keep validating so
- * the optional case above still reaches the service, but a *supplied* value gets the same 8..200
- * bound as registration, reset and change-password — it is setting a credential, not proving one.
- * {@code MembershipInviteService.accept}'s null/blank check is what enforces "required when the
- * address has no account yet"; this is the length floor that check was missing entirely.
+ * <ul>
+ *   <li><b>No Huddle account yet</b> — it is being SET. Required.</li>
+ *   <li><b>Already has one</b> — it is being PROVED, exactly as at {@code /login}, and it is the
+ *       only thing standing between an emailed link and that person's existing identity. It used
+ *       to be ignored outright here; see {@code AuthService#acceptInvite} for what that allowed.
+ *       An invitation still never CHANGES an existing password — the one thing a household owner
+ *       must not be able to do.</li>
+ *   <li>Omitted entirely is legitimate for exactly one caller: an invitee who is already signed in
+ *       as the invited address, whose session is the proof instead.</li>
+ * </ul>
+ *
+ * <p>⚠️ <b>{@code @Size} alone, with no {@code @NotBlank}, and the floor is now a floor on two
+ * different things.</b> {@code null} must keep validating so the already-signed-in case above
+ * reaches the service at all. The 8..200 bound is right for a password being set (matching
+ * registration, reset and change-password), and harmless for one being proved: no password this
+ * app has ever issued is shorter than 8 characters, so a too-short value cannot be a real
+ * credential and rejecting it early costs a legitimate caller nothing. It must NOT be relaxed on
+ * the "proving" argument — that would make this field a way to probe short passwords without
+ * paying the rate limiter.
  */
 public record AcceptInviteRequest(
         @NotNull Long inviteId,

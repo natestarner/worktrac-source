@@ -11,16 +11,16 @@ package com.worktrac.backend.membership;
  */
 public enum MembershipStatus {
 
-    /** Usable. Every owner, and every member of a Pro household. */
+    /** Usable. Every owner, and every member of a Plus household. */
     ACTIVE,
 
     /**
-     * A MEMBER login in a household that is no longer Pro.
+     * A MEMBER login in a household that is no longer Plus.
      *
      * <p>⚠️ <b>A pause, not a punishment, and the distinction is the whole design.</b> Nothing is
      * deleted, no membership is revoked, and no queued write is discarded — the member's person,
      * history and PRs stay exactly where they are, visible to the owner as always. When the
-     * household is Pro again the login resumes on its own, and any work the member had queued
+     * household is Plus again the login resumes on its own, and any work the member had queued
      * lands by itself on the next flush.
      *
      * <p>That is why the block is expressed as a status rather than by deleting memberships on

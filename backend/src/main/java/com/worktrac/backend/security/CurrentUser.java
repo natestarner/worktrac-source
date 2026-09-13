@@ -1,8 +1,11 @@
 package com.worktrac.backend.security;
 
 import com.worktrac.backend.membership.AccountAccess;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+
+import java.util.Optional;
 
 // The one place account/user identity is read out of the security context. Every
 // controller/service that needs "who is calling" goes through here instead of trusting
@@ -16,11 +19,36 @@ import org.springframework.stereotype.Component;
 public class CurrentUser {
 
     public AccountPrincipal get() {
-        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        if (!(principal instanceof AccountPrincipal accountPrincipal)) {
-            throw new IllegalStateException("No authenticated AccountPrincipal in security context");
+        return optional()
+                .orElseThrow(() -> new IllegalStateException("No authenticated AccountPrincipal in security context"));
+    }
+
+    /**
+     * Who is calling, when there may legitimately be nobody.
+     *
+     * <p>For {@code permitAll} routes that behave differently for a caller who happens to already
+     * be signed in — {@code POST /api/auth/accept-invite} is the one today, where an existing
+     * session belonging to the invited address is proof enough to join without retyping a
+     * password. {@link #get()} throws for those, and correctly: everywhere else, no principal is a
+     * wiring bug rather than a state to branch on.
+     *
+     * <p>⚠️ <b>A principal here has been fully validated, and that is the whole reason this is the
+     * right way to ask.</b> {@code JwtAuthenticationFilter} runs on every request, permitAll
+     * included, and only reaches the SecurityContext after checking the signature, refusing
+     * anything carrying {@code scp}, AND resolving the token's {@code tv} against the live user
+     * row and membership. Hand-parsing the Authorization header instead — as
+     * {@code POST /api/auth/session} must, because a selection token deliberately cannot
+     * authenticate through the filter — skips that second half: {@link JwtService#parseToken}
+     * alone does <b>not</b> compare {@code tv} to the database, so a token invalidated by a
+     * password reset still parses. Reach for the header directly only when a selection token is
+     * genuinely the point, and never as a shortcut to identity.
+     */
+    public Optional<AccountPrincipal> optional() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof AccountPrincipal accountPrincipal)) {
+            return Optional.empty();
         }
-        return accountPrincipal;
+        return Optional.of(accountPrincipal);
     }
 
     /**
