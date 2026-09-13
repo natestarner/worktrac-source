@@ -289,6 +289,17 @@ async function readOutboxKey(key, scope) {
 // to sit in: flushOutbox()'s own resumePausedMutations() (also gated on a token, see
 // queryClient.js) resumes it the moment a real session exists again, whether that's this same
 // boot (a token was already present) or a later login.
+//
+// The hydrated state must set `status: 'pending'` alongside `isPaused: true`, not isPaused alone
+// -- mirroring TanStack's own invariant that a paused mutation is always mid-retry (see the
+// `pending` dispatch case in mutation.js, which sets both together). A terminal-errored write's
+// persisted status is 'error'; forcing isPaused without also clearing status back to 'pending'
+// left `status` disagreeing with `isPaused`, a state real TanStack code never produces itself.
+// TanStack query-core >=5.102 stopped tolerating that: Mutation#continue() used to
+// unconditionally re-execute a mutation with no live retryer, but now only does so when
+// `state.status === 'pending'` -- so a hydrated-but-still-'error' mutation silently never
+// resumes, permanently stranding the write. Setting status here keeps resume working regardless
+// of that internal detail.
 export async function restoreOutbox(queryClient, scope) {
   if (!idbAvailable) return;
   try {
@@ -307,7 +318,7 @@ export async function restoreOutbox(queryClient, scope) {
       const asPaused = dehydrated.mutations
         .slice()
         .sort(byEnqueueOrder)
-        .map((m) => ({ ...m, state: { ...m.state, isPaused: true } }));
+        .map((m) => ({ ...m, state: { ...m.state, isPaused: true, status: 'pending' } }));
       hydrate(queryClient, { mutations: asPaused, queries: [] });
       return;
     }
