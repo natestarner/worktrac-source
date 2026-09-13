@@ -20,10 +20,10 @@ import java.util.List;
 // WHY THIS IS NEEDED AT ALL, given that entitlement expiry is clock-based:
 //
 //   The clock covers a CANCELED subscription -- once now passes current_period_end,
-//   SubscriptionService.isPro stops returning true on its own, webhook or no webhook.
+//   SubscriptionService.isPlus stops returning true on its own, webhook or no webhook.
 //
 //   It does NOT cover an ACTIVE one. If customer.subscription.deleted is never received, `status`
-//   stays ACTIVE forever and that household keeps Pro for free indefinitely, with nothing anywhere
+//   stays ACTIVE forever and that household keeps Plus for free indefinitely, with nothing anywhere
 //   to signal it. That failure is silent, unbounded, and costs money -- which is precisely the
 //   shape a watchdog exists to catch.
 //

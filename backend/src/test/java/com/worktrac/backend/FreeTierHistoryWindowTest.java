@@ -165,7 +165,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
     private void setPro(boolean pro) {
         Subscription subscription = subscriptionRepository.findByAccountId(accountId).orElseThrow();
         subscription.setStatus(pro ? SubscriptionStatus.ACTIVE : SubscriptionStatus.FREE);
-        subscription.setPlan(pro ? BillingPlan.PRO : BillingPlan.FREE);
+        subscription.setPlan(pro ? BillingPlan.PLUS : BillingPlan.FREE);
         subscriptionRepository.save(subscription);
     }
 
@@ -180,12 +180,12 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
     // ── The promise ────────────────────────────────────────────────────────────────────────────
 
     @Test
-    void freeHidesOlderSessionsButProBringsThemBackUnchanged() throws Exception {
+    void freeHidesOlderSessionsButPlusBringsThemBackUnchanged() throws Exception {
         seedOldAndRecent();
         long rowsAfterSeeding = storedSetCount();
 
         setPro(true);
-        assertEquals(2, getHistory().size(), "Pro should see the whole history");
+        assertEquals(2, getHistory().size(), "Plus should see the whole history");
 
         setPro(false);
         JsonNode clipped = getHistory();
@@ -279,7 +279,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
 
     // The count is only worth showing if it is exactly right, so this asserts the two halves add
     // up rather than merely that the count is non-zero: what Free can see, plus what it is told is
-    // hidden, must equal what Pro sees. A count derived from a slightly different filter than
+    // hidden, must equal what Plus sees. A count derived from a slightly different filter than
     // getHistory's would satisfy a "> 0" assertion and still lie to the person.
     @Test
     void freeIsToldExactlyHowManyWorkoutsAreHidden() throws Exception {
@@ -296,17 +296,17 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
         int visible = getHistory().size();
         setPro(true);
         assertEquals(getHistory().size(), visible + window.get("hiddenSessions").asInt(),
-                "visible + hidden must account for every session Pro can see");
+                "visible + hidden must account for every session Plus can see");
     }
 
-    // Pro has no floor, so there is nothing to report and no query to run.
+    // Plus has no floor, so there is nothing to report and no query to run.
     @Test
     void proIsToldNothingIsHidden() throws Exception {
         seedOldAndRecent();
         setPro(true);
 
         JsonNode window = getHistoryWindow();
-        assertTrue(window.get("windowStart").isNull(), "A null floor is what marks a household Pro");
+        assertTrue(window.get("windowStart").isNull(), "A null floor is what marks a household Plus");
         assertEquals(0, window.get("hiddenSessions").asInt());
         assertTrue(window.get("earliestHiddenAt").isNull());
     }
@@ -319,7 +319,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
         subscriptionRepository.save(subscription);
 
         assertEquals(0, getHistoryWindow().get("hiddenSessions").asInt(),
-                "Comped is Pro everywhere, here too -- no second code path");
+                "Comped is Plus everywhere, here too -- no second code path");
     }
 
     // getHistory drops sessions with no sets, so counting them here would promise the person more
@@ -392,6 +392,6 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
         subscriptionRepository.save(subscription);
 
         assertEquals(2, getHistory().size(),
-                "A comped household is Pro everywhere, with no second code path");
+                "A comped household is Plus everywhere, with no second code path");
     }
 }

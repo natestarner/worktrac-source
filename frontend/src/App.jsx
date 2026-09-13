@@ -18,6 +18,7 @@ import RegisterPage from './routes/RegisterPage';
 import ConfirmEmailPage from './routes/ConfirmEmailPage';
 import ForgotPasswordPage from './routes/ForgotPasswordPage';
 import ResetPasswordPage from './routes/ResetPasswordPage';
+import JoinPage from './routes/JoinPage';
 import ProtectedRoute from './routes/ProtectedRoute';
 import AdminRoute from './routes/AdminRoute';
 import AppShell from './routes/AppShell';
@@ -103,7 +104,7 @@ export default function App() {
       onSuccess={async () => {
         // The query cache (optimistic rows included) has just been restored. Bring back the temp->real
         // exercise AND set id maps and any queued writes -- for whichever account was last known to
-        // own the outbox (see outboxPersistence.js's getOutboxAccountId; this runs before AuthContext
+        // own the outbox (see outboxPersistence.js's getOutboxScope; this runs before AuthContext
         // has even confirmed identity, so it relies on that synchronous localStorage pointer, not
         // React state) -- then, if online, replay them; if offline, they stay queued and the
         // onlineManager subscription above flushes them on reconnect. Both id maps load first so a
@@ -146,6 +147,8 @@ export default function App() {
             <Route path="/confirm-email" element={<ConfirmEmailPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            {/* Where an invite email lands. Unauthenticated: acquiring a session is the point. */}
+            <Route path="/join" element={<JoinPage />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/app" element={<AppShell />}>
                 <Route index element={<Navigate to="log" replace />} />

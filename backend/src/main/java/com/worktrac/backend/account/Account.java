@@ -28,7 +28,7 @@ public class Account {
 
     // Whether a MEMBER login sees the whole household or only themselves (V66).
     //
-    // ⚠️ NO SETTER, DELIBERATELY. Pro/Family is forced ON, and the absence of a setter is what
+    // ⚠️ NO SETTER, DELIBERATELY. Plus/Family is forced ON, and the absence of a setter is what
     // enforces that -- there is no endpoint, no service method and no UI that can change it, so
     // "always on for this plan" is a property of the code rather than a check to be flipped. The
     // Team tier is what adds a setter, an endpoint and a toggle together. See V66's header.

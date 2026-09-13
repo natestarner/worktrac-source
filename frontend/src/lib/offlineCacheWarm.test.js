@@ -1,6 +1,6 @@
 import { QueryClient, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { warmOfflineCache } from './offlineCacheWarm';
+import { warmOfflineCache, peopleToWarm, MAX_WARMED_PEOPLE } from './offlineCacheWarm';
 import { queryKeys } from '../api/queryKeys';
 
 vi.mock('../api/exercises', () => ({
@@ -238,4 +238,79 @@ describe('warmOfflineCache afterRestore', () => {
     // cache relies on in queryClient.test.js's round-trip test.
     expect(client.getQueryData(queryKeys.history(1))).toEqual(['workout-A']);
   });
+
+  // ── Who gets warmed, once a household is bigger than the cap ────────────────────────────────
+
+  const roster = (n) => Array.from({ length: n }, (_, i) => ({ id: i + 1, name: `P${i + 1}` }));
+
+  /**
+   * ⚠️ The whole point of the cap being 6: **nothing changes for the households this product
+   * actually has.** A family of 2-5 is entirely inside it, so their warm is exactly what it was
+   * before the bound existed. If this fails, the reduction has started costing real users.
+   */
+  it('warms every person in a household that fits inside the cap', () => {
+    for (const size of [1, 2, 3, 4, 5, 6]) {
+      const people = roster(size);
+      expect(peopleToWarm(people, { selfPersonId: 1, activePersonId: 1 })).toHaveLength(size);
+    }
+  });
+
+  /**
+   * The reduction itself. Unbounded, a 30-athlete team fired 6 queries × 30 people = 180
+   * prefetches on every boot, reconnect, tab-focus and 5-minute tick.
+   */
+  it('caps the fan-out for a household far larger than a family', () => {
+    expect(peopleToWarm(roster(30), { selfPersonId: 1, activePersonId: 1 }))
+      .toHaveLength(MAX_WARMED_PEOPLE);
+  });
+
+  /**
+   * ⚠️ The viewer is warmed even when they sort last. For a MEMBER this is the only person they can
+   * write to, so dropping them is the one omission that would make the app useless offline rather
+   * than merely degraded.
+   */
+  it('always warms the viewer, however far down the roster they are', () => {
+    const warmed = peopleToWarm(roster(30), { selfPersonId: 30, activePersonId: 1 });
+
+    expect(warmed.map((p) => p.id)).toContain(30);
+    expect(warmed[0].id).toBe(30);
+  });
+
+  // Whoever is on screen is the other certainty. Second, not first: for a member looking at a
+  // sibling, their own data still matters more than the one they are only reading.
+  it('warms whoever is on screen, right after the viewer', () => {
+    const warmed = peopleToWarm(roster(30), { selfPersonId: 30, activePersonId: 25 });
+
+    expect(warmed.map((p) => p.id).slice(0, 2)).toEqual([30, 25]);
+  });
+
+  // The same person in both roles must not consume two of the six slots.
+  it('does not spend two slots when the viewer is the active person', () => {
+    const warmed = peopleToWarm(roster(30), { selfPersonId: 7, activePersonId: 7 });
+
+    expect(warmed).toHaveLength(MAX_WARMED_PEOPLE);
+    expect(new Set(warmed.map((p) => p.id)).size).toBe(MAX_WARMED_PEOPLE);
+  });
+
+  /**
+   * Both ids are legitimately null -- a v1 auth snapshot has no membership, and there is a frame
+   * before a person is auto-selected. Degrading to "the first N in the roster" keeps the warm
+   * useful rather than emptying it.
+   */
+  it('still warms a sensible set when neither id is known', () => {
+    const warmed = peopleToWarm(roster(30), {});
+
+    expect(warmed).toHaveLength(MAX_WARMED_PEOPLE);
+    expect(warmed[0].id).toBe(1);
+  });
+
+  // An id that names nobody (a person removed between /me and this call) must not silently cost a
+  // slot or throw.
+  it('ignores an id that matches no one in the roster', () => {
+    const warmed = peopleToWarm(roster(8), { selfPersonId: 999, activePersonId: 3 });
+
+    expect(warmed).toHaveLength(MAX_WARMED_PEOPLE);
+    expect(warmed[0].id).toBe(3);
+  });
+
 });

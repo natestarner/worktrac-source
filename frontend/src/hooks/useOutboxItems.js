@@ -75,6 +75,9 @@ export function useOutboxItems() {
     dead: isDeadWrite({
       status: mutation.state.status,
       errorStatus: mutation.state.error?.status,
+      // Without this the paused-login carve-out inside isDeadWrite can never fire, and a member
+      // whose household dropped to Free is told their queued sets can never sync.
+      errorCode: mutation.state.error?.code,
       errorTerminal: mutation.state.error?.terminal,
     }),
     ...describeOutboxMutation(

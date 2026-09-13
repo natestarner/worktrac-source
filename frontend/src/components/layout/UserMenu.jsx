@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { queryClient } from '../../lib/queryClient';
 import { getUnsyncedWriteCount } from '../../hooks/useOutboxCount';
+import { useAccountAccess } from '../../hooks/useAccountAccess';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 // `booting` is passed by AppShellSkeleton only. That skeleton renders a REAL Header so the
@@ -21,14 +22,32 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 // lands after the real Header mounts instead of opening a menu that is about to disappear.
 // See docs/incidents/2026-08-13-e2e-parallel-flakiness.md.
 export default function UserMenu({ booting = false }) {
-  const { people, logout, isAdmin } = useAuth();
+  const { people, logout, isAdmin, households, account, switchHousehold } = useAuth();
+  const { selfPersonId } = useAccountAccess();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [pendingLogoutCount, setPendingLogoutCount] = useState(0);
+  // The household a switch is waiting on, once the person has been told about unsynced work.
+  const [pendingSwitch, setPendingSwitch] = useState(null);
+  const [switching, setSwitching] = useState(false);
   const containerRef = useRef(null);
 
-  const primaryName = people.find((p) => p.isPrimary)?.name || 'Account';
+  // Only the OTHER households -- there is nothing to switch to when there is one, and offering the
+  // one you are already in is a control that does nothing. Undefined on an older auth snapshot,
+  // which reads as "nowhere to go" and hides the entry rather than erroring.
+  const otherHouseholds = (households ?? []).filter(
+    (h) => String(h.accountId) !== String(account?.id),
+  );
+
+  // The VIEWER's own name, not the household's primary -- for a member those are different
+  // people, and showing the primary's name here read as "logged in as the owner" while actually
+  // signed in as the member. Same fallback order as AppShell's default-active-person pick
+  // (frontend-core.md): selfPersonId first, the primary as the fallback for an owner (whose
+  // membership has no person of its own) or a v1 snapshot predating member logins.
+  const displayName = people.find((p) => String(p.id) === String(selfPersonId))?.name
+    || people.find((p) => p.isPrimary)?.name
+    || 'Account';
 
   // No existing dropdown/click-outside primitive in the codebase (Modal.jsx is a
   // full-screen scrim, not an anchored menu) -- close on outside click or Escape.
@@ -38,12 +57,14 @@ export default function UserMenu({ booting = false }) {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setOpen(false);
         setPendingLogoutCount(0);
+        setPendingSwitch(null);
       }
     }
     function handleKey(e) {
       if (e.key === 'Escape') {
         setOpen(false);
         setPendingLogoutCount(0);
+        setPendingSwitch(null);
       }
     }
     document.addEventListener('mousedown', handleClick);
@@ -82,6 +103,41 @@ export default function UserMenu({ booting = false }) {
     }
   }
 
+  // Switching household needs the network -- it mints a new session token, and there is no offline
+  // equivalent of that. Rather than a connectivity branch, the attempt simply surfaces its own
+  // failure like any other gated write would; useOnlineStatus is not consulted here.
+  async function runSwitch(household) {
+    setPendingSwitch(null);
+    setSwitching(true);
+    try {
+      await switchHousehold(household.accountId);
+      setOpen(false);
+      navigate('/app/log');
+    } catch {
+      // Deliberately swallowed to a no-op UI-wise: nothing was torn down (establishSession only
+      // commits after /me answers), so the person is still exactly where they were, in the
+      // household they were already in. Reopening the menu and trying again is the whole recovery.
+    } finally {
+      setSwitching(false);
+    }
+  }
+
+  function handleSwitch(household) {
+    // getUnsyncedWriteCount, NOT the banner's display count -- same reasoning as handleLogout: the
+    // banner deliberately ignores a brand-new in-flight write, and a decision about someone's data
+    // needs the honest answer.
+    const queued = getUnsyncedWriteCount(queryClient);
+    if (queued > 0) {
+      setPendingSwitch({ ...household, count: queued });
+      return;
+    }
+    runSwitch(household);
+  }
+
+  function confirmSwitch() {
+    runSwitch(pendingSwitch);
+  }
+
   function confirmLogout() {
     setPendingLogoutCount(0);
     setOpen(false);
@@ -109,7 +165,7 @@ export default function UserMenu({ booting = false }) {
           padding: 8,
         }}
       >
-        {primaryName}
+        {displayName}
         <span style={{ fontSize: 10, transform: open ? 'rotate(180deg)' : 'none' }}>&#9662;</span>
       </button>
 
@@ -136,10 +192,10 @@ export default function UserMenu({ booting = false }) {
           <MenuItem label="Profile" onClick={() => go('/app/profile')} />
           <MenuItem label="App Settings" onClick={() => go('/app/settings')} />
           {/* "Plan & billing" -- checked against every other label on this screen for the
-              substring rule below. It shares none, and crucially it is NOT "Upgrade to Pro":
+              substring rule below. It shares none, and crucially it is NOT "Upgrade to Plus":
               that string is the billing screen's own primary button, and a Free household
               standing on /app/billing would then have two controls with the same accessible
-              name. The header badge is "Go Pro" for the same reason. */}
+              name. The header badge is "Go Plus" for the same reason. */}
           <MenuItem label="Plan & billing" onClick={() => go('/app/billing')} />
           {/* Help sits directly above Contact Us so the menu reads as an escalation ladder:
               answer it yourself, then ask a human. Both labels deliberately share no substring
@@ -156,8 +212,50 @@ export default function UserMenu({ booting = false }) {
               <MenuItem label="Admin Portal" onClick={() => go('/admin')} />
             </>
           )}
+          {otherHouseholds.length > 0 && (
+            <>
+              <div style={{ borderTop: '1px solid var(--color-border)' }} />
+              {/* "Switch to" rather than "Switch household": Playwright matches accessible names
+                  as a case-insensitive SUBSTRING, and every label in this menu is deliberately
+                  non-overlapping (see the Help/Contact Us comment above). Naming each household
+                  also removes a step -- with two households the menu IS the picker. */}
+              {otherHouseholds.map((household) => (
+                <MenuItem
+                  key={household.accountId}
+                  label={`Switch to ${household.accountName}`}
+                  disabled={switching}
+                  onClick={() => handleSwitch(household)}
+                />
+              ))}
+            </>
+          )}
           <div style={{ borderTop: '1px solid var(--color-border)' }} />
-          {pendingLogoutCount > 0 ? (
+          {pendingSwitch ? (
+            <div role="alertdialog" aria-label="Unsynced changes" style={{ padding: '12px 16px' }}>
+              {/* ⚠️ SUSPENSION, NOT DESTRUCTION -- and this is deliberately NOT logout's wording.
+                  Logging out clears this device's outbox; switching household does not. The
+                  outgoing household's queued writes stay on their own IndexedDB key (adoptOutboxScope
+                  flips the scope pointer BEFORE evicting the mutation cache), so they are waiting,
+                  not lost, and switching back restores and syncs them.
+
+                  Reusing "will be lost" here would tell someone their work is about to be destroyed
+                  when it is not, which is its own kind of bug -- it would push people into waiting
+                  out a sync they never needed to wait for. Same getUnsyncedWriteCount source as
+                  logout (the safety count, never the banner's display count), much lower severity. */}
+              <div style={{ fontSize: 13, color: 'var(--color-text)', marginBottom: 10 }}>
+                {pendingSwitch.count === 1 ? '1 change hasn’t' : `${pendingSwitch.count} changes haven’t`} synced yet.
+                They’ll stay saved here and sync when you switch back.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button role="menuitem" onClick={confirmSwitch} style={cancelInlineStyle}>
+                  Switch anyway
+                </button>
+                <button onClick={() => setPendingSwitch(null)} style={cancelInlineStyle}>
+                  Stay here
+                </button>
+              </div>
+            </div>
+          ) : pendingLogoutCount > 0 ? (
             <div role="alertdialog" aria-label="Unsynced changes" style={{ padding: '12px 16px' }}>
               <div style={{ fontSize: 13, color: 'var(--color-text)', marginBottom: 10 }}>
                 {pendingLogoutCount === 1 ? '1 change hasn’t' : `${pendingLogoutCount} changes haven’t`} synced yet
@@ -204,11 +302,12 @@ const cancelInlineStyle = {
   cursor: 'pointer',
 };
 
-function MenuItem({ label, onClick }) {
+function MenuItem({ label, onClick, disabled = false }) {
   return (
     <button
       role="menuitem"
       onClick={onClick}
+      disabled={disabled}
       style={{
         display: 'block',
         width: '100%',
@@ -219,7 +318,8 @@ function MenuItem({ label, onClick }) {
         fontSize: 14,
         fontWeight: 600,
         color: 'var(--color-text)',
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
       }}
     >
       {label}

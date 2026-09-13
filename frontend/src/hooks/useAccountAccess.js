@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 // ⚠️ CHROME ONLY. The server has already decided: every list is filtered by PersonService.list and
 // every write is refused by requireWritablePerson before anything here is consulted. What this
 // buys is a client that does not offer a control it knows will be refused. It is the same
-// relationship AccountDto.plan has with SubscriptionService.isPro, and it carries the same
+// relationship AccountDto.plan has with SubscriptionService.isPlus, and it carries the same
 // warning -- never treat it as the authority, and never derive a permission from it that the
 // server did not state.
 //
@@ -26,13 +26,41 @@ export function useAccountAccess() {
   const { membership, people } = useAuth();
 
   const isMember = membership?.accountRole === 'MEMBER';
+  // ⚠️ Fails OPEN, exactly like the rest of this hook: an absent status (a v1 snapshot, a
+  // still-booting render) means NOT paused. The alternative locks somebody out of the whole app
+  // over a missing field they cannot do anything about -- and the server refuses every request
+  // anyway, so being wrong here costs one 403 rather than a wrongly-bricked app.
+  const isPaused = membership?.status === 'PAUSED_PLAN';
   const selfPersonId = membership?.personId ?? null;
+  // Null for an owner by design -- the server resolves it only for members, since an owner does not
+  // need telling who the owner is. Every consumer must render that absence as naming nobody rather
+  // than printing "null".
+  const ownerName = membership?.ownerName ?? null;
 
   return {
     isMember,
     isOwner: !isMember,
+    /**
+     * This login is suspended because the household is no longer on Plus.
+     *
+     * ⚠️ Unlike everything else on this hook, this is NOT chrome. It decides which screen renders
+     * at all — see `PausedLoginScreen`. /me is the single authority for it and keeps answering 200
+     * while paused, precisely so the client never has to infer this from a failed request: it
+     * cannot tell a refusal from a briefly-unhappy backend by status alone, and guessing wrong is
+     * the signed-out failure in docs/incidents/2026-07-27-db-outage-forced-logout.md.
+     *
+     * Offline, this comes from the auth snapshot's last-known value, which is the only truth
+     * available and the correct degradation: it neither strands somebody who is fine nor pretends
+     * a lapsed household is entitled.
+     */
+    isPaused,
     /** The person this login IS, if any. Identity, never authority — go through canWritePerson. */
     selfPersonId,
+    /**
+     * The household owner's name, or null. Answers "who do I ask?" for a member, and is what makes
+     * the app's refusals actionable ("ask Nate to rename it"). Identity, never authority.
+     */
+    ownerName,
     /**
      * True when this login may change that person's training data.
      *

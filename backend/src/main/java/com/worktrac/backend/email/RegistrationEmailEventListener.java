@@ -1,5 +1,8 @@
 package com.worktrac.backend.email;
 
+import com.worktrac.backend.membership.MembershipAcceptedEvent;
+import com.worktrac.backend.membership.MembershipInviteIssuedEvent;
+import com.worktrac.backend.membership.MembershipRevokedEvent;
 import com.worktrac.backend.registrationaudit.RegistrationAuditService;
 import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.user.PasswordResetCodeIssuedEvent;
@@ -81,6 +84,76 @@ public class RegistrationEmailEventListener {
                 RegistrationEventType.PASSWORD_RESET_SUCCESS_EMAIL_SENT,
                 RegistrationEventType.PASSWORD_RESET_SUCCESS_EMAIL_FAILED,
                 "password-reset-success");
+    }
+
+    /**
+     * The member-login invite.
+     *
+     * <p>Lives here rather than in a second listener on purpose: this is the same job — send an
+     * email after the transaction commits, off the request thread, and record the outcome either
+     * way — and a second component doing it would be a second mechanism to keep in step with
+     * {@code sendAndRecord}'s two-try/catch structure.
+     *
+     * <p>⚠️ A failure here is NOT recoverable by resending: the raw token exists only on this
+     * event, and the row holds a BCrypt hash that cannot reproduce it. The owner has to re-issue,
+     * which mints a new secret. That is exactly why the failure is audited rather than logged —
+     * an invitation that silently never arrived looks, from the owner's side, identical to one the
+     * recipient is ignoring.
+     */
+    @Async("emailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMembershipInviteIssued(MembershipInviteIssuedEvent event) {
+        sendAndRecord(event.email(),
+                () -> emailService.sendMembershipInvite(event.email(), event.personName(),
+                        event.householdName(), event.ownerName(),
+                        emailService.joinUrl(event.inviteId(), event.rawToken()),
+                        event.recipientHasAccount()),
+                RegistrationEventType.MEMBER_INVITE_EMAIL_SENT,
+                RegistrationEventType.MEMBER_INVITE_EMAIL_FAILED,
+                "membership invite");
+    }
+
+    /**
+     * An invitation was accepted: TWO sends, to two people, for two different reasons.
+     *
+     * <p>They are separate {@code sendAndRecord} calls rather than one, because either can fail on
+     * its own and the audit trail has to say which. The owner's is the typo detector; the member's
+     * carries the household name and the way out.
+     */
+    @Async("emailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMembershipAccepted(MembershipAcceptedEvent event) {
+        sendAndRecord(event.memberEmail(),
+                () -> emailService.sendAddedToHousehold(event.memberEmail(), event.personName(),
+                        event.householdName(), event.ownerName()),
+                RegistrationEventType.MEMBER_JOINED_EMAIL_SENT,
+                RegistrationEventType.MEMBER_JOINED_EMAIL_FAILED,
+                "added to household");
+
+        sendAndRecord(event.ownerEmail(),
+                () -> emailService.sendInviteAccepted(event.ownerEmail(), event.memberEmail(),
+                        event.personName(), event.householdName()),
+                RegistrationEventType.MEMBER_ACCEPTED_OWNER_EMAIL_SENT,
+                RegistrationEventType.MEMBER_ACCEPTED_OWNER_EMAIL_FAILED,
+                "invite accepted (owner)");
+    }
+
+    /**
+     * A login was removed, or an invitation withdrawn.
+     *
+     * <p>⚠️ A security control rather than a courtesy: without it somebody is silently signed out,
+     * and their queued offline writes can then never land. Audited for the same reason — a notice
+     * that quietly failed to send would leave them with no explanation at all.
+     */
+    @Async("emailTaskExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMembershipRevoked(MembershipRevokedEvent event) {
+        sendAndRecord(event.memberEmail(),
+                () -> emailService.sendLoginRevoked(event.memberEmail(), event.householdName(),
+                        event.ownerName(), event.wasOnlyAnInvitation()),
+                RegistrationEventType.MEMBER_REVOKED_EMAIL_SENT,
+                RegistrationEventType.MEMBER_REVOKED_EMAIL_FAILED,
+                "login revoked");
     }
 
     // Common shape for all four handlers above: attempt the send; only a failure *of the send

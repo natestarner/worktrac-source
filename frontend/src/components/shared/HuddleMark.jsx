@@ -20,14 +20,14 @@
 // the theme. The default, --brand-mark-hairline, is #bdb6af on light and `transparent` on dark,
 // because the cream circle is ~1.1:1 on a white surface (it needs an outline to exist at all) and
 // high-contrast on a dark one (the brand sheet drops the outline there). That switch is keyed to
-// the GROUND, not to the user's setting -- and PlanBadge's Pro pill keeps a fixed light background
-// in BOTH schemes (see .plan-badge--pro's comment), so inheriting the per-scheme token would erase
+// the GROUND, not to the user's setting -- and PlanBadge's Plus pill keeps a fixed light background
+// in BOTH schemes (see .plan-badge--plus's comment), so inheriting the per-scheme token would erase
 // its hairline in dark mode and dissolve the circle into the pill. It passes the light value
 // explicitly. Every other caller sits on a theme-following surface and leaves this alone.
 //
 // strokeWidth 1 + vectorEffect keeps the hairline at one device pixel at every size, which is the
 // brand sheet's own clamp ("below ~114px the 1.5pt hairline is clamped to 1 device px so it stays
-// visible"). At size=14 a scaled 1.5 resolves to ~0.16px -- invisible, which is what the Pro
+// visible"). At size=14 a scaled 1.5 resolves to ~0.16px -- invisible, which is what the Plus
 // pill's mark used to render.
 export default function HuddleMark({ size = 128, hairline = 'var(--brand-mark-hairline)' }) {
   // The artwork's own aspect ratio, from the viewBox below. Callers pass one number and cannot

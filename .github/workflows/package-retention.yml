@@ -1,0 +1,48 @@
+name: Package Retention — Prune old backend images
+
+# ci.yml's docker-build pushes one new ghcr.io image per merge to main, tagged with its commit
+# SHA, and never deletes anything -- by 2026-09-12 that had grown to 244 versions going back to
+# July, which tripped this account's $0 Packages spending budget and stalled docker-build
+# indefinitely (queued, no runner assigned -- GitHub refuses to schedule a job that could incur
+# further Packages spend once a budget's "Stop usage" threshold is hit, rather than failing the
+# job outright). A one-time cleanup got that back down to 30; this workflow is what keeps it
+# from re-accumulating.
+#
+# Runs on a schedule rather than as a step in ci.yml/docker-build: pruning old images is
+# unrelated to whether a fresh one exists, and keeping it a separate job means a bug or transient
+# failure here can never block a real deploy the way a failure inline in docker-build would.
+on:
+  schedule:
+    - cron: '0 3 * * 0'   # Sundays 03:00 UTC -- low-traffic, well clear of any deploy window
+  workflow_dispatch: {}    # manual "run it now" from the Actions tab
+
+jobs:
+  prune-old-images:
+    runs-on: ubuntu-latest
+    steps:
+      # ⚠️ GITHUB_TOKEN cannot delete versions of a package owned by a personal (non-org)
+      # account, no matter what `permissions:` this job requests -- GitHub scopes that token to
+      # the repository, and a personal account's packages are not repository-owned the way an
+      # org's can be. Confirmed live: deleting a version via the API required a PAT carrying the
+      # `delete:packages` OAuth scope; the workflow's own GITHUB_TOKEN was never in the running.
+      # So this needs a real PAT, stored as a repo secret:
+      #
+      #   1. github.com/settings/tokens -> generate a classic PAT with `read:packages` and
+      #      `delete:packages` scopes (fine-grained tokens don't yet expose package deletion).
+      #   2. Add it to this repo as Settings -> Secrets and variables -> Actions ->
+      #      `PACKAGE_CLEANUP_PAT`.
+      #
+      # Until that secret exists this job fails harmlessly on its own schedule -- it cannot
+      # affect docker-build, promote-to-lower, or anything deploy-related, which is the whole
+      # point of keeping it a separate workflow.
+      - name: Delete old worktrac-backend image versions
+        uses: actions/delete-package-versions@v5
+        with:
+          owner: ${{ github.repository_owner }}
+          package-name: 'worktrac-backend'
+          package-type: 'container'
+          min-versions-to-keep: 30
+          # Belt-and-suspenders alongside min-versions-to-keep's own recency ordering -- never
+          # let a clock skew or an unusual sort make "latest" itself the one pruned.
+          ignore-versions: '^latest$'
+          token: ${{ secrets.PACKAGE_CLEANUP_PAT }}

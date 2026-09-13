@@ -29,7 +29,7 @@ export function UIProvider({ children }) {
   const [tour, setTour] = useState(null);
 
   // Suppresses the first-run welcome modal while a brand-new household is parked on the billing
-  // screen, having arrived from marketing's "Go Pro". A modal interrupting someone who came here
+  // screen, having arrived from marketing's "Go Plus". A modal interrupting someone who came here
   // intending to pay is the wrong order: the tour goes AFTER the money decision, whichever way it
   // resolves.
   //
@@ -169,8 +169,18 @@ export function UIProvider({ children }) {
     toastTimerRef.current = setTimeout(() => setToast(null), durationMs);
   }, []);
 
-  const openConfirm = useCallback((message, onConfirm) => {
-    setConfirmDialog({ message, onConfirm });
+  /**
+   * `confirmLabel` is optional and defaults to "Delete", so all thirteen existing callers are
+   * untouched -- every one of them really does delete something.
+   *
+   * ⚠️ It exists because one caller does NOT. Removing a login takes away access and deletes
+   * nothing, and its dialog says so in as many words ("their workouts stay in this household") --
+   * above a button that would otherwise read "Delete". A button contradicting the sentence
+   * directly above it is worse than no explanation at all: it is the word people actually read
+   * before they tap, and it would make an owner hesitate over an action that costs nothing.
+   */
+  const openConfirm = useCallback((message, onConfirm, { confirmLabel } = {}) => {
+    setConfirmDialog({ message, onConfirm, confirmLabel: confirmLabel ?? 'Delete' });
   }, []);
   const closeConfirm = useCallback(() => setConfirmDialog(null), []);
   // Side effects must never live inside a setState updater function -- React (under

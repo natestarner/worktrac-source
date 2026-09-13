@@ -33,6 +33,7 @@ public class PersonExerciseService {
     private final WorkoutSetRepository workoutSetRepository;
     private final PersonService personService;
     private final QuotaService quotaService;
+    private final ExerciseAttributionResolver attributionResolver;
 
     public PersonExerciseService(PersonExerciseRepository personExerciseRepository,
                                   PersonExerciseFieldRepository personExerciseFieldRepository,
@@ -40,7 +41,8 @@ public class PersonExerciseService {
                                   ExerciseRepository exerciseRepository,
                                   WorkoutSetRepository workoutSetRepository,
                                   PersonService personService,
-                                  QuotaService quotaService) {
+                                  QuotaService quotaService,
+                                  ExerciseAttributionResolver attributionResolver) {
         this.personExerciseRepository = personExerciseRepository;
         this.personExerciseFieldRepository = personExerciseFieldRepository;
         this.tagService = tagService;
@@ -48,6 +50,7 @@ public class PersonExerciseService {
         this.workoutSetRepository = workoutSetRepository;
         this.personService = personService;
         this.quotaService = quotaService;
+        this.attributionResolver = attributionResolver;
     }
 
     // The person's Log picker: every exercise they've favorited, logged a set for, left a
@@ -80,11 +83,16 @@ public class PersonExerciseService {
             return List.of();
         }
 
-        return exerciseRepository.findAllById(pickerIds).stream()
+        List<Exercise> visible = exerciseRepository.findAllById(pickerIds).stream()
                 .filter(ex -> !ex.isDeleted())
                 .filter(ex -> ex.isGlobal() || ex.getAccount().getId().equals(access.accountId()))
                 .sorted(Comparator.comparing(Exercise::getName, String.CASE_INSENSITIVE_ORDER))
-                .map(ex -> PersonExerciseDto.of(ex, byExerciseId.get(ex.getId())))
+                .toList();
+        // ⚠️ Resolved ONCE, outside the mapping -- per-row it is an N+1 across the picker.
+        Map<Long, ExerciseAttribution> attribution = attributionResolver.resolve(access, visible);
+        return visible.stream()
+                .map(ex -> PersonExerciseDto.of(ex, byExerciseId.get(ex.getId()),
+                        attribution.get(ex.getId())))
                 .toList();
     }
 
@@ -94,7 +102,7 @@ public class PersonExerciseService {
         Exercise exercise = requireVisibleExercise(access.accountId(), exerciseId);
         PersonExercise pe = getOrCreate(person, exercise);
         pe.setFavorite(favorite);
-        return PersonExerciseDto.of(exercise, pe);
+        return PersonExerciseDto.of(exercise, pe, attributionResolver.resolveOne(access, exercise));
     }
 
     // Free-text tagging: each name is upserted into the account's shared vocabulary, then the
@@ -108,14 +116,14 @@ public class PersonExerciseService {
         if (tagNames != null) {
             for (String name : tagNames) {
                 if (name != null && !name.trim().isEmpty()) {
-                    resolved.add(tagService.getOrCreate(access.accountId(), name));
+                    resolved.add(tagService.getOrCreate(access.accountId(), name, access.userId()));
                 }
             }
         }
         PersonExercise pe = getOrCreate(person, exercise);
         pe.getTags().clear();
         pe.getTags().addAll(resolved);
-        return PersonExerciseDto.of(exercise, pe);
+        return PersonExerciseDto.of(exercise, pe, attributionResolver.resolveOne(access, exercise));
     }
 
     // The standing per-person note: a blank/whitespace-only value clears it back to null
@@ -127,7 +135,7 @@ public class PersonExerciseService {
         PersonExercise pe = getOrCreate(person, exercise);
         String trimmed = note == null ? "" : note.trim();
         pe.setNote(trimmed.isEmpty() ? null : trimmed);
-        return PersonExerciseDto.of(exercise, pe);
+        return PersonExerciseDto.of(exercise, pe, attributionResolver.resolveOne(access, exercise));
     }
 
     // Additive personalization, for the CSV/Excel importer (called with an already-resolved,
@@ -142,8 +150,12 @@ public class PersonExerciseService {
     // Returns what was actually applied, so the import summary can distinguish "we set your note"
     // from "you already had one".
     @Transactional
-    public PersonalizationApplied applyImportedPersonalization(Long accountId, Person person, Exercise exercise,
-                                                                String note, boolean favorite, List<String> tagNames) {
+    // importingUserId stamps any tag this import invents into the household vocabulary. Import is
+    // IMPORT_DATA, which is owner-only, so in practice this is always the owner -- passed through
+    // rather than assumed, so the stamp stays true if that ever changes.
+    public PersonalizationApplied applyImportedPersonalization(Long accountId, Long importingUserId, Person person,
+                                                                Exercise exercise, String note, boolean favorite,
+                                                                List<String> tagNames) {
         PersonExercise pe = getOrCreate(person, exercise);
 
         boolean noteApplied = false;
@@ -174,7 +186,7 @@ public class PersonExerciseService {
                     continue;
                 }
                 boolean isNewToAccount = tagService.find(accountId, name.trim()).isEmpty();
-                Tag tag = tagService.getOrCreate(accountId, name.trim());
+                Tag tag = tagService.getOrCreate(accountId, name.trim(), importingUserId);
                 pe.getTags().add(tag);
                 existing.add(tag.getName().toLowerCase(java.util.Locale.ROOT));
                 tagsAdded++;

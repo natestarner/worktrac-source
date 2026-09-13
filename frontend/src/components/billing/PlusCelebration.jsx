@@ -29,7 +29,7 @@ const CONFETTI_SPECS = [
   { left: 60, color: '#F2A65A', delay: 0.24 },
 ];
 
-export default function ProCelebration({ onDismiss }) {
+export default function PlusCelebration({ onDismiss }) {
   return (
     <div
       onClick={onDismiss}
@@ -88,7 +88,7 @@ export default function ProCelebration({ onDismiss }) {
             zIndex: 1,
           }}
         >
-          {/* The actual mark, not a generic icon -- same reasoning as the header's Pro pill
+          {/* The actual mark, not a generic icon -- same reasoning as the header's Plus pill
               (PlanBadge.jsx): paying earns Huddle's own identity. No hairline override needed
               here, unlike that pill -- this sits on var(--color-pr-bg), a normal theme-aware
               surface rather than a fixed-light one, so the default --brand-mark-hairline is
@@ -96,7 +96,7 @@ export default function ProCelebration({ onDismiss }) {
           <HuddleMark size={40} />
         </div>
         <div style={{ fontSize: 24, fontWeight: 'var(--weight-bold)', letterSpacing: '-0.01em', marginBottom: 8, position: 'relative', zIndex: 1 }}>
-          Welcome to Huddle Pro
+          Welcome to Huddle Plus
         </div>
         <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-muted)', lineHeight: 1.5, position: 'relative', zIndex: 1 }}>
           Your whole history, every record, and import are unlocked. Thanks for keeping Huddle going.

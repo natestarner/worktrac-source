@@ -169,12 +169,18 @@ fi
 #    stops them GROWING while the refactor lands. Lower the number when you remove one; a count
 #    below the pin is also an error, so the pin can never silently drift out of date.
 # ---------------------------------------------------------------------------------------------
-# Five legitimately-distinct triggers: online transition, tab visibility, and boot restore
-# (App.jsx), plus login and confirmEmail (AuthContext.jsx). Each used to re-derive its own
+# Four legitimately-distinct triggers: online transition, tab visibility, and boot restore
+# (App.jsx), plus AuthContext's `establishSession`. Each used to re-derive its own
 # `if (onlineManager.isOnline())` gate; that precondition now lives inside flushOutbox alongside
-# the auth-token one, so these are bare calls. The pin remains because a SIXTH trigger is a design
+# the auth-token one, so these are bare calls. The pin remains because a FIFTH trigger is a design
 # decision -- when should a queued write be retried? -- and deserves to be noticed, not slipped in.
-EXPECTED_FLUSH_CALLERS=5
+#
+# Was 5 until phase 6. It dropped by CONSOLIDATION, not by losing a flush: login and confirmEmail
+# each carried their own copy of the six ordered steps that turn a token into a session, and both
+# now go through `establishSession` -- along with two new callers, the household picker and
+# switching household. All four still flush; there is simply one call site instead of two, and two
+# new entry points that could not have been added without one.
+EXPECTED_FLUSH_CALLERS=4
 ACTUAL_FLUSH_CALLERS=$(count_where '\bflushOutbox\(' outside "$SRC/lib/")
 if [ "$ACTUAL_FLUSH_CALLERS" -ne "$EXPECTED_FLUSH_CALLERS" ]; then
   fail "flushOutbox() call-site count is $ACTUAL_FLUSH_CALLERS, pinned at $EXPECTED_FLUSH_CALLERS"
@@ -227,7 +233,16 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 # behaviour rather than an API. Losing the error is exactly right here -- the caller cannot act on
 # it, the person loses nothing they can perceive beyond a missing tick, and tryHaptic still RETURNS
 # which route it took so a test (and a human) can see what happened.
-EXPECTED_LIB_SWALLOWS=47
+# 54 since BOTH persisted stores were re-keyed by (account, login) for member logins.
+#   outboxPersistence (+4): migrationDone / markMigrated swallow an unreadable-storage read, and
+#     the per-account adoption's copy+delete are best-effort because readOutboxKey returns the
+#     entries either way.
+#   appStatePersistence (+3): the same migrationDone / markMigrated pair, plus the adoption read --
+#     an unreadable store there means "nothing to adopt", which is the same outcome as a first-ever
+#     boot.
+# Every one is commented at its site with why losing that error cannot lose anything: a queued
+# write in the outbox's case, a restored routine position in app state's.
+EXPECTED_LIB_SWALLOWS=54
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"
