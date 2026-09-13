@@ -1,5 +1,7 @@
 package com.worktrac.backend.csvimport;
 
+import com.worktrac.backend.membership.Permission;
+import com.worktrac.backend.membership.RequiresPermission;
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.common.TooManyRequestsException;
@@ -47,12 +49,14 @@ public class ImportController {
     // Writes nothing. Answers "what would this file do", including which rows are already present
     // and which optional columns were defaulted.
     @PostMapping("/api/people/{personId}/import/preview")
+    @RequiresPermission(value = Permission.IMPORT_DATA, personScoped = true)
     public ImportPreviewDto preview(@PathVariable Long personId, @Valid @RequestBody ImportRequest request) {
         requirePro();
-        return csvImportService.preview(currentUser.accountId(), personId, request);
+        return csvImportService.preview(currentUser.access(), personId, request);
     }
 
     @PostMapping("/api/people/{personId}/import")
+    @RequiresPermission(value = Permission.IMPORT_DATA, personScoped = true)
     public ImportPreviewDto commit(@PathVariable Long personId, @Valid @RequestBody ImportRequest request) {
         requirePro();
         // Only the commit is throttled, not the preview: preview writes nothing, and making
@@ -62,29 +66,31 @@ public class ImportController {
             throw new TooManyRequestsException(
                     "That's a lot of imports in a short time -- please try again a little later.");
         }
-        return csvImportService.commit(currentUser.accountId(), currentUser.userId(), personId, request);
+        return csvImportService.commit(currentUser.access(), personId, request);
     }
 
     @GetMapping("/api/people/{personId}/imports")
+    @RequiresPermission(value = Permission.IMPORT_DATA, personScoped = true)
     public List<ImportBatchDto> list(@PathVariable Long personId) {
-        return importUndoService.list(currentUser.accountId(), personId);
+        return importUndoService.list(currentUser.access(), personId);
     }
 
     @DeleteMapping("/api/people/{personId}/imports/{batchId}")
+    @RequiresPermission(value = Permission.IMPORT_DATA, personScoped = true)
     public ResponseEntity<ImportBatchDto> undo(@PathVariable Long personId, @PathVariable Long batchId) {
-        return ResponseEntity.ok(importUndoService.undo(currentUser.accountId(), personId, batchId));
+        return ResponseEntity.ok(importUndoService.undo(currentUser.access(), personId, batchId));
     }
 
-    // Importing is a Pro feature. Note which routes DON'T call this: `list` and `undo` stay open to
-    // everyone on purpose. A household that imported while Pro and then let it lapse must still be
+    // Importing is a Plus feature. Note which routes DON'T call this: `list` and `undo` stay open to
+    // everyone on purpose. A household that imported while Plus and then let it lapse must still be
     // able to see what they brought in and take it back out -- gating the exit would strand their
     // own data behind a paywall, which is the opposite of what the Free tier promises.
     //
     // Exporting is not gated at all, on either plan, for the same reason: every household can
     // always take its complete data out. See .claude/rules/billing.md.
     private void requirePro() {
-        if (!subscriptionService.isPro(currentUser.accountId())) {
-            throw new ForbiddenException("Importing past workouts is a Pro feature.");
+        if (!subscriptionService.isPlus(currentUser.accountId())) {
+            throw new ForbiddenException("Importing past workouts is a Plus feature.");
         }
     }
 }

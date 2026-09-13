@@ -50,19 +50,125 @@ See `docs/incidents/2026-08-01-outbox-reorder-enqueueseq.md`.
 - `flushOutbox`'s stuck retry restarts the same `Mutation` object in place (`m.execute(...)`)
   instead of remove-and-recreate (which always re-registers at the end of the array). Safe only
   because a terminal-`'error'` mutation's retryer has fully settled, unlike a `'pending'` one.
-- Persisted to its **own** IndexedDB key (`worktrac-outbox:<accountId>`), deliberately separate
-  from the query cache's persister, so neither the query cache's `maxAge` nor an app-update `buster` bump
-  can silently drop a queued write.
+- Persisted to its **own** IndexedDB key (`worktrac-outbox:<accountId>:<userId>`), deliberately
+  separate from the query cache's persister, so neither the query cache's `maxAge` nor an
+  app-update `buster` bump can silently drop a queued write.
+- **⚠️ The key is scoped by (account, LOGIN), not by account.** Two members of one household can
+  sign in on the same device; under an account-only key both resolved to the same store and
+  `adoptOutboxScope` saw no change between them, so member B's restore loaded member A's queued
+  writes and replayed them under B's token — where the person guards refuse them. A's work, stuck
+  as dead writes in B's outbox. `adoptOutboxScope` keeps the **flip-pointer-before-evicting**
+  ordering (below), and deliberately does **not** treat a null prior `userId` as a switch: that is
+  a pre-upgrade device gaining an id on its first authenticated load, i.e. the same login.
+- **⚠ `persistOutboxNow` may only DELETE a key the live cache has been reconciled with.** An
+  empty mutation cache has two possible meanings — "this login's queue is empty" and "this
+  login's queue has not been loaded yet" — and only the first licenses a delete. The module
+  tracks the last key it wrote or that `restoreOutbox` read (`reconciledKey`); an empty cache
+  against any other key persists nothing.
+
+  Without it, the hand-over window destroys data. `adoptOutboxScope` flips the pointer to the
+  **incoming** login and only then evicts the outgoing one's mutations; that eviction fires the
+  persistence subscription with an empty cache and a pointer already naming the newcomer, so the
+  delete landed on the newcomer's own key — the writes `restoreOutbox` was about to hand back
+  to them, a beat later. Two members of one household on one device hit it whenever both had work
+  queued: the second to sign in destroyed the first's, silently, and it surfaced only on the return
+  trip as work that looked like it had never been saved.
+
+  **A suspend-during-hand-over flag cannot replace this.** The mutation cache notifies through
+  `notifyManager`'s `setTimeout(0)` scheduler, so the callback lands after any window a caller
+  could hold open; the question has to be answerable from the event itself. Skipping a delete is
+  also the safe direction — the key still holds exactly what the next restore will load, and a
+  replayed write is idempotency-keyed. Pinned by `outboxPersistence.test.js`'s "an empty cache
+  never deletes a key it has not been reconciled with" and end to end by
+  `member-device-handoff.spec.ts`.
+- **The per-account → composite migration is TOMBSTONED, and that bound is load-bearing.** The
+  per-account key is shared by the whole household, so an unbounded fallback would hand it to
+  whichever member signed in next — reintroducing the leak through the migration meant to prevent
+  it. It is sound because at migration time the only login that account has ever had on this device
+  is the one that wrote those entries.
 - **Retries forever on transient failure** (`shouldRetryWrite`): 5xx, timeout, or statusless
-  network error backs off (capped 30s) but never gives up. Only a definitive **4xx** stops
-  retrying, since a write that can never succeed would head-of-line-block the shared serial scope.
-- A dependent write resolving to an unmapped temp id throws a **status-less (therefore retryable)**
-  error rather than dispatching a value the backend can't parse (`requireResolvedExerciseId` /
-  `requireResolvedSetId`, via `exerciseIdMap.js` / `setIdMap.js`). Delete-set treats a replay 404
-  as success.
+  network error backs off (capped 30s) but never gives up. Only a definitive **4xx** — or a dead
+  dependency, below — stops retrying, since a write that can never succeed would
+  head-of-line-block the shared serial scope. 408/429 are carved out as retryable, and
+  `isUnsyncedWrite` shares that carve-out through the same `RETRYABLE_4XX` set: as a bare 400-499
+  range check it called those two already-delivered while retries were still running, which would
+  have let the logout guard discard them silently.
+- A dependent write resolving to an unmapped temp id throws a status-less error rather than
+  dispatching a value the backend can't parse (`requireResolvedExerciseId` /
+  `requireResolvedSetId`, via `exerciseIdMap.js` / `setIdMap.js`). Edit-set **and** delete-set both
+  treat a replay 404 as success — the row is gone, so the end state is already reached, and a 404
+  needs the server to have *answered*, which no degraded condition produces.
 - **Gated on an authenticated session:** `flushOutbox`/`restoreOutbox` no-op or hydrate as paused
   when there's no token, rather than firing a write with no `Authorization` header — that 401
   could tear down a session that a moment later *does* have a valid token.
+
+### A dependent write dies with its dependency — the anti-wedge rule
+
+**Retrying forever is only correct while retrying can still change the outcome.** A mutation stays
+`'pending'` for the whole of its retry loop, and TanStack runs only the first `'pending'` mutation
+in a scope — so a write that can *never* succeed does not merely fail, it stops the entire outbox,
+including writes made later while fully online. `docs/incidents/2026-09-04-outbox-wedged-by-orphaned-edit.md`.
+
+`dependencyIsGone` (`queryClient.js`) answers that as a **local** question about the mutation
+cache, never a network one, and stamps `terminal` on the unresolved-id error;
+`shouldRetryWrite` honours it as its first clause.
+
+| The create it depends on | Verdict |
+|---|---|
+| Present, paused/pending/retrying | **retry** — this is how a dependent waits for its dependency |
+| **Absent** (cancelled by `cancelQueuedWritesForSet`, or evicted) | **terminal** |
+| Present, terminal `'error'` (a quota 403 on an exercise create, say) | **terminal** |
+
+- **This ends RETRIES; it never discards.** The write stays in the cache, stays persisted, stays
+  listed. `flushOutbox` re-executes every errored outbox mutation in `byEnqueueOrder`, so a
+  dependency that later succeeds takes its dependents with it in the same pass.
+- **Deleting a not-yet-synced set must cancel every write targeting it**, not just the create —
+  `cancelQueuedWritesForSet`, which is the source-level half of the same fix.
+- **`App.jsx` must `await` both id maps BEFORE `restoreOutbox`, sequentially.** They were one
+  `Promise.all`, and a restored dependent could beat its own mapping off disk. Survivable only
+  while unresolved ids retried forever; now it would fail a write whose mapping is sitting in
+  IndexedDB.
+- **Any new dependent write needs an answer to "what if its dependency never lands?"**
+
+### "Does the queue ever stop retrying?" — the exact answer
+
+Asked directly, and worth answering precisely, because the intuitive reading of *"a durable write
+retries forever"* is wrong in one direction and the intuitive fix is wrong in the other.
+
+**Tier 1 — never stops, unconditionally.** Anything caused by connectivity or server health: 5xx,
+502/503/504, cold start, DB down, pool exhausted, an aborted 15s request, a bare rejected fetch,
+408, 429. Retries forever with backoff (capped 30s), at any attempt count. **No status code a
+struggling backend can emit will ever end a write's retries**, and none of them can badge it or
+discard it — under those conditions the mutation never even leaves `'pending'`/`isPaused`.
+
+**Tier 2 — the retry LOOP ends; the write does not.** Exactly two things, and neither can be
+produced by a degraded backend:
+
+| Stop | What it is |
+|---|---|
+| A definitive 4xx (outside `{408, 429}`) | The server answered and rejected *this* write |
+| `error.terminal` — a dead dependency | A purely **local** check (`dependencyIsGone`); never consults the network |
+
+The write stays in the mutation cache, stays persisted, stays listed. And `flushOutbox` filters on
+`state.status === 'error'` **with no check on why it errored**, so it gets a completely fresh
+attempt on every reconnect, every tab-focus, every login and every boot. A dependent stuck behind a
+create that 401'd recovers by itself after the next sign-in: the create sorts first by `enqueueSeq`,
+lands in the same pass, and the dependent resolves behind it.
+
+**Tier 3 — actually leaves the queue.** Success; a 404 on edit/delete (the row is gone, so the end
+state is already reached — and a 404 needs the server to have *answered*); or an explicit human
+action (deleting the set whose create it targeted, Discard, Clear all, logout). **Never because it
+failed.**
+
+`isDeadWrite` is the single predicate for "this can never land" (definitive 4xx, or `terminal`), and
+it deliberately excludes **401**: a forced sign-out preserves the outbox and replays it after the
+next login, so badging it would call a write dead that is one login away from landing.
+
+**Why tier 2 exists at all**, given tier 1's absolutism: a `'pending'` mutation holds the single
+serial scope, so a write retrying forever on something that can never be satisfied does not fail
+alone — it stops the entire queue. *"Retry forever"* and *"the queue always drains"* are in direct
+tension, and the resolution is that **retrying forever is correct precisely while retrying can still
+change the outcome** — a question answered locally, never by asking the network.
 
 ## Editing a still-queued set
 
@@ -158,7 +264,7 @@ corrects it on the next refetch; **offline nothing can**, so it stands for the w
 `endedSessions.js` closes this with a **synchronous localStorage marker** written before the cache
 clear (`EndWorkoutConfirmModal`), which `useLiveSession` consults. localStorage specifically
 because the write cannot be beaten by a reload — the same reasoning as `offlineMode.js`'s manual
-pin and `outboxPersistence.js`'s account pointer. The marker is never cleared and needs no
+pin and `outboxPersistence.js`'s scope pointer. The marker is never cleared and needs no
 clearing: it suppresses exactly one id, and session ids are never reused.
 
 **Any other cache entry whose staleness would be actively wrong rather than merely old needs the

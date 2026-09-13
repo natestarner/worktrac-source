@@ -10,18 +10,28 @@ import {
   resendCode as apiResendCode,
   resendResetCode as apiResendResetCode,
   resetPassword as apiResetPassword,
+  startSession as apiStartSession,
 } from '../api/auth';
+import { changePassword as apiChangePassword } from '../api/password';
+import { acceptInvite as apiAcceptInvite, previewInvite as apiPreviewInvite } from '../api/logins';
 import { getAuthToken, isOfflineError, setAuthToken, setUnauthorizedHandler } from '../api/client';
 import { queryClient, resetQueryCache, clearOutboxMutations, flushOutbox } from '../lib/queryClient';
-import { clearOutbox, getOutboxAccountId, restoreOutbox, setOutboxAccountId } from '../lib/outboxPersistence';
+import { clearOutbox, getOutboxScope, restoreOutbox, setOutboxScope } from '../lib/outboxPersistence';
 import { clearAuthSnapshot, loadAuthSnapshot, saveAuthSnapshot } from '../lib/authSnapshot';
 import { requestPersistentStorage } from '../lib/durableStorage';
 import { markOnboardingPending } from '../lib/onboardingPending';
 
 const AuthContext = createContext(null);
 
-const EMPTY = { status: 'loading', user: null, account: null, people: [], offline: false, bootStalled: false };
-const SIGNED_OUT = { status: 'unauthenticated', user: null, account: null, people: [], offline: false, bootStalled: false };
+// `membership` is what this login may do in this household -- see useAccountAccess. It flows in
+// with the rest of /me's response (state spreads ...data), so it needs no plumbing of its own; the
+// null defaults here just mean a consumer never reads `undefined` on a signed-out render.
+//
+// `people` is the VISIBLE people, filtered server-side by PersonService.list. There is deliberately
+// no client-side visibility filter to go with it: one filter, on the server, is what makes it
+// impossible for a screen to forget.
+const EMPTY = { status: 'loading', user: null, account: null, membership: null, people: [], offline: false, bootStalled: false };
+const SIGNED_OUT = { status: 'unauthenticated', user: null, account: null, membership: null, people: [], offline: false, bootStalled: false };
 
 // Backoff for retrying /me at boot when the server/DB is unreachable and there's no snapshot to
 // fall back to (see the boot effect below) -- capped, doubling delay, same shape as the durable
@@ -61,10 +71,23 @@ export const BOOT_STALL_AFTER_ATTEMPTS = 3;
 // that persist a harmless no-op against the NEW account's (legitimately empty) key instead.
 // Returns whether an actual switch happened, so the caller knows whether it's worth also calling
 // restoreOutbox for the newly-adopted account's own persisted writes.
-function adoptOutboxAccount(accountId) {
-  const prior = getOutboxAccountId();
-  const switched = Boolean(prior) && accountId != null && String(prior) !== String(accountId);
-  setOutboxAccountId(accountId);
+//
+// ⚠️ SCOPED BY (account, LOGIN), not by account alone. Two members of the SAME household can now
+// sign in on one device, and under an account-only comparison this saw no change between them --
+// so it did not evict, and member B inherited member A's queued writes. B's token would then
+// replay them onto A's data, where the person guards refuse them: A's work, stuck as dead writes
+// in B's outbox, gone from A's screen.
+function adoptOutboxScope(accountId, userId) {
+  const prior = getOutboxScope();
+  const switched =
+    Boolean(prior?.accountId)
+    && accountId != null
+    && (String(prior.accountId) !== String(accountId)
+      // A null prior userId is a pre-member-logins device on its first authenticated load after the
+      // upgrade. That is NOT a switch -- it is the same login gaining an id -- and treating it as
+      // one would evict the writes the migration exists to preserve.
+      || (prior.userId != null && userId != null && String(prior.userId) !== String(userId)));
+  setOutboxScope({ accountId, userId });
   if (switched) clearOutboxMutations();
   return switched;
 }
@@ -108,7 +131,7 @@ async function verifyNewSession(token) {
   // Only now is discarding safe. The QUERY cache still has to go -- account-shared keys (catalog,
   // tags) carry no accountId, so a second household on this device must never read the first's --
   // but a sign-in that never completed must not cost the CURRENT session its offline copy.
-  // Deliberately does NOT touch the outbox (see resetQueryCache's own comment); adoptOutboxAccount
+  // Deliberately does NOT touch the outbox (see resetQueryCache's own comment); adoptOutboxScope
   // at each call site handles that, same household or not.
   resetQueryCache();
   clearAuthSnapshot();
@@ -167,7 +190,7 @@ export function AuthProvider({ children }) {
           // can still boot into the app, and mark durable storage so the offline cache isn't
           // evicted.
           saveAuthSnapshot(data);
-          adoptOutboxAccount(data.account?.id);
+          adoptOutboxScope(data.account?.id, data.user?.id);
           requestPersistentStorage();
           setState({ status: 'authenticated', offline: false, ...data });
         })
@@ -180,7 +203,7 @@ export function AuthProvider({ children }) {
           // /login.
           const snapshot = loadAuthSnapshot();
           if (isOfflineError(error) && snapshot) {
-            adoptOutboxAccount(snapshot.account?.id);
+            adoptOutboxScope(snapshot.account?.id, snapshot.user?.id);
             requestPersistentStorage();
             setState({ status: 'authenticated', offline: true, ...snapshot });
           } else if (isOfflineError(error)) {
@@ -246,21 +269,133 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const { token } = await apiLogin({ email, password });
+  // Everything that turns a freshly-minted token into a live session, in the one order that is
+  // correct. FOUR callers reach it -- an ordinary login, finishing a multi-household login,
+  // switching household, and confirming a registration -- and the whole reason it is a function
+  // rather than four copies is that the ordering below is load-bearing at every step and drifts
+  // silently when duplicated. It already had begun to: confirmEmail carried its own copy, which is
+  // how it would have quietly missed the outbox re-scoping this phase depends on.
+  //
+  // `afterSnapshot` exists for the ONE thing that legitimately differs -- arming the first-run
+  // welcome modal, which only confirmEmail may do (see its own comment for why). A hook is a
+  // smaller seam than a second copy of six ordered steps.
+  const establishSession = useCallback(async (token, { afterSnapshot } = {}) => {
     const data = await verifyNewSession(token);
     saveAuthSnapshot(data);
-    const switchedAccount = adoptOutboxAccount(data.account?.id);
-    // Only restore when the account actually changed -- the same account's queued writes never left
+    afterSnapshot?.(data);
+    const switchedAccount = adoptOutboxScope(data.account?.id, data.user?.id);
+    // Only restore when the scope actually changed -- the same login's queued writes never left
     // the live mutation cache across a mere 401, and restoring again would duplicate them.
+    //
+    // On a household SWITCH this is the whole story: the outgoing household's queued writes stay
+    // on their own IndexedDB key (adoptOutboxScope flips the pointer before evicting), so they are
+    // suspended rather than lost, and switching back restores them here.
     if (switchedAccount) await restoreOutbox(queryClient);
     flushOutbox();
     requestPersistentStorage();
-    // freshLogin distinguishes this explicit, credentials-based sign-in from a silent boot/reconnect
+    // freshLogin distinguishes an explicit, credentials-based sign-in from a silent boot/reconnect
     // reconciliation -- AppStateContext reads it to reset every person's last-open tab back to Log,
     // since resuming wherever the previous user left off is only correct on a mid-session reload.
+    // A household switch counts: it is a deliberate move to a different household's data.
     setState({ status: 'authenticated', offline: false, freshLogin: true, ...data });
   }, []);
+
+  /**
+   * Returns null once signed in, or `{ households, selectionToken }` when the credential belongs
+   * to two or more households and one has to be chosen first.
+   *
+   * The caller branches on the return value rather than on a status field, mirroring the server's
+   * `token == null`. One nullable that already had to be read beats a second vocabulary both sides
+   * must agree on.
+   */
+  const login = useCallback(async (email, password) => {
+    const response = await apiLogin({ email, password });
+    if (!response.token) {
+      // Nothing has been signed in and nothing has been torn down -- deliberately. Whatever session
+      // this device already had is still intact and still usable until a household is picked, so an
+      // abandoned picker costs nothing.
+      return { households: response.households ?? [], selectionToken: response.selectionToken };
+    }
+    await establishSession(response.token);
+    return null;
+  }, [establishSession]);
+
+  /**
+   * Finishes an invitation.
+   *
+   * ⚠️ Returns EXACTLY what `login` returns, and that is the whole design: null once signed in, or
+   * `{ households, selectionToken }` when this credential now belongs to two or more households
+   * and one has to be chosen first. Accepting an invitation as somebody who already had a
+   * household leaves them with two, so the screen they need next is the household picker they
+   * would have seen on their very next sign-in anyway -- not a toast, not a confirmation page, and
+   * not an automatic jump into a household nobody asked to be moved to.
+   *
+   * The server says which by returning `token == null`, the same nullable `login` already had to
+   * read. A brand-new address still has exactly one membership and is signed straight in.
+   *
+   * Goes through establishSession like every other way into a session -- the outbox re-scoping in
+   * particular is not optional here: this device may well be the OWNER's, with the owner's queued
+   * writes still in memory, and a member must never inherit them.
+   */
+  const acceptInvite = useCallback(async ({ inviteId, token, password }) => {
+    const response = await apiAcceptInvite({ inviteId, token, password });
+    if (!response.token) {
+      // Nothing has been torn down. The membership IS attached at this point -- that part is done
+      // and durable -- but whatever session this device already had is still intact and still
+      // usable, so abandoning the picker costs nothing but a trip through the account menu later.
+      return { households: response.households ?? [], selectionToken: response.selectionToken };
+    }
+    await establishSession(response.token);
+    return null;
+  }, [establishSession]);
+
+  /** What the /join screen needs before it can ask the right question. Reads nothing, changes nothing. */
+  const previewInvite = useCallback(({ inviteId, token }) => {
+    return apiPreviewInvite({ inviteId, token });
+  }, []);
+
+  /** Finishes a login that needed a household chosen. */
+  const chooseHousehold = useCallback(async (accountId, selectionToken) => {
+    const { token } = await apiStartSession({ accountId, selectionToken });
+    await establishSession(token);
+  }, [establishSession]);
+
+  /**
+   * Moves an already-signed-in person to another of their households.
+   *
+   * Deliberately the SAME sequence as a login rather than a lighter "just swap the token" path:
+   * every teardown in `establishSession` -- the query-cache reset, the snapshot rewrite, the outbox
+   * re-scope -- exists because the app is about to render a different household's data, which is
+   * exactly as true here as it is at sign-in. `resetQueryCache` in particular is not optional:
+   * account-shared keys (catalog, tags) carry no accountId, so without it household B renders
+   * household A's exercise list.
+   */
+  const switchHousehold = useCallback(async (accountId) => {
+    const { token } = await apiStartSession({ accountId });
+    await establishSession(token);
+  }, [establishSession]);
+
+  /**
+   * Changes this login's own password, then re-establishes the session from the token that comes
+   * back.
+   *
+   * ⚠️ The `establishSession` call is NOT optional bookkeeping. Changing a password bumps
+   * token_version server-side, which invalidates every token this user holds -- including the one
+   * that just made this request. Storing the response's token any other way, or not storing it at
+   * all, signs the person out on their next request as a direct result of having succeeded.
+   *
+   * It is the same sequence as a login rather than a lighter "swap the token" path for the reason
+   * switchHousehold gives: establishSession is the one way into a session, and a fifth private copy
+   * of its six ordered steps is exactly how confirmEmail nearly missed the outbox re-scoping.
+   *
+   * Note this is NOT freshLogin-neutral -- establishSession sets freshLogin, so every person's
+   * last-open tab resets to Log. Accepted rather than worked around: adding a flag to suppress it
+   * would be a second way through this function, and the cost is one tab reset on a rare action.
+   */
+  const changeOwnPassword = useCallback(async ({ currentPassword, newPassword }) => {
+    const { token } = await apiChangePassword({ currentPassword, newPassword });
+    await establishSession(token);
+  }, [establishSession]);
 
   // Starts the pending registration (sends a verification code) -- no account exists yet, so
   // this does not log the user in. That happens in confirmEmail below, once the code checks
@@ -271,24 +406,18 @@ export function AuthProvider({ children }) {
 
   const confirmEmail = useCallback(async ({ email, code }) => {
     const { token } = await apiConfirmEmail({ email, code });
-    const data = await verifyNewSession(token);
-    saveAuthSnapshot(data);
-    // Arms the first-run welcome modal for this account. Here, and NOT in login(): this is the
-    // only path where the account is provably created in this same request -- confirmEmail is
-    // what turns a pending registration into a real account, so an account reaching this line has
-    // just been created, full stop. login() runs on every ordinary sign-in an account will ever
-    // do, including years later, so it can never carry that guarantee.
-    markOnboardingPending(data.account?.id);
-    // A brand-new account has no queued writes of its own, but a PREVIOUS household's outbox may
-    // still be sitting in memory on this shared device -- same protection as login() above.
-    const switchedAccount = adoptOutboxAccount(data.account?.id);
-    if (switchedAccount) await restoreOutbox(queryClient);
-    flushOutbox();
-    requestPersistentStorage();
-    // See login()'s comment on freshLogin -- a brand-new confirmed registration is equally a "start
-    // fresh on Log" moment, not a resume.
-    setState({ status: 'authenticated', offline: false, freshLogin: true, ...data });
-  }, []);
+    // Same sequence as every other way into a session -- see establishSession. A brand-new account
+    // has no queued writes of its own, but a PREVIOUS household's outbox may still be sitting in
+    // memory on this shared device, which is why the re-scoping matters here too.
+    await establishSession(token, {
+      // Arms the first-run welcome modal for this account. Here, and NOT in login(): this is the
+      // only path where the account is provably created in this same request -- confirmEmail is
+      // what turns a pending registration into a real account, so an account reaching this line
+      // has just been created, full stop. login() runs on every ordinary sign-in an account will
+      // ever do, including years later, so it can never carry that guarantee.
+      afterSnapshot: (data) => markOnboardingPending(data.account?.id),
+    });
+  }, [establishSession]);
 
   const resendCode = useCallback(async ({ email }) => {
     return apiResendCode({ email });
@@ -338,6 +467,11 @@ export function AuthProvider({ children }) {
         ...state,
         isAdmin,
         login,
+        chooseHousehold,
+        acceptInvite,
+        previewInvite,
+        switchHousehold,
+        changeOwnPassword,
         register,
         confirmEmail,
         resendCode,

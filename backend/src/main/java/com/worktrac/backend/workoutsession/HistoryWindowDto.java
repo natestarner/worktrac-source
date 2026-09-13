@@ -13,7 +13,7 @@ import java.time.Instant;
 //
 // - windowStart is the floor itself, and is non-null for EVERY Free household, including one with
 //   nothing hidden yet. That is what lets PastSessionModal warn about an out-of-window date before
-//   the person has ever logged anything old. Null means Pro (no floor, nothing to say).
+//   the person has ever logged anything old. Null means Plus (no floor, nothing to say).
 // - hiddenSessions counts sessions before the floor THAT HAVE AT LEAST ONE SET, matching the
 //   `setsBySession.containsKey` filter in WorkoutSessionService#getHistory exactly -- so the number
 //   is precisely how many History rows are missing, never an inflated one. An honest count is the
@@ -25,7 +25,7 @@ import java.time.Instant;
 // comes back in a single round trip on upgrade. See .claude/rules/billing.md.
 public record HistoryWindowDto(Instant windowStart, int hiddenSessions, Instant earliestHiddenAt) {
 
-    // Pro, or any household with no floor: nothing is hidden and there is nothing to say.
+    // Plus, or any household with no floor: nothing is hidden and there is nothing to say.
     public static HistoryWindowDto unclamped() {
         return new HistoryWindowDto(null, 0, null);
     }

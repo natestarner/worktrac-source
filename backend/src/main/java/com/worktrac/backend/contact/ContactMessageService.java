@@ -2,6 +2,7 @@ package com.worktrac.backend.contact;
 
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.common.TooManyRequestsException;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.ratelimit.ContactRateLimiter;
@@ -59,8 +60,12 @@ public class ContactMessageService {
     }
 
     @Transactional
-    public void submit(Long accountId, Long userId, ContactRequest request, String ipAddress,
+    // Takes the whole AccountAccess rather than (accountId, userId): the record already carries
+    // both, and two parameters that must always agree are two parameters that can be passed out
+    // of order or out of sync.
+    public void submit(AccountAccess access, ContactRequest request, String ipAddress,
                         String userAgent, String correlationId) {
+        Long userId = access.userId();
         checkAllowed(userId, ipAddress);
 
         String subject = request.subject().trim();
@@ -82,11 +87,11 @@ public class ContactMessageService {
         // from "not yours".
         Person person = request.personId() == null
                 ? null
-                : personService.requireOwnedPerson(request.personId(), accountId);
+                : personService.requireVisiblePerson(request.personId(), access);
 
         User user = userRepository.getReferenceById(userId);
         ContactMessage contactMessage = new ContactMessage(
-                accountRepository.getReferenceById(accountId),
+                accountRepository.getReferenceById(access.accountId()),
                 user,
                 person,
                 // From the authenticated user, never from the request body -- see ContactMessage.

@@ -3,6 +3,10 @@ package com.worktrac.backend.user;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountDto;
 import com.worktrac.backend.account.AccountRepository;
+import com.worktrac.backend.membership.AccountMembership;
+import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.AccountRole;
+import com.worktrac.backend.membership.MembershipDto;
 import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.ConflictException;
@@ -65,6 +69,7 @@ public class RegistrationService {
     private final Clock clock;
     private final RegistrationAuditService auditService;
     private final SubscriptionService subscriptionService;
+    private final AccountMembershipRepository membershipRepository;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public RegistrationService(AccountRepository accountRepository, UserRepository userRepository,
@@ -74,7 +79,8 @@ public class RegistrationService {
                                 ApplicationEventPublisher eventPublisher, EmailProperties emailProperties,
                                 RegistrationRateLimiter rateLimiter, Optional<TestCodeCache> testCodeCache,
                                 Clock clock, RegistrationAuditService auditService,
-                                SubscriptionService subscriptionService) {
+                                SubscriptionService subscriptionService,
+                                AccountMembershipRepository membershipRepository) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
@@ -88,6 +94,7 @@ public class RegistrationService {
         this.clock = clock;
         this.auditService = auditService;
         this.subscriptionService = subscriptionService;
+        this.membershipRepository = membershipRepository;
     }
 
     @Transactional
@@ -261,8 +268,18 @@ public class RegistrationService {
                 : accountNameRaw.trim();
 
         Account account = accountRepository.save(new Account(accountName));
-        User user = userRepository.save(new User(account, email, passwordHash));
+        User user = userRepository.save(new User(email, passwordHash));
         Person person = personRepository.save(new Person(account, personName, true));
+        // The registrant owns the household they just created, and IS its primary person. This is
+        // the only place an OWNER membership is created from scratch -- every other membership
+        // comes from an invite (phase 7), which can only ever mint a MEMBER.
+        //
+        // The membership id deliberately does NOT go into the token. AccountAccessService resolves
+        // it from (userId, accountId) on every request, so a claim could only ever be a second
+        // copy that disagrees with the database -- and it would freeze for the token's 30-day life
+        // exactly the thing that has to stay revocable.
+        AccountMembership membership =
+                membershipRepository.save(new AccountMembership(account, user, person, AccountRole.OWNER));
         // Every account owns exactly one subscription row from the moment it exists, so "one row
         // per account" is true from here on rather than only for households that reach billing.
         // Nothing here talks to Stripe: a Stripe outage must never be able to break registration,
@@ -270,7 +287,13 @@ public class RegistrationService {
         subscriptionService.createFreeSubscription(account);
 
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(), user.getRole(), user.getTokenVersion());
-        return new AuthResponse(token, UserDto.from(user), AccountDto.from(account, BillingPlan.FREE),
-                PersonDto.from(person));
+        return AuthResponse.signedIn(token, UserDto.from(user), AccountDto.from(account, BillingPlan.FREE),
+                // null: this registrant IS the household's owner, so there is nobody else to
+                // name. See AuthService.ownerNameForMember.
+                // false: a brand-new household is on Free. It makes no difference to the status
+                // this produces -- the registrant is the OWNER, and an owner is never paused --
+                // but stating the true value keeps that from looking like a value chosen to dodge
+                // the question.
+                MembershipDto.from(membership, null, false), PersonDto.from(person));
     }
 }

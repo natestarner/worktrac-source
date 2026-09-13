@@ -11,6 +11,12 @@ import { tryForceUpdate } from '../../lib/swUpdate';
 
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
+// "End workout" is now ReadOnlyWrapped, which reads the caller's membership. These tests render
+// SessionBar without AuthProvider, so the hook is stubbed rather than the whole tree wrapped --
+// an owner, which is what every assertion below is about.
+vi.mock('../../hooks/useAccountAccess', () => ({
+  useAccountAccess: () => ({ canWritePerson: () => true, isMember: false, isOwner: true, selfPersonId: null, visiblePeople: [] }),
+}));
 vi.mock('../../hooks/useLiveSession', () => ({ useLiveSession: vi.fn() }));
 // Mocked like useLiveSession above: the recap's own assembly (history + catalog + pending writes)
 // is covered by useSessionRecap's sources, and its wording by utils/sessionRecap.test.js. What

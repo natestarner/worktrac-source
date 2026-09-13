@@ -33,7 +33,26 @@ const FOCUSABLE_NOT_CLOSE = FOCUSABLE.split(', ')
   .map((selector) => `${selector}:not([data-modal-close])`)
   .join(', ');
 
-export default function Modal({ width = 320, onClose, title, children, align = 'center', labelledBy }) {
+// `initialFocus` picks where focus lands on open:
+//   'first'  (default) -- the first real control, so a keyboard user starts on the name field,
+//             the note box or the first stepper rather than at the top of the page.
+//   'dialog' -- the dialog container itself. For a modal whose first control is a SEGMENTED input
+//             (<input type="date"> / type="time">), where focusing it makes the browser highlight
+//             the active segment: the month reads as a stray selected number the moment the modal
+//             appears, which looks like a rendering fault rather than a focused field.
+// Focusing the dialog is not a downgrade -- the WAI-ARIA dialog pattern lists it as an accepted
+// landing spot (that is what tabIndex={-1} on the panel is for), the title is announced, and Tab
+// still reaches every control. Prefer it only where the first control is segmented; everywhere
+// else landing on a real field is the better keyboard experience.
+export default function Modal({
+  width = 320,
+  onClose,
+  title,
+  children,
+  align = 'center',
+  labelledBy,
+  initialFocus = 'first',
+}) {
   const dialogRef = useRef(null);
   const restoreFocusRef = useRef(null);
   const titleId = useId();
@@ -55,8 +74,10 @@ export default function Modal({ width = 320, onClose, title, children, align = '
     // The header's X is skipped here -- it is first in DOM order, so without the exclusion
     // it would steal the focus that belongs to the name field / note box / first stepper.
     // It stays in the Tab cycle below; it just isn't where focus lands on open.
-    // Runs exactly once, on open -- see the ref note above.
-    const first = dialog.querySelector(FOCUSABLE_NOT_CLOSE);
+    // Runs exactly once, on open -- see the ref note above. `initialFocus` is read rather than
+    // depended on for the same reason: this effect is mount-only, and its value at mount is
+    // exactly the one that matters.
+    const first = initialFocus === 'dialog' ? null : dialog.querySelector(FOCUSABLE_NOT_CLOSE);
     (first || dialog).focus({ preventScroll: true });
 
     function onKeyDown(event) {
@@ -85,6 +106,10 @@ export default function Modal({ width = 320, onClose, title, children, align = '
   }, []);
 
   const isSheet = align === 'bottom';
+  // One derivation, used by BOTH the header's own conditional and the content wrapper's top
+  // padding below -- those two must never disagree about whether a header is on screen, or a
+  // headerless modal gets the shrunken header-gap inset instead of its own.
+  const hasHeader = Boolean(title || onClose);
 
   return createPortal(
     <div
@@ -133,7 +158,7 @@ export default function Modal({ width = 320, onClose, title, children, align = '
           animation: `${isSheet ? 'modalSheetIn' : 'modalDialogIn'} var(--dur-slow) var(--ease-out)`,
         }}
       >
-        {(title || onClose) && (
+        {hasHeader && (
           // Sticky, not static: the panel is maxHeight 80vh with its own scrollbar, and the
           // routine form is genuinely taller than that. A close button that scrolls out of
           // reach is what would make "the backdrop no longer closes this" feel like a trap.
@@ -167,7 +192,7 @@ export default function Modal({ width = 320, onClose, title, children, align = '
               justifyContent: title ? 'space-between' : 'flex-end',
               gap: 'var(--space-3)',
               background: 'var(--color-surface)',
-              padding: 'var(--space-6) var(--space-6) var(--space-3)',
+              padding: 'var(--space-6) var(--space-6) var(--space-2)',
             }}
           >
             {title && (
@@ -189,10 +214,21 @@ export default function Modal({ width = 320, onClose, title, children, align = '
         )}
         <div
           style={{
-            // Top padding is always space-6 -- whether or not there's a header above, this is
-            // plain flow content, un-elevated, so it's immune to the stacking-context paintover
-            // described above.
-            padding: `var(--space-6) var(--space-6) ${isSheet ? 'calc(var(--space-6) + env(safe-area-inset-bottom))' : 'var(--space-6)'}`,
+            // Plain flow content, un-elevated, so it is immune to the stacking-context paintover
+            // described above -- which is why the header->content gap is still mostly HERE rather
+            // than on the header's own bottom padding. That part of the 2026-08-10 fix is intact.
+            //
+            // What changed is the SIZE, not the structure. With a header the gap was space-3 + a
+            // full space-6 = 36px of padding, measuring ~40px from the title's box to the first
+            // field across every modal (add-person, routine, past-workout alike) -- enough that
+            // the title read as detached from the content it introduces. It is now space-2 +
+            // space-4 = 24px, and the wrapper still owns two thirds of it.
+            //
+            // Conditional because this padding does DOUBLE DUTY: with a header it is the gap, but
+            // with no header it is the panel's own top inset, where space-6 is correct and must
+            // stay -- shrinking it unconditionally would leave a headerless modal with 16px on top
+            // against 24px on its other three sides.
+            padding: `${hasHeader ? 'var(--space-4)' : 'var(--space-6)'} var(--space-6) ${isSheet ? 'calc(var(--space-6) + env(safe-area-inset-bottom))' : 'var(--space-6)'}`,
           }}
         >
           {children}

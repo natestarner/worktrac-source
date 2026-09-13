@@ -8,12 +8,17 @@ import { removePerson } from '../../api/people';
 import EditPersonModal from './EditPersonModal';
 import DeleteAccountModal from './DeleteAccountModal';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import { useAccountAccess } from '../../hooks/useAccountAccess';
+import ChangePasswordSection from './ChangePasswordSection';
+import LoginsSection from './LoginsSection';
 
 export default function ProfileTab() {
   const { user, account, people, refreshPeople } = useAuth();
+  const { isMember, selfPersonId, ownerName } = useAccountAccess();
   const { openConfirm } = useUI();
   const navigate = useNavigate();
   const primary = people.find((p) => p.isPrimary);
+  const self = people.find((p) => String(p.id) === String(selfPersonId));
   const [editingPerson, setEditingPerson] = useState(null);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const { run } = useGatedMutation();
@@ -38,13 +43,56 @@ export default function ProfileTab() {
         &larr; Back
       </button>
 
-      <SectionLabel>Account holder</SectionLabel>
+      {/* "Account holder" is the owner's framing and is actively wrong for a member: user.email
+          is the MEMBER's own address, so that heading would sit above their email describing
+          somebody else. A member gets their own identity instead.
+
+          A member also sees WHO the owner is -- MembershipDto.ownerName, resolved for members only.
+          It answers "who do I ask?", and it is what makes the refusals elsewhere actionable. */}
+      <SectionLabel>{isMember ? 'You' : 'Account holder'}</SectionLabel>
       <div style={cardStyle}>
-        <Field label="Name" value={primary?.name} />
+        <Field label="Name" value={isMember ? self?.name : primary?.name} />
+        {/* AccountRole spelled out in the same plain language LoginsSection and the handbook use
+            ("Enable login", never "OWNER"/"MEMBER") -- this is the one place a person can just
+            look up which they are, rather than inferring it from which controls are missing. */}
+        <Field label="Role" value={isMember ? 'Member' : 'Account owner'} />
         <Field label="Household" value={account?.name} />
-        <Field label="Email" value={user?.email} last />
+        <Field label="Email" value={user?.email} last={!isMember} />
+        {/* Only a member sees this, and only a member needs it: it answers "who do I ask?", and it
+            is the same person the refusals elsewhere in the app tell them to ask. ownerName is null
+            for an owner by design, so this row simply does not render for them. */}
+        {isMember && <Field label="Household owner" value={ownerName} last />}
       </div>
 
+      {/* The transparency line. Deliberately plain, deliberately above everything else a member can
+          do here, and deliberately the SAME sentence the invite email carries -- for a teenager
+          with their own login this is the whole trust story, and it must not read differently
+          depending on where they meet it.
+
+          ⚠️ If the owner's powers ever change, THIS SENTENCE changes with them. It is the reason
+          the owner gets invite/revoke controls but no password-setting control. */}
+      {isMember && (
+        <div style={transparencyStyle}>
+          {ownerName || 'The account owner'} owns this household. They can see your workouts and can
+          remove your login. <strong>They cannot see or set your password.</strong>
+        </div>
+      )}
+
+      {/* Above the household-management split on purpose: this is the one thing on this screen
+          every role can do, and for a member it is the ONLY thing. Putting it below would bury a
+          member's single action under a block that renders nothing for them. */}
+      <ChangePasswordSection />
+
+      {/* Everything below is household management, which is MANAGE_PEOPLE / DELETE_ACCOUNT and
+          therefore owner-only. Hidden rather than disabled: a member has no path to any of it, so
+          showing a greyed-out roster of controls they can never use is noise that also invites
+          "why not?". Disabling is for something you could do under other circumstances -- see
+          ReadOnlyWrap, which is exactly that case.
+
+          The server refuses all of it regardless (PersonController's MANAGE_PEOPLE, and
+          AccountController's DELETE_ACCOUNT); this only stops the client offering it. */}
+      {!isMember && (
+        <>
       <SectionLabel>People</SectionLabel>
       <div style={cardStyle}>
         {people.map((p, i) => (
@@ -85,6 +133,8 @@ export default function ProfileTab() {
         ))}
       </div>
 
+      <LoginsSection plan={account?.plan} />
+
       <SectionLabel>Danger zone</SectionLabel>
       <div style={cardStyle}>
         <div
@@ -108,6 +158,9 @@ export default function ProfileTab() {
           </OfflineDisabledWrap>
         </div>
       </div>
+
+        </>
+      )}
 
       {editingPerson && <EditPersonModal person={editingPerson} onClose={() => setEditingPerson(null)} />}
       {showDeleteAccount && <DeleteAccountModal onClose={() => setShowDeleteAccount(false)} />}
@@ -156,3 +209,13 @@ const badgeStyle = {
 
 const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent-text)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const deleteLinkStyle = { background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+
+const transparencyStyle = {
+  fontSize: 13,
+  lineHeight: 1.55,
+  color: 'var(--color-muted)',
+  background: 'var(--color-subtle-bg)',
+  borderRadius: 10,
+  padding: '12px 14px',
+  marginBottom: 24,
+};

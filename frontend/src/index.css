@@ -209,6 +209,33 @@
   --session-bar-height: 52px;
   --bottom-bar-height: 0px;
 
+  /* --- Top chrome clearance ----------------------------------------------
+     How far anything scrolled-to under the sticky .app-chrome needs to clear
+     it by, so the thing being scrolled to doesn't end up PAINTED OVER by the
+     chrome rather than merely near it. One shared value rather than two
+     independent guesses that could drift apart -- .help-section's anchored
+     headings and the Log picker's search field both need it.
+     Deliberately generous rather than exact: the chrome's height varies with
+     whether the person bar is showing (one person vs. several), and
+     overshooting costs a little whitespace where undershooting hides the
+     target behind the chrome. */
+  --sticky-chrome-clearance: 132px;
+
+  /* --- Log picker chips -------------------------------------------------
+     The picker's exercise chips are bounded by ROWS, not by a count of
+     items: chips are variable-width, so a fixed item cap shows wildly
+     different amounts of the list depending on how long someone's exercise
+     names are. Clipping at a row multiple also means a wider screen fits
+     more chips per row and therefore shows MORE items in the same nine
+     rows, for free and with no measurement.
+     These three are what make that arithmetic exact -- see .picker-chip
+     (whose height is pinned, not derived from font metrics) and
+     .picker-chip-wrap--clipped. Tune --picker-chip-rows here; nothing
+     else needs to change. */
+  --picker-chip-h: 46px;
+  --picker-chip-gap: var(--space-2);
+  --picker-chip-rows: 9;
+
   /* --- Rest ring -------------------------------------------------------
      The unfilled remainder of a person pill's rest ring. Two values because
      one ring has to work on two grounds: an inactive pill is --color-surface,
@@ -376,10 +403,19 @@ body {
    .sr-only: that hides it from sighted keyboard users too, which defeats the purpose -- the point
    is that someone tabbing sees where the focus went. Uses the same accent ring every other control
    gets, so it reads as part of the app rather than as a stray browser affordance. */
+/* Parked off-screen by its OWN height (translateY -100%), never by a fixed offset.
+   It was `top: calc(-1 * var(--space-10))` -- 40px -- against a box that measures 45.5px, so 5.5px
+   of it stayed on screen: a rounded, bordered, shadowed sliver above the header, indented 12px
+   from the left, which read as a stray line above the Huddle lockup.
+   A magic offset has to be re-verified against every change to the font size, the padding, the
+   border, or the length of the string once it is translated; -100% cannot drift, because it IS the
+   height. The extra --space-6 clears the box-shadow, which a flush -100% would leave bleeding.
+   Transform also composites instead of triggering layout on each frame of the transition. */
 .skip-link {
   position: absolute;
   left: var(--space-3);
-  top: calc(-1 * var(--space-10));
+  top: var(--space-3);
+  transform: translateY(calc(-100% - var(--space-6)));
   z-index: var(--z-header-menu);
   padding: var(--space-3) var(--space-4);
   background: var(--color-surface);
@@ -390,10 +426,10 @@ body {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-3), var(--elevation-hairline);
   text-decoration: none;
-  transition: top var(--dur-base) var(--ease-out);
+  transition: transform var(--dur-base) var(--ease-out);
 }
 .skip-link:focus-visible {
-  top: var(--space-3);
+  transform: translateY(0);
 }
 
 .sr-only {
@@ -559,6 +595,68 @@ button:not(.pressable):active:not(:disabled) {
   color: var(--color-muted);
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
+}
+
+/* The Log picker's search field scrolls itself to the top of the viewport on focus (see
+   ExercisePicker.jsx), aiming to stay clear of a mobile keyboard. Without this, "the top of the
+   viewport" is also exactly where the sticky .app-chrome paints, at a higher z-index -- so the
+   field lands right BEHIND the chrome instead of below it: hidden on a phone, "sliding under the
+   log banner" on a desktop click. See --sticky-chrome-clearance. */
+.exercise-search-input {
+  scroll-margin-top: var(--sticky-chrome-clearance);
+}
+
+/* The Log picker's exercise chips -- the big tappable ones, not `.chip` (which is the small
+   read-only tag pill). Was an inline style object in ExercisePicker.jsx; it lives here because
+   the row-clipping below needs the height and gap as tokens, and CSS is the only place a
+   calc() over them can be written.
+
+   The height is PINNED rather than left to padding + font metrics. That is the whole trick: it
+   makes every chip exactly one row tall, so a wrapped row is exactly --picker-chip-h and
+   clipping at a multiple of it always lands on a row boundary. Derive the height from padding
+   instead and a font swap or a line-height change silently puts the clip mid-row.
+
+   Single-line for the same reason: a name long enough to wrap would make ITS row taller and
+   break the multiple. `display: block` (not inline-flex) with line-height centring is what
+   makes text-overflow: ellipsis actually apply -- ellipsis has no effect on a flex container.
+   The full name stays in the accessible name via aria-label at the call site, so truncation is
+   visual only. */
+.picker-chip {
+  display: block;
+  height: var(--picker-chip-h);
+  /* Minus the 1px border top and bottom -- box-sizing is border-box globally, so this centres
+     the text in the content box. */
+  line-height: calc(var(--picker-chip-h) - 2px);
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  cursor: pointer;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.picker-chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--picker-chip-gap);
+}
+
+/* n rows of chips plus the n-1 gaps between them. Purely visual and correct on the FIRST paint --
+   no measurement, no flash. ExercisePicker separately measures scrollHeight against clientHeight
+   to decide whether to offer "Show all", and marks the clipped chips inert; if that measurement
+   never runs (jsdom lays nothing out), the list is still correctly clipped. */
+.picker-chip-wrap--clipped {
+  max-height: calc(
+    var(--picker-chip-rows) * var(--picker-chip-h) +
+      (var(--picker-chip-rows) - 1) * var(--picker-chip-gap)
+  );
+  overflow: hidden;
 }
 
 .empty-state {
@@ -770,6 +868,14 @@ input[type='search']::-webkit-search-results-decoration {
 
 .seg-fill {
   display: flex;
+  /* Lets a row with more options than a narrow phone can hold (Trends' 5-way exercise metric
+     switcher: Est. 1RM / Top weight / Volume / Best set / Reps) break onto a second line instead
+     of every pill's text overflowing on top of its neighbour -- see .seg-fill .seg-item below for
+     the half of this that actually decides WHEN that happens. `gap` above already spaces a second
+     row the same as the first, so no wrapping-specific gap is needed here. A control with few
+     enough options to always fit one row (the 3-item range/weekly-metric toggles) never reaches
+     the width this triggers at, so this is a no-op for them. */
+  flex-wrap: wrap;
   width: 100%;
 }
 
@@ -792,9 +898,70 @@ input[type='search']::-webkit-search-results-decoration {
   justify-content: center;
 }
 
+/* TabsNav (Log/History/PRs/Routines/Trends) keeps `.seg`'s default look -- sized to its own
+   content, NOT stretched full-width like `.seg-fill` -- whenever there's room for it. Below a
+   phone-portrait width there isn't: at full padding the five tabs are wider than the content
+   column beside them (the search box, a routine card), so the row either needs to scroll (the
+   old behaviour -- and iOS's overlay scrollbar is invisible until you already know to swipe, so
+   it just looked cut off) or shrink.
+   `flex-shrink` alone can't do this: a flex item's automatic minimum width already INCLUDES its
+   current padding, so shrinking never reaches into the padding -- it either leaves the box alone
+   or starts overflowing the text past it, which is the exact bug .seg-fill's own item rule
+   documents above. Padding has to be a value we write, not a width flex-shrink discovers.
+   A CSS lock, not a breakpoint: the row needs to trim by a different amount at 320px than at
+   414px, so a single cutover would either undershoot (still short of the edge) or overshoot
+   (tighter than it needs to be) everywhere except the one width it was tuned for. `10vw - 25px`
+   is fitted to two points measured LOCALLY (Windows Chrome, which -- like every non-Apple
+   platform -- already falls through this app's `-apple-system, BlinkMacSystemFont, 'SF Pro
+   Text'` stack to a substitute font): full padding (--space-4, 16px) at a ~410px-wide screen,
+   and 7px (just under --space-2) at 320px. `.app-chrome` (and this bar with it) is always full
+   viewport width with no narrower wrapper of its own, which is what makes `vw` an exact stand-in
+   for "this element's own available width" here.
+
+   That measurement being platform-specific is exactly why the fit-content/flex-shrink pair below
+   exists, and why this alone was not enough: lower's e2e run (Linux/Chromium, a third fallback
+   font again) rendered these same five labels ~40px wider in total than the Windows measurement
+   the constants above were fitted to, so the same padding floor that fits comfortably on the two
+   platforms actually measured here still overflowed by ~40px on a THIRD. No fixed pixel constant
+   can be fitted against a font stack this app never actually gets to render outside real Apple
+   hardware -- so padding shrinking first is the common-case polish, verified only for the
+   fallback fonts on hand, and the pair below is what turns "must never overflow" into a real
+   guarantee instead of a measurement that happened to hold on the machines used to take it. */
+.tabs-nav-bar .seg {
+  /* A definite width for `.seg-item`'s flex-shrink below to compress against once the padding
+     floor above isn't enough on its own -- `fit-content` keeps hugging its own content exactly
+     as before whenever that content is narrower than the row (the common case), so this changes
+     nothing visible unless the floor above has already been reached. */
+  width: fit-content;
+  max-width: 100%;
+}
+
+.tabs-nav-bar .seg-item {
+  padding-inline: clamp(7px, 10vw - 25px, var(--space-4));
+  /* The unconditional safety net: if the padding floor above still isn't enough (a wider font
+     than either fallback this was measured against), shrink into the label itself rather than
+     overflow or scroll -- ellipsis, not the overlap `.seg-fill`'s own item rule documents, since
+     this overrides the automatic min-content floor that rule relies on. Ellipsis truncates the
+     PAINT only; the text node (and therefore the accessible name) is untouched, so a screen
+     reader still hears "Routines" even on a screen narrow/wide-fonted enough to show "Routi…". */
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .seg-fill .seg-item {
   flex: 1 1 0;
-  min-width: 0;
+  /* Deliberately NOT min-width: 0. A flex item's automatic minimum defaults to its own
+     min-content size (its label's natural width, since nothing here sets overflow), and that
+     content-based floor is exactly what should decide wrapping -- it needs no breakpoint and
+     needs no per-label pixel guess, and it still updates itself for free if a label is ever
+     reworded. `min-width: 0` was overriding that floor to force every pill onto one line
+     regardless of content, which is what let "Top weight" and "Best set" shrink past their own
+     text width on an iPhone-portrait Trends card: with white-space: nowrap and no truncation, the
+     overflowing text painted on top of the next pill instead of wrapping the row.
+     flex-basis 0 still means each line's pills grow to fill it evenly once wrapping has settled
+     which pills share a line -- unchanged from before. */
   padding: var(--space-2) var(--space-1);
 }
 
@@ -845,8 +1012,13 @@ input[type='search']::-webkit-search-results-decoration {
    the full screen including the area behind the home indicator and, in
    landscape, the sensor housing. index.html sets viewport-fit=cover to opt into
    that region; these insets are what keeps content out from under it. */
+/* Vertical padding is --space-2, not --space-3, because the lockup brings its own. The asset's
+   viewBox is cropped to the brand-minimum clear space (docs/brand/README.md), which at height 52
+   renders as ~11px of empty pixels above and below the ink -- so 12px of padding on top of that
+   read as ~23px of gap and made the bar look unfinished rather than generous. Trimming the
+   PADDING respects the clear space; cropping the asset or shrinking the 52 would not. */
 .header-bar {
-  padding: var(--space-3) var(--space-6);
+  padding: var(--space-2) var(--space-6);
   padding-left: max(var(--space-6), env(safe-area-inset-left));
   padding-right: max(var(--space-6), env(safe-area-inset-right));
 }
@@ -886,7 +1058,7 @@ input[type='search']::-webkit-search-results-decoration {
   }
 }
 
-/* A dark fill couldn't get brighter without either failing AA behind "Pro" (--color-accent alone
+/* A dark fill couldn't get brighter without either failing AA behind "Plus" (--color-accent alone
    is 3.44:1 and fails at this size -- frontend-core.md) or burying HuddleMark's own colours in a
    same-toned background. So this pill flips the approach entirely and keeps its own FIXED bright
    identity colours regardless of theme -- literals, not tokens, the same deliberate exception
@@ -898,7 +1070,7 @@ input[type='search']::-webkit-search-results-decoration {
    Text is the LIGHT-MODE hex of --color-accent-text, pinned rather than left as the token (dark
    mode's variant is tuned for a dark background, which this deliberately never is) -- 5.33:1
    against white, the same already-documented number that token carries against --color-surface. */
-.plan-badge--pro {
+.plan-badge--plus {
   color: #a8532c;
   background: linear-gradient(135deg, #ffffff 0%, #fdf1e6 100%);
   border: 1px solid var(--color-accent);
@@ -1967,10 +2139,8 @@ input[type='search']::-webkit-search-results-decoration {
   padding-top: var(--space-8);
   margin-top: var(--space-8);
   /* Clears the sticky .app-chrome so an anchored section's heading isn't parked
-     underneath the tab bar. Deliberately generous rather than exact: the chrome's
-     height varies with whether the person bar is showing (one person vs. several),
-     and overshooting costs a little whitespace where undershooting hides a heading. */
-  scroll-margin-top: 132px;
+     underneath the tab bar. See --sticky-chrome-clearance. */
+  scroll-margin-top: var(--sticky-chrome-clearance);
 }
 
 .help-h2 {

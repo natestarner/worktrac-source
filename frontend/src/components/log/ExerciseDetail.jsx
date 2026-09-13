@@ -5,6 +5,7 @@ import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useHistory } from '../../hooks/useHistory';
 import { useDurableMutation } from '../../hooks/useDurableMutation';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { queryKeys } from '../../api/queryKeys';
 import { isTempExerciseId } from '../../lib/exerciseIdMap';
 import { newId } from '../../utils/id';
@@ -17,7 +18,7 @@ import {
   FAVORITE_MUTATION_KEY,
   isUnsyncedWrite,
 } from '../../lib/queryClient';
-import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
+import { cancelQueuedWritesForSet } from '../../lib/offlineSetEdits';
 import { comparableValue, computePrefillDraft, isPrSet } from '../../utils/formulas';
 import { resolveRestTargetSeconds } from '../../utils/restTarget';
 import { deriveExerciseSummaryFromHistory, mergeBestWithLocalSets } from '../../utils/exerciseSummaryFromHistory';
@@ -31,6 +32,7 @@ import EditSetModal from '../shared/EditSetModal';
 import ExerciseNoteModal from '../shared/ExerciseNoteModal';
 import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
+import ReadOnlyWrap from '../shared/ReadOnlyWrap';
 import { IconMore, IconNote, IconPencil, IconPin, IconStar, IconStarFilled, IconTrash } from '../shared/icons';
 import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
@@ -81,6 +83,14 @@ export default function ExerciseDetail({
     stopHoldTimer,
   } = useUI();
   const queryClient = useQueryClient();
+  // The one Tier-3 write this screen owns (deleting the exercise itself). Everything else here is
+  // durable and goes through the outbox; ConfigureExerciseModal has its own instance for the
+  // rename/tags/fields it owns. See handleRequestDelete for why the gate has to wrap the CONFIRM
+  // callback rather than the button.
+  const deleteExercise = useGatedMutation({
+    offlineMessage: 'Deleting needs a connection.',
+    errorMessage: "Couldn't delete that exercise. Try again.",
+  });
 
   // The one flag that decides what this screen measures. exercise.trackingType has shipped to the
   // client on both ExerciseDto and PersonExerciseDto since V6 -- it was simply never read.
@@ -265,15 +275,28 @@ export default function ExerciseDetail({
     favoriteMutation.mutate({ personId, exerciseId: exercise.id, exerciseName: exercise.name, favorite: next });
   }
 
+  // Tier-3, and already gated twice before it can be reached: ConfigureExerciseModal routes the
+  // entry point through useGatedMutation with `disabled={!online}`, and the Customize button that
+  // opens that modal is disabled for a temp id. Neither gate covers the window this handler owns,
+  // though -- the actual write happens after the CONFIRM, and UIContext's runConfirm is
+  // try/finally with no catch. So connectivity dropping between tapping Delete and confirming (or
+  // any 500) rejected into nothing: the dialog closed and the exercise was still there, looking
+  // exactly like a delete that worked.
+  //
+  // `deleteExercise.run` is the same useGatedMutation instance the rest of this screen's Tier-3
+  // writes use, so the failure lands on the one error path rather than a try/catch hand-rolled
+  // here -- open-coded copies of this with no catch are precisely what that hook was created to
+  // remove (see .claude/rules/frontend-core.md). Nothing about the outbox is involved: an exercise
+  // delete is not a durable write and never enters the queue.
   function handleRequestDelete() {
     setShowConfigureModal(false);
     openConfirm(
       `Delete "${exercise.name}"? Already-logged sets for it are kept, but it will disappear from your picker.`,
-      async () => {
+      deleteExercise.run(async () => {
         await removeExercise(exercise.id);
         if (onPersonalizationChanged) await onPersonalizationChanged();
         onBack();
-      },
+      }),
     );
   }
 
@@ -380,20 +403,44 @@ export default function ExerciseDetail({
       // the weight/reps shown come from the exact values submitted (the mutation variables).
       if (result.isPR) {
         const isHold = result.best.durationSeconds != null;
-        const isBodyweight = result.best.weight === 0;
+        // Read the LOGGED set's weight, not result.best's. The caption describes the set being
+        // celebrated and setText below comes from the same `variables`, so the two must not be able
+        // to disagree -- the old code mixed the sources for no reason.
+        const loggedWeight = Number(variables.weight) || 0;
+        const setText = formatSetSpaced({
+          weight: variables.weight,
+          reps: variables.reps,
+          durationSeconds: variables.durationSeconds,
+          unit: defaultUnit,
+        });
+        // ONE caption, chosen here rather than a boolean the overlay re-interprets.
+        //
+        // It was `isBodyweight: isBodyweight || isHold`, and PRCelebration renders the literal word
+        // "Bodyweight" for that flag -- so EVERY hold was captioned "Bodyweight", including one
+        // logged with weight on it. The comment said a hold "takes the same rep-focused
+        // presentation branch", which is true of the LAYOUT and false of the LABEL; one flag was
+        // answering both questions.
+        //
+        // PRsTab has had the correct three-way split all along (durationSeconds first, then
+        // weight === 0, then est. 1RM) and says "Longest hold at 25lb" -- so the two surfaces
+        // disagreed about the same set. This brings the celebration in line.
+        //
+        // The caption does not repeat the word "hold": est1rmText above it already reads
+        // "1:00 hold", so what is missing for a weighted hold is only the load.
+        const caption = isHold
+          ? loggedWeight > 0
+            ? `Weighted · ${loggedWeight} ${defaultUnit}`
+            : 'Bodyweight'
+          : loggedWeight === 0
+            ? 'Bodyweight'
+            : `Est. 1RM · ${setText}`;
         showCelebration({
           exerciseName: exercise.name,
-          // A hold has no est. 1RM either, so it takes the same rep-focused presentation branch.
-          isBodyweight: isBodyweight || isHold,
-          setText: formatSetSpaced({
-            weight: variables.weight,
-            reps: variables.reps,
-            durationSeconds: variables.durationSeconds,
-            unit: defaultUnit,
-          }),
+          caption,
+          setText,
           est1rmText: isHold
             ? `${formatRestTime(variables.durationSeconds)} hold`
-            : isBodyweight
+            : loggedWeight === 0
               ? `${variables.reps} reps`
               : `${result.best.est1rm} ${defaultUnit}`,
         });
@@ -728,7 +775,7 @@ export default function ExerciseDetail({
     if (set.optimistic) {
       // Not yet synced -- there's no server row to delete, only a still-pending create. Cancel it
       // outright rather than queuing a delete that would 404 (see offlineSetEdits.js).
-      cancelPendingLogSet(queryClient, set.id);
+      cancelQueuedWritesForSet(queryClient, set.id);
       return;
     }
     // Durable mutation reconciles sets/PRs/History on sync and treats a replay 404 (already
@@ -783,18 +830,25 @@ export default function ExerciseDetail({
                 each with a ~20px hit area. As IconButtons they share one 40px target and
                 one stroke weight. The aria-labels are unchanged -- e2e selects the note
                 button by "Edit note for this session". */}
-            <IconButton
-              onClick={handleToggleFavorite}
-              label={exercise.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              icon={exercise.isFavorite ? IconStarFilled : IconStar}
-              tone={exercise.isFavorite ? 'accent' : 'default'}
-            />
+            {/* Favoriting writes to person_exercise, so it belongs to whoever's screen this is.
+                ReadOnlyWrap nests INSIDE any offline wrapper by convention -- here there is none,
+                because favoriting is a durable outbox write and works offline. */}
+            <ReadOnlyWrap personId={personId}>
+              <IconButton
+                onClick={handleToggleFavorite}
+                label={exercise.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                icon={exercise.isFavorite ? IconStarFilled : IconStar}
+                tone={exercise.isFavorite ? 'accent' : 'default'}
+              />
+            </ReadOnlyWrap>
+            <ReadOnlyWrap personId={personId}>
             <IconButton
               onClick={() => setShowSessionNoteModal(true)}
               label={sessionNote ? 'Edit note for this session' : 'Add a note for this session'}
               icon={IconNote}
               tone={sessionNote ? 'accent' : 'default'}
             />
+            </ReadOnlyWrap>
             {/* Disabled until the exercise exists on the server. Everything behind this button is a
                 Tier-3 write that posts the exercise id straight to `api/*` -- rename, tags, setup
                 fields, delete -- and none of them resolve a temp id (unlike the durable writes,
@@ -808,13 +862,22 @@ export default function ExerciseDetail({
                 sync instead of firing at an id the server has never seen.
                 Reachable online only since the create stopped waiting on a refetch before opening
                 this screen (#186); offline it was always reachable, and always broken. */}
-            <IconButton
-              onClick={() => setShowConfigureModal(true)}
-              label="Customize this exercise"
-              icon={IconMore}
-              disabled={isTempExerciseId(exercise.id)}
-              data-tour-anchor={TOUR_ANCHORS.CUSTOMIZE_EXERCISE}
-            />
+            {/* Everything inside the modal is a per-person write (standing note, tags, setup
+                fields -- PersonExerciseController, personScoped), so on somebody else's screen all
+                of it 403s. Its two neighbours above were wrapped and this was not, which left a
+                live button between two greyed ones opening a modal where nothing could save.
+                Disabled rather than hidden, unlike the rename controls inside: this one you CAN do,
+                by switching to your own person. Nothing is lost by blocking the entry point --
+                the tags and the standing note are both rendered inline just below. */}
+            <ReadOnlyWrap personId={personId}>
+              <IconButton
+                onClick={() => setShowConfigureModal(true)}
+                label="Customize this exercise"
+                icon={IconMore}
+                disabled={isTempExerciseId(exercise.id)}
+                data-tour-anchor={TOUR_ANCHORS.CUSTOMIZE_EXERCISE}
+              />
+            </ReadOnlyWrap>
           </div>
           {exercise.tags?.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
@@ -826,11 +889,15 @@ export default function ExerciseDetail({
             </div>
           )}
 
+          {/* Second entry point to the same modal -- wrapping only the "..." button would be
+              cosmetic. */}
           {exercise.note && (
-            <button onClick={() => setShowConfigureModal(true)} className="pressable" style={pinnedNoteStyle}>
-              <IconPin size={14} style={{ marginTop: 2, color: 'var(--color-faint)' }} />
-              <span>{exercise.note}</span>
-            </button>
+            <ReadOnlyWrap personId={personId}>
+              <button onClick={() => setShowConfigureModal(true)} className="pressable" style={pinnedNoteStyle}>
+                <IconPin size={14} style={{ marginTop: 2, color: 'var(--color-faint)' }} />
+                <span>{exercise.note}</span>
+              </button>
+            </ReadOnlyWrap>
           )}
 
           {sessionNote && (
@@ -967,9 +1034,11 @@ export default function ExerciseDetail({
                 controls, and the wrapper's margin keeps them from touching. */}
             {isDuration && (
               <div style={{ marginBottom: 'var(--space-3)' }}>
+                <ReadOnlyWrap personId={personId}>
                 <Button onClick={handleToggleHold} variant="dark" size="lg" fullWidth>
                   {holdRunning ? `Stop timer · ${formatRestTime(runningHoldElapsed)}` : 'Start timer'}
                 </Button>
+                </ReadOnlyWrap>
               </div>
             )}
             {/* The screen's one primary action, and the only place size="lg" is used on
@@ -978,6 +1047,9 @@ export default function ExerciseDetail({
                 brand accent rather than the darker --color-accent-strong the smaller
                 filled buttons need. It's also the easiest thing on the page to hit
                 mid-set, which is the whole point. */}
+            {/* The screen's one primary action, and the one that matters most here: a member
+                must never be able to log a set onto somebody else's history. */}
+            <ReadOnlyWrap personId={personId}>
             <Button onClick={handleLogSet} variant="primary" size="lg" fullWidth data-tour-anchor={TOUR_ANCHORS.LOG_SET}>
               <span
                 style={{
@@ -990,6 +1062,7 @@ export default function ExerciseDetail({
                 {activePersonFirstName ? `Log set for ${activePersonFirstName}` : 'Log set'}
               </span>
             </Button>
+            </ReadOnlyWrap>
           </div>
         </div>
 
@@ -1097,17 +1170,24 @@ export default function ExerciseDetail({
                         // sweaty hands mid-set. Each now owns a 40px target.
                         // The labels stay exactly "Edit" and "Delete": ~40 e2e assertions
                         // select these by accessible name.
+                        // The labels stay exactly "Edit" and "Delete" -- ReadOnlyWrap clones the
+                        // control in place and adds no DOM node, so the ~40 e2e assertions that
+                        // select these by accessible name are unaffected.
                         <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
-                          <IconButton onClick={() => setEditingSet(set)} label="Edit" icon={IconPencil} tone="accent" />
-                          <IconButton
-                            onClick={() => openConfirm(
-                                'Delete this set? It stops counting toward your history, records and trends.',
-                                () => handleDeleteSet(set),
-                              )}
-                            label="Delete"
-                            icon={IconTrash}
-                            tone="danger"
-                          />
+                          <ReadOnlyWrap personId={personId}>
+                            <IconButton onClick={() => setEditingSet(set)} label="Edit" icon={IconPencil} tone="accent" />
+                          </ReadOnlyWrap>
+                          <ReadOnlyWrap personId={personId}>
+                            <IconButton
+                              onClick={() => openConfirm(
+                                  'Delete this set? It stops counting toward your history, records and trends.',
+                                  () => handleDeleteSet(set),
+                                )}
+                              label="Delete"
+                              icon={IconTrash}
+                              tone="danger"
+                            />
+                          </ReadOnlyWrap>
                         </div>
                       )}
                     </div>

@@ -8,7 +8,7 @@ import { formatDate } from '../../utils/datetime';
 
 // The explainer behind HistoryWindowNotice's "About your full history" control.
 //
-// THIS IS A MODAL, AND ProUpsell's header says never to use one. The distinction is solicited vs
+// THIS IS A MODAL, AND PlusUpsell's header says never to use one. The distinction is solicited vs
 // unsolicited: what that rule forbids is an upgrade prompt that INTERRUPTS -- an interstitial
 // someone mid-set has to dismiss to get back to logging. This one only ever opens from an explicit
 // tap on a "why?" control, in answer to a question the person just asked. Nothing opens it
@@ -41,11 +41,11 @@ export default function HistoryWindowModal({ historyWindow, onClose }) {
 
       <div style={benefitsWrapStyle}>
         <div style={benefitsTitleStyle}>
-          {/* Same reasoning as the notice's mark: this block IS the Pro offering, so it is the one
+          {/* Same reasoning as the notice's mark: this block IS the Plus offering, so it is the one
               place in the modal the identity belongs. --color-subtle-bg follows the theme, so the
               default hairline is right here too. */}
           <HuddleMark size={14} />
-          <span>What Pro adds</span>
+          <span>What Plus adds</span>
         </div>
         <ul style={listStyle}>
           {PRO_BENEFITS.map((benefit) => (
@@ -63,8 +63,8 @@ export default function HistoryWindowModal({ historyWindow, onClose }) {
       </p>
 
       <div style={actionsStyle}>
-        {/* "Unlock full history" shares no substring with "Go Pro" (the header badge, on screen
-            behind this), "See Pro" (the notice that opened it, also still on screen) or "Close"
+        {/* "Unlock full history" shares no substring with "Go Plus" (the header badge, on screen
+            behind this), "See Plus" (the notice that opened it, also still on screen) or "Close"
             (this modal's X). Playwright matches accessible names as a case-insensitive substring,
             so those four have to stay mutually non-containing. See .claude/rules/billing.md. */}
         <Button
@@ -78,7 +78,7 @@ export default function HistoryWindowModal({ historyWindow, onClose }) {
           Unlock full history
         </Button>
         <Link to="/app/help#plan" className="pressable" style={handbookLinkStyle} onClick={onClose}>
-          How Free and Pro differ
+          How Free and Plus differ
         </Link>
       </div>
     </Modal>

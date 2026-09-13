@@ -1,5 +1,7 @@
 package com.worktrac.backend.billing;
 
+import com.worktrac.backend.membership.RequiresPermission;
+import com.worktrac.backend.membership.Permission;
 import com.stripe.exception.StripeException;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
@@ -61,6 +63,7 @@ public class BillingController {
     // with no Stripe at all. A household on Free is still on Free, and answering 503 here would
     // make the billing screen unreadable in local development for no reason.
     @GetMapping("/subscription")
+    @RequiresPermission(anyMember = true)
     public SubscriptionDto subscription() {
         return subscriptionService.describe(currentUser.accountId());
     }
@@ -71,6 +74,7 @@ public class BillingController {
     // The client sends MONTH or YEAR -- never a Stripe price id. Accepting one from a browser would
     // let a caller check out against any price they cared to invent.
     @PostMapping("/checkout-session")
+    @RequiresPermission(Permission.MANAGE_BILLING)
     @Transactional
     public Map<String, String> createCheckoutSession(@Valid @RequestBody CheckoutRequest request) {
         requireStripe();
@@ -83,8 +87,8 @@ public class BillingController {
 
         // Refuse when the household is already entitled. Without this, two devices (or two taps in
         // two tabs) can each open a checkout and end up with a household paying twice.
-        if (subscriptionService.isPro(subscription)) {
-            throw new ForbiddenException("This household already has Pro.");
+        if (subscriptionService.isPlus(subscription)) {
+            throw new ForbiddenException("This household already has Plus.");
         }
 
         try {
@@ -93,7 +97,11 @@ public class BillingController {
             // unwind, since each carries its own subscriptions and payment methods.
             String customerId = subscription.getStripeCustomerId();
             if (customerId == null) {
-                String email = userRepository.findByAccount_Id(accountId)
+                // The OWNER's address specifically. Receipts and dunning mail must reach whoever is
+                // paying -- a member's inbox is neither the right destination nor stable, since
+                // members come and go while the owner is the billing relationship.
+                String email = userRepository.findOwners(accountId).stream()
+                        .findFirst()
                         .map(user -> user.getEmail())
                         .orElse(null);
                 customerId = stripeService.createCustomer(accountId, email,
@@ -120,6 +128,7 @@ public class BillingController {
     // webhook -- is what makes the upgrade visible the instant the browser returns, which avoids
     // the classic "I paid and I'm still on Free" support ticket. The webhook is the backstop.
     @PostMapping("/checkout-session/{sessionId}/reconcile")
+    @RequiresPermission(Permission.MANAGE_BILLING)
     @Transactional
     public SubscriptionDto reconcileCheckout(@PathVariable String sessionId) {
         requireStripe();
@@ -159,6 +168,7 @@ public class BillingController {
     // only -- Stripe has no embedded variant -- so the frontend opens it in a NEW TAB, leaving the
     // installed PWA's own document alive behind it.
     @PostMapping("/portal-session")
+    @RequiresPermission(Permission.MANAGE_BILLING)
     public Map<String, String> createPortalSession() {
         requireStripe();
         Long accountId = currentUser.accountId();

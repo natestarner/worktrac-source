@@ -6,7 +6,7 @@ import com.worktrac.backend.common.TooManyRequestsException;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.config.EmailProperties;
 import com.worktrac.backend.ratelimit.RegistrationRateLimiter;
-import com.worktrac.backend.security.TokenVersionService;
+import com.worktrac.backend.membership.AccountAccessService;
 import com.worktrac.backend.user.dto.ForgotPasswordRequest;
 import com.worktrac.backend.user.dto.ResendResetCodeRequest;
 import com.worktrac.backend.user.dto.ResetPasswordRequest;
@@ -41,7 +41,7 @@ public class PasswordResetService {
     private final ApplicationEventPublisher eventPublisher;
     private final EmailProperties emailProperties;
     private final RegistrationRateLimiter rateLimiter;
-    private final TokenVersionService tokenVersionService;
+    private final AccountAccessService accountAccessService;
     private final Optional<TestCodeCache> testCodeCache;
     private final Clock clock;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -52,7 +52,7 @@ public class PasswordResetService {
                                  ApplicationEventPublisher eventPublisher,
                                  EmailProperties emailProperties,
                                  RegistrationRateLimiter rateLimiter,
-                                 TokenVersionService tokenVersionService,
+                                 AccountAccessService accountAccessService,
                                  Optional<TestCodeCache> testCodeCache,
                                  Clock clock) {
         this.userRepository = userRepository;
@@ -61,7 +61,7 @@ public class PasswordResetService {
         this.eventPublisher = eventPublisher;
         this.emailProperties = emailProperties;
         this.rateLimiter = rateLimiter;
-        this.tokenVersionService = tokenVersionService;
+        this.accountAccessService = accountAccessService;
         this.testCodeCache = testCodeCache;
         this.clock = clock;
     }
@@ -135,7 +135,7 @@ public class PasswordResetService {
         // thirty more days -- on a screen implying the opposite.
         user.bumpTokenVersion();
         userRepository.save(user);
-        tokenVersionService.invalidate(user.getId());
+        accountAccessService.invalidateUser(user.getId());
         passwordResetCodeRepository.deleteByEmail(email);
 
         eventPublisher.publishEvent(new PasswordResetConfirmedEvent(email));

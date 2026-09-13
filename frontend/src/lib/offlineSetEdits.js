@@ -1,7 +1,7 @@
 // An offline-logged set (see ExerciseDetail.jsx's `optimisticSet`/`pendingBeforeSession`) has no
 // server row yet -- it's just a still-pending `logSet` mutation sitting in the outbox, keyed by
 // `variables.tempId` (the optimistic row's `id`). Deleting it before it's synced means cancelling
-// that pending CREATE outright (see cancelPendingLogSet below) -- there's no server row yet to
+// that pending CREATE outright (see cancelQueuedWritesForSet below) -- there's no server row yet to
 // delete.
 //
 // EDITING it, by contrast, is a genuinely separate durable write (EDIT_SET, targeting the create's
@@ -42,9 +42,37 @@ function findPendingLogSet(queryClient, tempId) {
     .find((m) => m.options.mutationKey?.[0] === 'logSet' && m.state.variables?.tempId === tempId);
 }
 
-export function cancelPendingLogSet(queryClient, tempId) {
-  const mutation = findPendingLogSet(queryClient, tempId);
-  if (mutation) queryClient.getMutationCache().remove(mutation);
+// Deleting a not-yet-synced set cancels its pending CREATE -- and must take every other queued
+// write that targeted that create with it, or the outbox wedges permanently.
+//
+// The one that matters is EDIT_SET. Correcting a still-queued set queues a genuinely separate
+// durable write against the create's tempId (see this file's header, and EditSetModal.jsx). Cancel
+// the create and leave that edit behind, and on reconnect it resolves a tempId the id map will
+// never hold -- because the create that would have recorded the mapping never ran. requireResolvedSetId
+// then throws UnresolvedSetIdError, which is deliberately STATUS-LESS and therefore retryable, so
+// the write retries forever at a 30s cap. Every durable write shares one serial mutation scope, and
+// a mutation in 'pending' (which includes retry backoff) never releases it -- so nothing queued
+// behind it ever syncs again, including sets logged later while fully online. That is the exact
+// head-of-line shape docs/incidents/2026-07-29-outbox-replay-order-deadlock.md describes.
+//
+// Nothing is lost by removing the edit: the create was cancelled, so no server row exists and an
+// edit against it is a logical no-op. It also keeps the "waiting to sync" list honest -- deleting a
+// set makes its pending correction disappear with it, rather than listing a change to a set the
+// person just watched vanish.
+//
+// This is the ONLY removal here that a failure could ever be confused with, and it isn't one: it is
+// driven by an explicit delete, never by a retry outcome. queryClient.js's dependency check is the
+// backstop for every other way a create can go missing.
+export function cancelQueuedWritesForSet(queryClient, tempId) {
+  const cache = queryClient.getMutationCache();
+  const doomed = cache
+    .getAll()
+    .filter(
+      (m) =>
+        (m.options.mutationKey?.[0] === 'logSet' && m.state.variables?.tempId === tempId) ||
+        (m.options.mutationKey?.[0] === 'editSet' && m.state.variables?.setId === tempId),
+    );
+  doomed.forEach((m) => cache.remove(m));
 }
 
 // Display-only: patches the pending create's own `state.variables` so a screen reading straight

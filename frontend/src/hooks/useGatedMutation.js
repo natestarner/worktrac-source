@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useRequireOnline } from './useRequireOnline';
+import { isOfflineError } from '../api/client';
 import { useUI } from '../context/UIContext';
 
 // The Tier-3 counterpart to useDurableMutation: one mechanism for every write that is deliberately
@@ -38,6 +39,21 @@ export function useGatedMutation(defaults = {}) {
       const offlineMessage = options.offlineMessage ?? defaults.offlineMessage;
       const errorMessage =
         options.errorMessage ?? defaults.errorMessage ?? "That didn't save. Try again.";
+      // Opt-in, and deliberately not the default. `errorMessage` is written for the common
+      // failure -- a connection that dropped, a server having a bad day -- where the server has
+      // nothing useful to say and a calm, fixed sentence is kinder than a status code.
+      //
+      // But some refusals ARE the server explaining something specific and actionable: "other
+      // people have already used this exercise, ask Nate to rename it". Showing "check your
+      // connection" there is worse than saying nothing -- it sends someone hunting for signal over
+      // something no connection will ever fix, the same failure mode ReadOnlyWrap exists to
+      // prevent one layer up.
+      //
+      // Opt-in per call site because backend 4xx text is NOT uniformly user-facing (an
+      // IllegalArgumentException can read "Unknown tracking type: foo"), so a blanket switch would
+      // leak developer copy into toasts across ~35 Tier-3 writes. Turn it on where the endpoint's
+      // 4xx messages are known to be written for a person.
+      const showServerMessage = options.showServerMessage ?? defaults.showServerMessage ?? false;
 
       // requireOnline wraps the whole thing, so an offline attempt shows its own calm toast and
       // never reaches the network -- exactly as before, just with the error path added underneath.
@@ -50,7 +66,12 @@ export function useGatedMutation(defaults = {}) {
           // connection that dropped mid-request. Either way there is nothing queued and nothing
           // retrying -- the person has to know, or they will believe it saved.
           console.error('Gated write failed', error);
-          showToast(errorMessage, { tone: 'error' });
+          // isOfflineError covers network failures AND 5xx -- everything where the server did not
+          // deliver a considered answer. What is left is a definitive 4xx, which is the only case
+          // where the server's own message is worth more than ours.
+          const serverMessage =
+            showServerMessage && !isOfflineError(error) ? error?.message : null;
+          showToast(serverMessage || errorMessage, { tone: 'error' });
           return undefined;
         } finally {
           setPending(false);
@@ -59,7 +80,7 @@ export function useGatedMutation(defaults = {}) {
     },
     // defaults is a fresh object literal at most call sites, so depending on it directly would
     // rebuild `run` every render. The two strings are what actually matter.
-    [requireOnline, showToast, defaults.offlineMessage, defaults.errorMessage],
+    [requireOnline, showToast, defaults.offlineMessage, defaults.errorMessage, defaults.showServerMessage],
   );
 
   return { online, pending, run };

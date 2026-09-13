@@ -1,5 +1,6 @@
 package com.worktrac.backend.contact;
 
+import com.worktrac.backend.membership.RequiresPermission;
 import com.worktrac.backend.security.ClientIpResolver;
 import com.worktrac.backend.security.CurrentUser;
 import com.worktrac.backend.security.RequestDiagnosticsFilter;
@@ -34,10 +35,11 @@ public class ContactController {
     // reaching a human -- completes asynchronously afterwards. There is no resource to hand back a
     // Location for, and no read endpoint to point at (see the plan's "no user-facing history").
     @PostMapping
+    @RequiresPermission(personScoped = true)
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void submit(@Valid @RequestBody ContactRequest request, HttpServletRequest servletRequest) {
         // ClientIpResolver, not getRemoteAddr() directly -- see its class comment.
-        contactMessageService.submit(currentUser.accountId(), currentUser.userId(), request,
+        contactMessageService.submit(currentUser.access(), request,
                 ClientIpResolver.resolveClientIp(servletRequest),
                 servletRequest.getHeader("User-Agent"),
                 servletRequest.getHeader(RequestDiagnosticsFilter.CORRELATION_ID_HEADER));

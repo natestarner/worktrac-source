@@ -39,7 +39,12 @@ Full narrative: `docs/architecture/testing.md`.
   reads the CLI flag too — but `E2E_WORKERS` is the documented knob, and the per-test/assertion
   time budgets are derived from whichever one you use, so the budget always matches the contention.
   The local default is `cores/4` (capped at 8), deliberately below Playwright's own `cores/2` so a
-  sibling worktree's suite still has room; a deployed target is pinned at 2 regardless.
+  sibling worktree's suite still has room; a deployed target ignores local cores entirely and is
+  hardcoded in `playwright.config.ts` -- raised from 2 to 8 on 2026-09-08 as a watched experiment
+  against lower's real, fixed constraint (a single Container App replica, Basic-tier/5-DTU SQL).
+  See that file's comment before touching it, and revert to 2 if `e2e-tests` starts failing with
+  connectivity-shaped errors on specs that aren't about connectivity -- that's the environment
+  saturating, not a code regression.
 - **The local stack is configured to absorb that parallelism — don't undo it.** `scripts/db.sh`
   sets `READ_COMMITTED_SNAPSHOT ON` (Azure SQL's default, a SQL Server container's non-default;
   without it `logLiveSet` deadlocks against itself under concurrency), `application-local.yml`
@@ -354,6 +359,21 @@ the re-seed that write triggers has fired before the next call types anything. *
 
 ## Locator gotchas
 
+- **The first click after a dnd-kit drag is swallowed — wait ~150ms.**
+  `AbstractPointerSensor.handleStart` adds a document-level capture-phase `click` →
+  `stopPropagation` listener, and `detach()` removes it on a **50ms `setTimeout`** (so the drag's
+  own synthetic click can't be read as a tap). Playwright can drop and click again well inside
+  that window, and the click is eaten **with no error**: actionability passes, the click
+  "succeeds", and the handler never runs. It presents as "my onClick broke after a drag". A real
+  person cannot drop and reach another control in 50ms, so **this is a test-timing artifact, not a
+  product defect — don't "fix" it in the app.** `routine-reorder.spec.ts` waits it out; this is one
+  of the few places a fixed `waitForTimeout` is the honest tool, because what is being waited out
+  is a fixed timer in a dependency with no observable signal to poll.
+- **`expect(await someAsyncRead()).toEqual(...)` does not retry.** A gated write commits and then
+  refetches, so a list re-renders a beat after the action — a one-shot `toEqual` over a plain array
+  captures the pre-refetch order and fails with correct data read too early. Use
+  `expect.poll(() => read()).toEqual(...)`. (`locator.count()` doesn't auto-wait either, which
+  fails the same way but quieter: it reports a short or empty list rather than throwing.)
 - **Use `exact: true` with `getByText`.** Toast and confirm-dialog text embeds item names, so
   substring matches collide and throw strict-mode violations.
 - New visible UI text that repeats an existing name (e.g. a link containing an exercise name) can

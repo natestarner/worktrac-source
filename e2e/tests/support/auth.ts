@@ -1,4 +1,20 @@
 import { APIRequestContext, Page, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+
+// randomUUID, not Math.random(): these addresses are typed into a real login form, so CodeQL traces
+// the value into a credential context and reports js/insecure-randomness as HIGH severity -- which
+// it did, three times, on the phase 6 PR. Nothing here is a secret (the password is a shared
+// literal and the suffix only has to be unique), but a scanner that must be argued with on every
+// auth PR is worse than a one-line change that removes the question. Collision resistance across a
+// suite that registers hundreds of households per run is a free bonus.
+//
+// ⚠️ The `huddle+e2e-` PREFIX and the `@starner.co` domain are the halves that must NOT change --
+// TestDataCleanupService matches on them from an independently-maintained copy of the literal.
+// Only the unique suffix moved.
+function uniqueSuffix() {
+  return randomUUID().replace(/-/g, '').slice(0, 12);
+}
+
 
 // Registration now requires confirming a 6-digit emailed code before the account exists --
 // this can't read a real inbox, so it drives the same test-support endpoint the backend
@@ -41,7 +57,7 @@ export async function registerHousehold(
   options: RegisterHouseholdOptions = {},
 ): Promise<string> {
   const { emailOverride, keepWelcome = false } = options;
-  const email = emailOverride ?? `huddle+e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
+  const email = emailOverride ?? `huddle+e2e-${Date.now()}-${uniqueSuffix()}@starner.co`;
 
   await page.goto('/register');
   await page.getByPlaceholder('e.g. Alex').fill(personName);
@@ -77,17 +93,17 @@ export async function registerHousehold(
   return email;
 }
 
-// Puts a household on Pro (or back on Free) without Stripe existing at all -- the same escape
+// Puts a household on Plus (or back on Free) without Stripe existing at all -- the same escape
 // hatch e2eNoopRecipientPattern provides for real email sends, and the reason this suite needs no
 // Stripe credentials in any environment.
 //
-// The backend writes `comped`, so a household set Pro here is entitled through the SAME single
-// derivation a paying one uses (SubscriptionService.isPro). A spec that passes against this is
+// The backend writes `comped`, so a household set Plus here is entitled through the SAME single
+// derivation a paying one uses (SubscriptionService.isPlus). A spec that passes against this is
 // exercising the real entitlement path rather than a fixture built for tests.
 export async function setBillingPlan(
   request: APIRequestContext,
   email: string,
-  plan: 'FREE' | 'PRO',
+  plan: 'FREE' | 'PLUS',
 ): Promise<void> {
   const configResponse = await request.get('/config.json');
   const { apiUrl } = await configResponse.json();
@@ -99,6 +115,88 @@ export async function setBillingPlan(
   // misconfigured E2E_TEST_SUPPORT_KEY surfaces here rather than as a confusing assertion failure
   // three lines later in whatever spec called this.
   expect(response.status(), `setBillingPlan failed -- check E2E_TEST_SUPPORT_KEY`).toBe(204);
+}
+
+// Gives an existing person in an existing household their own MEMBER login, and signs in as them.
+//
+// ⚠️ The email MUST come from the same generator registerHousehold uses. TestDataCleanupService
+// reaps e2e users by the `huddle+%@starner.co` pattern, and that pattern is an independently
+// maintained copy of the literal this file produces -- an address outside it leaves a real user
+// row in lower forever, surfacing much later as an unrelated FK failure during some other
+// cleanup. A member's user row in particular OUTLIVES the household it was invited to.
+//
+// Drives the same profile-gated, shared-secret test-support route as setBillingPlan, because the
+// invite flow does not exist yet (phase 7 builds it). What it creates is a REAL user and a REAL
+// membership, so a spec using this exercises the same AccountAccessService resolution and the same
+// guards a genuine member will hit.
+// memberEmailOverride attaches an EXISTING credential to this household instead of minting a new
+// one -- the shape that makes one login belong to two households, which is what phase 6 is about.
+// The backend reuses a matching user row rather than creating a second, and leaves its password
+// alone, so the caller must pass an address whose password is already the shared 'password123'.
+export async function addMemberLogin(
+  page: Page,
+  request: APIRequestContext,
+  ownerEmail: string,
+  personName: string,
+  memberEmailOverride?: string,
+): Promise<{ email: string; password: string }> {
+  const email = memberEmailOverride
+    ?? `huddle+e2e-member-${Date.now()}-${uniqueSuffix()}@starner.co`;
+  const password = 'password123';
+
+  // ⚠️ Plus FIRST. Member logins are a Plus feature: from phase 8 a member in a Free household is
+  // PAUSED and refused on every route, so a spec that minted one against a freshly-registered
+  // (therefore Free) household would be testing the pause rather than whatever it says it tests.
+  // Registration creates a Free subscription, so this is needed for every caller, and doing it
+  // here rather than in each spec is what stops the next one forgetting.
+  await setBillingPlan(request, ownerEmail, 'PLUS');
+
+  const configResponse = await request.get('/config.json');
+  const { apiUrl } = await configResponse.json();
+  const params = new URLSearchParams({ ownerEmail, personName, memberEmail: email, password });
+  const response = await request.post(`${apiUrl}/api/auth/test/member?${params.toString()}`, {
+    headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' },
+  });
+  // 404 covers a wrong key, an unknown owner AND an unknown person name, so a typo in any of the
+  // three surfaces here rather than as a confusing assertion three lines into the spec.
+  expect(
+    response.status(),
+    `addMemberLogin failed for owner=${ownerEmail} person=${personName}. `
+      + '404 covers a wrong E2E_TEST_SUPPORT_KEY, an unknown owner AND an unknown person name, '
+      + 'so check all three; '
+      + "409 means that person already has a login -- naming the OWNER's own person does this. "
+      + `Body: ${await response.text()}`,
+  ).toBe(204);
+
+  return { email, password };
+}
+
+// Flips accounts.members_see_everyone for one household. The product ships this forced ON with no
+// endpoint and no UI (see V66), so this profile-gated route is the ONLY way to exercise the OFF
+// path -- which is what keeps the Team-tier seam tested code rather than dead code.
+export async function setMemberVisibility(
+  request: APIRequestContext,
+  ownerEmail: string,
+  membersSeeEveryone: boolean,
+): Promise<void> {
+  const configResponse = await request.get('/config.json');
+  const { apiUrl } = await configResponse.json();
+  const params = new URLSearchParams({ ownerEmail, membersSeeEveryone: String(membersSeeEveryone) });
+  const response = await request.post(`${apiUrl}/api/auth/test/member-visibility?${params.toString()}`, {
+    headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' },
+  });
+  expect(response.status(), 'setMemberVisibility failed -- check E2E_TEST_SUPPORT_KEY').toBe(204);
+}
+
+// Signs in through the real login form, so a spec exercises the same path a member actually uses.
+export async function loginAs(page: Page, email: string, password: string): Promise<void> {
+  await page.goto('/login');
+  // LoginPage's placeholders are "Email"/"Password"; RegisterPage's are the you@example.com /
+  // "At least 8 characters" pair registerHousehold uses. They are different screens.
+  await page.getByPlaceholder('Email', { exact: true }).fill(email);
+  await page.getByPlaceholder('Password', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Log in' }).click();
+  await expect(page).toHaveURL(/\/app\/log/);
 }
 
 // TestCodeCache (see TestCodeCache.java) is a plain in-memory map inside the running

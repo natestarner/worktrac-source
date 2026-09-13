@@ -16,6 +16,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -246,5 +247,170 @@ class RoutineControllerTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(copyBody))
                 .andExpect(status().isNotFound());
+    }
+
+    // ---- Ordering (V61/V62 routines.sort_order) --------------------------------------------
+    //
+    // The Log picker shows only the first few routines, so which ones those are is now a
+    // preference the person sets rather than an accident of which they built first.
+
+    private long createRoutine(String name) throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of("name", name, "exerciseIds", exerciseIds));
+        String response = mockMvc.perform(post("/api/people/" + personId + "/routines")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response).get("id").asLong();
+    }
+
+    private List<String> routineNames(long forPersonId) throws Exception {
+        String response = mockMvc.perform(get("/api/people/" + forPersonId + "/routines")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> names = new ArrayList<>();
+        objectMapper.readTree(response).forEach(node -> names.add(node.get("name").asText()));
+        return names;
+    }
+
+    // A new routine appends. Listing used to be created_at ASC, which produced the same answer by
+    // accident -- this pins it against the sort_order the reorder endpoint writes.
+    @Test
+    void newRoutinesAppendToTheEndOfThePersonsList() throws Exception {
+        createRoutine("First");
+        createRoutine("Second");
+        createRoutine("Third");
+
+        assertEquals(List.of("First", "Second", "Third"), routineNames(personId));
+    }
+
+    @Test
+    void reorderRewritesTheListAndSurvivesAReload() throws Exception {
+        long first = createRoutine("First");
+        long second = createRoutine("Second");
+        long third = createRoutine("Third");
+
+        String body = objectMapper.writeValueAsString(Map.of("routineIds", List.of(third, first, second)));
+        String response = mockMvc.perform(put("/api/people/" + personId + "/routines/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        List<String> responseNames = new ArrayList<>();
+        objectMapper.readTree(response).forEach(node -> responseNames.add(node.get("name").asText()));
+        assertEquals(List.of("Third", "First", "Second"), responseNames);
+
+        // Re-read rather than trusting the response: persisting sort_order is the point, and only
+        // a fresh load exercises findByPerson_IdOrderBySortOrderAscIdAsc.
+        assertEquals(List.of("Third", "First", "Second"), routineNames(personId));
+        assertEquals(3, List.of(first, second, third).size());
+
+        // Creating AFTER a reorder is the only case that can tell a real sort_order from the id
+        // tiebreak in the ORDER BY. While the list is still in creation order, every assertion
+        // above would pass just as happily against a column stuck at 0 -- ids ascend in the same
+        // direction. Here they diverge: appended, "Fourth" is last; at 0 it would tie with
+        // "Third" and the id tiebreak would sort it SECOND.
+        createRoutine("Fourth");
+        assertEquals(List.of("Third", "First", "Second", "Fourth"), routineNames(personId));
+    }
+
+    // The list has to name every routine exactly once. A partial or duplicated list has no correct
+    // interpretation -- the omitted ones would keep positions that now collide -- so it is refused
+    // rather than silently renumbered around.
+    @Test
+    void reorderRefusesAListThatDoesNotMatchThePersonsRoutines() throws Exception {
+        long first = createRoutine("First");
+        createRoutine("Second");
+
+        String partial = objectMapper.writeValueAsString(Map.of("routineIds", List.of(first)));
+        mockMvc.perform(put("/api/people/" + personId + "/routines/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(partial))
+                .andExpect(status().isBadRequest());
+
+        String duplicated = objectMapper.writeValueAsString(Map.of("routineIds", List.of(first, first)));
+        mockMvc.perform(put("/api/people/" + personId + "/routines/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(duplicated))
+                .andExpect(status().isBadRequest());
+
+        // Refused means unchanged, not partially applied.
+        assertEquals(List.of("First", "Second"), routineNames(personId));
+    }
+
+    // Per-person separation, the household's core invariant: one person's routine id must not be
+    // placeable into another person's ordering, even within the same account.
+    @Test
+    void reorderCannotPullInAnotherPersonsRoutine() throws Exception {
+        long mine = createRoutine("Mine");
+        long person2 = addPerson("Sam");
+
+        String otherBody = objectMapper.writeValueAsString(Map.of("name", "Theirs", "exerciseIds", exerciseIds));
+        String otherResponse = mockMvc.perform(post("/api/people/" + person2 + "/routines")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(otherBody))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long theirs = objectMapper.readTree(otherResponse).get("id").asLong();
+
+        String body = objectMapper.writeValueAsString(Map.of("routineIds", List.of(theirs, mine)));
+        mockMvc.perform(put("/api/people/" + personId + "/routines/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest());
+
+        assertEquals(List.of("Mine"), routineNames(personId));
+        assertEquals(List.of("Theirs"), routineNames(person2));
+    }
+
+    // A copy arrives at the end of the list it is arriving IN, not at the source's position. Easy
+    // to miss, because copy() builds the Routine directly rather than going through create().
+    @Test
+    void copiedRoutineLandsAtTheEndOfTheTargetsOwnList() throws Exception {
+        long person2 = addPerson("Sam");
+        long ownA = createRoutineFor(person2, "Sams A");
+        long ownB = createRoutineFor(person2, "Sams B");
+
+        // Put the target's list into an order the ids alone would not produce, so that a copy
+        // which forgot to assign sort_order (landing at 0) sorts differently from one that
+        // appended -- without this the id tiebreak makes both look identical.
+        String reorderBody = objectMapper.writeValueAsString(Map.of("routineIds", List.of(ownB, ownA)));
+        mockMvc.perform(put("/api/people/" + person2 + "/routines/order")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reorderBody))
+                .andExpect(status().isOk());
+        assertEquals(List.of("Sams B", "Sams A"), routineNames(person2));
+
+        long source = createRoutine("Shared");
+        String copyBody = objectMapper.writeValueAsString(Map.of("targetPersonIds", List.of(person2)));
+        mockMvc.perform(post("/api/people/" + personId + "/routines/" + source + "/copy")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(copyBody))
+                .andExpect(status().isOk());
+
+        // Appended. At sort_order 0 it would tie with "Sams B" and the id tiebreak would place it
+        // SECOND, not last.
+        assertEquals(List.of("Sams B", "Sams A", "Shared"), routineNames(person2));
+    }
+
+    private long createRoutineFor(long forPersonId, String name) throws Exception {
+        String body = objectMapper.writeValueAsString(Map.of("name", name, "exerciseIds", exerciseIds));
+        String response = mockMvc.perform(post("/api/people/" + forPersonId + "/routines")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response).get("id").asLong();
     }
 }

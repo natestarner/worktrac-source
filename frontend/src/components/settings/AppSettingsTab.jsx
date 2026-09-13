@@ -18,8 +18,9 @@ import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
 import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import { useAccountAccess } from '../../hooks/useAccountAccess';
 import ImportDataModal from './ImportDataModal';
-import ProUpsell from '../shared/ProUpsell';
+import PlusUpsell from '../shared/PlusUpsell';
 import LegalLinks from '../shared/LegalLinks';
 import { APP_BUILD } from '../../lib/appBuild';
 import { invalidateAfterImport } from '../../lib/queryClient';
@@ -34,11 +35,12 @@ export default function AppSettingsTab() {
   const { account, people, refreshPeople } = useAuth();
   // The derived entitlement, carried in the auth snapshot -- so this reads correctly on a cold
   // offline boot rather than depending on a request that may not have come back. An UNKNOWN plan
-  // (a snapshot written before billing shipped) is treated as Pro here on purpose: showing the
+  // (a snapshot written before billing shipped) is treated as Plus here on purpose: showing the
   // real control and letting the server answer is far better than telling a paying household its
   // own import is unavailable.
   const plan = account?.plan;
-  const isPro = plan !== 'FREE';
+  const isPlus = plan !== 'FREE';
+  const { isMember, selfPersonId } = useAccountAccess();
   const { openConfirm } = useUI();
   const offlinePinned = useOfflinePin();
   // Settings writes are Tier-3. They had the online gate but no error path -- a failed unit change
@@ -156,6 +158,18 @@ export default function AppSettingsTab() {
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
           Default unit for new sets entered from now on. Sets already logged keep the unit they were recorded in. Changing this never rewrites past numbers.
         </div>
+        {/* MANAGE_HOUSEHOLD, so owner-only. A member gets the VALUE rather than a greyed-out
+            toggle: the unit is genuinely useful information to them (it is what their own new sets
+            will be recorded in), while a dead switch communicates only that something is broken.
+            Naming who can change it answers the obvious next question in the same breath. */}
+        {isMember ? (
+          <div style={{ fontSize: 15, fontWeight: 600 }}>
+            {account?.defaultUnit}
+            <span style={{ display: 'block', fontSize: 13, fontWeight: 400, color: 'var(--color-muted)', marginTop: 4 }}>
+              Set by the household owner.
+            </span>
+          </div>
+        ) : (
         <div style={{ display: 'flex', gap: 'var(--space-1)', background: 'var(--color-subtle-bg)', borderRadius: 'var(--radius-md)', padding: 'var(--space-1)', maxWidth: 220 }}>
           {['lb', 'kg'].map((unit) => {
             const active = account?.defaultUnit === unit;
@@ -193,6 +207,7 @@ export default function AppSettingsTab() {
             );
           })}
         </div>
+        )}
       </Card>
 
       <SectionLabel>Offline Mode</SectionLabel>
@@ -240,8 +255,18 @@ export default function AppSettingsTab() {
           Show a countdown after logging a set, per person. Rest time between sets is always recorded
           for Trends either way.
         </div>
+        {/* ⚠️ The ONE place a person list is filtered client-side. Everywhere else the server's
+            PersonService.list is the only filter, deliberately, so no screen can forget one.
+            This is not a visibility rule -- a member with visibility ON can already see these
+            people everywhere else -- it is a display choice inside an already-visible set: a
+            sibling's rest-timer preference is not information a member needs, and a column of
+            greyed toggles for other people is noise that invites "why can't I change this?".
+            Their own row stays fully interactive: the rest timer is a per-person training
+            preference, and a member turning theirs off mid-workout must not need the owner. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {people.map((person) => {
+          {people
+            .filter((person) => !isMember || String(person.id) === String(selfPersonId))
+            .map((person) => {
             const personEnabled = person.restTimerEnabled ?? true;
             const busy = pendingRestPerson === person.id;
             return (
@@ -295,6 +320,13 @@ export default function AppSettingsTab() {
           tags.map((t) => (
             <div key={t.id} style={categoryChipStyle}>
               {t.name}
+              {/* An owner may always delete any tag. A member may delete only one they created
+                  AND that nobody else has applied yet -- the same shape as the (unshipped-to-this-
+                  screen) rename rule, and the server is the one deciding it: `t.deletable` is
+                  TagDto's own answer to "would DELETE succeed for me right now", so this never
+                  re-derives authorship or in-use from raw ids. Hidden rather than disabled -- see
+                  ProfileTab for why a control the server would refuse is not greyed out instead. */}
+              {(!isMember || t.deletable) && (
               <OfflineDisabledWrap message="Deleting a tag needs a connection.">
                 <button
                   onClick={() => openConfirm(`Delete tag "${t.name}"? It will be removed from every exercise it's applied to.`, () => guardedDeleteTag(t))}
@@ -303,6 +335,7 @@ export default function AppSettingsTab() {
                   &times;
                 </button>
               </OfflineDisabledWrap>
+              )}
             </div>
           ))}
         {!tagsLoading && tags.length === 0 && (
@@ -337,6 +370,17 @@ export default function AppSettingsTab() {
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 18 }}>Enter a tag name.</div>
       )}
 
+      {/* The whole Data section is household-wide: the export is EVERY person's history in one
+          file (EXPORT_ACCOUNT_DATA) and the import writes in bulk (IMPORT_DATA). Both are
+          owner-only, and both 403 for a member, so the section is hidden rather than shown with
+          two dead buttons.
+
+          A member is NOT locked out of their own data -- per-person export lives on History and
+          follows VIEW, so they can still take their own workouts out. Keeping the two apart is
+          the point: "members can see everyone" must not quietly become "any member can walk out
+          with the household's complete history in one click". */}
+      {!isMember && (
+      <>
       <SectionLabel>Data</SectionLabel>
       <Card size="dense" style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
@@ -352,17 +396,17 @@ export default function AppSettingsTab() {
           Bring workouts in from a CSV or Excel file: one this app exported, or a spreadsheet of your
           own. You choose who it belongs to, and see exactly what will be added before anything is saved.
         </div>
-        {/* Importing is a Pro feature, so a Free household gets the explanation INSTEAD of a
+        {/* Importing is a Plus feature, so a Free household gets the explanation INSTEAD of a
             button that would 403. Exporting above is deliberately not gated on either plan --
             every household can always take its own data out. */}
-        {isPro ? (
+        {isPlus ? (
           <OfflineDisabledWrap message="Importing needs a connection.">
             <Button onClick={() => setShowImportModal(true)} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               Import data
             </Button>
           </OfflineDisabledWrap>
         ) : (
-          <ProUpsell plan={plan}>Importing past workouts is part of Pro.</ProUpsell>
+          <PlusUpsell plan={plan}>Importing past workouts is part of Plus.</PlusUpsell>
         )}
 
         {imports.length > 0 && (
@@ -394,6 +438,8 @@ export default function AppSettingsTab() {
           </div>
         )}
       </Card>
+      </>
+      )}
 
       {showImportModal && (
         <ImportDataModal

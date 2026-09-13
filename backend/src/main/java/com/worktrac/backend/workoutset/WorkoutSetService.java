@@ -5,6 +5,8 @@ import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.exercise.Exercise;
 import com.worktrac.backend.exercise.ExerciseRepository;
+import com.worktrac.backend.membership.AccountAccess;
+import com.worktrac.backend.membership.Permission;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.stats.BestDto;
@@ -54,14 +56,14 @@ public class WorkoutSetService {
     // the ONLY path that computes rest_seconds -- see computeRestSeconds below and the
     // V17 migration for why this must never be done from logSetIntoSession too.
     @Transactional
-    public LogSetResultDto logLiveSet(Long accountId, Long personId, LogSetRequest request) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        LogSetResultDto duplicate = findDuplicate(accountId, request.idempotencyKey());
+    public LogSetResultDto logLiveSet(AccountAccess access, Long personId, LogSetRequest request) {
+        Person person = personService.requireWritablePerson(personId, access);
+        LogSetResultDto duplicate = findDuplicate(access, request.idempotencyKey());
         if (duplicate != null) {
             return duplicate;
         }
-        Account account = accountRepository.getReferenceById(accountId);
-        Exercise exercise = requireVisibleExercise(accountId, request.exerciseId());
+        Account account = accountRepository.getReferenceById(access.accountId());
+        Exercise exercise = requireVisibleExercise(access.accountId(), request.exerciseId());
 
         // The set's real logging time: the client's timestamp when supplied (so a delayed/offline
         // sync stays accurate), otherwise now. Computed BEFORE getOrCreateLiveSession so a session
@@ -87,16 +89,19 @@ public class WorkoutSetService {
     // set), so any created_at gap against a prior set would be meaningless, not just
     // imprecise. See CLAUDE.md's Data Model Notes for the full rationale.
     @Transactional
-    public LogSetResultDto logSetIntoSession(Long accountId, Long sessionId, LogSetRequest request) {
-        LogSetResultDto duplicate = findDuplicate(accountId, request.idempotencyKey());
+    public LogSetResultDto logSetIntoSession(AccountAccess access, Long sessionId, LogSetRequest request) {
+        LogSetResultDto duplicate = findDuplicate(access, request.idempotencyKey());
         if (duplicate != null) {
             return duplicate;
         }
-        WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, accountId)
+        WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, access.accountId())
                 .orElseThrow(() -> new NotFoundException("We couldn't find that workout."));
-        Person person = session.getPerson();
-        Account account = accountRepository.getReferenceById(accountId);
-        Exercise exercise = requireVisibleExercise(accountId, request.exerciseId());
+        // Child-id endpoint: the finder proves the session is in this ACCOUNT, not that the caller
+        // may write to the PERSON behind it. See WorkoutSessionService.editSession.
+        Person person = personService.requireWritablePerson(session.getPerson(), access,
+                "We couldn't find that workout.");
+        Account account = accountRepository.getReferenceById(access.accountId());
+        Exercise exercise = requireVisibleExercise(access.accountId(), request.exerciseId());
 
         // rest_seconds stays null here (this endpoint is never real-time logging -- see the method
         // doc above), but created_at still honors the client timestamp when supplied.
@@ -149,11 +154,29 @@ public class WorkoutSetService {
     // request whose original actually committed), return that set instead of inserting a duplicate.
     // isPR is reported false on the dedup path: the set already exists, so a replay is never itself
     // a new PR. Null/blank key -> no dedup (nothing to key on).
-    private LogSetResultDto findDuplicate(Long accountId, String idempotencyKey) {
+    private LogSetResultDto findDuplicate(AccountAccess access, String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return null;
         }
-        return workoutSetRepository.findByClientKeyAndSession_Person_Account_Id(idempotencyKey, accountId)
+        return workoutSetRepository.findByClientKeyAndSession_Person_Account_Id(idempotencyKey, access.accountId())
+                // ⚠️ The lookup is ACCOUNT-scoped, and it has to stay that way:
+                // UX_workout_sets_client_key (V41) is unique across the whole table, so narrowing
+                // the dedup below the scope of the index would let a "not a duplicate" answer walk
+                // straight into a unique-constraint violation.
+                //
+                // What that scope means with more than one login is that a key belonging to
+                // ANOTHER person in the household would otherwise be answered with that person's
+                // set, its session and its best -- a read of someone else's data through an
+                // endpoint that looks like a write. Treat it as no duplicate instead.
+                //
+                // Residual, and deliberately accepted: the insert that follows will then hit the
+                // unique index and fail as a 500, which the outbox retries. That is only reachable
+                // by forging another person's key -- a client-generated UUID that appears in no
+                // response this caller can see -- so it is not a collision anyone reaches by
+                // accident. Failing the forger's own write is a better outcome than serving them
+                // the row, and better than a terminal 4xx, which would discard a real write.
+                .filter(existing -> access.has(Permission.WRITE_OTHER_PEOPLE)
+                        || access.isSelf(existing.getPerson().getId()))
                 .map(existing -> {
                     BestDto best = statsService.getBest(existing.getPerson().getId(), existing.getExercise().getId())
                             .orElse(null);
@@ -197,18 +220,23 @@ public class WorkoutSetService {
     // to edit or removed individually (the history/summary views only carry aggregate
     // weight/reps, not set ids).
     @Transactional(readOnly = true)
-    public java.util.List<WorkoutSetDto> listForSessionAndExercise(Long accountId, Long sessionId, Long exerciseId) {
-        workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, accountId)
+    public java.util.List<WorkoutSetDto> listForSessionAndExercise(AccountAccess access, Long sessionId, Long exerciseId) {
+        WorkoutSession session = workoutSessionRepository.findByIdAndPerson_Account_Id(sessionId, access.accountId())
                 .orElseThrow(() -> new NotFoundException("We couldn't find that workout."));
+        // Read, so visible rather than writable -- a member may look at a workout they can see.
+        personService.requireVisiblePerson(session.getPerson(), access, "We couldn't find that workout.");
         return workoutSetRepository.findBySession_IdAndExercise_IdOrderByCreatedAtAsc(sessionId, exerciseId).stream()
                 .map(WorkoutSetDto::from)
                 .toList();
     }
 
     @Transactional
-    public WorkoutSetDto editSet(Long accountId, Long setId, EditSetRequest request) {
-        WorkoutSet set = workoutSetRepository.findByIdAndSession_Person_Account_Id(setId, accountId)
+    public WorkoutSetDto editSet(AccountAccess access, Long setId, EditSetRequest request) {
+        WorkoutSet set = workoutSetRepository.findByIdAndSession_Person_Account_Id(setId, access.accountId())
                 .orElseThrow(() -> new NotFoundException("We couldn't find that set."));
+        // Child-id endpoint: the finder proves the set is in this ACCOUNT, not that the caller may
+        // write to the PERSON behind it. See WorkoutSessionService.editSession.
+        personService.requireWritablePerson(set.getPerson(), access, "We couldn't find that set.");
         // Same reconciliation (and the same leniency) as a create -- an edit is a separate durable
         // write that can sit in the outbox just as long, so a rejection here loses it just as
         // permanently. restSeconds is deliberately untouched: it records what actually happened.
@@ -220,9 +248,10 @@ public class WorkoutSetService {
     }
 
     @Transactional
-    public void deleteSet(Long accountId, Long setId) {
-        WorkoutSet set = workoutSetRepository.findByIdAndSession_Person_Account_Id(setId, accountId)
+    public void deleteSet(AccountAccess access, Long setId) {
+        WorkoutSet set = workoutSetRepository.findByIdAndSession_Person_Account_Id(setId, access.accountId())
                 .orElseThrow(() -> new NotFoundException("We couldn't find that set."));
+        personService.requireWritablePerson(set.getPerson(), access, "We couldn't find that set.");
         workoutSetRepository.delete(set);
     }
 

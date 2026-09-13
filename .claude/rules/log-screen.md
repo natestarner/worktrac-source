@@ -368,6 +368,53 @@ something:
   the app default for everyone today; the per-person and per-exercise columns drop into that one
   function plus their two write surfaces, because every consumer already reads the snapshot.
 
+## The picker is BOUNDED but never REORDERED
+
+`ExercisePicker` reads two ways, and they want opposite orderings: **recognition** ("get me to
+what's next") and **retrieval** ("where is Bulgarian Split Squat?"). Retrieval needs a position
+that is the same on every visit, so the alphabetical order `PersonExerciseService.listForPerson`
+returns is preserved exactly.
+
+- **Never rank the picker by recency or frequency.** It was considered and rejected: a list that
+  re-sorts itself between visits cannot be learned, and "Other Previously Logged" grows
+  monotonically forever, so it is the list most in need of a stable position. Bounding is the only
+  lever, because it shortens a list without moving anything in it. (`PersonExerciseDto` carries no
+  `lastLoggedAt`/`logCount` and deliberately should not gain them for this purpose — see
+  `docs/exercise-favorites-redesign.md`'s 2026-09-04 entry.)
+- **Groups are bounded by ROWS, not by a count of items** (`--picker-chip-rows`, index.css).
+  Chips are variable-width, so a fixed item cap shows a wildly different amount of the list
+  depending on how long someone's exercise names are. Rows also make the bound responsive for
+  free: a wider screen fits more chips per row and therefore shows more items in the same nine
+  rows. **A test that pins an item count is pinning the wrong thing** — `picker-bounds.spec.ts`
+  counts distinct row tops, and runs at a 390px viewport because at 1280px forty chips fit inside
+  nine rows and there is nothing to assert.
+- **The clip is pure CSS; the hook only measures.** `.picker-chip-wrap--clipped` caps the height,
+  so the first paint is already correct at any width — measuring first and rendering second would
+  cost a wrong-height frame on the app's most-used screen. `useChipRowOverflow` adds only the two
+  things CSS cannot express: whether to offer the disclosure, and which chips are past the cut.
+- **`.picker-chip` pins its own height and stays single-line.** That is what makes every wrapped
+  row exactly `--picker-chip-h`, which is what lets the clip land on a row boundary. Derive the
+  height from padding instead, or let a long name wrap, and the clip silently lands mid-row.
+  Truncation is visual only — the full name stays in `aria-label`.
+- **The overflow must be `inert`.** A clipped-but-present chip is still focusable, still in the
+  accessibility tree, and **still passes Playwright's `toBeVisible()`**. Dropping it from the DOM
+  instead is the bug: that shrinks the container below its own cap, which re-fires the observer,
+  which reports no overflow, which restores it — an oscillation. See `useChipRowOverflow`'s header.
+- **The disclosure sits BELOW its list, and the chevron flips.** Beside the section heading it read
+  as decoration on a label and sat nowhere near the place the list stops. The chevron carries most
+  of the signal because the clip lands on a row boundary, so a truncated list looks deliberately
+  complete — no half-row peeks out to suggest otherwise.
+- **Every disclosure label names its own noun** (`Show all 40 favorites` / `Collapse favorites`).
+  Up to three are on screen at once and Playwright matches an accessible name by **substring**, so
+  a bare "Show all" (or "Collapse") is mutually ambiguous. The label is a **direct text-node
+  child** beside the icon, never wrapped in a `<span>` — RTL's `getByText` concatenates only direct
+  text children.
+- **Expanded state is local `useState` + `key={activePersonId}` on `<ExercisePicker>`.** The picker
+  is NOT unmounted by a person switch on its own (AppShell navigates to that person's `lastTab`,
+  usually this one), so without the key one person's expanded list shows on the next person's
+  screen. Same isolation route `useExerciseFilter` takes on History/PRs, and it keeps a
+  visit-scoped preference out of the persisted `PERSON_DEFAULTS` schema.
+
 ## Routine stepping is index-based, and that is load-bearing
 
 A routine may list the same exercise more than once (bench, row, bench). `AppStateContext`'s

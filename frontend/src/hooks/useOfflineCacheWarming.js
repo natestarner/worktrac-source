@@ -12,7 +12,10 @@ export const WARM_INTERVAL_MS = 5 * 60 * 1000;
 // already uses for flushOutbox (online transition, tab regaining visibility) plus an initial
 // warm and a periodic re-run. Every trigger gates on being online and (for the periodic timer)
 // foregrounded, so a pinned-offline or backgrounded device never fires a warm attempt.
-export function useOfflineCacheWarming(people) {
+// `selfPersonId` / `activePersonId` decide WHO gets warmed once the household is larger than
+// MAX_WARMED_PEOPLE -- see peopleToWarm. Below that cap they change nothing, which is every
+// household this product has today.
+export function useOfflineCacheWarming(people, { selfPersonId = null, activePersonId = null } = {}) {
   const queryClient = useQueryClient();
   // warmOfflineCache's queryClient.prefetchQuery calls are imperative, so -- unlike a useQuery
   // observer -- they are NOT held back by PersistQueryClientProvider while the persisted cache is
@@ -28,14 +31,14 @@ export function useOfflineCacheWarming(people) {
     if (isRestoring) return undefined;
 
     function warm() {
-      warmOfflineCache(queryClient, people);
+      warmOfflineCache(queryClient, people, { selfPersonId, activePersonId });
     }
 
     // The first warm after `isRestoring` clears is the only one running against a cache that came
     // off disk rather than off the network, so it's the only one that passes afterRestore -- see
     // warmOfflineCache. The later triggers (online transition, visibility, interval) are looking
     // at a cache this page session already fetched, where the ordinary staleness check is right.
-    warmOfflineCache(queryClient, people, { afterRestore: true });
+    warmOfflineCache(queryClient, people, { afterRestore: true, selfPersonId, activePersonId });
 
     const unsubscribeOnline = onlineManager.subscribe((online) => {
       if (online) warm();
@@ -58,5 +61,5 @@ export function useOfflineCacheWarming(people) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `people` is compared by identity from
     // useAuth(); a new array each render (e.g. `data.people` from a fresh /me response) is exactly
     // the signal that should re-run the initial warm with the updated roster.
-  }, [queryClient, people, isRestoring]);
+  }, [queryClient, people, isRestoring, selfPersonId, activePersonId]);
 }

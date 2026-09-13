@@ -12,6 +12,16 @@ paths:
   - "frontend/src/utils/exerciseDuplicates.js"
   - "frontend/src/hooks/useRequireOnline.js"
   - "frontend/src/hooks/useGatedMutation.js"
+  # Member logins. The handbook now states, as fact, who can see and do what in a household --
+  # so the code that decides those answers has to load this rule. Without these five, somebody
+  # could change who a member may write to, or what an owner may do to a login, and never be
+  # shown the page that promises otherwise.
+  - "backend/src/main/java/com/worktrac/backend/membership/**"
+  - "backend/src/main/java/com/worktrac/backend/person/**"
+  - "backend/src/main/java/com/worktrac/backend/user/**"
+  - "backend/src/main/java/com/worktrac/backend/account/**"
+  - "frontend/src/context/**"
+  - "frontend/src/components/profile/**"
 ---
 
 # The end-user handbook states these rules as fact
@@ -35,7 +45,7 @@ that isn't one.
 | the rest timer targets 90s and freezes at 10 min | `utils/restTarget.js` |
 | a line-chart dot is one session; three metrics are a best set, two are session totals | `components/trends/exerciseMetrics.js`, `weeklyMetrics.js` |
 | the consistency grid is always 26 weeks and ignores the range toggle, **and that only the last 90 days of it fill in on Free** | `components/trends/**`, `SubscriptionService.FREE_HISTORY_WINDOW` |
-| what Free and Pro each include, that export is free on both, and that PR detection reads the whole history even when display is clamped | `SubscriptionService` (the `isPro` derivation and the window), `billing/**`, `csvimport/ImportController` |
+| what Free and Plus each include, that export is free on both, and that PR detection reads the whole history even when display is clamped | `SubscriptionService` (the `isPlus` derivation and the window), `billing/**`, `csvimport/ImportController` |
 | exactly which actions work offline vs. need a connection | `useRequireOnline.js`, `useGatedMutation.js`, or moving a write between the two |
 | import requires `Exercise` + `Date` + (`Reps` or `Duration (sec)`), and every other column's default | `csvimport/**`, `export/**` |
 | adding an exercise you already have opens it instead of duplicating | `utils/exerciseDuplicates.js` |
@@ -65,7 +75,26 @@ before changing one. `HelpTab.test.jsx` pins the list deliberately as a literal 
 deriving it from the component, since a derived list would agree with any rename.
 
 Current ids: `setup`, `people`, `logging`, `rest`, `time`, `own`, `routines`, `history`, `prs`,
-`trends`, `personal`, `settings`, `data`, `offline`, `trouble`.
+`trends`, `personal`, `settings`, `plan`, `data`, `offline`, `trouble`.
+
+(`plan` was missing from this list while `HistoryWindowModal` linked to it — the one id a
+contextual deep-link actually used.)
+
+**A deep link has to SCROLL, and nothing does that for free.** `HelpTab` carries an effect that
+scrolls to `location.hash` on mount, because neither entry path manages it alone: a full load looks
+for the element before React has rendered it and never retries, and a client-side `<Link>` changes
+the URL without scrolling at all. Both presented identically — the handbook opening at the top of a
+very long page, with the named section twelve thousand pixels below the fold — so it read as a dead
+link rather than a scroll bug.
+
+The in-page `<a href="#id">` links are a *different* mechanism (the browser's own fragment
+navigation) and were never broken. Don't "unify" them onto the effect: a hash-only anchor click
+fires `hashchange`, not `popstate`, so `useLocation` may not even re-run for it.
+
+Guarded by `help.spec.ts`'s deep-link spec and `free-window-notice.spec.ts`'s
+"How Free and Plus differ" spec — both assert the heading clears the sticky chrome **and** that
+`scrollY` actually moved. Visibility alone proves nothing here: the whole handbook is in the DOM, so
+a heading far below the fold is "visible" to a query and useless to a reader.
 
 ## The page must survive the basement
 

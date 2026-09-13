@@ -1,5 +1,7 @@
 package com.worktrac.backend.account;
 
+import com.worktrac.backend.membership.RequiresPermission;
+import com.worktrac.backend.membership.Permission;
 import com.worktrac.backend.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -25,11 +27,13 @@ public class AccountController {
     }
 
     @PutMapping("/default-unit")
+    @RequiresPermission(Permission.MANAGE_HOUSEHOLD)
     public AccountDto updateDefaultUnit(@Valid @RequestBody UpdateDefaultUnitRequest request) {
         return accountService.updateDefaultUnit(currentUser.accountId(), request.defaultUnit());
     }
 
     @DeleteMapping
+    @RequiresPermission(Permission.DELETE_ACCOUNT)
     public ResponseEntity<Void> deleteAccount(@Valid @RequestBody DeleteAccountRequest request) {
         accountDeletionService.deleteAccount(currentUser.accountId(), currentUser.userId(), request.password());
         return ResponseEntity.noContent().build();

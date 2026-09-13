@@ -13,6 +13,7 @@ import {
   registerOfflineMutationDefaults,
   resetQueryCache,
   shouldDehydrateQuery,
+  isDeadWrite,
   isUnsyncedWrite,
   shouldRetryWrite,
 } from './queryClient';
@@ -298,8 +299,38 @@ describe('dependent writes guard against an unresolved temp exercise id', () => 
     return observer.mutate(variables);
   }
 
+  // Put the create this dependent write is waiting on into the cache, still pending.
+  //
+  // `scope: undefined` is deliberate and is the one artificial thing here: in the app both writes
+  // share OUTBOX_SCOPE_ID, so a pending create BLOCKS the dependent from running at all -- which is
+  // the serialization that makes the whole outbox work, and is covered by its own tests. Keeping
+  // the scope here would simply deadlock this test, proving nothing about the thing under test,
+  // which is the resolver's verdict on its dependency.
+  //
+  // It also says something worth knowing: because of that serialization, by the time a dependent's
+  // mutationFn actually runs in production its create has almost always already settled -- so the
+  // retryable branch below is a safety net rather than the common path. It still has to be right,
+  // because treating a create that CAN still run as unrecoverable would discard a good write.
+  function queuePendingCreate(tempId, { terminal = false } = {}) {
+    const observer = new MutationObserver(client, {
+      ...client.getMutationDefaults(CREATE_EXERCISE_MUTATION_KEY),
+      mutationKey: CREATE_EXERCISE_MUTATION_KEY,
+      scope: undefined,
+      retry: false,
+    });
+    addExercise.mockImplementation(
+      terminal
+        ? () => Promise.reject(Object.assign(new Error('over quota'), { status: 403 }))
+        : () => new Promise(() => {}),
+    );
+    return observer.mutate({ name: 'Bench', trackingType: 'strength', tempId, personId: 7, idempotencyKey: 'ck' }).catch(() => {});
+  }
+
   it('throws a status-less (retryable) error instead of posting a raw temp id, and never calls the API', async () => {
     const tempId = newTempExerciseId();
+    // The create is still queued and could still run, so waiting is exactly right.
+    queuePendingCreate(tempId);
+
     let caughtError;
     await dispatch({ mode: 'live', personId: 7, exerciseId: tempId, weight: 100, reps: 5, idempotencyKey: 'k3', clientLoggedAt: 't' }).catch(
       (error) => {
@@ -311,7 +342,52 @@ describe('dependent writes guard against an unresolved temp exercise id', () => 
     expect(caughtError.status).toBeUndefined();
     // shouldRetryWrite must treat this as transient (no `.status`), not as a definitive 4xx --
     // that's what makes it requeue/retry rather than surface as a stuck failure.
+    expect(caughtError.terminal).toBe(false);
     expect(shouldRetryWrite(0, caughtError)).toBe(true);
+    expect(logLiveSet).not.toHaveBeenCalled();
+  });
+
+  // The anti-wedge backstop. With no create left in the cache the mapping can never arrive, so
+  // retrying is not "waiting for a dependency" -- it is holding the one serial outbox scope
+  // forever, which stops every write behind it including ones made later while fully online.
+  // Note this ends RETRIES only: the write is still in the cache, so it is still persisted and
+  // still listed. See docs/incidents/2026-09-04-outbox-wedged-by-orphaned-edit.md.
+  it('is TERMINAL, not retryable, once the create it depends on is gone from the cache', async () => {
+    const tempId = newTempExerciseId();
+    let caughtError;
+    await dispatch({ mode: 'live', personId: 7, exerciseId: tempId, weight: 100, reps: 5, idempotencyKey: 'k3b', clientLoggedAt: 't' }).catch(
+      (error) => {
+        caughtError = error;
+      },
+    );
+
+    expect(caughtError.status).toBeUndefined();
+    expect(caughtError.terminal).toBe(true);
+    expect(shouldRetryWrite(0, caughtError)).toBe(false);
+    expect(logLiveSet).not.toHaveBeenCalled();
+  });
+
+  // The second, previously-unreported wedge: an exercise create rejected with a definitive 4xx (a
+  // quota 403, a 400 on an unknown trackingType) never records a mapping, so every set queued
+  // against its temp id would otherwise retry forever behind it.
+  it('is TERMINAL once the create it depends on has itself terminally failed', async () => {
+    const tempId = newTempExerciseId();
+    await queuePendingCreate(tempId, { terminal: true });
+    await vi.waitFor(() =>
+      expect(
+        client.getMutationCache().getAll().some((m) => m.options.mutationKey?.[0] === 'createExercise' && m.state.status === 'error'),
+      ).toBe(true),
+    );
+
+    let caughtError;
+    await dispatch({ mode: 'live', personId: 7, exerciseId: tempId, weight: 100, reps: 5, idempotencyKey: 'k3c', clientLoggedAt: 't' }).catch(
+      (error) => {
+        caughtError = error;
+      },
+    );
+
+    expect(caughtError.terminal).toBe(true);
+    expect(shouldRetryWrite(0, caughtError)).toBe(false);
     expect(logLiveSet).not.toHaveBeenCalled();
   });
 
@@ -386,7 +462,24 @@ describe('EDIT_SET guards against an unresolved temp set id (a set logged offlin
     return observer.mutate(variables);
   }
 
+  // The create this edit targets, still queued -- the ordinary "edit a set you just logged
+  // offline" state, where waiting is exactly right. `scope: undefined` for the same reason as the
+  // exercise block above: with the real shared scope a pending create blocks the edit from running
+  // at all, which would deadlock this test rather than exercise the resolver's verdict.
+  function queuePendingLogSet(tempId) {
+    logLiveSet.mockImplementation(() => new Promise(() => {}));
+    const observer = new MutationObserver(client, {
+      ...client.getMutationDefaults(LOG_SET_MUTATION_KEY),
+      mutationKey: LOG_SET_MUTATION_KEY,
+      scope: undefined,
+      retry: false,
+    });
+    observer.mutate({ mode: 'live', personId: 7, exerciseId: 3, weight: 135, reps: 5, tempId, idempotencyKey: 'ik', clientLoggedAt: 't' }).catch(() => {});
+  }
+
   it('throws a status-less (retryable) error instead of posting a raw temp id, and never calls the API', async () => {
+    queuePendingLogSet('optimistic-not-synced-yet');
+
     let caughtError;
     await dispatch({ setId: 'optimistic-not-synced-yet', weight: 140, reps: 3, personId: 7, sessionId: null, exerciseId: 3, exerciseName: 'Squat' }).catch((error) => {
       caughtError = error;
@@ -394,8 +487,35 @@ describe('EDIT_SET guards against an unresolved temp set id (a set logged offlin
 
     expect(caughtError).toBeInstanceOf(Error);
     expect(caughtError.status).toBeUndefined();
+    expect(caughtError.terminal).toBe(false);
     expect(shouldRetryWrite(0, caughtError)).toBe(true);
     expect(editSet).not.toHaveBeenCalled();
+  });
+
+  // The reported bug, at the retry-policy layer: delete the unsynced set and its create is gone,
+  // so this edit's tempId can never map. Retrying it forever is what wedged the whole outbox.
+  it('is TERMINAL, not retryable, once the create it edits is gone from the cache', async () => {
+    let caughtError;
+    await dispatch({ setId: 'optimistic-cancelled', weight: 140, reps: 3, personId: 7, sessionId: null, exerciseId: 3, exerciseName: 'Squat' }).catch((error) => {
+      caughtError = error;
+    });
+
+    expect(caughtError.status).toBeUndefined();
+    expect(caughtError.terminal).toBe(true);
+    expect(shouldRetryWrite(0, caughtError)).toBe(false);
+    expect(editSet).not.toHaveBeenCalled();
+  });
+
+  // Mirrors DELETE_SET: the row is gone, so there is nothing left to apply the edit to and the end
+  // state is already reached. A 404 requires the server to have ANSWERED -- a down, cold or
+  // timing-out backend produces a rejected fetch or a 5xx, never this -- so no degraded condition
+  // can reach this branch.
+  it('treats a 404 (the set was deleted elsewhere) as done rather than a stuck error', async () => {
+    editSet.mockRejectedValue(Object.assign(new Error('gone'), { status: 404 }));
+
+    await expect(
+      dispatch({ setId: 999, weight: 140, reps: 3, personId: 7, sessionId: 10, exerciseId: 3, exerciseName: 'Squat' }),
+    ).resolves.toBeNull();
   });
 
   it('resolves and dispatches normally once the create has synced and mapped the id', async () => {
@@ -721,11 +841,31 @@ describe('isUnsyncedWrite', () => {
     expect(isUnsyncedWrite({ status: 'error', errorStatus: 422 })).toBe(false);
   });
 
-  it('agrees with shouldRetryWrite on where the 4xx boundary sits', () => {
-    for (const status of [399, 400, 499, 500]) {
+  // 408 and 429 are included deliberately: they are the two 4xx codes that explicitly mean "try
+  // again", and they are exactly where these predicates used to disagree -- shouldRetryWrite kept
+  // retrying while isUnsyncedWrite (a bare 400-499 range check) called the write already-delivered,
+  // so the logout guard would have discarded it with no warning. A boundary test that samples only
+  // 399/400/499/500 cannot see that, which is why it did not.
+  it('agrees with shouldRetryWrite on which 4xx codes are still retrying', () => {
+    for (const status of [399, 400, 408, 429, 499, 500]) {
       const stillRetrying = shouldRetryWrite(1, { status });
       expect(isUnsyncedWrite({ status: 'error', errorStatus: status })).toBe(stillRetrying);
     }
+  });
+
+  // The other half of the same agreement: whatever shouldRetryWrite has stopped retrying is what
+  // the UI is allowed to call dead, with 401 held back because a forced sign-out preserves the
+  // outbox and replays it after the next login.
+  it('isDeadWrite is the exact complement of "still retrying", minus the recoverable 401', () => {
+    for (const status of [400, 403, 404, 422]) {
+      expect(shouldRetryWrite(1, { status })).toBe(false);
+      expect(isDeadWrite({ status: 'error', errorStatus: status })).toBe(true);
+    }
+    for (const status of [408, 429, 500, 503, undefined]) {
+      expect(shouldRetryWrite(1, { status })).toBe(true);
+      expect(isDeadWrite({ status: 'error', errorStatus: status })).toBe(false);
+    }
+    expect(isDeadWrite({ status: 'error', errorStatus: 401 })).toBe(false);
   });
 });
 

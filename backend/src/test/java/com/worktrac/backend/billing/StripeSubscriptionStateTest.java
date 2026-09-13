@@ -69,7 +69,7 @@ class StripeSubscriptionStateTest {
     }
 
     // When Stripe names an explicit moment, that is when access actually stops -- so it is the date
-    // the screen must show. Otherwise someone reads "Pro until" beside the wrong day.
+    // the screen must show. Otherwise someone reads "Plus until" beside the wrong day.
     @Test
     void cancelAtBecomesTheDateServiceEnds() {
         Instant endsAt = Instant.parse("2027-08-28T23:01:43Z");
@@ -80,7 +80,7 @@ class StripeSubscriptionStateTest {
     }
 
     // An unrecognised status maps to INCOMPLETE rather than ACTIVE: guessing generously about a
-    // state we do not understand gives Pro away.
+    // state we do not understand gives Plus away.
     @Test
     void anUnknownStatusIsNotTreatedAsEntitled() {
         assertThat(stripeService.toState(subscription("some_future_status")).status())

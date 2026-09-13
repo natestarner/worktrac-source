@@ -2,8 +2,8 @@ package com.worktrac.backend.account;
 
 import com.worktrac.backend.billing.BillingPlan;
 
-// `plan` is the DERIVED entitlement (SubscriptionService.isPro), not raw Stripe status -- the app
-// shell should ask "is this household Pro", never "is this household past_due". It reaches the
+// `plan` is the DERIVED entitlement (SubscriptionService.isPlus), not raw Stripe status -- the app
+// shell should ask "is this household Plus", never "is this household past_due". It reaches the
 // client through MeResponse/AuthResponse and is persisted in the frontend's auth snapshot, which is
 // what lets the header render the right control while offline.
 //

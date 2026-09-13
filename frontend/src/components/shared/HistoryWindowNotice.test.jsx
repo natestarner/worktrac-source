@@ -22,7 +22,7 @@ describe('HistoryWindowNotice', () => {
     renderNotice({ plan: 'FREE', historyWindow: HIDDEN });
 
     expect(screen.getByText(/Your full history has 47 more workouts\./)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'See Pro' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'See Plus' })).toBeInTheDocument();
   });
 
   it('prefixes the tab-specific lead when one is given', () => {
@@ -36,14 +36,14 @@ describe('HistoryWindowNotice', () => {
   // ⚠️ The three fail-closed gates. Each is asserted separately because each silences the notice on
   // its own, and a single combined case would pass with two of them deleted.
   describe('renders nothing unless there is something true to say', () => {
-    it('when the household is Pro', () => {
-      const { container } = renderNotice({ plan: 'PRO', historyWindow: HIDDEN });
+    it('when the household is Plus', () => {
+      const { container } = renderNotice({ plan: 'PLUS', historyWindow: HIDDEN });
       expect(container).toBeEmptyDOMElement();
     });
 
     // The one that matters most: an auth snapshot written before billing shipped carries no plan,
     // and showing someone who already pays a notice about what they cannot see is the worst outcome
-    // available here. Absence is the safe default -- same call PlanBadge and ProUpsell make.
+    // available here. Absence is the safe default -- same call PlanBadge and PlusUpsell make.
     it('when the plan is unknown', () => {
       const { container } = renderNotice({ plan: undefined, historyWindow: HIDDEN });
       expect(container).toBeEmptyDOMElement();
@@ -87,7 +87,7 @@ describe('HistoryWindowNotice', () => {
     });
 
     // ⚠️ Playwright matches an accessible name as a case-insensitive SUBSTRING, and all four of
-    // these are in the DOM together once the explainer is open (the header's "Go Pro" lives outside
+    // these are in the DOM together once the explainer is open (the header's "Go Plus" lives outside
     // this component but on the same screen). A shared substring makes every getByRole on any of
     // them a strict-mode violation somewhere else in the suite. See .claude/rules/billing.md.
     it('keeps its control names non-containing with the notice and the modal chrome', () => {
@@ -95,12 +95,12 @@ describe('HistoryWindowNotice', () => {
       fireEvent.click(screen.getByRole('button', { name: 'About your full history' }));
 
       const names = [
-        'See Pro',
+        'See Plus',
         'About your full history',
         'Unlock full history',
-        'How Free and Pro differ',
+        'How Free and Plus differ',
         'Close',
-        'Go Pro',
+        'Go Plus',
       ];
       for (const a of names) {
         for (const b of names) {
@@ -111,9 +111,9 @@ describe('HistoryWindowNotice', () => {
 
       // ...and the three that this component actually renders are really on screen under those
       // exact names, so the list above cannot quietly stop describing the UI.
-      expect(screen.getByRole('link', { name: 'See Pro' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'See Plus' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Unlock full history' })).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'How Free and Pro differ' })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'How Free and Plus differ' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
     });
 

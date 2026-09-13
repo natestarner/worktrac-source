@@ -192,7 +192,9 @@ describe('ExerciseDetail PR celebration payload', () => {
     fireEvent.click(await screen.findByText('Log set'));
 
     await waitFor(() =>
-      expect(showCelebration).toHaveBeenCalledWith(expect.objectContaining({ isBodyweight: true, est1rmText: '12 reps' })),
+      expect(showCelebration).toHaveBeenCalledWith(
+        expect.objectContaining({ caption: 'Bodyweight', est1rmText: '12 reps' }),
+      ),
     );
   });
 
@@ -209,7 +211,56 @@ describe('ExerciseDetail PR celebration payload', () => {
     fireEvent.click(await screen.findByText('Log set'));
 
     await waitFor(() =>
-      expect(showCelebration).toHaveBeenCalledWith(expect.objectContaining({ isBodyweight: false, est1rmText: '208 lb' })),
+      expect(showCelebration).toHaveBeenCalledWith(
+        expect.objectContaining({ caption: 'Est. 1RM · 185 lb × 5', est1rmText: '208 lb' }),
+      ),
+    );
+  });
+
+  // THE REGRESSION, reported from the app: create a timed exercise, put a weight AND a time on it,
+  // log it, and the PR overlay called it "Bodyweight".
+  //
+  // The cause was one flag answering two questions. `isBodyweight: isBodyweight || isHold` is
+  // correct for "does this set have an est. 1RM to show" and wrong for "was this performed at
+  // bodyweight", and PRCelebration rendered it as the literal word. PRsTab has always split those
+  // correctly ("Longest hold at 25lb"), so the two surfaces disagreed about the same set.
+  it('names the load on a weighted hold rather than calling it bodyweight', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 25, reps: 0 }));
+    logLiveSet.mockResolvedValue({
+      isPR: true,
+      best: { weight: 25, reps: 0, unit: 'lb', est1rm: null, durationSeconds: 60 },
+      session: { id: 101 },
+      set: { id: 201 },
+    });
+    renderExerciseDetail({ exercise: { ...exercise, trackingType: 'duration' } });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() =>
+      expect(showCelebration).toHaveBeenCalledWith(
+        expect.objectContaining({ caption: 'Weighted · 25 lb' }),
+      ),
+    );
+    expect(showCelebration).not.toHaveBeenCalledWith(
+      expect.objectContaining({ caption: 'Bodyweight' }),
+    );
+  });
+
+  // The half that was never wrong: an unweighted hold really is a bodyweight hold.
+  it('still calls an unweighted hold bodyweight', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 0 }));
+    logLiveSet.mockResolvedValue({
+      isPR: true,
+      best: { weight: 0, reps: 0, unit: 'lb', est1rm: null, durationSeconds: 60 },
+      session: { id: 101 },
+      set: { id: 201 },
+    });
+    renderExerciseDetail({ exercise: { ...exercise, trackingType: 'duration' } });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() =>
+      expect(showCelebration).toHaveBeenCalledWith(expect.objectContaining({ caption: 'Bodyweight' })),
     );
   });
 });
@@ -1818,5 +1869,72 @@ describe('ExerciseDetail Customize is unavailable until the exercise exists on t
 
     expect(screen.getByRole('button', { name: /favorites/ })).toBeEnabled();
     expect(screen.getByRole('button', { name: /note for this session/ })).toBeEnabled();
+  });
+});
+
+
+// Every write behind "Customize this exercise" is a PER-PERSON one -- standing note, tags, setup
+// fields, all PersonExerciseController/personScoped -- so on somebody ELSE's screen every one of
+// them 403s. Its two neighbours in that action row were ReadOnlyWrapped and this was not, which
+// left a live button between two greyed ones opening a modal where nothing could save. A member
+// looking at a sibling's Log screen could type a standing note, blur, and get "That didn't save."
+//
+// Driven through the REAL useAccountAccess by supplying a membership, rather than mocking the hook:
+// what is being pinned is that the wrap reaches the button, and a stubbed predicate would pass just
+// as happily against a component that never asked.
+describe('ExerciseDetail Customize is read-only on somebody else\u2019s screen', () => {
+  function mockCommon() {
+    vi.clearAllMocks();
+    useAppState.mockReturnValue(typedDraft());
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+  }
+
+  // personId 99 is somebody else: ExerciseDetail is rendered for person 7.
+  function asMemberViewingSomeoneElse() {
+    mockCommon();
+    useAuth.mockReturnValue({
+      account: { defaultUnit: 'lb' },
+      people: [],
+      membership: { accountRole: 'MEMBER', personId: 99 },
+    });
+  }
+
+  function asMemberOnTheirOwnScreen() {
+    mockCommon();
+    useAuth.mockReturnValue({
+      account: { defaultUnit: 'lb' },
+      people: [],
+      membership: { accountRole: 'MEMBER', personId: 7 },
+    });
+  }
+
+  it('disables Customize when the screen belongs to another person', () => {
+    asMemberViewingSomeoneElse();
+    renderExerciseDetail();
+
+    expect(screen.getByRole('button', { name: 'Customize this exercise' })).toBeDisabled();
+    // Its neighbours, which were already wrapped -- asserted alongside so the three read as one row.
+    expect(screen.getByRole('button', { name: /favorites/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /note for this session/ })).toBeDisabled();
+  });
+
+  it('disables the pinned standing note too, since it opens the same modal', () => {
+    asMemberViewingSomeoneElse();
+    renderExerciseDetail({ exercise: { ...exercise, note: 'Keep elbows tucked' } });
+
+    // Still readable -- only the route into the modal is closed.
+    expect(screen.getByText('Keep elbows tucked')).toBeInTheDocument();
+    expect(screen.getByText('Keep elbows tucked').closest('button')).toBeDisabled();
+  });
+
+  it('leaves Customize alone on the member\u2019s own screen', () => {
+    asMemberOnTheirOwnScreen();
+    renderExerciseDetail({ exercise: { ...exercise, note: 'Keep elbows tucked' } });
+
+    expect(screen.getByRole('button', { name: 'Customize this exercise' })).toBeEnabled();
+    expect(screen.getByText('Keep elbows tucked').closest('button')).toBeEnabled();
   });
 });

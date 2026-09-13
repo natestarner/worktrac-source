@@ -9,6 +9,7 @@ import { migrateLegacyRestTimerPrefs } from '../lib/restTimerMigration';
 import { tryForceUpdate } from '../lib/swUpdate';
 import { clearOnboardingPending, isOnboardingPending } from '../lib/onboardingPending';
 import { useOfflineCacheWarming } from '../hooks/useOfflineCacheWarming';
+import { useAccountAccess } from '../hooks/useAccountAccess';
 import { screenTitleFor } from '../utils/screenTitle';
 import Header from '../components/layout/Header';
 import PersonPillBar from '../components/layout/PersonPillBar';
@@ -21,7 +22,9 @@ import OfflineBanner from '../components/shared/OfflineBanner';
 import ConnectionTroubleBanner from '../components/shared/ConnectionTroubleBanner';
 import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
 import ErrorBoundary from '../components/shared/ErrorBoundary';
+import ReadOnlyPersonNotice from '../components/shared/ReadOnlyPersonNotice';
 import NoActivePersonScreen from '../components/shared/NoActivePersonScreen';
+import PausedLoginScreen from '../components/shared/PausedLoginScreen';
 import { REFRESH_INDICATOR_SLOT_ID } from '../components/shared/RefreshIndicator';
 import WelcomeModal from '../components/onboarding/WelcomeModal';
 import ProductTour from '../components/onboarding/ProductTour';
@@ -31,6 +34,7 @@ export default function AppShell() {
   const { activePersonId, selectPerson, lastTab, setLastTab, selectedExerciseId, restTimersByPerson, setRestTimer } =
     useAppState();
   const { restTimers, startRestTimer, tour, startTour, onboardingDeferred, releaseOnboarding } = useUI();
+  const { selfPersonId, isPaused } = useAccountAccess();
   const [showWelcome, setShowWelcome] = useState(false);
   const accountId = account?.id;
 
@@ -39,7 +43,7 @@ export default function AppShell() {
   // whenever the active account changes, so a shared device switching between two households
   // shows each account's own first-run welcome exactly once, never the other's.
   useEffect(() => {
-    // onboardingDeferred is set when a household registers via marketing's "Go Pro" and is routed
+    // onboardingDeferred is set when a household registers via marketing's "Go Plus" and is routed
     // straight to /app/billing -- the tour must not interrupt a purchase. BillingTab releases it
     // once that decision resolves (paid, or "Start with Free", or simply leaving the screen), and
     // listing it as a dependency is what makes the modal appear at that moment with no further
@@ -65,6 +69,8 @@ export default function AppShell() {
   const restTimersRef = useRef(restTimers);
   restTimersRef.current = restTimers;
   const location = useLocation();
+  // null on a screen that renders its own <h1> -- see the <main> below.
+  const screenTitle = screenTitleFor(location.pathname);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const prevPersonIdRef = useRef(activePersonId);
@@ -75,14 +81,27 @@ export default function AppShell() {
   // Proactively warms every person's logging-essentials data into the offline cache (not just
   // whichever person/tab is on screen), so a device hand-off mid-outage still has something to
   // render. See useOfflineCacheWarming.js for the full trigger list.
-  useOfflineCacheWarming(people);
+  useOfflineCacheWarming(people, { selfPersonId, activePersonId });
 
+  // Which person the app opens on when nothing is persisted for this login yet.
+  //
+  // WARNING: `isPrimary` is the HOUSEHOLD's primary person, not the viewer. For a member that is
+  // somebody else, so their very first sign-in on a device -- which is every member's first
+  // sign-in, and every one after the app-state re-key scoped that store per login -- landed them
+  // on the owner's screen with every write control greyed out. The app read as broken before it
+  // read as read-only.
+  //
+  // Their own person first, then the household's primary. Nothing changes for an owner: the
+  // backfill points their membership at the primary person, and a membership without one (or a v1
+  // snapshot, where useAccountAccess reports null) falls through to exactly the old expression.
   useEffect(() => {
     if (!activePersonId && people.length > 0) {
-      const primary = people.find((p) => p.isPrimary) || people[0];
+      const self =
+        selfPersonId == null ? null : people.find((p) => String(p.id) === String(selfPersonId));
+      const primary = self || people.find((p) => p.isPrimary) || people[0];
       selectPerson(primary.id);
     }
-  }, [activePersonId, people, selectPerson]);
+  }, [activePersonId, people, selectPerson, selfPersonId]);
 
   // One-time migration of the legacy per-device rest-timer localStorage flag to the account-side
   // preference, so anyone who'd turned it off before doesn't have it silently reset.
@@ -186,6 +205,19 @@ export default function AppShell() {
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [queryClient, activePersonId]);
 
+  // ⚠️ BEFORE the no-active-person check, and before any chrome. A paused login is refused on
+  // every route, so rendering the normal app would draw a screen whose every control fails --
+  // and it would do so while firing requests the server has already decided to refuse. It also
+  // must not depend on `people`: that list comes from /me, which still answers, but a paused
+  // member has no reason to wait on person selection to be told why nothing works.
+  //
+  // /me is the single authority for this (it keeps answering 200 while paused), so the client
+  // never infers it from a failed request. Offline, it comes from the auth snapshot's last-known
+  // value -- the only truth available, and the correct degradation.
+  if (isPaused) {
+    return <PausedLoginScreen />;
+  }
+
   // NEVER `return null` here. That is a literally empty #root, which boot-watchdog.js reports as
   // "Huddle couldn't load" after seven seconds -- see NoActivePersonScreen for the full mechanism
   // and why the two cases behind "no active person" need different answers.
@@ -251,9 +283,18 @@ export default function AppShell() {
           Handbook -- every other screen title is a styled div -- so without it a screen reader
           landed on a new screen with no announcement of which one. Keyed on the route so the five
           tabs and the six account-menu screens all resolve, from one derivation rather than eleven
-          separate headings that could drift. */}
+          separate headings that could drift.
+
+          `screenTitleFor` returns null for a screen that draws its own <h1> (today only the
+          Handbook), and then this renders NOTHING. Rendering it unconditionally put a hidden
+          "Huddle Handbook" heading immediately above the visible one -- announced twice, and a
+          strict-mode violation for the two Handbook e2e specs. */}
       <main className="tab-panel" id="main-content" style={{ margin: '0 auto' }}>
-        <h1 className="sr-only">{screenTitleFor(location.pathname)}</h1>
+        {screenTitle ? <h1 className="sr-only">{screenTitle}</h1> : null}
+        {/* Mounted once here rather than on each tab, so a member looking at someone else's data
+            gets the same explanation on every screen and no tab can forget it. Renders null for
+            an owner, and for a member looking at their own data. */}
+        <ReadOnlyPersonNotice />
         {/* Scoped to the tab panel, not the whole shell, so a crashing tab leaves the header,
             person pills and tab nav usable -- the person can switch away and keep working
             instead of losing the app. `resetKey` (not `key`) clears a previous tab's error on

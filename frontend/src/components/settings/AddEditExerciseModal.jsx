@@ -85,7 +85,14 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       const updated = await updateExercise(exercise.id, { name: trimmed });
       onSaved(updated);
     },
-    { errorMessage: "Couldn't save — check your connection and try again." },
+    {
+      errorMessage: "Couldn't save — check your connection and try again.",
+      // A rename can now be refused for a reason the person can act on: they may not own the
+      // exercise (403), or other people have already logged against it (409, naming the owner to
+      // ask). Those sentences are written for a person and are the whole point of the refusal --
+      // replacing them with "check your connection" would be actively misleading.
+      showServerMessage: true,
+    },
   );
 
   // A caller that needs a real, already-synced exercise id (the Routines form sends the created
@@ -212,6 +219,12 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       isGlobal: false,
       isFavorite: true,
       tags: [],
+      // You just made it, and nobody else can have logged against it yet -- so the Customize modal
+      // reads it as yours while the create is still queued, instead of falling back to the
+      // unattributed "Household exercise" badge with no Name field. Replaced wholesale by the
+      // server's row when CREATE_EXERCISE's onSettled reconciles.
+      createdByYou: true,
+      renamable: true,
       optimistic: true,
     };
     insertOptimisticExercise(queryClient, personId, tempExercise);

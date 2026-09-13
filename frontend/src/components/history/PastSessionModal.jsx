@@ -11,7 +11,7 @@ import { localDateTimeToIso, localDateTimeToMs, toLocalDateStr, toLocalTimeStr }
 import Modal from '../shared/Modal';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
-import ProUpsell from '../shared/ProUpsell';
+import PlusUpsell from '../shared/PlusUpsell';
 import { windowLabel } from '../shared/historyWindowCopy';
 
 export default function PastSessionModal({ onClose }) {
@@ -32,7 +32,7 @@ export default function PastSessionModal({ onClose }) {
   // something that actually happened, which is the opposite of "nothing is deleted, ever".
   //
   // The boundary comes from the server's windowStart, never a client-side 90 days, so this warning
-  // and the clamp it describes cannot disagree. An unknown window (Pro, or no answer yet) means no
+  // and the clamp it describes cannot disagree. An unknown window (Plus, or no answer yet) means no
   // warning: windowStart is non-null for every Free household, so absence here is never a Free
   // household being silently missed.
   //
@@ -61,8 +61,11 @@ export default function PastSessionModal({ onClose }) {
     errorMessage: "Couldn't start that past workout.",
   });
 
+  // initialFocus="dialog": the first control here is <input type="date">, and focusing it makes the
+  // browser highlight its month segment -- so the modal opened with a stray selected number in the
+  // date, which reads as a glitch. See Modal.jsx for why this is not an a11y downgrade.
   return (
-    <Modal width={340} onClose={onClose} title="Log a past workout">
+    <Modal width={340} onClose={onClose} title="Log a past workout" initialFocus="dialog">
       <div style={{ fontSize: 13, color: 'var(--color-muted)', marginBottom: 18 }}>When did {activePersonName} work out?</div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
         <input
@@ -81,10 +84,10 @@ export default function PastSessionModal({ onClose }) {
       </div>
       {outsideWindow && (
         <div style={{ marginBottom: 12 }}>
-          <ProUpsell plan={account?.plan}>
+          <PlusUpsell plan={account?.plan}>
             That&rsquo;s outside {windowLabel(windowStart)}, which is what History, PRs and Trends
             show on Free. The workout still saves to your full history.
-          </ProUpsell>
+          </PlusUpsell>
         </div>
       )}
       {!online && (

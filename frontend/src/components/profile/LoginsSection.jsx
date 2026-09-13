@@ -1,0 +1,360 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import SectionLabel from '../shared/SectionLabel';
+import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
+import Modal from '../shared/Modal';
+import { useGatedMutation } from '../../hooks/useGatedMutation';
+import { useUI } from '../../context/UIContext';
+import { listLogins, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
+
+/**
+ * The owner's login manager: who in this household can sign in, and inviting the ones who cannot.
+ *
+ * Owner-only, and HIDDEN rather than disabled for a member — same reasoning as the People roster
+ * above it in ProfileTab. A member has no path to any of this, so a greyed-out list of controls
+ * they can never use is noise that also invites "why not?". Disabling is for something you could
+ * do under other circumstances.
+ *
+ * `plan` (AccountDto.plan, chrome only — billing.md) is what lets Enable-login/Resend be replaced
+ * with a link to Plus on Free instead of opening an invite that `MembershipInviteService.invite`
+ * can only refuse. See member-access.md's "a control the server will refuse must not be offered" —
+ * this is bug #2 on that list. Fails OPEN on an unknown plan, same as `PlusUpsell`/`PlanBadge`: a
+ * pre-billing snapshot must not cost a paying household the real control.
+ */
+export default function LoginsSection({ plan }) {
+  const [rows, setRows] = useState(null);
+  const [invitingPerson, setInvitingPerson] = useState(null);
+  const { run } = useGatedMutation();
+  const { showToast, openConfirm } = useUI();
+
+  const load = useCallback(async () => {
+    try {
+      setRows(await listLogins());
+    } catch {
+      // Deliberately quiet: this is a READ on a settings screen, and the section simply does not
+      // render until it succeeds. A toast here would fire on every offline visit to Profile for a
+      // feature the person was not asking about.
+      setRows(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const sendInvite = run(
+    async (personId, email) => {
+      await inviteLogin(personId, email);
+      setInvitingPerson(null);
+      showToast('Invite sent.');
+      await load();
+    },
+    {
+      offlineMessage: 'Sending an invite needs a connection.',
+      errorMessage: "Couldn't send that invite.",
+      // The refusals here are written for a person and say what to do: that person already has a
+      // login, or the invite was just sent and is still cooling down.
+      showServerMessage: true,
+    },
+  );
+
+  const removeLogin = run(
+    async (row) => {
+      await revokeLogin(row.personId);
+      showToast(row.status === 'ACTIVE' ? 'Login removed.' : 'Invite withdrawn.');
+      await load();
+    },
+    {
+      offlineMessage: 'Removing a login needs a connection.',
+      errorMessage: "Couldn't remove that login.",
+      // The one refusal here is "you can't remove your own login", which says what to do instead.
+      showServerMessage: true,
+    },
+  );
+
+  const unlock = run(
+    async (row) => {
+      await unlockLogin(row.personId);
+      showToast(`${row.personName} can try signing in again.`);
+      await load();
+    },
+    {
+      offlineMessage: 'Unlocking a login needs a connection.',
+      errorMessage: "Couldn't unlock that login.",
+    },
+  );
+
+  /**
+   * ⚠️ The confirm names the two things that are NOT obvious, and both are load-bearing.
+   *
+   * 1. The person and their workouts stay. Everything else on this screen that says "remove"
+   *    deletes training data, so without this sentence an owner reasonably assumes this does too —
+   *    and hesitates over an access decision that costs nothing.
+   * 2. Work queued on THEIR device may never sync. A revoked member who is offline cannot be
+   *    reached; on reconnect their token resolves to no membership and the session tears down with
+   *    those writes undeliverable. There is no server-side fix (offline-internals.md), so the
+   *    honest thing is to say so before the owner acts, not after.
+   */
+  function confirmRemove(row) {
+    const message = row.status === 'ACTIVE'
+      ? `Remove ${row.personName}'s login? ${row.personName} and all of their workouts stay in this `
+        + `household — only their ability to sign in goes away. If they're offline right now, `
+        + `anything they haven't synced yet may not make it.`
+      : `Withdraw the invite for ${row.personName}? The link in their email stops working.`;
+    // Not "Delete": this dialog's whole job is telling the owner nothing is deleted.
+    openConfirm(message, () => removeLogin(row), {
+      confirmLabel: row.status === 'ACTIVE' ? 'Remove login' : 'Withdraw invite',
+    });
+  }
+
+  if (!rows) return null;
+
+  return (
+    <>
+      <SectionLabel>Logins</SectionLabel>
+      {/* data-testid because a managed login's name collides with PersonPillBar's own button for
+          that same person -- both legitimately render "Sam" whenever a household has 2+ people,
+          so an unscoped getByText('Sam') is ambiguous the instant both have mounted. See the
+          e2e spec's own comment for the incident this papered over locally by pure timing luck. */}
+      <div style={cardStyle} data-testid="logins-list">
+        <div style={introStyle}>
+          Give someone their own email and password so they can log their own workouts. They&rsquo;ll
+          see everyone&rsquo;s workouts but can only change their own.
+        </div>
+        {rows.map((row, i) => (
+          <div
+            key={row.personId}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '14px 0',
+              borderBottom: i < rows.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{row.personName}</div>
+              {/* The address is shown back because the owner typed it -- without it they cannot
+                  tell which of two similar addresses they used. */}
+              {row.email && (
+                <div style={emailStyle} title={row.email}>
+                  {row.email}
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              {row.status === 'ACTIVE' && <span style={activeBadgeStyle}>HAS LOGIN</span>}
+              {row.status === 'INVITED' && <span style={invitedBadgeStyle}>INVITED</span>}
+              {/* Orthogonal to status, deliberately: an ACTIVE login that is locked is still a
+                  login, and it clears itself in fifteen minutes. Collapsing the two would leave
+                  the owner unable to see "they have a login AND cannot use it right now" -- which
+                  is the single most common reason a member says signing in is broken, and the
+                  whole reason this is surfaced rather than emailed. */}
+              {row.lockedUntil && (
+                <span style={lockedBadgeStyle}>LOCKED</span>
+              )}
+              {row.lockedUntil && (
+                <OfflineDisabledWrap message="Unlocking a login needs a connection.">
+                  <button onClick={() => unlock(row)} style={linkStyle}>
+                    Unlock
+                  </button>
+                </OfflineDisabledWrap>
+              )}
+              {row.status !== 'ACTIVE' && (
+                plan === 'FREE' ? (
+                  // Not OfflineDisabledWrap'd: like PlanBadge's "Go Plus", this is a navigation, not
+                  // a write, so it works offline and the gate belongs on the checkout button it
+                  // leads to. Reuses the header pill's own class rather than a new style object —
+                  // frontend-core.md's "a raw literal in a component is the bug" applies to a new
+                  // one-off treatment as much as to a hardcoded value. No HuddleMark here: billing.md
+                  // reserves the mark for badges naming Plus as a product, and a small text link
+                  // inside a dense row is exactly the "clutter" case it calls out.
+                  <Link to="/app/billing" className="pressable plan-badge plan-badge--upgrade">
+                    Unlock with Plus
+                  </Link>
+                ) : (
+                  <OfflineDisabledWrap message="Sending an invite needs a connection.">
+                    <button onClick={() => setInvitingPerson(row)} style={linkStyle}>
+                      {row.status === 'INVITED' ? 'Resend' : 'Enable login'}
+                    </button>
+                  </OfflineDisabledWrap>
+                )
+              )}
+              {/* Not offered for the owner's own login: nothing in the app could put it back, and a
+                  household with no owner has nobody who can invite one. The server refuses it too
+                  (409), so this only stops the client offering a control that can only fail. */}
+              {row.status !== 'NONE' && !row.isSelf && (
+                <OfflineDisabledWrap message="Removing a login needs a connection.">
+                  {/* ⚠️ "Remove login", never bare "Remove". The People roster higher up this same
+                      screen has its own Remove, and THAT one deletes the person along with every
+                      session, set and routine they own. Two identically-named controls on one
+                      screen, one destructive and one not, is a mis-tap waiting to happen -- and the
+                      one word the owner reads is the only thing distinguishing them. */}
+                  <button onClick={() => confirmRemove(row)} style={removeLinkStyle}>
+                    Remove login
+                  </button>
+                </OfflineDisabledWrap>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {invitingPerson && (
+        <InviteModal
+          person={invitingPerson}
+          onCancel={() => setInvitingPerson(null)}
+          onSend={(email) => sendInvite(invitingPerson.personId, email)}
+        />
+      )}
+    </>
+  );
+}
+
+function InviteModal({ person, onCancel, onSend }) {
+  const [email, setEmail] = useState(person.email || '');
+
+  return (
+    <Modal title={`Enable login for ${person.personName}`} onClose={onCancel}>
+      <div style={{ fontSize: 14, lineHeight: 1.55, color: 'var(--color-muted)', marginBottom: 16 }}>
+        We&rsquo;ll email {person.personName} a link to set up their own login. Nothing changes until
+        they open it.
+      </div>
+
+      {/* ⚠️ Stated BEFORE the email field, deliberately -- these are the things worth knowing
+          before you type somebody's address, not after. The plan calls for all three. */}
+      <ul style={disclosureStyle}>
+        <li>Member logins are part of Plus. If this household goes back to Free the login stops
+          working until you upgrade again — {person.personName}&rsquo;s workouts are never deleted
+          either way.</li>
+        <li>You can see their workouts and can remove their login at any time. You will never be
+          able to see or set their password.</li>
+        <li>If {person.personName} is under 13, set this up with a parent or guardian and use an
+          address one of them can reach.</li>
+      </ul>
+
+      <label htmlFor="invite-email" style={labelStyle}>Email</label>
+      <input
+        id="invite-email"
+        type="email"
+        autoComplete="off"
+        placeholder="them@example.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="input"
+      />
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+        <button
+          onClick={() => onSend(email.trim())}
+          disabled={!email.trim()}
+          className="btn btn-primary btn-full pressable"
+        >
+          Send invite
+        </button>
+        <button onClick={onCancel} style={cancelStyle}>Cancel</button>
+      </div>
+    </Modal>
+  );
+}
+
+const cardStyle = {
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 12,
+  padding: '4px 16px 8px',
+  marginBottom: 24,
+};
+
+const introStyle = {
+  fontSize: 13,
+  lineHeight: 1.5,
+  color: 'var(--color-muted)',
+  padding: '14px 0 4px',
+};
+
+const emailStyle = {
+  fontSize: 13,
+  color: 'var(--color-muted)',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  maxWidth: 220,
+};
+
+const badgeBase = {
+  fontSize: 10,
+  fontWeight: 700,
+  letterSpacing: '0.06em',
+  padding: '3px 7px',
+  borderRadius: 5,
+};
+
+const activeBadgeStyle = { ...badgeBase, background: 'var(--color-subtle-bg)', color: 'var(--color-muted)' };
+const invitedBadgeStyle = { ...badgeBase, background: 'var(--color-accent-soft, var(--color-subtle-bg))', color: 'var(--color-accent-text)' };
+
+const lockedBadgeStyle = {
+  padding: '2px 8px',
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--color-border)',
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  color: 'var(--color-muted)',
+};
+
+const removeLinkStyle = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  color: 'var(--color-danger)',
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: 'pointer',
+};
+
+const linkStyle = {
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  color: 'var(--color-accent-text)',
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: 'pointer',
+};
+
+// Matches ImportDataModal's field label rather than the uppercase treatment on the auth pages.
+// The uppercase idiom belongs to <SectionLabel>, which is a heading ABOVE a group of content; the
+// two in-app modals an owner uses should also read the same as each other. check-design-primitives
+// enforces the first half of that.
+const labelStyle = {
+  display: 'block',
+  marginBottom: 6,
+  fontSize: 13,
+  fontWeight: 700,
+  color: 'var(--color-muted)',
+};
+
+const disclosureStyle = {
+  margin: '0 0 18px',
+  padding: '12px 16px 12px 30px',
+  background: 'var(--color-subtle-bg)',
+  borderRadius: 10,
+  fontSize: 13,
+  lineHeight: 1.5,
+  color: 'var(--color-muted)',
+  display: 'grid',
+  gap: 8,
+};
+
+const cancelStyle = {
+  padding: '12px 18px',
+  background: 'none',
+  border: '1px solid var(--color-border)',
+  borderRadius: 10,
+  fontSize: 14,
+  fontWeight: 600,
+  color: 'var(--color-text)',
+  cursor: 'pointer',
+};

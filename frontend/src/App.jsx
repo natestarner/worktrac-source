@@ -18,6 +18,7 @@ import RegisterPage from './routes/RegisterPage';
 import ConfirmEmailPage from './routes/ConfirmEmailPage';
 import ForgotPasswordPage from './routes/ForgotPasswordPage';
 import ResetPasswordPage from './routes/ResetPasswordPage';
+import JoinPage from './routes/JoinPage';
 import ProtectedRoute from './routes/ProtectedRoute';
 import AdminRoute from './routes/AdminRoute';
 import AppShell from './routes/AppShell';
@@ -103,13 +104,25 @@ export default function App() {
       onSuccess={async () => {
         // The query cache (optimistic rows included) has just been restored. Bring back the temp->real
         // exercise AND set id maps and any queued writes -- for whichever account was last known to
-        // own the outbox (see outboxPersistence.js's getOutboxAccountId; this runs before AuthContext
+        // own the outbox (see outboxPersistence.js's getOutboxScope; this runs before AuthContext
         // has even confirmed identity, so it relies on that synchronous localStorage pointer, not
         // React state) -- then, if online, replay them; if offline, they stay queued and the
         // onlineManager subscription above flushes them on reconnect. Both id maps load first so a
         // set logged against an offline-created exercise, or an edit queued against a not-yet-synced
         // set, can resolve on replay.
-        await Promise.all([loadExerciseIdMap(), loadSetIdMap(), restoreOutbox(queryClient)]);
+        //
+        // "First" is SEQUENTIAL, and it has to be. These were one Promise.all, which ran the maps
+        // concurrently with the restore -- so a restored dependent write could reach
+        // requireResolvedExerciseId/requireResolvedSetId before the mapping it needs had loaded off
+        // disk. That was survivable only because an unresolved temp id retried forever and the map
+        // won the race on a later attempt. It is not survivable now: a dependent whose create is
+        // absent from the cache is treated as terminally undeliverable (see queryClient.js), and a
+        // create that already SUCCEEDED is absent by definition -- successes are never persisted.
+        // Losing that race would therefore fail a write that has a perfectly good mapping sitting
+        // in IndexedDB. Awaiting the maps first removes the race rather than relying on retries to
+        // paper over it.
+        await Promise.all([loadExerciseIdMap(), loadSetIdMap()]);
+        await restoreOutbox(queryClient);
         flushOutbox();
       }}
     >
@@ -134,6 +147,8 @@ export default function App() {
             <Route path="/confirm-email" element={<ConfirmEmailPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            {/* Where an invite email lands. Unauthenticated: acquiring a session is the point. */}
+            <Route path="/join" element={<JoinPage />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/app" element={<AppShell />}>
                 <Route index element={<Navigate to="log" replace />} />

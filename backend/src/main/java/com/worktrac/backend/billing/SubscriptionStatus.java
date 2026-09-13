@@ -6,7 +6,7 @@ package com.worktrac.backend.billing;
 //
 // Note TRIALING: this product ships with no trial (the Free tier is the trial). It is here anyway
 // because enabling a trial is a Dashboard setting, not a code change -- if one is ever switched on,
-// the entitlement derivation should already treat those households as Pro rather than silently
+// the entitlement derivation should already treat those households as Plus rather than silently
 // locking out people Stripe considers in good standing.
 public enum SubscriptionStatus {
 
@@ -21,7 +21,7 @@ public enum SubscriptionStatus {
     ACTIVE,
 
     // Payment failed and Stripe is retrying (Smart Retries). Entitlement CONTINUES through this
-    // window -- see SubscriptionService.isPro for why cutting access mid-dunning is the wrong call.
+    // window -- see SubscriptionService.isPlus for why cutting access mid-dunning is the wrong call.
     PAST_DUE,
 
     // Ended, or ending. Entitlement continues until current_period_end, because they paid for it.

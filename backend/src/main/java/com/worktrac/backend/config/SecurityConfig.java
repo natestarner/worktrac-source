@@ -2,9 +2,8 @@ package com.worktrac.backend.config;
 
 import com.worktrac.backend.security.AuthRequestLoggingFilter;
 import com.worktrac.backend.security.JwtAuthenticationFilter;
-import com.worktrac.backend.security.JwtService;
+import com.worktrac.backend.security.TokenAuthenticator;
 import com.worktrac.backend.security.RequestDiagnosticsFilter;
-import com.worktrac.backend.security.TokenVersionService;
 import com.worktrac.backend.security.RequestSizeLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,10 +26,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService,
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                     TokenAuthenticator tokenAuthenticator,
                                                      CorsConfigurationSource corsConfigurationSource,
                                                      RequestLimitProperties requestLimitProperties,
-                                                     TokenVersionService tokenVersionService,
                                                      AdminProperties adminProperties) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
@@ -42,11 +41,37 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/confirm-email",
+                        // /api/auth/session is permitAll because a SELECTION token cannot authenticate
+                        // through the filter by design (JwtService.parseToken refuses any token
+                        // carrying scp), so an authenticated matcher here would make finishing a
+                        // multi-household login impossible. The route reads the header itself and
+                        // hands it to TokenAuthenticator -- the SAME validator this filter uses, so
+                        // "cannot use the filter" no longer means "gets a weaker check". It did
+                        // once; see TokenAuthenticator's header.
+                        // /api/auth/accept-invite and /api/auth/invite/preview are permitAll for the
+                        // same reason as /session: the caller has no session yet, and the emailed
+                        // token is what stands in for one. Each verifies that token itself -- see
+                        // MembershipInviteService.requireValidInvite.
+                        //
+                        // ⚠️ permitAll here does NOT mean unauthenticated. JwtAuthenticationFilter
+                        // still runs, so a caller who happens to be signed in arrives with a fully
+                        // validated principal -- which is exactly what lets accept-invite recognise
+                        // an invitee who is already signed in as the invited address without
+                        // hand-parsing (and under-validating) the header. See CurrentUser.optional.
+                        .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/session",
+                                "/api/auth/accept-invite", "/api/auth/invite/preview",
+                                "/api/auth/confirm-email",
                                 "/api/auth/resend-code", "/api/auth/forgot-password", "/api/auth/reset-password",
                                 "/api/auth/resend-reset-code", "/api/auth/test/pending-code",
                                 "/api/auth/test/email-outcome",
-                                "/api/auth/test/billing-plan").permitAll()
+                                "/api/auth/test/billing-plan",
+                                // Both @Profile({"local","lower"}) AND shared-secret gated in
+                                // TestSupportController; permitAll here only means the security
+                                // chain does not additionally demand a JWT, which these have no way
+                                // to supply -- they exist to CREATE the login a test then signs in as.
+                                "/api/auth/test/member",
+                                "/api/auth/test/member-visibility",
+                                "/api/auth/test/pending-invite").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         // Server-to-server (Azure Event Grid), no JWT possible -- gated instead
                         // by EmailDeliveryWebhookController's own query-param shared secret.
@@ -80,7 +105,7 @@ public class SecurityConfig {
                 // reaches a controller is still tagged with its correlation id in the logs. Same
                 // "must be positioned relative to an already-registered filter" constraint as
                 // above, hence relative to AuthRequestLoggingFilter rather than to the chain head.
-                .addFilterBefore(new JwtAuthenticationFilter(jwtService, tokenVersionService, adminProperties),
+                .addFilterBefore(new JwtAuthenticationFilter(tokenAuthenticator, adminProperties),
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new AuthRequestLoggingFilter(), JwtAuthenticationFilter.class)
                 .addFilterBefore(new RequestDiagnosticsFilter(), AuthRequestLoggingFilter.class)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { EXERCISE_METRICS } from '../trends/exerciseMetrics';
 import { WEEKLY_METRICS } from '../trends/weeklyMetrics';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
@@ -37,7 +37,8 @@ const SECTIONS = [
   { id: 'trends', title: 'Trends', group: 'Looking back' },
   { id: 'personal', title: 'Notes, tags and favorites', group: 'Making it yours' },
   { id: 'settings', title: 'Settings', group: 'Making it yours' },
-  { id: 'plan', title: 'Free and Pro', group: 'Making it yours' },
+  { id: 'logins', title: 'Giving someone their own login', group: 'Making it yours' },
+  { id: 'plan', title: 'Free and Plus', group: 'Making it yours' },
   { id: 'data', title: 'Import and export', group: 'Making it yours' },
   { id: 'offline', title: 'Losing the connection', group: 'When things go wrong' },
   { id: 'trouble', title: 'Getting help', group: 'When things go wrong' },
@@ -47,7 +48,36 @@ const restCeilingMinutes = REST_CEILING_SECONDS / 60;
 
 export default function HelpTab() {
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const { startTour } = useUI();
+
+  // ARRIVING at /app/help#plan has to land on that section. Nothing else makes it happen, and the
+  // section ids are advertised as deep links right above -- so "How Free and Plus differ"
+  // (HistoryWindowModal) navigated to the handbook and left the reader at the top of a very long
+  // page, twelve thousand pixels above the answer. Measured: scrollY stayed 0 with the target
+  // heading at y=12447.
+  //
+  // Neither entry path can scroll on its own, for different reasons:
+  //   full load / reload / bookmark -- the browser looks for #plan before React has rendered it,
+  //     finds nothing, and does not retry.
+  //   client-side <Link> -- React Router changes the URL and never scrolls at all.
+  // Both are a mount of this component, which is why one mount-time effect covers both.
+  //
+  // This does NOT replace the native jump for the in-page <a href="#plan"> links: those already
+  // work (verified -- scrollY 0 -> 12283), and a hash-only anchor click fires `hashchange` rather
+  // than `popstate`, so `useLocation` may not even re-run for them. Running twice would be
+  // harmless anyway; scrolling to the same element is idempotent.
+  //
+  // scrollIntoView() honours the `scroll-margin-top: var(--sticky-chrome-clearance)` on
+  // .help-section, so the heading clears the sticky chrome exactly as a native jump does -- don't
+  // reach for scrollTo(), which would have to re-derive that offset and could then disagree with
+  // the CSS.
+  useEffect(() => {
+    const id = hash ? decodeURIComponent(hash.slice(1)) : '';
+    if (!id) return;
+    const target = document.getElementById(id);
+    if (target) target.scrollIntoView();
+  }, [hash]);
 
   return (
     <div className="help">
@@ -163,6 +193,13 @@ export default function HelpTab() {
           Type in the search box to reach the full library. Search is forgiving about word order, so
           &ldquo;barbell squat&rdquo; finds <strong>Barbell Back Squat</strong>. You don&rsquo;t have
           to guess the exact name.
+        </p>
+        <p>
+          Both lists stay alphabetical, and they always will &mdash; so an exercise sits in the same
+          place every time you come looking for it. Once a list outgrows the screen it shows the
+          first few rows with a <T>Show all</T> link underneath; tap it to see the rest, and{' '}
+          <T>Collapse</T> to fold it back. Worth knowing: a wide screen fits more per row, so an
+          iPad shows more of the list than a phone before the link appears.
         </p>
 
         <h3 className="help-h3">Logging</h3>
@@ -342,6 +379,18 @@ export default function HelpTab() {
           with the same movement works fine. <ChipWait />
         </p>
 
+        <h3 className="help-h3">Putting them in order</h3>
+        <p>
+          Your routines are listed in whatever order you put them in, on the <T>Routines</T> tab and
+          in the Log picker&rsquo;s shortcut alike. Tap <T>Reorder routines</T>, drag the handles,
+          then tap <T>Done</T>. <ChipWait />
+        </p>
+        <p>
+          This is worth two minutes if you have more than a handful: the Log picker&rsquo;s{' '}
+          <T>Start a routine</T> shortcut only shows the first four, so the ones you put at the top
+          are the ones waiting for you when you walk in.
+        </p>
+
         <h3 className="help-h3">Running one</h3>
         <p>
           Start it from the <T>Routines</T> tab, or from the <T>Start a routine</T> shortcut at the top
@@ -386,8 +435,8 @@ export default function HelpTab() {
           every exercise and every set. Personal records are badged where they happened.
         </p>
         <p>
-          On <T>Free</T> this shows the last 90 days. Older workouts are hidden rather than deleted.
-          See <a href="#plan">Free and Pro</a>.
+          On <T>Free</T> this shows the last 90 days. Everything before that is still saved in your
+          full history. See <a href="#plan">Free and Plus</a>.
         </p>
 
         <h3 className="help-h3">Finding something</h3>
@@ -436,9 +485,9 @@ export default function HelpTab() {
           shouldn&rsquo;t have counted removes it from the board.
         </p>
         <p>
-          On <T>Free</T> the board covers the last 90 days; <T>Pro</T> makes it all-time. Either
+          On <T>Free</T> the board covers the last 90 days; <T>Plus</T> makes it all-time. Either
           way, a set is only badged as a PR if it beats <strong>everything</strong> you have logged.
-          See <a href="#plan">Free and Pro</a>.
+          See <a href="#plan">Free and Plus</a>.
         </p>
         <p>
           Sort three ways: <strong>Most recent</strong> (the default: what got better lately),{' '}
@@ -516,7 +565,7 @@ export default function HelpTab() {
           </p>
           <p>
             On <T>Free</T> the grid still spans six months, but only the last 90 days can be filled
-            in. That is as far back as Free shows. See <a href="#plan">Free and Pro</a>.
+            in. That is as far back as Free shows. See <a href="#plan">Free and Plus</a>.
           </p>
         </Note>
 
@@ -632,14 +681,97 @@ export default function HelpTab() {
         </p>
       </Section>
 
-      <Section id="plan" title="Free and Pro">
+      {/* ⚠️ THIS SECTION IS A PROMISE, NOT A DESCRIPTION.
+          Three sentences here are load-bearing and are asserted in code elsewhere:
+            "Their workouts stay"        -> MembershipInviteService.revoke deletes a membership,
+                                            never a person and never training data.
+            "You can't see or set their
+             password"                   -> there is no CHANGE_ANY_PASSWORD permission, deliberately.
+            "They can't change anyone
+             else's workouts"            -> AccountRole never grants MEMBER WRITE_OTHER_PEOPLE,
+                                            under any visibility setting.
+          If any of those ever stops being true, this copy changes in the same commit. */}
+      <Section id="logins" title="Giving someone their own login">
         <p className="help-lede">
-          Free is free for good. Not a trial that runs out. Pro adds your whole history and
-          the ability to bring old workouts in.
+          Everyone in the household can share one login and tap between people &mdash; that is the
+          iPad-at-the-squat-rack setup, and it still works exactly as it always did. But an older
+          kid with their own phone can have their own sign-in instead.
+        </p>
+        <p>
+          <T>Profile</T> &rarr; <T>Logins</T>, then <T>Enable login</T> next to their name. You
+          enter their email address and they get a link. If that address is new to Huddle they
+          choose a password; if they already use Huddle they sign in with the password they
+          already have, and this household is added to their account alongside their own. Until
+          they accept, their row says <T>Invited</T>. This is a Plus feature.
+        </p>
+        <p>
+          Either way, <strong>the invitation only does anything once they act on it</strong>. The
+          link on its own is not a way into anybody&rsquo;s account &mdash; someone who already has
+          a Huddle password still has to enter it &mdash; and you see the same <T>Invited</T> row
+          whichever of the two it turns out to be.
         </p>
 
         <HelpTable
-          head={['', 'Free', 'Pro']}
+          head={['They can', 'They cannot']}
+          rows={[
+            ['Log their own workouts, on their own phone', "Change anyone else's workouts"],
+            ['See everyone in the household', 'Add or remove people'],
+            ['Add an exercise or tag to the shared list, or delete their own unused tag', 'Delete a shared exercise, or a tag someone else added or uses'],
+            ['Rename an exercise they added, until someone else logs it', 'Rename one somebody else added'],
+            ['Rename their own name and rest timer', 'Change the household name or units'],
+            ['Change their own password', 'Import, export everything, or see billing'],
+          ]}
+        />
+
+        <Note title="You can never see or set their password">
+          <p>
+            Not by design and not by accident &mdash; there is no screen anywhere in Huddle that
+            lets one person set another&rsquo;s password. If they forget it they use
+            <T>Forgot password</T>, exactly as you would. What you can do is send the invite again,
+            unlock them if too many wrong tries locked them out, or remove their login.
+          </p>
+        </Note>
+
+        <Note title="Removing a login keeps the person and everything they logged">
+          <p>
+            <T>Remove</T> takes away their ability to sign in. It does not delete them, their
+            workouts, their history or their PRs &mdash; all of that stays in the household and you
+            keep seeing it, exactly as before they had a login.
+          </p>
+          <p>
+            One thing to know: if their phone is offline when you remove them, anything they logged
+            and haven&rsquo;t synced yet may never arrive. There is no way around that &mdash; their
+            phone can&rsquo;t be reached. If it matters, wait until they&rsquo;re back on a
+            connection.
+          </p>
+        </Note>
+
+        <Note title="If a household goes back to Free">
+          <p>
+            Member logins pause. Nobody is deleted and nothing is lost &mdash; their workouts and
+            everyone else&rsquo;s stay exactly where they are, and the household keeps working from
+            the main login. Go back to Plus and their sign-in starts working again on its own.
+          </p>
+        </Note>
+
+        <Note title="Setting one up for a child">
+          <p>
+            A login needs an email address, which means a child&rsquo;s login involves collecting
+            their email and a password from them. If they&rsquo;re under 13, set it up together with
+            a parent or guardian and use an address one of you can reach. You stay in control
+            either way: only you can create a login, and only you can remove one.
+          </p>
+        </Note>
+      </Section>
+
+      <Section id="plan" title="Free and Plus">
+        <p className="help-lede">
+          Free is free for good. Not a trial that runs out. Plus adds your whole history, the
+          ability to bring old workouts in, and a personal login for anyone who wants one.
+        </p>
+
+        <HelpTable
+          head={['', 'Free', 'Plus']}
           rows={[
             ['People in your household', 'Everyone', 'Everyone'],
             ['Workouts, sets and exercises', 'Unlimited', 'Unlimited'],
@@ -648,15 +780,17 @@ export default function HelpTab() {
             ['Export all your data', 'Yes', 'Yes'],
             ['History, PRs and trends', 'Last 90 days', 'Everything'],
             ['Import past workouts', 'No', 'Yes'],
+            ['A personal login for each person', 'No', 'Yes'],
           ]}
         />
 
         <Note title="Nothing you log is ever deleted">
           <p>
-            On Free, workouts older than 90 days are <strong>hidden, not removed</strong>. Every set
-            stays exactly where it was, and the moment you subscribe your whole history is back. If
-            you later cancel, you keep Pro until the period you paid for ends, and then the same
-            thing happens in reverse: hidden, never lost.
+            On Free, History, PRs and Trends <strong>show the last 90 days</strong>. Everything
+            older is still saved &mdash; every set stays exactly where it was, and the moment you
+            subscribe your whole history is on screen again. If you later cancel, you keep Plus until
+            the period you paid for ends, and then those screens go back to 90 days.{' '}
+            <strong>Your history never changes; only how much of it is on screen does.</strong>
           </p>
           <p>
             You don&rsquo;t have to keep track of this yourself. Whenever your full history holds
@@ -680,7 +814,7 @@ export default function HelpTab() {
 
         <h3 className="help-h3">Changing your plan</h3>
         <p>
-          Your account menu &rarr; <T>Plan &amp; billing</T> shows what you&rsquo;re on. Pro is
+          Your account menu &rarr; <T>Plan &amp; billing</T> shows what you&rsquo;re on. Plus is
           $3.99 a month or $29 a year. Payments are handled by Stripe. The app never sees
           your card. <T>Manage billing</T> opens Stripe in a new tab to change a card, download
           receipts, switch between monthly and yearly, or cancel.
@@ -712,7 +846,7 @@ export default function HelpTab() {
           <T>App Settings</T> &rarr; <T>Import data</T> takes a CSV or Excel file: one Huddle
           exported, or a spreadsheet you kept yourself. You choose whose workouts it is, and you see
           exactly what will be added before anything is saved. Importing is part of{' '}
-          <T>Pro</T> (see <a href="#plan">Free and Pro</a>).
+          <T>Plus</T> (see <a href="#plan">Free and Plus</a>).
         </p>
         <p>Three columns are required:</p>
         <HelpTable
@@ -800,6 +934,20 @@ export default function HelpTab() {
           changes waiting to sync&rdquo;. Sets you log while offline appear in your list immediately
           and can be edited and deleted like any other; they aren&rsquo;t stuck behind a spinner. When
           the connection returns, everything sends in the order you did it.
+        </p>
+        <p>
+          Tapping that count opens the full list, so you can check nothing you entered was lost. A
+          change that genuinely can&rsquo;t be sent &mdash; a correction to a set you later deleted
+          on another device, say &mdash; is marked <T>Couldn&rsquo;t sync</T> rather than sitting
+          there looking like it&rsquo;s still trying. A slow or unreachable server never gets that
+          mark: those keep retrying for as long as it takes, and they will send.
+        </p>
+        <p>
+          Every row has a <T>Discard</T>, and there&rsquo;s a <T>Clear all queued changes</T> at the
+          bottom. You shouldn&rsquo;t need either &mdash; the queue sends on its own &mdash; but
+          they&rsquo;re there so a change you no longer want, or one you believe is stuck, is never
+          something you have to log out to get rid of. Both ask before discarding anything, and what
+          they discard is gone for good.
         </p>
 
         <h3 className="help-h3">When the signal is bad rather than absent</h3>

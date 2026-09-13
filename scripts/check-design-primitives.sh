@@ -108,6 +108,42 @@ if [ -n "$heavy" ]; then
   fail=1
 fi
 
+# -- 5. The card recipe -------------------------------------------------------
+#
+# surface background + a 1px --color-border + --radius-lg is <Card>. The recipe was retyped 61
+# times before the primitive had a padding scale to make adoption possible, and the radius drifted
+# across 8/10/12/14/16 for objects that are all the same kind of thing.
+#
+# This counts rather than forbids. A large number of the remaining sites are LEGITIMATELY not
+# cards -- popovers at --radius-md, the modal panel and auth cards at --radius-xl, chips, and a
+# recurring "container for rows" shape ('4px 20px') the three-step scale deliberately does not
+# name. Forbidding outright would force those into a step that is wrong for them, which is how a
+# scale grows back to 27 values.
+#
+# So the ceiling is a ratchet: it may go DOWN freely as more sites migrate, and going UP means
+# someone hand-rolled a new one. Lower it when you migrate; raise it only with a reason.
+#
+# KNOWN LIMIT, stated rather than hidden: this matches the recipe written INLINE on one line,
+# which is how most of them are written. A multi-line `const cardStyle = { ... }` spreads the
+# two tokens across separate lines and slips past -- bash cannot cheaply match across lines.
+# So this is a tripwire for the common shape, not a proof of absence. It is still worth having:
+# the 61 that accumulated were overwhelmingly the inline form.
+EXPECTED_HANDROLLED_CARDS=9
+
+handrolled=$(grep -rn "1px solid var(--color-border)" --include='*.jsx' "$SRC" \
+  | grep -v '\.test\.jsx:' \
+  | grep -v 'components/admin/' \
+  | grep -v 'routes/admin/' \
+  | grep -c "var(--color-surface)" || true)
+
+if [ "$handrolled" -gt "$EXPECTED_HANDROLLED_CARDS" ]; then
+  echo "FAIL: hand-rolled card recipes is $handrolled, above the pinned $EXPECTED_HANDROLLED_CARDS"
+  note "Use components/shared/Card.jsx -- size=\"dense\" (16x20) or the default (20), or flush."
+  note "If this really is not a card (a popover, a chip, a row container), raise the ceiling"
+  note "above WITH the reason, the way the resilience guard's swallow count does."
+  fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "check-design-primitives: FAILED"
   exit 1

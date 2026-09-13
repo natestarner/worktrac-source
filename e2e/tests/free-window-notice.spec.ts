@@ -7,7 +7,7 @@ import { forEachConnectivityMode } from './support/parity';
 // truncated screen that looks complete.
 //
 // The acute case this closes, which log-past-workout.spec.ts flagged and worked around by forcing
-// the household to Pro: log a past workout at an out-of-window date, tap Done, and land on History
+// the household to Plus: log a past workout at an out-of-window date, tap Done, and land on History
 // reading "No workouts logged yet" -- about a workout the app had just saved.
 //
 // Deliberately NO setBillingPlan call anywhere in this file. registerHousehold leaves a household
@@ -106,6 +106,33 @@ test.describe('The Free-tier window names the rest of your history', () => {
 
     await explainer.getByRole('button', { name: 'Unlock full history' }).click();
     await expect(page).toHaveURL(/\/app\/billing/);
+  });
+
+  // The other exit from that explainer, and the one that was broken. It is a client-side <Link> to
+  // /app/help#plan, and React Router does not scroll to a hash -- so this landed on the handbook at
+  // the top of a very long page, roughly twelve thousand pixels above the section it names.
+  //
+  // Asserted here rather than only in help.spec.ts because this is the path someone actually takes:
+  // help.spec.ts proves the deep link works, this proves THIS control uses one that resolves.
+  test('"How Free and Plus differ" lands on the plan section of the handbook', async ({
+    page,
+    request,
+  }) => {
+    await registerHousehold(page, request, 'Jamie');
+    await logAnOutOfWindowWorkout(page);
+
+    await page.getByRole('button', { name: 'About your full history' }).click();
+    await page.getByRole('dialog').getByRole('link', { name: 'How Free and Plus differ' }).click();
+
+    await expect(page).toHaveURL(/\/app\/help#plan/);
+
+    const heading = page.getByRole('heading', { name: 'Free and Plus' });
+    await expect(heading).toBeVisible();
+
+    const chrome = await page.locator('.app-chrome').boundingBox();
+    const box = await heading.boundingBox();
+    expect(box!.y).toBeGreaterThanOrEqual(chrome!.y + chrome!.height);
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   });
 
   // A household with nothing behind the window must see no change anywhere. This is what keeps the

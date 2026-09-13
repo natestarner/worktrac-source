@@ -1,8 +1,8 @@
 import { MutationObserver, QueryClient, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cancelPendingLogSet, patchPendingLogSetDisplay } from './offlineSetEdits';
-import { LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from './queryClient';
-import { logLiveSet } from '../api/sets';
+import { cancelQueuedWritesForSet, patchPendingLogSetDisplay } from './offlineSetEdits';
+import { EDIT_SET_MUTATION_KEY, LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from './queryClient';
+import { editSet, logLiveSet } from '../api/sets';
 
 vi.mock('../api/sets', () => ({
   logLiveSet: vi.fn(),
@@ -39,6 +39,14 @@ function dispatchLogSet(client, overrides = {}) {
   return vars;
 }
 
+function dispatchEditSet(client, setId) {
+  const observer = new MutationObserver(client, {
+    ...client.getMutationDefaults(EDIT_SET_MUTATION_KEY),
+    mutationKey: EDIT_SET_MUTATION_KEY,
+  });
+  observer.mutate({ setId, weight: 140, reps: 3, personId: 7, sessionId: null, exerciseId: 1 }).catch(() => {});
+}
+
 function pendingMutations(client) {
   return client.getMutationCache().getAll().filter((m) => m.state.status === 'pending');
 }
@@ -52,14 +60,14 @@ describe('offlineSetEdits', () => {
 
   afterEach(() => onlineManager.setOnline(true));
 
-  describe('cancelPendingLogSet', () => {
+  describe('cancelQueuedWritesForSet', () => {
     it('removes the paused mutation behind an offline-logged set', async () => {
       const client = newClient();
       onlineManager.setOnline(false);
       dispatchLogSet(client);
       await vi.waitFor(() => expect(pendingMutations(client)).toHaveLength(1));
 
-      cancelPendingLogSet(client, 'optimistic-a');
+      cancelQueuedWritesForSet(client, 'optimistic-a');
 
       expect(pendingMutations(client)).toHaveLength(0);
       // Cancelled outright -- never actually dispatched to the server, even after reconnect.
@@ -70,7 +78,43 @@ describe('offlineSetEdits', () => {
 
     it('is a no-op when no mutation matches the tempId', () => {
       const client = newClient();
-      expect(() => cancelPendingLogSet(client, 'no-such-temp-id')).not.toThrow();
+      expect(() => cancelQueuedWritesForSet(client, 'no-such-temp-id')).not.toThrow();
+    });
+
+    // The reported bug: edit a not-yet-synced set, then delete it. Cancelling only the create left
+    // the EDIT_SET behind, pointing at a tempId nothing would ever map -- and that write then
+    // retried forever, holding the one serial outbox scope and stopping every write behind it.
+    it('takes a queued edit of that same unsynced set with it', async () => {
+      const client = newClient();
+      onlineManager.setOnline(false);
+      dispatchLogSet(client);
+      dispatchEditSet(client, 'optimistic-a');
+      await vi.waitFor(() => expect(pendingMutations(client)).toHaveLength(2));
+
+      cancelQueuedWritesForSet(client, 'optimistic-a');
+
+      expect(pendingMutations(client)).toHaveLength(0);
+      onlineManager.setOnline(true);
+      await client.resumePausedMutations();
+      expect(logLiveSet).not.toHaveBeenCalled();
+      expect(editSet).not.toHaveBeenCalled();
+    });
+
+    // Scoped to the set being deleted -- deleting one unsynced set must not silently discard a
+    // correction to a different one.
+    it('leaves a queued edit of a DIFFERENT set alone', async () => {
+      const client = newClient();
+      onlineManager.setOnline(false);
+      dispatchLogSet(client);
+      dispatchEditSet(client, 'optimistic-b');
+      await vi.waitFor(() => expect(pendingMutations(client)).toHaveLength(2));
+
+      cancelQueuedWritesForSet(client, 'optimistic-a');
+
+      const left = pendingMutations(client);
+      expect(left).toHaveLength(1);
+      expect(left[0].options.mutationKey[0]).toBe('editSet');
+      expect(left[0].state.variables.setId).toBe('optimistic-b');
     });
   });
 

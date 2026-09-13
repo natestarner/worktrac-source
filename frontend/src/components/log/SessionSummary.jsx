@@ -3,11 +3,12 @@ import SectionLabel from '../shared/SectionLabel';
 import { useUI } from '../../context/UIContext';
 import { listSessionSets } from '../../api/sets';
 import { queryKeys } from '../../api/queryKeys';
-import { cancelPendingLogSet } from '../../lib/offlineSetEdits';
+import { cancelQueuedWritesForSet } from '../../lib/offlineSetEdits';
 import { dispatchDurableWrite, DELETE_SET_MUTATION_KEY } from '../../lib/queryClient';
 import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import SetPillRow from '../shared/SetPillRow';
+import Card from '../shared/Card';
 
 export default function SessionSummary({ entries, loading, sessionId, personId, onSelectExercise, onChanged }) {
   const { openConfirm } = useUI();
@@ -18,7 +19,7 @@ export default function SessionSummary({ entries, loading, sessionId, personId, 
     // their pending creates outright instead of trying to delete something that doesn't exist yet.
     const optimisticIds = entry.sets.filter((s) => s.optimistic).map((s) => s.id);
     optimisticIds.forEach((tempId) => {
-      cancelPendingLogSet(queryClient, tempId);
+      cancelQueuedWritesForSet(queryClient, tempId);
       if (sessionId) {
         queryClient.setQueryData(queryKeys.sessionSets(sessionId, entry.exerciseId), (old = []) =>
           old.filter((s) => s.id !== tempId),
@@ -71,9 +72,9 @@ export default function SessionSummary({ entries, loading, sessionId, personId, 
   // own space: mid-set, vertical room is the scarce resource.
   if (entries.length === 0) {
     return (
-      <div style={{ marginBottom: 16, padding: '16px 20px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, color: 'var(--color-muted)', fontSize: 14 }}>
+      <Card size="dense" style={{ marginBottom: 16, color: 'var(--color-muted)', fontSize: 14 }}>
         Nothing logged in this workout yet — pick an exercise below to start.
-      </div>
+      </Card>
     );
   }
 

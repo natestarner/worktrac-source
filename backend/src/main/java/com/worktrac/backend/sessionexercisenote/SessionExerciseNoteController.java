@@ -1,5 +1,6 @@
 package com.worktrac.backend.sessionexercisenote;
 
+import com.worktrac.backend.membership.RequiresPermission;
 import com.worktrac.backend.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -21,19 +22,22 @@ public class SessionExerciseNoteController {
     }
 
     @PutMapping("/api/people/{personId}/live-exercise-notes")
+    @RequiresPermission(personScoped = true)
     public SessionExerciseNoteDto saveLiveNote(@PathVariable Long personId, @Valid @RequestBody LiveExerciseNoteRequest request) {
-        return sessionExerciseNoteService.upsertLiveNote(currentUser.accountId(), personId, request.exerciseId(), request.note());
+        return sessionExerciseNoteService.upsertLiveNote(currentUser.access(), personId, request.exerciseId(), request.note());
     }
 
     @PutMapping("/api/sessions/{sessionId}/exercises/{exerciseId}/note")
+    @RequiresPermission(personScoped = true)
     public SessionExerciseNoteDto saveSessionNote(@PathVariable Long sessionId, @PathVariable Long exerciseId,
                                                    @Valid @RequestBody ExerciseNoteRequest request) {
-        return sessionExerciseNoteService.upsertSessionNote(currentUser.accountId(), sessionId, exerciseId, request.note());
+        return sessionExerciseNoteService.upsertSessionNote(currentUser.access(), sessionId, exerciseId, request.note());
     }
 
     @GetMapping("/api/sessions/{sessionId}/exercises/{exerciseId}/note")
+    @RequiresPermission(personScoped = true)
     public ResponseEntity<SessionExerciseNoteDto> getNote(@PathVariable Long sessionId, @PathVariable Long exerciseId) {
-        return sessionExerciseNoteService.getNote(currentUser.accountId(), sessionId, exerciseId)
+        return sessionExerciseNoteService.getNote(currentUser.access(), sessionId, exerciseId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }

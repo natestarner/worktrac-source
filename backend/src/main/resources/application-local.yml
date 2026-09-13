@@ -117,6 +117,7 @@ app:
     # 429ing unrelated tests partway through a class purely because earlier ones spent the quota.
     # Login is the worst case for that -- nearly every integration test authenticates at least
     # once, and the e2e suite authenticates in every one of its ~109 tests.
+    login-per-email-per-hour: 100000
     login-per-ip-per-hour: 100000
     login-global-per-hour: 100000
     contact-per-user-per-hour: 100000

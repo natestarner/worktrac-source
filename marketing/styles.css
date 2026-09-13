@@ -622,7 +622,7 @@ img {
   gap: var(--space-3);
 }
 
-/* The hero's tertiary action. Demoted from a third button when "Go Pro" joined "Start free":
+/* The hero's tertiary action. Demoted from a third button when "Go Plus" joined "Start free":
    three buttons compete with each other, and at 390px they stack into most of the fold. A text
    link keeps the scroll cue without pretending to be a peer of the two real CTAs.
 
@@ -1175,11 +1175,11 @@ img {
 /* Below this width the table's real column count (520px min-width, tuned for the
    longest row label) no longer fits without horizontal scrolling. Rather than
    scale text/padding down to force a fit, the table restacks into one card per
-   feature, each showing "Free" and "Pro" as labelled rows -- the same
+   feature, each showing "Free" and "Plus" as labelled rows -- the same
    information, read top-to-bottom instead of side-to-side. Column headers move
    into generated content on each cell (data-label) rather than disappearing:
    the <thead> stays in the DOM (visually hidden, not display:none) so the
-   Free/Pro column association a screen reader gets from the table markup on
+   Free/Plus column association a screen reader gets from the table markup on
    wider screens isn't lost here, it's just carried differently. */
 @media (max-width: 620px) {
   .compare-wrap {

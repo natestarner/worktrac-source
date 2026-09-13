@@ -5,6 +5,8 @@ paths:
   - "backend/src/main/java/com/worktrac/backend/sessionexercisenote/**"
   - "backend/src/main/java/com/worktrac/backend/exercise/**"
   - "backend/src/main/java/com/worktrac/backend/stats/**"
+  - "backend/src/main/java/com/worktrac/backend/routine/**"
+  - "frontend/src/components/routines/**"
 ---
 
 # Workout data model invariants
@@ -167,3 +169,61 @@ custom fields). **Any new per-person personalization field needs the same treatm
 someone does only this, with nothing else, will they ever see it again?" Without it the frontend
 falls back to the account-wide catalog DTO, which carries none of these fields, and the change is
 invisible forever. See `docs/incidents/2026-08-05-exercise-personalization-picker-gap.md`.
+
+## `routines.sort_order` (V61/V62) — the person's own arrangement
+
+Routines are listed by `sort_order`, not `created_at`. The old ordering was **oldest first**, which
+put the routine someone built first (and most likely abandoned) at the top of both the Routines tab
+and the Log picker's quick-start block, and their current program at the bottom.
+
+- **The finder is `findByPerson_IdOrderBySortOrderAscIdAsc`.** The `id` tiebreak is defensive, and
+  it is also a **test hazard**: while a list is still in creation order, `id` ascends in the same
+  direction as `sort_order`, so an assertion over a freshly-created list passes just as happily
+  against a column stuck at 0. The only case that discriminates is **creating after a reorder** —
+  that is what `RoutineControllerTest`'s ordering tests do, and the first drafts of them were
+  vacuous without it.
+- **Every insert path assigns a position.** `create` appends at `max + 1`; `copy` appends at the
+  **target** person's `max + 1`, not the source's — easy to miss, because `copy` builds the
+  `Routine` directly rather than going through `create`.
+- **Reorder takes the person's WHOLE list, and refuses anything else.** `PUT
+  /api/people/{personId}/routines/order` requires the id set to match that person's routines
+  exactly; a partial or duplicated list is a 400 (`IllegalArgumentException`). A partial list has no
+  correct interpretation — the omitted routines would keep positions that now collide — and
+  silently renumbering around it is worse than refusing. Terminal 4xx is right here because this is
+  an online-gated write with no outbox behind it.
+- **It is its own endpoint, not an overload of `update`.** `RoutineRequest` carries `name` +
+  `exerciseIds`, so reordering through it would rewrite every routine's exercise membership to move
+  one row.
+- **`RoutineDto` deliberately does not expose `sortOrder`.** Order is implied by array position;
+  widening the DTO would put a new field into every persisted query cache for no gain (the axis-D
+  case in `resilience.md`).
+- **V62 backfills from `created_at`**, so every existing household saw exactly the order it saw
+  before the feature shipped, and nothing moved until someone chose to move it. A migration that
+  reordered people's routines as a side effect of shipping reordering would be the worst possible
+  introduction to it.
+
+### The reorder UI is a MODE, and the gate is on the way in
+
+`RoutinesTab` swaps the row actions for grip handles behind a `Reorder routines` toggle, holds the
+working order as a **local draft**, and commits **one** PUT on `Done` — the same
+local-rows-then-save shape `RoutineFormModal` uses for the exercises inside a routine.
+
+- **A mode, not always-visible handles.** A row already carries Copy to… / Edit / Delete / Start
+  routine, and a fifth control is too many on a phone; a mode also gives exactly **one** control to
+  `OfflineDisabledWrap` instead of a handle per row.
+- **Routine CRUD is Tier-3, so the gate is on opening the mode**, not on `Done`. Refusing at
+  `Done`, after someone has arranged a dozen routines, would throw the arrangement away.
+- **A failed commit keeps the mode open with the draft intact.** `useGatedMutation` has already
+  shown the toast; `run` resolves `undefined` for both an offline refusal and a failed write, which
+  is exactly the signal needed. Same call `ImportDataModal` makes by staying open on failure.
+- **An unchanged order writes nothing.** Opening the mode and closing it again is not a write, and
+  skipping it also stops the gate refusing a no-op offline, which would read as "reordering is
+  broken".
+- **Switching people abandons the draft.** `RoutinesTab` is not remounted on a person switch, so
+  without the reset one person's half-finished arrangement would show on another's list — and
+  `Done` would commit it against the wrong `personId`.
+- **Reuse `RoutineFormModal`'s dnd-kit setup verbatim**: listeners on the grip handle via
+  `setActivatorNodeRef` (never the row — this is a full scrolling tab, so a row-wide activator
+  fights every scroll gesture), `POINTER_SENSOR_OPTIONS` hoisted to module scope (`useSensor`
+  memoizes on object identity), and hand-rolled arrow keys rather than dnd-kit's `KeyboardSensor`
+  (which derives the next slot from measured rects jsdom never lays out).

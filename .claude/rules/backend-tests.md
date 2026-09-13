@@ -18,6 +18,21 @@ Full narrative: `docs/architecture/testing.md`.
   minutes) via `-DexcludedGroups=integration`. `bash scripts/test-backend.sh` or plain
   `mvn verify` runs everything.
 
+## ⚠️ Every integration test needs `@MockitoBean EmailService` — even one that sends no mail
+
+`EmailService`'s constructor builds a live Azure `EmailClient` from `app.email.connection-string`
+and has **no guard for an empty value**, so without the mock the whole `ApplicationContext` fails
+to load with `'connectionString' cannot be an empty string` and every test in the class errors.
+
+**This is a local-vs-CI divergence that a green local run cannot catch.** `application-local.yml`
+reads `${ACS_EMAIL_CONNECTION_STRING:}`, and a developer machine set up for local dev has that
+variable exported — so the real client builds fine locally and the missing mock is invisible. CI
+has it empty. `MembershipBackfillTest` shipped without it, passed locally, and failed `backend-ci`
+with six context-load errors.
+
+Reproduce CI's condition before pushing a new integration test:
+`ACS_EMAIL_CONNECTION_STRING= bash scripts/test-backend.sh`
+
 ## Class-level parallelism is deliberately 1 — do not raise it
 
 `junit-platform.properties` is back at 1, not the 4 it briefly was, after **two independent real

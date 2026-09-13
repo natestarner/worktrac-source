@@ -1,5 +1,7 @@
 package com.worktrac.backend.export;
 
+import com.worktrac.backend.membership.RequiresPermission;
+import com.worktrac.backend.membership.Permission;
 import com.worktrac.backend.security.CurrentUser;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -23,8 +25,9 @@ public class ExportController {
     }
 
     @GetMapping("/api/people/{personId}/export.csv")
+    @RequiresPermission(personScoped = true)
     public ResponseEntity<byte[]> export(@PathVariable Long personId) {
-        CsvExportService.CsvExport export = csvExportService.export(currentUser.accountId(), personId);
+        CsvExportService.CsvExport export = csvExportService.export(currentUser.access(), personId);
         byte[] body = export.content().getBytes(StandardCharsets.UTF_8);
 
         return ResponseEntity.ok()
@@ -35,8 +38,9 @@ public class ExportController {
     }
 
     @GetMapping("/api/export/all.zip")
+    @RequiresPermission(Permission.EXPORT_ACCOUNT_DATA)
     public ResponseEntity<byte[]> exportAll() {
-        CsvExportService.ZipExport export = csvExportService.exportAll(currentUser.accountId());
+        CsvExportService.ZipExport export = csvExportService.exportAll(currentUser.access());
 
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("application/zip"))

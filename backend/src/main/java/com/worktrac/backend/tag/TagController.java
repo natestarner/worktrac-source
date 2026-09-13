@@ -1,5 +1,7 @@
 package com.worktrac.backend.tag;
 
+import com.worktrac.backend.membership.RequiresPermission;
+import com.worktrac.backend.membership.Permission;
 import com.worktrac.backend.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -31,23 +33,32 @@ public class TagController {
     }
 
     @GetMapping
+    @RequiresPermission(anyMember = true)
     public List<TagDto> list() {
-        return tagService.list(currentUser.accountId());
+        return tagService.list(currentUser.access());
     }
 
     @PostMapping
+    @RequiresPermission(Permission.CREATE_SHARED_RESOURCE)
     public TagDto create(@Valid @RequestBody TagRequest request) {
-        return tagService.create(currentUser.accountId(), request.name());
+        return tagService.create(currentUser.access(), request.name());
     }
 
+    // EDIT_OWN, not EDIT_ANY -- see ExerciseController's PUT for the full warning. The real
+    // decision is in TagService.rename.
     @PutMapping("/{tagId}")
+    @RequiresPermission(Permission.EDIT_OWN_SHARED_RESOURCE)
     public TagDto rename(@PathVariable Long tagId, @Valid @RequestBody TagRequest request) {
-        return tagService.rename(currentUser.accountId(), tagId, request.name());
+        return tagService.rename(currentUser.access(), tagId, request.name());
     }
 
+    // DELETE_OWN, not DELETE_SHARED_RESOURCE -- every member holds it, precisely so the
+    // interceptor lets them through: it cannot know who created the row behind a {tagId}, or
+    // whether anyone else has applied it. TagService.delete is what actually decides both.
     @DeleteMapping("/{tagId}")
+    @RequiresPermission(Permission.DELETE_OWN_SHARED_RESOURCE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long tagId) {
-        tagService.delete(currentUser.accountId(), tagId);
+        tagService.delete(currentUser.access(), tagId);
     }
 }

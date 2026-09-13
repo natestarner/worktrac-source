@@ -16,6 +16,126 @@ Applies to all backend production code. Subsystem-specific rules load alongside 
   the whole app is `AdminController`/`AdminService`, which reads across every account on purpose.
   If you are writing a cross-account query anywhere else, it is a bug.
 
+### The account is no longer the whole boundary — `AccountAccess` is
+
+An account can hold more than one login, so "is this row in my account?" is now only half the
+question. `membership/AccountAccess` answers both halves and is resolved **once per request** by
+`JwtAuthenticationFilter`, then passed explicitly — services take it as a parameter rather than
+reaching into the security context, so the dependency stays in the signature and a test can build
+one as a record literal.
+
+- **Ask for a permission, never for a role.** `AccountRole.permissions()` is the *only* place in
+  the codebase that turns a role into authority; everything else calls `AccountAccess.has(...)`.
+  A second `role == OWNER` comparison anywhere is the bug — that map is what makes adding a
+  `COACH` role a one-file change instead of a 36-call-site one.
+- **Two person guards, and picking the wrong one is invisible.** `requireVisiblePerson` for reads,
+  `requireWritablePerson` for writes. They replaced `requireOwnedPerson`, which was deleted with
+  no compatibility shim precisely so every call site had to be re-classified by hand; if a rebase
+  reintroduces that name, it will fail to compile rather than quietly reopening the hole.
+- **Status codes carry meaning here.** Not in the account, or not visible → **404**, preserving the
+  pre-existing property that a caller cannot distinguish "doesn't exist" from "not yours". Visible
+  but not writable → **403**, because a 404 there is a lie the UI immediately contradicts.
+- **⚠️ An endpoint keyed on a CHILD id still needs a person guard.** `PATCH /api/sets/{setId}`,
+  `PATCH /api/sessions/{sessionId}` and friends prove tenancy by walking the FK chain up to the
+  *account* — that says nothing about which person owns the row. Use the already-loaded
+  `requireVisiblePerson(person, access, message)` / `requireWritablePerson(person, access, message)`
+  overloads, passing the *caller's* not-found message (the caller was asking for a set, not a
+  person). `WorkoutSetService.findDuplicate` is the same trap one step further removed: it resolves
+  an idempotency key account-wide, so it must check the found row's person before returning it.
+- **Every handler under `/api/**` carries `@RequiresPermission`**, enforced at build time by
+  `HandlerPermissionCoverageTest`. Household-scoped permissions are checked declaratively by
+  `PermissionInterceptor`; `personScoped = true` means a service guard does it; `anyMember = true`
+  means any member of the account may call it. The exempt controllers are listed in that test with
+  the mechanism that gates each instead.
+- **⚠ A permission an interceptor CANNOT decide must be annotated with the weaker one and refused
+  in the service — and `HandlerPermissionCoverageTest` will not notice if the service half is
+  dropped.** `PUT /api/exercises/{id}` and `PUT /api/tags/{id}` carry
+  `EDIT_OWN_SHARED_RESOURCE`, which every member holds, precisely so the interceptor lets them
+  through: it cannot know who created the row behind an `{id}`.
+  `AccountAccess.mayEditSharedResource(createdByUserId)` is what actually refuses, and the coverage
+  test asserts only that an annotation is **present**, never **which**. So deleting that service
+  check fails nothing and silently hands every member the household's whole catalog.
+  `MemberPermissionsTest`'s shared-resources block is the only thing pinning it — verified
+  non-vacuous by removing the check.
+- **Creator stamps (`exercises.created_by_user_id`, `tags.created_by_user_id`) are set once, at
+  construction, and never transferred.** Neither entity has a setter, and neither dedup branch in
+  `ExerciseService.add` (nor the find branch of `TagService.getOrCreate`) re-stamps the row it
+  returns: an offline replay of a create is not a claim of authorship, and re-stamping would move
+  who may rename it. A **null** stamp fails **closed** for a member and stays editable by the owner
+  through `EDIT_ANY_SHARED_RESOURCE` — see `V67`'s comment for the three ways a null legitimately
+  arises.
+- **Every path that can create a shared resource must stamp it, and there are four**, not the two
+  the endpoints suggest: `ExerciseService.add`, `TagService.getOrCreate` (reached from
+  `PersonExerciseService.setTags` **and** the importer), and `CsvImportService.write`, which invents
+  exercises for names the household does not have. That last one is why `write` takes an
+  `AccountAccess` rather than a bare `accountId`.
+- **⚠ A member may rename a shared resource only while nobody ELSE is using it, and the refusal is
+  a 409, not a 403.** An exercise or tag is household-wide, so its name is the label on everyone's
+  history; having created it does not make it yours forever. `ExerciseService.update` and
+  `TagService.rename` check
+  `existsByExercise_IdAndPerson_IdNot` / `isTagAppliedByAnotherPerson` against
+  `AccountAccess.requireSelfPersonId()`.
+  - **"Unused" means nobody OTHER than you** — deliberately not "no rows at all". Using your own
+    exercise must not cost you the ability to fix your own typo; the harm is relabelling somebody
+    else's history.
+  - **The OWNER is exempt** (`EDIT_ANY_SHARED_RESOURCE`), and that is load-bearing rather than
+    incidental: they are the remedy the refusal points at. Block them and the message has nobody to
+    send you to.
+  - **403 and 409 are different diagnoses and must not be collapsed.** 403 is "not yours"; 409 is
+    "yours, but in use". They point at different fixes, and only 409 has a remedy to offer.
+    `MemberPermissionsTest` pins them apart.
+  - **`requireSelfPersonId()` throws rather than returning null**, because a null person would make
+    `person_id <> ?` match every row and report "used by nobody" — waving through exactly the
+    rename the check exists to refuse. Failing open is the one direction that must not happen.
+  - Safe to refuse at all only because rename is a **gated (online-only)** write; a definitive 4xx
+    on a durable write would be discarded, not shown.
+- **⚠ Delete follows the SAME shape as rename for tags, but NOT for exercises.** A member may
+  delete a tag they created once nobody else is using it — `DELETE_OWN_SHARED_RESOURCE` +
+  `AccountAccess.mayDeleteSharedResource` + `TagService.delete`'s own
+  `isTagAppliedByAnotherPerson` check, same 403-then-409 ordering as rename and for the same
+  probing reason. **Exercises have no member-facing delete at all** — `ExerciseController`'s
+  `DELETE` still carries only `DELETE_SHARED_RESOURCE` (owner-only, unconditional, no ownership
+  or in-use check, exactly as it always was). Don't generalize the tag rule onto exercises without
+  that being a deliberate decision: `DELETE_OWN_SHARED_RESOURCE` is a **narrower** grant alongside
+  `DELETE_SHARED_RESOURCE`, not a replacement for it, and `TagDto.deletable` is the server's own
+  precomputed answer to "would DELETE succeed for me right now" so the client never re-derives
+  authorship/in-use from raw ids.
+- **⚠ `ExerciseDto`/`PersonExerciseDto` carry the rename-side twin of `TagDto.deletable`.**
+  `renamable` answers "would `PUT /api/exercises/{id}` succeed for me right now" and reproduces
+  **all three** of `ExerciseService.update`'s gates; `createdByName` + `createdByYou` answer "who
+  added this". Three things about them are load-bearing:
+  - **`ExerciseAttributionResolver` is the single derivation, and it is BATCHED.**
+    `ExerciseService.list` maps the whole visible catalog, so asking either question per row is an
+    N+1 across several hundred rows. Both lookups run once, before the mapping — keep every call
+    to it **outside** the `.stream()`. The in-use query is skipped entirely for an owner (exempt
+    via `EDIT_ANY_SHARED_RESOURCE`) and asks only about the household's OWN ids, never the ~200
+    global rows that are unrenamable by definition.
+  - **It MIRRORS `update`'s gates rather than sharing code with them.** The service still refuses
+    on its own terms, so a drift refuses the write and shows the server's message — the safe
+    direction. Both are pinned in `MemberPermissionsTest`.
+  - **`createdByName` is a NAME and nothing more**, exactly like `MembershipDto.ownerName`, and
+    resolves through one `AccountMembershipRepository.findPersonNamesByUser` per list call. Null is
+    legitimate — a global row, V67's three null-stamp cases, or a **revoked login**, whose rows lose
+    their name because revoke deletes the only membership linking that user to a person here. Every
+    consumer renders that as naming nobody.
+  - `ExerciseService.list` takes an **`AccountAccess`**, not a bare `accountId`, because its rows
+    now carry a per-login answer — same reason `CsvImportService.write` does.
+- **`MembershipDto.ownerName` is resolved for MEMBERS only.** An owner does not need telling who
+  the owner is, and resolving it for them would add a query to `/me` — the hottest endpoint in the
+  app — for every existing user, all of whom are owners. It is a NAME and nothing more: no email,
+  no id, nothing a member could act on outside the app. Null is legitimate (no owner membership, or
+  one with no person) and every consumer must render that as naming nobody rather than "null".
+- **⚠ Neither creation path may ever throw on a permission.** `ExerciseService.add` and
+  `TagService.getOrCreate` deliberately contain no check at all: MEMBER holds
+  `CREATE_SHARED_RESOURCE` unconditionally, so the annotation is the whole gate. These are durable
+  writes, and `shouldRetryWrite` treats a definitive 4xx as terminal — a 403 here would discard the
+  create permanently along with every set queued behind its temp exercise id. Same argument as the
+  quota check's placement after both dedup branches; do not add one above them.
+- **`PermissionInterceptor` throws `ForbiddenException`; it must never `setStatus`/`sendError`.**
+  `sendError` re-dispatches to `/error`, which re-runs the stateless chain as anonymous and turns
+  the 403 into a **401** — read by the frontend as "signed out". **MockMvc cannot catch this**
+  (no container-level error dispatch), so that guarantee is pinned by a Playwright assertion.
+
 ## Time
 
 - Use the injected `Clock` bean (`config/ClockConfig.java`), **never `Instant.now()`**. This is
@@ -86,6 +206,18 @@ Contact Us bug report could only be matched to the container logs by timestamp. 
   failure into a **401** — which the frontend reads as "session invalid" and logs the user out.
   A DB/backend outage must always degrade to "queue and retry", never to "you are signed out".
   See `docs/incidents/2026-07-27-db-outage-forced-logout.md`.
+
+- **⚠️ On an already-authenticated route, `UnauthorizedException` (401) means ONE thing: this
+  token itself is no longer valid.** `api/client.js` reads it that bluntly on purpose — any 401
+  on a request that carried a bearer token clears it and force-navigates to `/login`, with no
+  per-route opt-out. That is correct for a stale/revoked token and wrong for anything else, so an
+  authenticated endpoint that separately checks a SECOND credential (a current password, say)
+  must never throw `UnauthorizedException` for that check failing — the token is fine, and 401
+  there silently signs the person out over a wrong answer to a question that had nothing to do
+  with their session. Use `ForbiddenException` (403) instead, the same way the sibling lockout
+  case on that same check already uses `LockedException` (423) rather than colliding on 401.
+  `PasswordChangeService`'s wrong-current-password branch is the worked example; see
+  `docs/incidents/2026-09-09-change-password-wrong-current-signs-out.md`.
 
 ## Validation strictness is a durability decision
 

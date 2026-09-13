@@ -33,7 +33,7 @@ to signed-out, blank, silently-lost, or a spinner over a request that will never
 | **Cold start / scale-to-zero** | Lower runs `min-replicas=0`. The ingress **holds the connection ~35s** while a replica starts — it does not refuse and does not 503 (measured 2026-09-02). So the client's 15s abort fires FIRST: the first call after a scale-to-zero always fails, by arithmetic. **A simulated hang shorter than that abort proves nothing** — fourteen rounds of investigation came back clean for exactly this reason. A fulfilled 5xx, when one does arrive, resets the reachability counter, so this does _not_ trip lie-fi either |
 | **DB down, backend up** | `GlobalExceptionHandler` → honest 503. Must degrade to "queue and retry", **never** "you are signed out" (`docs/incidents/2026-07-27-db-outage-forced-logout.md`) |
 | **DB slow / pool exhausted** | Hikari default max 10; lower/prod `connection-timeout: 60000`. Requests hang past the client's abort, so a *busy* server presents as lie-fi |
-| **Definitive 4xx** | The only thing allowed to end a durable write's retries (`shouldRetryWrite`) |
+| **Definitive 4xx** | One of only two things allowed to end a durable write's retries (`shouldRetryWrite`). The other is a **dead dependency** — a temp id whose create is gone or has itself terminally failed — which is a local check, never a network one. Both end RETRIES; neither discards. A write leaves the outbox only by succeeding or by an explicit human action, **never** because it failed (`offline-internals.md`) |
 
 ### C. Client lifecycle — what the device does
 | Condition | What makes it distinct |
@@ -41,8 +41,8 @@ to signed-out, blank, silently-lost, or a spinner over a request that will never
 | **Reload / cold boot at an arbitrary instant** | The query persister is throttled at 1s — anything changed inside that window was never written |
 | **Service-worker silent forced reload** | `swUpdate.js`'s `tryForceUpdate` reloads on ordinary navigation whenever a new build exists — i.e. **always just after a deploy** |
 | **Storage unavailable / evicted** | Private mode, quota, disabled storage. Persistence modules swallow this and degrade to in-memory |
-| **Multi-tab / multi-device** | One shared `worktrac-outbox:<accountId>` IndexedDB key |
-| **Person or account switch mid-outage** | `adoptOutboxAccount()`'s ordering is load-bearing; per-person isolation must hold while writes are queued |
+| **Multi-tab / multi-device** | One shared `worktrac-outbox:<accountId>:<userId>` IndexedDB key |
+| **Person, LOGIN or account switch mid-outage** | `adoptOutboxScope()`'s ordering is load-bearing (flip the pointer, *then* evict); per-person isolation must hold while writes are queued, and two members of one household on one device must not inherit each other's queue |
 
 ### D. State restored from an earlier world
 | Condition | What makes it distinct |
@@ -60,12 +60,18 @@ There is already exactly one way to do each of these. **Adding a second is the b
 |---|---|---|
 | Offline-capable write | `useDurableMutation` (component) / `dispatchDurableWrite`, `enqueueOutboxWrite` (non-component) | A bare `useMutation`, or calling `api/*` directly |
 | Online-only (Tier-3) write | `useGatedMutation` (the **only** caller of `useRequireOnline`) | Calling `api/*` directly; an ad-hoc `try/catch` + toast per call site; `useRequireOnline` on its own |
+| Surfacing a server refusal a person can act on | `useGatedMutation`'s `showServerMessage` opt-in | A second catch at the call site, or making it the default — backend 4xx text is not uniformly user-facing (`"Unknown tracking type: foo"`), so a blanket switch leaks developer copy across ~35 writes. Off, a 409 saying "ask Nate to rename it" is replaced by "check your connection", which sends someone hunting for signal over something no connection fixes |
 | Disabling a Tier-3 entry point up front | `OfflineDisabledWrap` | Hand-rolled `disabled={!online}` |
+| Disabling a control that belongs to someone else | `ReadOnlyWrap` (nested INSIDE `OfflineDisabledWrap`) | A hand-rolled permission check, or a second message about connectivity |
+| "What may this login do here?" | `useAccountAccess` | Reading `membership` off `useAuth()` directly |
+| Turning a token into a live session | `AuthContext`'s `establishSession` (login, the household picker, switching household, confirm-email **and changing your own password** all go through it) | Repeating its six ordered steps at a call site — `confirmEmail` had its own copy and would have silently missed the outbox re-scoping |
 | "Am I online?" | `useOnlineStatus` (never reflects lie-fi — deliberate) | `navigator.onLine`, a second connectivity flag |
 | "Is the backend struggling?" | `useConnectionTrouble` | Inspecting query error state by hand |
 | Ordering queued writes | `byEnqueueOrder` / `enqueueSeq` | TanStack's `submittedAt` — re-stamped on every re-execute |
 | Retry policy for a write | `shouldRetryWrite` | A per-mutation `retry` option |
 | "Has this write not synced yet?" | `isUnsyncedWrite` | `status === 'pending'` |
+| "Can this write never land?" | `isDeadWrite` — and pass it `errorCode`, not just `errorStatus` | Reading `status === 'error'` directly — that is also how a 401 and a still-retrying write look. Dropping `errorCode` at a call site silently re-breaks the paused-login carve-out, since a paused member's refusal is an ordinary-looking 403 |
+| Discarding a queued write | `cancelQueuedWritesForSet` (one set's writes) / `discardOutboxItem` (one item) / `clearOutboxMutations` + `clearOutbox` (all) | Removing from the mutation cache without also clearing the persisted copy — a reload resurrects it |
 | Data available offline | Add the key to `offlineCacheWarm.js` | A per-screen fallback fetch |
 | HTTP | `api/client.js` | A raw `fetch` |
 | Reachability check | `probeReachability` | A second health ping |
@@ -83,6 +89,7 @@ is added here with a reason** — and none of these may be "simplified" away.
 |---|---|---|
 | `useRequireOnline` / `OfflineDisabledWrap` | Tier-3 writes refuse offline | Some (`createPastSession`) are **not idempotent** — queueing them would duplicate on replay |
 | `useOnlineStatus` | Reflects hard-offline and the pin, **never lie-fi** | Lie-fi must not disable Tier-3 controls; the server may still be answering |
+| `ReadOnlyWrap` vs `OfflineDisabledWrap` | When a control is **both** not-writable and offline, the read-only message wins | A control a member can *never* use must not claim it "needs a connection" — that sends someone hunting for signal in a basement over something no connection fixes. Not a connectivity branch: the precedence is structural (`ReadOnlyWrap` nests inside and ignores the offline props it is handed), so getting the nesting backwards fails loudly instead of producing the wrong message |
 | `offlineCacheWarm.js` | No-ops when offline | Warming is meaningless with no network |
 | `AuthContext` | `isOfflineError && snapshot` → degrade; real 4xx → sign out | The single highest-consequence branch in the app (`2026-07-27`) |
 | `ExerciseDetail.jsx` | `summaryQuery.isPaused \|\| isError` → derived summary | Hard-offline pauses, lie-fi errors; both need the derived value |
@@ -95,7 +102,11 @@ is added here with a reason** — and none of these may be "simplified" away.
 | `ImportDataModal` | Branches on **file type** (`.xlsx` → lazy converter, else `file.text()`), never on connectivity | Not a connectivity branch at all; listed only so the `await import(...)` beside a gated write doesn't read as one |
 | `SessionSummary` remove | The deletes are durable, but the entry point stays `OfflineDisabledWrap`ped | Enumerating which rows to delete needs a live `listSessionSets` read. The *write* is no longer the limitation — the *read* is |
 | `getRaw` (export) and `IMPORT_TIMEOUT_MS` (import) | 60s timeout vs `request`'s 15s | A full-history export — and an import of one, with thousands of inserts behind it — is legitimately slow; aborting a working transfer would be worse. Bounded is the point, not the number |
-| `AUTH_TIMEOUT_MS` (`login`, `confirm-email`) | 45s timeout vs `request`'s 15s | 15s is right everywhere else *because something better waits behind it* — a read falls back to the cache, a write to the outbox, boot `/me` to the auth snapshot. Credentials have no fallback: an aborted sign-in is just a sign-in that didn't work. Lower's measured cold start is ~35s with the ingress **holding** the connection, so at 15s the first sign-in after a scale-to-zero was arithmetically certain to fail (`docs/incidents/2026-09-02-cold-backend-login-strands-the-device.md`) |
+| **A paused member login** (`AccountAccess.status()`, `PausedLoginScreen`) | The whole app is replaced by one screen, and every request but two is refused | Not a connectivity branch — the client reads it from `/me`'s `membership.status`, which keeps answering 200 while paused precisely so being paused is never INFERRED from a failure (it cannot be told from a briefly-unhappy backend by status alone — `2026-07-27`). Offline it comes from the auth snapshot's last-known value, the only truth available. The refusal is a **Tier-2 stop, not a discard**: `isDeadWrite` carves out `MEMBER_LOGIN_PAUSED` so queued work survives and lands by itself on re-upgrade |
+| **Changing your own password** (`ChangePasswordSection`) | Online-only, with no offline equivalent and no queueing | It MINTS a session token, so there is nothing to queue and nothing cached behind it — the same argument as switching household. It also bumps `token_version` server-side, invalidating the token that made the request, so the response's replacement token MUST go through `establishSession`: not doing so signs the person out as a direct result of succeeding |
+| **Switching household** (`AuthContext.switchHousehold`, the account menu's "Switch to …") | Online-only, with no offline equivalent and no queueing | It MINTS a session token, so there is nothing to queue and nothing cached behind it — the same reason `createPastSession` is Tier-3. Deliberately **not** parity-tested: asserting it "behaves the same in every mode" would assert something false. It also **suspends rather than discards** queued work — the outgoing household's writes stay on their own outbox key — so its confirm must never reuse logout's "will be lost" wording, which describes a genuine discard |
+| **Accepting an invitation** (`JoinPage`, `AuthContext.acceptInvite`) | Online-only, with no offline equivalent and no queueing | It MINTS a session token — the same argument as switching household and changing your own password. `/join` also **gates its whole screen on a live `invite/preview`**, because the question it must ask (sign in vs. choose a password) is not answerable from anything cached, and there is nothing useful to render offline behind a link that cannot be redeemed offline anyway. ⚠️ That preview must branch on `isOfflineError` and say *"couldn't reach Huddle"*: reporting a link we could not CHECK as *"no longer valid"* sends somebody holding a perfectly good invitation to ask for another one, and against lower's ~35s cold start that is routine, not an edge case |
+| `AUTH_TIMEOUT_MS` (`login`, `confirm-email`, **`session`**, `accept-invite`, **`invite/preview`**, `user/password`) | 45s timeout vs `request`'s 15s | 15s is right everywhere else *because something better waits behind it* — a read falls back to the cache, a write to the outbox, boot `/me` to the auth snapshot. Credentials have no fallback: an aborted sign-in is just a sign-in that didn't work. Lower's measured cold start is ~35s with the ingress **holding** the connection, so at 15s the first sign-in after a scale-to-zero was arithmetically certain to fail (`docs/incidents/2026-09-02-cold-backend-login-strands-the-device.md`) |
 
 ## Prove it, don't argue it
 

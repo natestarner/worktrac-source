@@ -7,6 +7,7 @@ import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.exercise.PersonExerciseService;
 import com.worktrac.backend.export.ExportRow;
 import com.worktrac.backend.export.WorkoutRowProjection;
+import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.quota.QuotaService;
@@ -110,18 +111,18 @@ public class CsvImportService {
     }
 
     @Transactional(readOnly = true)
-    public ImportPreviewDto preview(Long accountId, Long personId, ImportRequest request) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        Account account = accountRepository.getReferenceById(accountId);
-        Plan plan = plan(accountId, person, account, request);
+    public ImportPreviewDto preview(AccountAccess access, Long personId, ImportRequest request) {
+        Person person = personService.requireWritablePerson(personId, access);
+        Account account = accountRepository.getReferenceById(access.accountId());
+        Plan plan = plan(access.accountId(), person, account, request);
         return plan.summarize(null, 0, 0, 0, 0, List.of(), 0);
     }
 
     @Transactional
-    public ImportPreviewDto commit(Long accountId, Long userId, Long personId, ImportRequest request) {
-        Person person = personService.requireOwnedPerson(personId, accountId);
-        Account account = accountRepository.getReferenceById(accountId);
-        Plan plan = plan(accountId, person, account, request);
+    public ImportPreviewDto commit(AccountAccess access, Long personId, ImportRequest request) {
+        Person person = personService.requireWritablePerson(personId, access);
+        Account account = accountRepository.getReferenceById(access.accountId());
+        Plan plan = plan(access.accountId(), person, account, request);
 
         if (plan.totalSets() == 0) {
             // Nothing to record, and deliberately no batch row: a retried commit that finds
@@ -135,14 +136,14 @@ public class CsvImportService {
         // and refusing one would discard a durable write recording a workout somebody actually
         // did. Checked against the whole planned batch, so one file cannot vault the ceiling in a
         // single transaction.
-        quotaService.requireSetCapacity(accountId, workoutSetRepository.countByAccountId(accountId),
+        quotaService.requireSetCapacity(access.accountId(), workoutSetRepository.countByAccountId(access.accountId()),
                 plan.totalSets());
 
-        User user = userRepository.getReferenceById(userId);
+        User user = userRepository.getReferenceById(access.userId());
         ImportBatch batch = importBatchRepository.save(new ImportBatch(person, user, request.filename(),
                 plan.totalSets(), plan.createdSessionCount(), plan.skippedDuplicates(), clock.instant()));
 
-        Written written = write(plan, person, account, accountId, batch);
+        Written written = write(plan, person, account, access, batch);
 
         log.info("Imported {} sets into {} new and {} existing workouts for person {} (batch {}); "
                         + "{} rows were already present",
@@ -269,7 +270,12 @@ public class CsvImportService {
 
     // ── Writing ────────────────────────────────────────────────────────────────────────────────
 
-    private Written write(Plan plan, Person person, Account account, Long accountId, ImportBatch batch) {
+    // Takes the whole AccountAccess rather than a bare accountId because this is a CREATION path
+    // for two shared resources -- it invents exercises for names the household does not have, and
+    // (through applyImportedPersonalization) tags for labels it has not seen. Both carry a creator
+    // stamp now, so "where" is no longer enough; it has to know who.
+    private Written write(Plan plan, Person person, Account account, AccountAccess access, ImportBatch batch) {
+        Long accountId = access.accountId();
         Map<String, Exercise> byName = new HashMap<>();
         for (Exercise exercise : exerciseRepository.findVisibleToAccount(accountId)) {
             byName.putIfAbsent(key(exercise.getName()), exercise);
@@ -291,9 +297,13 @@ public class CsvImportService {
             Map<Long, String> sessionNotes = new LinkedHashMap<>();
 
             for (ParsedImport.ParsedRow row : planned.rows()) {
+                // Stamped with the importer. Import is IMPORT_DATA, which is owner-only, so today
+                // this is always the owner -- threaded through rather than hardcoded so the stamp
+                // stays true if that ever changes.
                 Exercise exercise = byName.computeIfAbsent(key(row.exerciseName()),
                         k -> exerciseRepository.save(new Exercise(account, row.exerciseName(), null,
-                                row.isHold() ? Exercise.TRACKING_TYPE_DURATION : Exercise.TRACKING_TYPE_STRENGTH)));
+                                row.isHold() ? Exercise.TRACKING_TYPE_DURATION : Exercise.TRACKING_TYPE_STRENGTH,
+                                access.userId())));
 
                 WorkoutSet set = new WorkoutSet(session, person, exercise, row.weight(), row.reps(),
                         row.durationSeconds(), row.unit(), row.restSeconds(), row.createdAt(), null);
@@ -333,8 +343,8 @@ public class CsvImportService {
             if (!p.hasAnything()) {
                 continue;
             }
-            var applied = personExerciseService.applyImportedPersonalization(accountId, person, p.exercise,
-                    p.note, p.favorite, List.copyOf(p.tags));
+            var applied = personExerciseService.applyImportedPersonalization(accountId, access.userId(),
+                    person, p.exercise, p.note, p.favorite, List.copyOf(p.tags));
             if (applied.noteApplied()) {
                 written.notesApplied++;
             }

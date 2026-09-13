@@ -13,11 +13,10 @@ import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import EmptyState from '../shared/EmptyState';
 import HistoryWindowNotice from '../shared/HistoryWindowNotice';
-import { IconDumbbell } from '../shared/icons';
+import { IconTrendingUp } from '../shared/icons';
 import { rangeReachesPastWindow, windowLabel } from '../shared/historyWindowCopy';
 import Card from '../shared/Card';
 
-const cardStyle = { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 18px' };
 
 // One placeholder shape per real chart component below (ConsistencyHeatmap, WeeklyFrequencyChart,
 // WeeklyMetricChart, ExerciseTrendChart) -- each mirrors that component's own
@@ -48,19 +47,19 @@ function TrendsSkeleton() {
         <Skeleton width={160} height={34} radius={10} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
-        <div style={cardStyle}>
+        <Card size="dense">
           <Skeleton width={50} height={11} style={{ marginBottom: 8 }} />
           <Skeleton width={90} height={20} />
-        </div>
-        <div style={cardStyle}>
+        </Card>
+        <Card size="dense">
           <Skeleton width={70} height={11} style={{ marginBottom: 8 }} />
           <Skeleton width={100} height={20} style={{ marginBottom: 2 }} />
           <Skeleton width={120} height={13} />
-        </div>
-        <div style={cardStyle}>
+        </Card>
+        <Card size="dense">
           <Skeleton width={110} height={11} style={{ marginBottom: 8 }} />
           <Skeleton width={130} height={20} />
-        </div>
+        </Card>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
         <HeatmapSkeleton />
@@ -76,16 +75,6 @@ function TrendsSkeleton() {
     </div>
   );
 }
-
-// Extracted when the empty-range branch grew a third case. --color-muted, not the --color-faint
-// this used to be: index.css is explicit that faint is for dividers and inactive glyphs, never body
-// copy, and an empty state is body copy.
-const emptyRangeStyle = {
-  textAlign: 'center',
-  padding: 'var(--space-10) var(--space-5)',
-  color: 'var(--color-muted)',
-  fontSize: 'var(--text-base)',
-};
 
 export default function TrendsTab() {
   const {
@@ -141,17 +130,21 @@ export default function TrendsTab() {
             what it is hiding, so saying so would send them in a circle. */}
         {hiddenFromView > 0 ? (
           <EmptyState
-            icon={IconDumbbell}
+            icon={IconTrendingUp}
             title={`No workouts in the ${rangeEmptyLabel(trendsRangeWeeks)}`}
             body="Earlier training is part of your full history."
             action={windowNotice}
           />
         ) : (
-          <div style={emptyRangeStyle}>
-            {overview.hasAnyHistory
-              ? `No workouts in the ${rangeEmptyLabel(trendsRangeWeeks)}. Try a wider range.`
-              : 'No workouts logged yet. Trends will show up here once a few sessions are in the books.'}
-          </div>
+          <EmptyState
+            icon={IconTrendingUp}
+            title={overview.hasAnyHistory ? `No workouts in the ${rangeEmptyLabel(trendsRangeWeeks)}` : 'No workouts logged yet'}
+            body={
+              overview.hasAnyHistory
+                ? 'Try a wider range.'
+                : 'Trends will show up here once a few sessions are in the books.'
+            }
+          />
         )}
       </div>
     );

@@ -219,11 +219,11 @@ describe('AppSettingsTab offline gating', () => {
     expect(updateDefaultUnit).not.toHaveBeenCalled();
   });
 
-  // Importing is a Pro feature and the backend answers 403, so a Free household must get the
+  // Importing is a Plus feature and the backend answers 403, so a Free household must get the
   // explanation INSTEAD of a control -- offering a button that cannot work is the "spinner over a
   // request that will never succeed" shape the degraded-conditions contract forbids.
   describe('the import entry point', () => {
-    it('offers Pro instead of a button on a Free household', () => {
+    it('offers Plus instead of a button on a Free household', () => {
       useAuth.mockReturnValue({
         account: { defaultUnit: 'lb', plan: 'FREE' },
         people: [],
@@ -232,20 +232,20 @@ describe('AppSettingsTab offline gating', () => {
       renderTab();
 
       expect(screen.queryByRole('button', { name: 'Import data' })).not.toBeInTheDocument();
-      expect(screen.getByText(/Importing past workouts is part of Pro/)).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'See Pro' })).toHaveAttribute('href', '/app/billing');
+      expect(screen.getByText(/Importing past workouts is part of Plus/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'See Plus' })).toHaveAttribute('href', '/app/billing');
     });
 
-    it('offers the real control on a Pro household', () => {
+    it('offers the real control on a Plus household', () => {
       useAuth.mockReturnValue({
-        account: { defaultUnit: 'lb', plan: 'PRO' },
+        account: { defaultUnit: 'lb', plan: 'PLUS' },
         people: [],
         refreshPeople: vi.fn(),
       });
       renderTab();
 
       expect(screen.getByRole('button', { name: 'Import data' })).toBeInTheDocument();
-      expect(screen.queryByText(/part of Pro/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/part of Plus/)).not.toBeInTheDocument();
     });
 
     // EXPORTING IS NOT GATED, on either plan. This is the assertion that stops someone "tidying"
@@ -274,5 +274,68 @@ describe('AppSettingsTab offline gating', () => {
 
       expect(screen.getByRole('button', { name: 'Import data' })).toBeInTheDocument();
     });
+  });
+});
+
+// A member's Settings is trimmed to what is actually theirs. Household-wide controls are hidden
+// rather than greyed: they are MANAGE_HOUSEHOLD / DELETE_SHARED_RESOURCE / IMPORT_DATA /
+// EXPORT_ACCOUNT_DATA, which a member can never hold, so a dead control would be pure noise.
+describe('AppSettingsTab as a member', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useUI.mockReturnValue({ openConfirm: vi.fn(), showToast: vi.fn() });
+    useTags.mockReturnValue({ tags: [{ id: 1, name: 'Push' }], isLoading: false });
+    listImports.mockResolvedValue([]);
+    useAuth.mockReturnValue({
+      account: { id: 1, defaultUnit: 'lb', plan: 'PLUS' },
+      membership: { accountRole: 'MEMBER', personId: 2, membersSeeEveryone: true },
+      people: [
+        { id: 1, name: 'Nate', isPrimary: true, restTimerEnabled: true },
+        { id: 2, name: 'Samuel', isPrimary: false, restTimerEnabled: true },
+      ],
+      refreshPeople: vi.fn(),
+    });
+  });
+
+  // The value is genuinely useful to them -- it is what their own new sets get recorded in --
+  // while a dead switch communicates only that something is broken.
+  it('shows the household unit as a value, not a toggle', async () => {
+    renderTab();
+    expect(await screen.findByText('Set by the household owner.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'kg' })).not.toBeInTheDocument();
+  });
+
+  // A sibling's rest-timer preference is not information a member needs, and their own row must
+  // stay live -- turning the timer off mid-workout must not require the owner.
+  it('shows only their own rest-timer row, still interactive', async () => {
+    renderTab();
+    await screen.findByText('Samuel');
+    expect(screen.queryByText('Nate')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Rest timer Off for Samuel')).toBeEnabled();
+  });
+
+  it('hides the whole-household export and import section', async () => {
+    renderTab();
+    await screen.findByText('Samuel');
+    expect(screen.queryByRole('button', { name: 'Export all data' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Import data' })).not.toBeInTheDocument();
+  });
+
+  // Creating and applying tags stays open to members. Deleting one they didn't create, or one
+  // somebody else has already applied, is not -- `deletable` is the server's own answer to "would
+  // DELETE succeed for me right now" (TagDto), so the client never re-derives that from raw ids.
+  it('hides the delete control on a tag they cannot delete', async () => {
+    useTags.mockReturnValue({ tags: [{ id: 1, name: 'Push', deletable: false }], isLoading: false });
+    renderTab();
+    expect(await screen.findByText('Push')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '\u00d7' })).not.toBeInTheDocument();
+  });
+
+  // The one they made, and nobody else has applied yet.
+  it('shows the delete control on a tag the member may delete', async () => {
+    useTags.mockReturnValue({ tags: [{ id: 1, name: 'Push', deletable: true }], isLoading: false });
+    renderTab();
+    expect(await screen.findByText('Push')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '\u00d7' })).toBeInTheDocument();
   });
 });

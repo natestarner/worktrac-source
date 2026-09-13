@@ -12,6 +12,9 @@ export const queryKeys = {
   // Account-shared (no personId).
   exercises: () => ['exercises'],
   tags: () => ['tags'],
+  // Account-shared, like exercises and tags -- no personId. Owner-only on the server
+  // (MANAGE_LOGINS), so every read of it is gated on isOwner at the call site.
+  accountLogins: () => ['account-logins'],
   // Billing belongs to the household, not to whoever is currently selected -- one subscription
   // per account, so this is one of the few reads that legitimately has no personId.
   subscription: () => ['subscription'],

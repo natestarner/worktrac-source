@@ -92,6 +92,25 @@ describe('apiClient', () => {
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
 
+  // Regression for the wrong-current-password bug: /api/user/password only ever 200s with a
+  // valid session token attached, so the request above ("clears the token... on a 401 for an
+  // authenticated request") is exactly what fires if that route ever answers a credential
+  // mismatch with 401 instead of 403 -- the person's still-valid session gets torn down and they
+  // land on /login with no explanation, over a wrong CURRENT password rather than an expired
+  // token. A live session is not proof of a person for a route asking it to prove exactly that.
+  // See docs/incidents/2026-09-09-change-password-wrong-current-signs-out.md.
+  it('does not treat a definitive 4xx on an authenticated request as a session failure', async () => {
+    setAuthToken('still-valid-token');
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    global.fetch.mockReturnValue(jsonResponse({ message: "That isn't your current password." }, 403));
+
+    await expect(apiClient.post('/api/user/password', {})).rejects.toThrow("That isn't your current password.");
+
+    expect(getAuthToken()).toBe('still-valid-token');
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
   it('throws with the server message on a non-2xx response', async () => {
     global.fetch.mockReturnValue(jsonResponse({ message: 'Cannot delete the primary person on an account' }, 409));
 
