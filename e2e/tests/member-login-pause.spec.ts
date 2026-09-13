@@ -33,7 +33,7 @@ async function logout(page: Page) {
 }
 
 /** A Plus household with a working member login. Leaves the page signed in AS THE MEMBER. */
-async function proHouseholdWithAMember(page: Page, request: APIRequestContext) {
+async function plusHouseholdWithAMember(page: Page, request: APIRequestContext) {
   const ownerEmail = await registerHousehold(page, request, 'Nate');
   await setBillingPlan(request, ownerEmail, 'PLUS');
   await page.reload();
@@ -66,7 +66,7 @@ test.describe('A member login when the household leaves Plus', () => {
    * your login stopped working is that a lapsed payment cost you your training history.
    */
   test('the member gets one screen that says why, and says nothing was deleted', async ({ page, request }) => {
-    const { ownerEmail } = await proHouseholdWithAMember(page, request);
+    const { ownerEmail } = await plusHouseholdWithAMember(page, request);
 
     await setBillingPlan(request, ownerEmail, 'FREE');
     await page.reload();
@@ -86,7 +86,7 @@ test.describe('A member login when the household leaves Plus', () => {
    * re-created person, nothing to restore -- the same login simply starts working again.
    */
   test('going back to Plus resumes the same login, with no re-invitation', async ({ page, request }) => {
-    const { ownerEmail } = await proHouseholdWithAMember(page, request);
+    const { ownerEmail } = await plusHouseholdWithAMember(page, request);
 
     await setBillingPlan(request, ownerEmail, 'FREE');
     await page.reload();
@@ -107,7 +107,7 @@ test.describe('A member login when the household leaves Plus', () => {
    * the household back on Plus. Pausing them would lock everyone out of the screen that undoes it.
    */
   test('the owner keeps full access, and still sees the member and their data', async ({ page, request }) => {
-    const { ownerEmail } = await proHouseholdWithAMember(page, request);
+    const { ownerEmail } = await plusHouseholdWithAMember(page, request);
 
     await setBillingPlan(request, ownerEmail, 'FREE');
     await logout(page);
@@ -117,9 +117,20 @@ test.describe('A member login when the household leaves Plus', () => {
     await expect(page.getByText(/Your login is paused/i)).toHaveCount(0);
 
     // Sam is still here, and still shows as holding a login -- nothing was revoked.
+    //
+    // ⚠️ Scoped to the Logins list, not a bare page-wide getByText: PersonPillBar renders every
+    // person's name as its own button once a household has 2+ people (frontend-core.md's sticky
+    // chrome), so an unscoped getByText('Sam') is ambiguous the instant both it and this list's
+    // own "Sam" row have mounted -- ambiguous on every run, not intermittently, but only reliably
+    // hit locally once LoginsSection's separate listLogins() fetch resolves. Locally that lands
+    // late enough that this assertion often already succeeded against the pill alone; lower's
+    // slower round trip closes that window, making the strict-mode violation the norm there
+    // instead of the exception. The sibling "resumes the same login" test above already had to
+    // solve the identical ambiguity by scoping to `.app-chrome`.
     await openProfile(page);
-    await expect(page.getByText('Sam')).toBeVisible();
-    await expect(page.getByText('HAS LOGIN')).toHaveCount(2);
+    const loginsList = page.getByTestId('logins-list');
+    await expect(loginsList.getByText('Sam', { exact: true })).toBeVisible();
+    await expect(loginsList.getByText('HAS LOGIN')).toHaveCount(2);
   });
 
   /**
@@ -127,7 +138,7 @@ test.describe('A member login when the household leaves Plus', () => {
    * is nowhere, and an owner finds out from the people whose logins stopped working.
    */
   test('the owner is told, by name, whose logins a downgrade would pause', async ({ page, request }) => {
-    const { ownerEmail } = await proHouseholdWithAMember(page, request);
+    const { ownerEmail } = await plusHouseholdWithAMember(page, request);
 
     await logout(page);
     await loginAs(page, ownerEmail, 'password123');

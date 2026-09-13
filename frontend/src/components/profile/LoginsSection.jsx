@@ -112,7 +112,11 @@ export default function LoginsSection({ plan }) {
   return (
     <>
       <SectionLabel>Logins</SectionLabel>
-      <div style={cardStyle}>
+      {/* data-testid because a managed login's name collides with PersonPillBar's own button for
+          that same person -- both legitimately render "Sam" whenever a household has 2+ people,
+          so an unscoped getByText('Sam') is ambiguous the instant both have mounted. See the
+          e2e spec's own comment for the incident this papered over locally by pure timing luck. */}
+      <div style={cardStyle} data-testid="logins-list">
         <div style={introStyle}>
           Give someone their own email and password so they can log their own workouts. They&rsquo;ll
           see everyone&rsquo;s workouts but can only change their own.
