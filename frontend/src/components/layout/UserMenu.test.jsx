@@ -283,14 +283,14 @@ describe('UserMenu', () => {
         logout: vi.fn(),
         isAdmin: false,
         account: { id: 1 },
-        households: TWO,
-        switchHousehold: vi.fn().mockResolvedValue(undefined),
+        accounts: TWO,
+        switchAccount: vi.fn().mockResolvedValue(undefined),
         ...overrides,
       };
     }
 
     it('offers nothing to switch to when the login has one household', () => {
-      useAuth.mockReturnValue(authWith({ households: [TWO[0]] }));
+      useAuth.mockReturnValue(authWith({ accounts: [TWO[0]] }));
       renderMenu();
       openMenu();
 
@@ -301,7 +301,7 @@ describe('UserMenu', () => {
     // hide the entry, not throw -- the field is additive and its absence is meaningful, which is
     // why it needed no SNAPSHOT_VERSION bump.
     it('hides the entry rather than erroring when households is absent', () => {
-      useAuth.mockReturnValue(authWith({ households: undefined }));
+      useAuth.mockReturnValue(authWith({ accounts: undefined }));
       renderMenu();
       openMenu();
 
@@ -325,7 +325,7 @@ describe('UserMenu', () => {
 
       fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to The Wilsons' }));
 
-      await waitFor(() => expect(auth.switchHousehold).toHaveBeenCalledWith(2));
+      await waitFor(() => expect(auth.switchAccount).toHaveBeenCalledWith(2));
       await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/app/log'));
     });
 
@@ -362,10 +362,10 @@ describe('UserMenu', () => {
 
       fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to The Wilsons' }));
       await screen.findByRole('alertdialog', { name: 'Unsynced changes' });
-      expect(auth.switchHousehold).not.toHaveBeenCalled();
+      expect(auth.switchAccount).not.toHaveBeenCalled();
 
       fireEvent.click(screen.getByRole('menuitem', { name: 'Switch anyway' }));
-      await waitFor(() => expect(auth.switchHousehold).toHaveBeenCalledWith(2));
+      await waitFor(() => expect(auth.switchAccount).toHaveBeenCalledWith(2));
     });
 
     it('stays put when the notice is declined', async () => {
@@ -380,21 +380,21 @@ describe('UserMenu', () => {
       await screen.findByRole('alertdialog', { name: 'Unsynced changes' });
       fireEvent.click(screen.getByRole('button', { name: 'Stay here' }));
 
-      expect(auth.switchHousehold).not.toHaveBeenCalled();
+      expect(auth.switchAccount).not.toHaveBeenCalled();
       expect(screen.getByRole('menuitem', { name: 'Switch to The Wilsons' })).toBeInTheDocument();
     });
 
     // A failed switch tore nothing down -- establishSession only commits after /me answers -- so
     // the person is still in the household they were already in, and the menu is still usable.
     it('leaves the session intact when the switch fails', async () => {
-      const auth = authWith({ switchHousehold: vi.fn().mockRejectedValue(new Error('offline')) });
+      const auth = authWith({ switchAccount: vi.fn().mockRejectedValue(new Error('offline')) });
       useAuth.mockReturnValue(auth);
       renderMenu();
       openMenu();
 
       fireEvent.click(screen.getByRole('menuitem', { name: 'Switch to The Wilsons' }));
 
-      await waitFor(() => expect(auth.switchHousehold).toHaveBeenCalled());
+      await waitFor(() => expect(auth.switchAccount).toHaveBeenCalled());
       expect(mockNavigate).not.toHaveBeenCalled();
     });
   });

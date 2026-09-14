@@ -121,7 +121,7 @@ public class EmailService {
      * first contact with this feature is this email, not the app. It says the same thing the
      * Profile page does, deliberately.
      */
-    public String sendMembershipInvite(String toEmail, String personName, String householdName,
+    public String sendMembershipInvite(String toEmail, String personName, String accountName,
                                         String ownerName, String joinUrl, boolean recipientHasAccount) {
         // ⚠️ These two sentences are now LITERALLY TRUE, and they were not always. The
         // already-have-an-account branch has said "sign in with the password you already use"
@@ -134,7 +134,7 @@ public class EmailService {
         String actionSentence = recipientHasAccount
                 ? "Open the link below and sign in with the password you already use for Huddle."
                 : "Open the link below to choose a password and finish setting up your login.";
-        String buttonLabel = recipientHasAccount ? "Join " + householdName : "Set up my login";
+        String buttonLabel = recipientHasAccount ? "Join " + accountName : "Set up my login";
 
         String html = membershipInviteTemplate
                 .replace("{{LOGO_URL}}", logoUrl)
@@ -145,11 +145,11 @@ public class EmailService {
                 // escaped rather than interpolated raw. OWNER_NAME and PERSON_NAME are person
                 // names and HOUSEHOLD_NAME is an account name -- all free text the household chose.
                 .replace("{{PERSON_NAME}}", escapeHtml(personName))
-                .replace("{{HOUSEHOLD_NAME}}", escapeHtml(householdName))
+                .replace("{{HOUSEHOLD_NAME}}", escapeHtml(accountName))
                 .replace("{{OWNER_NAME}}", escapeHtml(ownerName));
 
         String plain = ownerName + " set up a Huddle login for you as " + personName
-                + " in " + householdName + ". " + actionSentence + " " + joinUrl
+                + " in " + accountName + ". " + actionSentence + " " + joinUrl
                 + "  This link expires in 7 days. " + ownerName + " can see your workouts and can"
                 + " remove your login, but cannot see or set your password.";
 
@@ -175,21 +175,21 @@ public class EmailService {
      * visible way to leave is the shape of a trap regardless of intent, and this is the message
      * they will still have in their inbox months later when they want it.
      */
-    public String sendAddedToHousehold(String toEmail, String personName, String householdName,
+    public String sendAddedToHousehold(String toEmail, String personName, String accountName,
                                         String ownerName) {
         String html = simpleNoticeTemplate
                 .replace("{{LOGO_URL}}", logoUrl)
-                .replace("{{HEADING}}", escapeHtml("You're in " + householdName))
+                .replace("{{HEADING}}", escapeHtml("You're in " + accountName))
                 .replace("{{BODY}}", escapeHtml("You're now logging as " + personName + " in "
-                        + householdName + ". " + ownerName + " can see your workouts and can remove"
+                        + accountName + ". " + ownerName + " can see your workouts and can remove"
                         + " your login, but cannot see or set your password.")
                         + "<br><br>You can leave this household at any time from Profile &rarr; "
                         + "Leave household.")
                 .replace("{{CTA_URL}}", appUrl)
                 .replace("{{CTA_LABEL}}", "Open Huddle");
 
-        return send(toEmail, "You've joined " + householdName + " on Huddle",
-                "You're now logging as " + personName + " in " + householdName + ". "
+        return send(toEmail, "You've joined " + accountName + " on Huddle",
+                "You're now logging as " + personName + " in " + accountName + ". "
                         + ownerName + " can see your workouts and can remove your login, but cannot"
                         + " see or set your password. You can leave at any time from Profile."
                         + " Open Huddle: " + appUrl,
@@ -205,13 +205,13 @@ public class EmailService {
      * the message; "somebody accepted" would be useless.
      */
     public String sendInviteAccepted(String toEmail, String memberEmail, String personName,
-                                      String householdName) {
+                                      String accountName) {
         String html = simpleNoticeTemplate
                 .replace("{{LOGO_URL}}", logoUrl)
                 .replace("{{HEADING}}", escapeHtml(personName + " has a login now"))
                 .replace("{{BODY}}", escapeHtml(memberEmail) + " accepted your invitation and can now"
                         + " sign in as " + escapeHtml(personName) + " in "
-                        + escapeHtml(householdName) + ".<br><br>If that address is not who you meant"
+                        + escapeHtml(accountName) + ".<br><br>If that address is not who you meant"
                         + " to invite, remove the login from Profile &rarr; Logins straight away —"
                         + " they can see everyone's workouts.")
                 .replace("{{CTA_URL}}", appOrigin + "/app/profile")
@@ -219,7 +219,7 @@ public class EmailService {
 
         return send(toEmail, personName + " accepted their Huddle login",
                 memberEmail + " accepted your invitation and can now sign in as " + personName
-                        + " in " + householdName + ". If that is not who you meant to invite, remove"
+                        + " in " + accountName + ". If that is not who you meant to invite, remove"
                         + " the login from Profile > Logins straight away -- they can see everyone's"
                         + " workouts. " + appOrigin + "/app/profile",
                 html);
@@ -232,15 +232,15 @@ public class EmailService {
      * queued offline writes can then never land — see {@code offline-internals.md}. They deserve to
      * know that before they wonder where their sets went.
      */
-    public String sendLoginRevoked(String toEmail, String householdName, String ownerName,
+    public String sendLoginRevoked(String toEmail, String accountName, String ownerName,
                                     boolean wasOnlyAnInvitation) {
         String heading = wasOnlyAnInvitation
-                ? "Your invitation to " + householdName + " was withdrawn"
-                : "Your login for " + householdName + " was removed";
+                ? "Your invitation to " + accountName + " was withdrawn"
+                : "Your login for " + accountName + " was removed";
         String body = wasOnlyAnInvitation
-                ? ownerName + " withdrew the invitation to join " + householdName + ". Nothing was"
+                ? ownerName + " withdrew the invitation to join " + accountName + ". Nothing was"
                         + " set up, and there is nothing you need to do."
-                : ownerName + " removed your login for " + householdName + ". Your workouts stay in"
+                : ownerName + " removed your login for " + accountName + ". Your workouts stay in"
                         + " that household — they were never yours to take with you — and anything"
                         + " you logged on a device that was offline may not have synced before"
                         + " access ended. Your Huddle account and any other households are"

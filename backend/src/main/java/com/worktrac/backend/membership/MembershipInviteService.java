@@ -210,7 +210,7 @@ public class MembershipInviteService {
 
     /** The household's own name, for the notices that have to say which household. */
     @Transactional(readOnly = true)
-    public String householdNameFor(Long accountId) {
+    public String accountNameFor(Long accountId) {
         return accountRepository.findById(accountId).map(Account::getName).orElse("your household");
     }
 
@@ -335,7 +335,7 @@ public class MembershipInviteService {
     }
 
     /** What the /join screen needs to know before it can ask the right question. */
-    public record InvitePreview(String householdName, String personName, String email,
+    public record InvitePreview(String accountName, String personName, String email,
                                  boolean recipientHasAccount) {
     }
 
@@ -596,7 +596,7 @@ public class MembershipInviteService {
         // Inside the transaction, per announce()'s comment.
         boolean wasOnlyAnInvitation = !hadMembership;
         revokedEmail.ifPresent(email -> events.publishEvent(new MembershipRevokedEvent(
-                email, householdNameFor(accountId), ownerNameFor(accountId), wasOnlyAnInvitation)));
+                email, accountNameFor(accountId), ownerNameFor(accountId), wasOnlyAnInvitation)));
 
         return revokedEmail;
     }

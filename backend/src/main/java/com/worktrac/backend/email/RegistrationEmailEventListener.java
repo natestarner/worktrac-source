@@ -105,7 +105,7 @@ public class RegistrationEmailEventListener {
     public void onMembershipInviteIssued(MembershipInviteIssuedEvent event) {
         sendAndRecord(event.email(),
                 () -> emailService.sendMembershipInvite(event.email(), event.personName(),
-                        event.householdName(), event.ownerName(),
+                        event.accountName(), event.ownerName(),
                         emailService.joinUrl(event.inviteId(), event.rawToken()),
                         event.recipientHasAccount()),
                 RegistrationEventType.MEMBER_INVITE_EMAIL_SENT,
@@ -125,14 +125,14 @@ public class RegistrationEmailEventListener {
     public void onMembershipAccepted(MembershipAcceptedEvent event) {
         sendAndRecord(event.memberEmail(),
                 () -> emailService.sendAddedToHousehold(event.memberEmail(), event.personName(),
-                        event.householdName(), event.ownerName()),
+                        event.accountName(), event.ownerName()),
                 RegistrationEventType.MEMBER_JOINED_EMAIL_SENT,
                 RegistrationEventType.MEMBER_JOINED_EMAIL_FAILED,
                 "added to household");
 
         sendAndRecord(event.ownerEmail(),
                 () -> emailService.sendInviteAccepted(event.ownerEmail(), event.memberEmail(),
-                        event.personName(), event.householdName()),
+                        event.personName(), event.accountName()),
                 RegistrationEventType.MEMBER_ACCEPTED_OWNER_EMAIL_SENT,
                 RegistrationEventType.MEMBER_ACCEPTED_OWNER_EMAIL_FAILED,
                 "invite accepted (owner)");
@@ -149,7 +149,7 @@ public class RegistrationEmailEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onMembershipRevoked(MembershipRevokedEvent event) {
         sendAndRecord(event.memberEmail(),
-                () -> emailService.sendLoginRevoked(event.memberEmail(), event.householdName(),
+                () -> emailService.sendLoginRevoked(event.memberEmail(), event.accountName(),
                         event.ownerName(), event.wasOnlyAnInvitation()),
                 RegistrationEventType.MEMBER_REVOKED_EMAIL_SENT,
                 RegistrationEventType.MEMBER_REVOKED_EMAIL_FAILED,

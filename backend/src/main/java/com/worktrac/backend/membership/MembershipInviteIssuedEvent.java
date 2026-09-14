@@ -20,7 +20,7 @@ package com.worktrac.backend.membership;
 public record MembershipInviteIssuedEvent(
         String email,
         String personName,
-        String householdName,
+        String accountName,
         String ownerName,
         String rawToken,
         Long inviteId,

@@ -13,7 +13,7 @@ vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }));
 
 const SET_PASSWORD = {
   mode: 'SET_PASSWORD',
-  householdName: 'the Starner household',
+  accountName: 'the Starner household',
   personName: 'Sam',
   email: 'sam@example.com',
 };
@@ -30,14 +30,14 @@ function renderAt(search) {
 describe('JoinPage', () => {
   const acceptInvite = vi.fn();
   const previewInvite = vi.fn();
-  const chooseHousehold = vi.fn();
+  const chooseAccount = vi.fn();
   const logout = vi.fn();
 
   function signedInAs(email) {
     useAuth.mockReturnValue({
       acceptInvite,
       previewInvite,
-      chooseHousehold,
+      chooseAccount,
       logout,
       status: email ? 'authenticated' : 'unauthenticated',
       user: email ? { email } : null,
@@ -127,7 +127,7 @@ describe('JoinPage', () => {
      */
     it('shows the shared household picker when joining leaves them in two', async () => {
       acceptInvite.mockResolvedValue({
-        households: [
+        accounts: [
           { accountId: 1, accountName: 'Sam’s house', accountRole: 'OWNER' },
           { accountId: 2, accountName: 'the Starner household', accountRole: 'MEMBER' },
         ],
@@ -146,7 +146,7 @@ describe('JoinPage', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /the Starner household/ }));
 
-      await waitFor(() => expect(chooseHousehold).toHaveBeenCalledWith(2, 'five-minute-token'));
+      await waitFor(() => expect(chooseAccount).toHaveBeenCalledWith(2, 'five-minute-token'));
       await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/app/log'));
     });
   });

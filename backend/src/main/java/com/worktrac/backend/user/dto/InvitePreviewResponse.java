@@ -22,9 +22,9 @@ import com.worktrac.backend.membership.MembershipInviteService;
  *
  * <p>Deliberately carries no account id, no person id, no plan and no owner name. A screen deciding
  * which question to ask needs a label and a mode, not a household summary — the same reasoning
- * {@code HouseholdChoiceDto} spells out.
+ * {@code AccountChoiceDto} spells out.
  */
-public record InvitePreviewResponse(String householdName, String personName, String email, String mode) {
+public record InvitePreviewResponse(String accountName, String personName, String email, String mode) {
 
     /** The invited address already has a Huddle account: it must sign in, not pick a new password. */
     public static final String SIGN_IN = "SIGN_IN";
@@ -34,7 +34,7 @@ public record InvitePreviewResponse(String householdName, String personName, Str
 
     public static InvitePreviewResponse from(MembershipInviteService.InvitePreview preview) {
         return new InvitePreviewResponse(
-                preview.householdName(),
+                preview.accountName(),
                 preview.personName(),
                 preview.email(),
                 preview.recipientHasAccount() ? SIGN_IN : SET_PASSWORD);

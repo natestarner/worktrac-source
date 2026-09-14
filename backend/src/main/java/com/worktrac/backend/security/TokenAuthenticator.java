@@ -86,7 +86,7 @@ public class TokenAuthenticator {
      * why this returns a bare identity instead of a principal: at this moment the caller genuinely
      * has a user and no account, and inventing one to satisfy a shared type would be a lie.
      */
-    public Optional<TokenIdentity> authenticateForHouseholdChoice(String rawToken) {
+    public Optional<TokenIdentity> authenticateForAccountChoice(String rawToken) {
         return authenticateSelection(rawToken)
                 .map(selection -> new TokenIdentity(selection.userId(), selection.tokenVersion()))
                 .or(() -> authenticate(rawToken)

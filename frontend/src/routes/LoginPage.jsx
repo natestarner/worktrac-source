@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/shared/Spinner';
-import HouseholdPicker from '../components/auth/HouseholdPicker';
+import AccountPicker from '../components/auth/AccountPicker';
 import {
   authCardStyle,
   authPageStyle,
@@ -14,7 +14,7 @@ import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
 import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
 
 export default function LoginPage() {
-  const { login, chooseHousehold } = useAuth();
+  const { login, chooseAccount } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState('');
@@ -56,7 +56,7 @@ export default function LoginPage() {
     setError('');
     setSubmitting(true);
     try {
-      await chooseHousehold(accountId, choice.selectionToken);
+      await chooseAccount(accountId, choice.selectionToken);
       navigate('/app/log');
     } catch (err) {
       // The overwhelmingly likely failure is an expired selection token -- five minutes is short
@@ -70,8 +70,8 @@ export default function LoginPage() {
 
   if (choice) {
     return (
-      <HouseholdPicker
-        households={choice.households}
+      <AccountPicker
+        accounts={choice.accounts}
         onChoose={handleChoose}
         onCancel={() => { setChoice(null); setError(''); }}
         submitting={submitting}

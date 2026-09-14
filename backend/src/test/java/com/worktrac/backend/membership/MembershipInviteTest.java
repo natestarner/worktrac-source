@@ -354,7 +354,7 @@ class MembershipInviteTest extends AbstractIntegrationTest {
 
             // One membership, so no picker: signed straight in, byte-for-byte as before.
             assertThat(session.get("token").asText()).isNotBlank();
-            assertThat(session.get("households").isNull()).isTrue();
+            assertThat(session.get("accounts").isNull()).isTrue();
             assertThat(session.get("membership").get("accountRole").asText()).isEqualTo("MEMBER");
             assertThat(session.get("membership").get("personId").asLong()).isEqualTo(samPersonId);
             // The transparency line's data: a member is told who the owner is.
@@ -415,13 +415,13 @@ class MembershipInviteTest extends AbstractIntegrationTest {
 
             assertThat(response.get("token").isNull()).isTrue();
             assertThat(response.get("selectionToken").asText()).isNotBlank();
-            assertThat(response.get("households")).hasSize(2);
+            assertThat(response.get("accounts")).hasSize(2);
             // Their own household and the one they just joined, in that order (oldest first).
-            assertThat(response.get("households").get(0).get("accountRole").asText()).isEqualTo("OWNER");
-            assertThat(response.get("households").get(1).get("accountRole").asText()).isEqualTo("MEMBER");
+            assertThat(response.get("accounts").get(0).get("accountRole").asText()).isEqualTo("OWNER");
+            assertThat(response.get("accounts").get(1).get("accountRole").asText()).isEqualTo("MEMBER");
 
             // And the selection token really finishes the job.
-            long joinedAccountId = response.get("households").get(1).get("accountId").asLong();
+            long joinedAccountId = response.get("accounts").get(1).get("accountId").asLong();
             JsonNode session = json(mockMvc.perform(MockMvcRequestBuilders.post("/api/auth/session")
                     .header("Authorization", bearer(response.get("selectionToken").asText()))
                     .contentType(MediaType.APPLICATION_JSON)
@@ -486,7 +486,7 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             JsonNode response = json(post(inviteId, token, null, samToken).andExpect(status().isOk()));
 
             assertThat(response.get("token").isNull()).isTrue();
-            assertThat(response.get("households")).hasSize(2);
+            assertThat(response.get("accounts")).hasSize(2);
         }
 
         /**
@@ -574,7 +574,7 @@ class MembershipInviteTest extends AbstractIntegrationTest {
 
             JsonNode unknown = preview(inviteId, token);
             assertThat(unknown.get("mode").asText()).isEqualTo("SET_PASSWORD");
-            assertThat(unknown.get("householdName").asText()).isNotBlank();
+            assertThat(unknown.get("accountName").asText()).isNotBlank();
             assertThat(unknown.get("personName").asText()).isEqualTo("Sam");
             assertThat(unknown.get("email").asText()).isEqualTo(email);
 

@@ -22,7 +22,7 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 // lands after the real Header mounts instead of opening a menu that is about to disappear.
 // See docs/incidents/2026-08-13-e2e-parallel-flakiness.md.
 export default function UserMenu({ booting = false }) {
-  const { people, logout, isAdmin, households, account, switchHousehold } = useAuth();
+  const { people, logout, isAdmin, accounts, account, switchAccount } = useAuth();
   const { selfPersonId } = useAccountAccess();
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,7 +36,7 @@ export default function UserMenu({ booting = false }) {
   // Only the OTHER households -- there is nothing to switch to when there is one, and offering the
   // one you are already in is a control that does nothing. Undefined on an older auth snapshot,
   // which reads as "nowhere to go" and hides the entry rather than erroring.
-  const otherHouseholds = (households ?? []).filter(
+  const otherAccounts = (accounts ?? []).filter(
     (h) => String(h.accountId) !== String(account?.id),
   );
 
@@ -110,7 +110,7 @@ export default function UserMenu({ booting = false }) {
     setPendingSwitch(null);
     setSwitching(true);
     try {
-      await switchHousehold(household.accountId);
+      await switchAccount(household.accountId);
       setOpen(false);
       navigate('/app/log');
     } catch {
@@ -212,19 +212,19 @@ export default function UserMenu({ booting = false }) {
               <MenuItem label="Admin Portal" onClick={() => go('/admin')} />
             </>
           )}
-          {otherHouseholds.length > 0 && (
+          {otherAccounts.length > 0 && (
             <>
               <div style={{ borderTop: '1px solid var(--color-border)' }} />
               {/* "Switch to" rather than "Switch household": Playwright matches accessible names
                   as a case-insensitive SUBSTRING, and every label in this menu is deliberately
                   non-overlapping (see the Help/Contact Us comment above). Naming each household
                   also removes a step -- with two households the menu IS the picker. */}
-              {otherHouseholds.map((household) => (
+              {otherAccounts.map((other) => (
                 <MenuItem
-                  key={household.accountId}
-                  label={`Switch to ${household.accountName}`}
+                  key={other.accountId}
+                  label={`Switch to ${other.accountName}`}
                   disabled={switching}
-                  onClick={() => handleSwitch(household)}
+                  onClick={() => handleSwitch(other)}
                 />
               ))}
             </>

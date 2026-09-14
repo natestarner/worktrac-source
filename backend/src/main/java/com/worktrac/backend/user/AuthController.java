@@ -129,7 +129,7 @@ public class AuthController {
         }
 
         TokenAuthenticator.TokenIdentity identity = tokenAuthenticator
-                .authenticateForHouseholdChoice(header.substring(7))
+                .authenticateForAccountChoice(header.substring(7))
                 .orElseThrow(() -> new UnauthorizedException("Sign in again to choose a household."));
 
         return authService.startSession(identity.userId(), identity.tokenVersion(), request.accountId());

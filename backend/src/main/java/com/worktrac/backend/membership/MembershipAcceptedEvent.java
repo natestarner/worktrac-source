@@ -15,6 +15,6 @@ public record MembershipAcceptedEvent(
         String memberEmail,
         String ownerEmail,
         String personName,
-        String householdName,
+        String accountName,
         String ownerName) {
 }

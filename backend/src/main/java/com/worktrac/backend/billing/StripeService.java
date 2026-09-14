@@ -101,10 +101,10 @@ public class StripeService {
     // two Stripe Customers for one household. Duplicate CHECKOUT SESSIONS are harmless by
     // comparison (an abandoned one simply expires); two Customers are painful to unwind, because
     // each can carry its own subscriptions and payment methods.
-    public String createCustomer(Long accountId, String email, String householdName) throws StripeException {
+    public String createCustomer(Long accountId, String email, String accountName) throws StripeException {
         CustomerCreateParams params = CustomerCreateParams.builder()
                 .setEmail(email)
-                .setName(householdName)
+                .setName(accountName)
                 // Stamped so a webhook can always resolve the household even when the local write
                 // that would have recorded the customer id lost a race.
                 .putMetadata("accountId", String.valueOf(accountId))

@@ -144,12 +144,12 @@ other route already refused — see the two bullets below.
   **Do not widen them back to public, and do not add a public wrapper returning their result
   unchanged** — both re-open the hole and neither fails a test.
 - **Two public methods, and neither returns an unvalidated principal.** `authenticate` (the filter's
-  path, and the full-token half of `/session`) and `authenticateForHouseholdChoice` (`/session`
+  path, and the full-token half of `/session`) and `authenticateForAccountChoice` (`/session`
   only, either kind, selection first). Adding a "just parse it for me" convenience method rebuilds
   the trap this class exists to close.
 - **The two kinds are validated differently, deliberately.** A full token names a household, so its
   membership is checked; a selection token names none — which is the entire point of it — so only
-  `tv` is. That asymmetry is why `authenticateForHouseholdChoice` returns a bare `TokenIdentity`
+  `tv` is. That asymmetry is why `authenticateForAccountChoice` returns a bare `TokenIdentity`
   rather than a principal: at that moment the caller genuinely has a user and no account.
 - **⚠️ Polarity is absent-means-CURRENT** for `tv`, like `role` and `scp`: a token minted before the
   claim existed parses as **0** and matches a never-bumped row. Inverting it signs out **every
@@ -248,7 +248,7 @@ resend cooldown.
   `AuthResponse` shapes a sign-in does — one membership signs straight in, two or more return the
   household picker plus a selection token. That is why joining needs no journey of its own: the
   client reads the same `token == null` it already read, and `JoinPage` renders the same
-  `components/auth/HouseholdPicker` `LoginPage` does.
+  `components/auth/AccountPicker` `LoginPage` does.
 - **⚠️ NEITHER invite route may answer 401 — both refuse with 403 (and 423 when locked).** They are
   `permitAll`, but the browser attaches whatever session token it holds, and `api/client.js` reads
   **any** 401 on a token-bearing request as "your session expired": it clears the token and
