@@ -211,6 +211,15 @@ export default function UserMenu({ booting = false }) {
           {!isMember && planIncludes(account?.plan, 'ROSTER') && (
             <MenuItem label={`${capitalize(vocab.member)}s`} onClick={() => go('/app/roster')} />
           )}
+          {/* Per-PERSON, unlike everything else in this menu -- it opens on whoever is active in
+              the person bar, which is how a trainer moves between clients without a second
+              navigation concept. Shown to everyone: a client writing their own weigh-in is half of
+              what the feature is for.
+
+              ⚠️ "Check-ins" and never "Notes". This is the third note concept in the app and
+              "Notes" already exists elsewhere; Playwright matches accessible names as a substring,
+              so the overlap would break unrelated specs. See coaching.md. */}
+          <MenuItem label="Check-ins" onClick={() => go('/app/check-ins')} />
           <MenuItem label="Profile" onClick={() => go('/app/profile')} />
           <MenuItem label="App Settings" onClick={() => go('/app/settings')} />
           {/* "Plan & billing" -- checked against every other label on this screen for the

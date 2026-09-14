@@ -31,6 +31,10 @@ export const queryKeys = {
   // `history`, because PRs and Trends ask the same question without reading the history list.
   historyWindow: (personId) => ['history-window', personId],
   routines: (personId) => ['routines', personId],
+  // Per person, like every other read about one person's training. What a caller SEES under
+  // this key depends on who they are -- a trainer's private notes are filtered out server-side
+  // for the client they are about -- so it must be reset on an auth change like everything else.
+  checkIns: (personId) => ['check-ins', personId],
   prs: (personId) => ['prs', personId],
   trendsOverview: (personId, weeks) => ['trends-overview', personId, weeks],
   exerciseTrend: (personId, exerciseId, weeks) => ['exercise-trend', personId, exerciseId, weeks],

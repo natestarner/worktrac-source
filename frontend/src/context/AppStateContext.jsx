@@ -79,6 +79,18 @@ const PERSON_DEFAULTS = {
   // Cleared only on a successful send -- never on a failed one, since "the send failed and your
   // text is gone" is precisely the silently-lost outcome the degraded-conditions contract forbids.
   contactDraft: null,
+
+  // A half-written check-in, for exactly the same reason contactDraft exists above it.
+  //
+  // ⚠️ Writing a check-in is a TIER-3 GATED write, not a durable one: the POST carries no
+  // idempotency key, so replaying it from the outbox would record the same weigh-in twice. And a
+  // gate over free text WITHOUT a preserved draft is itself the silently-lost outcome the
+  // degraded-conditions contract forbids -- refusing offline is only acceptable because nothing
+  // typed is thrown away.
+  //
+  // Per person, because a trainer switching between two clients mid-thought must not carry one
+  // client's note onto the other's screen. Cleared only on a successful save.
+  checkInDraft: null,
 };
 
 const initialState = {
@@ -252,6 +264,10 @@ export function reducer(state, action) {
       return updateActive(state, { contactDraft: action.draft });
     case 'CLEAR_CONTACT_DRAFT':
       return updateActive(state, { contactDraft: null });
+    case 'SET_CHECK_IN_DRAFT':
+      return updateActive(state, { checkInDraft: action.draft });
+    case 'CLEAR_CHECK_IN_DRAFT':
+      return updateActive(state, { checkInDraft: null });
     default:
       return state;
   }
@@ -374,6 +390,8 @@ export function AppStateProvider({ children }) {
       doneEditingSession: () => dispatch({ type: 'DONE_EDITING_SESSION' }),
       setContactDraft: (draft) => dispatch({ type: 'SET_CONTACT_DRAFT', draft }),
       clearContactDraft: () => dispatch({ type: 'CLEAR_CONTACT_DRAFT' }),
+      setCheckInDraft: (draft) => dispatch({ type: 'SET_CHECK_IN_DRAFT', draft }),
+      clearCheckInDraft: () => dispatch({ type: 'CLEAR_CHECK_IN_DRAFT' }),
     }),
     [],
   );
