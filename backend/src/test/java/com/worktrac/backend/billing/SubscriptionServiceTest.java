@@ -56,14 +56,14 @@ class SubscriptionServiceTest {
     class InGoodStanding {
 
         @Test
-        void activeIsPro() {
+        void activeIsPlus() {
             assertThat(service.isPlus(subscription(SubscriptionStatus.ACTIVE))).isTrue();
         }
 
         // No trial ships today, but enabling one is a Dashboard setting rather than a code change.
         // If that ever happens, a trialing household must not be silently locked out.
         @Test
-        void trialingIsPro() {
+        void trialingIsPlus() {
             assertThat(service.isPlus(subscription(SubscriptionStatus.TRIALING))).isTrue();
         }
 
@@ -71,7 +71,7 @@ class SubscriptionServiceTest {
         // (Smart Retries); cutting access mid-dunning is how a recoverable payment failure turns
         // into a cancellation. They keep what they are paying for while the card is sorted out.
         @Test
-        void pastDueIsStillPro() {
+        void pastDueIsStillPlus() {
             assertThat(service.isPlus(subscription(SubscriptionStatus.PAST_DUE))).isTrue();
         }
     }
@@ -81,7 +81,7 @@ class SubscriptionServiceTest {
     class Cancelled {
 
         @Test
-        void cancelledButInsidePaidPeriodIsPro() {
+        void cancelledButInsidePaidPeriodIsPlus() {
             Subscription subscription = subscription(SubscriptionStatus.CANCELED);
             subscription.setCurrentPeriodEnd(clock.instant().plus(Duration.ofDays(10)));
 
@@ -112,18 +112,18 @@ class SubscriptionServiceTest {
     class NotEntitled {
 
         @Test
-        void freeIsNotPro() {
+        void freeIsNotPlus() {
             assertThat(service.isPlus(subscription(SubscriptionStatus.FREE))).isFalse();
         }
 
         // Checkout was started and abandoned. Intent is not payment.
         @Test
-        void incompleteIsNotPro() {
+        void incompleteIsNotPlus() {
             assertThat(service.isPlus(subscription(SubscriptionStatus.INCOMPLETE))).isFalse();
         }
 
         @Test
-        void unpaidIsNotPro() {
+        void unpaidIsNotPlus() {
             assertThat(service.isPlus(subscription(SubscriptionStatus.UNPAID))).isFalse();
         }
     }
@@ -190,7 +190,6 @@ class SubscriptionServiceTest {
             assertThat(service.planFor(7L)).isEqualTo(BillingPlan.PLUS);
 
             SubscriptionDto dto = service.describe(7L);
-            assertThat(dto.pro()).isTrue();
             assertThat(dto.plan()).isEqualTo(BillingPlan.PLUS);
             // The raw status still travels, because the screen needs it to explain WHY.
             assertThat(dto.status()).isEqualTo(SubscriptionStatus.PAST_DUE);

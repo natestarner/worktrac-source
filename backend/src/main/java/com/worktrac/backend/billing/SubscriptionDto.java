@@ -2,9 +2,15 @@ package com.worktrac.backend.billing;
 
 import java.time.Instant;
 
-// What the billing screen reads. Carries both the derived answer (`pro`) and the raw Stripe status,
-// because the screen legitimately needs both: `pro` decides what the household can do, `status`
-// decides what to SAY about it -- "renews", "ends", or "we could not take your payment".
+// What the billing screen reads. Carries both the derived entitlement (`plan`) and the raw Stripe
+// status, because the screen legitimately needs both: `plan` decides what the household can do,
+// `status` decides what to SAY about it -- "renews", "ends", or "we could not take your payment".
+//
+// ⚠️ There was once a second field, `boolean pro`, carrying the same answer as `plan` in a
+// different shape -- so the client read `plan === 'PLUS' || subscription.pro === true`, an OR
+// across two spellings of one fact. It is gone. One derivation reaches the browser, and adding a
+// per-tier boolean beside `plan` is the bug: with four tiers that is one new field per tier, each
+// free to disagree with the enum it was derived from.
 //
 // Deliberately carries no Stripe customer or subscription id. Those are support identifiers with no
 // use in the browser, and the admin list is where they belong.
@@ -14,24 +20,22 @@ public record SubscriptionDto(
         BillingInterval billingInterval,
         Instant currentPeriodEnd,
         boolean cancelAtPeriodEnd,
-        boolean comped,
-        boolean pro) {
+        boolean comped) {
 
-    public static SubscriptionDto from(Subscription subscription, boolean pro) {
+    public static SubscriptionDto from(Subscription subscription, boolean entitled) {
         return new SubscriptionDto(
-                pro ? BillingPlan.PLUS : BillingPlan.FREE,
+                entitled ? BillingPlan.PLUS : BillingPlan.FREE,
                 subscription.getStatus(),
                 subscription.getBillingInterval(),
                 subscription.getCurrentPeriodEnd(),
                 subscription.isCancelAtPeriodEnd(),
-                subscription.isComped(),
-                pro);
+                subscription.isComped());
     }
 
     // A household with no subscription row. Should be unreachable (registration creates one and
     // V56 backfilled the rest), but a billing screen that 500s because billing has no opinion yet
     // is strictly worse than one that correctly says "Free".
     public static SubscriptionDto free() {
-        return new SubscriptionDto(BillingPlan.FREE, SubscriptionStatus.FREE, null, null, false, false, false);
+        return new SubscriptionDto(BillingPlan.FREE, SubscriptionStatus.FREE, null, null, false, false);
     }
 }

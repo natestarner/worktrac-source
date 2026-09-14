@@ -95,7 +95,7 @@ describe('BillingTab', () => {
   it('shows the renewal date for an active Plus household', async () => {
     render(
       { id: 1, plan: 'PLUS' },
-      { plan: 'PLUS', status: 'ACTIVE', pro: true, currentPeriodEnd: '2026-09-27T12:00:00Z' },
+      { plan: 'PLUS', status: 'ACTIVE', currentPeriodEnd: '2026-09-27T12:00:00Z' },
     );
 
     expect(await screen.findByText(/Renews Sep 27, 2026/)).toBeInTheDocument();
@@ -110,7 +110,6 @@ describe('BillingTab', () => {
       {
         plan: 'PLUS',
         status: 'CANCELED',
-        pro: true,
         cancelAtPeriodEnd: true,
         currentPeriodEnd: '2026-09-27T12:00:00Z',
       },
@@ -123,14 +122,14 @@ describe('BillingTab', () => {
   // Access continues through Stripe's retry window, so this is a nudge to fix the card rather
   // than a lockout -- cutting access mid-dunning turns a recoverable failure into a cancellation.
   it('nudges a past-due household without taking Plus away', async () => {
-    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'PAST_DUE', pro: true });
+    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'PAST_DUE' });
 
     expect(await screen.findByText(/couldn.t take your last payment/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Manage billing' })).toBeInTheDocument();
   });
 
   it('tells a comped household it is on the house, with nothing to manage', async () => {
-    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'FREE', pro: true, comped: true });
+    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'FREE', comped: true });
 
     expect(await screen.findByText(/on the house/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Manage billing' })).not.toBeInTheDocument();
@@ -166,7 +165,7 @@ describe('BillingTab', () => {
   it('opens the Stripe portal in a new tab rather than navigating away', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     createPortalSession.mockResolvedValue({ url: 'https://billing.stripe.com/session/test' });
-    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', pro: true });
+    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE' });
 
     fireEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
 
@@ -198,7 +197,7 @@ describe('BillingTab', () => {
     const releaseOnboarding = vi.fn();
     useUI.mockReturnValue({ releaseOnboarding, showToast: vi.fn() });
     useAuth.mockReturnValue({ account: { id: 1, plan: 'PLUS' }, refreshPeople: vi.fn().mockResolvedValue() });
-    getSubscription.mockResolvedValue({ plan: 'PLUS', status: 'ACTIVE', pro: true });
+    getSubscription.mockResolvedValue({ plan: 'PLUS', status: 'ACTIVE' });
     reconcileCheckout.mockResolvedValue({});
 
     renderWithQuery(
@@ -252,8 +251,8 @@ describe('BillingTab', () => {
 
   // ── Warning an owner before they downgrade ──────────────────────────────────────────────────
 
-  const PRO_ACCOUNT = { name: 'Starner', plan: 'PLUS' };
-  const PRO_SUB = { pro: true, status: 'ACTIVE', currentPeriodEnd: '2027-01-01T00:00:00Z' };
+  const PLUS_ACCOUNT = { name: 'Starner', plan: 'PLUS' };
+  const PLUS_SUB = { plan: 'PLUS', status: 'ACTIVE', currentPeriodEnd: '2027-01-01T00:00:00Z' };
 
   /**
    * ⚠️ This is the LAST screen of ours an owner sees before they can downgrade. Cancelling happens
@@ -262,7 +261,7 @@ describe('BillingTab', () => {
    * stopped working from those people.
    */
   it('warns, by name and by count, whose logins a downgrade would pause', async () => {
-    render(PRO_ACCOUNT, PRO_SUB, {
+    render(PLUS_ACCOUNT, PLUS_SUB, {
       logins: [
         { personId: 1, personName: 'Nate', status: 'ACTIVE', isSelf: true },
         { personId: 2, personName: 'Sam', status: 'ACTIVE', isSelf: false },
@@ -280,7 +279,7 @@ describe('BillingTab', () => {
   // The owner's own login is never paused by a downgrade, so counting it would overstate the cost
   // of cancelling -- and in a household with no member logins at all, by exactly one.
   it('never counts the owner’s own login', async () => {
-    render(PRO_ACCOUNT, PRO_SUB, {
+    render(PLUS_ACCOUNT, PLUS_SUB, {
       logins: [{ personId: 1, personName: 'Nate', status: 'ACTIVE', isSelf: true }],
     });
 
@@ -290,7 +289,7 @@ describe('BillingTab', () => {
 
   // An outstanding invitation has nobody signing in yet, so there is nothing to pause.
   it('counts only accepted logins, not outstanding invitations', async () => {
-    render(PRO_ACCOUNT, PRO_SUB, {
+    render(PLUS_ACCOUNT, PLUS_SUB, {
       logins: [
         { personId: 1, personName: 'Nate', status: 'ACTIVE', isSelf: true },
         { personId: 2, personName: 'Sam', status: 'INVITED', isSelf: false },
@@ -302,7 +301,7 @@ describe('BillingTab', () => {
   });
 
   it('says it in the singular for one login', async () => {
-    render(PRO_ACCOUNT, PRO_SUB, {
+    render(PLUS_ACCOUNT, PLUS_SUB, {
       logins: [{ personId: 2, personName: 'Sam', status: 'ACTIVE', isSelf: false }],
     });
 
@@ -315,7 +314,7 @@ describe('BillingTab', () => {
    * control that can only fail.
    */
   it('never asks for the login list as a member', async () => {
-    render(PRO_ACCOUNT, PRO_SUB, {
+    render(PLUS_ACCOUNT, PLUS_SUB, {
       membership: { accountRole: 'MEMBER', personId: 2, status: 'ACTIVE' },
     });
 

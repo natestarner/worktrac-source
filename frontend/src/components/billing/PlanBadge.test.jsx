@@ -60,8 +60,8 @@ describe('PlanBadge', () => {
     free.unmount();
 
     withAccount({ id: 1, plan: 'PLUS' });
-    const pro = renderBadge();
-    expect(pro.container.querySelector('.plan-badge--plus svg')).toBeInTheDocument();
+    const plus = renderBadge();
+    expect(plus.container.querySelector('.plan-badge--plus svg')).toBeInTheDocument();
   });
 
   // THE case this component exists to get right. An auth snapshot written before billing shipped

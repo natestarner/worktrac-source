@@ -11,6 +11,47 @@ Full narrative: `docs/architecture/billing.md`. `accounts` is the billable entit
 one login, many people, **no seats** — so there is exactly one `subscriptions` row per account,
 enforced by a unique index (V56).
 
+## The tier roadmap, and why the paid tier is called Plus
+
+Four tiers are planned. Two exist:
+
+| Tier | Audience | State |
+|---|---|---|
+| **Free** | Families trying it out, training together on one shared device | Shipped |
+| **Plus** | Families who want full history and a login each | Shipped |
+| **Pro** | Personal trainers, with private client sub-accounts | Planned |
+| **Team** | Sports teams and lifting clubs, with a leaderboard and coach approval | Planned |
+
+**The paid tier was renamed Pro → Plus in #280 (`d71e614`) purely to free the name**, because
+"Pro" is the natural word for the personal-trainer tier and could not mean two things. V73 carried
+the data half of that rename and points here for the reasoning; this section is that reasoning.
+
+⚠️ **Anything still spelled `pro` in this codebase means PLUS, and is a bug to be fixed rather
+than a tier to build on.** The rename was behaviourally complete and lexically incomplete, and the
+stragglers were cleared separately: `PRO_BENEFITS` → `PLUS_BENEFITS`,
+`BillingEventType.PRO_WELCOME_EMAIL_*` → `PLUS_WELCOME_EMAIL_*` (persisted values, hence V74),
+`ImportController.requirePro` → `requirePlus`, and `SubscriptionDto.pro`, which was **deleted**
+rather than renamed — it carried the same answer as `plan` in a second shape.
+
+**The seams the two planned tiers are built on already exist, and each was left deliberately
+inert.** Do not "finish" any of them opportunistically; each is switched on by the tier that needs
+it, together with the copy and the tests that make it true:
+
+- `accounts.members_see_everyone` (V66) — owner-sees-all vs member-sees-only-self. Forced `true`
+  for Free/Plus **by construction**, because a family expects it. Pro is what adds the setter and
+  the endpoint; a private client is a `MEMBER` in an account where this is `false`.
+- `AccountRole.permissions(membersSeeEveryone)` — the only place in the codebase a role becomes
+  authority, which is what makes a third role a change to one map rather than to 36 guard sites.
+- `QuotaProperties.peoplePerAccount = 20` — a hard ceiling that blocks a roster outright, left
+  unraised on purpose so "a team is just a big family" cannot ship by accident.
+
+**When a third tier lands, `isPlus` stops being the shape of the question.** It is a boolean
+answering a four-way question, and eleven call sites ask it. The replacement must keep the
+derivation below intact — it answers *"is this subscription currently paying?"*, which stays
+exactly right — and add one map from tier to capability, mirroring `AccountRole.permissions()`:
+**ask for a feature, never for a tier.** A second `plan == PRO` comparison anywhere is the bug, for
+the same reason a second `role == OWNER` comparison is.
+
 ## Entitlement is DERIVED, never stored
 
 `SubscriptionService.isPlus` is the only place the question "is this household Plus?" is answered:

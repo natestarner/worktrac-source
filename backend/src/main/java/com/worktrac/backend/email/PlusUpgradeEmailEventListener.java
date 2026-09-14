@@ -59,7 +59,7 @@ public class PlusUpgradeEmailEventListener {
             // owner by construction -- but recording it rather than silently doing nothing is the
             // whole point of this audit trail.
             log.warn("No owner login found for account {}; welcome-to-Plus email not sent", accountId);
-            recordSafely(accountId, BillingEventType.PRO_WELCOME_EMAIL_FAILED, "No owner login found");
+            recordSafely(accountId, BillingEventType.PLUS_WELCOME_EMAIL_FAILED, "No owner login found");
             return;
         }
 
@@ -69,10 +69,10 @@ public class PlusUpgradeEmailEventListener {
             messageId = emailService.sendPlusWelcome(email);
         } catch (Exception e) {
             log.error("Failed to send welcome-to-Plus email for account {}", accountId, e);
-            recordSafely(accountId, BillingEventType.PRO_WELCOME_EMAIL_FAILED, failureReason(e));
+            recordSafely(accountId, BillingEventType.PLUS_WELCOME_EMAIL_FAILED, failureReason(e));
             return;
         }
-        recordSafely(accountId, BillingEventType.PRO_WELCOME_EMAIL_SENT, messageId);
+        recordSafely(accountId, BillingEventType.PLUS_WELCOME_EMAIL_SENT, messageId);
     }
 
     // Isolated from the send itself, same as RegistrationEmailEventListener#recordSafely: a DB

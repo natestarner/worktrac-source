@@ -284,7 +284,7 @@ public class EmailService {
      * <p>Copy is deliberately the same line {@code PlusCelebration} shows in-app the instant checkout
      * completes ("Your whole history, every record, and import are unlocked") -- one derivation of
      * what Plus buys, restated in two places rather than invented twice. See {@code planCopy.js}'s
-     * {@code PRO_BENEFITS} if that ever changes.
+     * {@code PLUS_BENEFITS} if that ever changes.
      */
     public String sendPlusWelcome(String toEmail) {
         String html = simpleNoticeTemplate

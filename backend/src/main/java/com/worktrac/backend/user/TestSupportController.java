@@ -162,9 +162,9 @@ public class TestSupportController {
         }
         Long accountId = owned.get(0).getAccount().getId();
         Subscription subscription = subscriptionService.getOrCreate(owned.get(0).getAccount());
-        boolean pro = "PLUS".equalsIgnoreCase(plan.trim());
-        subscription.setComped(pro);
-        subscription.setPlan(pro ? BillingPlan.PLUS : BillingPlan.FREE);
+        boolean plus = "PLUS".equalsIgnoreCase(plan.trim());
+        subscription.setComped(plus);
+        subscription.setPlan(plus ? BillingPlan.PLUS : BillingPlan.FREE);
         subscriptionRepository.save(subscription);
 
         // Member logins are gated on the household being Plus, and that answer is cached per login

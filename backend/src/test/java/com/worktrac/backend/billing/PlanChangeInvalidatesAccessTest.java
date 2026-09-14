@@ -97,8 +97,8 @@ class PlanChangeInvalidatesAccessTest extends AbstractIntegrationTest {
         subscription.setComped(true);
         subscriptionRepository.save(subscription);
 
-        AccountAccess whilePro = resolve(member, account);
-        assertThat(whilePro.accountIsPro()).isTrue();
+        AccountAccess whilePlus = resolve(member, account);
+        assertThat(whilePlus.accountIsPro()).isTrue();
 
         // Now the real production path: a Stripe state that is NOT entitled, applied through the
         // one method the webhook, the billing controller and the reconciliation watchdog all use.

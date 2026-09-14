@@ -56,7 +56,7 @@ describe('PausedLoginScreen', () => {
   it('offers no upgrade control, because a member could never use one', () => {
     render(<PausedLoginScreen />);
 
-    expect(screen.queryByRole('button', { name: /upgrade|subscribe|billing|pro/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /upgrade|subscribe|billing|plus/i })).not.toBeInTheDocument();
   });
 
   // Without this the screen is a dead end for somebody who has another household to switch to, or

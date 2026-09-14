@@ -21,7 +21,7 @@ public final class BillingTestSupport {
     private BillingTestSupport() {
     }
 
-    public static void makePro(SubscriptionRepository subscriptionRepository, Long accountId) {
+    public static void makePlus(SubscriptionRepository subscriptionRepository, Long accountId) {
         Subscription subscription = subscriptionRepository.findByAccountId(accountId).orElseThrow(
                 () -> new IllegalStateException("No subscription row for account " + accountId
                         + " -- registration should have created one"));

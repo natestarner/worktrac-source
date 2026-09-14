@@ -83,7 +83,7 @@ test.describe('billing', () => {
 
     await page.route('**/api/billing/checkout-session/*/reconcile', async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 300));
-      await route.fulfill({ json: { plan: 'PLUS', status: 'ACTIVE', pro: true } });
+      await route.fulfill({ json: { plan: 'PLUS', status: 'ACTIVE' } });
     });
 
     // A real top-level navigation, not client-side routing -- this is what Stripe's return_url

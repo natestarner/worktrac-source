@@ -46,8 +46,8 @@ class PlusUpgradeEmailEventListenerTest {
 
         listener.onPlusUpgraded(new PlusUpgradedEvent(42L));
 
-        verify(auditService).record(42L, BillingEventType.PRO_WELCOME_EMAIL_SENT, "msg-1");
-        verify(auditService, never()).record(any(), eq(BillingEventType.PRO_WELCOME_EMAIL_FAILED), any());
+        verify(auditService).record(42L, BillingEventType.PLUS_WELCOME_EMAIL_SENT, "msg-1");
+        verify(auditService, never()).record(any(), eq(BillingEventType.PLUS_WELCOME_EMAIL_FAILED), any());
     }
 
     @Test
@@ -65,8 +65,8 @@ class PlusUpgradeEmailEventListenerTest {
 
         listener.onPlusUpgraded(new PlusUpgradedEvent(42L));
 
-        verify(auditService).record(eq(42L), eq(BillingEventType.PRO_WELCOME_EMAIL_FAILED), any());
-        verify(auditService, never()).record(any(), eq(BillingEventType.PRO_WELCOME_EMAIL_SENT), any());
+        verify(auditService).record(eq(42L), eq(BillingEventType.PLUS_WELCOME_EMAIL_FAILED), any());
+        verify(auditService, never()).record(any(), eq(BillingEventType.PLUS_WELCOME_EMAIL_SENT), any());
     }
 
     // Not reachable in production -- applyStripeState only ever runs against an account that has an
@@ -84,7 +84,7 @@ class PlusUpgradeEmailEventListenerTest {
         listener.onPlusUpgraded(new PlusUpgradedEvent(99L));
 
         verify(emailService, never()).sendPlusWelcome(any());
-        verify(auditService).record(eq(99L), eq(BillingEventType.PRO_WELCOME_EMAIL_FAILED), any());
+        verify(auditService).record(eq(99L), eq(BillingEventType.PLUS_WELCOME_EMAIL_FAILED), any());
     }
 
     // Mirrors RegistrationEmailEventListenerTest's conflation guard: a genuinely successful send
@@ -101,11 +101,11 @@ class PlusUpgradeEmailEventListenerTest {
         when(userRepository.findOwners(7L)).thenReturn(List.of(owner));
         when(emailService.sendPlusWelcome("owner@example.com")).thenReturn("msg-9");
         doThrow(new RuntimeException("DB hiccup"))
-                .when(auditService).record(7L, BillingEventType.PRO_WELCOME_EMAIL_SENT, "msg-9");
+                .when(auditService).record(7L, BillingEventType.PLUS_WELCOME_EMAIL_SENT, "msg-9");
 
         // Must not throw out of the listener method itself.
         listener.onPlusUpgraded(new PlusUpgradedEvent(7L));
 
-        verify(auditService, never()).record(eq(7L), eq(BillingEventType.PRO_WELCOME_EMAIL_FAILED), any());
+        verify(auditService, never()).record(eq(7L), eq(BillingEventType.PLUS_WELCOME_EMAIL_FAILED), any());
     }
 }

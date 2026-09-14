@@ -91,7 +91,7 @@ class TrendsControllerTest extends AbstractIntegrationTest {
         // is independent of the range toggle, and that hasAnyHistory tells a brand-new person from
         // a lapsed one. Both are Plus behaviours now, so the plan is stated rather than assumed.
         // The Free-tier window has its own coverage in FreeTierHistoryWindowTest.
-        BillingTestSupport.makePro(subscriptionRepository, registerJson.get("account").get("id").asLong());
+        BillingTestSupport.makePlus(subscriptionRepository, registerJson.get("account").get("id").asLong());
 
         String exercisesResponse = mockMvc.perform(get("/api/exercises").header("Authorization", "Bearer " + token))
                 .andReturn().getResponse().getContentAsString();
