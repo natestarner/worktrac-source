@@ -41,7 +41,7 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 export default function RoutinesTab() {
   const navigate = useNavigate();
   const { activePersonId, startRoutine } = useAppState();
-  const { people } = useAuth();
+  const { people, account } = useAuth();
   const { openConfirm } = useUI();
   const { exercises: catalog, refetch: refetchCatalog } = useExercises();
   const { exercises: personExercises, refetch: refetchPersonExercises } = usePersonExercises(activePersonId);
@@ -318,6 +318,7 @@ export default function RoutinesTab() {
 
       {modalRoutine !== undefined && (
         <RoutineFormModal
+          defaultUnit={account?.defaultUnit}
           personId={activePersonId}
           routine={modalRoutine}
           personExercises={personExercises}

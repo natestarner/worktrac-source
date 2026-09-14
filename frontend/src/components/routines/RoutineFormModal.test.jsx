@@ -214,7 +214,85 @@ describe('RoutineFormModal validation', () => {
 
     expect(screen.getAllByText('Bench Press')).toHaveLength(2);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
     await waitFor(() => expect(updateRoutine).toHaveBeenCalledWith(1, 7, { name: 'Cycle', exercises: [{ exerciseId: 1, targetWeight: null, targetReps: null, targetUnit: null }, { exerciseId: 3, targetWeight: null, targetReps: null, targetUnit: null }, { exerciseId: 1, targetWeight: null, targetReps: null, targetUnit: null }] }));
+  });
+});
+
+// Prescribed targets. These are what make an assigned program mean anything -- a routine whose
+// numbers did not travel arrives as a bare list of exercise names.
+describe('RoutineFormModal targets', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createRoutine.mockResolvedValue({});
+    updateRoutine.mockResolvedValue({});
+  });
+
+  function buildRoutineNamed(name) {
+    renderModal({ defaultUnit: 'lb' });
+    fireEvent.change(screen.getByPlaceholderText('Routine name (e.g. Push Day)'), { target: { value: name } });
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+  }
+
+  it('sends a target entered against the row it was typed on', async () => {
+    buildRoutineNamed('Squat Day');
+
+    fireEvent.change(screen.getByLabelText(/Target weight/), { target: { value: '185' } });
+    fireEvent.change(screen.getByLabelText(/Target reps/), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save routine' }));
+
+    await waitFor(() => expect(createRoutine).toHaveBeenCalledWith(1, {
+      name: 'Squat Day',
+      exercises: [{ exerciseId: 1, targetWeight: 185, targetReps: 5, targetUnit: 'lb' }],
+    }));
+  });
+
+  // ⚠️ An empty field is NULL, not zero. "No target" and "a target of zero" are different
+  // prescriptions -- zero weight is a legitimate bodyweight target -- so reading a cleared field as
+  // 0 would silently prescribe one.
+  it('sends no target at all when the fields are left blank', async () => {
+    buildRoutineNamed('Plain');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save routine' }));
+
+    await waitFor(() => expect(createRoutine).toHaveBeenCalledWith(1, {
+      name: 'Plain',
+      exercises: [{ exerciseId: 1, targetWeight: null, targetReps: null, targetUnit: null }],
+    }));
+  });
+
+  // Each half stands alone: "5 reps at whatever you can manage" is a real prescription, and a unit
+  // with no weight is noise the database refuses outright.
+  it('sends reps alone without inventing a unit', async () => {
+    buildRoutineNamed('AMRAP');
+
+    fireEvent.change(screen.getByLabelText(/Target reps/), { target: { value: '8' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save routine' }));
+
+    await waitFor(() => expect(createRoutine).toHaveBeenCalledWith(1, {
+      name: 'AMRAP',
+      exercises: [{ exerciseId: 1, targetWeight: null, targetReps: 8, targetUnit: null }],
+    }));
+  });
+
+  // The unit a target was WRITTEN in travels with it. A row loaded from the server keeps its own
+  // unit, so changing the account default later cannot reinterpret a number somebody already set.
+  it('keeps the unit an existing target was written in', async () => {
+    renderModal({
+      defaultUnit: 'lb',
+      routine: {
+        id: 7,
+        name: 'Imported',
+        exercises: [{ exerciseId: 1, targetWeight: 100, targetReps: 5, targetUnit: 'kg' }],
+      },
+    });
+
+    // EDIT mode says "Save"; only the create path says "Save routine".
+    fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+
+    await waitFor(() => expect(updateRoutine).toHaveBeenCalledWith(1, 7, {
+      name: 'Imported',
+      exercises: [{ exerciseId: 1, targetWeight: 100, targetReps: 5, targetUnit: 'kg' }],
+    }));
   });
 });
