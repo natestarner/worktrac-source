@@ -26,7 +26,7 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 export default function UserMenu({ booting = false }) {
   const { people, logout, isAdmin, accounts, account, switchAccount } = useAuth();
   const vocab = accountVocab(account?.vocab);
-  const { selfPersonId } = useAccountAccess();
+  const { selfPersonId, isMember } = useAccountAccess();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -196,14 +196,19 @@ export default function UserMenu({ booting = false }) {
               gated on VIEW_OTHER_PEOPLE rather than on the plan (see PlanFeature.ROSTER): a roster
               of four people who live in the same house, sorted by who trained least recently, is
               not a useful screen, while a roster of forty clients is the whole product. That is a
-              discovery decision rather than an access one, so this hides the door without the
-              server refusing anyone who finds it anyway.
+              discovery decision rather than an access one for an owner or a manager.
+
+              ⚠️ BUT A MEMBER IS EXCLUDED, and that half IS about access. The endpoint carries
+              VIEW_OTHER_PEOPLE, which a private client does not hold -- so offering it to one would
+              be a menu item that 403s. The javadoc on the endpoint used to claim a client would get
+              a roster of just themselves; the interceptor refuses them before the service ever
+              runs, and an e2e caught the gap.
 
               The label is the account's own noun -- "Clients" on Pro, "Athletes" when Team lands.
               Checked against every other label in this menu for the substring rule: it shares none
               with Profile / App Settings / Plan & billing / Help / Contact Us / Admin Portal /
               Logout / Log out anyway / Cancel, and none of them contains it. */}
-          {planIncludes(account?.plan, 'ROSTER') && (
+          {!isMember && planIncludes(account?.plan, 'ROSTER') && (
             <MenuItem label={`${capitalize(vocab.member)}s`} onClick={() => go('/app/roster')} />
           )}
           <MenuItem label="Profile" onClick={() => go('/app/profile')} />

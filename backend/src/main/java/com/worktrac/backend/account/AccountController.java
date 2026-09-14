@@ -64,11 +64,17 @@ public class AccountController {
      * Everyone this login can see, quietest first — the trainer's answer to "who has stopped
      * showing up?".
      *
-     * <p>{@code VIEW_OTHER_PEOPLE}, which is the same permission that decides whether the person
-     * switcher shows anybody else. So a private client calling this gets a roster of exactly
-     * themselves rather than a 403: the list is filtered by the same {@code PersonService.list}
-     * every other screen uses, and refusing outright would be a different answer to a question the
-     * app already answers consistently everywhere else.
+     * <p>{@code VIEW_OTHER_PEOPLE}, the same permission that decides whether the person switcher
+     * shows anybody else — so an OWNER or a MANAGER reaches it and a private client does not.
+     *
+     * <p>⚠️ A private client is refused by the interceptor with a 403, before this method runs. An
+     * earlier version of this comment claimed they would get a roster of exactly themselves; that
+     * was never true, and the client was offering them the menu item on the strength of it until an
+     * e2e caught it. The entry point in {@code UserMenu} now excludes a member for that reason — a
+     * control the server will refuse must not be offered ({@code member-access.md}).
+     *
+     * <p>A roster of one person is not a screen worth reaching anyway. What a client wants is their
+     * own History, which they already have.
      *
      * <p>{@code zone} is the caller's IANA zone, because "days since" and "this week" mean the
      * viewer's calendar, not the server's UTC storage. An unrecognised one degrades to UTC.

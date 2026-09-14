@@ -23,7 +23,9 @@ async function seedRoutines(page: Page, request: APIRequestContext, names: strin
   for (const name of names) {
     await request.post(`${apiUrl}/api/people/${personId}/routines`, {
       headers,
-      data: { name, exerciseIds: [catalog[0].id] },
+      // RoutineRequest carries a prescribed target per exercise (V77), so a bare id list is no
+      // longer the wire shape. These specs are about ORDER, so they send the no-target form.
+      data: { name, exercises: [{ exerciseId: catalog[0].id }] },
     });
   }
 

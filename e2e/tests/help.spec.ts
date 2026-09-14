@@ -83,7 +83,7 @@ test.describe('Handbook', () => {
     await registerHousehold(page, request, 'Curie');
     await page.goto('/app/help#plan');
 
-    const heading = page.getByRole('heading', { name: 'Free and Plus' });
+    const heading = page.getByRole('heading', { name: 'Plans', exact: true });
     await expect(heading).toBeVisible();
 
     const chrome = await page.locator('.app-chrome').boundingBox();
