@@ -59,11 +59,11 @@ class PersonGuardTest {
     }
 
     private static AccountAccess owner() {
-        return new AccountAccess(1L, ACCOUNT, 5L, AccountRole.OWNER, ME, true, BillingPlan.PLUS);
+        return new AccountAccess(1L, ACCOUNT, 5L, AccountRole.OWNER, ME, true, BillingPlan.PLUS, null);
     }
 
     private static AccountAccess member(boolean seesEveryone) {
-        return new AccountAccess(2L, ACCOUNT, 6L, AccountRole.MEMBER, ME, seesEveryone, BillingPlan.PLUS);
+        return new AccountAccess(2L, ACCOUNT, 6L, AccountRole.MEMBER, ME, seesEveryone, BillingPlan.PLUS, null);
     }
 
     @Nested

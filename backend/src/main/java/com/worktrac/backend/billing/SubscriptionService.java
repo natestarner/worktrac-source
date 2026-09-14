@@ -1,6 +1,7 @@
 package com.worktrac.backend.billing;
 
 import com.worktrac.backend.account.Account;
+import com.worktrac.backend.config.StripeProperties;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,12 +50,19 @@ public class SubscriptionService {
 
     private final SubscriptionRepository subscriptionRepository;
     private final ApplicationEventPublisher events;
+    private final StripeProperties stripeProperties;
     private final Clock clock;
 
+    // ⚠️ Takes StripeProperties for the price->tier map ONLY, never to talk to Stripe. StripeService
+    // is still the only class that imports com.stripe.* (billing.md), and this depends on the
+    // configuration rather than on the SDK -- which is what keeps applyStripeState unit-testable
+    // with a plain properties object and no HTTP stub.
     public SubscriptionService(SubscriptionRepository subscriptionRepository,
-                                ApplicationEventPublisher events, Clock clock) {
+                                ApplicationEventPublisher events, StripeProperties stripeProperties,
+                                Clock clock) {
         this.subscriptionRepository = subscriptionRepository;
         this.events = events;
+        this.stripeProperties = stripeProperties;
         this.clock = clock;
     }
 
@@ -131,6 +139,14 @@ public class SubscriptionService {
         if (!isEntitled(subscription)) {
             return BillingPlan.FREE;
         }
+        // A comp's tier comes from the comp, not from billing_plan. The two are separate columns
+        // because billing_plan is a cache of present entitlement that applyStripeState rewrites on
+        // every Stripe event, while a comp is a standing grant meant to outlive exactly that. Null
+        // comped_plan means PLUS -- what every comp granted before Pro existed.
+        if (subscription.isComped()) {
+            BillingPlan granted = subscription.getCompedPlan();
+            return granted == null ? LOWEST_PAID_PLAN : granted;
+        }
         BillingPlan recorded = subscription.getPlan();
         // An entitled row recording no tier is a contradiction applyStripeState cannot produce --
         // it writes both together. Reachable only by a hand-edited row, and the safe answer is the
@@ -138,6 +154,60 @@ public class SubscriptionService {
         // upward would hand out a tier nobody bought. That rule keeps working as tiers are added,
         // which a literal `return PLUS` would not.
         return recorded == null || recorded == BillingPlan.FREE ? LOWEST_PAID_PLAN : recorded;
+    }
+
+    /**
+     * Writes the tier and seat count the Stripe price says was bought.
+     *
+     * <p>⚠️ AN UNRECOGNISED PRICE KEEPS THE TIER THE ROW ALREADY HAD, rather than falling back to
+     * the lowest paid one. A price id we cannot map is a CONFIG gap on our side — an env var not
+     * carried to this environment, or a Price created in the Dashboard and never wired up — and
+     * it is not evidence about what the household bought. Downgrading a paying Pro trainer to Plus
+     * because somebody forgot an env var would be the worst possible reading of it, and it would
+     * self-inflict on every webhook until the config was fixed. Keeping the tier degrades to "stale
+     * but right"; the reconciliation watchdog re-applies once the mapping exists.
+     *
+     * <p>Seats travel with the tier for the same reason: a band change IS a price change, so the
+     * two cannot be written independently without drifting.
+     */
+    private void applyPurchasedTier(Subscription subscription, boolean entitled) {
+        if (!entitled) {
+            subscription.setPlan(BillingPlan.FREE);
+            subscription.setClientSeats(null);
+            return;
+        }
+        Optional<PlanSku> sku = stripeProperties.skuForPriceId(subscription.getStripePriceId());
+        if (sku.isEmpty()) {
+            return;
+        }
+        subscription.setPlan(sku.get().plan());
+        subscription.setClientSeats(sku.get().band() == null ? null : sku.get().band().clientLimit());
+    }
+
+    /**
+     * A household's tier and its seat allowance, from ONE read.
+     *
+     * <p>Exists because {@code AccountAccessService} caches both and would otherwise hit the
+     * subscriptions table twice per cache miss to learn two facts that come off the same row --
+     * on the app's hottest path, resolved for every request that misses.
+     */
+    public record Entitlement(BillingPlan plan, Integer clientSeats) {
+
+        static final Entitlement FREE = new Entitlement(BillingPlan.FREE, null);
+    }
+
+    public Entitlement entitlementOf(Long accountId) {
+        return subscriptionRepository.findByAccountId(accountId)
+                .map(subscription -> {
+                    BillingPlan plan = entitledPlan(subscription);
+                    // Seats only mean anything while the tier that has them is actually in force.
+                    // A lapsed Pro subscription still RECORDS the band it bought; reporting those
+                    // seats would hand a Free account a roster allowance it is not paying for.
+                    return plan == BillingPlan.FREE
+                            ? Entitlement.FREE
+                            : new Entitlement(plan, subscription.getClientSeats());
+                })
+                .orElse(Entitlement.FREE);
     }
 
     /**
@@ -204,16 +274,16 @@ public class SubscriptionService {
         if (state.stripeCustomerId() != null) {
             subscription.setStripeCustomerId(state.stripeCustomerId());
         }
-        // plan is the derived answer materialized for cheap reads (the admin list, AccountDto).
-        // entitledPlan stays the authority -- this is a cache of it, computed here so the two
-        // cannot be set independently.
+        // plan and client_seats are the derived answers materialized for cheap reads (the admin
+        // list, AccountDto, the quota check). entitledPlan stays the authority -- these are a cache
+        // of it, computed here so the two cannot be set independently.
         //
-        // ⚠️ With one paid tier the tier follows directly from entitlement. When a second paid tier
-        // exists this becomes a lookup from state.stripePriceId() -- the reverse of the price map --
-        // because the price is the only thing in a Stripe payload that says WHICH tier was bought.
-        // Deriving it from a boolean then would silently write PLUS over a Pro subscription.
+        // ⚠️ THE TIER COMES FROM THE PRICE, not from the fact that they are paying. The price id is
+        // the only thing in a Stripe payload that says WHICH tier was bought, so with two paid
+        // tiers an `isEntitled ? PLUS : FREE` here would silently write PLUS over a Pro
+        // subscription on the very next webhook.
         boolean nowEntitled = isEntitled(subscription);
-        subscription.setPlan(nowEntitled ? BillingPlan.PLUS : BillingPlan.FREE);
+        applyPurchasedTier(subscription, nowEntitled);
         subscription.setUpdatedAt(clock.instant());
 
         // The welcome email fires at most once per account, ever -- the null check is what makes

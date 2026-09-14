@@ -60,7 +60,18 @@ public record AccountAccess(
          * a {@code accountPlan == BillingPlan.PLUS} here is the same bug as a {@code role == OWNER}
          * outside {@link AccountRole}.
          */
-        BillingPlan accountPlan) {
+        BillingPlan accountPlan,
+
+        /**
+         * How many CLIENTS this account is licensed for, or null when the tier has no seats (every
+         * household tier) or the band is unlimited.
+         *
+         * <p>Cached beside the plan rather than read separately, because both come off the same
+         * subscription row — see {@code SubscriptionService.entitlementOf}. Same staleness bound as
+         * the plan, and acceptable for the same reason: at worst a trainer adds one client past a
+         * band change for up to a minute.
+         */
+        Integer clientSeats) {
 
     public AccountAccess {
         Objects.requireNonNull(userId, "userId");
@@ -187,6 +198,7 @@ public record AccountAccess(
     public static AccountAccess ownerOf(Long userId, Long accountId) {
         // A paid plan: an OWNER's status() ignores it entirely, so the value is arbitrary -- but a
         // paid one cannot mislead a reader into thinking owners can be paused.
-        return new AccountAccess(userId, accountId, null, AccountRole.OWNER, null, true, BillingPlan.PLUS);
+        return new AccountAccess(userId, accountId, null, AccountRole.OWNER, null, true,
+                BillingPlan.PLUS, null);
     }
 }

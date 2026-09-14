@@ -20,9 +20,14 @@ describe('planIncludes', () => {
   // Failing closed there strips paid features from a paying household for as long as the tab is
   // open; failing open costs one doomed round trip the server refuses with a message.
   it('fails OPEN for a tier name this bundle has never heard of', () => {
-    expect(planIncludes('PRO', 'FULL_HISTORY')).toBe(true);
     expect(planIncludes('TEAM', 'MEMBER_LOGINS')).toBe(true);
     expect(planIncludes('SOMETHING_ENTIRELY_NEW', 'DATA_IMPORT')).toBe(true);
+  });
+
+  it('gives Pro everything Plus has', () => {
+    for (const feature of PLAN_FEATURES.PLUS) {
+      expect(planIncludes('PRO', feature)).toBe(true);
+    }
   });
 
   // A snapshot written before billing shipped carries no plan at all. Same direction, same reason.
@@ -42,7 +47,8 @@ describe('isKnownPlan', () => {
   it('recognises exactly the plans in the map', () => {
     expect(isKnownPlan('FREE')).toBe(true);
     expect(isKnownPlan('PLUS')).toBe(true);
-    expect(isKnownPlan('PRO')).toBe(false);
+    expect(isKnownPlan('PRO')).toBe(true);
+    expect(isKnownPlan('TEAM')).toBe(false);
     expect(isKnownPlan(undefined)).toBe(false);
     expect(isKnownPlan(null)).toBe(false);
   });
@@ -62,7 +68,7 @@ describe('isPaidPlan', () => {
   });
 
   // Forward-compatible: every tier added after FREE is a paid one.
-  it('treats an unrecognised tier name as paid', () => {
+  it('treats Pro and an unrecognised tier name alike as paid', () => {
     expect(isPaidPlan('PRO')).toBe(true);
     expect(isPaidPlan('TEAM')).toBe(true);
   });
@@ -84,5 +90,13 @@ describe('the map itself', () => {
     expect([...PLAN_FEATURES.PLUS].sort()).toEqual(
       ['DATA_IMPORT', 'FULL_HISTORY', 'MEMBER_LOGINS'].sort(),
     );
+  });
+
+  // A paid tier that dropped something a cheaper one has would present as a household paying more
+  // and getting less -- the backend builds PRO's set FROM Plus's for exactly this reason.
+  it('never lets a higher tier hold fewer features than Plus', () => {
+    for (const feature of PLAN_FEATURES.PLUS) {
+      expect(PLAN_FEATURES.PRO).toContain(feature);
+    }
   });
 });

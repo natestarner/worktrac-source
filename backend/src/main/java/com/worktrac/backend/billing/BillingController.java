@@ -68,11 +68,23 @@ public class BillingController {
         return subscriptionService.describe(currentUser.accountId());
     }
 
-    public record CheckoutRequest(@NotNull BillingInterval interval) {
+    /**
+     * What the client is buying, in SYMBOLS the server maps -- never a Stripe price id.
+     *
+     * <p>{@code plan} is nullable for compatibility with the shape this endpoint had when PLUS was
+     * the only thing for sale: a body carrying only an interval still means Plus. {@code band} is
+     * required for PRO and forbidden for PLUS, which {@link PlanSku#of} enforces by simply not
+     * having a constant for the other combinations.
+     */
+    public record CheckoutRequest(BillingPlan plan, ClientBand band, @NotNull BillingInterval interval) {
+
+        BillingPlan planOrDefault() {
+            return plan == null ? BillingPlan.PLUS : plan;
+        }
     }
 
-    // The client sends MONTH or YEAR -- never a Stripe price id. Accepting one from a browser would
-    // let a caller check out against any price they cared to invent.
+    // The client sends plan + band + interval -- never a Stripe price id. Accepting one from a
+    // browser would let a caller check out against any price they cared to invent.
     @PostMapping("/checkout-session")
     @RequiresPermission(Permission.MANAGE_BILLING)
     @Transactional
@@ -92,7 +104,20 @@ public class BillingController {
         // paid tier answers it. A second checkout is how a household ends up with two Stripe
         // subscriptions regardless of which tiers they name.
         if (subscriptionService.isEntitled(subscription)) {
-            throw new ForbiddenException("This household already has Plus.");
+            throw new ForbiddenException("This account already has a paid plan.");
+        }
+
+        // Which of the ten things we sell is this? A combination we do not sell -- FREE, PLUS with
+        // a band, PRO without one -- is a 400 with a message rather than a 500 from deeper in.
+        PlanSku sku = PlanSku.of(request.planOrDefault(), request.band(), request.interval())
+                .orElseThrow(() -> new IllegalArgumentException("That isn't a plan you can buy."));
+
+        // Separate from requireStripe(): "Stripe is wired up here" and "this environment sells this
+        // tier" are different questions. An environment can legitimately have Plus prices and no
+        // Pro ones -- during the rollout of a new tier, that is every environment for a while --
+        // and conflating them would have switched off Plus checkout over a missing Pro env var.
+        if (stripeProperties.priceIdFor(sku).isEmpty()) {
+            throw new ServiceUnavailableException("That plan isn't available yet.");
         }
 
         try {
@@ -114,9 +139,9 @@ public class BillingController {
             }
 
             String clientSecret = stripeService.createEmbeddedCheckoutSession(
-                    accountId, customerId, request.interval());
+                    accountId, customerId, sku);
             auditService.record(accountId, BillingEventType.CHECKOUT_STARTED,
-                    "interval=" + request.interval());
+                    "sku=" + sku);
             return Map.of("clientSecret", clientSecret, "publishableKey", stripeService.publishableKey());
         } catch (StripeException e) {
             // The real reason, not just an event-type label -- same rule the registration audit

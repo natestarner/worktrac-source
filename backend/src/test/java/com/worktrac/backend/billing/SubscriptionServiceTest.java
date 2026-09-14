@@ -1,6 +1,7 @@
 package com.worktrac.backend.billing;
 
 import com.worktrac.backend.account.Account;
+import com.worktrac.backend.config.StripeProperties;
 import com.worktrac.backend.support.MutableClock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,9 +28,14 @@ import static org.mockito.Mockito.when;
 // the naive implementation (a stored is_plus flag, or `status == ACTIVE`) gets it wrong.
 class SubscriptionServiceTest {
 
+    private static final String PLUS_MONTH_PRICE = "price_plus_month";
+    private static final String PLUS_YEAR_PRICE = "price_plus_year";
+    private static final String PRO_STUDIO_YEAR_PRICE = "price_pro_studio_year";
+
     private SubscriptionRepository repository;
     private MutableClock clock;
     private ApplicationEventPublisher events;
+    private StripeProperties stripeProperties;
     private SubscriptionService service;
     private Account account;
 
@@ -41,7 +47,15 @@ class SubscriptionServiceTest {
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         clock = new MutableClock();
         events = mock(ApplicationEventPublisher.class);
-        service = new SubscriptionService(repository, events, clock);
+        // A real StripeProperties with a real price map, not a mock: applyStripeState now derives
+        // the tier from the price id, so a mock returning empty would make every test assert the
+        // "unrecognised price" branch while looking like it asserted the normal one.
+        stripeProperties = new StripeProperties();
+        stripeProperties.setPrices(new java.util.LinkedHashMap<>(java.util.Map.of(
+                PlanSku.PLUS_MONTH.name(), PLUS_MONTH_PRICE,
+                PlanSku.PLUS_YEAR.name(), PLUS_YEAR_PRICE,
+                PlanSku.PRO_STUDIO_YEAR.name(), PRO_STUDIO_YEAR_PRICE)));
+        service = new SubscriptionService(repository, events, stripeProperties, clock);
         account = new Account("Test Household");
     }
 
@@ -135,6 +149,103 @@ class SubscriptionServiceTest {
         @Test
         void unpaidIsNotEntitled() {
             assertThat(service.isEntitled(subscription(SubscriptionStatus.UNPAID))).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("the tier comes from the PRICE, never from the fact of paying")
+    class PurchasedTier {
+
+        private StripeSubscriptionState state(String priceId, SubscriptionStatus status) {
+            return new StripeSubscriptionState("cus_1", "sub_1", priceId, status,
+                    BillingInterval.YEAR, clock.instant().plus(Duration.ofDays(30)), false);
+        }
+
+        // With one paid tier, "entitled" and "Plus" were the same thing. With two they are not, and
+        // this is the assertion that stops a future `isEntitled ? PLUS : FREE` from silently
+        // writing PLUS over somebody's Pro subscription on the very next webhook.
+        @Test
+        void aProPriceWritesProAndItsSeats() {
+            Subscription subscription = subscription(SubscriptionStatus.FREE);
+
+            service.applyStripeState(subscription, state(PRO_STUDIO_YEAR_PRICE, SubscriptionStatus.ACTIVE));
+
+            assertThat(subscription.getPlan()).isEqualTo(BillingPlan.PRO);
+            assertThat(subscription.getClientSeats()).isEqualTo(ClientBand.STUDIO.clientLimit());
+            assertThat(service.entitledPlan(subscription)).isEqualTo(BillingPlan.PRO);
+        }
+
+        @Test
+        void aPlusPriceWritesPlusAndNoSeats() {
+            Subscription subscription = subscription(SubscriptionStatus.FREE);
+
+            service.applyStripeState(subscription, state(PLUS_YEAR_PRICE, SubscriptionStatus.ACTIVE));
+
+            assertThat(subscription.getPlan()).isEqualTo(BillingPlan.PLUS);
+            assertThat(subscription.getClientSeats()).isNull();
+        }
+
+        // A price we cannot map is a CONFIG gap on our side -- an env var not carried to this
+        // environment -- and it is not evidence about what the household bought. Downgrading a
+        // paying Pro trainer to Plus over a missing env var would be the worst reading of it, and
+        // it would re-inflict itself on every webhook until somebody noticed.
+        @Test
+        void anUnrecognisedPriceKeepsTheTierRatherThanGuessing() {
+            Subscription subscription = subscription(SubscriptionStatus.ACTIVE, BillingPlan.PRO);
+            subscription.setClientSeats(ClientBand.STUDIO.clientLimit());
+
+            service.applyStripeState(subscription,
+                    state("price_from_an_unconfigured_environment", SubscriptionStatus.ACTIVE));
+
+            assertThat(subscription.getPlan()).isEqualTo(BillingPlan.PRO);
+            assertThat(subscription.getClientSeats()).isEqualTo(ClientBand.STUDIO.clientLimit());
+        }
+
+        // A lapse clears the seats as well as the tier. Leaving them behind would hand a Free
+        // account a roster allowance it is no longer paying for, the next time anything read them.
+        @Test
+        void lapsingClearsTheTierAndTheSeats() {
+            Subscription subscription = subscription(SubscriptionStatus.ACTIVE, BillingPlan.PRO);
+            subscription.setClientSeats(ClientBand.STUDIO.clientLimit());
+
+            service.applyStripeState(subscription, new StripeSubscriptionState("cus_1", "sub_1",
+                    PRO_STUDIO_YEAR_PRICE, SubscriptionStatus.UNPAID, BillingInterval.YEAR, null, false));
+
+            assertThat(subscription.getPlan()).isEqualTo(BillingPlan.FREE);
+            assertThat(subscription.getClientSeats()).isNull();
+        }
+
+        // entitlementOf is what AccountAccessService caches, and it must not report seats for a
+        // tier that is no longer in force even though the row still records the band it bought.
+        @Test
+        void entitlementOfReportsNoSeatsOnceTheTierLapses() {
+            Subscription subscription = subscription(SubscriptionStatus.UNPAID, BillingPlan.PRO);
+            subscription.setClientSeats(ClientBand.STUDIO.clientLimit());
+            when(repository.findByAccountId(9L)).thenReturn(Optional.of(subscription));
+
+            assertThat(service.entitlementOf(9L).plan()).isEqualTo(BillingPlan.FREE);
+            assertThat(service.entitlementOf(9L).clientSeats()).isNull();
+        }
+
+        // A comp's tier comes from comped_plan, not from billing_plan, because billing_plan is a
+        // cache applyStripeState rewrites on every Stripe event while a comp is a standing grant.
+        @Test
+        void aCompGrantsTheTierTheCompNames() {
+            Subscription subscription = subscription(SubscriptionStatus.FREE, BillingPlan.FREE);
+            subscription.setComped(true);
+            subscription.setCompedPlan(BillingPlan.PRO);
+
+            assertThat(service.entitledPlan(subscription)).isEqualTo(BillingPlan.PRO);
+        }
+
+        // Null comped_plan means PLUS: it is what every comp granted before Pro existed, which is
+        // why V75 needed no backfill.
+        @Test
+        void aCompWithNoRecordedTierStillMeansPlus() {
+            Subscription subscription = subscription(SubscriptionStatus.FREE, BillingPlan.FREE);
+            subscription.setComped(true);
+
+            assertThat(service.entitledPlan(subscription)).isEqualTo(BillingPlan.PLUS);
         }
     }
 

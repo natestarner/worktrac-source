@@ -32,6 +32,16 @@ public class QuotaProperties {
     // be answered deliberately later.
     private int peoplePerAccount = 20;
 
+    // The safety ceiling for a PRO account on the UNLIMITED band. "Unlimited" is a pricing promise,
+    // not an invitation to create a hundred thousand rows -- so there is still a number, it is just
+    // far above any real roster rather than a shape assumption about families.
+    //
+    // ⚠️ This is what ANSWERS the question the comment above says nobody had answered yet, and it
+    // answers it narrowly: a roster is not a big household, it is a PRO account with seats it paid
+    // for. peoplePerAccount stays at 20 and keeps meaning what it always meant -- a family is a
+    // family. A Free or Plus household is unaffected by this line existing.
+    private int peoplePerProAccount = 500;
+
     // Own exercises only -- the preloaded global catalog does not count against anyone.
     private int exercisesPerAccount = 1000;
 
@@ -46,6 +56,14 @@ public class QuotaProperties {
 
     public int getPeoplePerAccount() {
         return peoplePerAccount;
+    }
+
+    public int getPeoplePerProAccount() {
+        return peoplePerProAccount;
+    }
+
+    public void setPeoplePerProAccount(int peoplePerProAccount) {
+        this.peoplePerProAccount = peoplePerProAccount;
     }
 
     public void setPeoplePerAccount(int peoplePerAccount) {

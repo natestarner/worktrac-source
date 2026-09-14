@@ -20,7 +20,15 @@ public enum BillingPlan {
     FREE,
 
     /** The paid family tier. Named Pro until #280 renamed it to free that word for the Pro tier. */
-    PLUS;
+    PLUS,
+
+    /**
+     * Personal trainers: individual client logins, each client's data private by default.
+     *
+     * <p>Priced by client count ({@link ClientBand}) rather than per household, which is the first
+     * time a tier has a size. Everything Plus includes, Pro includes.
+     */
+    PRO;
 
     private static final Set<PlanFeature> NOTHING_EXTRA = Collections.unmodifiableSet(
             EnumSet.noneOf(PlanFeature.class));
@@ -29,6 +37,21 @@ public enum BillingPlan {
             PlanFeature.FULL_HISTORY,
             PlanFeature.DATA_IMPORT,
             PlanFeature.MEMBER_LOGINS));
+
+    // ⚠️ Everything PLUS has, plus whatever is Pro-specific. Built FROM Plus's set rather than
+    // retyped, so a feature added to Plus cannot be silently missing from the tier above it --
+    // which would present as a household paying more and getting less.
+    //
+    // Today that is the whole of it: Pro is purchasable and priced by client count, but the things
+    // that make it a trainer product (private clients, the manager role, the roster, programs) are
+    // added by the phases that ENFORCE them. A PlanFeature nothing checks is a gate nobody can
+    // fail, so declaring them early would be capability on paper only.
+    private static final Set<PlanFeature> PRO_FEATURES = proFeatures();
+
+    private static Set<PlanFeature> proFeatures() {
+        EnumSet<PlanFeature> features = EnumSet.copyOf(PLUS_FEATURES);
+        return Collections.unmodifiableSet(features);
+    }
 
     /**
      * What this plan includes.
@@ -40,7 +63,11 @@ public enum BillingPlan {
      * them in writing on both plans.
      */
     public Set<PlanFeature> features() {
-        return this == PLUS ? PLUS_FEATURES : NOTHING_EXTRA;
+        return switch (this) {
+            case FREE -> NOTHING_EXTRA;
+            case PLUS -> PLUS_FEATURES;
+            case PRO -> PRO_FEATURES;
+        };
     }
 
     /** Whether this plan is paid for. Used for wording and chrome, never as a gate -- gates ask has(). */

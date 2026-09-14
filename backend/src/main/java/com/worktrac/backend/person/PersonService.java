@@ -120,7 +120,11 @@ public class PersonService {
     @Transactional
     public PersonDto add(AccountAccess access, String name) {
         Long accountId = access.accountId();
-        quotaService.requirePersonCapacity(accountId, personRepository.countByAccount_Id(accountId));
+        // The ceiling is plan-derived: a household tier is bounded by what a family is, a Pro
+        // account by the band it bought. Both come off the already-resolved AccountAccess, so this
+        // costs no extra query on a write that is rare anyway.
+        quotaService.requirePersonCapacity(accountId, personRepository.countByAccount_Id(accountId),
+                access.accountPlan(), access.clientSeats());
         Account account = accountRepository.getReferenceById(accountId);
         Person person = personRepository.save(new Person(account, name.trim(), false));
         return PersonDto.from(person);

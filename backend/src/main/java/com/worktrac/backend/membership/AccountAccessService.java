@@ -63,7 +63,7 @@ public class AccountAccessService {
      * itself, and {@code invalidateAccount} makes a real plan change take effect immediately —
      * see {@code AccountPlanChangedListener} for what calls it.
      */
-    private record CachedAccess(AccountAccessRow row, BillingPlan accountPlan) {
+    private record CachedAccess(AccountAccessRow row, SubscriptionService.Entitlement entitlement) {
     }
 
     public AccountAccessService(AccountMembershipRepository membershipRepository,
@@ -85,12 +85,13 @@ public class AccountAccessService {
                 key -> membershipRepository.findAccessRow(key.userId(), key.accountId())
                         // Resolved on the miss, inside the loader, so a hit stays a pure memory
                         // read. See CachedAccess.
-                        .map(r -> new CachedAccess(r, subscriptionService.entitledPlan(r.accountId()))));
+                        .map(r -> new CachedAccess(r, subscriptionService.entitlementOf(r.accountId()))));
 
         return cached.filter(c -> c.row().tokenVersion() == tokenVersion)
                 .map(c -> new AccountAccess(c.row().userId(), c.row().accountId(),
                         c.row().membershipId(), c.row().accountRole(), c.row().personId(),
-                        c.row().membersSeeEveryone(), c.accountPlan()));
+                        c.row().membersSeeEveryone(), c.entitlement().plan(),
+                        c.entitlement().clientSeats()));
     }
 
     /** After a membership is created, removed, or has its role or person changed. */

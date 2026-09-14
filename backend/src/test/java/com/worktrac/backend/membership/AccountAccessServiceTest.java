@@ -39,7 +39,8 @@ class AccountAccessServiceTest {
         // Plus by default -- these cases are about caching and invalidation, not entitlement.
         // The pause itself is covered by MemberLoginPauseTest against a real household.
         subscriptionService = mock(SubscriptionService.class);
-        when(subscriptionService.entitledPlan(anyLong())).thenReturn(BillingPlan.PLUS);
+        when(subscriptionService.entitlementOf(anyLong()))
+                .thenReturn(new SubscriptionService.Entitlement(BillingPlan.PLUS, null));
         service = new AccountAccessService(repository, subscriptionService);
         stub(USER, ACCOUNT, AccountRole.OWNER, 100L, TOKEN_VERSION);
     }

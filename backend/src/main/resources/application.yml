@@ -138,8 +138,21 @@ app:
     # Local development uses the secret `stripe listen` mints, NOT the one from the Dashboard --
     # a Dashboard endpoint cannot reach localhost.
     webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
-    price-monthly: ${STRIPE_PRICE_MONTHLY:}
-    price-yearly: ${STRIPE_PRICE_YEARLY:}
+    # One Stripe Price id per thing we sell, keyed by PlanSku.name(). Missing entries are legal:
+    # an environment that has no Pro prices yet simply cannot sell Pro, and Plus keeps working.
+    # The two Plus keys deliberately keep their ORIGINAL env var names so no deployed environment
+    # has to change anything to keep selling what it already sells.
+    prices:
+      PLUS_MONTH: ${STRIPE_PRICE_MONTHLY:}
+      PLUS_YEAR: ${STRIPE_PRICE_YEARLY:}
+      PRO_STARTER_MONTH: ${STRIPE_PRICE_PRO_STARTER_MONTH:}
+      PRO_STARTER_YEAR: ${STRIPE_PRICE_PRO_STARTER_YEAR:}
+      PRO_STUDIO_MONTH: ${STRIPE_PRICE_PRO_STUDIO_MONTH:}
+      PRO_STUDIO_YEAR: ${STRIPE_PRICE_PRO_STUDIO_YEAR:}
+      PRO_PRACTICE_MONTH: ${STRIPE_PRICE_PRO_PRACTICE_MONTH:}
+      PRO_PRACTICE_YEAR: ${STRIPE_PRICE_PRO_PRACTICE_YEAR:}
+      PRO_UNLIMITED_MONTH: ${STRIPE_PRICE_PRO_UNLIMITED_MONTH:}
+      PRO_UNLIMITED_YEAR: ${STRIPE_PRICE_PRO_UNLIMITED_YEAR:}
     return-url: ${STRIPE_RETURN_URL:http://localhost:3000/app/billing}
   email-delivery-webhook:
     # Shared-secret query-param key gating the public Event Grid delivery-report webhook (see

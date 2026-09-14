@@ -15,6 +15,10 @@ export const PLAN_FEATURES = {
   // none of it is a feature in this map's sense. Mirrors BillingPlan.FREE.features().
   FREE: [],
   PLUS: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS'],
+  // Everything Plus has. What makes Pro a trainer product -- private clients, the manager role,
+  // the roster, programs -- is added by the phases that ENFORCE those, because a feature nothing
+  // checks is a gate nobody can fail.
+  PRO: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS'],
 };
 
 /**

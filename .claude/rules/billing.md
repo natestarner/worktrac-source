@@ -7,9 +7,15 @@ paths:
 
 # Billing invariants
 
-Full narrative: `docs/architecture/billing.md`. `accounts` is the billable entity — one household,
-one login, many people, **no seats** — so there is exactly one `subscriptions` row per account,
-enforced by a unique index (V56).
+Full narrative: `docs/architecture/billing.md`. `accounts` is the billable entity — so there is
+exactly one `subscriptions` row per account, enforced by a unique index (V56).
+
+**Household tiers have no seats; Pro is licensed by client count.** That replaces the old "one
+household, one login, many people, no seats" framing, which was true while every tier was a family
+tier and is false now. It is a **replacement, not an exception**: Free and Plus still have no seats
+at all, and their ceiling (`QuotaProperties.peoplePerAccount`, twenty) is still a statement about
+what a family is rather than about what anybody paid for. Pro's ceiling is the band it bought. One
+`subscriptions` row per account is unchanged — a band is a column on that row, not a second row.
 
 ## The tier roadmap, and why the paid tier is called Plus
 
@@ -79,11 +85,58 @@ to every gate.
 - **The client has its own copy** — `frontend/src/utils/planFeatures.js` — because the same
   question was being asked as a bare `plan !== 'FREE'` at five call sites. It drives chrome only,
   and `PlanFeatureMappingTest` / `planFeatures.test.js` pin the two maps to the same answers.
-- **⚠️ When a second PAID tier exists, `applyStripeState` must stop deriving the tier from
-  entitlement.** Today `setPlan(nowEntitled ? PLUS : FREE)` is exactly right because there is one
-  paid tier. With two it silently writes PLUS over a Pro subscription — the tier has to come from
-  `state.stripePriceId()`, since the price is the only thing in a Stripe payload that says which
-  tier was bought.
+- **⚠️ THE TIER COMES FROM THE PRICE.** `applyStripeState` maps `state.stripePriceId()` back through
+  `StripeProperties.skuForPriceId`, because the price is the only thing in a Stripe payload that
+  says which tier was bought. An `isEntitled ? PLUS : FREE` here would silently write PLUS over a
+  Pro subscription on the very next webhook.
+  - **An unrecognised price KEEPS the tier the row already had** — it is a config gap on our side
+    (an env var not carried to this environment), not evidence about what the household bought.
+    Downgrading a paying trainer over a missing env var would re-inflict itself on every webhook
+    until somebody noticed. The watchdog re-applies once the mapping exists.
+  - **Seats travel with the tier**, written in the same place, because a band change *is* a price
+    change and two writers for one fact is how they drift.
+
+## Pro: bands, seats and the price matrix
+
+- **`PlanSku` is the catalogue** — one constant per (plan, band, interval) we sell, and **the enum
+  name IS the config key** (`app.stripe.prices.PRO_STUDIO_YEAR`). Renaming a constant is a config
+  change in three places (repo secrets, the deploy workflow's env block, `backend-env.json`). It is
+  an enum rather than a formatting function because the **reverse** lookup has to be total: a
+  webhook carries a price id and nothing else that names a tier.
+- **The client still never sends a price id.** It sends plan + band + interval; the server maps
+  them. A combination we do not sell — FREE, PLUS *with* a band, PRO *without* one — has no
+  constant, so it is a 400 rather than a checkout against the wrong price.
+- **`isConfigured()` no longer asks about prices, and `sells(plan)` is per-tier.** "Can we reach
+  Stripe" and "do we sell this here" are different questions: an environment legitimately has Plus
+  prices and no Pro ones for the whole length of a tier rollout, and conflating them meant one
+  missing Pro env var would have switched off **Plus** checkout. A tier this environment cannot
+  sell answers **503**, the same honest-refusal posture as an unconfigured environment.
+- **A blank env var is how an unset one arrives.** `${STRIPE_PRICE_PRO_X:}` binds to `""`, not to
+  absent, so blank must count as unconfigured — otherwise every environment claims it sells
+  everything.
+- **⚠️ A BAND IS A CEILING ON ADDING, NEVER A REVOCATION.** `client_seats` is consulted only before
+  a person is created. Moving *down* a band refuses the next client and touches nothing that
+  already exists — every client keeps their login, history and programs. Same promise the Plus
+  pause makes, and it is not negotiable here either: a billing change must never cost somebody
+  *else* their access.
+- **The trainer does not spend a client seat on themselves.** The person ceiling is
+  `clientSeats + 1`, because a trainer who also trains must not pay to log their own squats.
+- **UNLIMITED still has a number** (`peoplePerProAccount`). "Unlimited" is a pricing promise, not
+  an invitation to create rows without bound. `clientLimit()` is **null** rather than a sentinel,
+  because "unlimited" and "a very large number" read the same in a comparison and completely
+  differently in copy — a sentinel would make *"12 of 2147483647 clients"* a reachable string.
+- **`comped_plan` says WHICH tier a comp grants, and null means PLUS.** That is what every comp
+  meant before Pro existed, which is why V75 needed no backfill. It is separate from `billing_plan`
+  because that column is a cache `applyStripeState` rewrites on every Stripe event, while a comp is
+  a standing grant meant to outlive exactly that — folding them together would let a webhook about
+  a lapsed card overwrite the comp.
+- **Seats are reported only while the tier is in force.** A lapsed Pro row still records the band it
+  bought; `entitlementOf` and `SubscriptionDto` both clear seats once the tier reads FREE, or a Free
+  account would be told it has a roster allowance it is not paying for.
+- **`SubscriptionService` takes `StripeProperties`, not `StripeService`.** It depends on the price
+  *configuration*, never on the SDK — `StripeService` is still the only class importing
+  `com.stripe.*`, and this is what keeps `applyStripeState` unit-testable with a plain properties
+  object and no HTTP stub.
 
 ### The unknown-plan polarity, and why the client has two of them
 
