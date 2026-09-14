@@ -113,6 +113,15 @@ function updateActive(state, patch) {
   return updatePerson(state, state.activePersonId, patch);
 }
 
+/** The active person's slice, or an empty object before one exists. */
+function activeSlice(state) {
+  return state.byPerson[state.activePersonId] ?? {};
+}
+
+// The shape every check-in draft starts from, so a patch against a null draft still produces a
+// complete one rather than an object with holes in it.
+const EMPTY_CHECK_IN_DRAFT = { bodyWeight: '', note: '', visibleToPerson: true };
+
 // Every person's persisted rest timer, keyed by personId -- the ONE piece of per-person state read
 // for EVERY person rather than only the active one.
 //
@@ -264,8 +273,19 @@ export function reducer(state, action) {
       return updateActive(state, { contactDraft: action.draft });
     case 'CLEAR_CONTACT_DRAFT':
       return updateActive(state, { contactDraft: null });
+    // ⚠️ MERGES A PATCH AGAINST THE CURRENT DRAFT, rather than replacing it wholesale.
+    //
+    // Every field on this form is its own onChange, and each one used to spread `...draft` from its
+    // own render closure. Two changes landing in the same tick therefore clobbered each other: the
+    // second wrote a draft built from the state as it was BEFORE the first, silently discarding it.
+    // A person typing and then ticking a box fast enough -- or Playwright, which is always that
+    // fast -- lost whatever they typed, and the Save button went back to disabled with no
+    // explanation. The reducer is the only place that reliably knows the current value, so the
+    // merge belongs here.
     case 'SET_CHECK_IN_DRAFT':
-      return updateActive(state, { checkInDraft: action.draft });
+      return updateActive(state, {
+        checkInDraft: { ...(EMPTY_CHECK_IN_DRAFT), ...activeSlice(state).checkInDraft, ...action.patch },
+      });
     case 'CLEAR_CHECK_IN_DRAFT':
       return updateActive(state, { checkInDraft: null });
     default:
@@ -390,7 +410,9 @@ export function AppStateProvider({ children }) {
       doneEditingSession: () => dispatch({ type: 'DONE_EDITING_SESSION' }),
       setContactDraft: (draft) => dispatch({ type: 'SET_CONTACT_DRAFT', draft }),
       clearContactDraft: () => dispatch({ type: 'CLEAR_CONTACT_DRAFT' }),
-      setCheckInDraft: (draft) => dispatch({ type: 'SET_CHECK_IN_DRAFT', draft }),
+      // Takes a PATCH, not a whole draft -- see the reducer. A caller passing a full object still
+      // works, since a full object is a patch over every field.
+      setCheckInDraft: (patch) => dispatch({ type: 'SET_CHECK_IN_DRAFT', patch }),
       clearCheckInDraft: () => dispatch({ type: 'CLEAR_CHECK_IN_DRAFT' }),
     }),
     [],

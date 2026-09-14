@@ -41,7 +41,10 @@ export default function CheckInsTab() {
 
   const vocab = accountVocab(account?.vocab);
   const person = people.find((p) => String(p.id) === String(activePersonId));
-  const draft = checkInDraft ?? { bodyWeight: '', note: '', visibleToPerson: true };
+  // Each field sends only ITS OWN value; the reducer merges against the current draft. Spreading
+  // `...draft` here instead would rebuild it from this render's closure, so two changes in one tick
+  // would clobber each other -- which is exactly what happened before.
+  const draft = { bodyWeight: '', note: '', visibleToPerson: true, ...checkInDraft };
 
   const { data: entries, isLoading, isError } = useQuery({
     queryKey: queryKeys.checkIns(activePersonId),
@@ -68,7 +71,12 @@ export default function CheckInsTab() {
       // ⚠️ Cleared ONLY after the save lands. On a failure the draft stays exactly as typed, which
       // is the whole reason gating this write is acceptable.
       clearCheckInDraft();
-      await queryClient.invalidateQueries({ queryKey: queryKeys.checkIns(activePersonId) });
+      // ⚠️ NOT AWAITED. Awaiting an invalidation inside a gated write keeps the write "pending" until
+      // every matching query has refetched -- and pending is what disables this button. The list
+      // updated but the form stayed disabled until a reload, which reads as the screen being broken
+      // after one successful save. Same trap frontend-core.md records for
+      // LogTab.handleExerciseCreated; the refetch does not need to be waited on to happen.
+      queryClient.invalidateQueries({ queryKey: queryKeys.checkIns(activePersonId) });
     },
     {
       offlineMessage: 'Saving a check-in needs a connection.',
@@ -80,7 +88,7 @@ export default function CheckInsTab() {
   const discard = run(
     async (entry) => {
       await removeCheckIn(activePersonId, entry.id);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.checkIns(activePersonId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.checkIns(activePersonId) });
     },
     {
       offlineMessage: 'Removing a check-in needs a connection.',
@@ -108,7 +116,7 @@ export default function CheckInsTab() {
             type="number"
             inputMode="decimal"
             value={draft.bodyWeight}
-            onChange={(e) => setCheckInDraft({ ...draft, bodyWeight: e.target.value })}
+            onChange={(e) => setCheckInDraft({ bodyWeight: e.target.value })}
             style={inputStyle}
           />
 
@@ -120,7 +128,7 @@ export default function CheckInsTab() {
             rows={3}
             maxLength={2000}
             value={draft.note}
-            onChange={(e) => setCheckInDraft({ ...draft, note: e.target.value })}
+            onChange={(e) => setCheckInDraft({ note: e.target.value })}
             style={{ ...inputStyle, minHeight: 80, padding: 'var(--space-2)', resize: 'vertical' }}
           />
 
@@ -129,7 +137,7 @@ export default function CheckInsTab() {
               <input
                 type="checkbox"
                 checked={!draft.visibleToPerson}
-                onChange={(e) => setCheckInDraft({ ...draft, visibleToPerson: !e.target.checked })}
+                onChange={(e) => setCheckInDraft({ visibleToPerson: !e.target.checked })}
                 style={{ width: 20, height: 20 }}
               />
               {/* Phrased as what it DOES rather than as a state, so there is no ambiguity about

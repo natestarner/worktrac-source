@@ -71,7 +71,13 @@ describe('CheckInsTab', () => {
       return {
         activePersonId: 1,
         checkInDraft: held,
-        setCheckInDraft: (next) => { draft = next; setHeld(next); },
+        // MERGES, mirroring the reducer: the component sends only the field that changed, and a
+        // mock that replaced wholesale would pass while the real thing clobbered the other fields.
+        setCheckInDraft: (patch) => {
+          const merged = { bodyWeight: '', note: '', visibleToPerson: true, ...held, ...patch };
+          draft = merged;
+          setHeld(merged);
+        },
         clearCheckInDraft: () => { clearCheckInDraft(); setHeld(null); },
       };
     });
