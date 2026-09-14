@@ -187,7 +187,11 @@ describe('BillingTab', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
 
     expect(await screen.findByTestId('stripe-embedded-checkout')).toBeInTheDocument();
-    expect(createCheckoutSession).toHaveBeenCalledWith('YEAR');
+    // ⚠️ The TIER is asserted, not just the interval. This read toHaveBeenCalledWith('YEAR') and
+    // passed for months while the screen could only ever sell Plus -- an omitted plan is read by
+    // the server as PLUS, so a Pro button calling it this way would have silently sold the wrong
+    // tier and taken the wrong money.
+    expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PLUS', band: null });
   });
 
   // The moment a checkout actually lands. releaseOnboarding must wait for the celebration to be
@@ -322,4 +326,67 @@ describe('BillingTab', () => {
     expect(listLogins).not.toHaveBeenCalled();
   });
 
+});
+
+// The trainer path off the Free screen. Pro was fully buyable over the API for several commits
+// while every button here sold Plus -- an omitted plan is read by the server as PLUS -- so these
+// assert the tier and band that actually reach checkout, not merely that a button exists.
+describe('BillingTab Pro upgrade', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+    useUI.mockReturnValue({ releaseOnboarding: vi.fn(), showToast: vi.fn() });
+    createCheckoutSession.mockResolvedValue({ clientSecret: 'cs_secret', publishableKey: 'pk_test' });
+  });
+
+  const renderTab = () => render({ id: 1, plan: 'FREE' }, { plan: 'FREE', status: null });
+
+  it('offers Pro alongside Plus on the Free screen', async () => {
+    renderTab();
+
+    expect(await screen.findByRole('button', { name: 'Subscribe to Pro' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upgrade to Plus' })).toBeInTheDocument();
+  });
+
+  // ⚠️ THE ONE THAT WOULD HAVE CAUGHT THE ORIGINAL BUG. Selling Pro at Plus's price is a silent
+  // failure: checkout succeeds, the money is taken, and the trainer gets a tier they did not buy.
+  it('sends the Pro tier and the chosen band to checkout', async () => {
+    renderTab();
+
+    fireEvent.change(await screen.findByLabelText('How many clients?'), {
+      target: { value: 'PRACTICE' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Subscribe to Pro' }));
+
+    await waitFor(() =>
+      expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PRO', band: 'PRACTICE' }));
+  });
+
+  // The smallest band, because a trainer arriving here has one or two clients far more often than
+  // forty -- pre-selecting a bigger one quotes a price they did not ask for.
+  it('starts on the smallest band', async () => {
+    renderTab();
+
+    expect(await screen.findByLabelText('How many clients?')).toHaveValue('STARTER');
+    expect(screen.getByText('$190 / year')).toBeInTheDocument();
+  });
+
+  // One interval control on the screen, driving both cards: two prices quoting different billing
+  // periods at once is how somebody compares $29/year against $19/month and concludes wrongly.
+  it('prices Pro in whichever interval the screen is showing', async () => {
+    renderTab();
+
+    fireEvent.click(await screen.findByRole('radio', { name: /Monthly/ }));
+
+    expect(screen.getByText('$19 / month')).toBeInTheDocument();
+  });
+
+  it('still sends Plus from the Plus button', async () => {
+    renderTab();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
+
+    await waitFor(() =>
+      expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PLUS', band: null }));
+  });
 });

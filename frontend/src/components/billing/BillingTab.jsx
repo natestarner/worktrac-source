@@ -22,7 +22,7 @@ import LegalLinks from '../shared/LegalLinks';
 import PlanChooser from './PlanChooser';
 import EmbeddedCheckout from './EmbeddedCheckout';
 import PlusCelebration from './PlusCelebration';
-import { PLUS_BENEFITS } from './planCopy';
+import { PLUS_BENEFITS, PRO_ADDITIONS, PRO_BANDS } from './planCopy';
 import { isPaidPlan, planIncludes } from '../../utils/planFeatures';
 
 // The household's plan, and where an upgrade happens.
@@ -44,6 +44,9 @@ export default function BillingTab() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [interval, setInterval] = useState('YEAR');
+  // Smallest band pre-selected. A trainer arriving here has one or two clients far more often than
+  // forty, and pre-selecting a bigger band would quote them a price they did not ask for.
+  const [proBand, setProBand] = useState(PRO_BANDS[0].id);
   const [checkout, setCheckout] = useState(null);
   const [showCelebration, setShowCelebration] = useState(false);
 
@@ -150,9 +153,13 @@ export default function BillingTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkoutParam]);
 
+  // ⚠️ Takes the tier explicitly rather than reading component state, and the default is PLUS.
+  // It was `createCheckoutSession(interval)` with no plan at all, which the server reads as Plus --
+  // so while Pro was fully buyable over the API, every button on this screen sold Plus. A caller
+  // that forgets the argument still gets the old, correct behaviour rather than a 400.
   const handleUpgrade = run(
-    async () => {
-      const { clientSecret, publishableKey } = await createCheckoutSession(interval);
+    async ({ plan = 'PLUS', band = null } = {}) => {
+      const { clientSecret, publishableKey } = await createCheckoutSession(interval, { plan, band });
       setCheckout({ clientSecret, publishableKey });
     },
     {
@@ -215,6 +222,8 @@ export default function BillingTab() {
       ) : (
         <FreeSummary
           interval={interval}
+          proBand={proBand}
+          onProBandChange={setProBand}
           onIntervalChange={setInterval}
           pending={pending}
           onUpgrade={handleUpgrade}
@@ -305,7 +314,7 @@ function renewalLine(cancelling, periodEnd) {
     : `Renews ${formatDate(periodEnd)}.`;
 }
 
-function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFree }) {
+function FreeSummary({ interval, onIntervalChange, proBand, onProBandChange, pending, onUpgrade, onStartFree }) {
   return (
     <>
       <SectionLabel>Your plan</SectionLabel>
@@ -324,7 +333,7 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
             badge labelled "Go Plus" precisely so it does not compete with this, and so the two
             never share an accessible name. */}
         <OfflineDisabledWrap message="Upgrading needs a connection.">
-          <Button variant="primary" size="lg" fullWidth onClick={onUpgrade} disabled={pending}>
+          <Button variant="primary" size="lg" fullWidth onClick={() => onUpgrade({ plan: 'PLUS' })} disabled={pending}>
             Upgrade to Plus
           </Button>
         </OfflineDisabledWrap>
@@ -332,6 +341,14 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
           Cancel any time. Your workouts are never deleted. See <LegalLinks />.
         </p>
       </div>
+
+      <ProUpgradeCard
+        interval={interval}
+        band={proBand}
+        onBandChange={onProBandChange}
+        pending={pending}
+        onUpgrade={onUpgrade}
+      />
 
       {/* Equal-weight, not fine print. Someone who arrived from marketing's "Go Plus" was routed
           straight here, and Free is permanent -- deferring costs them nothing. */}
@@ -341,6 +358,89 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
     </>
   );
 }
+
+/**
+ * The trainer path off the Free screen.
+ *
+ * Quieter than the Plus card above it and placed below on purpose: the overwhelming majority of
+ * people reading this screen are families, and a Pro card competing for attention would cost more
+ * conversions than it wins. A trainer who needs it is looking for it.
+ *
+ * ⚠️ "Subscribe to Pro" is checked against every other control on this screen for the substring
+ * rule -- Upgrade to Plus / Start with Free, decide later / Manage billing / Go Plus. It shares no
+ * substring with any of them, and none contains it.
+ */
+function ProUpgradeCard({ interval, band, onBandChange, pending, onUpgrade }) {
+  const selected = PRO_BANDS.find((b) => b.id === band) ?? PRO_BANDS[0];
+  // The interval chosen above drives this price too, so the two cards can never quote different
+  // billing periods on one screen.
+  const price = interval === 'YEAR' ? selected.year : selected.month;
+
+  return (
+    <>
+      <SectionLabel>Training clients?</SectionLabel>
+      <div style={cardStyle}>
+        <p style={mutedLineStyle}>
+          Huddle Pro gives every client their own login, keeps their training private from each
+          other, and shows you who has stopped showing up.
+        </p>
+
+        <label htmlFor="pro-band" style={{ ...mutedLineStyle, display: 'block', marginBottom: 'var(--space-1)' }}>
+          How many clients?
+        </label>
+        <select
+          id="pro-band"
+          value={selected.id}
+          onChange={(event) => onBandChange(event.target.value)}
+          style={bandSelectStyle}
+        >
+          {PRO_BANDS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name} &mdash; {option.label}
+            </option>
+          ))}
+        </select>
+
+        <p style={{ ...planHeadingStyle, marginTop: 'var(--space-3)' }}>{price}</p>
+
+        <ul style={benefitListStyle}>
+          {PRO_ADDITIONS.map((benefit) => (
+            <li key={benefit.id} style={benefitItemStyle}>
+              <BenefitCheck />
+              <span>{benefit.label}</span>
+            </li>
+          ))}
+        </ul>
+
+        {/* Not variant="primary": this screen allows exactly one, and it belongs to the Plus card
+            that most readers came here for. */}
+        <OfflineDisabledWrap message="Upgrading needs a connection.">
+          <Button variant="secondary" size="lg" fullWidth
+                  onClick={() => onUpgrade({ plan: 'PRO', band: selected.id })} disabled={pending}>
+            Subscribe to Pro
+          </Button>
+        </OfflineDisabledWrap>
+        <p style={finePrintStyle}>
+          Your own training and your assistants are free &mdash; you pay for clients. Change bands
+          whenever your roster does.
+        </p>
+      </div>
+    </>
+  );
+}
+
+const bandSelectStyle = {
+  width: '100%',
+  minHeight: 44,
+  padding: '0 var(--space-2)',
+  // 16px, or iOS Safari zooms the viewport on focus -- the same rule every input in this app
+  // follows (frontend-core.md).
+  fontSize: 'var(--text-md)',
+  color: 'var(--color-text)',
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)',
+};
 
 // Deliberately the same treatment as the marketing site's pricing card -- an accent tick per
 // benefit -- so the page someone read before signing up and the screen they upgrade on feel like
