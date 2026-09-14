@@ -6,6 +6,8 @@ paths:
   - "frontend/src/utils/accountVocab.js"
   - "frontend/src/hooks/useAccountAccess.js"
   - "frontend/src/components/settings/AppSettingsTab.jsx"
+  - "backend/src/main/java/com/worktrac/backend/checkin/**"
+  - "backend/src/main/java/com/worktrac/backend/routine/**"
   - "e2e/tests/pro-private-clients.spec.ts"
 ---
 
@@ -119,6 +121,49 @@ read by `frontend/src/utils/accountVocab.js`.
   the normal case for the first load after a deploy.
 - `forPlan` is an exhaustive switch with **no default**, so adding `TEAM` fails the build until
   somebody maps it. A default would silently call a sports team a household.
+
+## Check-ins — one table, two uses, and the naming is the risk
+
+`check_ins` is a dated entry about a PERSON (not a set, not an exercise). One column tells the two
+uses apart:
+
+| `visible_to_person` | What it is | Who reads it |
+|---|---|---|
+| `0` | a manager's private observation | staff only |
+| `1` | a check-in the person can see, including every one they wrote | the person, staff, and anyone who can view them |
+
+- ⚠️ **"Staff" means `WRITE_OTHER_PEOPLE`, never `VIEW_OTHER_PEOPLE`.** The names look
+  interchangeable and are not: on a family account with visibility ON, **every MEMBER holds
+  `VIEW_OTHER_PEOPLE`**, so gating on it would show a teenager whatever their parent wrote
+  privately about their sibling. Only OWNER and MANAGER hold `WRITE_OTHER_PEOPLE`.
+- **The filter lives in ONE repository query** (`findVisibleTo(personId, includePrivate)`), taking
+  the answer as a parameter. There is deliberately **no "find all for person" method** for a new
+  call site to reach for — the choice between two methods is the dangerous part.
+- **A person can never make an entry invisible to themselves.** Meaningless, and it would create a
+  place in the app their trainer can read but they cannot un-write. Forced, not refused: this is a
+  durable write and a 4xx would discard it.
+- **An empty entry (no weight, no note) is a 400, refused in the service.** Left to
+  `CK_check_ins_has_content` it would be a 500 — which `shouldRetryWrite` treats as transient, so
+  a durable write of nothing would retry forever and **wedge the single serial outbox scope** behind
+  it. Discarding an entry that records nothing loses nothing.
+- **Deleting somebody else's entry answers 404, not 403.** Being refused *differently* would tell a
+  client that a private entry about them exists.
+
+### ⚠️ This is the THIRD note concept. Keep the labels mutually non-containing.
+
+Two already exist and the person can see both:
+
+| Concept | Table | Its label |
+|---|---|---|
+| a standing note on one exercise | `person_exercise.note` (V35) | "standing note" |
+| a note for one workout | `session_exercise_notes` (V36) | "Note for this session" |
+| **a dated entry about a person** | **`check_ins` (V78)** | **"Check-ins"** |
+
+Neither of the first two is about a person and neither is ever private. **The check-in surface never
+uses the word "note" as a label** — Playwright matches accessible names as a case-insensitive
+substring and "Notes" already exists on the same screens, so a "Private note" control would break
+unrelated specs and read as a fourth concept. Visibility is a property of a check-in, not a
+different kind of thing.
 
 ## The promises that do not move
 
