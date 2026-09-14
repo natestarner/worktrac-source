@@ -15,10 +15,13 @@ export const PLAN_FEATURES = {
   // none of it is a feature in this map's sense. Mirrors BillingPlan.FREE.features().
   FREE: [],
   PLUS: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS'],
-  // Everything Plus has. What makes Pro a trainer product -- private clients, the manager role,
-  // the roster, programs -- is added by the phases that ENFORCE those, because a feature nothing
-  // checks is a gate nobody can fail.
-  PRO: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS'],
+  // Everything Plus has, plus what makes Pro a trainer product. A capability lands in this list in
+  // the commit that puts a CONTROL behind it -- a feature nothing checks is a gate nobody can fail,
+  // and it would drift from the server's map unnoticed.
+  //
+  // PRIVATE_MEMBERS arrived with the member-visibility toggle in AppSettingsTab. MANAGER_ROLE is
+  // still absent on purpose: the server grants it, but no client control asks about it yet.
+  PRO: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS', 'PRIVATE_MEMBERS'],
 };
 
 /**

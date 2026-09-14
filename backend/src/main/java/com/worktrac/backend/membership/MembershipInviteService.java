@@ -9,6 +9,7 @@ import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.common.TooManyRequestsException;
 import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.person.Person;
+import com.worktrac.backend.person.PersonDto;
 import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.registrationaudit.RegistrationAuditService;
@@ -216,6 +217,35 @@ public class MembershipInviteService {
 
     /** What the caller needs to send the email. The raw token exists only in this object. */
     public record IssuedInvite(MembershipInvite invite, String rawToken, boolean recipientHasAccount) {
+    }
+
+    /**
+     * Creates a person and invites them in ONE motion — how a trainer actually onboards a client.
+     *
+     * <p>A family adds people over years and invites them later, if ever; a trainer does both at
+     * the moment somebody signs up, every time. Two round trips for one intention is not merely
+     * clumsy here, it is lossy — see the transaction note below.
+     *
+     * <p>⚠️ <b>ONE TRANSACTION, AND THAT IS THE ENTIRE POINT.</b> If the invitation is refused —
+     * a typo'd address that is already attached to this account, a household still on a tier
+     * without member logins, an expired seat allowance — the person is <b>not</b> created either.
+     * Done as two calls from the client, every refusal would leave an orphan person behind, so a
+     * trainer fixing a typo and retrying would accumulate a duplicate roster entry per attempt,
+     * each of them a billable client seat. There is no undo for that on the client's side, because
+     * by the time it sees the error the first call has already committed.
+     *
+     * <p>The seat ceiling is enforced by {@code personService.add} BEFORE the invitation is built,
+     * so an over-limit account is refused without an email ever being queued. Its refusal is a 403
+     * rather than a 429 on purpose: {@code shouldRetryWrite} treats 429 as transient, and a seat
+     * limit never clears on its own.
+     *
+     * <p>The email still dispatches from {@code invite}'s {@code AFTER_COMMIT} listener, so it
+     * cannot fire for a person who was rolled back.
+     */
+    @Transactional
+    public IssuedInvite addAndInvite(AccountAccess access, String personName, String rawEmail) {
+        PersonDto person = personService.add(access, personName);
+        return invite(access, person.id(), rawEmail);
     }
 
     /**

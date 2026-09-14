@@ -1014,4 +1014,112 @@ class MembershipInviteTest extends AbstractIntegrationTest {
         }
     }
 
+    /**
+     * Creating a person and inviting them in ONE call — how a trainer onboards a client, as
+     * opposed to a family adding people over years and inviting them later, if ever.
+     */
+    @Nested
+    @DisplayName("create and invite in one motion")
+    class AddAndInvite {
+
+        private ResultActions addAndInvite(String personName, String email) throws Exception {
+            return mockMvc.perform(post("/api/account/logins")
+                    .header("Authorization", bearer(ownerToken))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(
+                            Map.of("personName", personName, "email", email))));
+        }
+
+        private int invitesForPersonNamed(String name) {
+            return jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM membership_invites i JOIN people p ON p.id = i.person_id "
+                            + "WHERE p.account_id = ? AND p.name = ?",
+                    Integer.class, accountId, name);
+        }
+
+        private int peopleNamed(String name) {
+            return jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM people WHERE account_id = ? AND name = ?",
+                    Integer.class, accountId, name);
+        }
+
+        private void downgradeToFree() throws Exception {
+            mockMvc.perform(post("/api/auth/test/billing-plan")
+                            .header("X-E2E-Test-Key", "local-dev-only-e2e-test-key-do-not-use-elsewhere")
+                            .param("email", "owner-" + suffix + "@example.com")
+                            .param("plan", "FREE"))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        void createsThePersonAndInvitesThemAtOnce() throws Exception {
+            JsonNode row = json(addAndInvite("Dana", "dana-" + suffix + "@example.com")
+                    .andExpect(status().isOk()));
+
+            assertThat(row.get("personName").asText()).isEqualTo("Dana");
+            assertThat(row.get("status").asText()).isEqualTo(PersonLoginDto.INVITED);
+            assertThat(peopleNamed("Dana")).isEqualTo(1);
+            // Read over JDBC rather than through the repository: the invite's person is a lazy
+            // proxy, so touching it outside a session is a LazyInitializationException rather than
+            // an assertion. Every other DB-state check in this file reads the table directly too.
+            assertThat(invitesForPersonNamed("Dana")).isEqualTo(1);
+        }
+
+        // The response says INVITED and nothing else, exactly as the per-person invite route does.
+        // The person's id is the one thing it may add, because that is identity the caller just
+        // created rather than anything about the invited address.
+        @Test
+        void saysNothingAboutWhetherThatAddressAlreadyHasAnAccount() throws Exception {
+            String shared = "taken-" + suffix + "@example.com";
+            JsonNode stranger = json(addAndInvite("Dana", shared).andExpect(status().isOk()));
+
+            JsonNode second = json(addAndInvite("Kim", shared).andExpect(status().isOk()));
+
+            assertThat(second.get("status").asText()).isEqualTo(stranger.get("status").asText());
+            assertThat(second.get("personId").asLong()).isNotEqualTo(stranger.get("personId").asLong());
+        }
+
+        // ⚠️ THE WHOLE REASON THIS IS ONE ENDPOINT RATHER THAN TWO CALLS.
+        //
+        // Done as two calls from the client, a refused invitation leaves the person behind, and a
+        // trainer fixing the address and retrying accumulates one orphan roster entry per attempt
+        // -- each of them a billable client seat, with no undo on the client's side, because by
+        // the time it sees the error the create has already committed.
+        @Test
+        void createsNoPersonWhenTheInvitationIsRefused() throws Exception {
+            downgradeToFree();
+
+            addAndInvite("Orphan", "orphan-" + suffix + "@example.com")
+                    .andExpect(status().isConflict());
+
+            assertThat(peopleNamed("Orphan")).isZero();
+        }
+
+        // No email may escape for a person who was rolled back. The send rides an AFTER_COMMIT
+        // listener, so a transaction that never commits cannot fire one -- this is what keeps that
+        // true if the listener is ever moved.
+        @Test
+        void sendsNoInvitationEmailWhenTheInvitationIsRefused() throws Exception {
+            downgradeToFree();
+
+            addAndInvite("Orphan", "orphan-" + suffix + "@example.com")
+                    .andExpect(status().isConflict());
+
+            verify(emailService, never()).sendMembershipInvite(
+                    anyString(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+        }
+
+        @Test
+        void refusesABlankName() throws Exception {
+            addAndInvite("   ", "dana-" + suffix + "@example.com")
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        void refusesAnAddressThatIsNotOne() throws Exception {
+            addAndInvite("Dana", "not-an-address")
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
 }

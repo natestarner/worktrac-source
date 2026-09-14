@@ -26,6 +26,9 @@ export function useAccountAccess() {
   const { membership, people } = useAuth();
 
   const isMember = membership?.accountRole === 'MEMBER';
+  // Pro's assistant. Sees and writes every person, but owns nothing about the ACCOUNT -- no
+  // billing, no deletion, no household settings, no account-wide export. See AccountRole.MANAGER.
+  const isManager = membership?.accountRole === 'MANAGER';
   // ⚠️ Fails OPEN, exactly like the rest of this hook: an absent status (a v1 snapshot, a
   // still-booting render) means NOT paused. The alternative locks somebody out of the whole app
   // over a missing field they cannot do anything about -- and the server refuses every request
@@ -39,7 +42,22 @@ export function useAccountAccess() {
 
   return {
     isMember,
-    isOwner: !isMember,
+    isManager,
+    /**
+     * This login owns the ACCOUNT — billing, deletion, household settings.
+     *
+     * ⚠️ Written as "neither a member nor a manager" rather than `accountRole === 'OWNER'`, and the
+     * difference is the whole fail-open contract at the top of this file. An unknown role (a v1
+     * snapshot, a still-booting render) must answer TRUE, because every v1 snapshot's holder IS
+     * their household's owner; `=== 'OWNER'` would answer false and tell an offline owner they may
+     * not manage their own household, with no way to prove otherwise until they reconnect.
+     *
+     * ⚠️ It was `!isMember` until MANAGER existed, which silently made every assistant an owner in
+     * the client's eyes — offering them billing and account deletion that the server refuses. Any
+     * role added later is owner-shaped by default for the same fail-open reason, so a new
+     * non-owning role MUST be subtracted here in the commit that adds it.
+     */
+    isOwner: !isMember && !isManager,
     /**
      * This login is suspended because the household is no longer on Plus.
      *
