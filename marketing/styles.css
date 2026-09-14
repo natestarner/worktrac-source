@@ -1362,6 +1362,19 @@ img {
   margin-left: var(--space-2);
 }
 
+/* The four-tier comparison on /pricing. .compare's own layout is built for three columns, and a
+   fourth squeezes the feature name to nothing on a laptop -- so the table scrolls sideways inside
+   .compare-wrap rather than compressing. That is the one sanctioned horizontal scroll on this site:
+   a table may scroll in its own container, the PAGE may not.
+
+   Below 720px .compare flattens into stacked rows via td::before { content: attr(data-label) }, so
+   this min-width must not apply there -- the flattened form has no columns to be narrow. */
+@media (min-width: 721px) {
+  .compare--four {
+    min-width: 640px;
+  }
+}
+
 .site-footer__links {
   display: flex;
   align-items: center;

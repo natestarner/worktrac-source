@@ -13,6 +13,17 @@ The homepage converts **families**; `for-trainers.html` converts **trainers**. D
 three ways, or hiding two-thirds of it behind a JS audience switcher, trades a working page for one
 competing for three sets of keywords.
 
+`pricing.html` is the third page and a different kind: it is the ONE place a four-column comparison
+belongs, for somebody deliberately comparing rather than arriving with an audience already in mind.
+`.compare` is built for three columns, so it takes `.compare--four`, which lets the TABLE scroll
+sideways inside `.compare-wrap` rather than compressing the feature name to nothing. That is the one
+sanctioned horizontal scroll on this site: a table may scroll in its own container, the PAGE may not.
+
+⚠️ **Every new `<td>` needs its `data-label`.** Below 720px `.compare` flattens into stacked rows and
+each cell draws its column name from `td::before { content: attr(data-label) }` — a cell without one
+loses its heading entirely on a phone, and the gap is invisible at desktop width.
+`pricing.spec.ts` asserts there are zero such cells.
+
 Adding a third audience page (`for-teams.html` is the planned one) means copying the shape:
 
 - **Shared header, footer and `styles.css`; its own hero, proof, pricing and FAQ.**
