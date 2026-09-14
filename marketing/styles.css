@@ -1365,7 +1365,13 @@ img {
 .site-footer__links {
   display: flex;
   align-items: center;
-  gap: 28px;
+  /* Wraps, and that is not cosmetic: this was a nowrap row at five links, and the sixth pushed the
+     footer past 390px -- which shows up as the whole PAGE scrolling horizontally, not as a wrapped
+     footer, because nothing here clips. Caught by landing.spec.ts's horizontal-scroll assertion at
+     mobile width. Any further link would have done the same. */
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 28px;
 }
 
 .site-footer__links a {
