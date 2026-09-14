@@ -37,6 +37,7 @@ const SECTION_IDS = [
   'personal',
   'settings',
   'logins',
+  'visibility',
   'plan',
   'data',
   'offline',

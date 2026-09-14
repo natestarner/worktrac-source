@@ -122,7 +122,8 @@ public class EmailService {
      * Profile page does, deliberately.
      */
     public String sendMembershipInvite(String toEmail, String personName, String accountName,
-                                        String ownerName, String joinUrl, boolean recipientHasAccount) {
+                                        String accountNoun, String ownerName, String joinUrl,
+                                        boolean recipientHasAccount) {
         // ⚠️ These two sentences are now LITERALLY TRUE, and they were not always. The
         // already-have-an-account branch has said "sign in with the password you already use"
         // since it was written, while the screen behind the link offered one password field to
@@ -146,7 +147,12 @@ public class EmailService {
                 // names and HOUSEHOLD_NAME is an account name -- all free text the household chose.
                 .replace("{{PERSON_NAME}}", escapeHtml(personName))
                 .replace("{{HOUSEHOLD_NAME}}", escapeHtml(accountName))
-                .replace("{{OWNER_NAME}}", escapeHtml(ownerName));
+                .replace("{{OWNER_NAME}}", escapeHtml(ownerName))
+                // ⚠️ Only the NOUN moves with the tier. The sentence it sits in -- and above all
+                // "They cannot see or set your password" -- is the same on every plan, because it
+                // is a promise rather than a description. Escaped like the rest even though it is
+                // ours, so the template has exactly one rule.
+                .replace("{{ACCOUNT_NOUN}}", escapeHtml(accountNoun == null ? "household" : accountNoun));
 
         String plain = ownerName + " set up a Huddle login for you as " + personName
                 + " in " + accountName + ". " + actionSentence + " " + joinUrl

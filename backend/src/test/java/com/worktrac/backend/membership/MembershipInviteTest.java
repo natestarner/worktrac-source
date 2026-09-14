@@ -242,7 +242,7 @@ class MembershipInviteTest extends AbstractIntegrationTest {
             // mock: its own joinUrl therefore answers null, and that null is what reaches this
             // call. A property of the double, not of the code under test.
             verify(emailService, timeout(2000))
-                    .sendMembershipInvite(eq(samEmail), eq("Sam"), anyString(), anyString(),
+                    .sendMembershipInvite(eq(samEmail), eq("Sam"), anyString(), anyString(), anyString(),
                             nullable(String.class), anyBoolean());
         }
 
@@ -1106,7 +1106,8 @@ class MembershipInviteTest extends AbstractIntegrationTest {
                     .andExpect(status().isConflict());
 
             verify(emailService, never()).sendMembershipInvite(
-                    anyString(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+                    anyString(), anyString(), anyString(), anyString(), anyString(), anyString(),
+                    anyBoolean());
         }
 
         @Test

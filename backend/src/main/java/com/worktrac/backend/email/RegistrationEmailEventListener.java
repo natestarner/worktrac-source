@@ -105,7 +105,7 @@ public class RegistrationEmailEventListener {
     public void onMembershipInviteIssued(MembershipInviteIssuedEvent event) {
         sendAndRecord(event.email(),
                 () -> emailService.sendMembershipInvite(event.email(), event.personName(),
-                        event.accountName(), event.ownerName(),
+                        event.accountName(), event.accountNoun(), event.ownerName(),
                         emailService.joinUrl(event.inviteId(), event.rawToken()),
                         event.recipientHasAccount()),
                 RegistrationEventType.MEMBER_INVITE_EMAIL_SENT,

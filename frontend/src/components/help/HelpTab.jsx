@@ -38,6 +38,7 @@ const SECTIONS = [
   { id: 'personal', title: 'Notes, tags and favorites', group: 'Making it yours' },
   { id: 'settings', title: 'Settings', group: 'Making it yours' },
   { id: 'logins', title: 'Giving someone their own login', group: 'Making it yours' },
+  { id: 'visibility', title: 'What the account holder can see', group: 'Making it yours' },
   { id: 'plan', title: 'Plans', group: 'Making it yours' },
   { id: 'data', title: 'Import and export', group: 'Making it yours' },
   { id: 'offline', title: 'Losing the connection', group: 'When things go wrong' },
@@ -760,6 +761,66 @@ export default function HelpTab() {
             their email and a password from them. If they&rsquo;re under 13, set it up together with
             a parent or guardian and use an address one of you can reach. You stay in control
             either way: only you can create a login, and only you can remove one.
+          </p>
+        </Note>
+      </Section>
+
+      {/* The other side of the login section above: that one is written for whoever hands a login
+          out, and this one for whoever receives it.
+
+          ⚠️ THE PASSWORD SENTENCE IS THE SAME SENTENCE the Profile screen, the invitation email
+          and the privacy policy carry. It is a promise, not a description, and it is true because
+          there is no CHANGE_ANY_PASSWORD permission and no screen anywhere that sets somebody
+          else's password. If that ever changes, all four change in the same commit
+          (.claude/rules/member-access.md). */}
+      <Section id="visibility" title="What the account holder can see">
+        <p className="help-lede">
+          If somebody gave you a login on their account &mdash; a parent, or a trainer &mdash; this
+          is exactly what they can and cannot do. It is short on purpose.
+        </p>
+
+        <HelpTable
+          head={['', 'Them', 'You']}
+          rows={[
+            ['See your workouts, sets and PRs', 'Yes', 'Yes'],
+            ['Add, edit or delete your workouts', 'Yes', 'Yes'],
+            ['See other people on the account', 'Yes', 'Only if the account is set up that way'],
+            ['Remove your login', 'Yes', 'No'],
+            ['See or set your password', 'No', 'Yes — it is yours'],
+            ['Export your full history', 'Yes', 'Yes, any time, at no cost'],
+          ]}
+        />
+
+        <Note title="They cannot see or set your password">
+          <p>
+            There is no screen anywhere in Huddle that lets one person set another&rsquo;s
+            password &mdash; not the account holder, not us. If you forget it, you reset it
+            yourself from the sign-in screen using your own email.
+          </p>
+          <p>
+            They <em>can</em> clear a lockout if you have typed a wrong password too many times.
+            That only lets you try again; it tells them nothing and lets them in as nobody.
+          </p>
+        </Note>
+
+        <Note title="Your training data lives in their account">
+          <p>
+            That is worth knowing plainly: if they delete the account, your workouts go with it, and
+            we cannot get them back. <strong>You can export your complete history to a CSV file at
+            any time, on any plan, without asking them.</strong> It is on the History screen.
+          </p>
+          <p>
+            If your login is removed, your workouts stay in their account &mdash; removing a login
+            does not delete a person or their training.
+          </p>
+        </Note>
+
+        <Note title="Whether other people can see you">
+          <p>
+            On a family account, everyone on it can see everyone else. On a trainer&rsquo;s account
+            it usually works the other way: each client sees only their own training, and only the
+            trainer and their assistants see everyone. The account holder chooses which, for the
+            whole account.
           </p>
         </Note>
       </Section>

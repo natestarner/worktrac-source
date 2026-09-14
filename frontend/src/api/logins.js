@@ -10,6 +10,19 @@ export function listLogins() {
 // The response says INVITED whatever the state of the invited address -- deliberately. See
 // MembershipInviteService on the backend: an owner-visible difference between "they already had an
 // account" and "they did not" is a user-enumeration oracle.
+/**
+ * Creates a person AND invites them, in one request.
+ *
+ * ⚠️ ONE SERVER TRANSACTION, and that is the point rather than a convenience. Done as two calls
+ * from here, a refused invitation — a typo'd address already on the account, a plan without member
+ * logins — would leave the person behind, so fixing the address and retrying would accumulate one
+ * orphan roster entry per attempt, each a billable client seat, with no undo available on this
+ * side. See MembershipInviteService.addAndInvite.
+ */
+export function addAndInviteLogin(personName, email) {
+  return apiClient.post('/api/account/logins', { personName, email });
+}
+
 export function inviteLogin(personId, email) {
   return apiClient.post(`/api/account/logins/${personId}/invite`, { email });
 }

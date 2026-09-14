@@ -2,10 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LoginsSection from './LoginsSection';
-import { listLogins, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
+import { listLogins, addAndInviteLogin, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
 
 vi.mock('../../api/logins', () => ({
   listLogins: vi.fn(),
+  addAndInviteLogin: vi.fn(),
   inviteLogin: vi.fn(),
   revokeLogin: vi.fn(),
   unlockLogin: vi.fn(),
@@ -314,4 +315,55 @@ describe('LoginsSection', () => {
     expect(screen.queryByText('LOCKED')).not.toBeInTheDocument();
   });
 
+});
+
+// Add a person and invite them in one motion -- how a trainer onboards a client, as opposed to a
+// family adding people over years and inviting them later, if ever.
+describe('LoginsSection add-and-invite', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listLogins.mockResolvedValue([
+      { personId: 1, personName: 'Nate', status: 'ACTIVE', email: 'nate@example.com', isSelf: true },
+    ]);
+    addAndInviteLogin.mockResolvedValue({});
+  });
+
+  it('offers one control that creates the person and invites them', async () => {
+    render(<LoginsSection plan="PRO" />);
+
+    expect(await screen.findByRole('button', { name: '+ Add someone with a login' })).toBeInTheDocument();
+  });
+
+  // ⚠️ BOTH FIELDS IN ONE REQUEST. As two calls a refused invitation would leave the person behind,
+  // so a trainer fixing a typo'd address accumulates an orphan roster entry -- and a billable client
+  // seat -- per attempt, with no undo on this side.
+  it('sends the name and the address together', async () => {
+    render(<LoginsSection plan="PRO" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Add someone with a login' }));
+    fireEvent.change(screen.getByLabelText('Their name'), { target: { value: 'Dana' } });
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'dana@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send invite' }));
+
+    await waitFor(() => expect(addAndInviteLogin).toHaveBeenCalledWith('Dana', 'dana@example.com'));
+  });
+
+  it('will not send until both are filled in', async () => {
+    render(<LoginsSection plan="PRO" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Add someone with a login' }));
+    fireEvent.change(screen.getByLabelText('Their name'), { target: { value: 'Dana' } });
+
+    expect(screen.getByRole('button', { name: 'Send invite' })).toBeDisabled();
+  });
+
+  // The same promise the Profile screen, the invitation email and the privacy policy carry. It is
+  // stated at the moment somebody is deciding to hand out a login, which is when it matters.
+  it('states the password promise before asking for an address', async () => {
+    render(<LoginsSection plan="PRO" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '+ Add someone with a login' }));
+
+    expect(screen.getByText(/never be able to see or set their password/)).toBeInTheDocument();
+  });
 });

@@ -5,7 +5,7 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import Modal from '../shared/Modal';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useUI } from '../../context/UIContext';
-import { listLogins, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
+import { listLogins, addAndInviteLogin, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
 import { planIncludes } from '../../utils/planFeatures';
 
 /**
@@ -22,9 +22,13 @@ import { planIncludes } from '../../utils/planFeatures';
  * this is bug #2 on that list. Fails OPEN on an unknown plan, same as `PlusUpsell`/`PlanBadge`: a
  * pre-billing snapshot must not cost a paying household the real control.
  */
-export default function LoginsSection({ plan }) {
+// refreshPeople is a PROP rather than useAuth(): this component is rendered bare by its own test,
+// and a new context dependency would make every one of those tests need a provider to exercise the
+// invite flow. Same call as RoutineFormModal's defaultUnit.
+export default function LoginsSection({ plan, refreshPeople }) {
   const [rows, setRows] = useState(null);
   const [invitingPerson, setInvitingPerson] = useState(null);
+  const [addingPerson, setAddingPerson] = useState(false);
   const { run } = useGatedMutation();
   const { showToast, openConfirm } = useUI();
 
@@ -42,6 +46,23 @@ export default function LoginsSection({ plan }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  const addAndInvite = run(
+    async (personName, email) => {
+      await addAndInviteLogin(personName, email);
+      setAddingPerson(false);
+      showToast('Invite sent.');
+      await refreshPeople?.();
+      await load();
+    },
+    {
+      offlineMessage: 'Sending an invite needs a connection.',
+      errorMessage: "Couldn't add that person.",
+      // The refusals are written for a person: that address is already on this account, or the
+      // plan does not include member logins.
+      showServerMessage: true,
+    },
+  );
 
   const sendInvite = run(
     async (personId, email) => {
@@ -121,6 +142,19 @@ export default function LoginsSection({ plan }) {
         <div style={introStyle}>
           Give someone their own email and password so they can log their own workouts. They&rsquo;ll
           see everyone&rsquo;s workouts but can only change their own.
+        </div>
+        {/* One motion, for the case a trainer is actually in: a client who does not exist yet. The
+            per-person Enable login below stays for everybody already on the account -- a family
+            adds people over years and invites them later, if ever. */}
+        {/* No role check here: this whole section is already owner-only -- ProfileTab renders it
+            inside its !isMember block, and the server requires MANAGE_LOGINS. A second gate would
+            be a second answer to a question already settled one level up. */}
+        <div style={{ paddingBottom: 14, borderBottom: '1px solid var(--color-subtle-bg)' }}>
+            <OfflineDisabledWrap message="Sending an invite needs a connection.">
+              <button className="btn btn-secondary btn-sm pressable" onClick={() => setAddingPerson(true)}>
+                + Add someone with a login
+              </button>
+          </OfflineDisabledWrap>
         </div>
         {rows.map((row, i) => (
           <div
@@ -202,6 +236,12 @@ export default function LoginsSection({ plan }) {
         ))}
       </div>
 
+      {addingPerson && (
+        <AddPersonWithLoginModal
+          onCancel={() => setAddingPerson(false)}
+          onSend={(personName, email) => addAndInvite(personName, email)}
+        />
+      )}
       {invitingPerson && (
         <InviteModal
           person={invitingPerson}
@@ -210,6 +250,63 @@ export default function LoginsSection({ plan }) {
         />
       )}
     </>
+  );
+}
+
+/**
+ * Add a person and invite them at once.
+ *
+ * ⚠️ Both fields go in ONE request. Creating the person here and inviting separately would leave an
+ * orphan person behind on every refused invitation -- a typo'd address, a plan without member
+ * logins -- and this modal has no way to undo the half that succeeded.
+ *
+ * "Add someone with a login" shares no substring with "Enable login", "Resend", "Remove",
+ * "Unlock" or "Unlock with Plus" on this same screen; Playwright matches accessible names as a
+ * case-insensitive substring, so an overlap here breaks specs elsewhere.
+ */
+function AddPersonWithLoginModal({ onCancel, onSend }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const ready = name.trim() !== '' && email.trim() !== '';
+
+  return (
+    <Modal title="Add someone with a login" onClose={onCancel}>
+      <p style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 16 }}>
+        They&rsquo;ll get an email to choose their own password. You&rsquo;ll be able to see their
+        workouts and remove their login &mdash; you will never be able to see or set their password.
+      </p>
+
+      <label htmlFor="add-person-name" style={labelStyle}>Their name</label>
+      <input
+        id="add-person-name"
+        autoComplete="off"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        className="input"
+      />
+
+      <label htmlFor="add-person-email" style={{ ...labelStyle, marginTop: 14 }}>Email</label>
+      <input
+        id="add-person-email"
+        type="email"
+        autoComplete="off"
+        placeholder="them@example.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="input"
+      />
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+        <button
+          onClick={() => onSend(name.trim(), email.trim())}
+          disabled={!ready}
+          className="btn btn-primary btn-full pressable"
+        >
+          Send invite
+        </button>
+        <button onClick={onCancel} style={cancelStyle}>Cancel</button>
+      </div>
+    </Modal>
   );
 }
 

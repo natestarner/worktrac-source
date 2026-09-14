@@ -1,6 +1,7 @@
 package com.worktrac.backend.membership;
 
 import com.worktrac.backend.account.Account;
+import com.worktrac.backend.account.AccountVocab;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.billing.PlanFeature;
 import com.worktrac.backend.billing.SubscriptionService;
@@ -338,6 +339,7 @@ public class MembershipInviteService {
                 invite.getEmail(),
                 invite.getPerson().getName(),
                 invite.getAccount().getName(),
+                AccountVocab.forPlan(subscriptionService.entitledPlan(accountId)).account(),
                 ownerNameFor(accountId),
                 issued.rawToken(),
                 invite.getId(),
