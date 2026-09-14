@@ -1,5 +1,8 @@
 package com.worktrac.backend.membership;
 
+import com.worktrac.backend.billing.BillingPlan;
+import com.worktrac.backend.billing.PlanFeature;
+
 /**
  * Whether a login may currently be used in this household, as opposed to what it may do.
  *
@@ -11,11 +14,11 @@ package com.worktrac.backend.membership;
  */
 public enum MembershipStatus {
 
-    /** Usable. Every owner, and every member of a Plus household. */
+    /** Usable. Every owner, and every member of a household whose plan includes member logins. */
     ACTIVE,
 
     /**
-     * A MEMBER login in a household that is no longer Plus.
+     * A MEMBER login in a household whose plan no longer includes member logins.
      *
      * <p>⚠️ <b>A pause, not a punishment, and the distinction is the whole design.</b> Nothing is
      * deleted, no membership is revoked, and no queued write is discarded — the member's person,
@@ -41,7 +44,9 @@ public enum MembershipStatus {
      * while {@code /me} is documented as the single authority. Same rule as
      * {@code AccountRole.permissions()} being the only role→authority map.
      */
-    public static MembershipStatus forRole(AccountRole role, boolean accountIsPro) {
-        return role == AccountRole.MEMBER && !accountIsPro ? PAUSED_PLAN : ACTIVE;
+    public static MembershipStatus forRole(AccountRole role, BillingPlan accountPlan) {
+        return role == AccountRole.MEMBER && !accountPlan.has(PlanFeature.MEMBER_LOGINS)
+                ? PAUSED_PLAN
+                : ACTIVE;
     }
 }

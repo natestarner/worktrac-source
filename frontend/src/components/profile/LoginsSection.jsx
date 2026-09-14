@@ -6,6 +6,7 @@ import Modal from '../shared/Modal';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useUI } from '../../context/UIContext';
 import { listLogins, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
+import { planIncludes } from '../../utils/planFeatures';
 
 /**
  * The owner's login manager: who in this household can sign in, and inviting the ones who cannot.
@@ -162,7 +163,7 @@ export default function LoginsSection({ plan }) {
                 </OfflineDisabledWrap>
               )}
               {row.status !== 'ACTIVE' && (
-                plan === 'FREE' ? (
+                !planIncludes(plan, 'MEMBER_LOGINS') ? (
                   // Not OfflineDisabledWrap'd: like PlanBadge's "Go Plus", this is a navigation, not
                   // a write, so it works offline and the gate belongs on the checkout button it
                   // leads to. Reuses the header pill's own class rather than a new style object —

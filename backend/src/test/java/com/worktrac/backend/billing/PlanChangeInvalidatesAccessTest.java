@@ -98,7 +98,7 @@ class PlanChangeInvalidatesAccessTest extends AbstractIntegrationTest {
         subscriptionRepository.save(subscription);
 
         AccountAccess whilePlus = resolve(member, account);
-        assertThat(whilePlus.accountIsPro()).isTrue();
+        assertThat(whilePlus.accountPlan()).isEqualTo(BillingPlan.PLUS);
 
         // Now the real production path: a Stripe state that is NOT entitled, applied through the
         // one method the webhook, the billing controller and the reconciliation watchdog all use.
@@ -109,15 +109,15 @@ class PlanChangeInvalidatesAccessTest extends AbstractIntegrationTest {
                     "cus_" + suffix, "sub_" + suffix, "price_" + suffix,
                     SubscriptionStatus.CANCELED, BillingInterval.MONTH,
                     // A period that ended yesterday: cancelled AND past its paid window, which is
-                    // the one combination isPlus answers false for.
+                    // the one combination isEntitled answers false for.
                     Instant.now().minus(1, ChronoUnit.DAYS), false));
         });
 
-        // ⚠️ Without the listener this still answers accountIsPro == true, from the cache entry
+        // ⚠️ Without the listener this still answers accountPlan == PLUS, from the cache entry
         // primed above, for another 60 seconds -- and the member keeps seeing "paused" after the
         // household has paid, which is precisely when somebody gives up.
         AccountAccess afterChange = resolve(member, account);
-        assertThat(afterChange.accountIsPro()).isFalse();
+        assertThat(afterChange.accountPlan()).isEqualTo(BillingPlan.FREE);
         assertThat(afterChange.status()).isEqualTo(com.worktrac.backend.membership.MembershipStatus.PAUSED_PLAN);
 
         // Membership id is unchanged: the plan moved, nothing was revoked.

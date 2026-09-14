@@ -45,21 +45,67 @@ it, together with the copy and the tests that make it true:
 - `QuotaProperties.peoplePerAccount = 20` — a hard ceiling that blocks a roster outright, left
   unraised on purpose so "a team is just a big family" cannot ship by accident.
 
-**When a third tier lands, `isPlus` stops being the shape of the question.** It is a boolean
-answering a four-way question, and eleven call sites ask it. The replacement must keep the
-derivation below intact — it answers *"is this subscription currently paying?"*, which stays
-exactly right — and add one map from tier to capability, mirroring `AccountRole.permissions()`:
-**ask for a feature, never for a tier.** A second `plan == PRO` comparison anywhere is the bug, for
-the same reason a second `role == OWNER` comparison is.
+## ⚠️ Ask for a FEATURE, never for a tier
+
+`isPlus` used to be a boolean answering what is now a four-way question, asked at eleven call
+sites — each one a place a third tier could be forgotten. It is gone, split into the two questions
+it was conflating:
+
+| Question | Answered by |
+|---|---|
+| Is this subscription currently **paying**? | `SubscriptionService.isEntitled` — the four-case derivation below, unchanged |
+| **Which tier** is this household on? | `SubscriptionService.entitledPlan` = `isEntitled ? the tier the row records : FREE` |
+| Does that tier **include X**? | `BillingPlan.features()`, reached through `SubscriptionService.has(accountId, PlanFeature)` |
+
+**`BillingPlan.features()` is the only place in the codebase that branches on a tier**, exactly as
+`AccountRole.permissions()` is the only place that branches on a role. A second
+`plan == BillingPlan.PRO` comparison anywhere is the bug, for the same reason a second
+`role == OWNER` is — that map is what makes adding Pro and Team a change to one file rather than
+to every gate.
+
+- **`PlanFeature.DATA_IMPORT` and `Permission.IMPORT_DATA` are different questions and are spelled
+  differently on purpose.** The permission asks *may this LOGIN import*; the feature asks *does this
+  household's PLAN include importing*. `ImportController` checks both. Naming them the same thing
+  would invite collapsing them, and they are not collapsible: an owner on Free holds the permission
+  and lacks the feature; a member on Plus is the reverse.
+- **FREE's feature set is EMPTY, not a subset of PLUS.** Everything Free actually gets — unlimited
+  workouts, every person, offline logging, PRs, routines, the full data export — is ungated, so
+  none of it is a `PlanFeature`. Several are promised in writing on the marketing site for *both*
+  plans; listing them here would invite gating one.
+- **An entitled row that records no tier resolves to the LOWEST PAID tier, never FREE.** Only a
+  hand-edited row reaches that branch (`applyStripeState` writes entitlement and tier together),
+  but the polarity matters: somebody demonstrably paying must not be clamped, and guessing upward
+  would hand out a tier nobody bought.
+- **The client has its own copy** — `frontend/src/utils/planFeatures.js` — because the same
+  question was being asked as a bare `plan !== 'FREE'` at five call sites. It drives chrome only,
+  and `PlanFeatureMappingTest` / `planFeatures.test.js` pin the two maps to the same answers.
+- **⚠️ When a second PAID tier exists, `applyStripeState` must stop deriving the tier from
+  entitlement.** Today `setPlan(nowEntitled ? PLUS : FREE)` is exactly right because there is one
+  paid tier. With two it silently writes PLUS over a Pro subscription — the tier has to come from
+  `state.stripePriceId()`, since the price is the only thing in a Stripe payload that says which
+  tier was bought.
+
+### The unknown-plan polarity, and why the client has two of them
+
+A browser keeps its auth snapshot across deploys (`resilience.md` axis D), so a bundle **will** be
+handed a tier name it predates. The client answers that in two different directions, and both are
+deliberate:
+
+| Helper | Unknown NAME (`'PRO'`) | No plan at all (`undefined`) | Why |
+|---|---|---|---|
+| `planIncludes` | included | included | Fails OPEN. Being wrong costs one doomed round trip the server refuses with a message; being wrong the other way tells a paying household they are on Free for as long as the tab stays open |
+| `isPaidPlan` | paid | **not paid** | Every tier after FREE is paid, so a newer name is paid. But *no plan* is not a plan to call paid — `BillingTab` picks between the "you have Plus" summary and the "here is what Plus costs" one on this, and answering true would show the paid summary to somebody who never paid and hide the control that lets them |
+| `isKnownPlan` | not known | not known | The one "render nothing" case. `PlanBadge` NAMES the plan on screen and there is no safe way to name one you do not recognise |
 
 ## Entitlement is DERIVED, never stored
 
-`SubscriptionService.isPlus` is the only place the question "is this household Plus?" is answered:
+`SubscriptionService.isEntitled` is the only place the question "is this subscription currently
+paying?" is answered:
 
 ```
-isPlus = status ∈ { ACTIVE, TRIALING, PAST_DUE }
-      OR (status == CANCELED AND current_period_end > now)
-      OR comped
+isEntitled = status ∈ { ACTIVE, TRIALING, PAST_DUE }
+          OR (status == CANCELED AND current_period_end > now)
+          OR comped
 ```
 
 One expression gets four otherwise-separate cases right. **Do not replace it with an `is_plus`
@@ -73,7 +119,7 @@ column**, and do not let a caller compare statuses itself — each of these beco
 4. **`comped`** grants Plus with no Stripe object, so founding households need no second code path.
 
 `subscriptions.billing_plan` is a materialized cache of the derivation, written only by
-`applyStripeState` so the two cannot be set independently. `isPlus` stays the authority.
+`applyStripeState` so the two cannot be set independently. `entitledPlan` stays the authority.
 
 **A missing subscription row means FREE, never an error.** Registration creates one and V56
 backfilled the rest, so it should be unreachable — but a read of workout history must not fail

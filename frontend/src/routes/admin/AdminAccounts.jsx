@@ -4,6 +4,7 @@ import { useAdminData } from '../../hooks/useAdminData';
 import { formatDate, formatDateTime } from '../../utils/datetime';
 import AdminTable from '../../components/admin/AdminTable';
 import Skeleton from '../../components/shared/Skeleton';
+import { isPaidPlan } from '../../utils/planFeatures';
 
 const COLUMNS = [
   { key: 'name', label: 'Household' },
@@ -41,8 +42,8 @@ const COLUMNS = [
           fontWeight: 700,
           padding: '2px 8px',
           borderRadius: 6,
-          background: row.plan === 'PLUS' ? 'var(--color-pr-bg)' : 'var(--color-subtle-bg)',
-          color: row.plan === 'PLUS' ? 'var(--color-pr-text)' : 'var(--color-muted)',
+          background: isPaidPlan(row.plan) ? 'var(--color-pr-bg)' : 'var(--color-subtle-bg)',
+          color: isPaidPlan(row.plan) ? 'var(--color-pr-text)' : 'var(--color-muted)',
         }}
         title={row.comped ? 'Comped -- no Stripe subscription behind this' : row.stripeCustomerId || ''}
       >

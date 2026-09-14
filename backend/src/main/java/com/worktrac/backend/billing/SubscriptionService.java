@@ -12,7 +12,13 @@ import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
 
-// The one place "is this household Plus?" is answered, for the whole application.
+// The one place "what is this household entitled to?" is answered, for the whole application.
+//
+// TWO QUESTIONS, ONE AUTHORITY. `isEntitled` answers "is this subscription currently paying?" --
+// the four-case derivation below, unchanged since it shipped. `entitledPlan` combines that with the
+// tier the row records, and every gate reads it through `has(accountId, PlanFeature)`. Callers ask
+// for a FEATURE, never for a tier: BillingPlan.features() is the only place a tier becomes
+// capability, exactly as AccountRole.permissions() is the only place a role becomes authority.
 //
 // ENTITLEMENT IS DERIVED, NEVER STORED. There is deliberately no is_plus column to read. One
 // expression gets four otherwise-separate cases right, and splitting it into a stored flag would
@@ -34,6 +40,9 @@ import java.util.Set;
 @Service
 public class SubscriptionService {
 
+    // The lowest tier that is paid for. Only reachable from entitledPlan's contradiction branch.
+    private static final BillingPlan LOWEST_PAID_PLAN = BillingPlan.PLUS;
+
     // Statuses Stripe considers "in good standing", i.e. entitled outright.
     private static final Set<SubscriptionStatus> ENTITLED_OUTRIGHT =
             EnumSet.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING, SubscriptionStatus.PAST_DUE);
@@ -49,15 +58,19 @@ public class SubscriptionService {
         this.clock = clock;
     }
 
-    // THE derivation. Everything that gates on Plus calls this -- never a status comparison of its
-    // own, and never a stored flag.
-    public boolean isPlus(Long accountId) {
+    // THE derivation: is this subscription currently paying? Never a status comparison of its own
+    // at a call site, and never a stored flag.
+    //
+    // This deliberately says nothing about WHICH tier -- that is entitledPlan's job. Splitting the
+    // two is what lets a third tier be added without touching any of the four cases below, each of
+    // which was expensive to get right.
+    public boolean isEntitled(Long accountId) {
         return subscriptionRepository.findByAccountId(accountId)
-                .map(this::isPlus)
+                .map(this::isEntitled)
                 .orElse(false);
     }
 
-    public boolean isPlus(Subscription subscription) {
+    public boolean isEntitled(Subscription subscription) {
         if (subscription == null) {
             return false;
         }
@@ -87,7 +100,7 @@ public class SubscriptionService {
     public static final Duration FREE_HISTORY_WINDOW = Duration.ofDays(90);
 
     public Instant historyFloor(Long accountId) {
-        return isPlus(accountId) ? null : clock.instant().minus(FREE_HISTORY_WINDOW);
+        return has(accountId, PlanFeature.FULL_HISTORY) ? null : clock.instant().minus(FREE_HISTORY_WINDOW);
     }
 
     // True when `moment` is visible to this household. Null floor (Plus) admits everything, and a
@@ -97,8 +110,45 @@ public class SubscriptionService {
         return floor == null || moment == null || !moment.isBefore(floor);
     }
 
-    public BillingPlan planFor(Long accountId) {
-        return isPlus(accountId) ? BillingPlan.PLUS : BillingPlan.FREE;
+    /**
+     * The tier this household is entitled to RIGHT NOW -- the one authority on that question.
+     *
+     * <p>Two inputs: whether the subscription is paying at all (isEntitled, above) and which tier
+     * the row records. A lapsed subscription reads FREE regardless of the tier it used to hold, so
+     * a downgrade needs no write to take effect -- the same clock-driven property the CANCELED case
+     * has always had.
+     *
+     * <p>{@code subscriptions.billing_plan} is a cache of this, written only by applyStripeState so
+     * the two cannot be set independently. This method stays the authority.
+     */
+    public BillingPlan entitledPlan(Long accountId) {
+        return subscriptionRepository.findByAccountId(accountId)
+                .map(this::entitledPlan)
+                .orElse(BillingPlan.FREE);
+    }
+
+    public BillingPlan entitledPlan(Subscription subscription) {
+        if (!isEntitled(subscription)) {
+            return BillingPlan.FREE;
+        }
+        BillingPlan recorded = subscription.getPlan();
+        // An entitled row recording no tier is a contradiction applyStripeState cannot produce --
+        // it writes both together. Reachable only by a hand-edited row, and the safe answer is the
+        // LOWEST paid tier: somebody demonstrably paying must not be treated as Free, and guessing
+        // upward would hand out a tier nobody bought. That rule keeps working as tiers are added,
+        // which a literal `return PLUS` would not.
+        return recorded == null || recorded == BillingPlan.FREE ? LOWEST_PAID_PLAN : recorded;
+    }
+
+    /**
+     * Whether this household's plan includes the given feature. THE gate every caller uses.
+     *
+     * <p>⚠️ Ask for a feature, never for a tier. An {@code entitledPlan(id) == BillingPlan.PLUS} at
+     * a call site is the bug -- it is exactly the comparison this method exists to keep in one
+     * place, the same way AccountAccess.has keeps role comparisons in one place.
+     */
+    public boolean has(Long accountId, PlanFeature feature) {
+        return entitledPlan(accountId).has(feature);
     }
 
     public Optional<Subscription> findByAccountId(Long accountId) {
@@ -106,10 +156,10 @@ public class SubscriptionService {
     }
 
     // What the billing screen reads. A household with no row renders as Free rather than erroring,
-    // for the same reason isPlus does.
+    // for the same reason entitledPlan does.
     public SubscriptionDto describe(Long accountId) {
         return subscriptionRepository.findByAccountId(accountId)
-                .map(subscription -> SubscriptionDto.from(subscription, isPlus(subscription)))
+                .map(subscription -> SubscriptionDto.from(subscription, entitledPlan(subscription)))
                 .orElseGet(SubscriptionDto::free);
     }
 
@@ -143,7 +193,7 @@ public class SubscriptionService {
         // it wrong fails silently; this one is worth it anyway because a welcome email's failure
         // mode (missed or duplicated) is worse than a cache staying stale an extra minute, and
         // PlusWelcomeSentAt is what keeps a wrong comparison here from ever double-sending.
-        boolean wasPlus = isPlus(subscription);
+        boolean wasEntitled = isEntitled(subscription);
 
         subscription.setStripeSubscriptionId(state.stripeSubscriptionId());
         subscription.setStripePriceId(state.stripePriceId());
@@ -155,17 +205,22 @@ public class SubscriptionService {
             subscription.setStripeCustomerId(state.stripeCustomerId());
         }
         // plan is the derived answer materialized for cheap reads (the admin list, AccountDto).
-        // isPlus stays the authority -- this is a cache of it, computed here so the two cannot be
-        // set independently.
-        boolean nowPlus = isPlus(subscription);
-        subscription.setPlan(nowPlus ? BillingPlan.PLUS : BillingPlan.FREE);
+        // entitledPlan stays the authority -- this is a cache of it, computed here so the two
+        // cannot be set independently.
+        //
+        // ⚠️ With one paid tier the tier follows directly from entitlement. When a second paid tier
+        // exists this becomes a lookup from state.stripePriceId() -- the reverse of the price map --
+        // because the price is the only thing in a Stripe payload that says WHICH tier was bought.
+        // Deriving it from a boolean then would silently write PLUS over a Pro subscription.
+        boolean nowEntitled = isEntitled(subscription);
+        subscription.setPlan(nowEntitled ? BillingPlan.PLUS : BillingPlan.FREE);
         subscription.setUpdatedAt(clock.instant());
 
         // The welcome email fires at most once per account, ever -- the null check is what makes
-        // that exact rather than best-effort even if a future edit gets wasPlus/nowPlus subtly wrong,
+        // that exact rather than best-effort even if a future edit gets wasEntitled/nowEntitled subtly wrong,
         // and it is why a renewal (Plus -> Plus) or a PAST_DUE recovery (both already Plus) never
         // re-triggers it.
-        boolean firstUpgrade = !wasPlus && nowPlus && subscription.getPlusWelcomeSentAt() == null;
+        boolean firstUpgrade = !wasEntitled && nowEntitled && subscription.getPlusWelcomeSentAt() == null;
         if (firstUpgrade) {
             subscription.setPlusWelcomeSentAt(clock.instant());
         }

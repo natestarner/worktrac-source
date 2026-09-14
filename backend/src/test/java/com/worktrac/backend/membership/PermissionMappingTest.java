@@ -1,5 +1,6 @@
 package com.worktrac.backend.membership;
 
+import com.worktrac.backend.billing.BillingPlan;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -118,7 +119,7 @@ class PermissionMappingTest {
     class Access {
 
         private AccountAccess member(boolean seesEveryone, Long selfPersonId) {
-            return new AccountAccess(7L, 3L, 11L, AccountRole.MEMBER, selfPersonId, seesEveryone, true);
+            return new AccountAccess(7L, 3L, 11L, AccountRole.MEMBER, selfPersonId, seesEveryone, BillingPlan.PLUS);
         }
 
         @Test
@@ -152,11 +153,11 @@ class PermissionMappingTest {
 
         @Test
         void refusesToBeBuiltWithoutAnIdentity() {
-            assertThatThrownBy(() -> new AccountAccess(null, 3L, 11L, AccountRole.MEMBER, 5L, true, true))
+            assertThatThrownBy(() -> new AccountAccess(null, 3L, 11L, AccountRole.MEMBER, 5L, true, BillingPlan.PLUS))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new AccountAccess(7L, null, 11L, AccountRole.MEMBER, 5L, true, true))
+            assertThatThrownBy(() -> new AccountAccess(7L, null, 11L, AccountRole.MEMBER, 5L, true, BillingPlan.PLUS))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new AccountAccess(7L, 3L, 11L, null, 5L, true, true))
+            assertThatThrownBy(() -> new AccountAccess(7L, 3L, 11L, null, 5L, true, BillingPlan.PLUS))
                     .isInstanceOf(NullPointerException.class);
         }
     }

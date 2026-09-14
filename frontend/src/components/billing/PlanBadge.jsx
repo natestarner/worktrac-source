@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import HuddleMark from '../shared/HuddleMark';
+import { isKnownPlan } from '../../utils/planFeatures';
 
 // The household's plan, in the header, immediately left of the account menu.
 //
@@ -38,7 +39,7 @@ export default function PlanBadge() {
   const { account } = useAuth();
   const plan = account?.plan;
 
-  if (plan !== 'FREE' && plan !== 'PLUS') {
+  if (!isKnownPlan(plan)) {
     return null;
   }
 

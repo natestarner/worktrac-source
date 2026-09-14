@@ -23,6 +23,6 @@ public class AccountService {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new NotFoundException("We couldn't find that account."));
         account.setDefaultUnit(defaultUnit);
-        return AccountDto.from(account, subscriptionService.planFor(accountId));
+        return AccountDto.from(account, subscriptionService.entitledPlan(accountId));
     }
 }

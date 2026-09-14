@@ -51,28 +51,38 @@ class SubscriptionServiceTest {
         return subscription;
     }
 
+    // A row whose recorded tier is set, the way applyStripeState always leaves one. The overload
+    // above leaves plan at its FREE default, which for an ENTITLED status is the contradiction
+    // entitledPlan falls back on -- fine for the derivation tests, wrong for anything asserting a
+    // tier, because it would pass identically if the recorded tier were ignored entirely.
+    private Subscription subscription(SubscriptionStatus status, BillingPlan plan) {
+        Subscription subscription = subscription(status);
+        subscription.setPlan(plan);
+        return subscription;
+    }
+
     @Nested
     @DisplayName("statuses Stripe considers in good standing")
     class InGoodStanding {
 
         @Test
-        void activeIsPlus() {
-            assertThat(service.isPlus(subscription(SubscriptionStatus.ACTIVE))).isTrue();
+        void activeIsEntitled() {
+            assertThat(service.isEntitled(subscription(SubscriptionStatus.ACTIVE))).isTrue();
         }
 
         // No trial ships today, but enabling one is a Dashboard setting rather than a code change.
         // If that ever happens, a trialing household must not be silently locked out.
         @Test
-        void trialingIsPlus() {
-            assertThat(service.isPlus(subscription(SubscriptionStatus.TRIALING))).isTrue();
+        void trialingIsEntitled() {
+            assertThat(service.isEntitled(subscription(SubscriptionStatus.TRIALING))).isTrue();
         }
 
         // The one most likely to be "simplified" into a lockout. Stripe is still retrying the card
         // (Smart Retries); cutting access mid-dunning is how a recoverable payment failure turns
         // into a cancellation. They keep what they are paying for while the card is sorted out.
         @Test
-        void pastDueIsStillPlus() {
-            assertThat(service.isPlus(subscription(SubscriptionStatus.PAST_DUE))).isTrue();
+        void pastDueIsStillEntitled() {
+            assertThat(service.isEntitled(subscription(SubscriptionStatus.PAST_DUE))).isTrue();
         }
     }
 
@@ -81,11 +91,11 @@ class SubscriptionServiceTest {
     class Cancelled {
 
         @Test
-        void cancelledButInsidePaidPeriodIsPlus() {
+        void cancelledButInsidePaidPeriodIsEntitled() {
             Subscription subscription = subscription(SubscriptionStatus.CANCELED);
             subscription.setCurrentPeriodEnd(clock.instant().plus(Duration.ofDays(10)));
 
-            assertThat(service.isPlus(subscription)).isTrue();
+            assertThat(service.isEntitled(subscription)).isTrue();
         }
 
         // Expiry happens BY THE CLOCK -- no webhook is involved, and none is needed. This is the
@@ -94,16 +104,16 @@ class SubscriptionServiceTest {
         void cancelledBecomesFreeWhenThePeriodElapses() {
             Subscription subscription = subscription(SubscriptionStatus.CANCELED);
             subscription.setCurrentPeriodEnd(clock.instant().plus(Duration.ofDays(10)));
-            assertThat(service.isPlus(subscription)).isTrue();
+            assertThat(service.isEntitled(subscription)).isTrue();
 
             clock.advance(Duration.ofDays(11));
 
-            assertThat(service.isPlus(subscription)).isFalse();
+            assertThat(service.isEntitled(subscription)).isFalse();
         }
 
         @Test
         void cancelledWithNoPeriodEndIsFree() {
-            assertThat(service.isPlus(subscription(SubscriptionStatus.CANCELED))).isFalse();
+            assertThat(service.isEntitled(subscription(SubscriptionStatus.CANCELED))).isFalse();
         }
     }
 
@@ -112,19 +122,19 @@ class SubscriptionServiceTest {
     class NotEntitled {
 
         @Test
-        void freeIsNotPlus() {
-            assertThat(service.isPlus(subscription(SubscriptionStatus.FREE))).isFalse();
+        void freeIsNotEntitled() {
+            assertThat(service.isEntitled(subscription(SubscriptionStatus.FREE))).isFalse();
         }
 
         // Checkout was started and abandoned. Intent is not payment.
         @Test
-        void incompleteIsNotPlus() {
-            assertThat(service.isPlus(subscription(SubscriptionStatus.INCOMPLETE))).isFalse();
+        void incompleteIsNotEntitled() {
+            assertThat(service.isEntitled(subscription(SubscriptionStatus.INCOMPLETE))).isFalse();
         }
 
         @Test
-        void unpaidIsNotPlus() {
-            assertThat(service.isPlus(subscription(SubscriptionStatus.UNPAID))).isFalse();
+        void unpaidIsNotEntitled() {
+            assertThat(service.isEntitled(subscription(SubscriptionStatus.UNPAID))).isFalse();
         }
     }
 
@@ -139,7 +149,7 @@ class SubscriptionServiceTest {
             Subscription subscription = subscription(SubscriptionStatus.FREE);
             subscription.setComped(true);
 
-            assertThat(service.isPlus(subscription)).isTrue();
+            assertThat(service.isEntitled(subscription)).isTrue();
         }
 
         // A comp outlives a cancellation: someone who paid, cancelled, and was later comped is Plus.
@@ -149,7 +159,7 @@ class SubscriptionServiceTest {
             subscription.setCurrentPeriodEnd(clock.instant().minus(Duration.ofDays(30)));
             subscription.setComped(true);
 
-            assertThat(service.isPlus(subscription)).isTrue();
+            assertThat(service.isEntitled(subscription)).isTrue();
         }
     }
 
@@ -164,35 +174,85 @@ class SubscriptionServiceTest {
         void resolvesToFreeRatherThanThrowing() {
             when(repository.findByAccountId(any())).thenReturn(Optional.empty());
 
-            assertThat(service.isPlus(42L)).isFalse();
-            assertThat(service.planFor(42L)).isEqualTo(BillingPlan.FREE);
+            assertThat(service.isEntitled(42L)).isFalse();
+            assertThat(service.entitledPlan(42L)).isEqualTo(BillingPlan.FREE);
             assertThat(service.describe(42L).plan()).isEqualTo(BillingPlan.FREE);
         }
 
         @Test
         void nullSubscriptionIsFree() {
-            assertThat(service.isPlus((Subscription) null)).isFalse();
+            assertThat(service.isEntitled((Subscription) null)).isFalse();
         }
     }
 
     @Nested
-    @DisplayName("planFor / describe agree with isPlus")
+    @DisplayName("entitledPlan / describe agree with isEntitled")
     class DerivedViews {
 
         // These three must never be able to disagree: one derivation, three readers. A past-due
         // household is the case that catches a `status == ACTIVE` shortcut in any of them.
         @Test
         void pastDueReadsAsPlusEverywhere() {
-            Subscription subscription = subscription(SubscriptionStatus.PAST_DUE);
+            Subscription subscription = subscription(SubscriptionStatus.PAST_DUE, BillingPlan.PLUS);
             when(repository.findByAccountId(7L)).thenReturn(Optional.of(subscription));
 
-            assertThat(service.isPlus(7L)).isTrue();
-            assertThat(service.planFor(7L)).isEqualTo(BillingPlan.PLUS);
+            assertThat(service.isEntitled(7L)).isTrue();
+            assertThat(service.entitledPlan(7L)).isEqualTo(BillingPlan.PLUS);
 
             SubscriptionDto dto = service.describe(7L);
             assertThat(dto.plan()).isEqualTo(BillingPlan.PLUS);
             // The raw status still travels, because the screen needs it to explain WHY.
             assertThat(dto.status()).isEqualTo(SubscriptionStatus.PAST_DUE);
+        }
+
+        // ⚠️ The tier comes from the ROW, not from the fact that they are paying. With one paid
+        // tier those are indistinguishable, so this is the assertion that stops a future second
+        // paid tier from being silently flattened to PLUS by an `isEntitled ? PLUS : FREE`.
+        @Test
+        void theRecordedTierIsWhatEntitlementResolvesTo() {
+            Subscription subscription = subscription(SubscriptionStatus.ACTIVE, BillingPlan.PLUS);
+            when(repository.findByAccountId(7L)).thenReturn(Optional.of(subscription));
+
+            assertThat(service.entitledPlan(7L)).isEqualTo(BillingPlan.PLUS);
+            assertThat(service.entitledPlan(subscription)).isEqualTo(BillingPlan.PLUS);
+        }
+
+        // A lapse needs no write to take effect -- the same clock-driven property the CANCELED case
+        // has always had. The row still SAYS Plus; entitlement says otherwise and wins.
+        @Test
+        void aLapsedSubscriptionReadsFreeEvenThoughTheRowStillRecordsPlus() {
+            Subscription subscription = subscription(SubscriptionStatus.UNPAID, BillingPlan.PLUS);
+            when(repository.findByAccountId(7L)).thenReturn(Optional.of(subscription));
+
+            assertThat(service.entitledPlan(7L)).isEqualTo(BillingPlan.FREE);
+            assertThat(service.has(7L, PlanFeature.FULL_HISTORY)).isFalse();
+            assertThat(service.describe(7L).plan()).isEqualTo(BillingPlan.FREE);
+        }
+
+        // The contradiction branch: entitled, but the row records no tier. Only a hand-edited row
+        // reaches this, and the safe answer is the lowest PAID tier -- never FREE, which would
+        // clamp somebody who is demonstrably paying.
+        @Test
+        void anEntitledRowWithNoRecordedTierFallsBackToTheLowestPaidTier() {
+            Subscription subscription = subscription(SubscriptionStatus.ACTIVE, BillingPlan.FREE);
+            when(repository.findByAccountId(7L)).thenReturn(Optional.of(subscription));
+
+            assertThat(service.entitledPlan(7L)).isEqualTo(BillingPlan.PLUS);
+            assertThat(service.has(7L, PlanFeature.FULL_HISTORY)).isTrue();
+        }
+
+        // The gate every caller actually uses. Free holds no feature; Plus holds all three.
+        @Test
+        void hasAnswersFromTheFeatureMapRatherThanATierComparison() {
+            when(repository.findByAccountId(1L))
+                    .thenReturn(Optional.of(subscription(SubscriptionStatus.FREE, BillingPlan.FREE)));
+            when(repository.findByAccountId(2L))
+                    .thenReturn(Optional.of(subscription(SubscriptionStatus.ACTIVE, BillingPlan.PLUS)));
+
+            for (PlanFeature feature : PlanFeature.values()) {
+                assertThat(service.has(1L, feature)).as("FREE should not hold %s", feature).isFalse();
+                assertThat(service.has(2L, feature)).as("PLUS should hold %s", feature).isTrue();
+            }
         }
     }
 
@@ -245,7 +305,7 @@ class SubscriptionServiceTest {
             verify(events, never()).publishEvent(any(PlusUpgradedEvent.class));
         }
 
-        // PAST_DUE is already Plus (isPlus's own dunning-grace case) -- recovering FROM it back to
+        // PAST_DUE is already Plus (isEntitled's own dunning-grace case) -- recovering FROM it back to
         // ACTIVE is not an upgrade and must not re-welcome someone whose card was simply retried.
         @Test
         void pastDueRecoveringToActiveDoesNotRepublish() {

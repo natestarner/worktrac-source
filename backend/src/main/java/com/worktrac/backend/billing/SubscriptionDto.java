@@ -22,9 +22,9 @@ public record SubscriptionDto(
         boolean cancelAtPeriodEnd,
         boolean comped) {
 
-    public static SubscriptionDto from(Subscription subscription, boolean entitled) {
+    public static SubscriptionDto from(Subscription subscription, BillingPlan entitledPlan) {
         return new SubscriptionDto(
-                entitled ? BillingPlan.PLUS : BillingPlan.FREE,
+                entitledPlan,
                 subscription.getStatus(),
                 subscription.getBillingInterval(),
                 subscription.getCurrentPeriodEnd(),

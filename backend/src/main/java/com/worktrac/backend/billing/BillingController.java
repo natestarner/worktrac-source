@@ -87,7 +87,11 @@ public class BillingController {
 
         // Refuse when the household is already entitled. Without this, two devices (or two taps in
         // two tabs) can each open a checkout and end up with a household paying twice.
-        if (subscriptionService.isPlus(subscription)) {
+        //
+        // isEntitled, not a tier comparison: the question is "are they already paying", and any
+        // paid tier answers it. A second checkout is how a household ends up with two Stripe
+        // subscriptions regardless of which tiers they name.
+        if (subscriptionService.isEntitled(subscription)) {
             throw new ForbiddenException("This household already has Plus.");
         }
 

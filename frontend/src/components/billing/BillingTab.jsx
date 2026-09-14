@@ -23,6 +23,7 @@ import PlanChooser from './PlanChooser';
 import EmbeddedCheckout from './EmbeddedCheckout';
 import PlusCelebration from './PlusCelebration';
 import { PLUS_BENEFITS } from './planCopy';
+import { isPaidPlan, planIncludes } from '../../utils/planFeatures';
 
 // The household's plan, and where an upgrade happens.
 //
@@ -62,7 +63,7 @@ export default function BillingTab() {
     // member is a guaranteed 403; and a household that is not Plus has no working member logins to
     // warn about. Not offering a request the app knows will be refused is the same rule as not
     // offering a control that can only fail.
-    enabled: isOwner && account?.plan === 'PLUS',
+    enabled: isOwner && planIncludes(account?.plan, 'MEMBER_LOGINS'),
     staleTime: 60_000,
   });
 
@@ -97,7 +98,7 @@ export default function BillingTab() {
   // The entitlement answer, in preference order: the snapshot (always present, works offline),
   // then the query. Never `false` merely because a request has not come back yet -- that would be
   // the "unreachable server downgrades you" failure the contract forbids.
-  const isPlus = plan === 'PLUS' || subscription?.plan === 'PLUS';
+  const isPlus = isPaidPlan(plan) || isPaidPlan(subscription?.plan);
 
   // Stripe returns the browser to /app/billing?checkout=cs_... The backend reads that session
   // directly and applies it, so the upgrade is visible immediately rather than waiting on a

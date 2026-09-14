@@ -25,6 +25,7 @@ import LegalLinks from '../shared/LegalLinks';
 import { APP_BUILD } from '../../lib/appBuild';
 import { invalidateAfterImport } from '../../lib/queryClient';
 import Card from '../shared/Card';
+import { planIncludes } from '../../utils/planFeatures';
 
 // Every setting here is household-wide -- nothing is scoped to whichever person happens to be
 // active. Units and the shared tag vocabulary are account-level; the rest timer is a per-person
@@ -35,11 +36,12 @@ export default function AppSettingsTab() {
   const { account, people, refreshPeople } = useAuth();
   // The derived entitlement, carried in the auth snapshot -- so this reads correctly on a cold
   // offline boot rather than depending on a request that may not have come back. An UNKNOWN plan
-  // (a snapshot written before billing shipped) is treated as Plus here on purpose: showing the
-  // real control and letting the server answer is far better than telling a paying household its
-  // own import is unavailable.
+  // (a snapshot written before billing shipped, or one written by a NEWER build naming a tier this
+  // bundle has never heard of) is treated as entitled on purpose: showing the real control and
+  // letting the server answer is far better than telling a paying household its own import is
+  // unavailable. That polarity lives in planIncludes now rather than in this file.
   const plan = account?.plan;
-  const isPlus = plan !== 'FREE';
+  const canImport = planIncludes(plan, 'DATA_IMPORT');
   const { isMember, selfPersonId } = useAccountAccess();
   const { openConfirm } = useUI();
   const offlinePinned = useOfflinePin();
@@ -399,7 +401,7 @@ export default function AppSettingsTab() {
         {/* Importing is a Plus feature, so a Free household gets the explanation INSTEAD of a
             button that would 403. Exporting above is deliberately not gated on either plan --
             every household can always take its own data out. */}
-        {isPlus ? (
+        {canImport ? (
           <OfflineDisabledWrap message="Importing needs a connection.">
             <Button onClick={() => setShowImportModal(true)} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               Import data

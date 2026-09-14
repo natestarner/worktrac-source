@@ -331,10 +331,10 @@ public class AuthService {
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(),
                 user.getRole(), user.getTokenVersion());
         return AuthResponse.signedIn(token, UserDto.from(user),
-                AccountDto.from(account, subscriptionService.planFor(account.getId())),
+                AccountDto.from(account, subscriptionService.entitledPlan(account.getId())),
                 MembershipDto.from(membership,
                         ownerNameForMember(account.getId(), membership.getAccountRole()),
-                        subscriptionService.isPlus(account.getId())),
+                        subscriptionService.entitledPlan(account.getId())),
                 PersonDto.from(primaryPerson));
     }
 
@@ -452,7 +452,7 @@ public class AuthService {
                 .map(HouseholdChoiceDto::from)
                 .toList();
         return new MeResponse(UserDto.from(user),
-                AccountDto.from(account, subscriptionService.planFor(accountId)),
+                AccountDto.from(account, subscriptionService.entitledPlan(accountId)),
                 MembershipDto.from(access, ownerNameForMember(accountId, access.accountRole())),
                 personService.list(access),
                 households);

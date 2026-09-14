@@ -1,5 +1,6 @@
 package com.worktrac.backend.person;
 
+import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.common.NotFoundException;
@@ -58,11 +59,11 @@ class PersonGuardTest {
     }
 
     private static AccountAccess owner() {
-        return new AccountAccess(1L, ACCOUNT, 5L, AccountRole.OWNER, ME, true, true);
+        return new AccountAccess(1L, ACCOUNT, 5L, AccountRole.OWNER, ME, true, BillingPlan.PLUS);
     }
 
     private static AccountAccess member(boolean seesEveryone) {
-        return new AccountAccess(2L, ACCOUNT, 6L, AccountRole.MEMBER, ME, seesEveryone, true);
+        return new AccountAccess(2L, ACCOUNT, 6L, AccountRole.MEMBER, ME, seesEveryone, BillingPlan.PLUS);
     }
 
     @Nested

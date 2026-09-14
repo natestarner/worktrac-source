@@ -1,5 +1,7 @@
 package com.worktrac.backend.membership;
 
+import com.worktrac.backend.billing.BillingPlan;
+
 /**
  * The client's view of {@link AccountAccess}: who this login is inside this household, and what
  * that lets them see.
@@ -11,7 +13,7 @@ package com.worktrac.backend.membership;
  * <p><b>This drives chrome only.</b> The server has already decided; every list is filtered and
  * every write is guarded before anything here is sent. What it buys is a client that doesn't offer
  * a control it knows will be refused — the same relationship {@code AccountDto.plan} has with
- * {@code SubscriptionService.isPlus}, and it carries the same warning: never treat it as the
+ * {@code SubscriptionService.entitledPlan}, and it carries the same warning: never treat it as the
  * authority, and never re-derive a permission from it that the server didn't state.
  *
  * <p><b>{@code ownerName} answers "who do I ask?"</b> — the household owner's person name, or null
@@ -45,18 +47,18 @@ public record MembershipDto(String accountRole, Long personId, boolean membersSe
     /**
      * The login-time variant, where no {@link AccountAccess} has been resolved yet.
      *
-     * <p>{@code accountIsPro} is passed in rather than read off the membership because entitlement
+     * <p>{@code accountPlan} is passed in rather than read off the membership because entitlement
      * is not a column — it is derived from the subscription's state, including a time-dependent
-     * branch. Passing it keeps {@code SubscriptionService.isPlus} the single authority instead of
-     * this DTO growing a second opinion about what Plus means.
+     * branch. Passing it keeps {@code SubscriptionService.entitledPlan} the single authority
+     * instead of this DTO growing a second opinion about which tier a household is on.
      */
     public static MembershipDto from(AccountMembership membership, String ownerName,
-                                      boolean accountIsPro) {
+                                      BillingPlan accountPlan) {
         return new MembershipDto(
                 membership.getAccountRole().name(),
                 membership.getPerson() == null ? null : membership.getPerson().getId(),
                 membership.getAccount().isMembersSeeEveryone(),
                 ownerName,
-                MembershipStatus.forRole(membership.getAccountRole(), accountIsPro).name());
+                MembershipStatus.forRole(membership.getAccountRole(), accountPlan).name());
     }
 }

@@ -2,6 +2,7 @@ package com.worktrac.backend.membership;
 
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
+import com.worktrac.backend.billing.PlanFeature;
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.ConflictException;
 import com.worktrac.backend.common.NotFoundException;
@@ -242,7 +243,7 @@ public class MembershipInviteService {
         // A CONFLICT rather than a FORBIDDEN: they hold MANAGE_LOGINS perfectly well, and will be
         // able to do exactly this the moment the household is Plus. 403 would say "not you", which
         // is the wrong diagnosis and points at the wrong fix.
-        if (!subscriptionService.isPlus(access.accountId())) {
+        if (!subscriptionService.has(access.accountId(), PlanFeature.MEMBER_LOGINS)) {
             throw new ConflictException(
                     "Personal logins are part of Huddle Plus. Upgrade and you can invite "
                             + person.getName() + " straight away.");

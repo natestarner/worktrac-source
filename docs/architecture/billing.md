@@ -12,7 +12,7 @@ Invariants: `.claude/rules/billing.md`. This file is the reasoning behind them.
 Everything else is free forever, **including full data export on both plans**. That last one is a
 deliberate reversal of an earlier draft, and it removed more than it added: no self-serve
 GDPR/CCPA gap, no admin export endpoint to make a privacy-policy commitment keepable, and no second
-entitlement predicate (`canExport`) diverging from `isPlus`. Export mainly appeals to people who
+entitlement predicate (`canExport`) diverging from the plan itself. Export mainly appeals to people who
 intend to leave, and gating the exit is the weakest thing to charge for. It also resolved a latent
 contradiction — `HelpTab.jsx` already tells people to "export your data first" before deleting an
 account, advice that would have been impossible to follow for exactly the Free users most likely to
@@ -21,9 +21,17 @@ be deleting.
 ## Why entitlement is derived rather than stored
 
 The obvious design is an `is_plus` column. It is wrong in four separate ways, and the derivation in
-`SubscriptionService.isPlus` gets all four right in one expression — see the rule file for the
+`SubscriptionService.isEntitled` gets all four right in one expression — see the rule file for the
 enumeration. The short version: entitlement is a function of *status and time*, and any stored copy
 of it is stale the moment the clock moves.
+
+That column would have been wrong a fifth way, which only became visible once a second paid tier
+was on the roadmap: a boolean cannot answer "which tier". The derivation is now split in two —
+`isEntitled` (is this subscription paying?) and `entitledPlan` (paying, so which tier?) — and
+capability comes from `BillingPlan.features()`, the one place a tier becomes anything. Callers ask
+for a `PlanFeature`, never for a tier, the same way they ask for a `Permission` and never for a
+role. Keeping the *paying* half untouched through that split was deliberate: those four cases were
+expensive to get right and none of them has anything to do with tiers.
 
 The most consequential of the four is that **expiry happens by the clock, not by a webhook**. A
 cancelled household stops being Plus when its paid period ends whether or not Stripe's

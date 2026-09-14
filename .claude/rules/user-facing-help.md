@@ -45,7 +45,7 @@ that isn't one.
 | the rest timer targets 90s and freezes at 10 min | `utils/restTarget.js` |
 | a line-chart dot is one session; three metrics are a best set, two are session totals | `components/trends/exerciseMetrics.js`, `weeklyMetrics.js` |
 | the consistency grid is always 26 weeks and ignores the range toggle, **and that only the last 90 days of it fill in on Free** | `components/trends/**`, `SubscriptionService.FREE_HISTORY_WINDOW` |
-| what Free and Plus each include, that export is free on both, and that PR detection reads the whole history even when display is clamped | `SubscriptionService` (the `isPlus` derivation and the window), `billing/**`, `csvimport/ImportController` |
+| what Free and Plus each include, that export is free on both, and that PR detection reads the whole history even when display is clamped | `SubscriptionService` (the `isEntitled` derivation, `BillingPlan.features()` and the window), `billing/**`, `csvimport/ImportController` |
 | exactly which actions work offline vs. need a connection | `useRequireOnline.js`, `useGatedMutation.js`, or moving a write between the two |
 | import requires `Exercise` + `Date` + (`Reps` or `Duration (sec)`), and every other column's default | `csvimport/**`, `export/**` |
 | adding an exercise you already have opens it instead of duplicating | `utils/exerciseDuplicates.js` |
