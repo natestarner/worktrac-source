@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { queryClient } from '../../lib/queryClient';
 import { getUnsyncedWriteCount } from '../../hooks/useOutboxCount';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
+import { planIncludes } from '../../utils/planFeatures';
+import { accountVocab, capitalize } from '../../utils/accountVocab';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 // `booting` is passed by AppShellSkeleton only. That skeleton renders a REAL Header so the
@@ -23,6 +25,7 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 // See docs/incidents/2026-08-13-e2e-parallel-flakiness.md.
 export default function UserMenu({ booting = false }) {
   const { people, logout, isAdmin, accounts, account, switchAccount } = useAuth();
+  const vocab = accountVocab(account?.vocab);
   const { selfPersonId } = useAccountAccess();
   const navigate = useNavigate();
   const location = useLocation();
@@ -189,6 +192,20 @@ export default function UserMenu({ booting = false }) {
             zIndex: 'var(--z-header-menu)',
           }}
         >
+          {/* Pro's entry point, and the ONE place ROSTER is asked about. The endpoint itself is
+              gated on VIEW_OTHER_PEOPLE rather than on the plan (see PlanFeature.ROSTER): a roster
+              of four people who live in the same house, sorted by who trained least recently, is
+              not a useful screen, while a roster of forty clients is the whole product. That is a
+              discovery decision rather than an access one, so this hides the door without the
+              server refusing anyone who finds it anyway.
+
+              The label is the account's own noun -- "Clients" on Pro, "Athletes" when Team lands.
+              Checked against every other label in this menu for the substring rule: it shares none
+              with Profile / App Settings / Plan & billing / Help / Contact Us / Admin Portal /
+              Logout / Log out anyway / Cancel, and none of them contains it. */}
+          {planIncludes(account?.plan, 'ROSTER') && (
+            <MenuItem label={`${capitalize(vocab.member)}s`} onClick={() => go('/app/roster')} />
+          )}
           <MenuItem label="Profile" onClick={() => go('/app/profile')} />
           <MenuItem label="App Settings" onClick={() => go('/app/settings')} />
           {/* "Plan & billing" -- checked against every other label on this screen for the

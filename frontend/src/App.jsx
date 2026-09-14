@@ -32,6 +32,7 @@ import RoutinesTab from './components/routines/RoutinesTab';
 import TrendsTab from './components/trends/TrendsTab';
 import AppSettingsTab from './components/settings/AppSettingsTab';
 import ProfileTab from './components/profile/ProfileTab';
+import RosterTab from './components/roster/RosterTab';
 import ContactTab from './components/contact/ContactTab';
 // Eagerly imported like every other route. React.lazy would trim ~6KB gzipped and add the app's
 // only Suspense boundary plus a second route-loading mechanism -- and in an app whose whole point
@@ -159,6 +160,10 @@ export default function App() {
                 <Route path="trends" element={<TrendsTab />} />
                 <Route path="settings" element={<AppSettingsTab />} />
                 <Route path="profile" element={<ProfileTab />} />
+                {/* Eagerly imported like every other route -- see frontend-core.md on why this app
+                    has no React.lazy: a route that must fetch a chunk is a worse failure shape
+                    than one that cannot, even when the chunk is precached. */}
+                <Route path="roster" element={<RosterTab />} />
                 <Route path="billing" element={<BillingTab />} />
                 <Route path="help" element={<HelpTab />} />
                 <Route path="contact" element={<ContactTab />} />

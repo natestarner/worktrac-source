@@ -5,6 +5,7 @@ import { listTags } from '../api/tags';
 import { listRoutines } from '../api/routines';
 import { getLiveSession, getHistory, getHistoryWindow } from '../api/sessions';
 import { getPrs } from '../api/stats';
+import { listRoster } from '../api/roster';
 
 // How fresh a warmed entry needs to be before prefetchQuery bothers refetching it -- kept short
 // (not the global 60s default) so the periodic re-run in useOfflineCacheWarming.js actually
@@ -135,6 +136,17 @@ export async function warmOfflineCache(
   const targets = [
     { queryKey: queryKeys.exercises(), queryFn: listExercises },
     { queryKey: queryKeys.tags(), queryFn: listTags },
+    // The trainer roster. Warmed so it degrades to last-known rather than a spinner over a request
+    // that will not succeed -- the one screen somebody opens BETWEEN sessions, which is exactly
+    // when a gym basement has no signal.
+    //
+    // ⚠️ refreshAfterRestore is deliberately OFF. It holds no unsent optimistic state, so forcing a
+    // refetch would destroy nothing -- but it is a pure read whose numbers move once a day at most,
+    // and the boot warm is the one moment the network is busiest. Ordinary staleness is right here.
+    //
+    // Undefined weeks, matching what RosterTab asks for, so the warmed entry is the one the screen
+    // reads rather than a sibling key nothing observes.
+    { queryKey: queryKeys.roster(undefined), queryFn: () => listRoster() },
     ...peopleToWarm(people, { selfPersonId, activePersonId })
       .flatMap((person) => personWarmTargets(person.id)),
   ];

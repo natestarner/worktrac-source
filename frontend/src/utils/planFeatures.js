@@ -21,7 +21,7 @@ export const PLAN_FEATURES = {
   //
   // PRIVATE_MEMBERS arrived with the member-visibility toggle in AppSettingsTab. MANAGER_ROLE is
   // still absent on purpose: the server grants it, but no client control asks about it yet.
-  PRO: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS', 'PRIVATE_MEMBERS'],
+  PRO: ['FULL_HISTORY', 'DATA_IMPORT', 'MEMBER_LOGINS', 'PRIVATE_MEMBERS', 'ROSTER'],
 };
 
 /**

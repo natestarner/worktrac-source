@@ -47,5 +47,20 @@ public enum PlanFeature {
      * logins is not thereby buying an assistant, and an assistant is the thing a practice with more
      * than one trainer actually needs.
      */
-    MANAGER_ROLE
+    MANAGER_ROLE,
+
+    /**
+     * The trainer roster — everyone on the account, ordered by who has gone quietest.
+     *
+     * <p>⚠️ CHROME ONLY, and the one feature in this enum the SERVER never refuses on. Every number
+     * on the roster is derived from workouts the caller can already read one person at a time, so
+     * refusing the aggregate would protect nothing — it would decline a convenience while leaving
+     * the information reachable. {@code GET /api/account/roster} is therefore gated on
+     * {@code VIEW_OTHER_PEOPLE} alone.
+     *
+     * <p>What this grants is the ENTRY POINT. A roster of four people who live in the same house,
+     * sorted by who trained least recently, is not a useful screen; a roster of forty clients is
+     * the whole product. That is a discovery decision, not an access one.
+     */
+    ROSTER
 }

@@ -52,6 +52,7 @@ public enum BillingPlan {
         EnumSet<PlanFeature> features = EnumSet.copyOf(PLUS_FEATURES);
         features.add(PlanFeature.PRIVATE_MEMBERS);
         features.add(PlanFeature.MANAGER_ROLE);
+        features.add(PlanFeature.ROSTER);
         return Collections.unmodifiableSet(features);
     }
 
