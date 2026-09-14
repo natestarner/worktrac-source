@@ -23,5 +23,29 @@ public enum PlanFeature {
     DATA_IMPORT,
 
     /** A personal login for anyone in the household. Without it a MEMBER is PAUSED_PLAN. */
-    MEMBER_LOGINS
+    MEMBER_LOGINS,
+
+    /**
+     * The account may decide whether its members see each other, rather than always seeing
+     * everyone.
+     *
+     * <p>This is what makes {@code accounts.members_see_everyone} settable. Without it the column
+     * is forced ON — which is right for a family, where everyone expects to see everyone, and wrong
+     * for a trainer whose clients must not see each other's numbers.
+     *
+     * <p>⚠️ It gates the SETTING, not the reading. Every account still HAS the column and every
+     * guard still honours it; a plan without this feature simply cannot change it away from the
+     * family default. That is deliberate: dropping the tier must not silently expose one client's
+     * training to another, so the value is left exactly as it was (see AccountService).
+     */
+    PRIVATE_MEMBERS,
+
+    /**
+     * The account may hand out a MANAGER login — full reach over everyone, no say over the account.
+     *
+     * <p>Separate from MEMBER_LOGINS because they are different products: a family buying personal
+     * logins is not thereby buying an assistant, and an assistant is the thing a practice with more
+     * than one trainer actually needs.
+     */
+    MANAGER_ROLE
 }

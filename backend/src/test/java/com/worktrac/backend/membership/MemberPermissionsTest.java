@@ -19,6 +19,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -65,11 +67,12 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
     private long ownerPersonId;
     private long memberPersonId;
     private long accountId;
+    private String ownerEmail;
 
     @BeforeEach
     void setUpHouseholdWithAMember() throws Exception {
         String suffix = UUID.randomUUID().toString().substring(0, 8);
-        String ownerEmail = "owner-" + suffix + "@example.com";
+        ownerEmail = "owner-" + suffix + "@example.com";
         String memberEmail = "member-" + suffix + "@example.com";
 
         ownerToken = RegistrationTestSupport
@@ -120,6 +123,34 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
 
     private JsonNode json(org.springframework.test.web.servlet.ResultActions actions) throws Exception {
         return objectMapper.readTree(actions.andReturn().getResponse().getContentAsString());
+    }
+
+    /**
+     * A SECOND member login, bound to a new person — the shape a Pro roster has and the only way to
+     * assert that one member cannot see another's.
+     *
+     * <p>Goes through the same test-support route the class already uses for the first one, so it
+     * produces a genuine membership rather than a hand-built row.
+     */
+    private String memberTokenForNewPerson(String personName) throws Exception {
+        String email = "huddle+e2e-" + personName.toLowerCase() + "-" + accountId + "@starner.co";
+        mockMvc.perform(post("/api/people")
+                        .header("Authorization", bearer(ownerToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("name", personName))))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/auth/test/member")
+                        .header("X-E2E-Test-Key", "local-dev-only-e2e-test-key-do-not-use-elsewhere")
+                        .param("ownerEmail", ownerEmail)
+                        .param("personName", personName)
+                        .param("memberEmail", email)
+                        .param("password", "password123"))
+                .andExpect(status().isNoContent());
+        return json(mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(
+                        Map.of("email", email, "password", "password123")))))
+                .get("token").asText();
     }
 
     private void setVisibility(boolean membersSeeEveryone) {
@@ -253,6 +284,70 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
 
             assertThat(people).hasSize(1);
             assertThat(people.get(0).get("id").asLong()).isEqualTo(memberPersonId);
+        }
+
+        /**
+         * ⚠️ THE EXERCISE CATALOGUE IS THE ONE PLACE THE PRIVACY CLAIM COULD BE QUIETLY FALSE.
+         *
+         * <p>Exercises are ACCOUNT-scoped, not person-scoped, so hiding a sibling's history says
+         * nothing about their exercise NAMES. Before the catalogue filter, a client creating
+         * "Rehab -- post-op shoulder" had it appear in every other client's picker: no workout data
+         * leaked, but free text somebody typed about themselves did, which is exactly what Pro
+         * sells the absence of.
+         *
+         * <p>Asserted from BOTH sides, because only the pair proves a filter rather than an outage:
+         * the sibling must not see it, and the owner must still see it.
+         */
+        @Test
+        void anotherMembersOwnExerciseIsNotInTheirCatalogue() throws Exception {
+            setVisibility(false);
+
+            // The member invents one, through the ordinary durable create path.
+            mockMvc.perform(post("/api/exercises")
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("name", "Rehab -- post-op shoulder"))))
+                    .andExpect(status().isOk());
+
+            // The OWNER still sees it: they can see every person in the account, so hiding a row
+            // from them would be theatre -- and a trainer has to be able to see what a client added.
+            assertThat(catalogueNames(ownerToken)).contains("Rehab -- post-op shoulder");
+
+            // A SECOND member does not. This is the assertion the feature exists for.
+            String otherMemberToken = memberTokenForNewPerson("Marcus");
+            assertThat(catalogueNames(otherMemberToken)).doesNotContain("Rehab -- post-op shoulder");
+
+            // ...and the creator still sees their own, or the filter has broken the thing it was
+            // protecting. A test asserting only the absence would pass against a catalogue that
+            // returned nothing at all.
+            assertThat(catalogueNames(memberToken)).contains("Rehab -- post-op shoulder");
+        }
+
+        // With visibility ON -- every family account, by construction -- nothing changes. The
+        // shared catalogue is the whole point of a household, and this is what stops the Pro filter
+        // leaking into the tier it was never meant to touch.
+        @Test
+        void withVisibilityOnTheCatalogueStaysShared() throws Exception {
+            setVisibility(true);
+
+            mockMvc.perform(post("/api/exercises")
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("name", "Family Farmer Carry"))))
+                    .andExpect(status().isOk());
+
+            String otherMemberToken = memberTokenForNewPerson("Uriah");
+            assertThat(catalogueNames(otherMemberToken)).contains("Family Farmer Carry");
+        }
+
+        private List<String> catalogueNames(String token) throws Exception {
+            JsonNode rows = json(mockMvc.perform(get("/api/exercises")
+                    .header("Authorization", bearer(token))));
+            List<String> names = new ArrayList<>();
+            rows.forEach(row -> names.add(row.get("name").asText()));
+            return names;
         }
     }
 

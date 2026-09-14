@@ -42,14 +42,16 @@ public enum BillingPlan {
     // retyped, so a feature added to Plus cannot be silently missing from the tier above it --
     // which would present as a household paying more and getting less.
     //
-    // Today that is the whole of it: Pro is purchasable and priced by client count, but the things
-    // that make it a trainer product (private clients, the manager role, the roster, programs) are
-    // added by the phases that ENFORCE them. A PlanFeature nothing checks is a gate nobody can
-    // fail, so declaring them early would be capability on paper only.
+    // The two Pro-specific ones are what make it a trainer product rather than a bigger Plus:
+    // clients who cannot see each other, and an assistant who can see all of them. The roster and
+    // programs are added by the phases that ENFORCE them -- a PlanFeature nothing checks is a gate
+    // nobody can fail, so declaring one early is capability on paper only.
     private static final Set<PlanFeature> PRO_FEATURES = proFeatures();
 
     private static Set<PlanFeature> proFeatures() {
         EnumSet<PlanFeature> features = EnumSet.copyOf(PLUS_FEATURES);
+        features.add(PlanFeature.PRIVATE_MEMBERS);
+        features.add(PlanFeature.MANAGER_ROLE);
         return Collections.unmodifiableSet(features);
     }
 

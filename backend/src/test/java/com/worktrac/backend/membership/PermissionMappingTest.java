@@ -38,6 +38,58 @@ class PermissionMappingTest {
     }
 
     @Nested
+    @DisplayName("MANAGER")
+    class Manager {
+
+        // Everything about the PEOPLE, nothing about the ACCOUNT. An assistant trainer runs the
+        // roster; they do not decide what the practice pays for or whether it continues to exist.
+        @Test
+        void holdsEverythingExceptTheFourAccountLevelPermissions() {
+            EnumSet<Permission> expected = EnumSet.allOf(Permission.class);
+            expected.remove(Permission.MANAGE_BILLING);
+            expected.remove(Permission.DELETE_ACCOUNT);
+            expected.remove(Permission.MANAGE_HOUSEHOLD);
+            expected.remove(Permission.EXPORT_ACCOUNT_DATA);
+
+            assertThat(AccountRole.MANAGER.permissions(true))
+                    .containsExactlyInAnyOrderElementsOf(expected);
+        }
+
+        // ⚠️ EXPORT_ACCOUNT_DATA is the least obvious exclusion and the one most likely to be
+        // "fixed" by someone who notices a manager can read every person anyway. That permission
+        // was split off from per-person export precisely so "can see everyone" could not silently
+        // become "can walk out with the whole roster in one click" — an argument that applies with
+        // MORE force to an assistant than to a family member. A manager can still export any one
+        // client, which is what an assistant actually needs.
+        @Test
+        void cannotWalkOutWithTheWholeAccountInOneFile() {
+            assertThat(AccountRole.MANAGER.permissions(true)).doesNotContain(Permission.EXPORT_ACCOUNT_DATA);
+            assertThat(AccountRole.MANAGER.permissions(true)).contains(Permission.VIEW_OTHER_PEOPLE);
+        }
+
+        // The member-visibility setting decides what a MEMBER sees. A manager sees everyone either
+        // way — hiding a client from the person running the practice would be theatre, and it is
+        // the whole point of the role.
+        @Test
+        void isUnaffectedByTheMemberVisibilitySetting() {
+            assertThat(AccountRole.MANAGER.permissions(false))
+                    .isEqualTo(AccountRole.MANAGER.permissions(true));
+        }
+
+        // ⚠️ THIS IS A DELIBERATE ASYMMETRY, STATED SO IT IS NOT MISTAKEN FOR AN OVERSIGHT.
+        // OWNER_PERMISSIONS is EnumSet.allOf, so a permission added later is granted to owners
+        // automatically; MANAGER's set is enumerated, so it is NOT. That fails closed, which is the
+        // right direction — but it is silent, and the symptom is "the assistant cannot do the new
+        // thing" rather than anything that throws. When you add a Permission, decide here whether a
+        // manager holds it.
+        @Test
+        void doesNotInheritNewPermissionsTheWayAnOwnerDoes() {
+            assertThat(AccountRole.MANAGER.permissions(true))
+                    .isNotEqualTo(AccountRole.OWNER.permissions(true));
+        }
+    }
+
+    @Nested
     @DisplayName("MEMBER")
     class Member {
 

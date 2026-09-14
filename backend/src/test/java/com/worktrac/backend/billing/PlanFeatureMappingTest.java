@@ -62,6 +62,42 @@ class PlanFeatureMappingTest {
         void isPaid() {
             assertThat(BillingPlan.PLUS.isPaid()).isTrue();
         }
+
+        // A family tier must NOT be able to make its members private. Free and Plus are forced to
+        // "everyone sees everyone" by not holding this, which is what replaced Account's missing
+        // setter as the enforcement -- see V66 and Account.setMembersSeeEveryone.
+        @Test
+        void cannotMakeItsMembersPrivate() {
+            assertThat(BillingPlan.PLUS.has(PlanFeature.PRIVATE_MEMBERS)).isFalse();
+            assertThat(BillingPlan.FREE.has(PlanFeature.PRIVATE_MEMBERS)).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("PRO")
+    class Pro {
+
+        // ⚠️ Built FROM Plus's set rather than retyped, so a feature added to Plus cannot be
+        // silently missing from the tier above it -- which would present as a household paying
+        // more and getting less. This is the assertion that keeps that true.
+        @Test
+        void holdsEverythingPlusHolds() {
+            assertThat(BillingPlan.PRO.features())
+                    .containsAll(BillingPlan.PLUS.features());
+        }
+
+        // The two that make it a trainer product rather than a bigger Plus: clients who cannot see
+        // each other, and an assistant who can see all of them.
+        @Test
+        void addsPrivateMembersAndTheManagerRole() {
+            assertThat(BillingPlan.PRO.features())
+                    .contains(PlanFeature.PRIVATE_MEMBERS, PlanFeature.MANAGER_ROLE);
+        }
+
+        @Test
+        void isPaid() {
+            assertThat(BillingPlan.PRO.isPaid()).isTrue();
+        }
     }
 
     @Nested

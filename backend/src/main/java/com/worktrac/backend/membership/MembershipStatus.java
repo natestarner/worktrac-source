@@ -44,8 +44,21 @@ public enum MembershipStatus {
      * while {@code /me} is documented as the single authority. Same rule as
      * {@code AccountRole.permissions()} being the only role→authority map.
      */
+    /**
+     * ⚠️ EVERY ROLE BUT OWNER PAUSES, not just MEMBER.
+     *
+     * <p>A MANAGER's login is one of the logins a paid plan is paying for, exactly like a member's,
+     * so a lapse suspends it too. And the reason an OWNER is exempt applies to nobody else: they
+     * are the only role holding {@code MANAGE_BILLING}, so they are the only one who can return
+     * the account to a paid plan. A manager cannot, which makes pausing them recoverable in the
+     * same way — and NOT pausing them would hand a lapsed account a login with full reach over
+     * every person in it.
+     *
+     * <p>Expressed as {@code != OWNER} rather than as a list of the roles that pause, so a role
+     * added later pauses by default. That direction fails closed.
+     */
     public static MembershipStatus forRole(AccountRole role, BillingPlan accountPlan) {
-        return role == AccountRole.MEMBER && !accountPlan.has(PlanFeature.MEMBER_LOGINS)
+        return role != AccountRole.OWNER && !accountPlan.has(PlanFeature.MEMBER_LOGINS)
                 ? PAUSED_PLAN
                 : ACTIVE;
     }

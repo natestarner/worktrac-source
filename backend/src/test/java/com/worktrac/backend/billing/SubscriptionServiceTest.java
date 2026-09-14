@@ -352,18 +352,31 @@ class SubscriptionServiceTest {
             assertThat(service.has(7L, PlanFeature.FULL_HISTORY)).isTrue();
         }
 
-        // The gate every caller actually uses. Free holds no feature; Plus holds all three.
+        // The gate every caller actually uses. Asserts DELEGATION -- that has() answers from
+        // BillingPlan.features() for whatever tier the household resolves to -- rather than
+        // restating the map, which is PlanFeatureMappingTest's job. Restating it here is how two
+        // tests end up disagreeing about what a tier includes.
         @Test
         void hasAnswersFromTheFeatureMapRatherThanATierComparison() {
             when(repository.findByAccountId(1L))
                     .thenReturn(Optional.of(subscription(SubscriptionStatus.FREE, BillingPlan.FREE)));
             when(repository.findByAccountId(2L))
                     .thenReturn(Optional.of(subscription(SubscriptionStatus.ACTIVE, BillingPlan.PLUS)));
+            when(repository.findByAccountId(3L))
+                    .thenReturn(Optional.of(subscription(SubscriptionStatus.ACTIVE, BillingPlan.PRO)));
 
             for (PlanFeature feature : PlanFeature.values()) {
-                assertThat(service.has(1L, feature)).as("FREE should not hold %s", feature).isFalse();
-                assertThat(service.has(2L, feature)).as("PLUS should hold %s", feature).isTrue();
+                assertThat(service.has(1L, feature))
+                        .as("FREE.has(%s)", feature).isEqualTo(BillingPlan.FREE.has(feature));
+                assertThat(service.has(2L, feature))
+                        .as("PLUS.has(%s)", feature).isEqualTo(BillingPlan.PLUS.has(feature));
+                assertThat(service.has(3L, feature))
+                        .as("PRO.has(%s)", feature).isEqualTo(BillingPlan.PRO.has(feature));
             }
+
+            // ...and the map is not vacuously all-true: the two Pro-only features separate the tiers.
+            assertThat(service.has(2L, PlanFeature.PRIVATE_MEMBERS)).isFalse();
+            assertThat(service.has(3L, PlanFeature.PRIVATE_MEMBERS)).isTrue();
         }
     }
 

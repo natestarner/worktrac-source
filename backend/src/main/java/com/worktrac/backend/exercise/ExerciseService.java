@@ -49,13 +49,54 @@ public class ExerciseService {
     // one -- see .claude/rules/backend-core.md.
     @Transactional(readOnly = true)
     public List<ExerciseDto> list(AccountAccess access) {
-        List<Exercise> exercises = exerciseRepository.findVisibleToAccount(access.accountId());
+        List<Exercise> exercises = catalogueFor(access);
         // ⚠️ Resolved ONCE, outside the mapping below. Per-row it is an N+1 across the whole
         // catalog -- see ExerciseAttributionResolver.
         Map<Long, ExerciseAttribution> attribution = attributionResolver.resolve(access, exercises);
         return exercises.stream()
                 .map(exercise -> ExerciseDto.from(exercise, attribution.get(exercise.getId())))
                 .toList();
+    }
+
+    /**
+     * The catalogue this login may SEE, which is not always the whole account's.
+     *
+     * <p>⚠️ ONE PREDICATE, TWO QUERIES, AND THE PREDICATE IS THE WHOLE FEATURE. An account whose
+     * members see everyone (every family account, by construction) gets the account-wide catalogue
+     * it always got. An account with private members — a Pro practice — hides rows created by
+     * OTHER members from a member, because an exercise name is free text somebody typed about
+     * themselves and a roster of strangers is not a family.
+     *
+     * <p>An OWNER or MANAGER always gets the whole catalogue: they can already see every person in
+     * the account, so hiding a row from them would be theatre.
+     *
+     * <p>⚠️ THIS FILTERS THE READ AND NEVER THE WRITE. {@code add} below must stay able to create
+     * an exercise for anybody, because it is a durable offline write and a 403 there would discard
+     * the create permanently along with every set queued behind its temp id. Filtering the
+     * catalogue costs nothing; refusing the create would cost somebody their workout.
+     */
+    private List<Exercise> catalogueFor(AccountAccess access) {
+        if (seesWholeCatalogue(access)) {
+            return exerciseRepository.findVisibleToAccount(access.accountId());
+        }
+        return exerciseRepository.findVisibleToMember(access.accountId(), access.userId());
+    }
+
+    /** The dedup lookup, scoped exactly as {@link #catalogueFor} is. The two must not diverge. */
+    private List<Exercise> dedupCandidates(AccountAccess access, String name, String trackingType) {
+        if (seesWholeCatalogue(access)) {
+            return exerciseRepository.findVisibleByNameAndTrackingType(
+                    access.accountId(), name, trackingType);
+        }
+        return exerciseRepository.findVisibleToMemberByNameAndTrackingType(
+                access.accountId(), access.userId(), name, trackingType);
+    }
+
+    // ⚠️ Asks for the PERMISSION, not for the role or the tier. VIEW_OTHER_PEOPLE is what an OWNER
+    // and a MANAGER hold and a private member does not, so this stays correct as roles are added
+    // without becoming a second place that branches on one.
+    private static boolean seesWholeCatalogue(AccountAccess access) {
+        return access.membersSeeEveryone() || access.has(Permission.VIEW_OTHER_PEOPLE);
     }
 
     // ⚠️ NO PERMISSION CHECK LIVES IN HERE, and that is structural rather than an oversight.
@@ -108,8 +149,13 @@ public class ExerciseService {
         // sharing a name. It needs a genuine cross-device offline race, it is no worse than today,
         // and the alternative -- the server silently renaming what the client asked for -- is worse
         // than the gap.
-        List<Exercise> sameNameAndMeasure =
-                exerciseRepository.findVisibleByNameAndTrackingType(accountId, name, trackingType);
+        //
+        // ⚠️ SCOPED TO WHAT THIS LOGIN CAN SEE, for the same reason the catalogue is. Resolving a
+        // create against a row the caller cannot see would tell them "you already have this" about
+        // an exercise that then never appears in their picker — a worse outcome than the duplicate
+        // row the dedup was avoiding, and a confusing one to report. Two private clients ending up
+        // with their own "Rehab" rows is the correct answer, not a bug.
+        List<Exercise> sameNameAndMeasure = dedupCandidates(access, name, trackingType);
         if (!sameNameAndMeasure.isEmpty()) {
             // Same as the idempotency branch: this row is whoever's it already was.
             Exercise existing = sameNameAndMeasure.get(0);
