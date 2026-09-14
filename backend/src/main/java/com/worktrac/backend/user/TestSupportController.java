@@ -263,33 +263,6 @@ public class TestSupportController {
         return ResponseEntity.noContent().build();
     }
 
-    // Flips accounts.members_see_everyone for one household.
-    //
-    // ⚠️ A DIRECT UPDATE, on purpose. Account has NO setter for this column and no endpoint sets
-    // it -- that absence is what forces Plus/Family to "everyone sees everyone" by construction
-    // rather than by a check somebody could flip (see V66). Adding a setter for the benefit of
-    // tests would hand production code the very lever the design removes, so the mutation lives
-    // here instead, inside a controller whose bean does not exist outside local/lower.
-    //
-    // The Team tier is what adds a real setter, service method and toggle.
-    @PostMapping("/api/auth/test/member-visibility")
-    public ResponseEntity<Void> setMemberVisibility(
-            @RequestParam String ownerEmail,
-            @RequestParam boolean membersSeeEveryone,
-            @RequestHeader(value = "X-E2E-Test-Key", required = false) String testKey) {
-        if (!keyMatches(testKey)) {
-            return ResponseEntity.notFound().build();
-        }
-        Optional<Account> account = ownedAccount(ownerEmail);
-        if (account.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-        jdbcTemplate.update("UPDATE accounts SET members_see_everyone = ? WHERE id = ?",
-                membersSeeEveryone ? 1 : 0, account.get().getId());
-        accountAccessService.invalidateAccount(account.get().getId());
-        return ResponseEntity.noContent().build();
-    }
-
     /**
      * The outstanding invite for a household, with a token that will actually work.
      *

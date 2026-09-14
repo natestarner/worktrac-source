@@ -231,15 +231,16 @@ test.describe('Member logins', () => {
     await expect(page.getByRole('button', { name: /note for this session/ })).toBeDisabled();
   });
 
-  // The Team-tier seam. The product ships visibility forced ON with no endpoint and no UI, so
-  // this profile-gated route is the only way to reach the OFF path -- which is what keeps it
-  // exercised code rather than dead code waiting to rot.
+  // Visibility OFF is a PRO household -- a private client. It used to be reachable on any tier via
+  // a test-support route, which was the only way in while the column had no endpoint at all (V66).
+  // Now that Pro owns the setting, forcing it onto a Plus household would be testing a state the
+  // product cannot produce, so this registers the tier the behaviour actually belongs to.
   test('with household visibility off, a member sees only themselves', async ({ page, request }) => {
     const ownerEmail = await registerHousehold(page, request, 'Nate');
 
     await addPerson(page, 'Sam');
 
-    const member = await addMemberLogin(page, request, ownerEmail, 'Sam');
+    const member = await addMemberLogin(page, request, ownerEmail, 'Sam', undefined, 'PRO');
     await setMemberVisibility(request, ownerEmail, false);
     await loginAs(page, member.email, member.password);
 

@@ -93,22 +93,31 @@ export async function registerHousehold(
   return email;
 }
 
-// Puts a household on Plus (or back on Free) without Stripe existing at all -- the same escape
+// Puts a household on any tier (or back on Free) without Stripe existing at all -- the same escape
 // hatch e2eNoopRecipientPattern provides for real email sends, and the reason this suite needs no
 // Stripe credentials in any environment.
 //
-// The backend writes `comped`, so a household set Plus here is entitled through the SAME single
-// derivation a paying one uses (SubscriptionService.isPlus). A spec that passes against this is
-// exercising the real entitlement path rather than a fixture built for tests.
+// The backend writes `comped`, so a household set to a paid tier here is entitled through the SAME
+// single derivation a paying one uses (SubscriptionService.isEntitled). A spec that passes against
+// this is exercising the real entitlement path rather than a fixture built for tests.
+//
+// clientSeats is only meaningful on a tier that HAS seats. Omitting it means "that tier's default",
+// which for PRO is unlimited -- the shape a spec wants unless it is specifically testing the
+// ceiling.
 export async function setBillingPlan(
   request: APIRequestContext,
   email: string,
-  plan: 'FREE' | 'PLUS',
+  plan: 'FREE' | 'PLUS' | 'PRO',
+  clientSeats?: number,
 ): Promise<void> {
   const configResponse = await request.get('/config.json');
   const { apiUrl } = await configResponse.json();
+  const params = new URLSearchParams({ email, plan });
+  if (clientSeats !== undefined) {
+    params.set('clientSeats', String(clientSeats));
+  }
   const response = await request.post(
-    `${apiUrl}/api/auth/test/billing-plan?email=${encodeURIComponent(email)}&plan=${plan}`,
+    `${apiUrl}/api/auth/test/billing-plan?${params.toString()}`,
     { headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' } },
   );
   // 404 is what this endpoint returns for a wrong/missing key as well as an unknown email, so a
@@ -133,23 +142,27 @@ export async function setBillingPlan(
 // one -- the shape that makes one login belong to two households, which is what phase 6 is about.
 // The backend reuses a matching user row rather than creating a second, and leaves its password
 // alone, so the caller must pass an address whose password is already the shared 'password123'.
+// plan picks which paid tier the household is put on first. It defaults to PLUS because that is
+// the cheapest tier member logins work on; a spec testing PRO behaviour passes 'PRO' so the
+// household is never momentarily on a tier that cannot do what the spec is about to assert.
 export async function addMemberLogin(
   page: Page,
   request: APIRequestContext,
   ownerEmail: string,
   personName: string,
   memberEmailOverride?: string,
+  plan: 'PLUS' | 'PRO' = 'PLUS',
 ): Promise<{ email: string; password: string }> {
   const email = memberEmailOverride
     ?? `huddle+e2e-member-${Date.now()}-${uniqueSuffix()}@starner.co`;
   const password = 'password123';
 
-  // ⚠️ Plus FIRST. Member logins are a Plus feature: from phase 8 a member in a Free household is
-  // PAUSED and refused on every route, so a spec that minted one against a freshly-registered
-  // (therefore Free) household would be testing the pause rather than whatever it says it tests.
-  // Registration creates a Free subscription, so this is needed for every caller, and doing it
-  // here rather than in each spec is what stops the next one forgetting.
-  await setBillingPlan(request, ownerEmail, 'PLUS');
+  // ⚠️ A PAID TIER FIRST. Member logins are a paid feature (PlanFeature.MEMBER_LOGINS): a member in
+  // a Free household is PAUSED and refused on every route, so a spec that minted one against a
+  // freshly-registered (therefore Free) household would be testing the pause rather than whatever
+  // it says it tests. Registration creates a Free subscription, so this is needed for every caller,
+  // and doing it here rather than in each spec is what stops the next one forgetting.
+  await setBillingPlan(request, ownerEmail, plan);
 
   const configResponse = await request.get('/config.json');
   const { apiUrl } = await configResponse.json();
@@ -171,9 +184,18 @@ export async function addMemberLogin(
   return { email, password };
 }
 
-// Flips accounts.members_see_everyone for one household. The product ships this forced ON with no
-// endpoint and no UI (see V66), so this profile-gated route is the ONLY way to exercise the OFF
-// path -- which is what keeps the Team-tier seam tested code rather than dead code.
+// Flips accounts.members_see_everyone through the REAL endpoint a trainer uses:
+// PUT /api/account/member-visibility, MANAGE_HOUSEHOLD, so the OWNER and deliberately not a
+// MANAGER.
+//
+// ⚠️ This drove a profile-gated test-support route until Pro existed, because the column had no
+// setter and no endpoint at all (V66). That route is now DELETED rather than left beside this one:
+// it wrote the column directly, skipping the plan gate, so it could put a household into a state
+// the product itself cannot reach -- and the OFF path is precisely where that distinction is the
+// whole point. Two writers for one setting is the bug, per resilience.md's "reuse the mechanism".
+//
+// So the household must already be on a tier that HAS PlanFeature.PRIVATE_MEMBERS. Free and Plus
+// answer 409, which is a promise those tiers make to the families on them.
 export async function setMemberVisibility(
   request: APIRequestContext,
   ownerEmail: string,
@@ -181,11 +203,27 @@ export async function setMemberVisibility(
 ): Promise<void> {
   const configResponse = await request.get('/config.json');
   const { apiUrl } = await configResponse.json();
-  const params = new URLSearchParams({ ownerEmail, membersSeeEveryone: String(membersSeeEveryone) });
-  const response = await request.post(`${apiUrl}/api/auth/test/member-visibility?${params.toString()}`, {
-    headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' },
+
+  // Signed in as the owner over the API rather than reusing the page's session: this helper is
+  // called from specs that are about to sign in AS SOMEBODY ELSE, and one that had already done so
+  // would otherwise silently send a member's token at an owner-only route.
+  const login = await request.post(`${apiUrl}/api/auth/login`, {
+    data: { email: ownerEmail, password: 'password123' },
   });
-  expect(response.status(), 'setMemberVisibility failed -- check E2E_TEST_SUPPORT_KEY').toBe(204);
+  expect(login.status(), `setMemberVisibility could not sign in as ${ownerEmail}`).toBe(200);
+  const { token } = await login.json();
+
+  const response = await request.put(`${apiUrl}/api/account/member-visibility`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { membersSeeEveryone },
+  });
+  expect(
+    response.status(),
+    `setMemberVisibility failed for ${ownerEmail}. `
+      + '409 means this household is not on a tier whose members can be private -- call '
+      + "setBillingPlan(request, ownerEmail, 'PRO') first. "
+      + `Body: ${await response.text()}`,
+  ).toBe(200);
 }
 
 // Signs in through the real login form, so a spec exercises the same path a member actually uses.
