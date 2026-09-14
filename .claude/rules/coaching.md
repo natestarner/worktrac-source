@@ -195,3 +195,23 @@ Verified as unblocked, not built. Each is a pure addition:
 
 **The only genuinely new mechanism Team needs is result approval** — a `verified_by_user_id` on
 whatever feeds the leaderboard. Nothing in the Pro build may foreclose it.
+
+### Adding TEAM: what will stop you, and that is by design
+
+Verified by actually adding the constant and compiling, not by reading the code. **Two files refuse
+to build until somebody decides**, in this order:
+
+1. `BillingPlan.features()` — what Team grants.
+2. `AccountVocab.forPlan()` — what a club calls its people (`team` / `coach` / `athlete` /
+   `assistant coach`).
+
+Both are exhaustive switches with **no default**, which is the whole point: a default would silently
+hand a sports team the word household and an empty feature set, and the failure would surface as a
+screenshot in a bug report rather than at build time. **Do not add a default to either.**
+
+On the client there is no compiler, so the equivalent is a test: `planCopy.test.js` asserts
+`Object.keys(PLANS)` matches `Object.keys(PLAN_FEATURES)`, so adding a tier to one and not the
+other goes red. `PLAN_ORDER` deliberately names only tiers somebody can actually buy.
+
+Everything else is additive: the visibility toggle, `MANAGER`, the roster, programs, check-ins and
+the seat machinery all take Team without modification.
