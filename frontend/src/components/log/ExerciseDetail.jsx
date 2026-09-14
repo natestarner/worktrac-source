@@ -23,7 +23,7 @@ import { comparableValue, computePrefillDraft, isPrSet } from '../../utils/formu
 import { resolveRestTargetSeconds } from '../../utils/restTarget';
 import { deriveExerciseSummaryFromHistory, mergeBestWithLocalSets } from '../../utils/exerciseSummaryFromHistory';
 import { formatDateLabel, formatRestTime, MIN_HOLD_SECONDS, toLocalDateStr } from '../../utils/datetime';
-import { formatSetSpaced } from '../../utils/formatSet';
+import { formatSetSpaced, formatTarget } from '../../utils/formatSet';
 import WeightRepsStepper from './WeightRepsStepper';
 import DurationPickerSheet from '../shared/DurationPickerSheet';
 import CustomFieldEditorModal from '../shared/CustomFieldEditorModal';
@@ -53,10 +53,15 @@ export default function ExerciseDetail({
   // prop, not a direct useNavigate() call here -- ExerciseDetail takes onBack as a prop rather
   // than navigating itself, and its test file renders with no MemoryRouter at all.
   onViewAllHistory,
+  // The routine exercise being followed at this position, when a routine is running -- carrying
+  // whatever the trainer prescribed. Null the rest of the time.
+  prescribed = null,
 }) {
   const { account, people } = useAuth();
   const activePersonName = people.length >= 2 ? people.find((p) => p.id === personId)?.name : null;
   const activePersonFirstName = activePersonName?.split(' ')[0];
+  // Null whenever no routine is running, or the routine prescribes nothing at this position.
+  const targetLabel = formatTarget(prescribed ?? {});
   const {
     weightDraft,
     repsDraft,
@@ -930,6 +935,33 @@ export default function ExerciseDetail({
                 <Skeleton width={100} height={11} style={{ marginBottom: 8 }} />
                 <Skeleton width={130} height={20} />
               </div>
+            </div>
+          )}
+
+          {/* ⚠️ A PRESCRIPTION, NEVER A LIMIT. Nothing validates a logged set against these
+              numbers and nothing should: a client who lifts more than prescribed has had a good
+              day, not made a mistake, and the app arguing with the gym floor is the one thing a
+              logging-first product must not do. This renders the target and stops there -- it does
+              not prefill the steppers, because a prefill the person did not type is exactly the
+              race that logged a 315 deadlift as 0 (see docs/incidents/2026-08-12).
+
+              Rendered above the summary cards rather than inside one: it is about the set ABOUT to
+              be logged, while both cards below are about sets already logged. */}
+          {targetLabel && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 'var(--space-1)',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-muted)',
+                marginBottom: 'var(--space-2)',
+              }}
+            >
+              <span style={{ fontWeight: 'var(--weight-semibold)', color: 'var(--color-accent-text)' }}>
+                Target
+              </span>
+              <span>{targetLabel}</span>
             </div>
           )}
 

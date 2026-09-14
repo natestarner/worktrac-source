@@ -44,7 +44,19 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   // exercise id or the index. It also doubles as the dnd-kit sortable id.
   const nextRowKey = useRef(0);
   const [rows, setRows] = useState(() =>
-    routine ? routine.exercises.map((e) => ({ key: (nextRowKey.current += 1), exerciseId: e.exerciseId })) : [],
+    // ⚠️ The prescribed target rides along on the row, unread by this modal and sent straight back
+    // on save. The routine request is the WHOLE truth about the routine, so a builder that dropped
+    // these would silently wipe a trainer's prescribed numbers every time somebody renamed the
+    // routine or dragged one exercise -- see api/routines.js.
+    routine
+      ? routine.exercises.map((e) => ({
+          key: (nextRowKey.current += 1),
+          exerciseId: e.exerciseId,
+          targetWeight: e.targetWeight ?? null,
+          targetReps: e.targetReps ?? null,
+          targetUnit: e.targetUnit ?? null,
+        }))
+      : [],
   );
   const [exerciseFilter, setExerciseFilter] = useState('');
   const [addingExercise, setAddingExercise] = useState(false);
@@ -143,12 +155,17 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
         return;
       }
       // Duplicates are preserved in order -- the backend stores one routine_exercises row per
-      // position, numbered by sort_order.
-      const exerciseIds = rows.map((row) => row.exerciseId);
+      // position, numbered by sort_order, and matches targets by position for the same reason.
+      const exercises = rows.map((row) => ({
+        exerciseId: row.exerciseId,
+        targetWeight: row.targetWeight ?? null,
+        targetReps: row.targetReps ?? null,
+        targetUnit: row.targetUnit ?? null,
+      }));
       if (isEditing) {
-        await updateRoutine(personId, routine.id, { name: trimmed, exerciseIds });
+        await updateRoutine(personId, routine.id, { name: trimmed, exercises });
       } else {
-        await createRoutine(personId, { name: trimmed, exerciseIds });
+        await createRoutine(personId, { name: trimmed, exercises });
       }
       onSaved();
     },

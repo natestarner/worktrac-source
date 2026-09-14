@@ -190,7 +190,7 @@ describe('RoutineFormModal validation', () => {
     fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save routine' }));
 
-    await waitFor(() => expect(createRoutine).toHaveBeenCalledWith(1, { name: 'Push Day', exerciseIds: [1] }));
+    await waitFor(() => expect(createRoutine).toHaveBeenCalledWith(1, { name: 'Push Day', exercises: [{ exerciseId: 1, targetWeight: null, targetReps: null, targetUnit: null }] }));
     expect(onSaved).toHaveBeenCalled();
   });
 
@@ -205,7 +205,7 @@ describe('RoutineFormModal validation', () => {
 
     // The backend stores one routine_exercises row per position (sort_order 0/1/2) -- there is
     // no unique index on (routine_id, exercise_id), so the duplicate survives the round trip.
-    await waitFor(() => expect(createRoutine).toHaveBeenCalledWith(1, { name: 'Cycle', exerciseIds: [1, 3, 1] }));
+    await waitFor(() => expect(createRoutine).toHaveBeenCalledWith(1, { name: 'Cycle', exercises: [{ exerciseId: 1, targetWeight: null, targetReps: null, targetUnit: null }, { exerciseId: 3, targetWeight: null, targetReps: null, targetUnit: null }, { exerciseId: 1, targetWeight: null, targetReps: null, targetUnit: null }] }));
   });
 
   it('seeds the form from an existing routine that already repeats an exercise', async () => {
@@ -215,6 +215,6 @@ describe('RoutineFormModal validation', () => {
     expect(screen.getAllByText('Bench Press')).toHaveLength(2);
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(updateRoutine).toHaveBeenCalledWith(1, 7, { name: 'Cycle', exerciseIds: [1, 3, 1] }));
+    await waitFor(() => expect(updateRoutine).toHaveBeenCalledWith(1, 7, { name: 'Cycle', exercises: [{ exerciseId: 1, targetWeight: null, targetReps: null, targetUnit: null }, { exerciseId: 3, targetWeight: null, targetReps: null, targetUnit: null }, { exerciseId: 1, targetWeight: null, targetReps: null, targetUnit: null }] }));
   });
 });

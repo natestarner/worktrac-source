@@ -5,18 +5,22 @@ import com.worktrac.backend.exercise.Exercise;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.exercise.PersonExerciseService;
 import com.worktrac.backend.membership.AccountAccess;
+import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.MemberPersonName;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.quota.QuotaService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class RoutineService {
@@ -26,22 +30,44 @@ public class RoutineService {
     private final PersonService personService;
     private final PersonExerciseService personExerciseService;
     private final QuotaService quotaService;
+    private final AccountMembershipRepository membershipRepository;
+    private final Clock clock;
 
     public RoutineService(RoutineRepository routineRepository, ExerciseRepository exerciseRepository,
                            PersonService personService, PersonExerciseService personExerciseService,
-                           QuotaService quotaService) {
+                           QuotaService quotaService, AccountMembershipRepository membershipRepository,
+                           Clock clock) {
         this.routineRepository = routineRepository;
         this.exerciseRepository = exerciseRepository;
         this.personService = personService;
         this.personExerciseService = personExerciseService;
         this.quotaService = quotaService;
+        this.membershipRepository = membershipRepository;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
     public List<RoutineDto> list(AccountAccess access, Long personId) {
         Person person = personService.requireVisiblePerson(personId, access);
-        return routineRepository.findByPerson_IdOrderBySortOrderAscIdAsc(person.getId()).stream()
-                .map(RoutineDto::from)
+        List<Routine> routines = routineRepository.findByPerson_IdOrderBySortOrderAscIdAsc(person.getId());
+
+        // ⚠️ ONE lookup for every assigner name, resolved BEFORE the mapping loop. Asking per
+        // routine would be an N+1 on a list a client opens constantly -- the same rule
+        // ExerciseAttributionResolver follows for the catalogue, and the reason RoutineDto.from's
+        // one-argument overload leaves the name null rather than offering to fetch it.
+        //
+        // Skipped entirely when nothing here was assigned, which is every family household.
+        Map<Long, String> nameByUserId = routines.stream().anyMatch(r -> r.getAssignedByUserId() != null)
+                ? membershipRepository.findPersonNamesByUser(access.accountId()).stream()
+                        .collect(Collectors.toMap(MemberPersonName::userId, MemberPersonName::personName,
+                                (first, second) -> first))
+                : Map.of();
+
+        return routines.stream()
+                .map(routine -> RoutineDto.from(routine,
+                        routine.getAssignedByUserId() == null
+                                ? null
+                                : nameByUserId.get(routine.getAssignedByUserId())))
                 .toList();
     }
 
@@ -52,7 +78,7 @@ public class RoutineService {
                 routineRepository.countByPerson_Id(person.getId()));
         Routine routine = new Routine(person, request.name().trim());
         routine.setSortOrder(nextSortOrder(person));
-        applyExercises(access.accountId(), person, routine, request.exerciseIds());
+        applyExercises(access.accountId(), person, routine, request.exercises());
         return RoutineDto.from(routineRepository.save(routine));
     }
 
@@ -63,7 +89,7 @@ public class RoutineService {
                 .orElseThrow(() -> new NotFoundException("We couldn't find that routine."));
         routine.setName(request.name().trim());
         routine.getExercises().clear();
-        applyExercises(access.accountId(), person, routine, request.exerciseIds());
+        applyExercises(access.accountId(), person, routine, request.exercises());
         return RoutineDto.from(routine);
     }
 
@@ -95,6 +121,21 @@ public class RoutineService {
             // because copying to the same person twice must not reuse a position.
             copy.setSortOrder(nextSortOrder(target));
             attachExercises(copy, exercises);
+            copyTargets(source, copy);
+
+            // ⚠️ PROVENANCE, RATHER THAN A SECOND "assign" OPERATION. Copying a routine onto
+            // somebody else and assigning a program to a client are the same act; only the
+            // vocabulary differs. A parallel assign() would have been a second way to do an
+            // existing job -- exactly what resilience.md's mechanism table exists to prevent --
+            // and the two would have drifted on ordering, favouriting and exercise visibility.
+            //
+            // Stamped only when the copy lands on somebody ELSE. A person duplicating their own
+            // routine has not been assigned anything, and recording otherwise would have their own
+            // Routines list claim a trainer put it there.
+            if (!access.isSelf(target.getId())) {
+                copy.markAssignedBy(access.userId(), clock.instant());
+            }
+
             copies.add(RoutineDto.from(routineRepository.save(copy)));
             favorite(target, exercises);
         }
@@ -138,9 +179,25 @@ public class RoutineService {
                 .orElse(0);
     }
 
-    private void applyExercises(Long accountId, Person person, Routine routine, List<Long> exerciseIds) {
-        List<Exercise> exercises = resolveVisibleExercises(accountId, exerciseIds);
+    private void applyExercises(Long accountId, Person person, Routine routine,
+                                List<RoutineExerciseRequest> requested) {
+        List<Exercise> exercises = resolveVisibleExercises(accountId,
+                requested.stream().map(RoutineExerciseRequest::exerciseId).toList());
         attachExercises(routine, exercises);
+
+        // ⚠️ Applied by POSITION, matching the order resolveVisibleExercises preserved. Not by
+        // exercise id: the same exercise may legitimately appear twice in one routine (a top set
+        // and a back-off set at different numbers), and matching by id would give both the first
+        // one's target.
+        List<RoutineExercise> attached = routine.getExercises();
+        for (int i = 0; i < attached.size() && i < requested.size(); i++) {
+            RoutineExerciseRequest target = requested.get(i);
+            attached.get(i).setTarget(
+                    target.hasWeightTarget() ? target.targetWeight() : null,
+                    target.targetReps(),
+                    target.targetUnit());
+        }
+
         favorite(person, exercises);
     }
 
@@ -183,6 +240,25 @@ public class RoutineService {
         int order = 0;
         for (Exercise exercise : exercises) {
             routine.getExercises().add(new RoutineExercise(routine, exercise, order++));
+        }
+    }
+
+    /**
+     * Copies the source routine's prescribed targets onto a fresh copy, position by position.
+     *
+     * <p>⚠️ Matched by SORT ORDER rather than by exercise id, because the same exercise may appear
+     * twice in one routine (a top set and a back-off set, at different numbers) and matching by id
+     * would give both the first one's target.
+     *
+     * <p>Copying targets is what makes assigning a program mean anything: a template whose numbers
+     * did not travel would arrive as a bare list of exercise names.
+     */
+    private void copyTargets(Routine source, Routine copy) {
+        List<RoutineExercise> from = source.getExercises();
+        List<RoutineExercise> to = copy.getExercises();
+        for (int i = 0; i < to.size() && i < from.size(); i++) {
+            RoutineExercise original = from.get(i);
+            to.get(i).setTarget(original.getTargetWeight(), original.getTargetReps(), original.getTargetUnit());
         }
     }
 }

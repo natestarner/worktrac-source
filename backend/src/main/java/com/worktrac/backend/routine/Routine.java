@@ -47,6 +47,25 @@ public class Routine {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
 
+    // ── Assignment provenance (V77) ────────────────────────────────────────────────────────────
+    //
+    // Both null for every routine anybody has ever built for themselves, which is the default shape
+    // and stays that way. Set together, by RoutineService.assign, and NEVER transferred: a client
+    // who edits an assigned program still has a program their trainer assigned, because the
+    // question this answers is "who put this here", not "who last touched it".
+    //
+    // ⚠️ The USER, not the person. A trainer's own person row can be renamed or removed while the
+    // credential persists, and the axis that matters here is which login acted -- the same axis
+    // exercises.created_by_user_id uses. Null is legitimate and must render as naming nobody: a
+    // self-made routine, or an assigner whose login has since been removed (ON DELETE SET NULL,
+    // because a client must keep the program they are following).
+    @Column(name = "assigned_by_user_id")
+    private Long assignedByUserId;
+
+    @JdbcTypeCode(SqlTypes.TIMESTAMP)
+    @Column(name = "assigned_at")
+    private Instant assignedAt;
+
     @OneToMany(mappedBy = "routine", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sortOrder ASC")
     private List<RoutineExercise> exercises = new ArrayList<>();
@@ -96,5 +115,25 @@ public class Routine {
 
     public List<RoutineExercise> getExercises() {
         return exercises;
+    }
+
+    public Long getAssignedByUserId() {
+        return assignedByUserId;
+    }
+
+    public Instant getAssignedAt() {
+        return assignedAt;
+    }
+
+    /**
+     * Stamps who assigned this program and when — set together, once, by {@code RoutineService}.
+     *
+     * <p>⚠️ One setter for both, deliberately. They are a pair: an {@code assignedAt} with no
+     * assigner renders as "assigned by nobody, at a time", and an assigner with no timestamp cannot
+     * be ordered. Two setters is how they drift apart.
+     */
+    public void markAssignedBy(Long userId, Instant at) {
+        this.assignedByUserId = userId;
+        this.assignedAt = at;
     }
 }
