@@ -85,6 +85,12 @@ export const PRO_BANDS = [
  * `benefits` is what that tier ADDS over the one before it, which is what the billing screen and
  * the handbook both want. FREE's is empty because everything Free gets is ungated -- the same
  * reason BillingPlan.FREE.features() is empty.
+ *
+ * `welcome` is the line under "Welcome to Huddle X" the instant a checkout completes, and it names
+ * what THAT tier just unlocked. It lives here rather than in the celebration component because a
+ * trainer who has just paid for private clients and a roster being congratulated on unlocking
+ * import is the same bug as the badge naming the wrong tier -- one map, or three surfaces free to
+ * disagree. FREE has none: nobody celebrates arriving at Free.
  */
 export const PLANS = {
   FREE: {
@@ -94,6 +100,7 @@ export const PLANS = {
     blurb: 'Log workouts and add family members on a shared device. View the last 90 days of progress.',
     benefits: [],
     bands: null,
+    welcome: null,
   },
   PLUS: {
     id: 'PLUS',
@@ -102,6 +109,7 @@ export const PLANS = {
     blurb: 'Unlock complete workout history and give every family member their own login.',
     benefits: PLUS_BENEFITS,
     bands: null,
+    welcome: 'Your whole history, every record, and import are unlocked. Thanks for keeping Huddle going.',
   },
   PRO: {
     id: 'PRO',
@@ -110,6 +118,7 @@ export const PLANS = {
     blurb: "Everything trainers need — individual client logins, with your clients' training kept private from each other.",
     benefits: PRO_ADDITIONS,
     bands: PRO_BANDS,
+    welcome: 'Your clients get their own logins, kept private from each other, and a roster that shows you who has gone quiet.',
   },
 };
 

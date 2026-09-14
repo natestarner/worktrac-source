@@ -389,4 +389,64 @@ describe('BillingTab Pro upgrade', () => {
     await waitFor(() =>
       expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PLUS', band: null }));
   });
+
+  // ⚠️ THE TIER THIS SCREEN SAYS YOU ARE ON. Every string in the paid summary was the literal
+  // "Plus" while the branch that renders it asks isPaidPlan -- true for Pro. So a trainer who had
+  // just paid for Pro was shown "Huddle Plus" under a list of Plus's four benefits, with none of
+  // the four they had actually bought. The billing screen is the one place somebody checks what
+  // they are paying for, which makes it the worst place in the app to name the wrong tier.
+  describe('the paid summary names the tier it is actually on', () => {
+    const PRO = { id: 1, plan: 'PRO', vocab: { account: 'practice', owner: 'trainer', member: 'client', manager: 'assistant' } };
+
+    it('says Huddle Pro, not Huddle Plus, on a Pro account', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: 15 });
+
+      expect(await screen.findByText('Huddle Pro')).toBeInTheDocument();
+      expect(screen.queryByText('Huddle Plus')).not.toBeInTheDocument();
+    });
+
+    // Pro's benefits are the INCREMENT over Plus (see planCopy), so the screen has to show both
+    // lists -- a Pro account still has full history, import and member logins.
+    it('lists what Pro adds as well as everything Plus includes', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: 15 });
+
+      expect(await screen.findByText('What Pro includes')).toBeInTheDocument();
+      expect(screen.getByText(/Clients can't see each other/)).toBeInTheDocument();
+      expect(screen.getByText(/Your whole history/)).toBeInTheDocument();
+    });
+
+    // What the band bought, in the words the checkout dropdown used. Deliberately the allowance
+    // and not a usage count -- see seatLine.
+    it('names how many clients the band covers', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: 15 });
+
+      expect(await screen.findByText('Covers up to 15 clients.')).toBeInTheDocument();
+    });
+
+    // ⚠️ Null seats and unlimited seats are different absences. SubscriptionDto carries null for
+    // BOTH a household tier and an Unlimited band, so the tier is what tells them apart.
+    it('says there is no limit on the Unlimited band, rather than nothing at all', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: null });
+
+      expect(await screen.findByText(/No limit on how many clients/)).toBeInTheDocument();
+    });
+
+    it('says nothing about seats on a household tier, which has none', async () => {
+      render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', clientSeats: null });
+
+      expect(await screen.findByText('Huddle Plus')).toBeInTheDocument();
+      expect(screen.queryByText(/Covers up to/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/No limit on how many/)).not.toBeInTheDocument();
+    });
+
+    // A tier added server-side after this bundle shipped (resilience.md axis D). Describing it
+    // with Plus's benefits would be the bug above in a new disguise; the plan key is merely ugly.
+    it('does not describe an unrecognised paid tier as Plus', async () => {
+      render({ id: 1, plan: 'TEAM' }, { plan: 'TEAM', status: 'ACTIVE' });
+
+      expect(await screen.findByText('Huddle TEAM')).toBeInTheDocument();
+      expect(screen.queryByText(/Your whole history/)).toBeInTheDocument();
+      expect(screen.queryByText('What Plus includes')).not.toBeInTheDocument();
+    });
+  });
 });

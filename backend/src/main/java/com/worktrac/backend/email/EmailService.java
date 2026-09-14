@@ -8,6 +8,7 @@ import com.azure.communication.email.models.EmailSendStatus;
 import com.azure.core.models.ResponseError;
 import com.azure.core.util.polling.PollResponse;
 import com.azure.core.util.polling.SyncPoller;
+import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.config.EmailProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -292,25 +293,58 @@ public class EmailService {
      * what Plus buys, restated in two places rather than invented twice. See {@code planCopy.js}'s
      * {@code PLUS_BENEFITS} if that ever changes.
      */
-    public String sendPlusWelcome(String toEmail) {
+    /**
+     * The welcome email after a first-ever upgrade, written for the tier that was actually bought.
+     *
+     * <p>⚠️ <b>This took no plan and said "Welcome to Huddle Plus" to everybody.</b> A trainer who
+     * had just paid for Pro was congratulated by name on unlocking history, records and import --
+     * four things a Pro account already had, and none of the four they had paid for. The tier now
+     * arrives on {@link com.worktrac.backend.billing.PlusUpgradedEvent}, because the listener runs
+     * after the transaction that knew it has committed.
+     *
+     * <p>FREE is unreachable here by construction (the event is published only on a first upgrade
+     * TO an entitled tier) and throws rather than sending a congratulation about nothing.
+     */
+    public String sendPlusWelcome(String toEmail, BillingPlan plan) {
+        UpgradeCopy copy = upgradeCopy(plan);
+
         String html = simpleNoticeTemplate
                 .replace("{{LOGO_URL}}", logoUrl)
-                .replace("{{HEADING}}", escapeHtml("Welcome to Huddle Plus"))
-                .replace("{{BODY}}", escapeHtml("Your whole history, every record, and import are "
-                        + "unlocked. Every workout you've logged, and everything you log from here, "
-                        + "stays on screen, all-time records and trends open up over any range, and "
-                        + "you can bring in old data from a spreadsheet whenever you're ready.")
+                .replace("{{HEADING}}", escapeHtml(copy.heading()))
+                .replace("{{BODY}}", escapeHtml(copy.body())
                         + "<br><br>Thanks for keeping Huddle going.")
                 .replace("{{CTA_URL}}", appUrl)
                 .replace("{{CTA_LABEL}}", "Open Huddle");
 
-        return send(toEmail, "Welcome to Huddle Plus",
-                "Your whole history, every record, and import are unlocked. Every workout you've"
-                        + " logged, and everything you log from here, stays on screen, all-time"
-                        + " records and trends open up over any range, and you can bring in old data"
-                        + " from a spreadsheet whenever you're ready. Thanks for keeping Huddle going."
-                        + " Open Huddle: " + appUrl,
+        return send(toEmail, copy.heading(),
+                copy.body() + " Thanks for keeping Huddle going. Open Huddle: " + appUrl,
                 html);
+    }
+
+    private record UpgradeCopy(String heading, String body) {
+    }
+
+    /**
+     * ⚠️ Exhaustive, with NO default, on purpose -- the same forcing function
+     * {@code BillingPlan.features()} and {@code AccountVocab.forPlan()} use. Adding TEAM must not
+     * silently mail a sports club a letter about their household's import feature; it should refuse
+     * to compile until somebody writes the sentence.
+     */
+    private UpgradeCopy upgradeCopy(BillingPlan plan) {
+        return switch (plan) {
+            case FREE -> throw new IllegalArgumentException(
+                    "No welcome email for FREE -- this is only ever sent on an upgrade to a paid tier");
+            case PLUS -> new UpgradeCopy("Welcome to Huddle Plus",
+                    "Your whole history, every record, and import are unlocked. Every workout you've"
+                            + " logged, and everything you log from here, stays on screen, all-time"
+                            + " records and trends open up over any range, and you can bring in old"
+                            + " data from a spreadsheet whenever you're ready.");
+            case PRO -> new UpgradeCopy("Welcome to Huddle Pro",
+                    "Your practice is open. Every client can have their own login, kept private from"
+                            + " the others, and you see all of them. Assign a program with the weights"
+                            + " and reps you want hit, keep check-in notes only you can read, and open"
+                            + " the roster to see who has stopped showing up.");
+        };
     }
 
     public String sendPasswordResetSuccess(String toEmail) {

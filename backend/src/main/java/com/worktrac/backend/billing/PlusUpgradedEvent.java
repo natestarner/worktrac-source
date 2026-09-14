@@ -13,6 +13,13 @@ package com.worktrac.backend.billing;
  * <p>Deliberately NOT published for a comp grant ({@code CompBootstrap}). A comped household did
  * not upgrade -- they were never charged -- and the welcome copy says "thanks for keeping Huddle
  * going" in a context that presumes a purchase just happened.
+ *
+ * <p>⚠️ <b>It carries the PLAN, and the plan rides on the event rather than being looked up in the
+ * listener</b> -- the same call {@code MembershipInviteIssuedEvent} makes about the account noun,
+ * and for the same reason: by the time an {@code AFTER_COMMIT} listener runs, the transaction that
+ * knew the tier has committed and gone. Without it the listener could only send one email for every
+ * paid tier, and it did: a trainer who paid for Pro received "Welcome to Huddle Plus", describing
+ * four things they already had and none of the four they had just bought.
  */
-public record PlusUpgradedEvent(Long accountId) {
+public record PlusUpgradedEvent(Long accountId, BillingPlan plan) {
 }

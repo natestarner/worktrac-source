@@ -22,7 +22,8 @@ import LegalLinks from '../shared/LegalLinks';
 import PlanChooser from './PlanChooser';
 import EmbeddedCheckout from './EmbeddedCheckout';
 import PlusCelebration from './PlusCelebration';
-import { PLUS_BENEFITS, PRO_ADDITIONS, PRO_BANDS } from './planCopy';
+import { PLUS_BENEFITS, PRO_ADDITIONS, PRO_BANDS, planCopy } from './planCopy';
+import { accountVocab } from '../../utils/accountVocab';
 import { isPaidPlan, planIncludes } from '../../utils/planFeatures';
 
 // The household's plan, and where an upgrade happens.
@@ -213,7 +214,9 @@ export default function BillingTab() {
           </Button>
         </>
       ) : isPlus ? (
-        <PlusSummary
+        <PaidSummary
+          plan={isPaidPlan(plan) ? plan : subscription?.plan}
+          vocab={accountVocab(account?.vocab)}
           subscription={subscription}
           pending={pending}
           onManage={handleManageBilling}
@@ -231,16 +234,32 @@ export default function BillingTab() {
         />
       )}
 
-      {showCelebration && <PlusCelebration onDismiss={handleDismissCelebration} />}
+      {showCelebration && <PlusCelebration plan={plan} onDismiss={handleDismissCelebration} />}
     </div>
   );
 }
 
-function PlusSummary({ subscription, pending, onManage, pausableLogins = [] }) {
+// ⚠️ THIS SCREEN NAMES THE TIER FROM planCopy, and it did not always. It was `PlusSummary`, and
+// every string in it -- the heading, the benefit list, the comped line, the past-due nudge -- said
+// "Plus" as a literal while the branch that chooses it asks isPaidPlan, which is true for Pro. So a
+// trainer who had just paid $79 for Pro opened Plan & billing and was told they were on Huddle
+// Plus, under a list of Plus's four benefits with none of the four they had actually bought.
+//
+// The tier is asked for ONCE, at the top, and everything below reads that answer. Adding a second
+// `plan === 'PRO'` branch further down is the bug this shape exists to prevent -- see billing.md.
+function PaidSummary({ plan, vocab, subscription, pending, onManage, pausableLogins = [] }) {
   const cancelling = subscription?.cancelAtPeriodEnd === true;
   const periodEnd = subscription?.currentPeriodEnd;
   const comped = subscription?.comped === true;
   const pastDue = subscription?.status === 'PAST_DUE';
+  // Null for a tier this bundle predates (resilience.md axis D). Falling back to Plus's copy would
+  // describe a paid household with the wrong tier's benefits, which is the failure above; falling
+  // back to the plan KEY ("PRO") is merely ugly, and only for a build that is already behind.
+  const copy = planCopy(plan);
+  const name = copy?.name ?? plan;
+  // Everything Plus includes, plus what this tier adds over it -- `benefits` is deliberately only
+  // the increment (see planCopy), and a Pro household has all of both.
+  const benefits = plan === 'PLUS' ? PLUS_BENEFITS : [...PLUS_BENEFITS, ...(copy?.benefits ?? [])];
 
   return (
     <>
@@ -251,25 +270,33 @@ function PlusSummary({ subscription, pending, onManage, pausableLogins = [] }) {
             reader hears the heading once rather than twice. */}
         <div style={planTitleRowStyle}>
           <HuddleMark size={40} />
-          <div style={planHeadingStyle}>Huddle Plus</div>
+          <div style={planHeadingStyle}>Huddle {name}</div>
         </div>
         <p style={mutedLineStyle}>
           {comped
-            ? 'Your household has Plus on the house, with our thanks for being here early.'
-            : renewalLine(cancelling, periodEnd)}
+            ? `Your ${vocab.account} has ${name} on the house, with our thanks for being here early.`
+            : renewalLine(cancelling, periodEnd, name)}
         </p>
+        {/* What the band actually bought, said in the same words the checkout dropdown used.
+            Deliberately the ALLOWANCE and not "12 of 15": the usage half is a seat count the server
+            derives (people, minus the owner's own person, minus every manager's), and recomputing
+            it here from the people list would be a second derivation free to disagree with the one
+            that actually refuses an invite. Absent on a household tier, which has no seats at all. */}
+        {seatLine(subscription, plan, vocab) && (
+          <p style={mutedLineStyle}>{seatLine(subscription, plan, vocab)}</p>
+        )}
         {/* Access continues through Stripe's retry window, so this is a nudge rather than a
             lockout -- see SubscriptionService.isPlus for why cutting access mid-dunning is wrong. */}
         {pastDue && (
           <p style={warningLineStyle}>
-            We couldn&rsquo;t take your last payment. Update your card to keep Plus.
+            We couldn&rsquo;t take your last payment. Update your card to keep {name}.
           </p>
         )}
       </div>
 
-      <SectionLabel>What Plus includes</SectionLabel>
+      <SectionLabel>What {name} includes</SectionLabel>
       <div style={cardStyle}>
-        <BenefitList />
+        <BenefitList benefits={benefits} />
       </div>
 
       {/* ⚠️ Said HERE, and here is the only place it can be said.
@@ -288,9 +315,10 @@ function PlusSummary({ subscription, pending, onManage, pausableLogins = [] }) {
               ? '1 personal login will stop working'
               : `${pausableLogins.length} personal logins will stop working`}
           </strong>{' '}
-          if this household goes back to Free &mdash; {formatNames(pausableLogins)} would no longer
-          be able to sign in on their own device. Nothing is deleted: their workouts stay, you keep
-          seeing everything, and their logins start working again the moment you return to Plus.
+          if this {vocab.account} goes back to Free &mdash; {formatNames(pausableLogins)} would no
+          longer be able to sign in on their own device. Nothing is deleted: their workouts stay,
+          you keep seeing everything, and their logins start working again the moment you return to{' '}
+          {name}.
         </div>
       )}
 
@@ -305,12 +333,26 @@ function PlusSummary({ subscription, pending, onManage, pausableLogins = [] }) {
   );
 }
 
+/**
+ * What this subscription's band covers, or null when the tier is not licensed by clients at all.
+ *
+ * ⚠️ Null and "unlimited" are DIFFERENT absences, which is why SubscriptionDto.clientSeats is null
+ * rather than a large sentinel: a household tier has no seats to describe, while an Unlimited Pro
+ * band has no ceiling to name. A sentinel would render one of them as the other.
+ */
+function seatLine(subscription, plan, vocab) {
+  if (plan !== 'PRO') return null;
+  const seats = subscription?.clientSeats;
+  if (seats == null) return `No limit on how many ${vocab.member}s you take on.`;
+  return `Covers up to ${seats} ${vocab.member}${seats === 1 ? '' : 's'}.`;
+}
+
 // "ends" vs "renews" is the whole reassurance: someone who has cancelled needs to see that they
 // keep everything until the period they paid for actually runs out.
-function renewalLine(cancelling, periodEnd) {
+function renewalLine(cancelling, periodEnd, name) {
   if (!periodEnd) return 'Everything in Huddle, with no limits.';
   return cancelling
-    ? `Plus until ${formatDate(periodEnd)}: you keep everything until then.`
+    ? `${name} until ${formatDate(periodEnd)}: you keep everything until then.`
     : `Renews ${formatDate(periodEnd)}.`;
 }
 
@@ -468,10 +510,10 @@ function BenefitCheck() {
   );
 }
 
-function BenefitList() {
+function BenefitList({ benefits = PLUS_BENEFITS }) {
   return (
     <ul style={benefitListStyle}>
-      {PLUS_BENEFITS.map((benefit) => (
+      {benefits.map((benefit) => (
         <li key={benefit.id} style={benefitItemStyle}>
           <BenefitCheck />
           <span>{benefit.label}</span>

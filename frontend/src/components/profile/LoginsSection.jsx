@@ -7,6 +7,7 @@ import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useUI } from '../../context/UIContext';
 import { listLogins, addAndInviteLogin, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
 import { planIncludes } from '../../utils/planFeatures';
+import { planCopy } from '../billing/planCopy';
 
 /**
  * The owner's login manager: who in this household can sign in, and inviting the ones who cannot.
@@ -25,7 +26,7 @@ import { planIncludes } from '../../utils/planFeatures';
 // refreshPeople is a PROP rather than useAuth(): this component is rendered bare by its own test,
 // and a new context dependency would make every one of those tests need a provider to exercise the
 // invite flow. Same call as RoutineFormModal's defaultUnit.
-export default function LoginsSection({ plan, refreshPeople }) {
+export default function LoginsSection({ plan, vocab, refreshPeople }) {
   const [rows, setRows] = useState(null);
   const [invitingPerson, setInvitingPerson] = useState(null);
   const [addingPerson, setAddingPerson] = useState(false);
@@ -244,6 +245,8 @@ export default function LoginsSection({ plan, refreshPeople }) {
       )}
       {invitingPerson && (
         <InviteModal
+          plan={plan}
+          vocab={vocab}
           person={invitingPerson}
           onCancel={() => setInvitingPerson(null)}
           onSend={(email) => sendInvite(invitingPerson.personId, email)}
@@ -310,8 +313,14 @@ function AddPersonWithLoginModal({ onCancel, onSend }) {
   );
 }
 
-function InviteModal({ person, onCancel, onSend }) {
+function InviteModal({ person, plan, vocab, onCancel, onSend }) {
   const [email, setEmail] = useState(person.email || '');
+  // This modal is unreachable without MEMBER_LOGINS, so `plan` is always a paid tier here -- but
+  // name it from planCopy rather than as a literal, because a trainer who pays for Pro being told
+  // that logins "are part of Plus" describes a plan they did not buy. Falls back to the plain word
+  // when a newer server names a tier this bundle predates (resilience.md axis D).
+  const planName = planCopy(plan)?.name ?? 'your plan';
+  const account = vocab?.account ?? 'household';
 
   return (
     <Modal title={`Enable login for ${person.personName}`} onClose={onCancel}>
@@ -323,9 +332,9 @@ function InviteModal({ person, onCancel, onSend }) {
       {/* ⚠️ Stated BEFORE the email field, deliberately -- these are the things worth knowing
           before you type somebody's address, not after. The plan calls for all three. */}
       <ul style={disclosureStyle}>
-        <li>Member logins are part of Plus. If this household goes back to Free the login stops
-          working until you upgrade again — {person.personName}&rsquo;s workouts are never deleted
-          either way.</li>
+        <li>Member logins are part of {planName}. If this {account} goes back to Free the login
+          stops working until you upgrade again — {person.personName}&rsquo;s workouts are
+          never deleted either way.</li>
         <li>You can see their workouts and can remove their login at any time. You will never be
           able to see or set their password.</li>
         <li>If {person.personName} is under 13, set this up with a parent or guardian and use an

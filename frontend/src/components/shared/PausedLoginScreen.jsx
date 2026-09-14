@@ -1,8 +1,20 @@
 import { useAuth } from '../../context/AuthContext';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
+import { accountVocab } from '../../utils/accountVocab';
 
 /**
- * What a member sees when their household is no longer on Plus.
+ * What a member sees when their account is no longer on a paid plan.
+ *
+ * ⚠️ <b>It names no tier, and that is deliberate rather than vague.</b> By the time this screen
+ * renders, the account HAS lapsed -- so `account.plan` is FREE and the tier they were actually on
+ * is not knowable from here. It said "part of Huddle Plus" and "{owner} can turn Plus back on",
+ * which was simply false for a trainer's client whose PRO subscription lapsed: they were never on
+ * Plus. Naming the paid plans generally is true on every tier, including Team.
+ *
+ * The NOUN still moves with the tier via AccountVocab -- and note it will already have fallen back
+ * to the family nouns here for the same reason, since vocab is derived from the (now Free) plan.
+ * That is the safe direction: "household" reads as slightly generic to a client, where "practice"
+ * on a family account would read as plainly wrong.
  *
  * ⚠️ <b>This replaces the app rather than disabling parts of it, and that is the whole point.</b>
  * A paused login is refused on every route, so leaving the normal screens up would render an app
@@ -21,9 +33,10 @@ import { useAccountAccess } from '../../hooks/useAccountAccess';
  * workouts are never deleted on Free still holds exactly.
  */
 export default function PausedLoginScreen() {
-  const { user, logout } = useAuth();
+  const { user, account, logout } = useAuth();
   const { ownerName } = useAccountAccess();
-  const owner = ownerName || 'The household owner';
+  const vocab = accountVocab(account?.vocab);
+  const owner = ownerName || `The ${vocab.owner}`;
 
   return (
     <div style={wrapStyle}>
@@ -34,7 +47,8 @@ export default function PausedLoginScreen() {
         <h1 style={titleStyle}>Your login is paused</h1>
 
         <p style={bodyStyle}>
-          Personal logins are part of Huddle Plus, and this household isn&rsquo;t on Plus right now.
+          Personal logins are part of Huddle&rsquo;s paid plans, and this {vocab.account}{' '}
+          isn&rsquo;t on one right now.
         </p>
 
         {/* The sentence people actually need. Stated plainly and early, not buried under the
@@ -45,7 +59,7 @@ export default function PausedLoginScreen() {
         </p>
 
         <p style={bodyStyle}>
-          {owner} can turn Plus back on, and your login will start working again straight away
+          {owner} can turn it back on, and your login will start working again straight away
           &mdash; you won&rsquo;t need a new invitation.
         </p>
 

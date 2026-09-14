@@ -150,7 +150,7 @@ export default function ProfileTab() {
         ))}
       </div>
 
-      <LoginsSection plan={account?.plan} refreshPeople={refreshPeople} />
+      <LoginsSection plan={account?.plan} vocab={vocab} refreshPeople={refreshPeople} />
 
       <SectionLabel>Danger zone</SectionLabel>
       <div style={cardStyle}>

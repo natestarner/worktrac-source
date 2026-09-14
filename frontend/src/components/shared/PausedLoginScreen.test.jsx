@@ -35,7 +35,7 @@ describe('PausedLoginScreen', () => {
   it('names the owner as the person who can undo it', () => {
     render(<PausedLoginScreen />);
 
-    expect(screen.getByText(/Nate can turn Plus back on/)).toBeInTheDocument();
+    expect(screen.getByText(/Nate can turn it back on/)).toBeInTheDocument();
   });
 
   // ownerName is legitimately null (a household with no owner membership, or one with no person).
@@ -44,7 +44,7 @@ describe('PausedLoginScreen', () => {
     accessValue = { ownerName: null };
     render(<PausedLoginScreen />);
 
-    expect(screen.getByText(/The household owner can turn Plus back on/)).toBeInTheDocument();
+    expect(screen.getByText(/The household owner can turn it back on/)).toBeInTheDocument();
     expect(screen.queryByText(/null/)).not.toBeInTheDocument();
   });
 
@@ -66,5 +66,33 @@ describe('PausedLoginScreen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(logout).toHaveBeenCalledTimes(1);
+  });
+
+  // ⚠️ THE TIER THIS SCREEN MUST NOT NAME. It said "part of Huddle Plus" and "turn Plus back on",
+  // which is false for a trainer's client whose PRO subscription lapsed -- they were never on Plus.
+  // And by the time this renders the account HAS lapsed, so the tier they were on is not knowable
+  // from here at all. Naming the paid plans generally is the only statement true on every tier.
+  it('names no specific tier, because the one that lapsed is not knowable here', () => {
+    render(<PausedLoginScreen />);
+
+    expect(screen.getByText(/paid plans/)).toBeInTheDocument();
+    expect(screen.queryByText(/Huddle Plus/)).not.toBeInTheDocument();
+  });
+
+  // The noun still moves with the account, via AccountVocab -- so a client reads about a practice
+  // rather than about somebody else's household. (In production the vocab will usually have fallen
+  // back to the family nouns by now, since it is derived from the plan and the plan is Free again;
+  // the screen must render whichever it is handed rather than assuming one.)
+  it('uses the account\'s own noun', () => {
+    authValue = {
+      user: { email: 'client@example.com' },
+      account: { vocab: { account: 'practice', owner: 'trainer', member: 'client', manager: 'assistant' } },
+      logout,
+    };
+    accessValue = { ownerName: null };
+    render(<PausedLoginScreen />);
+
+    expect(screen.getByText(/this practice/)).toBeInTheDocument();
+    expect(screen.getByText(/The trainer can turn it back on/)).toBeInTheDocument();
   });
 });

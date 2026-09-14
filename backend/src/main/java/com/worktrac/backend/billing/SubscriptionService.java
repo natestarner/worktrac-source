@@ -306,7 +306,7 @@ public class SubscriptionService {
         events.publishEvent(new AccountPlanChangedEvent(saved.getAccount().getId()));
 
         if (firstUpgrade) {
-            events.publishEvent(new PlusUpgradedEvent(saved.getAccount().getId()));
+            events.publishEvent(new PlusUpgradedEvent(saved.getAccount().getId(), saved.getPlan()));
         }
 
         return saved;

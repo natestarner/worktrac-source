@@ -142,8 +142,8 @@ describe('LoginsSection', () => {
    * do, and the under-13 guidance. This is the screen where somebody decides to hand a login to a
    * child, so it is the screen that has to say it.
    */
-  it('states the Plus, transparency and under-13 disclosures before asking for an address', async () => {
-    render(<LoginsSection />);
+  it('states the plan, transparency and under-13 disclosures before asking for an address', async () => {
+    render(<LoginsSection plan="PLUS" />);
     fireEvent.click(await screen.findByRole('button', { name: 'Enable login' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Enable login for Sam' });
@@ -151,6 +151,35 @@ describe('LoginsSection', () => {
     expect(dialog).toHaveTextContent(/never deleted/i);
     expect(dialog).toHaveTextContent(/never be able to see or set their password/i);
     expect(dialog).toHaveTextContent(/under 13/i);
+  });
+
+  // ⚠️ The first bullet named Plus as a literal on a screen only a PAID account can reach -- so a
+  // trainer handing a client their login was told logins "are part of Plus", a plan they did not
+  // buy. The noun moves too: a practice is not a household.
+  it('names the plan the account is actually on, and the account by its own noun', async () => {
+    render(
+      <LoginsSection
+        plan="PRO"
+        vocab={{ account: 'practice', owner: 'trainer', member: 'client', manager: 'assistant' }}
+      />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Enable login' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Enable login for Sam' });
+    expect(dialog).toHaveTextContent(/part of Pro/i);
+    expect(dialog).toHaveTextContent(/this practice goes back to Free/i);
+    expect(dialog).not.toHaveTextContent(/part of Plus/i);
+  });
+
+  // A tier this bundle predates (resilience.md axis D). Naming it "Plus" would be the bug above;
+  // a plain phrase is merely unspecific, and this dialog's other three promises are unaffected.
+  it('falls back to a plain phrase rather than guessing a tier it does not know', async () => {
+    render(<LoginsSection plan="TEAM" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Enable login' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Enable login for Sam' });
+    expect(dialog).toHaveTextContent(/part of your plan/i);
+    expect(dialog).not.toHaveTextContent(/part of Plus/i);
   });
 
   it('sends the invite and reloads the list', async () => {

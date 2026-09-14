@@ -19,4 +19,32 @@ describe('PlusCelebration', () => {
 
     expect(onDismiss).toHaveBeenCalled();
   });
+
+  // ⚠️ The tier, and what that tier just unlocked. This said "Welcome to Huddle Plus" under a line
+  // about history, records and import -- so a trainer finishing a Pro checkout was congratulated on
+  // four things they already had and none of the four they had paid for.
+  it('welcomes a Pro checkout to Pro, and names what Pro unlocked', () => {
+    render(<PlusCelebration plan="PRO" onDismiss={vi.fn()} />);
+
+    expect(screen.getByText('Welcome to Huddle Pro')).toBeInTheDocument();
+    expect(screen.getByText(/clients get their own logins/)).toBeInTheDocument();
+    expect(screen.queryByText(/import are unlocked/)).not.toBeInTheDocument();
+  });
+
+  it('welcomes a Plus checkout to Plus', () => {
+    render(<PlusCelebration plan="PLUS" onDismiss={vi.fn()} />);
+
+    expect(screen.getByText('Welcome to Huddle Plus')).toBeInTheDocument();
+    expect(screen.getByText(/import are unlocked/)).toBeInTheDocument();
+  });
+
+  // ⚠️ The OPPOSITE call from PlanBadge's, deliberately. The badge renders nothing for a tier it
+  // does not recognise, because it is permanent chrome that self-corrects on the next /me. This is
+  // a one-shot congratulation over a payment that has already succeeded, and showing nothing after
+  // a successful checkout reads as "did that work?".
+  it('still celebrates a tier this build has never heard of', () => {
+    render(<PlusCelebration plan="ENTERPRISE" onDismiss={vi.fn()} />);
+
+    expect(screen.getByText('Welcome to Huddle Plus')).toBeInTheDocument();
+  });
 });
