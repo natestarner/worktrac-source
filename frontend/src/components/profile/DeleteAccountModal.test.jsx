@@ -94,3 +94,46 @@ describe('DeleteAccountModal', () => {
     expect(screen.getByRole('button', { name: 'Download all' })).toBeDisabled();
   });
 });
+
+// ⚠️ On a family account, deleting destroys YOUR OWN data. On a trainer's it destroys OTHER
+// PEOPLE'S -- clients who never agreed to it and cannot get it back. Naming the number is what
+// turns "everyone on this account" from a phrase into a fact somebody has to read past.
+describe('DeleteAccountModal — who else this takes with it', () => {
+  const PRO_VOCAB = { account: 'practice', owner: 'trainer', member: 'client', manager: 'assistant' };
+
+  function renderWith(people, vocab = PRO_VOCAB) {
+    useAuth.mockReturnValue({
+      account: { vocab },
+      people,
+      logout: vi.fn(),
+    });
+    return render(<DeleteAccountModal onClose={vi.fn()} />);
+  }
+
+  it('names how many other people lose their data, in the account’s own words', () => {
+    renderWith([{ id: 1, name: 'Nate' }, { id: 2, name: 'Dana' }, { id: 3, name: 'Sam' }]);
+
+    expect(screen.getByText(/2 other clients, and they cannot get it back/)).toBeInTheDocument();
+  });
+
+  it('says one client rather than 1 other clients', () => {
+    renderWith([{ id: 1, name: 'Nate' }, { id: 2, name: 'Dana' }]);
+
+    expect(screen.getByText(/1 other client, and they cannot get it back/)).toBeInTheDocument();
+  });
+
+  // A family account says "family members", from the same vocabulary the rest of the app uses.
+  it('uses the family noun on a family account', () => {
+    renderWith([{ id: 1, name: 'Nate' }, { id: 2, name: 'Sam' }], null);
+
+    expect(screen.getByText(/1 other family member, and they cannot get it back/)).toBeInTheDocument();
+  });
+
+  // Deleting an account that is only you is not the case this warning is for, and adding it there
+  // would make the sentence noise on the overwhelmingly common path.
+  it('says nothing extra when nobody else is on the account', () => {
+    renderWith([{ id: 1, name: 'Nate' }]);
+
+    expect(screen.queryByText(/cannot get it back/)).toBeNull();
+  });
+});
