@@ -56,13 +56,36 @@ imply otherwise.
 
 The same holds for the Plus pause, one step weaker: it does not even remove the membership.
 
+### The ladder has three rungs now, not two
+
+`MANAGER` sits between owner and member: it sees and writes every person, and owns nothing about the
+account — no billing, no deletion, no household settings, no account-wide export. It exists for a
+trainer's assistant, and it is deliberately **not** called `COACH`, because Team's OWNER is the one a
+club calls a coach. Full table and the reasoning: `.claude/rules/coaching.md`.
+
+Two things about it belong here rather than there, because they are about member access generally:
+
+- ⚠️ **`MANAGER` does not inherit new permissions the way `OWNER` does.** `OWNER_PERMISSIONS` is
+  `EnumSet.allOf`; `MANAGER`'s is enumerated. Fail-closed and correct, but silent — when you add a
+  `Permission`, decide in `PermissionMappingTest` whether a manager holds it.
+- ⚠️ **The client's `isOwner` is `!isMember && !isManager`, never `=== 'OWNER'`.** It was `!isMember`
+  until `MANAGER` existed, which silently made every assistant an owner in the client's eyes and
+  offered them billing and account deletion the server refuses. The negative form is what keeps the
+  fail-open contract for an unknown role. **A new non-owning role must be subtracted there in the
+  commit that adds it.**
+
 ### ⚠️ An owner may invite, resend, revoke and unlock. An owner may NEVER set a password.
 
 There is no `CHANGE_ANY_PASSWORD` permission, no admin path, and no support path. The member's
 Profile page states this as a promise to them:
 
-> {owner} owns this household. They can see your workouts and can remove your login.
+> {owner} owns this **{account}**. They can see your workouts and can remove your login.
 > **They cannot see or set your password.**
+
+⚠️ **Only the NOUN moves with the tier** — "owns this household" on a family account, "owns this
+practice" on a trainer's, from `AccountVocab` (see `coaching.md`). The sentence about the password
+does not vary by tier, by role or by plan, and a trainer must not be able to impersonate a client any
+more than a parent may impersonate a teenager.
 
 `PasswordChangeService` and the absence of any sibling to it are what make that true. **If a
 control to set another person's password is ever added, that sentence changes in the same commit**
@@ -86,7 +109,7 @@ An existing address now proves itself — its password, or a session already bel
 anything attaches. A brand-new address is unchanged: it is *setting* a password, and the emailed
 token is the only credential it can have. Details and the pins: `registration-and-email.md`.
 
-### ⚠️ Member logins are Plus-only, so EVERY test that mints one must set the household Plus first
+### ⚠️ Member logins are PAID-only, so EVERY test that mints one must set a paid plan first
 
 Registration creates a **Free** subscription. A MEMBER in a Free household is `PAUSED_PLAN` and is
 refused on every route but `GET /api/auth/me` and `GET /api/billing/subscription` — correctly. So a

@@ -38,7 +38,7 @@ const SECTIONS = [
   { id: 'personal', title: 'Notes, tags and favorites', group: 'Making it yours' },
   { id: 'settings', title: 'Settings', group: 'Making it yours' },
   { id: 'logins', title: 'Giving someone their own login', group: 'Making it yours' },
-  { id: 'plan', title: 'Free and Plus', group: 'Making it yours' },
+  { id: 'plan', title: 'Plans', group: 'Making it yours' },
   { id: 'data', title: 'Import and export', group: 'Making it yours' },
   { id: 'offline', title: 'Losing the connection', group: 'When things go wrong' },
   { id: 'trouble', title: 'Getting help', group: 'When things go wrong' },
@@ -764,25 +764,45 @@ export default function HelpTab() {
         </Note>
       </Section>
 
-      <Section id="plan" title="Free and Plus">
+      {/* ⚠️ The section id stays "plan". Section ids are API: HistoryWindowModal deep-links this
+          one, and HelpTab.test.jsx pins the whole list as a literal precisely so a rename cannot
+          pass by agreeing with itself. Only the title moved from "Free and Plus" to "Plans". */}
+      <Section id="plan" title="Plans">
         <p className="help-lede">
           Free is free for good. Not a trial that runs out. Plus adds your whole history, the
-          ability to bring old workouts in, and a personal login for anyone who wants one.
+          ability to bring old workouts in, and a personal login for anyone who wants one. Pro is
+          for personal trainers &mdash; it adds clients who can&rsquo;t see each other, assigned
+          programs and a roster.
         </p>
 
         <HelpTable
-          head={['', 'Free', 'Plus']}
+          head={['', 'Free', 'Plus', 'Pro']}
           rows={[
-            ['People in your household', 'Everyone', 'Everyone'],
-            ['Workouts, sets and exercises', 'Unlimited', 'Unlimited'],
-            ['Logging with no signal', 'Yes', 'Yes'],
-            ['PRs, routines, rest timer', 'Yes', 'Yes'],
-            ['Export all your data', 'Yes', 'Yes'],
-            ['History, PRs and trends', 'Last 90 days', 'Everything'],
-            ['Import past workouts', 'No', 'Yes'],
-            ['A personal login for each person', 'No', 'Yes'],
+            ['People in your household', 'Everyone', 'Everyone', 'You, your assistants, and the clients you pay for'],
+            ['Workouts, sets and exercises', 'Unlimited', 'Unlimited', 'Unlimited'],
+            ['Logging with no signal', 'Yes', 'Yes', 'Yes'],
+            ['PRs, routines, rest timer', 'Yes', 'Yes', 'Yes'],
+            ['Export all your data', 'Yes', 'Yes', 'Yes'],
+            ['History, PRs and trends', 'Last 90 days', 'Everything', 'Everything'],
+            ['Import past workouts', 'No', 'Yes', 'Yes'],
+            ['A personal login for each person', 'No', 'Yes', 'Yes'],
+            ['Keep everyone\u2019s training private from each other', 'No', 'No', 'Yes'],
+            ['Assistants who can see everyone', 'No', 'No', 'Yes'],
           ]}
         />
+
+        <Note title="Pro is priced by how many clients you have">
+          <p>
+            Free and Plus have no seats &mdash; add as many people as your household has. Pro is
+            different: you pay by how many <strong>clients</strong> you carry, in bands. Your own
+            training and every assistant you add are free.
+          </p>
+          <p>
+            Going over your band never locks anyone out. It stops you adding the{' '}
+            <em>next</em> client until you move up a band; everyone already there keeps working
+            exactly as before.
+          </p>
+        </Note>
 
         <Note title="Nothing you log is ever deleted">
           <p>
