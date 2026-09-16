@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -38,6 +40,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @AutoConfigureMockMvc
 class RosterTest extends AbstractIntegrationTest {
+
+    // ⚠️ WITHOUT THIS, THIS CLASS TALKS TO WHATEVER IS ON localhost:1434 -- which on a developer's
+    // machine is their real local SQL Server, and in CI is nothing at all. AbstractIntegrationTest
+    // cannot hoist it: a static @DynamicPropertySource has no way to learn which concrete subclass
+    // triggered it, so each one passes its own identity. Omitting it does not fail loudly; it falls
+    // back to application-local.yml and passes locally while failing every time on a clean machine.
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registerDatasource(registry, RosterTest.class);
+    }
 
     @Autowired
     private MockMvc mockMvc;
