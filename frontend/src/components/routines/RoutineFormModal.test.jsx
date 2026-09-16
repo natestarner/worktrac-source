@@ -168,6 +168,25 @@ describe('RoutineFormModal validation', () => {
     expect(screen.queryByText('Give this routine a name.')).not.toBeInTheDocument();
   });
 
+  // If the person had scrolled the panel down to browse exercises, a name error rendered at the
+  // top was invisible -- saving looked like it silently did nothing. Scrolling the name field
+  // into view (jsdom doesn't implement scrollIntoView -- the component guards the call, so this
+  // stubs it in rather than asserting a no-op) and focusing it makes the failure visible and lets
+  // a keyboard user start fixing it immediately.
+  it('scrolls to and focuses the name field when the name is blank', async () => {
+    renderModal();
+    const nameInput = screen.getByPlaceholderText('Routine name (e.g. Push Day)');
+    const scrollIntoView = vi.fn();
+    nameInput.scrollIntoView = scrollIntoView;
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save routine' }));
+
+    await screen.findByText('Give this routine a name.');
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+    expect(nameInput).toHaveFocus();
+  });
+
   it('shows an error and does not save when no exercises are selected', async () => {
     const onSaved = vi.fn();
     renderModal({ onSaved });
@@ -180,6 +199,28 @@ describe('RoutineFormModal validation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
     expect(screen.queryByText('Add at least one exercise.')).not.toBeInTheDocument();
+  });
+
+  // Same visibility problem, but the name itself isn't the invalid field here -- the name input
+  // is still the scroll target (it sits directly above this error message), but focus must stay
+  // off it since there's nothing wrong with what's in it.
+  it('scrolls to the name field but does not steal focus when no exercises are selected', async () => {
+    renderModal();
+    const nameInput = screen.getByPlaceholderText('Routine name (e.g. Push Day)');
+    const scrollIntoView = vi.fn();
+    nameInput.scrollIntoView = scrollIntoView;
+
+    fireEvent.change(nameInput, { target: { value: 'Push Day' } });
+    // Modal autofocuses the name field on open, so it's still focused at this point regardless
+    // of what the save handler does -- move focus off it first so the later assertion actually
+    // proves the handler didn't refocus it, rather than just observing the autofocus untouched.
+    const saveButton = screen.getByRole('button', { name: 'Save routine' });
+    saveButton.focus();
+    fireEvent.click(saveButton);
+
+    await screen.findByText('Add at least one exercise.');
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+    expect(nameInput).not.toHaveFocus();
   });
 
   it('saves once both a name and an exercise are provided', async () => {
