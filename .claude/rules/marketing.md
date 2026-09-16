@@ -219,11 +219,29 @@ onto two lines **inside its own pill**, at every width up to 430px, on every pag
   `for-trainers.spec.ts`'s "keeps the header on one row" test, which measures client rects per
   label at 320px — not element height, since `.btn`'s `min-height` is tall enough to hide a
   second line.
-- **Below 460px the wordmark is hidden and the mark alone carries the brand.** At 320px the lockup
-  (141px) + "Log in" (43px) + gaps (32px) claim 216 of 280px, leaving 64px for a CTA needing at
-  least 82px even if its label were the single word "Start" — so no label choice fits, and
-  shortening the CTA is not the fix. Dropping the wordmark returns 93px. Re-measure that budget
-  before adding anything to this row.
+
+### ⚠️ Fitting the row and keeping the brand name are TWO requirements
+
+The first fix here bought room the cheapest way available — `.brand__word { display: none }` below
+460px — and that breakpoint covers **every iPhone in portrait** (375–440px). The word "Huddle"
+silently disappeared from the header of all of them, on all three pages, and every existing
+assertion still passed: "nothing wraps" is trivially true of a header you have emptied.
+
+The row is fitted by shrinking each part instead (`≤460px`: mark 42px, brand gap `--space-2`,
+wordmark 22px, header/nav gaps `--space-3`, `.btn--small` padding 14px), and the wordmark is
+dropped **only below 360px**, which no current phone reports.
+
+- **Measure with the webfont BLOCKED.** Barlow loads with `display=swap`, so the first paint is
+  always the fallback stack, and it renders "Huddle" ~8px wider. Tuning against the loaded font
+  alone left 360px at +6px of slack — inside that margin. Measured worst case now: 360px +18px,
+  375px +33px, 390px +48px, 430px +85px, on `for-trainers.html` (the narrowest budget, since it
+  carries the longest CTA).
+- **Never satisfy a header-fit problem by removing brand or navigation.** `for-trainers.spec.ts`
+  asserts the wordmark is displayed, non-zero-width and still reads "Huddle" at 375/390/393/414/430
+  — real device widths — alongside the mark. Whichever requirement a change optimises for, the
+  other test fails.
+- 320px (the original SE) is the one documented exception: no arrangement fits, so the mark carries
+  the brand alone there.
 
 ## A marketing CTA that names a plan needs the app to understand it
 

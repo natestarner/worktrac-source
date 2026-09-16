@@ -559,24 +559,61 @@ img {
   }
 }
 
-/* Phones: the mark carries the brand, the wordmark steps aside.
-   With nowrap above, the header row has a real width budget and at 320px it does not balance --
-   brand (141px) + "Log in" (43px) + the two gaps (32px) already claim 216 of the 280px available,
-   leaving 64px for a CTA that needs at least 82px even if its label were the single word "Start".
-   Dropping the wordmark returns 93px, which fits every label down to 320px with room to spare;
-   the four-circle mark is the distinctive half of the lockup, keeps `aria-label="Huddle home"`,
-   and the wordmark still appears in the footer on every page.
-   460px rather than a common device width so every phone gets the same header instead of the
-   wordmark appearing on a 15 Pro Max and vanishing on a 15. */
+/* Phones: the whole lockup shrinks so the NAME can stay.
+   With nowrap above, this row has a real width budget, and at full size it does not fit a phone:
+   brand (141px) + "Log in" (43px) + the two gaps (32px) claim 216 of the 280px available at 320px.
+   Hiding .brand__word buys the most room in one move and was the first fix here -- but at a
+   460px breakpoint that silently removed the word "Huddle" from the header of EVERY iPhone in
+   portrait (375-440px), which is not a trade worth making for slack nobody needed.
+
+   Shrinking each part instead keeps the name at every width a current phone actually reports.
+   Measured on for-trainers.html, the narrowest-budget page because it carries the longest CTA,
+   with the webfont BLOCKED so the wider fallback stack is what is being measured:
+
+     360px +18px · 375px +33px · 390px +48px · 414px +70px · 430px +85px
+
+   The fallback matters and is not hypothetical: Barlow loads with `display=swap`, so the first
+   paint is always the fallback, and it renders "Huddle" ~8px wider than Barlow does. Tuning
+   against the loaded font alone left 360px with +6px, which is inside that margin.
+
+   Re-measure this budget before adding anything to this row, and measure it with fonts blocked. */
 @media (max-width: 460px) {
-  .brand__word {
-    display: none;
+  .site-header {
+    gap: var(--space-3);
   }
 
-  /* Buys back another 12px for the label, which is what keeps even the longest CTA off the
-     brand mark at 320px. */
+  .brand {
+    gap: var(--space-2);
+  }
+
+  /* height: auto keeps the aspect ratio from the SVG's own 52x47 attributes. */
+  .brand__mark {
+    width: 42px;
+    height: auto;
+  }
+
+  .brand__word {
+    font-size: 22px;
+  }
+
+  .site-nav {
+    gap: var(--space-3);
+  }
+
   .site-nav .btn--small {
-    padding: 0 16px;
+    padding: 0 14px;
+  }
+}
+
+/* Below 360px no arrangement fits: 320px leaves 64px for a CTA needing at least 82px even if its
+   label were the single word "Start", and shrinking type far enough to close that gap costs more
+   than the word is worth. The mark alone carries the brand there -- it is the distinctive half of
+   the lockup, `aria-label="Huddle home"` keeps the link's accessible name, and the wordmark is
+   still in the footer on every page. 359px rather than a device width because it is the measured
+   floor, not a guess: 360px is the narrowest viewport any current phone reports. */
+@media (max-width: 359px) {
+  .brand__word {
+    display: none;
   }
 }
 
