@@ -74,12 +74,27 @@ describe('ConfirmEmailPage', () => {
   // first-run welcome modal waits until the billing decision resolves. A tour interrupting someone
   // who arrived intending to pay is the wrong order.
   it('lands a Go Plus registration on billing, with the welcome modal deferred', async () => {
-    renderWithEmail('alex@example.com', { wantsPlus: true });
+    renderWithEmail('alex@example.com', { wantsPlan: 'PLUS' });
 
     fireEvent.change(screen.getByPlaceholderText('123456'), { target: { value: '123456' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/app/billing'));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/app/billing?intent=plus'));
+    expect(deferOnboarding).toHaveBeenCalled();
+  });
+
+  // The trainer half of the same path, from marketing/for-trainers.html's ?plan=pro CTAs. Both
+  // paid plans want the identical two things, so this branches on "was a plan named at all" rather
+  // than on which one -- the billing screen already carries a card for each. Asserted separately
+  // anyway: PRO reaching this page at all is exactly what was broken upstream in RegisterPage, and
+  // a test that only ever passes 'PLUS' would not have noticed.
+  it('lands a Pro registration on billing too, with the welcome modal deferred', async () => {
+    renderWithEmail('sam@example.com', { wantsPlan: 'PRO' });
+
+    fireEvent.change(screen.getByPlaceholderText('123456'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/app/billing?intent=pro'));
     expect(deferOnboarding).toHaveBeenCalled();
   });
 
@@ -89,7 +104,7 @@ describe('ConfirmEmailPage', () => {
     const order = [];
     deferOnboarding.mockImplementation(() => order.push('defer'));
     mockNavigate.mockImplementation(() => order.push('navigate'));
-    renderWithEmail('alex@example.com', { wantsPlus: true });
+    renderWithEmail('alex@example.com', { wantsPlan: 'PLUS' });
 
     fireEvent.change(screen.getByPlaceholderText('123456'), { target: { value: '123456' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));

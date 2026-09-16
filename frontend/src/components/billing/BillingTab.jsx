@@ -160,6 +160,43 @@ export default function BillingTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkoutParam]);
 
+  // Someone who arrived from marketing's ?plan=pro CTAs (RegisterPage -> ConfirmEmailPage) lands
+  // here with ?intent=pro. This screen leads with Plus and keeps the Pro card deliberately quieter
+  // and below it -- right for the families who are most of this screen's readers, wrong for a
+  // trainer who just told us twice which plan they wanted and would otherwise arrive looking at
+  // somebody else's offer. Nothing about the screen's ordering or emphasis changes; it just starts
+  // scrolled to the card they came for.
+  //
+  // Latched into state on the first render because the param is stripped immediately below: the
+  // value has to outlive the URL it came from.
+  const [wantedProOnArrival] = useState(() => searchParams.get('intent') === 'pro');
+  const scrolledToProRef = useRef(false);
+
+  // A callback ref rather than an effect, because the node is what we are waiting for: the Pro
+  // card only exists while the account is on Free, so on any other account this never fires and
+  // the arrival is simply an ordinary one. Guarded with scrollIntoView's own presence for jsdom,
+  // matching HistoryTab and ExercisePicker -- there is no shared scroll helper to reuse.
+  const proCardRef = useCallback(
+    (node) => {
+      if (!node || !wantedProOnArrival || scrolledToProRef.current) return;
+      scrolledToProRef.current = true;
+      if (node.scrollIntoView) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+    [wantedProOnArrival],
+  );
+
+  // Strip it for the same reason the checkout param is stripped: a reload or a shared link must
+  // not replay the jump. Every recognised or unrecognised value goes, not just 'pro', so nothing
+  // is left sitting in the URL.
+  const intentParam = searchParams.get('intent');
+  useEffect(() => {
+    if (!intentParam) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('intent');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intentParam]);
+
   // ⚠️ Takes the tier explicitly rather than reading component state, and the default is PLUS.
   // It was `createCheckoutSession(interval)` with no plan at all, which the server reads as Plus --
   // so while Pro was fully buyable over the API, every button on this screen sold Plus. A caller
@@ -237,6 +274,7 @@ export default function BillingTab() {
           pending={pending}
           onUpgrade={handleUpgrade}
           onStartFree={() => navigate('/app/log')}
+          proCardRef={proCardRef}
         />
       )}
 
@@ -362,7 +400,7 @@ function renewalLine(cancelling, periodEnd, name) {
     : `Renews ${formatDate(periodEnd)}.`;
 }
 
-function FreeSummary({ interval, onIntervalChange, proBand, onProBandChange, pending, onUpgrade, onStartFree }) {
+function FreeSummary({ interval, onIntervalChange, proBand, onProBandChange, pending, onUpgrade, onStartFree, proCardRef }) {
   return (
     <>
       <SectionLabel>Your plan</SectionLabel>
@@ -396,6 +434,7 @@ function FreeSummary({ interval, onIntervalChange, proBand, onProBandChange, pen
         onBandChange={onProBandChange}
         pending={pending}
         onUpgrade={onUpgrade}
+        cardRef={proCardRef}
       />
 
       {/* Equal-weight, not fine print. Someone who arrived from marketing's "Go Plus" was routed
@@ -418,7 +457,7 @@ function FreeSummary({ interval, onIntervalChange, proBand, onProBandChange, pen
  * rule -- Upgrade to Plus / Start with Free, decide later / Manage billing / Go Plus. It shares no
  * substring with any of them, and none contains it.
  */
-function ProUpgradeCard({ interval, band, onBandChange, pending, onUpgrade }) {
+function ProUpgradeCard({ interval, band, onBandChange, pending, onUpgrade, cardRef }) {
   const selected = PRO_BANDS.find((b) => b.id === band) ?? PRO_BANDS[0];
   // The interval chosen above drives this price too, so the two cards can never quote different
   // billing periods on one screen.
@@ -426,7 +465,12 @@ function ProUpgradeCard({ interval, band, onBandChange, pending, onUpgrade }) {
 
   return (
     <>
-      <SectionLabel>Training clients?</SectionLabel>
+      {/* The scroll anchor for a ?intent=pro arrival sits on the LABEL, not on the card below it:
+          the label is the top of this block, and scrolling to the card alone would park
+          "Training clients?" just above the viewport -- losing the one line that says what the
+          card is. SectionLabel spreads ...rest onto its element, and React 19 passes ref as an
+          ordinary prop, so this reaches the real DOM node. */}
+      <SectionLabel ref={cardRef} className="pro-upgrade-anchor">Training clients?</SectionLabel>
       <div style={cardStyle}>
         <p style={mutedLineStyle}>
           Huddle Pro gives every client their own login, keeps their training private from each

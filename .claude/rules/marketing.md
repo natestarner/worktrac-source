@@ -183,3 +183,58 @@ handles probing (`-i` with no output), scanning content via a contact-sheet
 (`-vf fps=1,tile=NxM`), trimming (`-ss`/`-t`), cropping (`-vf crop=...`), and the final VP9
 encode (`-c:v libvpx-vp9`) — no Chromium/canvas workaround needed at all once ffmpeg is
 available.
+
+## A class this stylesheet does not define fails SILENTLY, and nothing catches it
+
+There is no build step, so an unknown class name is not an error anywhere — not at author time,
+not in `check-marketing.sh`, not in the Playwright suite. The element simply renders unstyled,
+which for a *background* band means it renders as the page, and for a `<details>` means it renders
+as a raw browser disclosure triangle. Both shipped to production on `for-trainers.html`:
+
+- **`.band-soft` (×2) does not exist; the real class is `.section--subtle`.** The page was authored
+  with alternating tinted bands to separate its sections and rendered as one undifferentiated
+  column, which is what made its otherwise ordinary section padding read as "a lot of whitespace".
+  The reported symptom was spacing; the cause was a missing background.
+- **`.faq` (×6) did not exist either.** Six `<details class="faq">` rendered as native disclosure
+  triangles on a page whose every other element is designed. The site's real pattern is the open
+  `.faq-grid` / `.faq__item` / `.faq__q` grid `index.html` uses — reuse it rather than styling
+  `details` into a second FAQ mechanism.
+
+**When adding markup here, check every class you write actually exists in `styles.css`.** The
+whole-file audit is one pass over `class="..."` against `\.([a-zA-Z0-9_-]+)` in the stylesheet; the
+only legitimate miss is a JS hook (`js-lazy-video`). `e2e/marketing-tests` cannot catch this class
+of bug — every assertion there is about text and links, and unstyled markup still contains both.
+
+## The header is a width budget, and a button label must never wrap
+
+`.site-header` is one flex row: brand lockup, then `.site-nav` (optional links, "Log in", the CTA).
+Flex items shrink below their content width by default, so when it overflowed nothing broke
+visibly — the *labels* wrapped instead. "Log in" came apart after "Log", and the CTA's label broke
+onto two lines **inside its own pill**, at every width up to 430px, on every page.
+
+- **`.btn` and `.site-nav__link` carry `white-space: nowrap`.** That is what turns a silent squeeze
+  into a width the layout has to actually budget for. Don't remove it to "fix" an overflow.
+- **`landing.spec.ts`'s no-horizontal-scroll assertion cannot see this**, and neither can the
+  trainer page's copy of it: wrapping is precisely *how* a browser avoids overflow. The guard is
+  `for-trainers.spec.ts`'s "keeps the header on one row" test, which measures client rects per
+  label at 320px — not element height, since `.btn`'s `min-height` is tall enough to hide a
+  second line.
+- **Below 460px the wordmark is hidden and the mark alone carries the brand.** At 320px the lockup
+  (141px) + "Log in" (43px) + gaps (32px) claim 216 of 280px, leaving 64px for a CTA needing at
+  least 82px even if its label were the single word "Start" — so no label choice fits, and
+  shortening the CTA is not the fix. Dropping the wordmark returns 93px. Re-measure that budget
+  before adding anything to this row.
+
+## A marketing CTA that names a plan needs the app to understand it
+
+`index.html`'s "Go Plus" links to `/register?plan=plus`; `for-trainers.html`'s three CTAs link to
+`/register?plan=pro`. **That parameter only does anything if it is a key in
+`MARKETING_PLAN_INTENTS` in `frontend/src/routes/RegisterPage.jsx`.** An unrecognised value reads
+as "no plan named", which is indistinguishable from an ordinary signup — nothing throws, nothing
+404s, and the person lands on Log instead of the billing screen.
+
+`for-trainers.html` shipped its `?plan=pro` CTAs while that map understood only `'plus'`, so every
+trainer who clicked one was silently treated as having arrived with no intent. Note what did *not*
+catch it: `for-trainers.spec.ts` asserted all three hrefs carried `plan=pro` the whole time, and
+was correct — **it tested the producer, and nothing tested the consumer.** The journey is covered
+end to end in `e2e/tests/billing-onboarding-order.spec.ts` now.
