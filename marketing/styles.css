@@ -307,12 +307,16 @@ img {
    Layout
    ========================================================================= */
 
+/* Block padding is ~20% down from clamp(56px, 7vw, 104px): 44px on a phone, 88px at desktop.
+   Inline padding is unchanged -- it is the page gutter, not section rhythm.
+   .section--tight moves with it, or it stops being tighter than .section and the one band that
+   is meant to read as compressed (the closing CTA) ends up the loosest thing on the page. */
 .section {
-  padding: clamp(56px, 7vw, 104px) clamp(20px, 5vw, 72px);
+  padding: clamp(44px, 6vw, 88px) clamp(20px, 5vw, 72px);
 }
 
 .section--tight {
-  padding-block: clamp(48px, 5.5vw, 88px);
+  padding-block: clamp(38px, 5vw, 74px);
 }
 
 .section--subtle {
@@ -383,6 +387,13 @@ img {
   margin-bottom: clamp(32px, 4vw, 56px);
 }
 
+/* The margin above is a gap between the heading and the body it introduces. In a section that is
+   only a heading -- for-trainers' "Why another one" -- there is no body, so it was 56px of dead
+   space stacked on top of the section's own bottom padding and the next section's top padding. */
+.section__head:last-child {
+  margin-bottom: 0;
+}
+
 .prose {
   font-size: clamp(17px, 1.4vw, 18px);
   line-height: 1.6;
@@ -411,6 +422,11 @@ img {
   font-size: 18px;
   font-weight: 600;
   line-height: 1;
+  /* A button label never breaks mid-phrase. Without this, the header's flex row shrinks the CTA
+     below its content width at phone sizes and the label wraps INSIDE the pill -- "Start a
+     practice" came apart onto two lines at every width up to 430px. Making it nowrap is what
+     turns that silent squeeze into a width the layout below has to actually budget for. */
+  white-space: nowrap;
   cursor: pointer;
   transition: background var(--dur-base) var(--ease-out),
     border-color var(--dur-base) var(--ease-out);
@@ -528,6 +544,8 @@ img {
   font-size: 16px;
   font-weight: 500;
   color: var(--color-muted);
+  /* Same reason as .btn: "Log in" was breaking after "Log" on every page at phone widths. */
+  white-space: nowrap;
 }
 
 .site-nav__link--strong {
@@ -538,6 +556,27 @@ img {
 @media (max-width: 760px) {
   .site-nav__link--optional {
     display: none;
+  }
+}
+
+/* Phones: the mark carries the brand, the wordmark steps aside.
+   With nowrap above, the header row has a real width budget and at 320px it does not balance --
+   brand (141px) + "Log in" (43px) + the two gaps (32px) already claim 216 of the 280px available,
+   leaving 64px for a CTA that needs at least 82px even if its label were the single word "Start".
+   Dropping the wordmark returns 93px, which fits every label down to 320px with room to spare;
+   the four-circle mark is the distinctive half of the lockup, keeps `aria-label="Huddle home"`,
+   and the wordmark still appears in the footer on every page.
+   460px rather than a common device width so every phone gets the same header instead of the
+   wordmark appearing on a 15 Pro Max and vanishing on a 15. */
+@media (max-width: 460px) {
+  .brand__word {
+    display: none;
+  }
+
+  /* Buys back another 12px for the label, which is what keeps even the longest CTA off the
+     brand mark at 320px. */
+  .site-nav .btn--small {
+    padding: 0 16px;
   }
 }
 

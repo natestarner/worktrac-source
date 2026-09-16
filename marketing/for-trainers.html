@@ -4,20 +4,20 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
-  <title>Huddle Pro: the workout log your clients actually fill in</title>
-  <meta name="description" content="A training log for personal trainers. Give every client their own login, keep each one's data private, assign programs with the numbers to hit, and see at a glance who has gone quiet." />
+  <title>Huddle Pro: the training log for personal trainers</title>
+  <meta name="description" content="A training log for personal trainers. Give every client their own login, keep each one's data private, share programs with the numbers to hit, and see at a glance who has gone quiet." />
   <link rel="canonical" href="https://huddle.fitness/for-trainers.html" />
 
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://huddle.fitness/for-trainers.html" />
-  <meta property="og:title" content="Huddle Pro: the workout log your clients actually fill in" />
-  <meta property="og:description" content="Client logins, private by default. Assign programs with prescribed weights. See who has stopped showing up." />
+  <meta property="og:title" content="Huddle Pro: the training log for personal trainers" />
+  <meta property="og:description" content="Client logins, private by default. Share programs with the numbers on them. See who has stopped showing up." />
   <meta property="og:image" content="https://huddle.fitness/assets/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Huddle Pro: the workout log your clients actually fill in" />
-  <meta name="twitter:description" content="Client logins, private by default. Assign programs with prescribed weights. See who has stopped showing up." />
+  <meta name="twitter:title" content="Huddle Pro: the training log for personal trainers" />
+  <meta name="twitter:description" content="Client logins, private by default. Share programs with the numbers on them. See who has stopped showing up." />
   <meta name="twitter:image" content="https://huddle.fitness/assets/og-image.png" />
 
   <meta name="theme-color" content="#faf9f7" media="(prefers-color-scheme: light)" />
@@ -53,7 +53,7 @@
       <a class="site-nav__link site-nav__link--optional" href="#pricing">Pricing</a>
       <a class="site-nav__link site-nav__link--optional" href="#faq">FAQ</a>
       <a class="site-nav__link site-nav__link--strong" href="https://app.huddle.fitness/login">Log in</a>
-      <a class="btn btn--primary btn--small" href="https://app.huddle.fitness/register?plan=pro">Start a practice</a>
+      <a class="btn btn--primary btn--small" href="https://app.huddle.fitness/register?plan=pro">Get started</a>
     </nav>
   </header>
 
@@ -62,8 +62,8 @@
     <!-- ================= HERO ================= -->
     <section class="hero">
       <div class="hero__inner">
-        <h1 class="hero__title">The log your clients <em>actually fill in</em>.</h1>
-        <p class="hero__lead">Give every client their own login, assign the session, and see who trained.</p>
+        <h1 class="hero__title">Share the session. <em>See every rep</em>.</h1>
+        <p class="hero__lead">Every client gets their own login, the numbers to hit, and a log that comes straight back to you.</p>
       </div>
     </section>
 
@@ -77,7 +77,7 @@
     </section>
 
     <!-- ================= HOW IT WORKS ================= -->
-    <section class="section band-soft" id="how">
+    <section class="section section--subtle" id="how">
       <div class="section__head reveal">
         <p class="eyebrow">How it works</p>
         <h2 class="section__title">Four things, and no scheduling module</h2>
@@ -110,7 +110,7 @@
     </section>
 
     <!-- ================= PRICING ================= -->
-    <section class="section band-soft" id="pricing">
+    <section class="section section--subtle" id="pricing">
       <div class="section__head reveal">
         <p class="eyebrow">Pricing</p>
         <h2 class="section__title">Priced by how many clients you carry</h2>
@@ -155,7 +155,7 @@
 
         <p class="prose">Change bands whenever your roster does. Going over your band never locks anyone out &mdash; it just stops you adding the next client until you move up.</p>
 
-        <a class="btn btn--primary btn--full" href="https://app.huddle.fitness/register?plan=pro">Start a practice</a>
+        <a class="btn btn--primary btn--full" href="https://app.huddle.fitness/register?plan=pro">Get started</a>
       </div>
     </section>
 
@@ -166,31 +166,34 @@
         <h2 class="section__title">The things trainers ask first</h2>
       </div>
 
-      <div class="container--pricing reveal">
-        <details class="faq">
-          <summary>Can my clients see each other?</summary>
-          <p>No, unless you turn that on. Pro accounts start private: each client sees only their own training. You and your assistants see everyone.</p>
-        </details>
-        <details class="faq">
-          <summary>What happens if a client leaves me?</summary>
-          <p>Remove their login and their training data stays in your account &mdash; you keep the record of the work you did together. They can export their full history to CSV before they go, at no cost, and bring it into their own account later. Importing a spreadsheet needs a paid plan on their side, so it is worth saying that to them plainly rather than promising a free landing spot.</p>
-        </details>
-        <details class="faq">
-          <summary>Do my assistants cost extra?</summary>
-          <p>No. You pay for clients. Your own training and every assistant you add are free. An assistant can see and log for every client but cannot touch billing, delete the account, or change whether clients see each other.</p>
-        </details>
-        <details class="faq">
-          <summary>Does it work in a gym with no signal?</summary>
-          <p>Yes, and this is the part most coaching apps get wrong. Logging works with no internet at all &mdash; sets, notes, whole sessions &mdash; and syncs when the phone finds a connection. Nothing is lost in a basement.</p>
-        </details>
-        <details class="faq">
-          <summary>Is there scheduling and payments?</summary>
-          <p>No, deliberately. That is a whole other product and there are good ones already. Huddle is the training log, and it is the part your clients touch every session.</p>
-        </details>
-        <details class="faq">
-          <summary>I train my family, not clients.</summary>
-          <p>Then you want the <a href="/">family plans</a> &mdash; there is a free one.</p>
-        </details>
+      <!-- Same open two-column pattern index.html uses. This was authored as <details class="faq">,
+           but `.faq` is not a class styles.css defines, so every answer rendered as a bare native
+           disclosure triangle and every promise on this page sat behind a tap. -->
+      <div class="container--narrow faq-grid reveal">
+        <div class="faq__item">
+          <h3 class="faq__q">Can my clients see each other?</h3>
+          <p class="prose">No, unless you turn that on. Pro accounts start private: each client sees only their own training. You and your assistants see everyone.</p>
+        </div>
+        <div class="faq__item">
+          <h3 class="faq__q">What happens if a client leaves me?</h3>
+          <p class="prose">Remove their login and their training data stays in your account &mdash; you keep the record of the work you did together. They can export their full history to CSV before they go, at no cost, and bring it into their own account later. Importing a spreadsheet needs a paid plan on their side, so it is worth saying that to them plainly rather than promising a free landing spot.</p>
+        </div>
+        <div class="faq__item">
+          <h3 class="faq__q">Do my assistants cost extra?</h3>
+          <p class="prose">No. You pay for clients. Your own training and every assistant you add are free. An assistant can see and log for every client but cannot touch billing, delete the account, or change whether clients see each other.</p>
+        </div>
+        <div class="faq__item">
+          <h3 class="faq__q">Does it work in a gym with no signal?</h3>
+          <p class="prose">Yes, and this is the part most coaching apps get wrong. Logging works with no internet at all &mdash; sets, notes, whole sessions &mdash; and syncs when the phone finds a connection. Nothing is lost in a basement.</p>
+        </div>
+        <div class="faq__item">
+          <h3 class="faq__q">Is there scheduling and payments?</h3>
+          <p class="prose">No, deliberately. That is a whole other product and there are good ones already. Huddle is the training log, and it is the part your clients touch every session.</p>
+        </div>
+        <div class="faq__item">
+          <h3 class="faq__q">I train my family, not clients.</h3>
+          <p class="prose">Then you want the <a href="/">family plans</a> &mdash; there is a free one.</p>
+        </div>
       </div>
     </section>
 
@@ -199,7 +202,7 @@
       <div class="cta-final reveal">
         <h2 class="section__title">Try it with one client</h2>
         <p class="prose">Start on Starter, add a single client, and assign them a session this week. If the log is not better than what they are using now, you will know quickly.</p>
-        <a class="btn btn--on-dark" href="https://app.huddle.fitness/register?plan=pro">Start a practice</a>
+        <a class="btn btn--on-dark" href="https://app.huddle.fitness/register?plan=pro">Get started</a>
       </div>
     </section>
   </main>
@@ -210,7 +213,7 @@
         <circle cx="200" cy="175" r="34" fill="#e8734a" /><circle cx="258" cy="168" r="29" fill="#f2a65a" /><circle cx="198" cy="221" r="25" fill="#f2ede1" /><circle class="brand__mark-hairline" cx="198" cy="221" r="25" fill="none" /><circle cx="250" cy="219" r="19" fill="#b5542d" />
       </svg>
       <span class="brand__word" style="font-size: 19px">Huddle</span>
-      <span class="site-footer__tagline">The training log your clients actually fill in.</span>
+      <span class="site-footer__tagline">Share the session. See every rep.</span>
     </div>
     <nav class="site-footer__links" aria-label="Footer">
       <a href="/">For families</a>

@@ -57,16 +57,16 @@ test.describe('for-trainers page', () => {
   // imply a free landing spot. Both halves are asserted because the honest version needs both.
   test('states the export/import round trip exactly', async ({ page }) => {
     const faq = page.locator('#faq');
-    // Behind a <details>, so open it: asserting on hidden DOM would pass for text no reader can
-    // actually reach, which for a promise about somebody's data is the wrong thing to verify.
-    await faq.getByRole('group').filter({ hasText: 'What happens if a client leaves me?' }).click();
-
+    // These answers used to sit behind a <details> the test had to open first. The page now uses
+    // the same open .faq-grid the homepage does, so they are on screen without a tap -- which is
+    // what the old test was reaching for anyway: a promise about somebody's data should not be
+    // something a reader has to go looking for.
     await expect(faq.getByText(/export their full history to CSV before they go, at no cost/i)).toBeVisible();
     await expect(faq.getByText(/Importing a spreadsheet needs a paid plan/i)).toBeVisible();
   });
 
   test('sends its CTAs at the Pro signup', async ({ page }) => {
-    const ctas = page.getByRole('link', { name: 'Start a practice' });
+    const ctas = page.getByRole('link', { name: 'Get started', exact: true });
 
     await expect(ctas).toHaveCount(3);
     for (const href of await ctas.evaluateAll((links) => links.map((l) => l.getAttribute('href')))) {
@@ -81,6 +81,51 @@ test.describe('for-trainers page', () => {
 
     await page.goto('/');
     await expect(page.locator('.site-footer').getByRole('link', { name: 'For trainers' })).toBeVisible();
+  });
+
+  // ⚠️ This page carries the site's longest CTA label, so it is where the shared header runs out of
+  // room first -- but the failure was never page-specific. With the nav free to shrink its items
+  // below their content width, "Log in" broke after "Log" and the CTA label came apart inside its
+  // own pill, at every width up to 430px. The no-horizontal-scroll test below passed throughout:
+  // wrapping is precisely how the browser avoids overflow, so overflow alone never sees this.
+  //
+  // 320px rather than the project's 390px because that is the narrowest width the header has to
+  // survive, and the budget there is genuinely tight -- see the .brand__word rule in styles.css.
+  test('keeps the header on one row, with no label broken across lines', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 844 });
+
+    const header = await page.evaluate(() => {
+      const visible = [...document.querySelectorAll('.site-nav > *')].filter(
+        (el) => getComputedStyle(el).display !== 'none',
+      );
+
+      // A wrapped label renders as more than one client rect over its own contents. Measuring
+      // element height instead would miss it: .btn has a min-height tall enough to hide a second
+      // line, which is how "Start a practice" stayed broken without anything failing.
+      const wrapped = visible
+        .filter((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return range.getClientRects().length > 1;
+        })
+        .map((el) => el.textContent.trim());
+
+      // Vertical centres, not tops: .site-nav is align-items: center, so a 46px button and a 19px
+      // link sitting correctly on one row have different tops by design.
+      const centres = new Set(
+        visible.map((el) => {
+          const r = el.getBoundingClientRect();
+          return Math.round(r.top + r.height / 2);
+        }),
+      );
+
+      return { wrapped, rows: centres.size, labels: visible.map((el) => el.textContent.trim()) };
+    });
+
+    expect(header.wrapped).toEqual([]);
+    expect(header.rows).toBe(1);
+    // Both are load-bearing: a fix that simply hid the CTA on phones would satisfy everything above.
+    expect(header.labels.length).toBe(2);
   });
 
   test('does not scroll horizontally', async ({ page }) => {
