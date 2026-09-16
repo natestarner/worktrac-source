@@ -50,6 +50,11 @@ export default function BillingTab() {
   const [proBand, setProBand] = useState(PRO_BANDS[0].id);
   const [checkout, setCheckout] = useState(null);
   const [showCelebration, setShowCelebration] = useState(false);
+  // ⚠️ The tier the RECONCILE reported, not the one in the auth snapshot. The snapshot is refreshed
+  // a line later, but it is not the authority on what was just bought: when the webhook rather than
+  // the reconcile applies the purchase, /me can still answer FREE here, and a celebration is about
+  // the payment that just happened rather than about the account's current steady state.
+  const [celebratedPlan, setCelebratedPlan] = useState(null);
 
   // `online` is deliberately not destructured: OfflineDisabledWrap reads useOnlineStatus
   // itself, and a second copy of that answer here is the kind of duplicate the
@@ -133,11 +138,12 @@ export default function BillingTab() {
 
     (async () => {
       try {
-        await reconcileCheckout(checkoutParam);
+        const reconciled = await reconcileCheckout(checkoutParam);
         // /me is what carries the derived plan into the auth snapshot, so the header badge and
         // every other consumer update from the same source rather than a second copy of the truth.
         await refreshPeople();
         queryClient.invalidateQueries({ queryKey: queryKeys.subscription() });
+        setCelebratedPlan(reconciled?.plan ?? null);
         setShowCelebration(true);
       } catch {
         // The webhook is the backstop, so a failed reconcile is a delay rather than a lost payment.
@@ -234,7 +240,7 @@ export default function BillingTab() {
         />
       )}
 
-      {showCelebration && <PlusCelebration plan={plan} onDismiss={handleDismissCelebration} />}
+      {showCelebration && <PlusCelebration plan={celebratedPlan ?? plan} onDismiss={handleDismissCelebration} />}
     </div>
   );
 }

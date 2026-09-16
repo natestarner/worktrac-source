@@ -39,8 +39,17 @@ const CONFETTI_SPECS = [
 // transient congratulation over a payment that HAS succeeded, and showing no celebration at all
 // after a successful checkout reads as "did that work?" -- the opposite failure from the badge's,
 // where silence is the safe answer because it self-corrects on the next /me.
+//
+// ⚠️ THE GUARD ASKS FOR THE COPY, NOT FOR A RECOGNISED TIER. `planCopy('FREE')` returns a
+// real entry whose `welcome` is null -- nobody celebrates arriving at Free -- so a `?? PLANS.PLUS`
+// fallback keyed on the ENTRY slipped straight past it and rendered "Welcome to Huddle Free" under
+// an empty line. That is reachable: the auth snapshot still says FREE for the moment between a
+// checkout landing and /me catching up, and it stays FREE indefinitely whenever the webhook rather
+// than the reconcile is what applies the purchase. Caught by billing.spec.ts, which drives the real
+// redirect; no unit test had the timing to see it.
 export default function PlusCelebration({ plan, onDismiss }) {
-  const copy = planCopy(plan) ?? PLANS.PLUS;
+  const named = planCopy(plan);
+  const copy = named?.welcome ? named : PLANS.PLUS;
 
   return (
     <div
