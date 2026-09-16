@@ -1085,6 +1085,15 @@ input[type='search']::-webkit-search-results-decoration {
    Interaction states block) would have nothing to dim. This one has a real fill, so the generic
    rule already gives it visible hover/press feedback for free. */
 
+/* BillingTab scrolls this label into view for someone who arrived from the trainer page's
+   ?plan=pro CTAs, because the screen leads with Plus and keeps Pro deliberately quiet below it.
+   Third consumer of --sticky-chrome-clearance, for the same reason as the other two: without it
+   `block: 'start'` parks its top edge exactly where the sticky .app-chrome paints, at a
+   higher z-index, so the thing we scrolled to lands behind the tab bar. */
+.pro-upgrade-anchor {
+  scroll-margin-top: var(--sticky-chrome-clearance);
+}
+
 .person-pill-bar {
   padding: var(--space-3) var(--space-6);
   padding-left: max(var(--space-6), env(safe-area-inset-left));

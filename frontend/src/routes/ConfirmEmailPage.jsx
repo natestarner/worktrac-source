@@ -13,9 +13,12 @@ export default function ConfirmEmailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const email = location.state?.email;
-  // Set when this registration came from marketing's "Go Plus" (see RegisterPage). It changes two
-  // things and nothing else: where they land, and whether the first-run welcome modal waits.
-  const wantsPlus = location.state?.wantsPlus === true;
+  // Set when this registration came from a marketing CTA that named a paid plan -- the homepage's
+  // "Go Plus", or any CTA on the trainer page (see RegisterPage). 'PLUS' | 'PRO' | null. It changes
+  // two things and nothing else: where they land, and whether the first-run welcome modal waits.
+  // Both plans want the same two things, so this branches on "was a plan named at all", not on
+  // which one -- the billing screen already carries a card for each.
+  const wantsPlan = location.state?.wantsPlan ?? null;
 
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState(false);
@@ -51,12 +54,17 @@ export default function ConfirmEmailPage() {
     setSubmitting(true);
     try {
       await confirmEmail({ email, code: trimmedCode });
-      if (wantsPlus) {
+      if (wantsPlan) {
         // Defer BEFORE navigating: AppShell reads the gate in an effect keyed on the account, and
         // that effect runs as soon as the shell mounts. Setting it after the navigation would race
         // the modal it exists to suppress.
         deferOnboarding();
-        navigate('/app/billing');
+        // ?intent reports WHICH plan they named; the billing screen decides what to do with it.
+        // Carried for both rather than only for Pro, so this page stays "say where they came from"
+        // and the one screen that acts on it owns the behaviour. Today only 'pro' changes anything
+        // there -- billing already leads with Plus, so a Plus arrival is already looking at what it
+        // came for, while the Pro card is deliberately quieter and further down.
+        navigate(`/app/billing?intent=${wantsPlan.toLowerCase()}`);
       } else {
         navigate('/app/log');
       }

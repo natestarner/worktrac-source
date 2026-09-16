@@ -8,16 +8,35 @@ import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
 import LegalLinks from '../components/shared/LegalLinks';
 import { FIELD_LIMITS } from '../utils/fieldLimits';
 
+// Every paid plan a marketing CTA is allowed to name on the way in. marketing/index.html's
+// "Go Plus" button links here as /register?plan=plus, and every CTA on
+// marketing/for-trainers.html as /register?plan=pro. Carrying that intent through registration is
+// what lets someone who arrived wanting to pay land on the billing screen after confirming their
+// email, rather than on Log with no idea where to go next.
+//
+// ⚠️ for-trainers.html shipped its ?plan=pro CTAs while this only understood 'plus', so every
+// trainer who clicked one registered with no intent at all and was dropped on Log -- while a
+// family clicking "Go Plus" was carried to billing. Nothing failed; the param was simply read as
+// "no plan named". A new marketing CTA that names a plan needs its key HERE too, or it silently
+// does nothing.
+//
+// A Map rather than an object literal, because the key comes straight off a URL: a plain object
+// resolves `?plan=toString` (or constructor, or valueOf) to an inherited Object.prototype member,
+// which is truthy and would read as a named plan. A Map only ever answers for keys actually put
+// in it.
+const MARKETING_PLAN_INTENTS = new Map([
+  ['plus', 'PLUS'],
+  ['pro', 'PRO'],
+]);
+
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  // marketing/index.html's "Go Plus" button links here as /register?plan=plus. Carrying that intent
-  // through registration is what lets a household who arrived wanting to pay land on the billing
-  // screen after confirming their email, rather than on Log with no idea where to go next.
-  // Anything other than the exact value is ignored -- this is a hint from a URL, not a
-  // capability, and it grants nothing.
+  // 'PLUS' | 'PRO' | null. Anything else in the URL is ignored -- this is a hint from a URL, not a
+  // capability. It decides where someone lands, never what they are entitled to: the plan an
+  // account actually holds is derived server-side from the subscription, never from this.
   const [searchParams] = useSearchParams();
-  const wantsPlus = searchParams.get('plan') === 'plus';
+  const wantsPlan = MARKETING_PLAN_INTENTS.get(searchParams.get('plan')) ?? null;
   const [personName, setPersonName] = useState('');
   const [accountName, setAccountName] = useState('');
   const [email, setEmail] = useState('');
@@ -61,7 +80,7 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       await register({ accountName, email: trimmedEmail, password, personName: trimmedPersonName });
-      navigate('/confirm-email', { state: { email: trimmedEmail, wantsPlus } });
+      navigate('/confirm-email', { state: { email: trimmedEmail, wantsPlan } });
     } catch (err) {
       setError(err.message || 'Could not register');
     } finally {

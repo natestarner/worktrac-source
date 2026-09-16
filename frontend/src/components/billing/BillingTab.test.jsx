@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useSearchParams } from 'react-router-dom';
 import { onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BillingTab from './BillingTab';
@@ -55,6 +55,10 @@ describe('BillingTab', () => {
 
   afterEach(() => {
     onlineManager.setOnline(true);
+    // jsdom does not implement scrollIntoView at all, so the Pro-intent tests below ASSIGN it
+    // rather than spy on it (vi.spyOn throws on a property that does not exist). Deleting restores
+    // jsdom's real state -- absent -- which is the state the production guard is written for.
+    delete Element.prototype.scrollIntoView;
   });
 
   it('offers the upgrade with yearly preselected on a Free household', async () => {
@@ -251,6 +255,83 @@ describe('BillingTab', () => {
       { tone: 'info' },
     ));
     expect(screen.queryByText('Welcome to Huddle Plus')).not.toBeInTheDocument();
+  });
+
+  // ── Arriving from the trainer page's ?plan=pro CTAs ─────────────────────────────────────────
+
+  // This screen leads with Plus and keeps the Pro card deliberately quiet and below it -- right
+  // for the families who are most of its readers, wrong for a trainer who named Pro on the way in
+  // and would otherwise land looking at somebody else's offer. ?intent=pro starts them scrolled to
+  // the card they came for, and changes nothing else about the screen.
+  //
+  // jsdom implements no layout and no scrollIntoView, so what is asserted is the CALL and the node
+  // it was made on -- which is the part that can regress. That it clears the sticky chrome is CSS
+  // (.pro-upgrade-anchor's scroll-margin-top) and is not assertable here at all.
+  // ⚠️ The query string has to be read back off the ROUTER, not off window.location: MemoryRouter
+  // keeps its history in memory and never touches the real URL, so asserting on
+  // window.location.search would pass against a completely broken strip -- it is '' either way.
+  function SearchProbe() {
+    const [params] = useSearchParams();
+    return <div data-testid="search">{params.toString()}</div>;
+  }
+
+  function mockScrollIntoView() {
+    const spy = vi.fn();
+    Element.prototype.scrollIntoView = spy;
+    return spy;
+  }
+
+  function renderWithIntent(search) {
+    useAuth.mockReturnValue({
+      account: { id: 1, plan: 'FREE' },
+      refreshPeople: vi.fn().mockResolvedValue(),
+      membership: { accountRole: 'OWNER', personId: 1, status: 'ACTIVE' },
+    });
+    getSubscription.mockResolvedValue(null);
+    listLogins.mockResolvedValue([]);
+    return renderWithQuery(
+      <MemoryRouter initialEntries={[`/app/billing${search}`]}>
+        <BillingTab />
+        <SearchProbe />
+      </MemoryRouter>,
+    );
+  }
+
+  it('scrolls the Pro card into view when arriving with ?intent=pro', async () => {
+    const scrollIntoView = mockScrollIntoView();
+
+    renderWithIntent('?intent=pro');
+    await screen.findByRole('button', { name: 'Subscribe to Pro' });
+
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    // The anchor is the section LABEL, not the card body: scrolling to the card alone parks
+    // "Training clients?" just above the viewport and loses the line saying what the card is.
+    expect(scrollIntoView.mock.instances[0]).toHaveTextContent('Training clients?');
+  });
+
+  it('leaves the screen where it is for an ordinary arrival', async () => {
+    const scrollIntoView = mockScrollIntoView();
+
+    renderWithIntent('');
+    await screen.findByRole('button', { name: 'Subscribe to Pro' });
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  // Stripped for the same reason the checkout param is: a reload or a shared link must not replay
+  // the jump. Both halves matter -- the scroll happened, AND the URL no longer asks for it.
+  // A second param rides along deliberately. It makes the assertion non-vacuous -- an empty probe
+  // would also match a probe that reports nothing at all -- and pins the thing most likely to go
+  // wrong in a rewrite: the strip removes ONE key rather than replacing the whole query string,
+  // which matters because ?checkout= can legitimately be in the URL at the same time.
+  it('strips the intent param once it has acted on it, leaving the rest of the query alone', async () => {
+    mockScrollIntoView();
+
+    renderWithIntent('?intent=pro&keep=yes');
+    await screen.findByRole('button', { name: 'Subscribe to Pro' });
+
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('keep=yes'));
+    expect(screen.getByTestId('search').textContent).not.toContain('intent');
   });
 
   // ── Warning an owner before they downgrade ──────────────────────────────────────────────────

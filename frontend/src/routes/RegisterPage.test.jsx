@@ -65,7 +65,7 @@ describe('RegisterPage validation', () => {
       }),
     );
     expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
-      state: { email: 'alex@example.com', wantsPlus: false },
+      state: { email: 'alex@example.com', wantsPlan: null },
     });
   });
 
@@ -82,12 +82,33 @@ describe('RegisterPage validation', () => {
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
-        state: { email: 'alex@example.com', wantsPlus: true },
+        state: { email: 'alex@example.com', wantsPlan: 'PLUS' },
       }),
     );
   });
 
-  it('ignores a plan parameter that is not exactly "plus"', async () => {
+  // ⚠️ This is the case that was broken in production. marketing/for-trainers.html's three CTAs all
+  // link to /register?plan=pro, and this page understood only 'plus' -- so every trainer who
+  // clicked one was treated as having named no plan at all and dropped on Log, while a family
+  // clicking "Go Plus" was carried to billing. Nothing threw and nothing 404'd; the param was
+  // simply read as absent, which is why it survived a page that otherwise had e2e coverage
+  // asserting the links carried plan=pro.
+  it('carries ?plan=pro through to confirm-email so a trainer lands on billing', async () => {
+    renderPage('/register?plan=pro');
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Sam' } });
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'sam@example.com' } });
+    fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create household' }));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
+        state: { email: 'sam@example.com', wantsPlan: 'PRO' },
+      }),
+    );
+  });
+
+  it('ignores a plan parameter that names neither paid plan', async () => {
     renderPage('/register?plan=PLUS&plan=enterprise');
 
     fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Alex' } });
@@ -97,10 +118,32 @@ describe('RegisterPage validation', () => {
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
-        state: { email: 'alex@example.com', wantsPlus: false },
+        state: { email: 'alex@example.com', wantsPlan: null },
       }),
     );
   });
+
+  // The lookup key comes straight off a URL, so it must not reach Object.prototype. Against a
+  // plain object literal `?plan=toString` resolves to an inherited function -- truthy, and so read
+  // as a named plan, sending someone who named nothing to billing. It grants nothing either way,
+  // but "a query string can pick a member off Object.prototype" is worth never relying on.
+  it.each(['toString', 'constructor', 'valueOf', 'hasOwnProperty'])(
+    'does not read ?plan=%s as a named plan',
+    async (key) => {
+      renderPage(`/register?plan=${key}`);
+
+      fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Alex' } });
+      fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'alex@example.com' } });
+      fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Create household' }));
+
+      await waitFor(() =>
+        expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
+          state: { email: 'alex@example.com', wantsPlan: null },
+        }),
+      );
+    },
+  );
 
   // Registration previously made no mention of Terms/Privacy at all -- the point someone most
   // needs them, since it's the moment they're agreeing to something.
