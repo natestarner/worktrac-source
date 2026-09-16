@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
@@ -24,6 +24,7 @@ export default function ConfirmEmailPage() {
   const [resending, setResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [justSent, setJustSent] = useState(false);
+  const codeInputRef = useRef(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -74,6 +75,11 @@ export default function ConfirmEmailPage() {
       await resendCode({ email });
       setCooldown(RESEND_COOLDOWN_SECONDS);
       setJustSent(true);
+      // The old code stops working the moment a new one is sent -- clear it so a leftover
+      // stale code can't be submitted against the new one.
+      setCode('');
+      setCodeError(false);
+      codeInputRef.current?.focus();
     } catch (err) {
       setError(err.message || 'Could not resend the code');
     } finally {
@@ -118,6 +124,7 @@ export default function ConfirmEmailPage() {
         <label htmlFor="verification-code" style={labelStyle}>Verification code</label>
         <input
           autoFocus
+          ref={codeInputRef}
           id="verification-code"
           name="one-time-code"
           autoComplete="one-time-code"
