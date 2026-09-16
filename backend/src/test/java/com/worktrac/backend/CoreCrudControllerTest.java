@@ -189,7 +189,7 @@ class CoreCrudControllerTest extends AbstractIntegrationTest {
         // chain (routines/routine_exercises, workout_sessions/workout_sets,
         // person_exercise/person_exercise_fields) rather than trivially succeeding on a
         // person with no data.
-        String routineBody = objectMapper.writeValueAsString(Map.of("name", "Sam's Routine", "exerciseIds", List.of(exerciseId)));
+        String routineBody = objectMapper.writeValueAsString(Map.of("name", "Sam's Routine", "exercises", List.of(Map.of("exerciseId", exerciseId))));
         mockMvc.perform(post("/api/people/" + samId + "/routines")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)

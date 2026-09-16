@@ -1362,10 +1362,29 @@ img {
   margin-left: var(--space-2);
 }
 
+/* The four-tier comparison on /pricing. .compare's own layout is built for three columns, and a
+   fourth squeezes the feature name to nothing on a laptop -- so the table scrolls sideways inside
+   .compare-wrap rather than compressing. That is the one sanctioned horizontal scroll on this site:
+   a table may scroll in its own container, the PAGE may not.
+
+   Below 720px .compare flattens into stacked rows via td::before { content: attr(data-label) }, so
+   this min-width must not apply there -- the flattened form has no columns to be narrow. */
+@media (min-width: 721px) {
+  .compare--four {
+    min-width: 640px;
+  }
+}
+
 .site-footer__links {
   display: flex;
   align-items: center;
-  gap: 28px;
+  /* Wraps, and that is not cosmetic: this was a nowrap row at five links, and the sixth pushed the
+     footer past 390px -- which shows up as the whole PAGE scrolling horizontally, not as a wrapped
+     footer, because nothing here clips. Caught by landing.spec.ts's horizontal-scroll assertion at
+     mobile width. Any further link would have done the same. */
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 28px;
 }
 
 .site-footer__links a {

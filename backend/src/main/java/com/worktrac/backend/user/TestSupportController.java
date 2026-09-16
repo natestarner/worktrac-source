@@ -127,6 +127,14 @@ public class TestSupportController {
         return ResponseEntity.ok(new EmailOutcomeResponse(status, latest.getMessageId(), latest.getDetail()));
     }
 
+    private static BillingPlan parsePlan(String plan) {
+        try {
+            return BillingPlan.valueOf(plan.trim().toUpperCase());
+        } catch (IllegalArgumentException ignored) {
+            return BillingPlan.FREE;
+        }
+    }
+
     // Sets a household's plan directly, so the e2e suite can exercise both sides of every gate
     // without Stripe existing at all. The same escape hatch EmailProperties.e2eNoopRecipientPattern
     // provides for Azure Communication Services, and the reason the Playwright suite needs no
@@ -143,6 +151,10 @@ public class TestSupportController {
     public ResponseEntity<Void> setBillingPlan(
             @RequestParam String email,
             @RequestParam String plan,
+            // Only meaningful for a tier that has seats. Absent means "whatever that tier's default
+            // is", which for PRO is unlimited -- the shape a spec wants unless it is specifically
+            // testing the ceiling.
+            @RequestParam(required = false) Integer clientSeats,
             @RequestHeader(value = "X-E2E-Test-Key", required = false) String testKey) {
         if (!keyMatches(testKey)) {
             return ResponseEntity.notFound().build();
@@ -162,9 +174,15 @@ public class TestSupportController {
         }
         Long accountId = owned.get(0).getAccount().getId();
         Subscription subscription = subscriptionService.getOrCreate(owned.get(0).getAccount());
-        boolean pro = "PLUS".equalsIgnoreCase(plan.trim());
-        subscription.setComped(pro);
-        subscription.setPlan(pro ? BillingPlan.PLUS : BillingPlan.FREE);
+        // Any tier by name, so a spec can set PRO the same way it sets PLUS. An unrecognised name
+        // is FREE rather than a 400: this is test support, and the failure a spec should see is its
+        // own assertion failing, not a mystery status from the helper that set it up.
+        BillingPlan requested = parsePlan(plan);
+        boolean paid = requested.isPaid();
+        subscription.setComped(paid);
+        subscription.setCompedPlan(paid ? requested : null);
+        subscription.setPlan(requested);
+        subscription.setClientSeats(paid ? clientSeats : null);
         subscriptionRepository.save(subscription);
 
         // Member logins are gated on the household being Plus, and that answer is cached per login
@@ -241,33 +259,6 @@ public class TestSupportController {
         }
         // Without this the new membership is invisible for up to the cache's 60s TTL, which would
         // make every member test flaky in exactly the way that wastes an afternoon.
-        accountAccessService.invalidateAccount(account.get().getId());
-        return ResponseEntity.noContent().build();
-    }
-
-    // Flips accounts.members_see_everyone for one household.
-    //
-    // ⚠️ A DIRECT UPDATE, on purpose. Account has NO setter for this column and no endpoint sets
-    // it -- that absence is what forces Plus/Family to "everyone sees everyone" by construction
-    // rather than by a check somebody could flip (see V66). Adding a setter for the benefit of
-    // tests would hand production code the very lever the design removes, so the mutation lives
-    // here instead, inside a controller whose bean does not exist outside local/lower.
-    //
-    // The Team tier is what adds a real setter, service method and toggle.
-    @PostMapping("/api/auth/test/member-visibility")
-    public ResponseEntity<Void> setMemberVisibility(
-            @RequestParam String ownerEmail,
-            @RequestParam boolean membersSeeEveryone,
-            @RequestHeader(value = "X-E2E-Test-Key", required = false) String testKey) {
-        if (!keyMatches(testKey)) {
-            return ResponseEntity.notFound().build();
-        }
-        Optional<Account> account = ownedAccount(ownerEmail);
-        if (account.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-        jdbcTemplate.update("UPDATE accounts SET members_see_everyone = ? WHERE id = ?",
-                membersSeeEveryone ? 1 : 0, account.get().getId());
         accountAccessService.invalidateAccount(account.get().getId());
         return ResponseEntity.noContent().build();
     }

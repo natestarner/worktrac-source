@@ -162,10 +162,10 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
         return workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(personId).size();
     }
 
-    private void setPro(boolean pro) {
+    private void setPlus(boolean plus) {
         Subscription subscription = subscriptionRepository.findByAccountId(accountId).orElseThrow();
-        subscription.setStatus(pro ? SubscriptionStatus.ACTIVE : SubscriptionStatus.FREE);
-        subscription.setPlan(pro ? BillingPlan.PLUS : BillingPlan.FREE);
+        subscription.setStatus(plus ? SubscriptionStatus.ACTIVE : SubscriptionStatus.FREE);
+        subscription.setPlan(plus ? BillingPlan.PLUS : BillingPlan.FREE);
         subscriptionRepository.save(subscription);
     }
 
@@ -184,10 +184,10 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
         seedOldAndRecent();
         long rowsAfterSeeding = storedSetCount();
 
-        setPro(true);
+        setPlus(true);
         assertEquals(2, getHistory().size(), "Plus should see the whole history");
 
-        setPro(false);
+        setPlus(false);
         JsonNode clipped = getHistory();
         assertEquals(1, clipped.size(), "Free should see only the session inside the window");
         assertTrue(clipped.get(0).get("startedAt").asText().startsWith("2026-06-01"));
@@ -197,7 +197,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
         assertEquals(rowsAfterSeeding, storedSetCount(),
                 "Clipping history must never delete a single row");
 
-        setPro(true);
+        setPlus(true);
         JsonNode restored = getHistory();
         assertEquals(2, restored.size(), "Re-subscribing must restore the full history");
         assertEquals(rowsAfterSeeding, storedSetCount());
@@ -209,7 +209,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
     void theWindowSlidesWithTheClock() throws Exception {
         long session = createPastSession("2026-06-01T10:00:00Z");
         logSet(session, 135, 5);
-        setPro(false);
+        setPlus(false);
         assertEquals(1, getHistory().size());
 
         clock.advance(Duration.ofDays(120));
@@ -223,7 +223,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
     @Test
     void freeShowsOnlyRecordsInsideTheWindow() throws Exception {
         seedOldAndRecent();
-        setPro(false);
+        setPlus(false);
 
         JsonNode prs = getPrs();
 
@@ -240,7 +240,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
     void freeIsNotCongratulatedForBeatingOnlyTheVisibleWindow() throws Exception {
         long old = createPastSession("2026-01-10T10:00:00Z");
         logSet(old, 225, 5); // the real all-time best, outside the window
-        setPro(false);
+        setPlus(false);
 
         long today = createPastSession("2026-06-14T10:00:00Z");
         String response = mockMvc.perform(post("/api/sessions/" + today + "/sets")
@@ -260,7 +260,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
     void freeStillGetsARealPr() throws Exception {
         long old = createPastSession("2026-01-10T10:00:00Z");
         logSet(old, 225, 5);
-        setPro(false);
+        setPlus(false);
 
         long today = createPastSession("2026-06-14T10:00:00Z");
         String response = mockMvc.perform(post("/api/sessions/" + today + "/sets")
@@ -284,7 +284,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
     @Test
     void freeIsToldExactlyHowManyWorkoutsAreHidden() throws Exception {
         seedOldAndRecent();
-        setPro(false);
+        setPlus(false);
 
         JsonNode window = getHistoryWindow();
         assertEquals(1, window.get("hiddenSessions").asInt());
@@ -294,16 +294,16 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
                 "90 days before the frozen 2026-06-15 test clock");
 
         int visible = getHistory().size();
-        setPro(true);
+        setPlus(true);
         assertEquals(getHistory().size(), visible + window.get("hiddenSessions").asInt(),
                 "visible + hidden must account for every session Plus can see");
     }
 
     // Plus has no floor, so there is nothing to report and no query to run.
     @Test
-    void proIsToldNothingIsHidden() throws Exception {
+    void plusIsToldNothingIsHidden() throws Exception {
         seedOldAndRecent();
-        setPro(true);
+        setPlus(true);
 
         JsonNode window = getHistoryWindow();
         assertTrue(window.get("windowStart").isNull(), "A null floor is what marks a household Plus");
@@ -328,7 +328,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
     @Test
     void anEmptyOldSessionIsNotCountedAsHidden() throws Exception {
         createPastSession("2026-01-10T10:00:00Z"); // created, never logged into
-        setPro(false);
+        setPlus(false);
 
         JsonNode window = getHistoryWindow();
         assertEquals(0, window.get("hiddenSessions").asInt(),
@@ -344,7 +344,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
     void aFreeHouseholdWithNothingHiddenStillLearnsTheBoundary() throws Exception {
         long recent = createPastSession("2026-06-01T10:00:00Z");
         logSet(recent, 135, 5);
-        setPro(false);
+        setPlus(false);
 
         JsonNode window = getHistoryWindow();
         assertEquals(0, window.get("hiddenSessions").asInt());
@@ -357,7 +357,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
     void theHiddenCountSlidesWithTheClock() throws Exception {
         long session = createPastSession("2026-06-01T10:00:00Z");
         logSet(session, 135, 5);
-        setPro(false);
+        setPlus(false);
         assertEquals(0, getHistoryWindow().get("hiddenSessions").asInt());
 
         clock.advance(Duration.ofDays(120));
@@ -376,7 +376,7 @@ class FreeTierHistoryWindowTest extends AbstractIntegrationTest {
     void aFreeHouseholdWithOnlyOldHistoryIsNotToldItHasNeverTrained() throws Exception {
         long old = createPastSession("2026-01-10T10:00:00Z");
         logSet(old, 225, 5);
-        setPro(false);
+        setPlus(false);
 
         JsonNode overview = getTrendsOverview();
         assertTrue(overview.get("hasAnyHistory").asBoolean(),

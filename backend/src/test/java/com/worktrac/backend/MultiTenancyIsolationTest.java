@@ -247,7 +247,7 @@ class MultiTenancyIsolationTest extends AbstractIntegrationTest {
         long exerciseId = objectMapper.readTree(exercisesResponse).get(0).get("id").asLong();
 
         String routineBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Account A Routine", "exerciseIds", java.util.List.of(exerciseId)));
+                "name", "Account A Routine", "exercises", java.util.List.of(Map.of("exerciseId", exerciseId))));
         String routineResponse = mockMvc.perform(post("/api/people/" + personIdA + "/routines")
                         .header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -259,7 +259,7 @@ class MultiTenancyIsolationTest extends AbstractIntegrationTest {
         // B has no access to A's person id at all, so B must use their own (owned)
         // personId in the path -- confirming the routine isn't reachable there either.
         String updateBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Hijacked", "exerciseIds", java.util.List.of(exerciseId)));
+                "name", "Hijacked", "exercises", java.util.List.of(Map.of("exerciseId", exerciseId))));
         mockMvc.perform(put("/api/people/" + personIdB + "/routines/" + routineId)
                         .header("Authorization", "Bearer " + tokenB)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -280,7 +280,7 @@ class MultiTenancyIsolationTest extends AbstractIntegrationTest {
         long exerciseId = objectMapper.readTree(exercisesResponse).get(0).get("id").asLong();
 
         String routineBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Account A Routine", "exerciseIds", java.util.List.of(exerciseId)));
+                "name", "Account A Routine", "exercises", java.util.List.of(Map.of("exerciseId", exerciseId))));
         String routineResponse = mockMvc.perform(post("/api/people/" + personIdA + "/routines")
                         .header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -311,7 +311,7 @@ class MultiTenancyIsolationTest extends AbstractIntegrationTest {
         long personIdBKid = objectMapper.readTree(addPersonResponse).get("id").asLong();
 
         String routineBBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Account B Routine", "exerciseIds", java.util.List.of(exerciseId)));
+                "name", "Account B Routine", "exercises", java.util.List.of(Map.of("exerciseId", exerciseId))));
         String routineBResponse = mockMvc.perform(post("/api/people/" + personIdB + "/routines")
                         .header("Authorization", "Bearer " + tokenB)
                         .contentType(MediaType.APPLICATION_JSON)

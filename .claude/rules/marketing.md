@@ -7,6 +7,49 @@ paths:
 
 Full narrative: `docs/marketing-site.md`.
 
+## Two audiences, two pages — and the guard now reads both
+
+The homepage converts **families**; `for-trainers.html` converts **trainers**. Diluting one page
+three ways, or hiding two-thirds of it behind a JS audience switcher, trades a working page for one
+competing for three sets of keywords.
+
+`pricing.html` is the third page and a different kind: it is the ONE place a four-column comparison
+belongs, for somebody deliberately comparing rather than arriving with an audience already in mind.
+`.compare` is built for three columns, so it takes `.compare--four`, which lets the TABLE scroll
+sideways inside `.compare-wrap` rather than compressing the feature name to nothing. That is the one
+sanctioned horizontal scroll on this site: a table may scroll in its own container, the PAGE may not.
+
+⚠️ **Every new `<td>` needs its `data-label`.** Below 720px `.compare` flattens into stacked rows and
+each cell draws its column name from `td::before { content: attr(data-label) }` — a cell without one
+loses its heading entirely on a phone, and the gap is invisible at desktop width.
+`pricing.spec.ts` asserts there are zero such cells.
+
+Adding a third audience page (`for-teams.html` is the planned one) means copying the shape:
+
+- **Shared header, footer and `styles.css`; its own hero, proof, pricing and FAQ.**
+- **Its own `<title>`, description, canonical and `og:url`** — check 6 now fails a page with no
+  canonical *and* a page sharing one with another page, which is how an audience page silently stops
+  being indexed.
+- **Load `/app-links.js` blocking, exactly as the others do** (check 8). Without it, lower-environment
+  visitors are sent at the PRODUCTION app and the lower page is indexable alongside the real one.
+  Neither is visible from the page.
+- **Add it to `sitemap.xml`** (check 9).
+- **Add an explicit route to `staticwebapp.config.json`.** The 404 rewrite sends anything unmatched to
+  `/index.html` with a 200, so a missing route means the new page silently serves the homepage.
+- **One discreet link each way.** The header link is `site-nav__link--optional`, which hides at
+  ≤760px; the footer link does not hide, so it counts against the width below.
+
+⚠️ **`check-marketing.sh`'s checks 2, 4, 5 and 6 used to read `index.html` alone.** That was fine
+while it was the only page and silently useless the moment it was not: a second page could ship with
+broken asset paths, a hardcoded dev host, missing `alt` text or a duplicate canonical and every check
+would still have passed. They loop `marketing/*.html` now. **A new check must loop too.**
+
+⚠️ **The footer link row is a width budget.** `.site-footer__links` was `display: flex` with no
+wrapping; at five links it fit 390px and the sixth pushed the page into horizontal scroll — which
+presents as *the whole page* scrolling, not as a wrapped footer, because nothing there clips. It
+wraps now, but every added link still costs width somewhere. `landing.spec.ts`'s horizontal-scroll
+assertion is what catches it.
+
 ## The inline brand mark carries a ground-aware hairline
 
 The four-circle mark is inlined in `index.html` (header **and** footer), `privacy.html` and

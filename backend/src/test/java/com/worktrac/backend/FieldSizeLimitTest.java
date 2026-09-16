@@ -141,7 +141,7 @@ class FieldSizeLimitTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "name", "Too Big",
-                                "exerciseIds", Collections.nCopies(101, 1L)))))
+                                "exercises", Collections.nCopies(101, Map.of("exerciseId", 1L))))))
                 .andExpect(status().isBadRequest());
     }
 

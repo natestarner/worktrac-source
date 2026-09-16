@@ -38,7 +38,9 @@ const SECTIONS = [
   { id: 'personal', title: 'Notes, tags and favorites', group: 'Making it yours' },
   { id: 'settings', title: 'Settings', group: 'Making it yours' },
   { id: 'logins', title: 'Giving someone their own login', group: 'Making it yours' },
-  { id: 'plan', title: 'Free and Plus', group: 'Making it yours' },
+  { id: 'visibility', title: 'What the account holder can see', group: 'Making it yours' },
+  { id: 'coaching', title: 'Training clients', group: 'Making it yours' },
+  { id: 'plan', title: 'Plans', group: 'Making it yours' },
   { id: 'data', title: 'Import and export', group: 'Making it yours' },
   { id: 'offline', title: 'Losing the connection', group: 'When things go wrong' },
   { id: 'trouble', title: 'Getting help', group: 'When things go wrong' },
@@ -764,25 +766,189 @@ export default function HelpTab() {
         </Note>
       </Section>
 
-      <Section id="plan" title="Free and Plus">
+      {/* The other side of the login section above: that one is written for whoever hands a login
+          out, and this one for whoever receives it.
+
+          ⚠️ THE PASSWORD SENTENCE IS THE SAME SENTENCE the Profile screen, the invitation email
+          and the privacy policy carry. It is a promise, not a description, and it is true because
+          there is no CHANGE_ANY_PASSWORD permission and no screen anywhere that sets somebody
+          else's password. If that ever changes, all four change in the same commit
+          (.claude/rules/member-access.md). */}
+      <Section id="visibility" title="What the account holder can see">
         <p className="help-lede">
-          Free is free for good. Not a trial that runs out. Plus adds your whole history, the
-          ability to bring old workouts in, and a personal login for anyone who wants one.
+          If somebody gave you a login on their account &mdash; a parent, or a trainer &mdash; this
+          is exactly what they can and cannot do. It is short on purpose.
         </p>
 
         <HelpTable
-          head={['', 'Free', 'Plus']}
+          head={['', 'Them', 'You']}
           rows={[
-            ['People in your household', 'Everyone', 'Everyone'],
-            ['Workouts, sets and exercises', 'Unlimited', 'Unlimited'],
-            ['Logging with no signal', 'Yes', 'Yes'],
-            ['PRs, routines, rest timer', 'Yes', 'Yes'],
-            ['Export all your data', 'Yes', 'Yes'],
-            ['History, PRs and trends', 'Last 90 days', 'Everything'],
-            ['Import past workouts', 'No', 'Yes'],
-            ['A personal login for each person', 'No', 'Yes'],
+            ['See your workouts, sets and PRs', 'Yes', 'Yes'],
+            ['Add, edit or delete your workouts', 'Yes', 'Yes'],
+            ['See other people on the account', 'Yes', 'Only if the account is set up that way'],
+            ['Remove your login', 'Yes', 'No'],
+            ['See or set your password', 'No', 'Yes — it is yours'],
+            ['Export your full history', 'Yes', 'Yes, any time, at no cost'],
           ]}
         />
+
+        <Note title="They cannot see or set your password">
+          <p>
+            There is no screen anywhere in Huddle that lets one person set another&rsquo;s
+            password &mdash; not the account holder, not us. If you forget it, you reset it
+            yourself from the sign-in screen using your own email.
+          </p>
+          <p>
+            They <em>can</em> clear a lockout if you have typed a wrong password too many times.
+            That only lets you try again; it tells them nothing and lets them in as nobody.
+          </p>
+        </Note>
+
+        <Note title="Your training data lives in their account">
+          <p>
+            That is worth knowing plainly: if they delete the account, your workouts go with it, and
+            we cannot get them back. <strong>You can export your complete history to a CSV file at
+            any time, on any plan, without asking them.</strong> It is on the History screen.
+          </p>
+          <p>
+            If your login is removed, your workouts stay in their account &mdash; removing a login
+            does not delete a person or their training.
+          </p>
+        </Note>
+
+        <Note title="Whether other people can see you">
+          <p>
+            On a family account, everyone on it can see everyone else. On a trainer&rsquo;s account
+            it usually works the other way: each client sees only their own training, and only the
+            trainer and their assistants see everyone. The account holder chooses which, for the
+            whole account.
+          </p>
+        </Note>
+      </Section>
+
+      {/* Written for the TRAINER, unlike #visibility immediately above it, which is written for
+          the person who receives a login. The two answer opposite halves of the same arrangement
+          and deliberately overlap on the privacy claim -- a client reading one and a trainer
+          reading the other must not come away with different accounts of who sees what. */}
+      <Section id="coaching" title="Training clients">
+        <p className="help-lede">
+          On <strong>Huddle Pro</strong> an account is a practice rather than a household. Your
+          clients each get their own login, they cannot see each other, and three screens exist
+          that a family account never shows.
+        </p>
+
+        <HelpTable
+          head={['', 'What it is for']}
+          rows={[
+            ['Clients', 'Everyone you train, sorted so whoever has gone quietest is at the top'],
+            ['Check-ins', 'A weigh-in or a note about one client, on the day it happened'],
+            ['Targets on a routine', 'The weight and reps you want hit, carried to the client'],
+          ]}
+        />
+
+        <p>
+          <T>Clients</T> and <T>Check-ins</T> are both in your account menu, under your name. A
+          client sees <T>Check-ins</T> too &mdash; it is how they log a weigh-in &mdash; but never
+          <T>Clients</T>.
+        </p>
+
+        <Note title="Assigning a program is just copying a routine">
+          <p>
+            Build the routine on yourself, then use <T>Copy to&hellip;</T> and pick as many clients
+            as you like. It lands on their Routines tab labelled <em>From you</em>, and from that
+            moment it is <strong>their</strong> copy &mdash; changing yours afterwards does not
+            change theirs, so a tweak you make for one client&rsquo;s knee stays made.
+          </p>
+          <p>
+            Each exercise row takes an optional weight and reps. Those travel with the copy and
+            show on the client&rsquo;s log screen as <em>Target 185 lb &times; 5</em>, above the
+            card telling them what they did last time. Either half can be left blank &mdash;
+            &ldquo;135 lb, as many as you get&rdquo; is a real prescription.
+          </p>
+        </Note>
+
+        <Note title="A target is a prescription, not a limit">
+          <p>
+            It never fills in the boxes your client logs from, and nothing stops them going over or
+            under it. Beating a target is a good day, and Huddle treats it as one.
+          </p>
+        </Note>
+
+        <Note title="Notes your client cannot see">
+          <p>
+            When you write a check-in about a client, <T>Keep this to myself</T> keeps it off their
+            screen entirely. They see everything you leave unticked, plus their own entries. A
+            client writing their own check-in has no such box &mdash; nobody hides something from
+            themselves.
+          </p>
+        </Note>
+
+        <Note title="Who has stopped showing up">
+          <p>
+            The <T>Clients</T> screen puts anyone who has <strong>never</strong> logged a workout at
+            the very top, ahead of everyone who has simply been away a while. That is deliberate:
+            the client who quietly never started is the one easiest to lose and hardest to notice.
+          </p>
+        </Note>
+
+        <Note title="Assistants">
+          <p>
+            An assistant can see and log for every client, exactly as you can, and runs the roster.
+            They cannot touch billing, delete the account, change account settings, or export the
+            whole practice in one go. If you need somebody to cover sessions, that is the role.
+          </p>
+        </Note>
+
+        <Note title="If a client leaves you">
+          <p>
+            Removing their login leaves their training in your account &mdash; you keep the record
+            of the work you did together. They can <strong>export their complete history at any
+            time, at no cost</strong>, and take the file with them. Importing it into an account of
+            their own needs a paid plan on their side, which is worth telling them plainly rather
+            than promising a free landing spot.
+          </p>
+        </Note>
+      </Section>
+
+      {/* ⚠️ The section id stays "plan". Section ids are API: HistoryWindowModal deep-links this
+          one, and HelpTab.test.jsx pins the whole list as a literal precisely so a rename cannot
+          pass by agreeing with itself. Only the title moved from "Free and Plus" to "Plans". */}
+      <Section id="plan" title="Plans">
+        <p className="help-lede">
+          Free is free for good. Not a trial that runs out. Plus adds your whole history, the
+          ability to bring old workouts in, and a personal login for anyone who wants one. Pro is
+          for personal trainers &mdash; it adds clients who can&rsquo;t see each other, assigned
+          programs and a roster.
+        </p>
+
+        <HelpTable
+          head={['', 'Free', 'Plus', 'Pro']}
+          rows={[
+            ['People in your household', 'Everyone', 'Everyone', 'You, your assistants, and the clients you pay for'],
+            ['Workouts, sets and exercises', 'Unlimited', 'Unlimited', 'Unlimited'],
+            ['Logging with no signal', 'Yes', 'Yes', 'Yes'],
+            ['PRs, routines, rest timer', 'Yes', 'Yes', 'Yes'],
+            ['Export all your data', 'Yes', 'Yes', 'Yes'],
+            ['History, PRs and trends', 'Last 90 days', 'Everything', 'Everything'],
+            ['Import past workouts', 'No', 'Yes', 'Yes'],
+            ['A personal login for each person', 'No', 'Yes', 'Yes'],
+            ['Keep everyone\u2019s training private from each other', 'No', 'No', 'Yes'],
+            ['Assistants who can see everyone', 'No', 'No', 'Yes'],
+          ]}
+        />
+
+        <Note title="Pro is priced by how many clients you have">
+          <p>
+            Free and Plus have no seats &mdash; add as many people as your household has. Pro is
+            different: you pay by how many <strong>clients</strong> you carry, in bands. Your own
+            training and every assistant you add are free.
+          </p>
+          <p>
+            Going over your band never locks anyone out. It stops you adding the{' '}
+            <em>next</em> client until you move up a band; everyone already there keeps working
+            exactly as before.
+          </p>
+        </Note>
 
         <Note title="Nothing you log is ever deleted">
           <p>

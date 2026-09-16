@@ -36,7 +36,7 @@ import { FIELD_LIMITS } from '../../utils/fieldLimits';
 // buttons used keeps this path both real and testable). Only ONE sensor (Pointer) is registered
 // on DndContext, so dnd-kit's own listeners never attach a keydown handler to the handle and
 // there is nothing for our onKeyDown to collide with.
-export default function RoutineFormModal({ personId, routine, personExercises, catalog, onClose, onSaved, onExerciseCreated }) {
+export default function RoutineFormModal({ personId, routine, personExercises, catalog, defaultUnit, onClose, onSaved, onExerciseCreated }) {
   const isEditing = !!routine;
   const [name, setName] = useState(routine?.name || '');
   // Always mounted (unlike either error message, which renders only once its own error state is
@@ -47,9 +47,28 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   // Monotonic, modal-local, and never reused: a row's key has to survive reordering and stay
   // distinct from the other copies of the same exercise, so it can't be derived from the
   // exercise id or the index. It also doubles as the dnd-kit sortable id.
+  // The unit a target is ENTERED in, stamped onto the row so it travels with the number -- the same
+  // contract workout_sets and routine_exercises have. Changing the account default later must never
+  // reinterpret a target that was already written.
+  //
+  // A PROP rather than useAuth(): this component is rendered bare by its own test, and a new
+  // context dependency would make every one of those tests need a provider to exercise reordering.
+  const targetUnit = defaultUnit || 'lb';
   const nextRowKey = useRef(0);
   const [rows, setRows] = useState(() =>
-    routine ? routine.exercises.map((e) => ({ key: (nextRowKey.current += 1), exerciseId: e.exerciseId })) : [],
+    // ⚠️ The prescribed target rides along on the row, unread by this modal and sent straight back
+    // on save. The routine request is the WHOLE truth about the routine, so a builder that dropped
+    // these would silently wipe a trainer's prescribed numbers every time somebody renamed the
+    // routine or dragged one exercise -- see api/routines.js.
+    routine
+      ? routine.exercises.map((e) => ({
+          key: (nextRowKey.current += 1),
+          exerciseId: e.exerciseId,
+          targetWeight: e.targetWeight ?? null,
+          targetReps: e.targetReps ?? null,
+          targetUnit: e.targetUnit ?? null,
+        }))
+      : [],
   );
   const [exerciseFilter, setExerciseFilter] = useState('');
   const [addingExercise, setAddingExercise] = useState(false);
@@ -62,6 +81,23 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   // hears the same wording regardless of whether the move came from a drag or an arrow key.
   const [liveMessage, setLiveMessage] = useState('');
   const { run } = useGatedMutation();
+
+  /**
+   * Sets one half of one row's target.
+   *
+   * ⚠️ An empty field is NULL, not zero. "No target" and "a target of zero" are different
+   * prescriptions -- zero weight is a legitimate bodyweight target -- and reading a cleared field as
+   * 0 would silently prescribe one.
+   *
+   * Keyed by row key rather than by exercise id: the same exercise can appear twice in a routine at
+   * different numbers, and keying by id would move both.
+   */
+  function setRowTarget(rowKey, field, rawValue) {
+    const value = rawValue === '' ? null : Number(rawValue);
+    setRows((current) => current.map((row) => (
+      row.key === rowKey ? { ...row, [field]: Number.isNaN(value) ? null : value } : row
+    )));
+  }
 
   // A small activation distance -- not zero -- so a tap that lands on the handle but isn't
   // really a drag (a fat-fingered touch that moves a pixel or two) doesn't register as one.
@@ -153,12 +189,21 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
         return;
       }
       // Duplicates are preserved in order -- the backend stores one routine_exercises row per
-      // position, numbered by sort_order.
-      const exerciseIds = rows.map((row) => row.exerciseId);
+      // position, numbered by sort_order, and matches targets by position for the same reason.
+      const exercises = rows.map((row) => ({
+        exerciseId: row.exerciseId,
+        targetWeight: row.targetWeight ?? null,
+        targetReps: row.targetReps ?? null,
+        // ⚠️ A weight with no unit is uninterpretable, and the database refuses the pairing
+        // outright (CK_routine_exercises_target_unit). A row loaded from the server keeps the unit
+        // it was WRITTEN in; a newly typed one takes the account's current default. Never
+        // recomputed, so changing the account default does not reinterpret an existing target.
+        targetUnit: row.targetWeight == null ? null : (row.targetUnit ?? targetUnit),
+      }));
       if (isEditing) {
-        await updateRoutine(personId, routine.id, { name: trimmed, exerciseIds });
+        await updateRoutine(personId, routine.id, { name: trimmed, exercises });
       } else {
-        await createRoutine(personId, { name: trimmed, exerciseIds });
+        await createRoutine(personId, { name: trimmed, exercises });
       }
       onSaved();
     },
@@ -221,6 +266,8 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
                     index={idx}
                     total={rows.length}
                     exerciseName={exerciseById.get(row.exerciseId)?.name}
+                    targetUnit={targetUnit}
+                    onTargetChange={setRowTarget}
                     onRemove={removeExercise}
                     onMoveByKey={moveExercise}
                   />
@@ -327,7 +374,7 @@ const dndAccessibility = { screenReaderInstructions };
 // whole row as dnd-kit reorders the list; `attributes`/`listeners` (the drag activators) go on
 // the handle ALONE, not the row -- otherwise the exercise name and the remove button would start
 // a drag too, instead of just being read or tapped.
-function SortableRoutineRow({ row, index, total, exerciseName, onRemove, onMoveByKey }) {
+function SortableRoutineRow({ row, index, total, exerciseName, targetUnit, onTargetChange, onRemove, onMoveByKey }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: row.key });
   // The x component is dropped -- this list only ever reorders vertically, and a slightly
   // diagonal drag shouldn't nudge the row sideways too.
@@ -364,7 +411,33 @@ function SortableRoutineRow({ row, index, total, exerciseName, onRemove, onMoveB
         label={`Reorder: ${position}`}
         style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
       />
-      <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 0 }}>{exerciseName}</span>
+      <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 110 }}>{exerciseName}</span>
+      {/* Optional, and blank by default: most routines prescribe nothing, and a routine somebody
+          builds for themselves usually never will. Both fields are independent -- "135 lb, as many
+          as you get" and "5 reps at whatever you can manage" are real prescriptions, which is why
+          formatTarget renders each half on its own.
+
+          ⚠️ NOT gated on Pro. A target is useful to anyone who writes a routine, and gating it
+          would mean a family member's own plan could not carry the numbers they meant to hit. What
+          Pro sells is ASSIGNING a routine to somebody else, not the existence of a number. */}
+      <input
+        type="number"
+        inputMode="decimal"
+        value={row.targetWeight ?? ''}
+        onChange={(event) => onTargetChange(row.key, 'targetWeight', event.target.value)}
+        placeholder={targetUnit}
+        aria-label={`Target weight: ${position}`}
+        style={targetInputStyle}
+      />
+      <input
+        type="number"
+        inputMode="numeric"
+        value={row.targetReps ?? ''}
+        onChange={(event) => onTargetChange(row.key, 'targetReps', event.target.value)}
+        placeholder="reps"
+        aria-label={`Target reps: ${position}`}
+        style={targetInputStyle}
+      />
       <IconButton icon={IconClose} label={`Remove: ${position}`} tone="danger" onClick={() => onRemove(row.key)} />
     </div>
   );
@@ -373,11 +446,28 @@ function SortableRoutineRow({ row, index, total, exerciseName, onRemove, onMoveB
 const rowStyle = {
   display: 'flex',
   alignItems: 'center',
+  // Wraps so the two target fields drop under the exercise name at phone width rather than
+  // squeezing it to nothing -- this modal is used on a 390px screen.
+  flexWrap: 'wrap',
   gap: 4,
   padding: '6px 6px 6px 10px',
   borderRadius: 'var(--radius-md)',
   border: '1px solid var(--color-border)',
   background: 'var(--color-pr-bg)',
+};
+
+// 16px font, or iOS Safari zooms the viewport on focus -- the rule every input in this app follows
+// (frontend-core.md). The width is what keeps two of them plus a name on one line at 390px.
+const targetInputStyle = {
+  width: 62,
+  minHeight: 40,
+  padding: '0 6px',
+  textAlign: 'center',
+  fontSize: 'var(--text-md)',
+  color: 'var(--color-text)',
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-sm)',
 };
 
 // Matches the 40x40 footprint of the IconButton the DragOverlay clone stands in for, so the

@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import HuddleMark from '../shared/HuddleMark';
+import { isKnownPlan } from '../../utils/planFeatures';
+import { planCopy } from './planCopy';
 
 // The household's plan, in the header, immediately left of the account menu.
 //
@@ -38,7 +40,7 @@ export default function PlanBadge() {
   const { account } = useAuth();
   const plan = account?.plan;
 
-  if (plan !== 'FREE' && plan !== 'PLUS') {
+  if (!isKnownPlan(plan)) {
     return null;
   }
 
@@ -64,14 +66,24 @@ export default function PlanBadge() {
     );
   }
 
+  // ⚠️ THE TIER IS NAMED FROM planCopy, NOT HARDCODED. This read "Plus" for every paid plan, so a
+  // trainer who had just paid for Pro was told by their own header that they were on Plus -- while
+  // the billing screen one tap away said Pro. The pill is the one place in the app that names the
+  // tier on every screen, which is exactly why it must not be the one place that guesses it.
+  // planCopy is the same map BillingTab and the marketing pricing table read, so the three cannot
+  // disagree, and it returns null for a tier this bundle predates (resilience.md axis D) -- which
+  // falls into the same render-nothing case as an unknown plan below, deliberately: a paid
+  // household mislabelled with the wrong tier's name is the failure this component exists to avoid.
+  //
   // A link to /app/billing, same as "Go Plus" above -- it used to be a static span on the reasoning
-  // that the account menu's "Plan & billing" item already goes there and a Plus member has nothing
+  // that the account menu's "Plan & billing" item already goes there and a paying member has nothing
   // to DO here. That held while this was quiet chrome; now that it's a deliberately prominent,
   // branded badge, a tap that goes nowhere reads as broken rather than as "nothing to do".
   // "Plus" is a substring of "Profile" (UserMenu's first item) and of "Upgrade to Plus"
-  // (FreeSummary's button), but neither shares this control's ROLE -- Playwright/RTL role queries
-  // filter by role before matching name, and a Free household never sees this link at all (Plus and
-  // Free are mutually exclusive), so there is no state in which two same-named links coexist.
+  // (FreeSummary's button), and "Pro" is a substring of "Profile" too, but neither shares this
+  // control's ROLE -- Playwright/RTL role queries filter by role before matching name, and a Free
+  // household never sees this link at all (Free and paid are mutually exclusive), so there is no
+  // state in which two same-named links coexist.
   //
   // The same mark the Free pill now carries -- what changes between the two states is the pill, not
   // the glyph. It's already proven legible this small: public/icon.svg is the same four circles
@@ -86,10 +98,15 @@ export default function PlanBadge() {
   //
   // NOT wrapped in OfflineDisabledWrap, same reasoning as "Go Plus": this is a navigation, not a
   // write, and client-side routing works offline.
+  const name = planCopy(plan)?.name;
+  if (!name) {
+    return null;
+  }
+
   return (
-    <Link to="/app/billing" className="pressable plan-badge plan-badge--plus" aria-label="Plus">
+    <Link to="/app/billing" className="pressable plan-badge plan-badge--plus" aria-label={name}>
       <HuddleMark size={14} hairline="#bdb6af" />
-      Plus
+      {name}
     </Link>
   );
 }

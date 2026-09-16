@@ -3,6 +3,7 @@ import PlusUpsell from './PlusUpsell';
 import HistoryWindowModal from './HistoryWindowModal';
 import { fullHistorySentence } from './historyWindowCopy';
 import { IconHelp } from './icons';
+import { planIncludes } from '../../utils/planFeatures';
 
 // "There is more here than you can see." The one way History, PRs and Trends say so, so all three
 // read in the same voice and none of them can drift into being pushier than the others.
@@ -12,11 +13,12 @@ import { IconHelp } from './icons';
 // way to ask why. PlusUpsell keeps owning what an upgrade prompt looks like.
 //
 // THREE FAIL-CLOSED GATES, and any one of them silences this entirely:
-//   1. plan !== 'FREE'      -- includes UNKNOWN, not just Plus. An auth snapshot written before
-//                              billing shipped carries no plan, and showing a household that
-//                              already pays a notice about what they cannot see is the worst
-//                              outcome available here. Absence is the safe default, exactly as
-//                              PlanBadge and PlusUpsell already argue.
+//   1. the plan includes    -- via planIncludes, so UNKNOWN counts as included, not just Plus. An
+//      FULL_HISTORY            auth snapshot written before billing shipped carries no plan, and
+//                              one written by a newer build may name a tier this bundle has never
+//                              heard of; showing a household that already pays a notice about what
+//                              they cannot see is the worst outcome available here. Absence is the
+//                              safe default, exactly as PlanBadge and PlusUpsell already argue.
 //   2. no server answer yet -- `historyWindow` is null until the request returns, and "not asked"
 //                              must never render as "nothing hidden" or vice versa.
 //   3. hiddenSessions === 0 -- nothing is hidden, so there is nothing to say. This is what keeps
@@ -35,7 +37,7 @@ export default function HistoryWindowNotice({ plan, historyWindow, lead }) {
   const [explaining, setExplaining] = useState(false);
 
   const hidden = historyWindow?.hiddenSessions ?? 0;
-  if (plan !== 'FREE' || !historyWindow || hidden === 0) return null;
+  if (planIncludes(plan, 'FULL_HISTORY') || !historyWindow || hidden === 0) return null;
 
   return (
     <div style={wrapStyle}>

@@ -1,4 +1,5 @@
 import HuddleMark from '../shared/HuddleMark';
+import { PLANS, planCopy } from './planCopy';
 
 // The moment a checkout actually lands, mirroring PRCelebration's shape (shared/PRCelebration.jsx)
 // almost exactly -- same scrim, same confetti, same pop-in -- rather than inventing a second
@@ -29,7 +30,27 @@ const CONFETTI_SPECS = [
   { left: 60, color: '#F2A65A', delay: 0.24 },
 ];
 
-export default function PlusCelebration({ onDismiss }) {
+// ⚠️ TAKES THE TIER. It said "Welcome to Huddle Plus" as a literal, under a line about history,
+// records and import -- so a trainer finishing a Pro checkout was congratulated on unlocking four
+// things they already had and none of the four they had just bought. Both strings now come from
+// planCopy, the same map the billing screen and the header pill read.
+//
+// Unknown or absent tier falls back to Plus's wording rather than rendering nothing: this is a
+// transient congratulation over a payment that HAS succeeded, and showing no celebration at all
+// after a successful checkout reads as "did that work?" -- the opposite failure from the badge's,
+// where silence is the safe answer because it self-corrects on the next /me.
+//
+// ⚠️ THE GUARD ASKS FOR THE COPY, NOT FOR A RECOGNISED TIER. `planCopy('FREE')` returns a
+// real entry whose `welcome` is null -- nobody celebrates arriving at Free -- so a `?? PLANS.PLUS`
+// fallback keyed on the ENTRY slipped straight past it and rendered "Welcome to Huddle Free" under
+// an empty line. That is reachable: the auth snapshot still says FREE for the moment between a
+// checkout landing and /me catching up, and it stays FREE indefinitely whenever the webhook rather
+// than the reconcile is what applies the purchase. Caught by billing.spec.ts, which drives the real
+// redirect; no unit test had the timing to see it.
+export default function PlusCelebration({ plan, onDismiss }) {
+  const named = planCopy(plan);
+  const copy = named?.welcome ? named : PLANS.PLUS;
+
   return (
     <div
       onClick={onDismiss}
@@ -96,10 +117,10 @@ export default function PlusCelebration({ onDismiss }) {
           <HuddleMark size={40} />
         </div>
         <div style={{ fontSize: 24, fontWeight: 'var(--weight-bold)', letterSpacing: '-0.01em', marginBottom: 8, position: 'relative', zIndex: 1 }}>
-          Welcome to Huddle Plus
+          Welcome to Huddle {copy.name}
         </div>
         <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-muted)', lineHeight: 1.5, position: 'relative', zIndex: 1 }}>
-          Your whole history, every record, and import are unlocked. Thanks for keeping Huddle going.
+          {copy.welcome}
         </div>
       </div>
     </div>

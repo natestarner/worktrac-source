@@ -2,6 +2,7 @@ package com.worktrac.backend.quota;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.common.ForbiddenException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,9 +53,35 @@ public class QuotaService {
         this.properties = properties;
     }
 
-    public void requirePersonCapacity(Long accountId, long currentCount) {
-        check("people-per-account", accountId, currentCount, properties.getPeoplePerAccount(),
-                "This household has reached its limit of %d people.");
+    /**
+     * How many people an account may hold, which is a DIFFERENT question per tier.
+     *
+     * <p>A household tier is bounded by what a family is: {@code peoplePerAccount}, twenty, which
+     * has never been about what anybody paid for. A PRO account is bounded by what it BOUGHT --
+     * the band's client limit plus one for the trainer's own training profile, since a trainer who
+     * also trains must not be spending a client seat on themselves.
+     *
+     * <p>The UNLIMITED band still gets a number ({@code peoplePerProAccount}); "unlimited" is a
+     * pricing promise rather than an invitation to create rows without bound.
+     *
+     * <p>⚠️ THIS IS A CEILING ON ADDING, NEVER A REVOCATION. It is only ever consulted before a
+     * person is created. Moving DOWN a band leaves every existing client exactly where they are --
+     * the same promise the Plus pause makes, and the reason nothing reads this on a plan change.
+     */
+    public void requirePersonCapacity(Long accountId, long currentCount, BillingPlan plan, Integer clientSeats) {
+        if (plan != BillingPlan.PRO) {
+            check("people-per-account", accountId, currentCount, properties.getPeoplePerAccount(),
+                    "This household has reached its limit of %d people.");
+            return;
+        }
+        if (clientSeats == null) {
+            check("people-per-pro-account", accountId, currentCount, properties.getPeoplePerProAccount(),
+                    "This account has reached its limit of %d people.");
+            return;
+        }
+        check("client-seats", accountId, currentCount, clientSeats + 1,
+                "Your plan covers %d clients. Move up a plan to add more -- everybody you already "
+                        + "have keeps their login either way.");
     }
 
     public void requireExerciseCapacity(Long accountId, long currentCount) {

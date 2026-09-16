@@ -323,6 +323,15 @@ export function invalidateAfterImport(client, personId) {
   client.invalidateQueries({ queryKey: queryKeys.history(personId) });
   client.invalidateQueries({ queryKey: queryKeys.prs(personId) });
   client.invalidateQueries({ queryKey: queryKeys.historyWindow(personId) });
+  // ⚠️ THE ROSTER DERIVES FROM SETS TOO, and it is account-shared rather than person-keyed -- so a
+  // set logged for ANY person changes it. Invalidated by PREFIX because the key carries a weeks
+  // window this caller cannot know (queryKeys.roster(weeks)).
+  //
+  // It was missing here when the roster shipped, and the symptom was exactly what
+  // frontend-core.md warns about: log a set, open the roster, and it still says that client has
+  // never trained -- for up to a minute, because offlineCacheWarm had already cached the old
+  // answer. An e2e caught it; nothing about the screen looked wrong.
+  client.invalidateQueries({ queryKey: ['roster'] });
   client.invalidateQueries({ queryKey: queryKeys.personExercises(personId) });
   client.invalidateQueries({ queryKey: queryKeys.exercises() });
   client.invalidateQueries({ queryKey: queryKeys.tags() });
@@ -450,6 +459,15 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       // Derived from sets like the three above: logging into an out-of-window past session is how
       // the hidden count goes 0 -> 1, and that is the exact flow the notice exists for.
       client.invalidateQueries({ queryKey: queryKeys.historyWindow(vars.personId) });
+  // ⚠️ THE ROSTER DERIVES FROM SETS TOO, and it is account-shared rather than person-keyed -- so a
+  // set logged for ANY person changes it. Invalidated by PREFIX because the key carries a weeks
+  // window this caller cannot know (queryKeys.roster(weeks)).
+  //
+  // It was missing here when the roster shipped, and the symptom was exactly what
+  // frontend-core.md warns about: log a set, open the roster, and it still says that client has
+  // never trained -- for up to a minute, because offlineCacheWarm had already cached the old
+  // answer. An e2e caught it; nothing about the screen looked wrong.
+  client.invalidateQueries({ queryKey: ['roster'] });
       invalidateTrends(client, vars.personId);
     },
   });
@@ -548,6 +566,9 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
     client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
     client.invalidateQueries({ queryKey: queryKeys.historyWindow(vars.personId) });
+    // The roster derives from sets as well -- editing or deleting one moves a person's "last
+    // trained" and their adherence count. Prefix, because the key carries a weeks window.
+    client.invalidateQueries({ queryKey: ['roster'] });
     invalidateTrends(client, vars.personId);
   };
 

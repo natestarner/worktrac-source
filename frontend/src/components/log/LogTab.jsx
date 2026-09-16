@@ -471,6 +471,15 @@ export default function LogTab() {
           liveSession={liveSession}
           refetchLiveSession={refetchLiveSession}
           onBack={backToPicker}
+          // What the trainer prescribed for THIS position in the routine being followed.
+          //
+          // ⚠️ Read by routineIndex, not by exercise id. The same exercise can legitimately appear
+          // twice in one routine at different numbers (a top set and a back-off set), and matching
+          // by id would show the first one's target at both positions -- which is worse than
+          // showing none, because it is confidently wrong.
+          //
+          // Null whenever no routine is running, which is most of the time.
+          prescribed={activeRoutine?.exercises?.[routineIndex] ?? null}
           // Deep-links into History pre-filtered to this exercise. fromLog:true is what tells
           // HistoryTab's filter bar to show a "Back to {exercise}" link -- selectedExerciseId is
           // untouched by this navigation, so returning via that link (or the Log tab itself)

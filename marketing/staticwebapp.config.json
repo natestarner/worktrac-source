@@ -2,6 +2,10 @@
   "routes": [
     { "route": "/index.html", "headers": { "Cache-Control": "no-cache" } },
     { "route": "/", "headers": { "Cache-Control": "no-cache" } },
+    { "route": "/for-trainers.html", "headers": { "Cache-Control": "no-cache" } },
+    { "route": "/for-trainers", "rewrite": "/for-trainers.html" },
+    { "route": "/pricing.html", "headers": { "Cache-Control": "no-cache" } },
+    { "route": "/pricing", "rewrite": "/pricing.html" },
     { "route": "/styles.css", "headers": { "Cache-Control": "public, max-age=3600" } },
     { "route": "/app-links.js", "headers": { "Cache-Control": "public, max-age=3600" } },
     { "route": "/assets/*", "headers": { "Cache-Control": "public, max-age=604800" } }

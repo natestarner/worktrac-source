@@ -73,7 +73,15 @@ test.describe('A member login when the household leaves Plus', () => {
 
     await expect(page.getByText(/Your login is paused/i)).toBeVisible();
     await expect(page.getByText(/Nothing has been deleted/i)).toBeVisible();
-    await expect(page.getByText(/Nate can turn Plus back on/)).toBeVisible();
+    await expect(page.getByText(/Nate can turn it back on/)).toBeVisible();
+
+    // ⚠️ IT NAMES NO TIER, and that is precision rather than vagueness. This asserted
+    // "turn Plus back on" until the tier that lapsed stopped being knowable from here: by the time
+    // this screen renders, the account IS Free again. On a trainer's account the lapsed tier was
+    // PRO, and telling a client their trainer can "turn Plus back on" names a plan nobody ever
+    // bought. "Huddle's paid plans" is the only sentence true on every tier, Team included.
+    await expect(page.getByText(/paid plans/)).toBeVisible();
+    await expect(page.getByText(/Huddle Plus/)).toHaveCount(0);
 
     // No app behind it -- there is nothing here they could use, and every control would 403.
     await expect(page.getByRole('link', { name: 'Log' })).toHaveCount(0);

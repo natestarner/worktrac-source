@@ -13,8 +13,8 @@ import { authCardStyle, authPageStyle, errorBannerStyle } from './authStyles';
  *    sign-in anyway. Reusing it is what keeps joining from needing a journey of its own: no toast,
  *    no confirmation screen, no automatic jump into a household nobody asked to be moved to.
  *
- * Both callers hand it the same `{ households, selectionToken }` the server returned, and both
- * finish through `AuthContext.chooseHousehold` — so the two cannot drift on what picking means.
+ * Both callers hand it the same `{ accounts, selectionToken }` AuthContext returned, and both
+ * finish through `AuthContext.chooseAccount` — so the two cannot drift on what picking means.
  *
  * Deliberately a plain list of buttons rather than a select: on a phone two or three big targets
  * beat a dropdown, and the whole screen exists to be tapped once.
@@ -24,8 +24,8 @@ import { authCardStyle, authPageStyle, errorBannerStyle } from './authStyles';
  * the credential is already proved — so it is either omitted or points somewhere that makes sense
  * for a visitor who was already signed in.
  */
-export default function HouseholdPicker({
-  households,
+export default function AccountPicker({
+  accounts,
   onChoose,
   onCancel,
   cancelLabel = 'Use a different login',
@@ -58,12 +58,12 @@ export default function HouseholdPicker({
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-          {households.map((household) => (
+          {accounts.map((account) => (
             <button
-              key={household.accountId}
+              key={account.accountId}
               type="button"
               disabled={submitting}
-              onClick={() => onChoose(household.accountId)}
+              onClick={() => onChoose(account.accountId)}
               className="btn btn-lg btn-full pressable"
               style={{
                 background: 'var(--color-subtle-bg)',
@@ -82,13 +82,13 @@ export default function HouseholdPicker({
                   the name refuses to shrink or wrap and pushes the role label past the button
                   (and on a narrow phone, past the card) instead of wrapping. */}
               <span style={{ fontWeight: 'var(--weight-semibold)', whiteSpace: 'normal', overflowWrap: 'anywhere', minWidth: 0, flex: '1 1 auto' }}>
-                {household.accountName}
+                {account.accountName}
               </span>
               {/* Their own role, not a badge about the household -- it is the fastest way to tell
                   "the one I run" from "the one I was invited to" when both are named after a
                   family. */}
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', textTransform: 'lowercase', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                {household.accountRole === 'OWNER' ? 'you own this' : 'you’re a member'}
+                {account.accountRole === 'OWNER' ? 'you own this' : 'you’re a member'}
               </span>
             </button>
           ))}

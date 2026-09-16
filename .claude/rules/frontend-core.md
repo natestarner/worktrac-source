@@ -307,7 +307,7 @@ happily on a key nothing observes, which is exactly the failure mode.
 | Feature | Offline? |
 |---|---|
 | Log/edit/delete a set, session start/end, session note, favorite/unfavorite, create a custom exercise | ✅ durable outbox |
-| Add person, routine CRUD, tags, default unit, rest-timer preference, exercise rename/tags/custom fields, log a past workout, export, **import data and undo an import**, delete account, edit person, **send a Contact Us message** | ❌ gated — needs a connection |
+| Add person, routine CRUD, tags, default unit, rest-timer preference, exercise rename/tags/custom fields, log a past workout, export, **import data and undo an import**, delete account, edit person, **send a Contact Us message**, **record a check-in** | ❌ gated — needs a connection |
 
 - Offline-capable writes go through `useDurableMutation`. Tier-3 writes are gated because some
   (e.g. `createPastSession`) are **not idempotent** and would duplicate on replay.
@@ -317,6 +317,12 @@ happily on a key nothing observes, which is exactly the failure mode.
   `try { … } finally { setBusy(false) }` with **no catch**, so a failed write rejected into
   nothing and the person saw the spinner stop and nothing happen. A gated write has no outbox and
   no retry behind it — if it fails, saying so is the only option left.
+- **A check-in is gated for the same reason, and needs the same pairing.** The POST carries no
+  idempotency key, so a replay would record the same weigh-in twice — exactly `createPastSession`'s
+  argument. It is over free text, so the draft is persisted per person
+  (`PERSON_DEFAULTS.checkInDraft`) and cleared **only on a successful save**. A gate over free text
+  without a preserved draft *is* the silently-lost outcome the contract forbids. Note the original
+  plan called this a durable write; it is not, and the idempotency argument is why.
 - **The Contact Us message is gated for the usual reason — sending is not idempotent on replay.**
   The outbox retries forever across reloads and deploys, so a queued submission could reach the
   inbox repeatedly with no way for the person to see or cancel it mid-outage. What makes that

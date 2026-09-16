@@ -133,7 +133,7 @@ class AccountDeletionTest extends AbstractIntegrationTest {
                 .andExpect(status().isOk());
 
         String routineBody = objectMapper.writeValueAsString(Map.of(
-                "name", "Custom Routine " + personId, "exerciseIds", List.of(exerciseId)));
+                "name", "Custom Routine " + personId, "exercises", List.of(Map.of("exerciseId", exerciseId))));
         mockMvc.perform(post("/api/people/" + personId + "/routines")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)

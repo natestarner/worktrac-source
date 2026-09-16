@@ -28,10 +28,15 @@ public class Account {
 
     // Whether a MEMBER login sees the whole household or only themselves (V66).
     //
-    // ⚠️ NO SETTER, DELIBERATELY. Plus/Family is forced ON, and the absence of a setter is what
-    // enforces that -- there is no endpoint, no service method and no UI that can change it, so
-    // "always on for this plan" is a property of the code rather than a check to be flipped. The
-    // Team tier is what adds a setter, an endpoint and a toggle together. See V66's header.
+    // ⚠️ THE SETTER IS GATED BY A PLAN, NOT BY ITS OWN ABSENCE. It shipped with no setter at all,
+    // which made "forced ON for a family tier" a property of the code rather than a check somebody
+    // could flip -- and V66's header said the tier that needed it would add the setter, the
+    // endpoint and the toggle together. Pro is that tier, and this is that setter.
+    //
+    // What replaces the absence is PlanFeature.PRIVATE_MEMBERS: a plan that does not hold it cannot
+    // reach the endpoint at all, so Free and Plus are still forced ON -- now by an explicit gate
+    // that says WHY rather than by a missing method that says nothing. Do not call this from
+    // anywhere but AccountService.setMemberVisibility, which is where that gate lives.
     @Column(name = "members_see_everyone", nullable = false)
     private boolean membersSeeEveryone = true;
 
@@ -75,6 +80,10 @@ public class Account {
 
     public boolean isMembersSeeEveryone() {
         return membersSeeEveryone;
+    }
+
+    public void setMembersSeeEveryone(boolean membersSeeEveryone) {
+        this.membersSeeEveryone = membersSeeEveryone;
     }
 
     public Instant getCreatedAt() {

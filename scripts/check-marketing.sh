@@ -25,6 +25,12 @@ cd "$(dirname "$0")/.."
 
 DIR="marketing"
 INDEX="$DIR/index.html"
+
+# Every page the site serves. Checks 2, 4, 5 and 6 below run over ALL of them -- they read only
+# index.html while it was the only page, which would have left a second audience page's asset
+# paths, dev hosts, alt text and canonical URL entirely unchecked.
+PAGES=("$DIR"/*.html)
+
 fails=0
 
 fail() {
@@ -58,18 +64,22 @@ fi
 # Root-relative refs only (href/src/srcset="/..."); external URLs and in-page
 # anchors are skipped.
 missing_refs=0
-while IFS= read -r ref; do
-  [ -z "$ref" ] && continue
-  # A bare "/" (and any directory ref) is served as that directory's index.html.
-  case "$ref" in
-    */) target="$DIR${ref}index.html" ;;
-    *) target="$DIR$ref" ;;
-  esac
-  if [ ! -f "$target" ]; then
-    fail "referenced file does not exist: $ref"
-    missing_refs=$((missing_refs + 1))
-  fi
-done < <(grep -oE '(href|src|srcset)="/[^"#]*"' "$INDEX" | sed -E 's/^(href|src|srcset)="//; s/"$//' | sort -u)
+# EVERY page, not just index.html. A second page would otherwise carry unchecked asset paths that
+# 404 in production -- silently, as a missing stylesheet rather than an error.
+for page in "${PAGES[@]}"; do
+  while IFS= read -r ref; do
+    [ -z "$ref" ] && continue
+    # A bare "/" (and any directory ref) is served as that directory's index.html.
+    case "$ref" in
+      */) target="$DIR${ref}index.html" ;;
+      *) target="$DIR$ref" ;;
+    esac
+    if [ ! -f "$target" ]; then
+      fail "$(basename "$page") references a file that does not exist: $ref"
+      missing_refs=$((missing_refs + 1))
+    fi
+  done < <(grep -oE '(href|src|srcset)="/[^"#]*"' "$page" | sed -E 's/^(href|src|srcset)="//; s/"$//' | sort -u)
+done
 
 if [ "$missing_refs" -eq 0 ]; then
   pass "all local references resolve"
@@ -85,30 +95,49 @@ fi
 
 # --- 4. No dev host hardcoded in the page ------------------------------------
 # app-links.js legitimately names it; index.html must not.
-if grep -q 'app\.dev\.huddle\.fitness' "$INDEX"; then
-  fail "index.html hardcodes app.dev.huddle.fitness (app-links.js applies it at runtime)"
-else
-  pass "no dev host hardcoded in index.html"
-fi
+dev_host=0
+for page in "${PAGES[@]}"; do
+  if grep -q 'app\.dev\.huddle\.fitness' "$page"; then
+    fail "$(basename "$page") hardcodes app.dev.huddle.fitness (app-links.js applies it at runtime)"
+    dev_host=$((dev_host + 1))
+  fi
+done
+[ "$dev_host" -eq 0 ] && pass "no dev host hardcoded in any page"
 
 # --- 5. Every <img> has an alt attribute -------------------------------------
-if grep -oE '<img[^>]*>' "$INDEX" | grep -qv 'alt='; then
-  fail "an <img> tag is missing alt="
-  grep -oE '<img[^>]*>' "$INDEX" | grep -v 'alt=' | sed 's/^/        /'
-else
-  pass "every <img> has alt"
-fi
+missing_alt=0
+for page in "${PAGES[@]}"; do
+  if grep -oE '<img[^>]*>' "$page" | grep -qv 'alt='; then
+    fail "$(basename "$page") has an <img> with no alt="
+    grep -oE '<img[^>]*>' "$page" | grep -v 'alt=' | sed 's/^/        /'
+    missing_alt=$((missing_alt + 1))
+  fi
+done
+[ "$missing_alt" -eq 0 ] && pass "every <img> has alt"
 
 # --- 6. Canonical and og:url agree -------------------------------------------
-canonical=$(grep -oE '<link rel="canonical" href="[^"]*"' "$INDEX" | sed -E 's/.*href="([^"]*)".*/\1/')
-ogurl=$(grep -oE '<meta property="og:url" content="[^"]*"' "$INDEX" | sed -E 's/.*content="([^"]*)".*/\1/')
-if [ -z "$canonical" ]; then
-  fail "no canonical link"
-elif [ "$canonical" != "$ogurl" ]; then
-  fail "canonical ($canonical) and og:url ($ogurl) disagree"
-else
-  pass "canonical and og:url agree ($canonical)"
-fi
+# Per page, and a page with no canonical at all is a failure. Two audience pages sharing one
+# canonical URL is exactly how one of them stops being indexed -- which is invisible from the page.
+canon_fails=0
+declare -A seen_canonical
+for page in "${PAGES[@]}"; do
+  name=$(basename "$page")
+  canonical=$(grep -oE '<link rel="canonical" href="[^"]*"' "$page" | sed -E 's/.*href="([^"]*)".*/\1/')
+  ogurl=$(grep -oE '<meta property="og:url" content="[^"]*"' "$page" | sed -E 's/.*content="([^"]*)".*/\1/')
+  if [ -z "$canonical" ]; then
+    fail "$name has no canonical link"
+    canon_fails=$((canon_fails + 1))
+  elif [ -n "$ogurl" ] && [ "$canonical" != "$ogurl" ]; then
+    fail "$name: canonical ($canonical) and og:url ($ogurl) disagree"
+    canon_fails=$((canon_fails + 1))
+  elif [ -n "${seen_canonical[$canonical]:-}" ]; then
+    fail "$name shares a canonical URL with ${seen_canonical[$canonical]} ($canonical)"
+    canon_fails=$((canon_fails + 1))
+  else
+    seen_canonical[$canonical]="$name"
+  fi
+done
+[ "$canon_fails" -eq 0 ] && pass "every page has its own canonical, matching its og:url"
 
 # --- 7. No retired brand colour ----------------------------------------------
 # The v3 mark is #e8734a / #f2a65a / #f2ede1 / #b5542d and the wordmark inks are
@@ -121,6 +150,34 @@ if grep -riq '163b3e' "$DIR"/*.html "$DIR"/*.css "$DIR"/*.js; then
 else
   pass "no retired teal #163b3e"
 fi
+
+# --- 8. Every page loads app-links.js ----------------------------------------
+# It rewrites every CTA host on the dev deployment and injects noindex there. A page that forgets it
+# sends lower-environment visitors to the PRODUCTION app and lets the lower landing page be indexed
+# alongside the real one -- neither of which is visible from the page itself.
+missing_links=0
+for page in "${PAGES[@]}"; do
+  if ! grep -q 'src="/app-links.js"' "$page"; then
+    fail "$(basename "$page") does not load app-links.js"
+    missing_links=$((missing_links + 1))
+  fi
+done
+[ "$missing_links" -eq 0 ] && pass "every page loads app-links.js"
+
+# --- 9. Every page is in the sitemap -----------------------------------------
+# A page nobody links to and nothing lists is a page that does not exist as far as search is
+# concerned, and adding one is exactly when this is forgotten.
+missing_sitemap=0
+for page in "${PAGES[@]}"; do
+  name=$(basename "$page")
+  slug="$name"
+  [ "$name" = "index.html" ] && slug=""
+  if ! grep -q "huddle.fitness/$slug<" "$DIR/sitemap.xml"; then
+    fail "$name is not listed in sitemap.xml"
+    missing_sitemap=$((missing_sitemap + 1))
+  fi
+done
+[ "$missing_sitemap" -eq 0 ] && pass "every page is in sitemap.xml"
 
 echo
 if [ "$fails" -gt 0 ]; then

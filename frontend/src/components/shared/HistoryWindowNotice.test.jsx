@@ -79,7 +79,7 @@ describe('HistoryWindowNotice', () => {
       expect(screen.getByText(/Nothing is deleted, ever/)).toBeInTheDocument();
       // Names a real date rather than an abstraction.
       expect(screen.getByText(/goes back to Mar 12, 2024/)).toBeInTheDocument();
-      // The benefits come from planCopy's PRO_BENEFITS, not retyped prose.
+      // The benefits come from planCopy's PLUS_BENEFITS, not retyped prose.
       expect(screen.getByText(/Your whole history/)).toBeInTheDocument();
       // The two facts a less honest version would omit.
       expect(screen.getByText(/detected against your whole\s+history/)).toBeInTheDocument();

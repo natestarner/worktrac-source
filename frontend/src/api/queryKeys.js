@@ -15,6 +15,10 @@ export const queryKeys = {
   // Account-shared, like exercises and tags -- no personId. Owner-only on the server
   // (MANAGE_LOGINS), so every read of it is gated on isOwner at the call site.
   accountLogins: () => ['account-logins'],
+  // Account-shared for the same reason: it is a list ABOUT people rather than one person's data,
+  // and every viewer of it sees the same server-filtered set. The weeks window is part of the key
+  // because it changes the numbers in every row.
+  roster: (weeks) => ['roster', weeks],
   // Billing belongs to the household, not to whoever is currently selected -- one subscription
   // per account, so this is one of the few reads that legitimately has no personId.
   subscription: () => ['subscription'],
@@ -27,6 +31,10 @@ export const queryKeys = {
   // `history`, because PRs and Trends ask the same question without reading the history list.
   historyWindow: (personId) => ['history-window', personId],
   routines: (personId) => ['routines', personId],
+  // Per person, like every other read about one person's training. What a caller SEES under
+  // this key depends on who they are -- a trainer's private notes are filtered out server-side
+  // for the client they are about -- so it must be reset on an auth change like everything else.
+  checkIns: (personId) => ['check-ins', personId],
   prs: (personId) => ['prs', personId],
   trendsOverview: (personId, weeks) => ['trends-overview', personId, weeks],
   exerciseTrend: (personId, exerciseId, weeks) => ['exercise-trend', personId, exerciseId, weeks],

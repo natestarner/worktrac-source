@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppSettingsTab from './AppSettingsTab';
 import { createTag } from '../../api/tags';
-import { updateDefaultUnit } from '../../api/account';
+import { setMemberVisibility, updateDefaultUnit } from '../../api/account';
 import { setRestTimerPreference } from '../../api/people';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
@@ -29,7 +29,7 @@ vi.mock('../../api/tags', () => ({
   renameTag: vi.fn(),
   listTags: vi.fn(),
 }));
-vi.mock('../../api/account', () => ({ updateDefaultUnit: vi.fn() }));
+vi.mock('../../api/account', () => ({ updateDefaultUnit: vi.fn(), setMemberVisibility: vi.fn() }));
 vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
 vi.mock('../../api/dataImport', () => ({ listImports: vi.fn(), undoImport: vi.fn() }));
 vi.mock('../../api/people', () => ({ setRestTimerPreference: vi.fn() }));
@@ -337,5 +337,87 @@ describe('AppSettingsTab as a member', () => {
     renderTab();
     expect(await screen.findByText('Push')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '\u00d7' })).toBeInTheDocument();
+  });
+});
+
+// Pro's member-visibility toggle. The privacy claim on the pricing page is only as good as who is
+// allowed to change it, so most of this is about who does NOT see the control.
+describe('AppSettingsTab member visibility', () => {
+  const PRO_VOCAB = { account: 'practice', owner: 'trainer', member: 'client', manager: 'assistant' };
+
+  function signedInAs(accountRole, account) {
+    useAuth.mockReturnValue({
+      account,
+      membership: accountRole ? { accountRole } : null,
+      people: [],
+      refreshPeople: vi.fn(),
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listImports.mockResolvedValue([]);
+    onlineManager.setOnline(true);
+    useUI.mockReturnValue({ openConfirm: vi.fn(), showToast: vi.fn() });
+    useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn() });
+    setMemberVisibility.mockResolvedValue({});
+  });
+  afterEach(() => onlineManager.setOnline(true));
+
+  it("offers the owner of a Pro account both states, in the account's own words", () => {
+    signedInAs('OWNER', { defaultUnit: 'lb', plan: 'PRO', membersSeeEveryone: false, vocab: PRO_VOCAB });
+    renderTab();
+
+    expect(screen.getByText('Client privacy')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Client privacy Private' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Client privacy Shared' })).toBeInTheDocument();
+  });
+
+  it('sends the new value when the owner switches to Shared', async () => {
+    signedInAs('OWNER', { defaultUnit: 'lb', plan: 'PRO', membersSeeEveryone: false, vocab: PRO_VOCAB });
+    renderTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Client privacy Shared' }));
+
+    await waitFor(() => expect(setMemberVisibility).toHaveBeenCalledWith(true));
+  });
+
+  // Clicking the state you are already in is a no-op rather than a redundant round trip -- the
+  // same guard handleUnitSelect has.
+  it('does not re-send the state the account is already in', () => {
+    signedInAs('OWNER', { defaultUnit: 'lb', plan: 'PRO', membersSeeEveryone: false, vocab: PRO_VOCAB });
+    renderTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Client privacy Private' }));
+
+    expect(setMemberVisibility).not.toHaveBeenCalled();
+  });
+
+  // THE IMPORTANT ONE. A MANAGER sees and writes every client, so it is tempting to treat them as
+  // an owner -- and `isOwner` was literally `!isMember` until the role existed. Whether the clients
+  // can see each other is a promise the account made to the people in it, and it belongs to
+  // whoever made it. The server agrees (MANAGE_HOUSEHOLD is owner-only), so offering this would be
+  // a control that 403s.
+  it('does not offer it to a manager', () => {
+    signedInAs('MANAGER', { defaultUnit: 'lb', plan: 'PRO', membersSeeEveryone: false, vocab: PRO_VOCAB });
+    renderTab();
+
+    expect(screen.queryByText('Client privacy')).not.toBeInTheDocument();
+  });
+
+  it('does not offer it to a member', () => {
+    signedInAs('MEMBER', { defaultUnit: 'lb', plan: 'PRO', membersSeeEveryone: false, vocab: PRO_VOCAB });
+    renderTab();
+
+    expect(screen.queryByText('Client privacy')).not.toBeInTheDocument();
+  });
+
+  // Asking for the FEATURE, not the tier. A family plan cannot make its members private at all --
+  // that is a promise Free and Plus make, enforced server-side with a 409.
+  it('does not offer it on a family tier, even to the owner', () => {
+    signedInAs('OWNER', { defaultUnit: 'lb', plan: 'PLUS', membersSeeEveryone: true, vocab: null });
+    renderTab();
+
+    expect(screen.queryByText(/privacy$/)).not.toBeInTheDocument();
   });
 });

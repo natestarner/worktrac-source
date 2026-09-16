@@ -11,10 +11,14 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
 import ChangePasswordSection from './ChangePasswordSection';
 import LoginsSection from './LoginsSection';
+import { accountVocab, capitalize } from '../../utils/accountVocab';
 
 export default function ProfileTab() {
   const { user, account, people, refreshPeople } = useAuth();
   const { isMember, selfPersonId, ownerName } = useAccountAccess();
+  // Family nouns when the account carries none -- an auth snapshot written before `vocab` existed
+  // is the common case for a browser that has not reloaded across the deploy.
+  const vocab = accountVocab(account?.vocab);
   const { openConfirm } = useUI();
   const navigate = useNavigate();
   const primary = people.find((p) => p.isPrimary);
@@ -55,13 +59,18 @@ export default function ProfileTab() {
         {/* AccountRole spelled out in the same plain language LoginsSection and the handbook use
             ("Enable login", never "OWNER"/"MEMBER") -- this is the one place a person can just
             look up which they are, rather than inferring it from which controls are missing. */}
+        {/* ⚠️ Deliberately NOT routed through accountVocab. This names the ROLE, not the account
+            type, and "Member"/"Account owner" is the same plain language LoginsSection and the
+            handbook use -- making this one screen say "Client" while the handbook says "Member"
+            trades a small gain here for a contradiction across two documents. The account-shaped
+            nouns below DO move with the tier, because those describe the account. */}
         <Field label="Role" value={isMember ? 'Member' : 'Account owner'} />
-        <Field label="Household" value={account?.name} />
+        <Field label={capitalize(vocab.account)} value={account?.name} />
         <Field label="Email" value={user?.email} last={!isMember} />
         {/* Only a member sees this, and only a member needs it: it answers "who do I ask?", and it
             is the same person the refusals elsewhere in the app tell them to ask. ownerName is null
             for an owner by design, so this row simply does not render for them. */}
-        {isMember && <Field label="Household owner" value={ownerName} last />}
+        {isMember && <Field label={capitalize(vocab.owner)} value={ownerName} last />}
       </div>
 
       {/* The transparency line. Deliberately plain, deliberately above everything else a member can
@@ -70,11 +79,19 @@ export default function ProfileTab() {
           depending on where they meet it.
 
           ⚠️ If the owner's powers ever change, THIS SENTENCE changes with them. It is the reason
-          the owner gets invite/revoke controls but no password-setting control. */}
+          the owner gets invite/revoke controls but no password-setting control.
+
+          ⚠️ THE LAST SENTENCE IS VERBATIM AND MUST STAY THAT WAY. Only the NOUN moves with the
+          tier ("owns this household" / "owns this practice"), because a trainer's client reading
+          "household" is being told something false about a relationship they are paying for. The
+          password promise itself does not vary by tier, by role or by plan: there is no
+          CHANGE_ANY_PASSWORD, and a trainer must not be able to impersonate a client any more than
+          a parent may impersonate a teenager. Same sentence in the invite email, the handbook and
+          the privacy policy -- see member-access.md. */}
       {isMember && (
         <div style={transparencyStyle}>
-          {ownerName || 'The account owner'} owns this household. They can see your workouts and can
-          remove your login. <strong>They cannot see or set your password.</strong>
+          {ownerName || 'The account owner'} owns this {vocab.account}. They can see your workouts
+          and can remove your login. <strong>They cannot see or set your password.</strong>
         </div>
       )}
 
@@ -133,7 +150,7 @@ export default function ProfileTab() {
         ))}
       </div>
 
-      <LoginsSection plan={account?.plan} />
+      <LoginsSection plan={account?.plan} vocab={vocab} refreshPeople={refreshPeople} />
 
       <SectionLabel>Danger zone</SectionLabel>
       <div style={cardStyle}>

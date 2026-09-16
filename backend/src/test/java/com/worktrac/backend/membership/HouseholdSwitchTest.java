@@ -115,11 +115,11 @@ class HouseholdSwitchTest extends AbstractIntegrationTest {
         // No session yet -- the client branches on exactly this.
         assertThat(response.get("token").isNull()).isTrue();
         assertThat(response.get("selectionToken").asText()).isNotBlank();
-        assertThat(response.get("households")).hasSize(2);
+        assertThat(response.get("accounts")).hasSize(2);
 
         // The picker carries a label and a role, and deliberately nothing else: this is the one
         // response in the app that spans households.
-        JsonNode choice = response.get("households").get(0);
+        JsonNode choice = response.get("accounts").get(0);
         assertThat(choice.has("accountId")).isTrue();
         assertThat(choice.has("accountName")).isTrue();
         assertThat(choice.has("accountRole")).isTrue();
@@ -268,7 +268,7 @@ class HouseholdSwitchTest extends AbstractIntegrationTest {
         assertThat(response.get("token").asText()).isNotBlank();
         assertThat(response.get("account").get("id").asLong()).isPositive();
         assertThat(response.get("membership").get("accountRole").asText()).isEqualTo("OWNER");
-        assertThat(response.get("households").isNull()).isTrue();
+        assertThat(response.get("accounts").isNull()).isTrue();
         assertThat(response.get("selectionToken").isNull()).isTrue();
     }
 

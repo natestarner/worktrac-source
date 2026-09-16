@@ -87,8 +87,13 @@ public class CompBootstrap implements ApplicationRunner {
             return false;
         }
         subscription.setComped(true);
-        // plan is a materialized cache of the derivation, so it moves with it. isPlus stays the
-        // authority and already returns true for a comped household.
+        // Which tier the comp grants. Founding households get PLUS -- they were promised the paid
+        // family tier, not a trainer product, and Pro's seats would be meaningless to them.
+        //
+        // ⚠️ comped_plan is the authority for a comped row (entitledPlan reads it first); `plan` is
+        // still written because it is the materialized cache every cheap read uses. Both are set
+        // here so the two cannot disagree, the same rule applyStripeState follows.
+        subscription.setCompedPlan(BillingPlan.PLUS);
         subscription.setPlan(BillingPlan.PLUS);
         subscriptionRepository.save(subscription);
         return true;

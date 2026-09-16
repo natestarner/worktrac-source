@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import Modal from './Modal';
 import Button from './Button';
-import { PRO_BENEFITS } from '../billing/planCopy';
+import { PLUS_BENEFITS } from '../billing/planCopy';
 import { windowLabel } from './historyWindowCopy';
 import HuddleMark from './HuddleMark';
 import { formatDate } from '../../utils/datetime';
@@ -48,7 +48,7 @@ export default function HistoryWindowModal({ historyWindow, onClose }) {
           <span>What Plus adds</span>
         </div>
         <ul style={listStyle}>
-          {PRO_BENEFITS.map((benefit) => (
+          {PLUS_BENEFITS.map((benefit) => (
             <li key={benefit.id} style={listItemStyle}>
               {benefit.label}
             </li>

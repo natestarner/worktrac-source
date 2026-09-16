@@ -2,7 +2,7 @@
 // password, reset password and join -- plus the household picker they can both land on.
 //
 // These lived as exports on LoginPage.jsx, which was fine while LoginPage was the only thing that
-// owned a shared piece of that chrome. It stopped being fine when HouseholdPicker moved out into
+// owned a shared piece of that chrome. It stopped being fine when AccountPicker moved out into
 // its own component: LoginPage renders the picker, so the picker importing a style back out of
 // LoginPage is an import cycle. It happens to resolve today (the constants are only read inside a
 // component body, by which point both modules have evaluated), and that is precisely the kind of

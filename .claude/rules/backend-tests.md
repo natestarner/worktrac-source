@@ -14,6 +14,35 @@ Full narrative: `docs/architecture/testing.md`.
   Each class still gets its own isolated database on that one container via a
   `@DynamicPropertySource` method calling `registerDatasource`, so per-class data isolation is
   unchanged.
+- ⚠️ **THAT `@DynamicPropertySource` METHOD IS NOT OPTIONAL, AND OMITTING IT FAILS SILENTLY ON THE
+  ONE MACHINE THAT WOULD NOTICE.** `extends AbstractIntegrationTest` alone registers no datasource,
+  so the context falls back to `application-local.yml` — i.e. **`localhost:1434`, the developer's
+  own SQL Server**. The class then passes locally against real dev data and fails in CI, where
+  nothing is listening there, with `Connection refused` buried under a `FlywaySqlUnableToConnect`
+  wrapped in two `BeanCreationException`s. Worse, Spring's context-failure threshold is 1, so the
+  first class to do this poisons every later class sharing that context and the report names
+  eighteen failures with one cause.
+
+  It is not enough that the base class's javadoc says so — `RosterTest` and `CheckInTest` both
+  shipped without it and were caught only by a CI run during `/deploy-to-lower`. **Copy the method
+  when you create the class:**
+
+  ```java
+  @DynamicPropertySource
+  static void datasource(DynamicPropertyRegistry registry) {
+      registerDatasource(registry, MyNewTest.class);
+  }
+  ```
+
+  It cannot be hoisted into the base class: a static `@DynamicPropertySource` has no way to learn
+  which concrete subclass triggered it, which is why each one passes its own identity. The one-line
+  audit, when a context failure looks like this:
+
+  ```bash
+  for f in $(grep -rl "extends AbstractIntegrationTest" backend/src/test); do
+    grep -q registerDatasource "$f" || echo "MISSING: $f"
+  done
+  ```
 - `bash scripts/test-backend.sh unit` runs just the ~10 non-container unit classes (seconds, not
   minutes) via `-DexcludedGroups=integration`. `bash scripts/test-backend.sh` or plain
   `mvn verify` runs everything.

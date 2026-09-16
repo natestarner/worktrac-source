@@ -5,7 +5,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
-import { updateDefaultUnit } from '../../api/account';
+import { setMemberVisibility, updateDefaultUnit } from '../../api/account';
+import { accountVocab, capitalize } from '../../utils/accountVocab';
 import { setRestTimerPreference } from '../../api/people';
 import { createTag, deleteTag } from '../../api/tags';
 import { downloadAllPeopleZip } from '../../api/export';
@@ -25,6 +26,7 @@ import LegalLinks from '../shared/LegalLinks';
 import { APP_BUILD } from '../../lib/appBuild';
 import { invalidateAfterImport } from '../../lib/queryClient';
 import Card from '../shared/Card';
+import { planIncludes } from '../../utils/planFeatures';
 
 // Every setting here is household-wide -- nothing is scoped to whichever person happens to be
 // active. Units and the shared tag vocabulary are account-level; the rest timer is a per-person
@@ -35,12 +37,14 @@ export default function AppSettingsTab() {
   const { account, people, refreshPeople } = useAuth();
   // The derived entitlement, carried in the auth snapshot -- so this reads correctly on a cold
   // offline boot rather than depending on a request that may not have come back. An UNKNOWN plan
-  // (a snapshot written before billing shipped) is treated as Plus here on purpose: showing the
-  // real control and letting the server answer is far better than telling a paying household its
-  // own import is unavailable.
+  // (a snapshot written before billing shipped, or one written by a NEWER build naming a tier this
+  // bundle has never heard of) is treated as entitled on purpose: showing the real control and
+  // letting the server answer is far better than telling a paying household its own import is
+  // unavailable. That polarity lives in planIncludes now rather than in this file.
   const plan = account?.plan;
-  const isPlus = plan !== 'FREE';
-  const { isMember, selfPersonId } = useAccountAccess();
+  const canImport = planIncludes(plan, 'DATA_IMPORT');
+  const { isMember, isOwner, selfPersonId } = useAccountAccess();
+  const vocab = accountVocab(account?.vocab);
   const { openConfirm } = useUI();
   const offlinePinned = useOfflinePin();
   // Settings writes are Tier-3. They had the online gate but no error path -- a failed unit change
@@ -52,6 +56,7 @@ export default function AppSettingsTab() {
   const [newTagName, setNewTagName] = useState('');
   const [tagNameError, setTagNameError] = useState(false);
   const [pendingUnit, setPendingUnit] = useState(null);
+  const [pendingVisibility, setPendingVisibility] = useState(null);
   const [pendingRestPerson, setPendingRestPerson] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [imports, setImports] = useState([]);
@@ -142,7 +147,29 @@ export default function AppSettingsTab() {
     await refetchTags();
   }
 
+  // The `label` argument is only for the pending spinner -- keyed by label rather than by value so
+  // `false` doesn't read as "nothing pending", which is exactly the bug a boolean key invites here.
+  async function handleVisibilitySelect(value, label) {
+    if (account?.membersSeeEveryone === value || pendingVisibility) return;
+    setPendingVisibility(label);
+    try {
+      await setMemberVisibility(value);
+      await refreshPeople();
+    } finally {
+      setPendingVisibility(null);
+    }
+  }
+
   const guardedUnitSelect = run(handleUnitSelect, { offlineMessage: 'Changing units needs a connection.' });
+  // showServerMessage so the 409 explains itself. This control is hidden on a tier without
+  // PRIVATE_MEMBERS, so the refusal should be unreachable -- but a stale auth snapshot naming a
+  // tier this bundle predates can still get here, and "check your connection" would send somebody
+  // hunting for signal over something no connection fixes.
+  const guardedVisibilitySelect = run(handleVisibilitySelect, {
+    offlineMessage: 'Changing this needs a connection.',
+    errorMessage: "Couldn't change that setting.",
+    showServerMessage: true,
+  });
   const guardedRestTimerToggle = run(handleRestTimerToggle, { offlineMessage: 'Changing this needs a connection.' });
   const guardedAddTag = run(handleAddTag, { offlineMessage: 'Adding a tag needs a connection.' });
   const guardedDeleteTag = run(handleDeleteTag, { offlineMessage: 'Deleting a tag needs a connection.' });
@@ -209,6 +236,69 @@ export default function AppSettingsTab() {
         </div>
         )}
       </Card>
+
+      {/* Only on a tier that sells it, and only for the OWNER.
+          - planIncludes, never `plan === 'PRO'`: asking for a feature is what keeps this working
+            when Team arrives with its own answer. See planFeatures.js.
+          - isOwner, never `!isMember`: a MANAGER runs the roster but must not decide whether the
+            clients can see each other. That promise belongs to whoever made it, and the server
+            agrees -- MANAGE_HOUSEHOLD is owner-only.
+          - Hidden rather than disabled for anyone else, matching the rule in member-access.md: a
+            greyed control is for something you could do under other circumstances, and no member
+            or manager ever can. */}
+      {isOwner && planIncludes(account?.plan, 'PRIVATE_MEMBERS') && (
+        <>
+          <SectionLabel>{capitalize(vocab.member)} privacy</SectionLabel>
+          <Card size="dense" style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
+              Private means each {vocab.member} sees only their own workouts. You and your{' '}
+              {vocab.manager}s still see everyone. Shared lets everyone on the {vocab.account} see
+              each other&rsquo;s progress.
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--space-1)', background: 'var(--color-subtle-bg)', borderRadius: 'var(--radius-md)', padding: 'var(--space-1)', maxWidth: 220 }}>
+              {[
+                { value: false, label: 'Private' },
+                { value: true, label: 'Shared' },
+              ].map(({ value, label }) => {
+                const active = account?.membersSeeEveryone === value;
+                const loading = pendingVisibility === label;
+                const textColor = active ? 'var(--color-accent)' : 'var(--color-muted)';
+                return (
+                  <button
+                    key={label}
+                    onClick={() => guardedVisibilitySelect(value, label)}
+                    disabled={!!pendingVisibility || !online}
+                    title={online ? undefined : 'Changing this needs a connection.'}
+                    aria-label={`${capitalize(vocab.member)} privacy ${label}`}
+                    style={{
+                      flex: 1,
+                      minHeight: 40,
+                      padding: 'var(--space-2) 0',
+                      border: 'none',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: 'var(--text-sm)',
+                      fontWeight: 'var(--weight-semibold)',
+                      cursor: online ? 'pointer' : 'not-allowed',
+                      background: active ? 'var(--color-surface)' : 'transparent',
+                      color: textColor,
+                      boxShadow: active ? 'var(--shadow-1)' : 'none',
+                      opacity: online ? 1 : 0.5,
+                      position: 'relative',
+                    }}
+                  >
+                    <span style={{ visibility: loading ? 'hidden' : 'visible' }}>{label}</span>
+                    {loading && (
+                      <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Spinner size={14} color={textColor} />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+        </>
+      )}
 
       <SectionLabel>Offline Mode</SectionLabel>
       <Card size="dense" style={{ marginBottom: 24 }}>
@@ -399,7 +489,7 @@ export default function AppSettingsTab() {
         {/* Importing is a Plus feature, so a Free household gets the explanation INSTEAD of a
             button that would 403. Exporting above is deliberately not gated on either plan --
             every household can always take its own data out. */}
-        {isPlus ? (
+        {canImport ? (
           <OfflineDisabledWrap message="Importing needs a connection.">
             <Button onClick={() => setShowImportModal(true)} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
               Import data

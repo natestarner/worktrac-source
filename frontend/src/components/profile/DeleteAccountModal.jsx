@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { accountVocab } from '../../utils/accountVocab';
 import { deleteAccount } from '../../api/account';
 import { downloadAllPeopleZip } from '../../api/export';
 import Modal from '../shared/Modal';
@@ -11,7 +12,20 @@ import { cancelButtonStyle, deleteButtonStyle } from '../shared/ConfirmDialog';
 const CONFIRMATION_WORD = 'DELETE';
 
 export default function DeleteAccountModal({ onClose }) {
-  const { people, logout } = useAuth();
+  const { account, people, logout } = useAuth();
+  const vocab = accountVocab(account?.vocab);
+
+  // ⚠️ On a family account this sentence destroys YOUR OWN data. On a trainer's it destroys OTHER
+  // PEOPLE'S -- clients who never agreed to it and cannot get it back. Naming the number is what
+  // turns "everyone on this account" from a phrase into a fact somebody has to read past.
+  //
+  // Everybody but the person deleting, since their own record is not the surprising part. Counted
+  // from the visible people rather than asked for: the modal already has the list, and an extra
+  // request on a destructive confirm is one more thing that can fail at the worst moment.
+  const othersCount = Math.max(people.length - 1, 0);
+  const otherPeople = othersCount === 1
+    ? `1 other ${vocab.member}`
+    : `${othersCount} other ${vocab.member}s`;
   const navigate = useNavigate();
   const [confirmText, setConfirmText] = useState('');
   const [password, setPassword] = useState('');
@@ -33,6 +47,15 @@ export default function DeleteAccountModal({ onClose }) {
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 16 }}>
         This permanently deletes all data for everyone on this account -- every exercise, set, session, routine, and
         setup value. This cannot be undone, and this email will look brand new if you ever register again.
+        {othersCount > 0 && (
+          <>
+            {' '}
+            <strong>
+              That includes {otherPeople}, and they cannot get it back.
+            </strong>{' '}
+            Download their history below first if they might want it.
+          </>
+        )}
       </div>
 
       <div style={cardStyle}>

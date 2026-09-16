@@ -8,6 +8,7 @@ import com.azure.communication.email.models.EmailSendStatus;
 import com.azure.core.models.ResponseError;
 import com.azure.core.util.polling.PollResponse;
 import com.azure.core.util.polling.SyncPoller;
+import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.config.EmailProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -121,8 +122,9 @@ public class EmailService {
      * first contact with this feature is this email, not the app. It says the same thing the
      * Profile page does, deliberately.
      */
-    public String sendMembershipInvite(String toEmail, String personName, String householdName,
-                                        String ownerName, String joinUrl, boolean recipientHasAccount) {
+    public String sendMembershipInvite(String toEmail, String personName, String accountName,
+                                        String accountNoun, String ownerName, String joinUrl,
+                                        boolean recipientHasAccount) {
         // ⚠️ These two sentences are now LITERALLY TRUE, and they were not always. The
         // already-have-an-account branch has said "sign in with the password you already use"
         // since it was written, while the screen behind the link offered one password field to
@@ -134,7 +136,7 @@ public class EmailService {
         String actionSentence = recipientHasAccount
                 ? "Open the link below and sign in with the password you already use for Huddle."
                 : "Open the link below to choose a password and finish setting up your login.";
-        String buttonLabel = recipientHasAccount ? "Join " + householdName : "Set up my login";
+        String buttonLabel = recipientHasAccount ? "Join " + accountName : "Set up my login";
 
         String html = membershipInviteTemplate
                 .replace("{{LOGO_URL}}", logoUrl)
@@ -145,11 +147,16 @@ public class EmailService {
                 // escaped rather than interpolated raw. OWNER_NAME and PERSON_NAME are person
                 // names and HOUSEHOLD_NAME is an account name -- all free text the household chose.
                 .replace("{{PERSON_NAME}}", escapeHtml(personName))
-                .replace("{{HOUSEHOLD_NAME}}", escapeHtml(householdName))
-                .replace("{{OWNER_NAME}}", escapeHtml(ownerName));
+                .replace("{{HOUSEHOLD_NAME}}", escapeHtml(accountName))
+                .replace("{{OWNER_NAME}}", escapeHtml(ownerName))
+                // ⚠️ Only the NOUN moves with the tier. The sentence it sits in -- and above all
+                // "They cannot see or set your password" -- is the same on every plan, because it
+                // is a promise rather than a description. Escaped like the rest even though it is
+                // ours, so the template has exactly one rule.
+                .replace("{{ACCOUNT_NOUN}}", escapeHtml(accountNoun == null ? "household" : accountNoun));
 
         String plain = ownerName + " set up a Huddle login for you as " + personName
-                + " in " + householdName + ". " + actionSentence + " " + joinUrl
+                + " in " + accountName + ". " + actionSentence + " " + joinUrl
                 + "  This link expires in 7 days. " + ownerName + " can see your workouts and can"
                 + " remove your login, but cannot see or set your password.";
 
@@ -175,21 +182,21 @@ public class EmailService {
      * visible way to leave is the shape of a trap regardless of intent, and this is the message
      * they will still have in their inbox months later when they want it.
      */
-    public String sendAddedToHousehold(String toEmail, String personName, String householdName,
+    public String sendAddedToHousehold(String toEmail, String personName, String accountName,
                                         String ownerName) {
         String html = simpleNoticeTemplate
                 .replace("{{LOGO_URL}}", logoUrl)
-                .replace("{{HEADING}}", escapeHtml("You're in " + householdName))
+                .replace("{{HEADING}}", escapeHtml("You're in " + accountName))
                 .replace("{{BODY}}", escapeHtml("You're now logging as " + personName + " in "
-                        + householdName + ". " + ownerName + " can see your workouts and can remove"
+                        + accountName + ". " + ownerName + " can see your workouts and can remove"
                         + " your login, but cannot see or set your password.")
                         + "<br><br>You can leave this household at any time from Profile &rarr; "
                         + "Leave household.")
                 .replace("{{CTA_URL}}", appUrl)
                 .replace("{{CTA_LABEL}}", "Open Huddle");
 
-        return send(toEmail, "You've joined " + householdName + " on Huddle",
-                "You're now logging as " + personName + " in " + householdName + ". "
+        return send(toEmail, "You've joined " + accountName + " on Huddle",
+                "You're now logging as " + personName + " in " + accountName + ". "
                         + ownerName + " can see your workouts and can remove your login, but cannot"
                         + " see or set your password. You can leave at any time from Profile."
                         + " Open Huddle: " + appUrl,
@@ -205,13 +212,13 @@ public class EmailService {
      * the message; "somebody accepted" would be useless.
      */
     public String sendInviteAccepted(String toEmail, String memberEmail, String personName,
-                                      String householdName) {
+                                      String accountName) {
         String html = simpleNoticeTemplate
                 .replace("{{LOGO_URL}}", logoUrl)
                 .replace("{{HEADING}}", escapeHtml(personName + " has a login now"))
                 .replace("{{BODY}}", escapeHtml(memberEmail) + " accepted your invitation and can now"
                         + " sign in as " + escapeHtml(personName) + " in "
-                        + escapeHtml(householdName) + ".<br><br>If that address is not who you meant"
+                        + escapeHtml(accountName) + ".<br><br>If that address is not who you meant"
                         + " to invite, remove the login from Profile &rarr; Logins straight away —"
                         + " they can see everyone's workouts.")
                 .replace("{{CTA_URL}}", appOrigin + "/app/profile")
@@ -219,7 +226,7 @@ public class EmailService {
 
         return send(toEmail, personName + " accepted their Huddle login",
                 memberEmail + " accepted your invitation and can now sign in as " + personName
-                        + " in " + householdName + ". If that is not who you meant to invite, remove"
+                        + " in " + accountName + ". If that is not who you meant to invite, remove"
                         + " the login from Profile > Logins straight away -- they can see everyone's"
                         + " workouts. " + appOrigin + "/app/profile",
                 html);
@@ -232,15 +239,15 @@ public class EmailService {
      * queued offline writes can then never land — see {@code offline-internals.md}. They deserve to
      * know that before they wonder where their sets went.
      */
-    public String sendLoginRevoked(String toEmail, String householdName, String ownerName,
+    public String sendLoginRevoked(String toEmail, String accountName, String ownerName,
                                     boolean wasOnlyAnInvitation) {
         String heading = wasOnlyAnInvitation
-                ? "Your invitation to " + householdName + " was withdrawn"
-                : "Your login for " + householdName + " was removed";
+                ? "Your invitation to " + accountName + " was withdrawn"
+                : "Your login for " + accountName + " was removed";
         String body = wasOnlyAnInvitation
-                ? ownerName + " withdrew the invitation to join " + householdName + ". Nothing was"
+                ? ownerName + " withdrew the invitation to join " + accountName + ". Nothing was"
                         + " set up, and there is nothing you need to do."
-                : ownerName + " removed your login for " + householdName + ". Your workouts stay in"
+                : ownerName + " removed your login for " + accountName + ". Your workouts stay in"
                         + " that household — they were never yours to take with you — and anything"
                         + " you logged on a device that was offline may not have synced before"
                         + " access ended. Your Huddle account and any other households are"
@@ -284,27 +291,60 @@ public class EmailService {
      * <p>Copy is deliberately the same line {@code PlusCelebration} shows in-app the instant checkout
      * completes ("Your whole history, every record, and import are unlocked") -- one derivation of
      * what Plus buys, restated in two places rather than invented twice. See {@code planCopy.js}'s
-     * {@code PRO_BENEFITS} if that ever changes.
+     * {@code PLUS_BENEFITS} if that ever changes.
      */
-    public String sendPlusWelcome(String toEmail) {
+    /**
+     * The welcome email after a first-ever upgrade, written for the tier that was actually bought.
+     *
+     * <p>⚠️ <b>This took no plan and said "Welcome to Huddle Plus" to everybody.</b> A trainer who
+     * had just paid for Pro was congratulated by name on unlocking history, records and import --
+     * four things a Pro account already had, and none of the four they had paid for. The tier now
+     * arrives on {@link com.worktrac.backend.billing.PlusUpgradedEvent}, because the listener runs
+     * after the transaction that knew it has committed.
+     *
+     * <p>FREE is unreachable here by construction (the event is published only on a first upgrade
+     * TO an entitled tier) and throws rather than sending a congratulation about nothing.
+     */
+    public String sendPlusWelcome(String toEmail, BillingPlan plan) {
+        UpgradeCopy copy = upgradeCopy(plan);
+
         String html = simpleNoticeTemplate
                 .replace("{{LOGO_URL}}", logoUrl)
-                .replace("{{HEADING}}", escapeHtml("Welcome to Huddle Plus"))
-                .replace("{{BODY}}", escapeHtml("Your whole history, every record, and import are "
-                        + "unlocked. Every workout you've logged, and everything you log from here, "
-                        + "stays on screen, all-time records and trends open up over any range, and "
-                        + "you can bring in old data from a spreadsheet whenever you're ready.")
+                .replace("{{HEADING}}", escapeHtml(copy.heading()))
+                .replace("{{BODY}}", escapeHtml(copy.body())
                         + "<br><br>Thanks for keeping Huddle going.")
                 .replace("{{CTA_URL}}", appUrl)
                 .replace("{{CTA_LABEL}}", "Open Huddle");
 
-        return send(toEmail, "Welcome to Huddle Plus",
-                "Your whole history, every record, and import are unlocked. Every workout you've"
-                        + " logged, and everything you log from here, stays on screen, all-time"
-                        + " records and trends open up over any range, and you can bring in old data"
-                        + " from a spreadsheet whenever you're ready. Thanks for keeping Huddle going."
-                        + " Open Huddle: " + appUrl,
+        return send(toEmail, copy.heading(),
+                copy.body() + " Thanks for keeping Huddle going. Open Huddle: " + appUrl,
                 html);
+    }
+
+    private record UpgradeCopy(String heading, String body) {
+    }
+
+    /**
+     * ⚠️ Exhaustive, with NO default, on purpose -- the same forcing function
+     * {@code BillingPlan.features()} and {@code AccountVocab.forPlan()} use. Adding TEAM must not
+     * silently mail a sports club a letter about their household's import feature; it should refuse
+     * to compile until somebody writes the sentence.
+     */
+    private UpgradeCopy upgradeCopy(BillingPlan plan) {
+        return switch (plan) {
+            case FREE -> throw new IllegalArgumentException(
+                    "No welcome email for FREE -- this is only ever sent on an upgrade to a paid tier");
+            case PLUS -> new UpgradeCopy("Welcome to Huddle Plus",
+                    "Your whole history, every record, and import are unlocked. Every workout you've"
+                            + " logged, and everything you log from here, stays on screen, all-time"
+                            + " records and trends open up over any range, and you can bring in old"
+                            + " data from a spreadsheet whenever you're ready.");
+            case PRO -> new UpgradeCopy("Welcome to Huddle Pro",
+                    "Your practice is open. Every client can have their own login, kept private from"
+                            + " the others, and you see all of them. Assign a program with the weights"
+                            + " and reps you want hit, keep check-in notes only you can read, and open"
+                            + " the roster to see who has stopped showing up.");
+        };
     }
 
     public String sendPasswordResetSuccess(String toEmail) {

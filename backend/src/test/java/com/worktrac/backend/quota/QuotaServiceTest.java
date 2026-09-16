@@ -1,5 +1,6 @@
 package com.worktrac.backend.quota;
 
+import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.common.ForbiddenException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,14 +32,14 @@ class QuotaServiceTest {
 
     @Test
     void belowTheLimitIsAllowed() {
-        assertDoesNotThrow(() -> quotaService.requirePersonCapacity(1L, 9));
+        assertDoesNotThrow(() -> quotaService.requirePersonCapacity(1L, 9, BillingPlan.FREE, null));
     }
 
     // At the limit, not over it: the count is what exists BEFORE the write, so a household already
     // holding exactly `limit` rows must not be able to add one more.
     @Test
     void atTheLimitIsRefused() {
-        assertThrows(ForbiddenException.class, () -> quotaService.requirePersonCapacity(1L, 10));
+        assertThrows(ForbiddenException.class, () -> quotaService.requirePersonCapacity(1L, 10, BillingPlan.FREE, null));
     }
 
     @Test

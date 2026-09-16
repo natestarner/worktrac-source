@@ -14,7 +14,7 @@ import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.membership.AccountMembership;
 import com.worktrac.backend.membership.AccountRole;
 import com.worktrac.backend.membership.AccountMembershipRepository;
-import com.worktrac.backend.membership.HouseholdChoiceDto;
+import com.worktrac.backend.membership.AccountChoiceDto;
 import com.worktrac.backend.membership.MembershipDto;
 import com.worktrac.backend.membership.MembershipInvite;
 import com.worktrac.backend.membership.MembershipInviteService;
@@ -304,9 +304,9 @@ public class AuthService {
         if (memberships.size() > 1) {
             log.info("Credential for {} resolved to {} households; returning a picker",
                     user.getEmail(), memberships.size());
-            return AuthResponse.chooseHousehold(
+            return AuthResponse.chooseAccount(
                     UserDto.from(user),
-                    memberships.stream().map(HouseholdChoiceDto::from).toList(),
+                    memberships.stream().map(AccountChoiceDto::from).toList(),
                     jwtService.generateSelectionToken(user.getId(), user.getEmail(), user.getTokenVersion()));
         }
 
@@ -331,10 +331,10 @@ public class AuthService {
         String token = jwtService.generateToken(user.getId(), account.getId(), user.getEmail(),
                 user.getRole(), user.getTokenVersion());
         return AuthResponse.signedIn(token, UserDto.from(user),
-                AccountDto.from(account, subscriptionService.planFor(account.getId())),
+                AccountDto.from(account, subscriptionService.entitledPlan(account.getId())),
                 MembershipDto.from(membership,
                         ownerNameForMember(account.getId(), membership.getAccountRole()),
-                        subscriptionService.isPlus(account.getId())),
+                        subscriptionService.entitledPlan(account.getId())),
                 PersonDto.from(primaryPerson));
     }
 
@@ -446,13 +446,13 @@ public class AuthService {
         // Every household this LOGIN belongs to, current one included -- so the account menu can
         // offer "Switch household" only when there is somewhere to go. Scoped to the caller's own
         // user id, so it reveals nothing but their own memberships.
-        List<HouseholdChoiceDto> households = membershipRepository
+        List<AccountChoiceDto> households = membershipRepository
                 .findByUser_IdOrderByCreatedAtAscIdAsc(access.userId())
                 .stream()
-                .map(HouseholdChoiceDto::from)
+                .map(AccountChoiceDto::from)
                 .toList();
         return new MeResponse(UserDto.from(user),
-                AccountDto.from(account, subscriptionService.planFor(accountId)),
+                AccountDto.from(account, subscriptionService.entitledPlan(accountId)),
                 MembershipDto.from(access, ownerNameForMember(accountId, access.accountRole())),
                 personService.list(access),
                 households);

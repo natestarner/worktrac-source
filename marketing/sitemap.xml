@@ -5,4 +5,31 @@
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
   </url>
+  <!-- The trainer audience page. Its own entry rather than a variant of the homepage: it targets a
+       different search intent entirely ("personal trainer workout app") and shares no keyword
+       ranking with the family page. -->
+  <url>
+    <loc>https://huddle.fitness/for-trainers.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <!-- The one place a four-column comparison belongs. The homepage and the trainer page each show
+       only the plans their own audience would buy; this is for somebody deliberately comparing. -->
+  <url>
+    <loc>https://huddle.fitness/pricing.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- Legal pages were absent from this file until now, which meant the two documents a visitor is
+       most likely to go looking for were the two least likely to be indexed. -->
+  <url>
+    <loc>https://huddle.fitness/terms.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://huddle.fitness/privacy.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
 </urlset>

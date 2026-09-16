@@ -22,7 +22,9 @@ import LegalLinks from '../shared/LegalLinks';
 import PlanChooser from './PlanChooser';
 import EmbeddedCheckout from './EmbeddedCheckout';
 import PlusCelebration from './PlusCelebration';
-import { PRO_BENEFITS } from './planCopy';
+import { PLUS_BENEFITS, PRO_ADDITIONS, PRO_BANDS, planCopy } from './planCopy';
+import { accountVocab } from '../../utils/accountVocab';
+import { isPaidPlan, planIncludes } from '../../utils/planFeatures';
 
 // The household's plan, and where an upgrade happens.
 //
@@ -43,8 +45,16 @@ export default function BillingTab() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [interval, setInterval] = useState('YEAR');
+  // Smallest band pre-selected. A trainer arriving here has one or two clients far more often than
+  // forty, and pre-selecting a bigger band would quote them a price they did not ask for.
+  const [proBand, setProBand] = useState(PRO_BANDS[0].id);
   const [checkout, setCheckout] = useState(null);
   const [showCelebration, setShowCelebration] = useState(false);
+  // ⚠️ The tier the RECONCILE reported, not the one in the auth snapshot. The snapshot is refreshed
+  // a line later, but it is not the authority on what was just bought: when the webhook rather than
+  // the reconcile applies the purchase, /me can still answer FREE here, and a celebration is about
+  // the payment that just happened rather than about the account's current steady state.
+  const [celebratedPlan, setCelebratedPlan] = useState(null);
 
   // `online` is deliberately not destructured: OfflineDisabledWrap reads useOnlineStatus
   // itself, and a second copy of that answer here is the kind of duplicate the
@@ -62,7 +72,7 @@ export default function BillingTab() {
     // member is a guaranteed 403; and a household that is not Plus has no working member logins to
     // warn about. Not offering a request the app knows will be refused is the same rule as not
     // offering a control that can only fail.
-    enabled: isOwner && account?.plan === 'PLUS',
+    enabled: isOwner && planIncludes(account?.plan, 'MEMBER_LOGINS'),
     staleTime: 60_000,
   });
 
@@ -97,7 +107,7 @@ export default function BillingTab() {
   // The entitlement answer, in preference order: the snapshot (always present, works offline),
   // then the query. Never `false` merely because a request has not come back yet -- that would be
   // the "unreachable server downgrades you" failure the contract forbids.
-  const isPlus = plan === 'PLUS' || subscription?.pro === true;
+  const isPlus = isPaidPlan(plan) || isPaidPlan(subscription?.plan);
 
   // Stripe returns the browser to /app/billing?checkout=cs_... The backend reads that session
   // directly and applies it, so the upgrade is visible immediately rather than waiting on a
@@ -128,11 +138,12 @@ export default function BillingTab() {
 
     (async () => {
       try {
-        await reconcileCheckout(checkoutParam);
+        const reconciled = await reconcileCheckout(checkoutParam);
         // /me is what carries the derived plan into the auth snapshot, so the header badge and
         // every other consumer update from the same source rather than a second copy of the truth.
         await refreshPeople();
         queryClient.invalidateQueries({ queryKey: queryKeys.subscription() });
+        setCelebratedPlan(reconciled?.plan ?? null);
         setShowCelebration(true);
       } catch {
         // The webhook is the backstop, so a failed reconcile is a delay rather than a lost payment.
@@ -149,9 +160,13 @@ export default function BillingTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkoutParam]);
 
+  // ⚠️ Takes the tier explicitly rather than reading component state, and the default is PLUS.
+  // It was `createCheckoutSession(interval)` with no plan at all, which the server reads as Plus --
+  // so while Pro was fully buyable over the API, every button on this screen sold Plus. A caller
+  // that forgets the argument still gets the old, correct behaviour rather than a 400.
   const handleUpgrade = run(
-    async () => {
-      const { clientSecret, publishableKey } = await createCheckoutSession(interval);
+    async ({ plan = 'PLUS', band = null } = {}) => {
+      const { clientSecret, publishableKey } = await createCheckoutSession(interval, { plan, band });
       setCheckout({ clientSecret, publishableKey });
     },
     {
@@ -205,7 +220,9 @@ export default function BillingTab() {
           </Button>
         </>
       ) : isPlus ? (
-        <PlusSummary
+        <PaidSummary
+          plan={isPaidPlan(plan) ? plan : subscription?.plan}
+          vocab={accountVocab(account?.vocab)}
           subscription={subscription}
           pending={pending}
           onManage={handleManageBilling}
@@ -214,6 +231,8 @@ export default function BillingTab() {
       ) : (
         <FreeSummary
           interval={interval}
+          proBand={proBand}
+          onProBandChange={setProBand}
           onIntervalChange={setInterval}
           pending={pending}
           onUpgrade={handleUpgrade}
@@ -221,16 +240,32 @@ export default function BillingTab() {
         />
       )}
 
-      {showCelebration && <PlusCelebration onDismiss={handleDismissCelebration} />}
+      {showCelebration && <PlusCelebration plan={celebratedPlan ?? plan} onDismiss={handleDismissCelebration} />}
     </div>
   );
 }
 
-function PlusSummary({ subscription, pending, onManage, pausableLogins = [] }) {
+// ⚠️ THIS SCREEN NAMES THE TIER FROM planCopy, and it did not always. It was `PlusSummary`, and
+// every string in it -- the heading, the benefit list, the comped line, the past-due nudge -- said
+// "Plus" as a literal while the branch that chooses it asks isPaidPlan, which is true for Pro. So a
+// trainer who had just paid $79 for Pro opened Plan & billing and was told they were on Huddle
+// Plus, under a list of Plus's four benefits with none of the four they had actually bought.
+//
+// The tier is asked for ONCE, at the top, and everything below reads that answer. Adding a second
+// `plan === 'PRO'` branch further down is the bug this shape exists to prevent -- see billing.md.
+function PaidSummary({ plan, vocab, subscription, pending, onManage, pausableLogins = [] }) {
   const cancelling = subscription?.cancelAtPeriodEnd === true;
   const periodEnd = subscription?.currentPeriodEnd;
   const comped = subscription?.comped === true;
   const pastDue = subscription?.status === 'PAST_DUE';
+  // Null for a tier this bundle predates (resilience.md axis D). Falling back to Plus's copy would
+  // describe a paid household with the wrong tier's benefits, which is the failure above; falling
+  // back to the plan KEY ("PRO") is merely ugly, and only for a build that is already behind.
+  const copy = planCopy(plan);
+  const name = copy?.name ?? plan;
+  // Everything Plus includes, plus what this tier adds over it -- `benefits` is deliberately only
+  // the increment (see planCopy), and a Pro household has all of both.
+  const benefits = plan === 'PLUS' ? PLUS_BENEFITS : [...PLUS_BENEFITS, ...(copy?.benefits ?? [])];
 
   return (
     <>
@@ -241,25 +276,33 @@ function PlusSummary({ subscription, pending, onManage, pausableLogins = [] }) {
             reader hears the heading once rather than twice. */}
         <div style={planTitleRowStyle}>
           <HuddleMark size={40} />
-          <div style={planHeadingStyle}>Huddle Plus</div>
+          <div style={planHeadingStyle}>Huddle {name}</div>
         </div>
         <p style={mutedLineStyle}>
           {comped
-            ? 'Your household has Plus on the house, with our thanks for being here early.'
-            : renewalLine(cancelling, periodEnd)}
+            ? `Your ${vocab.account} has ${name} on the house, with our thanks for being here early.`
+            : renewalLine(cancelling, periodEnd, name)}
         </p>
+        {/* What the band actually bought, said in the same words the checkout dropdown used.
+            Deliberately the ALLOWANCE and not "12 of 15": the usage half is a seat count the server
+            derives (people, minus the owner's own person, minus every manager's), and recomputing
+            it here from the people list would be a second derivation free to disagree with the one
+            that actually refuses an invite. Absent on a household tier, which has no seats at all. */}
+        {seatLine(subscription, plan, vocab) && (
+          <p style={mutedLineStyle}>{seatLine(subscription, plan, vocab)}</p>
+        )}
         {/* Access continues through Stripe's retry window, so this is a nudge rather than a
             lockout -- see SubscriptionService.isPlus for why cutting access mid-dunning is wrong. */}
         {pastDue && (
           <p style={warningLineStyle}>
-            We couldn&rsquo;t take your last payment. Update your card to keep Plus.
+            We couldn&rsquo;t take your last payment. Update your card to keep {name}.
           </p>
         )}
       </div>
 
-      <SectionLabel>What Plus includes</SectionLabel>
+      <SectionLabel>What {name} includes</SectionLabel>
       <div style={cardStyle}>
-        <BenefitList />
+        <BenefitList benefits={benefits} />
       </div>
 
       {/* ⚠️ Said HERE, and here is the only place it can be said.
@@ -278,9 +321,10 @@ function PlusSummary({ subscription, pending, onManage, pausableLogins = [] }) {
               ? '1 personal login will stop working'
               : `${pausableLogins.length} personal logins will stop working`}
           </strong>{' '}
-          if this household goes back to Free &mdash; {formatNames(pausableLogins)} would no longer
-          be able to sign in on their own device. Nothing is deleted: their workouts stay, you keep
-          seeing everything, and their logins start working again the moment you return to Plus.
+          if this {vocab.account} goes back to Free &mdash; {formatNames(pausableLogins)} would no
+          longer be able to sign in on their own device. Nothing is deleted: their workouts stay,
+          you keep seeing everything, and their logins start working again the moment you return to{' '}
+          {name}.
         </div>
       )}
 
@@ -295,16 +339,30 @@ function PlusSummary({ subscription, pending, onManage, pausableLogins = [] }) {
   );
 }
 
+/**
+ * What this subscription's band covers, or null when the tier is not licensed by clients at all.
+ *
+ * ⚠️ Null and "unlimited" are DIFFERENT absences, which is why SubscriptionDto.clientSeats is null
+ * rather than a large sentinel: a household tier has no seats to describe, while an Unlimited Pro
+ * band has no ceiling to name. A sentinel would render one of them as the other.
+ */
+function seatLine(subscription, plan, vocab) {
+  if (plan !== 'PRO') return null;
+  const seats = subscription?.clientSeats;
+  if (seats == null) return `No limit on how many ${vocab.member}s you take on.`;
+  return `Covers up to ${seats} ${vocab.member}${seats === 1 ? '' : 's'}.`;
+}
+
 // "ends" vs "renews" is the whole reassurance: someone who has cancelled needs to see that they
 // keep everything until the period they paid for actually runs out.
-function renewalLine(cancelling, periodEnd) {
+function renewalLine(cancelling, periodEnd, name) {
   if (!periodEnd) return 'Everything in Huddle, with no limits.';
   return cancelling
-    ? `Plus until ${formatDate(periodEnd)}: you keep everything until then.`
+    ? `${name} until ${formatDate(periodEnd)}: you keep everything until then.`
     : `Renews ${formatDate(periodEnd)}.`;
 }
 
-function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFree }) {
+function FreeSummary({ interval, onIntervalChange, proBand, onProBandChange, pending, onUpgrade, onStartFree }) {
   return (
     <>
       <SectionLabel>Your plan</SectionLabel>
@@ -323,7 +381,7 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
             badge labelled "Go Plus" precisely so it does not compete with this, and so the two
             never share an accessible name. */}
         <OfflineDisabledWrap message="Upgrading needs a connection.">
-          <Button variant="primary" size="lg" fullWidth onClick={onUpgrade} disabled={pending}>
+          <Button variant="primary" size="lg" fullWidth onClick={() => onUpgrade({ plan: 'PLUS' })} disabled={pending}>
             Upgrade to Plus
           </Button>
         </OfflineDisabledWrap>
@@ -331,6 +389,14 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
           Cancel any time. Your workouts are never deleted. See <LegalLinks />.
         </p>
       </div>
+
+      <ProUpgradeCard
+        interval={interval}
+        band={proBand}
+        onBandChange={onProBandChange}
+        pending={pending}
+        onUpgrade={onUpgrade}
+      />
 
       {/* Equal-weight, not fine print. Someone who arrived from marketing's "Go Plus" was routed
           straight here, and Free is permanent -- deferring costs them nothing. */}
@@ -340,6 +406,89 @@ function FreeSummary({ interval, onIntervalChange, pending, onUpgrade, onStartFr
     </>
   );
 }
+
+/**
+ * The trainer path off the Free screen.
+ *
+ * Quieter than the Plus card above it and placed below on purpose: the overwhelming majority of
+ * people reading this screen are families, and a Pro card competing for attention would cost more
+ * conversions than it wins. A trainer who needs it is looking for it.
+ *
+ * ⚠️ "Subscribe to Pro" is checked against every other control on this screen for the substring
+ * rule -- Upgrade to Plus / Start with Free, decide later / Manage billing / Go Plus. It shares no
+ * substring with any of them, and none contains it.
+ */
+function ProUpgradeCard({ interval, band, onBandChange, pending, onUpgrade }) {
+  const selected = PRO_BANDS.find((b) => b.id === band) ?? PRO_BANDS[0];
+  // The interval chosen above drives this price too, so the two cards can never quote different
+  // billing periods on one screen.
+  const price = interval === 'YEAR' ? selected.year : selected.month;
+
+  return (
+    <>
+      <SectionLabel>Training clients?</SectionLabel>
+      <div style={cardStyle}>
+        <p style={mutedLineStyle}>
+          Huddle Pro gives every client their own login, keeps their training private from each
+          other, and shows you who has stopped showing up.
+        </p>
+
+        <label htmlFor="pro-band" style={{ ...mutedLineStyle, display: 'block', marginBottom: 'var(--space-1)' }}>
+          How many clients?
+        </label>
+        <select
+          id="pro-band"
+          value={selected.id}
+          onChange={(event) => onBandChange(event.target.value)}
+          style={bandSelectStyle}
+        >
+          {PRO_BANDS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name} &mdash; {option.label}
+            </option>
+          ))}
+        </select>
+
+        <p style={{ ...planHeadingStyle, marginTop: 'var(--space-3)' }}>{price}</p>
+
+        <ul style={benefitListStyle}>
+          {PRO_ADDITIONS.map((benefit) => (
+            <li key={benefit.id} style={benefitItemStyle}>
+              <BenefitCheck />
+              <span>{benefit.label}</span>
+            </li>
+          ))}
+        </ul>
+
+        {/* Not variant="primary": this screen allows exactly one, and it belongs to the Plus card
+            that most readers came here for. */}
+        <OfflineDisabledWrap message="Upgrading needs a connection.">
+          <Button variant="secondary" size="lg" fullWidth
+                  onClick={() => onUpgrade({ plan: 'PRO', band: selected.id })} disabled={pending}>
+            Subscribe to Pro
+          </Button>
+        </OfflineDisabledWrap>
+        <p style={finePrintStyle}>
+          Your own training and your assistants are free &mdash; you pay for clients. Change bands
+          whenever your roster does.
+        </p>
+      </div>
+    </>
+  );
+}
+
+const bandSelectStyle = {
+  width: '100%',
+  minHeight: 44,
+  padding: '0 var(--space-2)',
+  // 16px, or iOS Safari zooms the viewport on focus -- the same rule every input in this app
+  // follows (frontend-core.md).
+  fontSize: 'var(--text-md)',
+  color: 'var(--color-text)',
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)',
+};
 
 // Deliberately the same treatment as the marketing site's pricing card -- an accent tick per
 // benefit -- so the page someone read before signing up and the screen they upgrade on feel like
@@ -367,10 +516,10 @@ function BenefitCheck() {
   );
 }
 
-function BenefitList() {
+function BenefitList({ benefits = PLUS_BENEFITS }) {
   return (
     <ul style={benefitListStyle}>
-      {PRO_BENEFITS.map((benefit) => (
+      {benefits.map((benefit) => (
         <li key={benefit.id} style={benefitItemStyle}>
           <BenefitCheck />
           <span>{benefit.label}</span>

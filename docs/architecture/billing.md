@@ -12,7 +12,7 @@ Invariants: `.claude/rules/billing.md`. This file is the reasoning behind them.
 Everything else is free forever, **including full data export on both plans**. That last one is a
 deliberate reversal of an earlier draft, and it removed more than it added: no self-serve
 GDPR/CCPA gap, no admin export endpoint to make a privacy-policy commitment keepable, and no second
-entitlement predicate (`canExport`) diverging from `isPlus`. Export mainly appeals to people who
+entitlement predicate (`canExport`) diverging from the plan itself. Export mainly appeals to people who
 intend to leave, and gating the exit is the weakest thing to charge for. It also resolved a latent
 contradiction — `HelpTab.jsx` already tells people to "export your data first" before deleting an
 account, advice that would have been impossible to follow for exactly the Free users most likely to
@@ -21,9 +21,17 @@ be deleting.
 ## Why entitlement is derived rather than stored
 
 The obvious design is an `is_plus` column. It is wrong in four separate ways, and the derivation in
-`SubscriptionService.isPlus` gets all four right in one expression — see the rule file for the
+`SubscriptionService.isEntitled` gets all four right in one expression — see the rule file for the
 enumeration. The short version: entitlement is a function of *status and time*, and any stored copy
 of it is stale the moment the clock moves.
+
+That column would have been wrong a fifth way, which only became visible once a second paid tier
+was on the roadmap: a boolean cannot answer "which tier". The derivation is now split in two —
+`isEntitled` (is this subscription paying?) and `entitledPlan` (paying, so which tier?) — and
+capability comes from `BillingPlan.features()`, the one place a tier becomes anything. Callers ask
+for a `PlanFeature`, never for a tier, the same way they ask for a `Permission` and never for a
+role. Keeping the *paying* half untouched through that split was deliberate: those four cases were
+expensive to get right and none of them has anything to do with tiers.
 
 The most consequential of the four is that **expiry happens by the clock, not by a webhook**. A
 cancelled household stops being Plus when its paid period ends whether or not Stripe's
@@ -289,3 +297,76 @@ makes exactly one mistake possible:
 An unconfigured environment fails safe in the sense that matters — it refuses rather than granting
 Plus to everyone — but "fails safe" is not the same as "is fine", and this is the one combination
 worth checking by hand before pushing to `production`.
+
+## Why Pro is priced in bands rather than per seat
+
+Stripe supports a quantity on a subscription item, and "one seat per client" is the obvious shape.
+It was rejected for three reasons, in order of how much they cost:
+
+1. **A quantity has to be kept in sync with reality, forever.** Every person added or removed would
+   have to push a quantity update to Stripe, and every one of those is a write that can fail while
+   the local change succeeds. The failure is silent and self-perpetuating: the roster says twelve,
+   Stripe bills for nine, and nothing in the product ever notices. A band is a *ceiling* the server
+   compares against, so the two can never drift — there is nothing to keep in sync.
+2. **Proration on every add is hostile.** A trainer who adds a client mid-month would get a
+   pro-rated charge for a partial month, then another next month. Bands change rarely and
+   deliberately.
+3. **Four prices are legible; a quantity is not.** "Up to 15 clients, $39" is a sentence somebody
+   decides on. "$3.20 per client per month, billed monthly in arrears on your average" is a
+   spreadsheet.
+
+The cost of bands is a ceiling somebody can hit. That is paid for explicitly: going over refuses the
+**next** client and never removes anyone, and the refusal is a **403 rather than a 429** because
+`shouldRetryWrite` treats 429 as transient and a seat limit never clears on its own.
+
+## Why the price map needs a reverse direction
+
+`app.stripe.prices` maps a `PlanSku` to a Stripe price id, and `StripeProperties.skuForPriceId` maps
+back. The reverse direction is not a convenience — without it Pro cannot work at all.
+
+A webhook carries a price id and nothing that names a tier, and `billing.md` requires re-fetching
+the subscription from Stripe and writing *that* rather than trusting a delivered payload. So the
+only way to learn which tier a paying account is on is to map the price id back. With two prices
+that question never arose: anything paying was Plus.
+
+Three consequences worth knowing:
+
+- **The enum constant IS the config key.** `PRO_STUDIO_YEAR` looks up
+  `app.stripe.prices.PRO_STUDIO_YEAR`, so renaming a constant is a config change in three places.
+  The alternative — a hand-written key string beside each constant — is one more thing that can
+  disagree with itself.
+- **An unrecognised price id KEEPS the tier the account already had.** A price created in the
+  Dashboard but never added to an environment's config, or one since removed, must not downgrade
+  somebody who is paying. "Paying, tier unknown" is a config gap, not a cancellation.
+- **`sells(plan)` is per-tier, so an environment can ship Plus before Pro exists there.** Otherwise
+  adding a tier would make every environment "unconfigured" until ten env vars landed at once, and a
+  half-configured one would take a payment it could not reconcile.
+
+## Why a comp needs a tier, not a boolean
+
+`subscriptions.comped` was a boolean, which meant exactly one thing: Plus. With four tiers it had to
+answer *which*, so `comped_plan` sits beside it. The pairing is deliberate rather than a single
+nullable column: `comped` stays the question every existing code path asks ("is this account paying
+in the sense that matters?"), and `comped_plan` only refines the answer. A single `comped_plan`
+column would have made every one of those call sites do a null check to ask a boolean question.
+
+The test-support route writes the same two columns a real comp does, which is why an e2e that passes
+against it is exercising the real entitlement derivation rather than a fixture.
+
+## Why retroactive push-update was deferred
+
+Assigning a program copies it. The obvious follow-up is a button that pushes a template's later
+edits onto everyone who already has it — and it is deliberately not built.
+
+It is not a second mechanism: it is *assign* run again. What stops it is that it forces an
+unavoidable divergence decision, and every available answer is wrong somewhere:
+
+| Answer | What it does to a real client |
+|---|---|
+| Replace wholesale | A trainer who swapped a client's back squat for a leg press because of her knee has that silently undone by a template typo fix |
+| Merge per item | Unpredictable: the result depends on edit order, and nobody can look at a program and say what a push will do to it |
+| Ask | Needs a diff UI, which is a feature of its own |
+
+**Bulk assign captures most of the value with none of that**, because at assign time nothing has been
+customised yet. If push-update is added later it is purely additive — it needs a
+`source_template_id` stamp and no migration of existing assignments.

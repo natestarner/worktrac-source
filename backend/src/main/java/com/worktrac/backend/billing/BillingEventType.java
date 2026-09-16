@@ -35,6 +35,6 @@ public enum BillingEventType {
 
     // The welcome-to-Plus email (PlusUpgradedEvent) was sent, or failed to send. Isolated from the
     // audit WRITE the same way registration email outcomes are -- see PlusUpgradeEmailEventListener.
-    PRO_WELCOME_EMAIL_SENT,
-    PRO_WELCOME_EMAIL_FAILED
+    PLUS_WELCOME_EMAIL_SENT,
+    PLUS_WELCOME_EMAIL_FAILED
 }

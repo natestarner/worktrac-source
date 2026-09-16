@@ -5,7 +5,9 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import Modal from '../shared/Modal';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useUI } from '../../context/UIContext';
-import { listLogins, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
+import { listLogins, addAndInviteLogin, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
+import { planIncludes } from '../../utils/planFeatures';
+import { planCopy } from '../billing/planCopy';
 
 /**
  * The owner's login manager: who in this household can sign in, and inviting the ones who cannot.
@@ -21,9 +23,13 @@ import { listLogins, inviteLogin, revokeLogin, unlockLogin } from '../../api/log
  * this is bug #2 on that list. Fails OPEN on an unknown plan, same as `PlusUpsell`/`PlanBadge`: a
  * pre-billing snapshot must not cost a paying household the real control.
  */
-export default function LoginsSection({ plan }) {
+// refreshPeople is a PROP rather than useAuth(): this component is rendered bare by its own test,
+// and a new context dependency would make every one of those tests need a provider to exercise the
+// invite flow. Same call as RoutineFormModal's defaultUnit.
+export default function LoginsSection({ plan, vocab, refreshPeople }) {
   const [rows, setRows] = useState(null);
   const [invitingPerson, setInvitingPerson] = useState(null);
+  const [addingPerson, setAddingPerson] = useState(false);
   const { run } = useGatedMutation();
   const { showToast, openConfirm } = useUI();
 
@@ -41,6 +47,23 @@ export default function LoginsSection({ plan }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  const addAndInvite = run(
+    async (personName, email) => {
+      await addAndInviteLogin(personName, email);
+      setAddingPerson(false);
+      showToast('Invite sent.');
+      await refreshPeople?.();
+      await load();
+    },
+    {
+      offlineMessage: 'Sending an invite needs a connection.',
+      errorMessage: "Couldn't add that person.",
+      // The refusals are written for a person: that address is already on this account, or the
+      // plan does not include member logins.
+      showServerMessage: true,
+    },
+  );
 
   const sendInvite = run(
     async (personId, email) => {
@@ -121,6 +144,19 @@ export default function LoginsSection({ plan }) {
           Give someone their own email and password so they can log their own workouts. They&rsquo;ll
           see everyone&rsquo;s workouts but can only change their own.
         </div>
+        {/* One motion, for the case a trainer is actually in: a client who does not exist yet. The
+            per-person Enable login below stays for everybody already on the account -- a family
+            adds people over years and invites them later, if ever. */}
+        {/* No role check here: this whole section is already owner-only -- ProfileTab renders it
+            inside its !isMember block, and the server requires MANAGE_LOGINS. A second gate would
+            be a second answer to a question already settled one level up. */}
+        <div style={{ paddingBottom: 14, borderBottom: '1px solid var(--color-subtle-bg)' }}>
+            <OfflineDisabledWrap message="Sending an invite needs a connection.">
+              <button className="btn btn-secondary btn-sm pressable" onClick={() => setAddingPerson(true)}>
+                + Add someone with a login
+              </button>
+          </OfflineDisabledWrap>
+        </div>
         {rows.map((row, i) => (
           <div
             key={row.personId}
@@ -162,7 +198,7 @@ export default function LoginsSection({ plan }) {
                 </OfflineDisabledWrap>
               )}
               {row.status !== 'ACTIVE' && (
-                plan === 'FREE' ? (
+                !planIncludes(plan, 'MEMBER_LOGINS') ? (
                   // Not OfflineDisabledWrap'd: like PlanBadge's "Go Plus", this is a navigation, not
                   // a write, so it works offline and the gate belongs on the checkout button it
                   // leads to. Reuses the header pill's own class rather than a new style object —
@@ -201,8 +237,16 @@ export default function LoginsSection({ plan }) {
         ))}
       </div>
 
+      {addingPerson && (
+        <AddPersonWithLoginModal
+          onCancel={() => setAddingPerson(false)}
+          onSend={(personName, email) => addAndInvite(personName, email)}
+        />
+      )}
       {invitingPerson && (
         <InviteModal
+          plan={plan}
+          vocab={vocab}
           person={invitingPerson}
           onCancel={() => setInvitingPerson(null)}
           onSend={(email) => sendInvite(invitingPerson.personId, email)}
@@ -212,8 +256,71 @@ export default function LoginsSection({ plan }) {
   );
 }
 
-function InviteModal({ person, onCancel, onSend }) {
+/**
+ * Add a person and invite them at once.
+ *
+ * ⚠️ Both fields go in ONE request. Creating the person here and inviting separately would leave an
+ * orphan person behind on every refused invitation -- a typo'd address, a plan without member
+ * logins -- and this modal has no way to undo the half that succeeded.
+ *
+ * "Add someone with a login" shares no substring with "Enable login", "Resend", "Remove",
+ * "Unlock" or "Unlock with Plus" on this same screen; Playwright matches accessible names as a
+ * case-insensitive substring, so an overlap here breaks specs elsewhere.
+ */
+function AddPersonWithLoginModal({ onCancel, onSend }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const ready = name.trim() !== '' && email.trim() !== '';
+
+  return (
+    <Modal title="Add someone with a login" onClose={onCancel}>
+      <p style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 16 }}>
+        They&rsquo;ll get an email to choose their own password. You&rsquo;ll be able to see their
+        workouts and remove their login &mdash; you will never be able to see or set their password.
+      </p>
+
+      <label htmlFor="add-person-name" style={labelStyle}>Their name</label>
+      <input
+        id="add-person-name"
+        autoComplete="off"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        className="input"
+      />
+
+      <label htmlFor="add-person-email" style={{ ...labelStyle, marginTop: 14 }}>Email</label>
+      <input
+        id="add-person-email"
+        type="email"
+        autoComplete="off"
+        placeholder="them@example.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="input"
+      />
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+        <button
+          onClick={() => onSend(name.trim(), email.trim())}
+          disabled={!ready}
+          className="btn btn-primary btn-full pressable"
+        >
+          Send invite
+        </button>
+        <button onClick={onCancel} style={cancelStyle}>Cancel</button>
+      </div>
+    </Modal>
+  );
+}
+
+function InviteModal({ person, plan, vocab, onCancel, onSend }) {
   const [email, setEmail] = useState(person.email || '');
+  // This modal is unreachable without MEMBER_LOGINS, so `plan` is always a paid tier here -- but
+  // name it from planCopy rather than as a literal, because a trainer who pays for Pro being told
+  // that logins "are part of Plus" describes a plan they did not buy. Falls back to the plain word
+  // when a newer server names a tier this bundle predates (resilience.md axis D).
+  const planName = planCopy(plan)?.name ?? 'your plan';
+  const account = vocab?.account ?? 'household';
 
   return (
     <Modal title={`Enable login for ${person.personName}`} onClose={onCancel}>
@@ -225,9 +332,9 @@ function InviteModal({ person, onCancel, onSend }) {
       {/* ⚠️ Stated BEFORE the email field, deliberately -- these are the things worth knowing
           before you type somebody's address, not after. The plan calls for all three. */}
       <ul style={disclosureStyle}>
-        <li>Member logins are part of Plus. If this household goes back to Free the login stops
-          working until you upgrade again — {person.personName}&rsquo;s workouts are never deleted
-          either way.</li>
+        <li>Member logins are part of {planName}. If this {account} goes back to Free the login
+          stops working until you upgrade again — {person.personName}&rsquo;s workouts are
+          never deleted either way.</li>
         <li>You can see their workouts and can remove their login at any time. You will never be
           able to see or set their password.</li>
         <li>If {person.personName} is under 13, set this up with a parent or guardian and use an

@@ -65,10 +65,30 @@ public class Subscription {
     @Column(name = "cancel_at_period_end", nullable = false)
     private boolean cancelAtPeriodEnd;
 
-    // Grants Plus with no Stripe object behind it -- how founding households are kept whole when the
-    // Free-tier window lands, without coupon codes, a card prompt, or an admin write action.
+    // Grants a paid tier with no Stripe object behind it -- how founding households are kept whole
+    // when the Free-tier window lands, without coupon codes, a card prompt, or an admin write action.
     @Column(nullable = false)
     private boolean comped;
+
+    // WHICH tier a comp grants. Null means PLUS, which is what every comp meant before Pro existed
+    // and what CompBootstrap still grants -- so V75 needed no backfill.
+    //
+    // It is a separate column rather than reusing billing_plan because the two answer different
+    // questions: billing_plan is a cache of what the household is entitled to RIGHT NOW, rewritten
+    // by applyStripeState on every Stripe event, while this is the standing grant a comp confers.
+    // Folding them together would mean a Stripe webhook for a lapsed card could overwrite the comp
+    // that is meant to outlive it.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "comped_plan", length = 20)
+    private BillingPlan compedPlan;
+
+    // How many CLIENTS this subscription is licensed for, from the band that was bought. Null for
+    // every household tier (they have no seats) and for an unlimited band.
+    //
+    // ⚠️ Derived from the Stripe price on every applyStripeState, never set directly -- same rule
+    // billing_plan follows, and for the same reason: two writers for one fact is how they drift.
+    @Column(name = "client_seats")
+    private Integer clientSeats;
 
     // NULL until the welcome-to-Plus email has gone out; set exactly once. This IS the idempotency
     // mechanism -- SubscriptionService.applyStripeState only sends that email while this column is
@@ -173,6 +193,22 @@ public class Subscription {
 
     public boolean isComped() {
         return comped;
+    }
+
+    public BillingPlan getCompedPlan() {
+        return compedPlan;
+    }
+
+    public void setCompedPlan(BillingPlan compedPlan) {
+        this.compedPlan = compedPlan;
+    }
+
+    public Integer getClientSeats() {
+        return clientSeats;
+    }
+
+    public void setClientSeats(Integer clientSeats) {
+        this.clientSeats = clientSeats;
     }
 
     public void setComped(boolean comped) {

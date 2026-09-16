@@ -91,20 +91,26 @@ public class StripeService {
         return builder.build();
     }
 
-    // The CLIENT never sends a price id -- it sends MONTH or YEAR and this maps it. Accepting a
-    // price id from a browser would let a caller check out against any price they cared to invent.
-    private String priceIdFor(BillingInterval interval) {
-        return interval == BillingInterval.YEAR ? properties.getPriceYearly() : properties.getPriceMonthly();
+    // The CLIENT never sends a price id -- it sends a PlanSku's worth of symbols (plan, band,
+    // interval) and StripeProperties maps it. Accepting a price id from a browser would let a
+    // caller check out against any price they cared to invent.
+    //
+    // An unconfigured SKU throws rather than falling back to another price: checking somebody out
+    // against a tier they did not choose is worse than refusing, and BillingController already
+    // answers 503 for the environment-not-configured case before reaching here.
+    private String priceIdFor(PlanSku sku) {
+        return properties.priceIdFor(sku).orElseThrow(() -> new IllegalStateException(
+                "No Stripe price configured for " + sku));
     }
 
     // Carries an idempotency key derived from the account, so a double-tapped upgrade cannot create
     // two Stripe Customers for one household. Duplicate CHECKOUT SESSIONS are harmless by
     // comparison (an abandoned one simply expires); two Customers are painful to unwind, because
     // each can carry its own subscriptions and payment methods.
-    public String createCustomer(Long accountId, String email, String householdName) throws StripeException {
+    public String createCustomer(Long accountId, String email, String accountName) throws StripeException {
         CustomerCreateParams params = CustomerCreateParams.builder()
                 .setEmail(email)
-                .setName(householdName)
+                .setName(accountName)
                 // Stamped so a webhook can always resolve the household even when the local write
                 // that would have recorded the customer id lost a race.
                 .putMetadata("accountId", String.valueOf(accountId))
@@ -118,7 +124,7 @@ public class StripeService {
     // -- stranding someone mid-upgrade outside the app they just paid for. See
     // docs/architecture/billing.md.
     public String createEmbeddedCheckoutSession(Long accountId, String stripeCustomerId,
-                                                 BillingInterval interval) throws StripeException {
+                                                 PlanSku sku) throws StripeException {
         com.stripe.param.checkout.SessionCreateParams params =
                 com.stripe.param.checkout.SessionCreateParams.builder()
                         .setMode(Mode.SUBSCRIPTION)
@@ -128,7 +134,7 @@ public class StripeService {
                         // return and reconciles synchronously, which is what makes the upgrade
                         // visible immediately rather than waiting on a webhook.
                         .setReturnUrl(properties.getReturnUrl() + "?checkout={CHECKOUT_SESSION_ID}")
-                        .addLineItem(LineItem.builder().setPrice(priceIdFor(interval)).setQuantity(1L).build())
+                        .addLineItem(LineItem.builder().setPrice(priceIdFor(sku)).setQuantity(1L).build())
                         // One line, and it makes launch discounts and win-back offers possible
                         // later without a code change.
                         .setAllowPromotionCodes(true)

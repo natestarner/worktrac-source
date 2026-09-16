@@ -20,7 +20,13 @@ package com.worktrac.backend.membership;
 public record MembershipInviteIssuedEvent(
         String email,
         String personName,
-        String householdName,
+        String accountName,
+        // What this account CALLS itself -- "household" on a family plan, "practice" on a trainer's
+        // (AccountVocab). The invitation says "{owner} owns this {noun}", and a client being told
+        // they have joined somebody's "household" is being told something false about a
+        // relationship they are paying for. Carried on the event rather than resolved in the
+        // listener, because by then the transaction that knew the tier has committed and gone.
+        String accountNoun,
         String ownerName,
         String rawToken,
         Long inviteId,

@@ -38,6 +38,34 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
             + "AND EXISTS (SELECT 1 FROM WorkoutSet w WHERE w.session = s)")
     HiddenHistorySummary summarizeHiddenBefore(@Param("personId") Long personId, @Param("floor") Instant floor);
 
+    // ── The trainer roster ─────────────────────────────────────────────────────────────────────
+    //
+    // ⚠️ BOTH carry the same EXISTS sub-select as summarizeHiddenBefore above, and for the same
+    // reason: getHistory drops sessions with no sets, so counting them here would tell a trainer a
+    // client trained on a day their own History shows as empty. An abandoned session is not a
+    // workout on any other screen and must not become one here.
+    //
+    // ⚠️ Both are GROUPED or WINDOWED account-wide rather than asked per person. The roster is the
+    // one screen whose cost scales with the size of the practice, so an Unlimited band would run
+    // forty round trips per open -- see ExerciseAttributionResolver for the same rule applied to
+    // the exercise catalogue.
+
+    /** The most recent real workout per person, all time. Null-safe: a person with none is absent. */
+    @Query("SELECT s.person.id, MAX(s.startedAt) FROM WorkoutSession s "
+            + "WHERE s.person.account.id = :accountId "
+            + "AND EXISTS (SELECT 1 FROM WorkoutSet w WHERE w.session = s) "
+            + "GROUP BY s.person.id")
+    List<Object[]> lastWorkoutGroupedByPerson(@Param("accountId") Long accountId);
+
+    /**
+     * Every real workout start in the trailing window, per person — ONE query behind both the
+     * adherence count and the streak, so the two cannot be computed from different row sets.
+     */
+    @Query("SELECT s.person.id, s.startedAt FROM WorkoutSession s "
+            + "WHERE s.person.account.id = :accountId AND s.startedAt >= :since "
+            + "AND EXISTS (SELECT 1 FROM WorkoutSet w WHERE w.session = s)")
+    List<Object[]> workoutTimesSince(@Param("accountId") Long accountId, @Param("since") Instant since);
+
     // Admin-only aggregates below, consumed only by AdminService.
 
     @Query("SELECT ws.person.account.id, COUNT(ws) FROM WorkoutSession ws GROUP BY ws.person.account.id")

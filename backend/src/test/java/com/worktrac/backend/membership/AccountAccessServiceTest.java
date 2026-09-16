@@ -1,5 +1,6 @@
 package com.worktrac.backend.membership;
 
+import com.worktrac.backend.billing.BillingPlan;
 import com.worktrac.backend.billing.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,7 +39,8 @@ class AccountAccessServiceTest {
         // Plus by default -- these cases are about caching and invalidation, not entitlement.
         // The pause itself is covered by MemberLoginPauseTest against a real household.
         subscriptionService = mock(SubscriptionService.class);
-        when(subscriptionService.isPlus(anyLong())).thenReturn(true);
+        when(subscriptionService.entitlementOf(anyLong()))
+                .thenReturn(new SubscriptionService.Entitlement(BillingPlan.PLUS, null));
         service = new AccountAccessService(repository, subscriptionService);
         stub(USER, ACCOUNT, AccountRole.OWNER, 100L, TOKEN_VERSION);
     }

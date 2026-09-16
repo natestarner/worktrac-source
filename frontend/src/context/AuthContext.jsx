@@ -301,7 +301,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   /**
-   * Returns null once signed in, or `{ households, selectionToken }` when the credential belongs
+   * Returns null once signed in, or `{ accounts, selectionToken }` when the credential belongs
    * to two or more households and one has to be chosen first.
    *
    * The caller branches on the return value rather than on a status field, mirroring the server's
@@ -314,7 +314,7 @@ export function AuthProvider({ children }) {
       // Nothing has been signed in and nothing has been torn down -- deliberately. Whatever session
       // this device already had is still intact and still usable until a household is picked, so an
       // abandoned picker costs nothing.
-      return { households: response.households ?? [], selectionToken: response.selectionToken };
+      return { accounts: response.accounts ?? [], selectionToken: response.selectionToken };
     }
     await establishSession(response.token);
     return null;
@@ -324,7 +324,7 @@ export function AuthProvider({ children }) {
    * Finishes an invitation.
    *
    * ⚠️ Returns EXACTLY what `login` returns, and that is the whole design: null once signed in, or
-   * `{ households, selectionToken }` when this credential now belongs to two or more households
+   * `{ accounts, selectionToken }` when this credential now belongs to two or more households
    * and one has to be chosen first. Accepting an invitation as somebody who already had a
    * household leaves them with two, so the screen they need next is the household picker they
    * would have seen on their very next sign-in anyway -- not a toast, not a confirmation page, and
@@ -343,7 +343,7 @@ export function AuthProvider({ children }) {
       // Nothing has been torn down. The membership IS attached at this point -- that part is done
       // and durable -- but whatever session this device already had is still intact and still
       // usable, so abandoning the picker costs nothing but a trip through the account menu later.
-      return { households: response.households ?? [], selectionToken: response.selectionToken };
+      return { accounts: response.accounts ?? [], selectionToken: response.selectionToken };
     }
     await establishSession(response.token);
     return null;
@@ -355,7 +355,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   /** Finishes a login that needed a household chosen. */
-  const chooseHousehold = useCallback(async (accountId, selectionToken) => {
+  const chooseAccount = useCallback(async (accountId, selectionToken) => {
     const { token } = await apiStartSession({ accountId, selectionToken });
     await establishSession(token);
   }, [establishSession]);
@@ -370,7 +370,7 @@ export function AuthProvider({ children }) {
    * account-shared keys (catalog, tags) carry no accountId, so without it household B renders
    * household A's exercise list.
    */
-  const switchHousehold = useCallback(async (accountId) => {
+  const switchAccount = useCallback(async (accountId) => {
     const { token } = await apiStartSession({ accountId });
     await establishSession(token);
   }, [establishSession]);
@@ -385,7 +385,7 @@ export function AuthProvider({ children }) {
    * all, signs the person out on their next request as a direct result of having succeeded.
    *
    * It is the same sequence as a login rather than a lighter "swap the token" path for the reason
-   * switchHousehold gives: establishSession is the one way into a session, and a fifth private copy
+   * switchAccount gives: establishSession is the one way into a session, and a fifth private copy
    * of its six ordered steps is exactly how confirmEmail nearly missed the outbox re-scoping.
    *
    * Note this is NOT freshLogin-neutral -- establishSession sets freshLogin, so every person's
@@ -467,10 +467,10 @@ export function AuthProvider({ children }) {
         ...state,
         isAdmin,
         login,
-        chooseHousehold,
+        chooseAccount,
         acceptInvite,
         previewInvite,
-        switchHousehold,
+        switchAccount,
         changeOwnPassword,
         register,
         confirmEmail,

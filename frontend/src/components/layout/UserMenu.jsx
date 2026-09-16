@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { queryClient } from '../../lib/queryClient';
 import { getUnsyncedWriteCount } from '../../hooks/useOutboxCount';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
+import { planIncludes } from '../../utils/planFeatures';
+import { accountVocab, capitalize } from '../../utils/accountVocab';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 // `booting` is passed by AppShellSkeleton only. That skeleton renders a REAL Header so the
@@ -22,8 +24,9 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 // lands after the real Header mounts instead of opening a menu that is about to disappear.
 // See docs/incidents/2026-08-13-e2e-parallel-flakiness.md.
 export default function UserMenu({ booting = false }) {
-  const { people, logout, isAdmin, households, account, switchHousehold } = useAuth();
-  const { selfPersonId } = useAccountAccess();
+  const { people, logout, isAdmin, accounts, account, switchAccount } = useAuth();
+  const vocab = accountVocab(account?.vocab);
+  const { selfPersonId, isMember } = useAccountAccess();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -36,7 +39,7 @@ export default function UserMenu({ booting = false }) {
   // Only the OTHER households -- there is nothing to switch to when there is one, and offering the
   // one you are already in is a control that does nothing. Undefined on an older auth snapshot,
   // which reads as "nowhere to go" and hides the entry rather than erroring.
-  const otherHouseholds = (households ?? []).filter(
+  const otherAccounts = (accounts ?? []).filter(
     (h) => String(h.accountId) !== String(account?.id),
   );
 
@@ -110,7 +113,7 @@ export default function UserMenu({ booting = false }) {
     setPendingSwitch(null);
     setSwitching(true);
     try {
-      await switchHousehold(household.accountId);
+      await switchAccount(household.accountId);
       setOpen(false);
       navigate('/app/log');
     } catch {
@@ -189,6 +192,34 @@ export default function UserMenu({ booting = false }) {
             zIndex: 'var(--z-header-menu)',
           }}
         >
+          {/* Pro's entry point, and the ONE place ROSTER is asked about. The endpoint itself is
+              gated on VIEW_OTHER_PEOPLE rather than on the plan (see PlanFeature.ROSTER): a roster
+              of four people who live in the same house, sorted by who trained least recently, is
+              not a useful screen, while a roster of forty clients is the whole product. That is a
+              discovery decision rather than an access one for an owner or a manager.
+
+              ⚠️ BUT A MEMBER IS EXCLUDED, and that half IS about access. The endpoint carries
+              VIEW_OTHER_PEOPLE, which a private client does not hold -- so offering it to one would
+              be a menu item that 403s. The javadoc on the endpoint used to claim a client would get
+              a roster of just themselves; the interceptor refuses them before the service ever
+              runs, and an e2e caught the gap.
+
+              The label is the account's own noun -- "Clients" on Pro, "Athletes" when Team lands.
+              Checked against every other label in this menu for the substring rule: it shares none
+              with Profile / App Settings / Plan & billing / Help / Contact Us / Admin Portal /
+              Logout / Log out anyway / Cancel, and none of them contains it. */}
+          {!isMember && planIncludes(account?.plan, 'ROSTER') && (
+            <MenuItem label={`${capitalize(vocab.member)}s`} onClick={() => go('/app/roster')} />
+          )}
+          {/* Per-PERSON, unlike everything else in this menu -- it opens on whoever is active in
+              the person bar, which is how a trainer moves between clients without a second
+              navigation concept. Shown to everyone: a client writing their own weigh-in is half of
+              what the feature is for.
+
+              ⚠️ "Check-ins" and never "Notes". This is the third note concept in the app and
+              "Notes" already exists elsewhere; Playwright matches accessible names as a substring,
+              so the overlap would break unrelated specs. See coaching.md. */}
+          <MenuItem label="Check-ins" onClick={() => go('/app/check-ins')} />
           <MenuItem label="Profile" onClick={() => go('/app/profile')} />
           <MenuItem label="App Settings" onClick={() => go('/app/settings')} />
           {/* "Plan & billing" -- checked against every other label on this screen for the
@@ -212,19 +243,19 @@ export default function UserMenu({ booting = false }) {
               <MenuItem label="Admin Portal" onClick={() => go('/admin')} />
             </>
           )}
-          {otherHouseholds.length > 0 && (
+          {otherAccounts.length > 0 && (
             <>
               <div style={{ borderTop: '1px solid var(--color-border)' }} />
               {/* "Switch to" rather than "Switch household": Playwright matches accessible names
                   as a case-insensitive SUBSTRING, and every label in this menu is deliberately
                   non-overlapping (see the Help/Contact Us comment above). Naming each household
                   also removes a step -- with two households the menu IS the picker. */}
-              {otherHouseholds.map((household) => (
+              {otherAccounts.map((other) => (
                 <MenuItem
-                  key={household.accountId}
-                  label={`Switch to ${household.accountName}`}
+                  key={other.accountId}
+                  label={`Switch to ${other.accountName}`}
                   disabled={switching}
-                  onClick={() => handleSwitch(household)}
+                  onClick={() => handleSwitch(other)}
                 />
               ))}
             </>

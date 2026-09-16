@@ -1,5 +1,8 @@
 package com.worktrac.backend.membership;
 
+import com.worktrac.backend.billing.BillingPlan;
+import com.worktrac.backend.billing.PlanFeature;
+
 import java.util.Objects;
 
 // Everything the app needs to answer "what may this login do in this account?", resolved once per
@@ -42,17 +45,33 @@ public record AccountAccess(
         /** accounts.members_see_everyone. Forced true for Plus/Family; the Team tier's seam. */
         boolean membersSeeEveryone,
         /**
-         * Whether the HOUSEHOLD is on Plus — {@code SubscriptionService.isPlus}, resolved once per
-         * cache load rather than per request.
+         * The tier the HOUSEHOLD is entitled to — {@code SubscriptionService.entitledPlan},
+         * resolved once per cache load rather than per request.
          *
          * <p>⚠️ Not stored anywhere. It is derived from a subscription's state, including a
-         * time-dependent branch (a cancelled subscription stays Plus until its paid period ends,
-         * with no webhook to announce that). So this value can be up to the cache TTL stale, and
-         * that is accepted: a member keeps working for at most another minute after a plan lapses.
-         * Erring in that direction is deliberate — the opposite error locks somebody out of the
-         * app mid-workout over a billing edge the household may not even know about yet.
+         * time-dependent branch (a cancelled subscription keeps its tier until its paid period
+         * ends, with no webhook to announce that). So this value can be up to the cache TTL stale,
+         * and that is accepted: a member keeps working for at most another minute after a plan
+         * lapses. Erring in that direction is deliberate — the opposite error locks somebody out of
+         * the app mid-workout over a billing edge the household may not even know about yet.
+         *
+         * <p>⚠️ This was a {@code boolean accountIsPro} meaning "is Plus". It is a tier now, and
+         * every reader must ask it for a {@link PlanFeature} rather than comparing it to a value —
+         * a {@code accountPlan == BillingPlan.PLUS} here is the same bug as a {@code role == OWNER}
+         * outside {@link AccountRole}.
          */
-        boolean accountIsPro) {
+        BillingPlan accountPlan,
+
+        /**
+         * How many CLIENTS this account is licensed for, or null when the tier has no seats (every
+         * household tier) or the band is unlimited.
+         *
+         * <p>Cached beside the plan rather than read separately, because both come off the same
+         * subscription row — see {@code SubscriptionService.entitlementOf}. Same staleness bound as
+         * the plan, and acceptable for the same reason: at worst a trainer adds one client past a
+         * band change for up to a minute.
+         */
+        Integer clientSeats) {
 
     public AccountAccess {
         Objects.requireNonNull(userId, "userId");
@@ -77,7 +96,7 @@ public record AccountAccess(
      * different question: not "may you do this" but "may you do anything".
      */
     public MembershipStatus status() {
-        return MembershipStatus.forRole(accountRole, accountIsPro);
+        return MembershipStatus.forRole(accountRole, accountPlan);
     }
 
     /** True when this login IS the given person, rather than merely able to act on them. */
@@ -177,8 +196,9 @@ public record AccountAccess(
      * are already exercised in production before a MEMBER can exist.
      */
     public static AccountAccess ownerOf(Long userId, Long accountId) {
-        // accountIsPro true: an OWNER's status() ignores it entirely, so the value is arbitrary --
-        // but true is the one that cannot mislead a reader into thinking owners can be paused.
-        return new AccountAccess(userId, accountId, null, AccountRole.OWNER, null, true, true);
+        // A paid plan: an OWNER's status() ignores it entirely, so the value is arbitrary -- but a
+        // paid one cannot mislead a reader into thinking owners can be paused.
+        return new AccountAccess(userId, accountId, null, AccountRole.OWNER, null, true,
+                BillingPlan.PLUS, null);
     }
 }

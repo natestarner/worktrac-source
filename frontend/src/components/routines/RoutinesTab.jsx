@@ -41,7 +41,7 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 export default function RoutinesTab() {
   const navigate = useNavigate();
   const { activePersonId, startRoutine } = useAppState();
-  const { people } = useAuth();
+  const { people, account } = useAuth();
   const { openConfirm } = useUI();
   const { exercises: catalog, refetch: refetchCatalog } = useExercises();
   const { exercises: personExercises, refetch: refetchPersonExercises } = usePersonExercises(activePersonId);
@@ -268,7 +268,20 @@ export default function RoutinesTab() {
           {routines.map((r) => (
             <Card key={r.id}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>{r.name}</div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>{r.name}</div>
+                  {/* Where this came from, when somebody else put it here. RoutineDto.assignedByName
+                      is resolved server-side in one batched lookup; null is legitimate and means a
+                      self-made routine OR an assigner whose login has since been removed, so it
+                      renders as naming nobody rather than printing "null".
+                      Without this a client has a program in their list with no idea who wrote it,
+                      which is the difference between being coached and being handed a checklist. */}
+                  {r.assignedByName && (
+                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 2 }}>
+                      From {r.assignedByName}
+                    </div>
+                  )}
+                </div>
                 <div style={{ display: 'flex', gap: 14 }}>
                   {/* Copy reads this person's routine and writes it to whoever is picked in the
                       modal. The server guards both ends -- source is requireVisiblePerson, every
@@ -318,6 +331,7 @@ export default function RoutinesTab() {
 
       {modalRoutine !== undefined && (
         <RoutineFormModal
+          defaultUnit={account?.defaultUnit}
           personId={activePersonId}
           routine={modalRoutine}
           personExercises={personExercises}

@@ -40,6 +40,32 @@ public class MembershipLoginController {
     public record InviteRequest(@NotBlank @Email String email) {
     }
 
+    public record AddAndInviteRequest(@NotBlank String personName, @NotBlank @Email String email) {
+    }
+
+    /**
+     * Creates a person and invites them in one motion — how a trainer onboards a client.
+     *
+     * <p>Requires BOTH permissions, because it does both things. An assistant who could invite but
+     * not create people has no business reaching this by inviting a person they just made.
+     *
+     * <p>⚠️ The response is deliberately the same {@code INVITED} row
+     * {@link #invite(Long, InviteRequest)} returns, for the same reason: anything richer is a
+     * user-enumeration oracle. It carries the new person's id because the caller genuinely needs it
+     * — that is identity the caller just created, not information about the invited address.
+     *
+     * <p>A refusal rolls the person back too; see {@code MembershipInviteService#addAndInvite}.
+     */
+    @PostMapping
+    @RequiresPermission({Permission.MANAGE_PEOPLE, Permission.MANAGE_LOGINS})
+    public PersonLoginDto addAndInvite(@Valid @RequestBody AddAndInviteRequest request) {
+        MembershipInvite invite = inviteService
+                .addAndInvite(currentUser.access(), request.personName(), request.email())
+                .invite();
+        return new PersonLoginDto(invite.getPerson().getId(), invite.getPerson().getName(),
+                PersonLoginDto.INVITED, invite.getEmail(), false, null);
+    }
+
     @GetMapping
     @RequiresPermission(Permission.MANAGE_LOGINS)
     public List<PersonLoginDto> logins() {

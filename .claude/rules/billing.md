@@ -7,18 +7,158 @@ paths:
 
 # Billing invariants
 
-Full narrative: `docs/architecture/billing.md`. `accounts` is the billable entity — one household,
-one login, many people, **no seats** — so there is exactly one `subscriptions` row per account,
-enforced by a unique index (V56).
+Full narrative: `docs/architecture/billing.md`. `accounts` is the billable entity — so there is
+exactly one `subscriptions` row per account, enforced by a unique index (V56).
+
+**Household tiers have no seats; Pro is licensed by client count.** That replaces the old "one
+household, one login, many people, no seats" framing, which was true while every tier was a family
+tier and is false now. It is a **replacement, not an exception**: Free and Plus still have no seats
+at all, and their ceiling (`QuotaProperties.peoplePerAccount`, twenty) is still a statement about
+what a family is rather than about what anybody paid for. Pro's ceiling is the band it bought. One
+`subscriptions` row per account is unchanged — a band is a column on that row, not a second row.
+
+## The tier roadmap, and why the paid tier is called Plus
+
+Four tiers are planned. Two exist:
+
+| Tier | Audience | State |
+|---|---|---|
+| **Free** | Families trying it out, training together on one shared device | Shipped |
+| **Plus** | Families who want full history and a login each | Shipped |
+| **Pro** | Personal trainers, with private client sub-accounts | Planned |
+| **Team** | Sports teams and lifting clubs, with a leaderboard and coach approval | Planned |
+
+**The paid tier was renamed Pro → Plus in #280 (`d71e614`) purely to free the name**, because
+"Pro" is the natural word for the personal-trainer tier and could not mean two things. V73 carried
+the data half of that rename and points here for the reasoning; this section is that reasoning.
+
+⚠️ **Anything still spelled `pro` in this codebase means PLUS, and is a bug to be fixed rather
+than a tier to build on.** The rename was behaviourally complete and lexically incomplete, and the
+stragglers were cleared separately: `PRO_BENEFITS` → `PLUS_BENEFITS`,
+`BillingEventType.PRO_WELCOME_EMAIL_*` → `PLUS_WELCOME_EMAIL_*` (persisted values, hence V74),
+`ImportController.requirePro` → `requirePlus`, and `SubscriptionDto.pro`, which was **deleted**
+rather than renamed — it carried the same answer as `plan` in a second shape.
+
+**The seams the two planned tiers are built on already exist, and each was left deliberately
+inert.** Do not "finish" any of them opportunistically; each is switched on by the tier that needs
+it, together with the copy and the tests that make it true:
+
+- `accounts.members_see_everyone` (V66) — owner-sees-all vs member-sees-only-self. Forced `true`
+  for Free/Plus **by construction**, because a family expects it. Pro is what adds the setter and
+  the endpoint; a private client is a `MEMBER` in an account where this is `false`.
+- `AccountRole.permissions(membersSeeEveryone)` — the only place in the codebase a role becomes
+  authority, which is what makes a third role a change to one map rather than to 36 guard sites.
+- `QuotaProperties.peoplePerAccount = 20` — a hard ceiling that blocks a roster outright, left
+  unraised on purpose so "a team is just a big family" cannot ship by accident.
+
+## ⚠️ Ask for a FEATURE, never for a tier
+
+`isPlus` used to be a boolean answering what is now a four-way question, asked at eleven call
+sites — each one a place a third tier could be forgotten. It is gone, split into the two questions
+it was conflating:
+
+| Question | Answered by |
+|---|---|
+| Is this subscription currently **paying**? | `SubscriptionService.isEntitled` — the four-case derivation below, unchanged |
+| **Which tier** is this household on? | `SubscriptionService.entitledPlan` = `isEntitled ? the tier the row records : FREE` |
+| Does that tier **include X**? | `BillingPlan.features()`, reached through `SubscriptionService.has(accountId, PlanFeature)` |
+
+**`BillingPlan.features()` is the only place in the codebase that branches on a tier**, exactly as
+`AccountRole.permissions()` is the only place that branches on a role. A second
+`plan == BillingPlan.PRO` comparison anywhere is the bug, for the same reason a second
+`role == OWNER` is — that map is what makes adding Pro and Team a change to one file rather than
+to every gate.
+
+- **`PlanFeature.DATA_IMPORT` and `Permission.IMPORT_DATA` are different questions and are spelled
+  differently on purpose.** The permission asks *may this LOGIN import*; the feature asks *does this
+  household's PLAN include importing*. `ImportController` checks both. Naming them the same thing
+  would invite collapsing them, and they are not collapsible: an owner on Free holds the permission
+  and lacks the feature; a member on Plus is the reverse.
+- **FREE's feature set is EMPTY, not a subset of PLUS.** Everything Free actually gets — unlimited
+  workouts, every person, offline logging, PRs, routines, the full data export — is ungated, so
+  none of it is a `PlanFeature`. Several are promised in writing on the marketing site for *both*
+  plans; listing them here would invite gating one.
+- **An entitled row that records no tier resolves to the LOWEST PAID tier, never FREE.** Only a
+  hand-edited row reaches that branch (`applyStripeState` writes entitlement and tier together),
+  but the polarity matters: somebody demonstrably paying must not be clamped, and guessing upward
+  would hand out a tier nobody bought.
+- **The client has its own copy** — `frontend/src/utils/planFeatures.js` — because the same
+  question was being asked as a bare `plan !== 'FREE'` at five call sites. It drives chrome only,
+  and `PlanFeatureMappingTest` / `planFeatures.test.js` pin the two maps to the same answers.
+- **⚠️ THE TIER COMES FROM THE PRICE.** `applyStripeState` maps `state.stripePriceId()` back through
+  `StripeProperties.skuForPriceId`, because the price is the only thing in a Stripe payload that
+  says which tier was bought. An `isEntitled ? PLUS : FREE` here would silently write PLUS over a
+  Pro subscription on the very next webhook.
+  - **An unrecognised price KEEPS the tier the row already had** — it is a config gap on our side
+    (an env var not carried to this environment), not evidence about what the household bought.
+    Downgrading a paying trainer over a missing env var would re-inflict itself on every webhook
+    until somebody noticed. The watchdog re-applies once the mapping exists.
+  - **Seats travel with the tier**, written in the same place, because a band change *is* a price
+    change and two writers for one fact is how they drift.
+
+## Pro: bands, seats and the price matrix
+
+- **`PlanSku` is the catalogue** — one constant per (plan, band, interval) we sell, and **the enum
+  name IS the config key** (`app.stripe.prices.PRO_STUDIO_YEAR`). Renaming a constant is a config
+  change in three places (repo secrets, the deploy workflow's env block, `backend-env.json`). It is
+  an enum rather than a formatting function because the **reverse** lookup has to be total: a
+  webhook carries a price id and nothing else that names a tier.
+- **The client still never sends a price id.** It sends plan + band + interval; the server maps
+  them. A combination we do not sell — FREE, PLUS *with* a band, PRO *without* one — has no
+  constant, so it is a 400 rather than a checkout against the wrong price.
+- **`isConfigured()` no longer asks about prices, and `sells(plan)` is per-tier.** "Can we reach
+  Stripe" and "do we sell this here" are different questions: an environment legitimately has Plus
+  prices and no Pro ones for the whole length of a tier rollout, and conflating them meant one
+  missing Pro env var would have switched off **Plus** checkout. A tier this environment cannot
+  sell answers **503**, the same honest-refusal posture as an unconfigured environment.
+- **A blank env var is how an unset one arrives.** `${STRIPE_PRICE_PRO_X:}` binds to `""`, not to
+  absent, so blank must count as unconfigured — otherwise every environment claims it sells
+  everything.
+- **⚠️ A BAND IS A CEILING ON ADDING, NEVER A REVOCATION.** `client_seats` is consulted only before
+  a person is created. Moving *down* a band refuses the next client and touches nothing that
+  already exists — every client keeps their login, history and programs. Same promise the Plus
+  pause makes, and it is not negotiable here either: a billing change must never cost somebody
+  *else* their access.
+- **The trainer does not spend a client seat on themselves.** The person ceiling is
+  `clientSeats + 1`, because a trainer who also trains must not pay to log their own squats.
+- **UNLIMITED still has a number** (`peoplePerProAccount`). "Unlimited" is a pricing promise, not
+  an invitation to create rows without bound. `clientLimit()` is **null** rather than a sentinel,
+  because "unlimited" and "a very large number" read the same in a comparison and completely
+  differently in copy — a sentinel would make *"12 of 2147483647 clients"* a reachable string.
+- **`comped_plan` says WHICH tier a comp grants, and null means PLUS.** That is what every comp
+  meant before Pro existed, which is why V75 needed no backfill. It is separate from `billing_plan`
+  because that column is a cache `applyStripeState` rewrites on every Stripe event, while a comp is
+  a standing grant meant to outlive exactly that — folding them together would let a webhook about
+  a lapsed card overwrite the comp.
+- **Seats are reported only while the tier is in force.** A lapsed Pro row still records the band it
+  bought; `entitlementOf` and `SubscriptionDto` both clear seats once the tier reads FREE, or a Free
+  account would be told it has a roster allowance it is not paying for.
+- **`SubscriptionService` takes `StripeProperties`, not `StripeService`.** It depends on the price
+  *configuration*, never on the SDK — `StripeService` is still the only class importing
+  `com.stripe.*`, and this is what keeps `applyStripeState` unit-testable with a plain properties
+  object and no HTTP stub.
+
+### The unknown-plan polarity, and why the client has two of them
+
+A browser keeps its auth snapshot across deploys (`resilience.md` axis D), so a bundle **will** be
+handed a tier name it predates. The client answers that in two different directions, and both are
+deliberate:
+
+| Helper | Unknown NAME (`'PRO'`) | No plan at all (`undefined`) | Why |
+|---|---|---|---|
+| `planIncludes` | included | included | Fails OPEN. Being wrong costs one doomed round trip the server refuses with a message; being wrong the other way tells a paying household they are on Free for as long as the tab stays open |
+| `isPaidPlan` | paid | **not paid** | Every tier after FREE is paid, so a newer name is paid. But *no plan* is not a plan to call paid — `BillingTab` picks between the "you have Plus" summary and the "here is what Plus costs" one on this, and answering true would show the paid summary to somebody who never paid and hide the control that lets them |
+| `isKnownPlan` | not known | not known | The one "render nothing" case. `PlanBadge` NAMES the plan on screen and there is no safe way to name one you do not recognise |
 
 ## Entitlement is DERIVED, never stored
 
-`SubscriptionService.isPlus` is the only place the question "is this household Plus?" is answered:
+`SubscriptionService.isEntitled` is the only place the question "is this subscription currently
+paying?" is answered:
 
 ```
-isPlus = status ∈ { ACTIVE, TRIALING, PAST_DUE }
-      OR (status == CANCELED AND current_period_end > now)
-      OR comped
+isEntitled = status ∈ { ACTIVE, TRIALING, PAST_DUE }
+          OR (status == CANCELED AND current_period_end > now)
+          OR comped
 ```
 
 One expression gets four otherwise-separate cases right. **Do not replace it with an `is_plus`
@@ -32,7 +172,7 @@ column**, and do not let a caller compare statuses itself — each of these beco
 4. **`comped`** grants Plus with no Stripe object, so founding households need no second code path.
 
 `subscriptions.billing_plan` is a materialized cache of the derivation, written only by
-`applyStripeState` so the two cannot be set independently. `isPlus` stays the authority.
+`applyStripeState` so the two cannot be set independently. `entitledPlan` stays the authority.
 
 **A missing subscription row means FREE, never an error.** Registration creates one and V56
 backfilled the rest, so it should be unreachable — but a read of workout history must not fail

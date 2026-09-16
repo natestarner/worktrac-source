@@ -27,7 +27,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 @Service
 public class StatsService {
@@ -301,16 +303,14 @@ public class StatsService {
                         holdSecondsByWeek.get(e.getKey())))
                 .toList();
 
-        // Current week doesn't break the streak just because it's still in progress --
-        // start counting from last week if this week has no workouts logged yet.
-        LocalDate cursor = workoutCountByWeek.getOrDefault(currentWeekStart, 0) > 0
-                ? currentWeekStart
-                : currentWeekStart.minusWeeks(1);
-        int currentStreakWeeks = 0;
-        while (!cursor.isBefore(rangeStart) && workoutCountByWeek.getOrDefault(cursor, 0) > 0) {
-            currentStreakWeeks++;
-            cursor = cursor.minusWeeks(1);
-        }
+        // Shared with the trainer roster (WeeklyStreak), so the number a client sees on Trends and
+        // the number their trainer sees on the roster cannot disagree. The current-week-in-progress
+        // rule lives there.
+        Set<LocalDate> weeksTrained = workoutCountByWeek.entrySet().stream()
+                .filter(e -> e.getValue() > 0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+        int currentStreakWeeks = WeeklyStreak.consecutiveWeeks(weeksTrained, currentWeekStart, rangeStart);
 
         LocalDate thisWindowStart = today.minusDays(29);
         LocalDate lastWindowStart = today.minusDays(59);

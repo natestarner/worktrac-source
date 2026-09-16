@@ -7,6 +7,8 @@ import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.support.RegistrationTestSupport;
 import com.worktrac.backend.user.TestCodeCache;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -22,6 +24,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -54,6 +57,17 @@ class RoutineControllerTest extends AbstractIntegrationTest {
     private long personId;
     private List<Long> exerciseIds;
 
+    /**
+     * The routine request's exercise list, ids only.
+     *
+     * <p>RoutineRequest carries a prescribed target per exercise (V77), so a bare id list is no
+     * longer the wire shape. Every test here is about ORDER and OWNERSHIP rather than targets, so
+     * they send the no-target form -- which is also what a person building their own routine sends.
+     */
+    private static List<Map<String, Object>> asRequest(List<Long> ids) {
+        return ids.stream().map(id -> Map.<String, Object>of("exerciseId", id)).toList();
+    }
+
     @BeforeEach
     void setUp() throws Exception {
         String email = "routines-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
@@ -69,7 +83,7 @@ class RoutineControllerTest extends AbstractIntegrationTest {
 
     @Test
     void createStartAndReorderRoutine() throws Exception {
-        String createBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exerciseIds", exerciseIds));
+        String createBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exercises", asRequest(exerciseIds)));
         String createResponse = mockMvc.perform(post("/api/people/" + personId + "/routines")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -83,7 +97,7 @@ class RoutineControllerTest extends AbstractIntegrationTest {
 
         // reorder: reverse the exercise order
         List<Long> reversed = List.of(exerciseIds.get(1), exerciseIds.get(0));
-        String updateBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exerciseIds", reversed));
+        String updateBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exercises", asRequest(reversed)));
         String updateResponse = mockMvc.perform(put("/api/people/" + personId + "/routines/" + routineId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -112,7 +126,7 @@ class RoutineControllerTest extends AbstractIntegrationTest {
     void routineKeepsTheSameExerciseAtEveryPositionItAppearsIn() throws Exception {
         List<Long> cycling = List.of(exerciseIds.get(0), exerciseIds.get(1), exerciseIds.get(0));
 
-        String createBody = objectMapper.writeValueAsString(Map.of("name", "Cycle", "exerciseIds", cycling));
+        String createBody = objectMapper.writeValueAsString(Map.of("name", "Cycle", "exercises", asRequest(cycling)));
         String createResponse = mockMvc.perform(post("/api/people/" + personId + "/routines")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -141,7 +155,7 @@ class RoutineControllerTest extends AbstractIntegrationTest {
         // update() clears and re-applies, so dropping one copy must leave the other -- and the
         // repeated auto-favorite (RoutineService#favorite runs per occurrence) must stay a no-op.
         String updateBody = objectMapper.writeValueAsString(
-                Map.of("name", "Cycle", "exerciseIds", List.of(exerciseIds.get(0), exerciseIds.get(1))));
+                Map.of("name", "Cycle", "exercises", asRequest(List.of(exerciseIds.get(0), exerciseIds.get(1)))));
         String updateResponse = mockMvc.perform(put("/api/people/" + personId + "/routines/" + routineId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -167,7 +181,7 @@ class RoutineControllerTest extends AbstractIntegrationTest {
         long person2 = addPerson("Sam");
         long person3 = addPerson("Jordan");
 
-        String createBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exerciseIds", exerciseIds));
+        String createBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exercises", asRequest(exerciseIds)));
         String createResponse = mockMvc.perform(post("/api/people/" + personId + "/routines")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -210,7 +224,7 @@ class RoutineControllerTest extends AbstractIntegrationTest {
 
     @Test
     void copyRoutineFailsWithEmptyTargetList() throws Exception {
-        String createBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exerciseIds", exerciseIds));
+        String createBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exercises", asRequest(exerciseIds)));
         String createResponse = mockMvc.perform(post("/api/people/" + personId + "/routines")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -231,7 +245,7 @@ class RoutineControllerTest extends AbstractIntegrationTest {
     void copyRoutineFailsWhenCallerDoesNotOwnSourceRoutine() throws Exception {
         long person2 = addPerson("Sam");
 
-        String createBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exerciseIds", exerciseIds));
+        String createBody = objectMapper.writeValueAsString(Map.of("name", "Push Day", "exercises", asRequest(exerciseIds)));
         String createResponse = mockMvc.perform(post("/api/people/" + personId + "/routines")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -255,7 +269,7 @@ class RoutineControllerTest extends AbstractIntegrationTest {
     // preference the person sets rather than an accident of which they built first.
 
     private long createRoutine(String name) throws Exception {
-        String body = objectMapper.writeValueAsString(Map.of("name", name, "exerciseIds", exerciseIds));
+        String body = objectMapper.writeValueAsString(Map.of("name", name, "exercises", asRequest(exerciseIds)));
         String response = mockMvc.perform(post("/api/people/" + personId + "/routines")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -351,7 +365,7 @@ class RoutineControllerTest extends AbstractIntegrationTest {
         long mine = createRoutine("Mine");
         long person2 = addPerson("Sam");
 
-        String otherBody = objectMapper.writeValueAsString(Map.of("name", "Theirs", "exerciseIds", exerciseIds));
+        String otherBody = objectMapper.writeValueAsString(Map.of("name", "Theirs", "exercises", asRequest(exerciseIds)));
         String otherResponse = mockMvc.perform(post("/api/people/" + person2 + "/routines")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -404,7 +418,7 @@ class RoutineControllerTest extends AbstractIntegrationTest {
     }
 
     private long createRoutineFor(long forPersonId, String name) throws Exception {
-        String body = objectMapper.writeValueAsString(Map.of("name", name, "exerciseIds", exerciseIds));
+        String body = objectMapper.writeValueAsString(Map.of("name", name, "exercises", asRequest(exerciseIds)));
         String response = mockMvc.perform(post("/api/people/" + forPersonId + "/routines")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -413,4 +427,204 @@ class RoutineControllerTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response).get("id").asLong();
     }
+
+    /**
+     * Programs: a routine assigned onto somebody else, carrying the numbers they are meant to hit.
+     *
+     * <p>Assignment is not a separate operation — it is {@code copy} landing on another person, and
+     * these tests exist mostly to pin the two things that makes silent when wrong: the provenance
+     * stamp, and whether the targets travelled.
+     */
+    @Nested
+    @DisplayName("programs")
+    class Programs {
+
+        private long clientPersonId;
+
+        @BeforeEach
+        void addAClient() throws Exception {
+            clientPersonId = objectMapper.readTree(mockMvc.perform(post("/api/people")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("name", "Dana"))))
+                    .andReturn().getResponse().getContentAsString())
+                    .get("id").asLong();
+        }
+
+        private JsonNode createWithTarget() throws Exception {
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "name", "Squat Day",
+                    "exercises", List.of(
+                            Map.of("exerciseId", exerciseIds.get(0),
+                                    "targetWeight", 185, "targetReps", 5, "targetUnit", "lb"),
+                            Map.of("exerciseId", exerciseIds.get(1)))));
+            return objectMapper.readTree(mockMvc.perform(post("/api/people/" + personId + "/routines")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+        }
+
+        private JsonNode routinesFor(long owningPersonId) throws Exception {
+            return objectMapper.readTree(mockMvc.perform(get("/api/people/" + owningPersonId + "/routines")
+                            .header("Authorization", "Bearer " + token))
+                    .andReturn().getResponse().getContentAsString());
+        }
+
+        private JsonNode assignTo(long routineId, long targetPersonId) throws Exception {
+            return objectMapper.readTree(mockMvc.perform(post(
+                            "/api/people/" + personId + "/routines/" + routineId + "/copy")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("targetPersonIds", List.of(targetPersonId)))))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+        }
+
+        @Test
+        void aTargetRoundTripsThroughCreate() throws Exception {
+            JsonNode created = createWithTarget();
+
+            JsonNode first = created.get("exercises").get(0);
+            assertEquals(185, first.get("targetWeight").asInt());
+            assertEquals(5, first.get("targetReps").asInt());
+            assertEquals("lb", first.get("targetUnit").asText());
+
+            // The second exercise carries no target, and "no target" is null rather than zero.
+            assertTrue(created.get("exercises").get(1).get("targetWeight").isNull());
+            assertTrue(created.get("exercises").get(1).get("targetReps").isNull());
+        }
+
+        // ⚠️ THE ONE THAT WOULD HAVE BEEN SILENT DATA LOSS. update() clears the routine's exercises
+        // and rebuilds them from the request, so a request shape that could not carry a target used
+        // to destroy every target whenever a trainer renamed the routine or dragged one exercise --
+        // with the numbers simply gone the next time the client opened their program.
+        @Test
+        void aTargetSurvivesRenamingTheRoutine() throws Exception {
+            long routineId = createWithTarget().get("id").asLong();
+
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "name", "Squat Day (heavy)",
+                    "exercises", List.of(
+                            Map.of("exerciseId", exerciseIds.get(0),
+                                    "targetWeight", 185, "targetReps", 5, "targetUnit", "lb"),
+                            Map.of("exerciseId", exerciseIds.get(1)))));
+            JsonNode updated = objectMapper.readTree(mockMvc.perform(
+                            put("/api/people/" + personId + "/routines/" + routineId)
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+
+            assertEquals("Squat Day (heavy)", updated.get("name").asText());
+            assertEquals(185, updated.get("exercises").get(0).get("targetWeight").asInt());
+        }
+
+        // Omitting a target means "no target", never "leave what was there". The request is the
+        // whole truth about the routine, and a client that reads targets must send them back.
+        @Test
+        void omittingATargetClearsIt() throws Exception {
+            long routineId = createWithTarget().get("id").asLong();
+
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "name", "Squat Day",
+                    "exercises", asRequest(exerciseIds)));
+            JsonNode updated = objectMapper.readTree(mockMvc.perform(
+                            put("/api/people/" + personId + "/routines/" + routineId)
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andReturn().getResponse().getContentAsString());
+
+            assertTrue(updated.get("exercises").get(0).get("targetWeight").isNull());
+        }
+
+        @Test
+        void assigningCarriesTheTargetsOntoTheClient() throws Exception {
+            long routineId = createWithTarget().get("id").asLong();
+
+            assignTo(routineId, clientPersonId);
+
+            JsonNode assigned = routinesFor(clientPersonId).get(0);
+            assertEquals(185, assigned.get("exercises").get(0).get("targetWeight").asInt());
+            assertEquals("lb", assigned.get("exercises").get(0).get("targetUnit").asText());
+        }
+
+        // A template whose numbers did not travel would arrive as a bare list of exercise names,
+        // which is the difference between assigning a program and sharing a checklist.
+        @Test
+        void assigningStampsWhoPutItThere() throws Exception {
+            long routineId = createWithTarget().get("id").asLong();
+
+            assignTo(routineId, clientPersonId);
+
+            JsonNode assigned = routinesFor(clientPersonId).get(0);
+            assertEquals("Nate", assigned.get("assignedByName").asText());
+            assertTrue(assigned.get("assignedAt").isTextual());
+        }
+
+        // ⚠️ Copying your OWN routine is not an assignment. Stamping it would have somebody's own
+        // Routines list claim a trainer put it there -- and on a family account, that is every
+        // duplicate anybody has ever made.
+        @Test
+        void duplicatingYourOwnRoutineIsNotAnAssignment() throws Exception {
+            long routineId = createWithTarget().get("id").asLong();
+
+            assignTo(routineId, personId);
+
+            JsonNode mine = routinesFor(personId);
+            for (JsonNode routine : mine) {
+                assertTrue(routine.get("assignedByName").isNull(), "a self-copy must name nobody");
+                assertTrue(routine.get("assignedAt").isNull());
+            }
+        }
+
+        // Every routine that existed before programs did, and every one a person builds for
+        // themselves. Null must render as naming nobody rather than printing "null".
+        @Test
+        void aSelfMadeRoutineNamesNobody() throws Exception {
+            JsonNode created = createWithTarget();
+
+            assertTrue(created.get("assignedByName").isNull());
+            assertTrue(created.get("assignedAt").isNull());
+        }
+
+        // A weight with no unit is not interpretable. The DB refuses the pairing outright
+        // (CK_routine_exercises_target_unit); this is the client-facing half.
+        @Test
+        void refusesAWeightWithNoUnit() throws Exception {
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "name", "Broken",
+                    "exercises", List.of(Map.of("exerciseId", exerciseIds.get(0), "targetWeight", 185))));
+
+            JsonNode created = objectMapper.readTree(mockMvc.perform(
+                            post("/api/people/" + personId + "/routines")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+
+            // Dropped rather than rejected: a target is a convenience, and refusing the whole
+            // routine over an unusable half of one would lose the routine as well.
+            assertTrue(created.get("exercises").get(0).get("targetWeight").isNull());
+        }
+
+        @Test
+        void refusesAZeroRepTarget() throws Exception {
+            String body = objectMapper.writeValueAsString(Map.of(
+                    "name", "Broken",
+                    "exercises", List.of(Map.of("exerciseId", exerciseIds.get(0), "targetReps", 0))));
+
+            mockMvc.perform(post("/api/people/" + personId + "/routines")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
 }

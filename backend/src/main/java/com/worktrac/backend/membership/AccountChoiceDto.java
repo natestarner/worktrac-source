@@ -16,10 +16,10 @@ package com.worktrac.backend.membership;
  * <p><b>No person id and no counts.</b> Nothing about who is in the household, how many people it
  * has, or how much is logged there crosses this boundary. A picker needs a label, not a summary.
  */
-public record HouseholdChoiceDto(Long accountId, String accountName, String accountRole) {
+public record AccountChoiceDto(Long accountId, String accountName, String accountRole) {
 
-    public static HouseholdChoiceDto from(AccountMembership membership) {
-        return new HouseholdChoiceDto(
+    public static AccountChoiceDto from(AccountMembership membership) {
+        return new AccountChoiceDto(
                 membership.getAccount().getId(),
                 membership.getAccount().getName(),
                 membership.getAccountRole().name());

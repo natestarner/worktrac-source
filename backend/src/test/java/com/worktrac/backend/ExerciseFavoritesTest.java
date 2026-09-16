@@ -326,7 +326,7 @@ class ExerciseFavoritesTest extends AbstractIntegrationTest {
     void addingAnExerciseToARoutineAutoFavoritesIt() throws Exception {
         assertFalse(contains(pickerList(tokenA, personA1), "Barbell Bench Press"));
 
-        String routineBody = objectMapper.writeValueAsString(Map.of("name", "Push", "exerciseIds", List.of(benchPressId)));
+        String routineBody = objectMapper.writeValueAsString(Map.of("name", "Push", "exercises", List.of(Map.of("exerciseId", benchPressId))));
         mockMvc.perform(post("/api/people/" + personA1 + "/routines")
                         .header("Authorization", "Bearer " + tokenA)
                         .contentType(MediaType.APPLICATION_JSON)

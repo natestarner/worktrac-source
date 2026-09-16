@@ -84,7 +84,7 @@ class CsvImportControllerTest extends AbstractIntegrationTest {
         personId = registerJson.get("person").get("id").asLong();
         // Importing is a Plus feature. These tests are about the import itself, so the plan is
         // stated out loud rather than left as an assumption the gate would now break.
-        BillingTestSupport.makePro(subscriptionRepository, registerJson.get("account").get("id").asLong());
+        BillingTestSupport.makePlus(subscriptionRepository, registerJson.get("account").get("id").asLong());
     }
 
     // ── The anchor ─────────────────────────────────────────────────────────────────────────────

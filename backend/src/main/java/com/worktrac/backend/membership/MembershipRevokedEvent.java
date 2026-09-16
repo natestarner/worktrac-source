@@ -11,7 +11,7 @@ package com.worktrac.backend.membership;
  */
 public record MembershipRevokedEvent(
         String memberEmail,
-        String householdName,
+        String accountName,
         String ownerName,
         boolean wasOnlyAnInvitation) {
 }

@@ -2,6 +2,7 @@ package com.worktrac.backend.csvimport;
 
 import com.worktrac.backend.membership.Permission;
 import com.worktrac.backend.membership.RequiresPermission;
+import com.worktrac.backend.billing.PlanFeature;
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.common.TooManyRequestsException;
@@ -51,14 +52,14 @@ public class ImportController {
     @PostMapping("/api/people/{personId}/import/preview")
     @RequiresPermission(value = Permission.IMPORT_DATA, personScoped = true)
     public ImportPreviewDto preview(@PathVariable Long personId, @Valid @RequestBody ImportRequest request) {
-        requirePro();
+        requirePlus();
         return csvImportService.preview(currentUser.access(), personId, request);
     }
 
     @PostMapping("/api/people/{personId}/import")
     @RequiresPermission(value = Permission.IMPORT_DATA, personScoped = true)
     public ImportPreviewDto commit(@PathVariable Long personId, @Valid @RequestBody ImportRequest request) {
-        requirePro();
+        requirePlus();
         // Only the commit is throttled, not the preview: preview writes nothing, and making
         // someone spend an import token to find out what a file WOULD do is the opposite of what
         // the preview exists for.
@@ -88,8 +89,11 @@ public class ImportController {
     //
     // Exporting is not gated at all, on either plan, for the same reason: every household can
     // always take its complete data out. See .claude/rules/billing.md.
-    private void requirePro() {
-        if (!subscriptionService.isPlus(currentUser.accountId())) {
+    private void requirePlus() {
+        // ⚠️ Note the two names side by side: the handler carries Permission.IMPORT_DATA ("may this
+        // LOGIN import"), and this asks PlanFeature.DATA_IMPORT ("does this household's plan include
+        // importing"). Different questions, both required, deliberately spelled differently.
+        if (!subscriptionService.has(currentUser.accountId(), PlanFeature.DATA_IMPORT)) {
             throw new ForbiddenException("Importing past workouts is a Plus feature.");
         }
     }

@@ -4,12 +4,18 @@ export function listRoutines(personId) {
   return apiClient.get(`/api/people/${personId}/routines`);
 }
 
-export function createRoutine(personId, { name, exerciseIds }) {
-  return apiClient.post(`/api/people/${personId}/routines`, { name, exerciseIds });
+// ⚠️ `exercises` is the WHOLE TRUTH about the routine, targets included. The server rebuilds the
+// routine from it, so an exercise sent without its target loses that target -- omitting one means
+// "no target", never "leave what was there". Anything that edits a routine must round-trip what it
+// read, not just the ids.
+//
+// Each entry: { exerciseId, targetWeight?, targetReps?, targetUnit? }.
+export function createRoutine(personId, { name, exercises }) {
+  return apiClient.post(`/api/people/${personId}/routines`, { name, exercises });
 }
 
-export function updateRoutine(personId, routineId, { name, exerciseIds }) {
-  return apiClient.put(`/api/people/${personId}/routines/${routineId}`, { name, exerciseIds });
+export function updateRoutine(personId, routineId, { name, exercises }) {
+  return apiClient.put(`/api/people/${personId}/routines/${routineId}`, { name, exercises });
 }
 
 export function removeRoutine(personId, routineId) {

@@ -37,6 +37,8 @@ const SECTION_IDS = [
   'personal',
   'settings',
   'logins',
+  'visibility',
+    'coaching',
   'plan',
   'data',
   'offline',

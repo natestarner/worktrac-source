@@ -95,7 +95,7 @@ describe('BillingTab', () => {
   it('shows the renewal date for an active Plus household', async () => {
     render(
       { id: 1, plan: 'PLUS' },
-      { plan: 'PLUS', status: 'ACTIVE', pro: true, currentPeriodEnd: '2026-09-27T12:00:00Z' },
+      { plan: 'PLUS', status: 'ACTIVE', currentPeriodEnd: '2026-09-27T12:00:00Z' },
     );
 
     expect(await screen.findByText(/Renews Sep 27, 2026/)).toBeInTheDocument();
@@ -110,7 +110,6 @@ describe('BillingTab', () => {
       {
         plan: 'PLUS',
         status: 'CANCELED',
-        pro: true,
         cancelAtPeriodEnd: true,
         currentPeriodEnd: '2026-09-27T12:00:00Z',
       },
@@ -123,14 +122,14 @@ describe('BillingTab', () => {
   // Access continues through Stripe's retry window, so this is a nudge to fix the card rather
   // than a lockout -- cutting access mid-dunning turns a recoverable failure into a cancellation.
   it('nudges a past-due household without taking Plus away', async () => {
-    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'PAST_DUE', pro: true });
+    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'PAST_DUE' });
 
     expect(await screen.findByText(/couldn.t take your last payment/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Manage billing' })).toBeInTheDocument();
   });
 
   it('tells a comped household it is on the house, with nothing to manage', async () => {
-    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'FREE', pro: true, comped: true });
+    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'FREE', comped: true });
 
     expect(await screen.findByText(/on the house/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Manage billing' })).not.toBeInTheDocument();
@@ -166,7 +165,7 @@ describe('BillingTab', () => {
   it('opens the Stripe portal in a new tab rather than navigating away', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     createPortalSession.mockResolvedValue({ url: 'https://billing.stripe.com/session/test' });
-    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', pro: true });
+    render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE' });
 
     fireEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
 
@@ -188,7 +187,11 @@ describe('BillingTab', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
 
     expect(await screen.findByTestId('stripe-embedded-checkout')).toBeInTheDocument();
-    expect(createCheckoutSession).toHaveBeenCalledWith('YEAR');
+    // ⚠️ The TIER is asserted, not just the interval. This read toHaveBeenCalledWith('YEAR') and
+    // passed for months while the screen could only ever sell Plus -- an omitted plan is read by
+    // the server as PLUS, so a Pro button calling it this way would have silently sold the wrong
+    // tier and taken the wrong money.
+    expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PLUS', band: null });
   });
 
   // The moment a checkout actually lands. releaseOnboarding must wait for the celebration to be
@@ -198,7 +201,7 @@ describe('BillingTab', () => {
     const releaseOnboarding = vi.fn();
     useUI.mockReturnValue({ releaseOnboarding, showToast: vi.fn() });
     useAuth.mockReturnValue({ account: { id: 1, plan: 'PLUS' }, refreshPeople: vi.fn().mockResolvedValue() });
-    getSubscription.mockResolvedValue({ plan: 'PLUS', status: 'ACTIVE', pro: true });
+    getSubscription.mockResolvedValue({ plan: 'PLUS', status: 'ACTIVE' });
     reconcileCheckout.mockResolvedValue({});
 
     renderWithQuery(
@@ -252,8 +255,8 @@ describe('BillingTab', () => {
 
   // ── Warning an owner before they downgrade ──────────────────────────────────────────────────
 
-  const PRO_ACCOUNT = { name: 'Starner', plan: 'PLUS' };
-  const PRO_SUB = { pro: true, status: 'ACTIVE', currentPeriodEnd: '2027-01-01T00:00:00Z' };
+  const PLUS_ACCOUNT = { name: 'Starner', plan: 'PLUS' };
+  const PLUS_SUB = { plan: 'PLUS', status: 'ACTIVE', currentPeriodEnd: '2027-01-01T00:00:00Z' };
 
   /**
    * ⚠️ This is the LAST screen of ours an owner sees before they can downgrade. Cancelling happens
@@ -262,7 +265,7 @@ describe('BillingTab', () => {
    * stopped working from those people.
    */
   it('warns, by name and by count, whose logins a downgrade would pause', async () => {
-    render(PRO_ACCOUNT, PRO_SUB, {
+    render(PLUS_ACCOUNT, PLUS_SUB, {
       logins: [
         { personId: 1, personName: 'Nate', status: 'ACTIVE', isSelf: true },
         { personId: 2, personName: 'Sam', status: 'ACTIVE', isSelf: false },
@@ -280,7 +283,7 @@ describe('BillingTab', () => {
   // The owner's own login is never paused by a downgrade, so counting it would overstate the cost
   // of cancelling -- and in a household with no member logins at all, by exactly one.
   it('never counts the owner’s own login', async () => {
-    render(PRO_ACCOUNT, PRO_SUB, {
+    render(PLUS_ACCOUNT, PLUS_SUB, {
       logins: [{ personId: 1, personName: 'Nate', status: 'ACTIVE', isSelf: true }],
     });
 
@@ -290,7 +293,7 @@ describe('BillingTab', () => {
 
   // An outstanding invitation has nobody signing in yet, so there is nothing to pause.
   it('counts only accepted logins, not outstanding invitations', async () => {
-    render(PRO_ACCOUNT, PRO_SUB, {
+    render(PLUS_ACCOUNT, PLUS_SUB, {
       logins: [
         { personId: 1, personName: 'Nate', status: 'ACTIVE', isSelf: true },
         { personId: 2, personName: 'Sam', status: 'INVITED', isSelf: false },
@@ -302,7 +305,7 @@ describe('BillingTab', () => {
   });
 
   it('says it in the singular for one login', async () => {
-    render(PRO_ACCOUNT, PRO_SUB, {
+    render(PLUS_ACCOUNT, PLUS_SUB, {
       logins: [{ personId: 2, personName: 'Sam', status: 'ACTIVE', isSelf: false }],
     });
 
@@ -315,7 +318,7 @@ describe('BillingTab', () => {
    * control that can only fail.
    */
   it('never asks for the login list as a member', async () => {
-    render(PRO_ACCOUNT, PRO_SUB, {
+    render(PLUS_ACCOUNT, PLUS_SUB, {
       membership: { accountRole: 'MEMBER', personId: 2, status: 'ACTIVE' },
     });
 
@@ -323,4 +326,127 @@ describe('BillingTab', () => {
     expect(listLogins).not.toHaveBeenCalled();
   });
 
+});
+
+// The trainer path off the Free screen. Pro was fully buyable over the API for several commits
+// while every button here sold Plus -- an omitted plan is read by the server as PLUS -- so these
+// assert the tier and band that actually reach checkout, not merely that a button exists.
+describe('BillingTab Pro upgrade', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+    useUI.mockReturnValue({ releaseOnboarding: vi.fn(), showToast: vi.fn() });
+    createCheckoutSession.mockResolvedValue({ clientSecret: 'cs_secret', publishableKey: 'pk_test' });
+  });
+
+  const renderTab = () => render({ id: 1, plan: 'FREE' }, { plan: 'FREE', status: null });
+
+  it('offers Pro alongside Plus on the Free screen', async () => {
+    renderTab();
+
+    expect(await screen.findByRole('button', { name: 'Subscribe to Pro' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upgrade to Plus' })).toBeInTheDocument();
+  });
+
+  // ⚠️ THE ONE THAT WOULD HAVE CAUGHT THE ORIGINAL BUG. Selling Pro at Plus's price is a silent
+  // failure: checkout succeeds, the money is taken, and the trainer gets a tier they did not buy.
+  it('sends the Pro tier and the chosen band to checkout', async () => {
+    renderTab();
+
+    fireEvent.change(await screen.findByLabelText('How many clients?'), {
+      target: { value: 'PRACTICE' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Subscribe to Pro' }));
+
+    await waitFor(() =>
+      expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PRO', band: 'PRACTICE' }));
+  });
+
+  // The smallest band, because a trainer arriving here has one or two clients far more often than
+  // forty -- pre-selecting a bigger one quotes a price they did not ask for.
+  it('starts on the smallest band', async () => {
+    renderTab();
+
+    expect(await screen.findByLabelText('How many clients?')).toHaveValue('STARTER');
+    expect(screen.getByText('$190 / year')).toBeInTheDocument();
+  });
+
+  // One interval control on the screen, driving both cards: two prices quoting different billing
+  // periods at once is how somebody compares $29/year against $19/month and concludes wrongly.
+  it('prices Pro in whichever interval the screen is showing', async () => {
+    renderTab();
+
+    fireEvent.click(await screen.findByRole('radio', { name: /Monthly/ }));
+
+    expect(screen.getByText('$19 / month')).toBeInTheDocument();
+  });
+
+  it('still sends Plus from the Plus button', async () => {
+    renderTab();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
+
+    await waitFor(() =>
+      expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PLUS', band: null }));
+  });
+
+  // ⚠️ THE TIER THIS SCREEN SAYS YOU ARE ON. Every string in the paid summary was the literal
+  // "Plus" while the branch that renders it asks isPaidPlan -- true for Pro. So a trainer who had
+  // just paid for Pro was shown "Huddle Plus" under a list of Plus's four benefits, with none of
+  // the four they had actually bought. The billing screen is the one place somebody checks what
+  // they are paying for, which makes it the worst place in the app to name the wrong tier.
+  describe('the paid summary names the tier it is actually on', () => {
+    const PRO = { id: 1, plan: 'PRO', vocab: { account: 'practice', owner: 'trainer', member: 'client', manager: 'assistant' } };
+
+    it('says Huddle Pro, not Huddle Plus, on a Pro account', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: 15 });
+
+      expect(await screen.findByText('Huddle Pro')).toBeInTheDocument();
+      expect(screen.queryByText('Huddle Plus')).not.toBeInTheDocument();
+    });
+
+    // Pro's benefits are the INCREMENT over Plus (see planCopy), so the screen has to show both
+    // lists -- a Pro account still has full history, import and member logins.
+    it('lists what Pro adds as well as everything Plus includes', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: 15 });
+
+      expect(await screen.findByText('What Pro includes')).toBeInTheDocument();
+      expect(screen.getByText(/Clients can't see each other/)).toBeInTheDocument();
+      expect(screen.getByText(/Your whole history/)).toBeInTheDocument();
+    });
+
+    // What the band bought, in the words the checkout dropdown used. Deliberately the allowance
+    // and not a usage count -- see seatLine.
+    it('names how many clients the band covers', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: 15 });
+
+      expect(await screen.findByText('Covers up to 15 clients.')).toBeInTheDocument();
+    });
+
+    // ⚠️ Null seats and unlimited seats are different absences. SubscriptionDto carries null for
+    // BOTH a household tier and an Unlimited band, so the tier is what tells them apart.
+    it('says there is no limit on the Unlimited band, rather than nothing at all', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: null });
+
+      expect(await screen.findByText(/No limit on how many clients/)).toBeInTheDocument();
+    });
+
+    it('says nothing about seats on a household tier, which has none', async () => {
+      render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', clientSeats: null });
+
+      expect(await screen.findByText('Huddle Plus')).toBeInTheDocument();
+      expect(screen.queryByText(/Covers up to/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/No limit on how many/)).not.toBeInTheDocument();
+    });
+
+    // A tier added server-side after this bundle shipped (resilience.md axis D). Describing it
+    // with Plus's benefits would be the bug above in a new disguise; the plan key is merely ugly.
+    it('does not describe an unrecognised paid tier as Plus', async () => {
+      render({ id: 1, plan: 'TEAM' }, { plan: 'TEAM', status: 'ACTIVE' });
+
+      expect(await screen.findByText('Huddle TEAM')).toBeInTheDocument();
+      expect(screen.queryByText(/Your whole history/)).toBeInTheDocument();
+      expect(screen.queryByText('What Plus includes')).not.toBeInTheDocument();
+    });
+  });
 });

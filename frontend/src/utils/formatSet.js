@@ -35,3 +35,24 @@ export function formatSetSpaced(set) {
   }
   return `${set.weight} ${set.unit || 'lb'} × ${set.reps}`;
 }
+
+// A trainer's PRESCRIBED target, as text. Lives here rather than beside the Log screen for the
+// same reason formatSet does: this is the one place a set becomes words, and a target is a set
+// somebody has not done yet.
+//
+// ⚠️ Unlike a logged set, a target can be PARTIAL. "5 reps at whatever weight you can manage" and
+// "135 lb, as many as you get" are both real prescriptions, so each half renders on its own and the
+// caller gets null when there is nothing to say. formatSetSpaced cannot be reused directly: it
+// assumes both halves are present and would render "undefined lb × 5".
+//
+//   135 lb × 5    both halves
+//   135 lb        a weight, reps left open
+//   5 reps        reps, weight left open
+//   null          no target at all -- render nothing, not an empty row
+export function formatTarget({ targetWeight, targetReps, targetUnit } = {}) {
+  const weight = targetWeight == null ? null : `${Number(targetWeight)} ${targetUnit || 'lb'}`;
+  if (weight && targetReps != null) return `${weight} × ${targetReps}`;
+  if (weight) return weight;
+  if (targetReps != null) return `${targetReps} ${targetReps === 1 ? 'rep' : 'reps'}`;
+  return null;
+}

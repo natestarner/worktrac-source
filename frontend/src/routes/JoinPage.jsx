@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { isOfflineError } from '../api/client';
 import Spinner from '../components/shared/Spinner';
-import HouseholdPicker from '../components/auth/HouseholdPicker';
+import AccountPicker from '../components/auth/AccountPicker';
 import { authCardStyle, authPageStyle, errorBannerStyle, fieldLabelStyle } from '../components/auth/authStyles';
 import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
 import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
@@ -30,20 +30,20 @@ import { FIELD_LIMITS } from '../utils/fieldLimits';
  *                                 swapped the signed-in identity before, on a shared iPad, with no
  *                                 confirmation.
  *
- * On success this renders the SHARED HouseholdPicker whenever the response carries no token —
- * exactly what LoginPage does with the same `{ households, selectionToken }`. Somebody who already
+ * On success this renders the SHARED AccountPicker whenever the response carries no token —
+ * exactly what LoginPage does with the same `{ accounts, selectionToken }`. Somebody who already
  * had a household now has two, so that picker is the screen they would have met on their very next
  * sign-in anyway. Reusing it is the whole reason joining needs no journey of its own.
  */
 export default function JoinPage() {
   const [params] = useSearchParams();
-  const { acceptInvite, previewInvite, chooseHousehold, logout, user, status } = useAuth();
+  const { acceptInvite, previewInvite, chooseAccount, logout, user, status } = useAuth();
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  // What the invitation wants: null while loading, or { mode, householdName, personName, email }.
+  // What the invitation wants: null while loading, or { mode, accountName, personName, email }.
   const [invitation, setInvitation] = useState(null);
   // Set only when accepting left this credential in two or more households. Holds the five-minute
   // selection token, in COMPONENT STATE for the reason LoginPage spells out: it is a credential,
@@ -120,7 +120,7 @@ export default function JoinPage() {
     setError('');
     setSubmitting(true);
     try {
-      await chooseHousehold(accountId, choice.selectionToken);
+      await chooseAccount(accountId, choice.selectionToken);
       navigate('/app/log');
     } catch (err) {
       // Almost always an expired selection token -- five minutes is short on purpose. The
@@ -135,8 +135,8 @@ export default function JoinPage() {
   // ── Joined. Which household now? The same picker a multi-household login lands on. ──────────
   if (choice) {
     return (
-      <HouseholdPicker
-        households={choice.households}
+      <AccountPicker
+        accounts={choice.accounts}
         onChoose={handleChoose}
         submitting={submitting}
         error={error}
@@ -147,7 +147,7 @@ export default function JoinPage() {
   }
 
   const mode = invitation?.mode;
-  const householdName = invitation?.householdName;
+  const accountName = invitation?.accountName;
 
   return (
     <main style={authPageStyle}>
@@ -158,7 +158,7 @@ export default function JoinPage() {
         </picture>
 
         <h1 style={headingStyle}>
-          {householdName ? `Join ${householdName}` : 'Join a household'}
+          {accountName ? `Join ${accountName}` : 'Join a household'}
         </h1>
 
         {error && (
@@ -217,7 +217,7 @@ export default function JoinPage() {
           // checked out. So there is nothing to type.
           <>
             <p style={introStyle}>
-              You’re signed in as <strong>{signedInEmail}</strong>. Joining adds {householdName} to
+              You’re signed in as <strong>{signedInEmail}</strong>. Joining adds {accountName} to
               your account — the household you’re in now stays exactly as it is.
             </p>
             <button
@@ -239,7 +239,7 @@ export default function JoinPage() {
           <>
             <p style={introStyle}>
               {mode === 'SIGN_IN'
-                ? `You already have a Huddle account. Sign in and ${householdName} is added to it — anything you already track stays exactly where it is.`
+                ? `You already have a Huddle account. Sign in and ${accountName} is added to it — anything you already track stays exactly where it is.`
                 : `${invitation.personName}, choose a password to finish setting up your login.`}
             </p>
 

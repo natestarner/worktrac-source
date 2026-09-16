@@ -60,8 +60,8 @@ describe('PlanBadge', () => {
     free.unmount();
 
     withAccount({ id: 1, plan: 'PLUS' });
-    const pro = renderBadge();
-    expect(pro.container.querySelector('.plan-badge--plus svg')).toBeInTheDocument();
+    const plus = renderBadge();
+    expect(plus.container.querySelector('.plan-badge--plus svg')).toBeInTheDocument();
   });
 
   // THE case this component exists to get right. An auth snapshot written before billing shipped
@@ -80,6 +80,41 @@ describe('PlanBadge', () => {
     const { container } = renderBadge();
 
     expect(container).toBeEmptyDOMElement();
+  });
+
+  // ⚠️ THE BUG THIS BLOCK EXISTS FOR. The paid branch rendered the literal "Plus" for every plan
+  // that wasn't Free, so a trainer who had just paid for Pro read "Plus" in their own header --
+  // contradicting the billing screen one tap away. The header pill is the one place the tier is
+  // named on every screen, so it is the worst place to guess.
+  it('names PRO as Pro, not Plus', () => {
+    withAccount({ id: 1, plan: 'PRO' });
+    renderBadge();
+
+    // exact:true for the usual reason, with one more here: "Pro" is a substring of "Profile",
+    // UserMenu's first item, which lives in this same header subtree.
+    expect(screen.getByText('Pro', { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText('Plus', { exact: true })).not.toBeInTheDocument();
+  });
+
+  it('links the Pro badge to the billing screen, like every other state', () => {
+    withAccount({ id: 1, plan: 'PRO' });
+    renderBadge();
+
+    expect(screen.getByRole('link', { name: 'Pro', exact: true })).toHaveAttribute(
+      'href',
+      '/app/billing',
+    );
+  });
+
+  // Every paid tier gets the SAME pill, and the tier word is what distinguishes them -- the
+  // "one paid treatment plus the tier word" call, rather than a bespoke gradient per tier.
+  it('gives every paid tier the one paid treatment', () => {
+    for (const plan of ['PLUS', 'PRO']) {
+      withAccount({ id: 1, plan });
+      const { container, unmount } = renderBadge();
+      expect(container.querySelector('.plan-badge--plus svg')).toBeInTheDocument();
+      unmount();
+    }
   });
 
   // A value the client has never seen before (a plan added server-side after this build shipped)
