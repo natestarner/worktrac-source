@@ -39,6 +39,7 @@ const SECTIONS = [
   { id: 'settings', title: 'Settings', group: 'Making it yours' },
   { id: 'logins', title: 'Giving someone their own login', group: 'Making it yours' },
   { id: 'visibility', title: 'What the account holder can see', group: 'Making it yours' },
+  { id: 'coaching', title: 'Training clients', group: 'Making it yours' },
   { id: 'plan', title: 'Plans', group: 'Making it yours' },
   { id: 'data', title: 'Import and export', group: 'Making it yours' },
   { id: 'offline', title: 'Losing the connection', group: 'When things go wrong' },
@@ -821,6 +822,90 @@ export default function HelpTab() {
             it usually works the other way: each client sees only their own training, and only the
             trainer and their assistants see everyone. The account holder chooses which, for the
             whole account.
+          </p>
+        </Note>
+      </Section>
+
+      {/* Written for the TRAINER, unlike #visibility immediately above it, which is written for
+          the person who receives a login. The two answer opposite halves of the same arrangement
+          and deliberately overlap on the privacy claim -- a client reading one and a trainer
+          reading the other must not come away with different accounts of who sees what. */}
+      <Section id="coaching" title="Training clients">
+        <p className="help-lede">
+          On <strong>Huddle Pro</strong> an account is a practice rather than a household. Your
+          clients each get their own login, they cannot see each other, and three screens exist
+          that a family account never shows.
+        </p>
+
+        <HelpTable
+          head={['', 'What it is for']}
+          rows={[
+            ['Clients', 'Everyone you train, sorted so whoever has gone quietest is at the top'],
+            ['Check-ins', 'A weigh-in or a note about one client, on the day it happened'],
+            ['Targets on a routine', 'The weight and reps you want hit, carried to the client'],
+          ]}
+        />
+
+        <p>
+          <T>Clients</T> and <T>Check-ins</T> are both in your account menu, under your name. A
+          client sees <T>Check-ins</T> too &mdash; it is how they log a weigh-in &mdash; but never
+          <T>Clients</T>.
+        </p>
+
+        <Note title="Assigning a program is just copying a routine">
+          <p>
+            Build the routine on yourself, then use <T>Copy to&hellip;</T> and pick as many clients
+            as you like. It lands on their Routines tab labelled <em>From you</em>, and from that
+            moment it is <strong>their</strong> copy &mdash; changing yours afterwards does not
+            change theirs, so a tweak you make for one client&rsquo;s knee stays made.
+          </p>
+          <p>
+            Each exercise row takes an optional weight and reps. Those travel with the copy and
+            show on the client&rsquo;s log screen as <em>Target 185 lb &times; 5</em>, above the
+            card telling them what they did last time. Either half can be left blank &mdash;
+            &ldquo;135 lb, as many as you get&rdquo; is a real prescription.
+          </p>
+        </Note>
+
+        <Note title="A target is a prescription, not a limit">
+          <p>
+            It never fills in the boxes your client logs from, and nothing stops them going over or
+            under it. Beating a target is a good day, and Huddle treats it as one.
+          </p>
+        </Note>
+
+        <Note title="Notes your client cannot see">
+          <p>
+            When you write a check-in about a client, <T>Keep this to myself</T> keeps it off their
+            screen entirely. They see everything you leave unticked, plus their own entries. A
+            client writing their own check-in has no such box &mdash; nobody hides something from
+            themselves.
+          </p>
+        </Note>
+
+        <Note title="Who has stopped showing up">
+          <p>
+            The <T>Clients</T> screen puts anyone who has <strong>never</strong> logged a workout at
+            the very top, ahead of everyone who has simply been away a while. That is deliberate:
+            the client who quietly never started is the one easiest to lose and hardest to notice.
+          </p>
+        </Note>
+
+        <Note title="Assistants">
+          <p>
+            An assistant can see and log for every client, exactly as you can, and runs the roster.
+            They cannot touch billing, delete the account, change account settings, or export the
+            whole practice in one go. If you need somebody to cover sessions, that is the role.
+          </p>
+        </Note>
+
+        <Note title="If a client leaves you">
+          <p>
+            Removing their login leaves their training in your account &mdash; you keep the record
+            of the work you did together. They can <strong>export their complete history at any
+            time, at no cost</strong>, and take the file with them. Importing it into an account of
+            their own needs a paid plan on their side, which is worth telling them plainly rather
+            than promising a free landing spot.
           </p>
         </Note>
       </Section>
