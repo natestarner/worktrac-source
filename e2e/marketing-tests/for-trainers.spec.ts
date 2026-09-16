@@ -128,6 +128,41 @@ test.describe('for-trainers page', () => {
     expect(header.labels.length).toBe(2);
   });
 
+  // ⚠️ The companion to the test above, and it exists because that one ALONE was satisfied by a
+  // fix that deleted the brand name. "Nothing wraps" is trivially true of a header you have
+  // emptied, so the first fix here hid `.brand__word` below 460px — which is every iPhone in
+  // portrait (375–440px), and the word "Huddle" simply vanished from the header on all of them.
+  //
+  // Fitting the row and keeping the name are two requirements, so they need two assertions.
+  // Whichever one a future change optimises for, the other fails.
+  //
+  // These are real device widths, not round numbers: 375 = SE / 8 / X / 13 mini, 390 = 12–16,
+  // 393 = 14–15 Pro, 414 = Plus & XR, 430 = 15 Pro Max. 320 (the original SE) is the documented
+  // exception where the mark genuinely does carry the brand alone — see styles.css.
+  for (const width of [375, 390, 393, 414, 430]) {
+    test(`shows the Huddle wordmark at ${width}px, the width of a real iPhone in portrait`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+
+      const brand = await page.evaluate(() => {
+        const word = document.querySelector('.brand__word');
+        const rect = word.getBoundingClientRect();
+        return {
+          displayed: getComputedStyle(word).display !== 'none',
+          // Painted, not merely present: display:none is one way to lose it, a zero box is another.
+          width: Math.round(rect.width),
+          text: word.textContent.trim(),
+          markVisible: document.querySelector('.brand__mark').getBoundingClientRect().width > 0,
+        };
+      });
+
+      expect(brand.displayed).toBe(true);
+      expect(brand.width).toBeGreaterThan(0);
+      expect(brand.text).toBe('Huddle');
+      // The mark is not an acceptable casualty of making room for the word either.
+      expect(brand.markVisible).toBe(true);
+    });
+  }
+
   test('does not scroll horizontally', async ({ page }) => {
     const overflows = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
