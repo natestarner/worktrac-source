@@ -39,6 +39,11 @@ import { FIELD_LIMITS } from '../../utils/fieldLimits';
 export default function RoutineFormModal({ personId, routine, personExercises, catalog, onClose, onSaved, onExerciseCreated }) {
   const isEditing = !!routine;
   const [name, setName] = useState(routine?.name || '');
+  // Always mounted (unlike either error message, which renders only once its own error state is
+  // true), so it's a safe scroll target the instant validation fails -- targeting an error
+  // message's own ref would still be null on the render that first sets it. It sits directly
+  // above both error messages, so scrolling it into view surfaces whichever fired.
+  const nameInputRef = useRef(null);
   // Monotonic, modal-local, and never reused: a row's key has to survive reordering and stay
   // distinct from the other copies of the same exercise, so it can't be derived from the
   // exercise id or the index. It also doubles as the dnd-kit sortable id.
@@ -140,6 +145,11 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
       if (!trimmed || !hasExercises) {
         setNameError(!trimmed);
         setExercisesError(!hasExercises);
+        // The panel scrolls independently (Modal's maxHeight: 80vh), and browsing the exercise
+        // list can scroll the name field -- and with it whichever error just appeared -- off the
+        // top, which otherwise reads as the save silently doing nothing.
+        nameInputRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+        if (!trimmed) nameInputRef.current?.focus({ preventScroll: true });
         return;
       }
       // Duplicates are preserved in order -- the backend stores one routine_exercises row per
@@ -163,6 +173,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   return (
     <Modal width={420} onClose={onClose} title={isEditing ? 'Edit routine' : 'New routine'}>
       <input
+        ref={nameInputRef}
         value={name}
         onChange={(e) => {
           setName(e.target.value);
