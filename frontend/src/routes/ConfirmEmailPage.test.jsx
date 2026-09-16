@@ -118,6 +118,17 @@ describe('ConfirmEmailPage', () => {
     expect(screen.getByText('New code sent.')).toBeInTheDocument();
   });
 
+  it('clears a partially-typed code on resend, since the old code stops working', async () => {
+    renderWithEmail('alex@example.com');
+
+    const codeInput = screen.getByPlaceholderText('123456');
+    fireEvent.change(codeInput, { target: { value: '123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));
+
+    await waitFor(() => expect(resendCode).toHaveBeenCalledWith({ email: 'alex@example.com' }));
+    expect(codeInput).toHaveValue('');
+  });
+
   it('disables the resend button and shows a spinner while the request is in flight', async () => {
     let resolveResend;
     resendCode.mockReturnValue(new Promise((resolve) => { resolveResend = resolve; }));
