@@ -208,7 +208,10 @@ export default function HelpTab() {
         <p>
           Open an exercise and you get two steppers, weight and reps, and one big{' '}
           <T>Log set for&hellip;</T> button with the active person&rsquo;s name on it. The steppers
-          prefill from what you did last time, so a repeat set really is one tap.
+          prefill from what you did last time, so a repeat set really is one tap. Press and hold{' '}
+          <T>&minus;</T> or <T>+</T> to run through numbers quickly instead of tapping one at a
+          time; how big each tap or hold-step is can be set per person in{' '}
+          <T>App Settings</T> &rarr; <T>Steppers</T>.
         </p>
         <p>
           Above them sit two cards: <strong>Last time</strong>, showing that session&rsquo;s sets and
@@ -665,6 +668,7 @@ export default function HelpTab() {
             ['Units', 'Sets lb or kg for sets you log from now on.'],
             ['Offline Mode', 'Pins the app offline on this device.'],
             ['Rest Timer', 'An on/off switch per person, all on one screen.'],
+            ['Steppers', 'How far one tap of −/+ moves weight and time, per person.'],
             ['Tags', 'Create and delete the categories you tag exercises with.'],
             ['Data', 'Export everything, import a file, and undo a past import.'],
           ]}

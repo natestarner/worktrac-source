@@ -7,13 +7,14 @@ import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
 import { setMemberVisibility, updateDefaultUnit } from '../../api/account';
 import { accountVocab, capitalize } from '../../utils/accountVocab';
-import { setRestTimerPreference } from '../../api/people';
+import { setRestTimerPreference, setStepperIncrements } from '../../api/people';
 import { createTag, deleteTag } from '../../api/tags';
 import { downloadAllPeopleZip } from '../../api/export';
 import { listImports, undoImport } from '../../api/dataImport';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import { useOfflinePin } from '../../hooks/useOfflinePin';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
+import { DEFAULT_DURATION_INCREMENT_SECONDS, DEFAULT_WEIGHT_INCREMENT } from '../../hooks/useStepperIncrements';
 import { pinOffline, unpinOffline } from '../../lib/offlineMode';
 import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
@@ -45,6 +46,7 @@ export default function AppSettingsTab() {
   const canImport = planIncludes(plan, 'DATA_IMPORT');
   const { isMember, isOwner, selfPersonId } = useAccountAccess();
   const vocab = accountVocab(account?.vocab);
+  const unit = account?.defaultUnit || 'lb';
   const { openConfirm } = useUI();
   const offlinePinned = useOfflinePin();
   // Settings writes are Tier-3. They had the online gate but no error path -- a failed unit change
@@ -58,6 +60,7 @@ export default function AppSettingsTab() {
   const [pendingUnit, setPendingUnit] = useState(null);
   const [pendingVisibility, setPendingVisibility] = useState(null);
   const [pendingRestPerson, setPendingRestPerson] = useState(null);
+  const [pendingStepperPerson, setPendingStepperPerson] = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [imports, setImports] = useState([]);
 
@@ -120,6 +123,18 @@ export default function AppSettingsTab() {
     }
   }
 
+  // Both increments go in one write because the endpoint takes both: the unchanged one is sent
+  // back as-is rather than being left out, so a partial payload can never half-apply the pair.
+  async function handleStepperIncrements(personId, weightIncrement, durationIncrementSeconds) {
+    setPendingStepperPerson(personId);
+    try {
+      await setStepperIncrements(personId, weightIncrement, durationIncrementSeconds);
+      await refreshPeople();
+    } finally {
+      setPendingStepperPerson(null);
+    }
+  }
+
   async function handleUnitSelect(unit) {
     if (unit === account.defaultUnit || pendingUnit) return;
     setPendingUnit(unit);
@@ -171,6 +186,7 @@ export default function AppSettingsTab() {
     showServerMessage: true,
   });
   const guardedRestTimerToggle = run(handleRestTimerToggle, { offlineMessage: 'Changing this needs a connection.' });
+  const guardedStepperIncrements = run(handleStepperIncrements, { offlineMessage: 'Changing this needs a connection.' });
   const guardedAddTag = run(handleAddTag, { offlineMessage: 'Adding a tag needs a connection.' });
   const guardedDeleteTag = run(handleDeleteTag, { offlineMessage: 'Deleting a tag needs a connection.' });
 
@@ -400,6 +416,58 @@ export default function AppSettingsTab() {
         </div>
       </Card>
 
+      <SectionLabel>Steppers</SectionLabel>
+      <Card size="dense" style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 16 }}>
+          How far one tap of &minus; or + moves the weight and the time on the Log screen. Press and
+          hold a button to run through the numbers quickly.
+        </div>
+        {/* Filtered exactly like the rest timer above, and for the same reason: how big a jump
+            somebody else takes is not information a member needs, and a column of greyed controls
+            for other people invites "why can't I change this?". Their own stays interactive. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {people
+            .filter((person) => !isMember || String(person.id) === String(selfPersonId))
+            .map((person) => {
+              const weight = Number(person.weightIncrement ?? DEFAULT_WEIGHT_INCREMENT);
+              const seconds = Number(person.durationIncrementSeconds ?? DEFAULT_DURATION_INCREMENT_SECONDS);
+              const busy = pendingStepperPerson === person.id;
+              return (
+                <div key={person.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600 }}>{person.name}</div>
+                  <IncrementPills
+                    rowLabel={`Weight (${unit})`}
+                    options={WEIGHT_INCREMENT_OPTIONS.map((value) => ({
+                      value,
+                      label: String(value),
+                      // Every label on a screen must be mutually non-containing -- Playwright
+                      // matches an accessible name as a case-insensitive SUBSTRING. The unit
+                      // suffix is what keeps "step 1 lb" out of "step 10 lb".
+                      ariaLabel: `Weight step ${value} ${unit} for ${person.name}`,
+                    }))}
+                    selected={weight}
+                    onSelect={(value) => guardedStepperIncrements(person.id, value, seconds)}
+                    disabled={busy || !online}
+                    online={online}
+                  />
+                  <IncrementPills
+                    rowLabel="Time"
+                    options={DURATION_INCREMENT_OPTIONS.map((value) => ({
+                      value,
+                      label: `${value}s`,
+                      ariaLabel: `Time step ${value}s for ${person.name}`,
+                    }))}
+                    selected={seconds}
+                    onSelect={(value) => guardedStepperIncrements(person.id, weight, value)}
+                    disabled={busy || !online}
+                    online={online}
+                  />
+                </div>
+              );
+            })}
+        </div>
+      </Card>
+
       <SectionLabel>Tags</SectionLabel>
       <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
         Shared tags anyone on this account can apply to exercises from an exercise&rsquo;s Customize screen.
@@ -556,6 +624,62 @@ export default function AppSettingsTab() {
     </div>
   );
 }
+
+// Two of these render per person, so the pill row is a component rather than a fourth copy of the
+// segmented-pill markup in this file. Same visual recipe as the unit / visibility / rest-timer
+// groups above it -- deliberately not SegmentedToggle, which none of them use, because these carry
+// a per-person aria-label and a disabled/offline state that primitive has no term for.
+function IncrementPills({ rowLabel, options, selected, onSelect, disabled, online }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+      <div style={{ fontSize: 14, color: 'var(--color-muted)', flexShrink: 0 }}>{rowLabel}</div>
+      <div
+        style={{
+          display: 'flex',
+          gap: 'var(--space-1)',
+          background: 'var(--color-subtle-bg)',
+          borderRadius: 'var(--radius-md)',
+          padding: 'var(--space-1)',
+        }}
+      >
+        {options.map(({ value, label, ariaLabel }) => {
+          const active = selected === value;
+          return (
+            <button
+              key={label}
+              onClick={() => onSelect(value)}
+              disabled={disabled}
+              title={online ? undefined : 'Changing this needs a connection.'}
+              aria-label={ariaLabel}
+              style={{
+                minWidth: 40,
+                padding: '9px 10px',
+                border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 'var(--weight-semibold)',
+                cursor: disabled ? 'default' : 'pointer',
+                background: active ? 'var(--color-surface)' : 'transparent',
+                color: active ? 'var(--color-accent-text)' : 'var(--color-muted)',
+                boxShadow: active ? 'var(--shadow-1)' : 'none',
+                opacity: online ? 1 : 0.5,
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// 1 is the smallest useful nudge (a fixed-weight dumbbell rack, or a machine's pin), 2.5 is a
+// standard plate pair and the default, 10 is a plate a side. In whichever unit the account works
+// in: a step size is not a weight, so these are not converted between lb and kg.
+const WEIGHT_INCREMENT_OPTIONS = [1, 2.5, 5, 10];
+// 1s for someone chasing a personal best by a second; 30s for long carries.
+const DURATION_INCREMENT_OPTIONS = [1, 5, 10, 15, 30];
 
 const importRowStyle = {
   display: 'flex',

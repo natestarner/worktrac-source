@@ -512,6 +512,13 @@ button {
      one-handed on an iPad, and it leaves a blue selection over the button you meant to tap. */
   -webkit-user-select: none;
   user-select: none;
+  /* The other half of that rule, and a separate property: user-select stops the SELECTION, this
+     stops iOS Safari raising its callout/magnifier bubble over the control. It matters most on the
+     stepper +/-, which are now genuinely held down (hooks/useHoldRepeat.js) rather than tapped --
+     a callout appearing mid-hold would cover the number being changed. Global rather than scoped
+     to the steppers because it is the same rule as the line above it, for the same reason, and a
+     second scoped copy would be a second mechanism for one intent. */
+  -webkit-touch-callout: none;
 }
 
 /* Press feedback is opt-OUT, not opt-in, and the asymmetry above is why: the rule that STRIPS
@@ -1290,6 +1297,15 @@ input[type='search']::-webkit-search-results-decoration {
 .stepper-circle-btn-sm {
   width: 40px;
   height: 40px;
+}
+
+/* The decrement at its floor. Dimmed rather than `disabled` -- see WeightRepsStepper's header for
+   why the button stays clickable -- so this is the whole visual difference, and it is what makes
+   "you cannot go below this" legible instead of the button silently doing nothing. Matches how
+   every platform stepper marks a bound. */
+.stepper-circle-btn--at-bound {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* Now an <input>, not a button -- an unstyled text input defaults to a browser-chosen

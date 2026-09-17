@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WeightRepsStepper from './WeightRepsStepper';
 
 // Replaces NumericKeypad.test.jsx -- the modal keypad these cases used to cover is gone; the
@@ -99,5 +100,103 @@ describe('WeightRepsStepper value input', () => {
 
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.getByText('135')).toBeInTheDocument();
+  });
+});
+
+
+describe('WeightRepsStepper press-and-hold', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  function hold(title, ms) {
+    fireEvent.pointerDown(screen.getByTitle(title));
+    let left = ms;
+    while (left > 0) {
+      const chunk = Math.min(20, left);
+      act(() => {
+        vi.advanceTimersByTime(chunk);
+      });
+      left -= chunk;
+    }
+    act(() => {
+      window.dispatchEvent(new Event('pointerup'));
+    });
+  }
+
+  // Both halves matter. The first alone passes against a button that ignores every interaction,
+  // which is exactly the regression a broken repeatOnHold would look like.
+  it('does not repeat when repeatOnHold is false, and still takes a tap', () => {
+    const onDec = vi.fn();
+    render(
+      <WeightRepsStepper label="Time" value={60} onDec={onDec} onInc={vi.fn()} repeatOnHold={false} />,
+    );
+
+    hold('Decrease Time', 5000);
+    expect(onDec).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTitle('Decrease Time'));
+    expect(onDec).toHaveBeenCalledTimes(1);
+  });
+
+  // A CONTROLLED wrapper, because the repeat is meant to stop once stepping stops moving the
+  // value: handed a static `value` prop the hook correctly halts after two ticks, which would make
+  // this assert the opposite of what it says.
+  function Controlled({ onStep }) {
+    const [value, setValue] = useState(135);
+    return (
+      <WeightRepsStepper
+        label="Weight (lb)"
+        value={value}
+        onDec={() => {
+          onStep();
+          setValue(value - 2.5);
+        }}
+        onInc={vi.fn()}
+        onChange={vi.fn()}
+      />
+    );
+  }
+
+  it('repeats a held decrement, and the release does not add one more step on top', () => {
+    const onStep = vi.fn();
+    render(<Controlled onStep={onStep} />);
+
+    hold('Decrease Weight (lb)', 1200);
+    const repeats = onStep.mock.calls.length;
+    expect(repeats).toBeGreaterThanOrEqual(3);
+
+    // The trailing click is swallowed -- otherwise a held button always lands one step past
+    // wherever the repeat decided to stop.
+    fireEvent.click(screen.getByTitle('Decrease Weight (lb)'));
+    expect(onStep).toHaveBeenCalledTimes(repeats);
+  });
+});
+
+describe('WeightRepsStepper at a bound', () => {
+  it('marks only the decrement, and leaves it clickable', () => {
+    const onDec = vi.fn();
+    render(
+      <WeightRepsStepper label="Reps" value={0} atMin onDec={onDec} onInc={vi.fn()} onChange={vi.fn()} />,
+    );
+
+    const dec = screen.getByTitle('Decrease Reps');
+    expect(dec).toHaveAttribute('aria-disabled', 'true');
+    expect(dec.className).toContain('stepper-circle-btn--at-bound');
+    expect(screen.getByTitle('Increase Reps')).not.toHaveAttribute('aria-disabled');
+
+    // Never the `disabled` attribute: Playwright's actionability check would refuse to click it,
+    // and two existing specs deliberately step a control all the way down to its bound. It is also
+    // what keeps the log screen's tap-to-clear escape hatch alive on Time.
+    expect(dec).toBeEnabled();
+    fireEvent.click(dec);
+    expect(onDec).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks nothing when it is not at a bound', () => {
+    render(<WeightRepsStepper label="Reps" value={8} onDec={vi.fn()} onInc={vi.fn()} onChange={vi.fn()} />);
+
+    const dec = screen.getByTitle('Decrease Reps');
+    expect(dec).not.toHaveAttribute('aria-disabled');
+    expect(dec.className).not.toContain('stepper-circle-btn--at-bound');
   });
 });

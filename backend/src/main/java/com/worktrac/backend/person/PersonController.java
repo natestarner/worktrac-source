@@ -63,6 +63,17 @@ public class PersonController {
         return personService.setRestTimerEnabled(currentUser.access(), personId, request.enabled());
     }
 
+    // Person-scoped for the same reason as the rest timer above: how big a jump the +/- buttons
+    // make is a training preference, and somebody adjusting their own mid-workout must not have to
+    // ask the owner.
+    @PutMapping("/{personId}/stepper-increments")
+    @RequiresPermission(personScoped = true)
+    public PersonDto setStepperIncrements(@PathVariable Long personId,
+                                          @Valid @RequestBody StepperIncrementsRequest request) {
+        return personService.setStepperIncrements(currentUser.access(), personId,
+                request.weightIncrement(), request.durationIncrementSeconds());
+    }
+
     // MANAGE_PEOPLE rather than person-scoped, deliberately: this deletes that person's entire
     // training history, so it must not be reachable by a member acting on themselves.
     @DeleteMapping("/{personId}")

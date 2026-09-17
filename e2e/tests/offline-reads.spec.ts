@@ -24,7 +24,10 @@ async function setWeight(page, target: number) {
         await row.getByRole('button', { name: current < target ? '+' : '−', exact: true }).click();
         return Number(await value.inputValue());
       },
-      { timeout: 15000 },
+      // Tight, explicit intervals rather than Playwright's default ramp to 1s: the default weight
+      // step is 2.5, so reaching 45 from a blank draft is ~18 passes and one click per pass. On the
+      // default schedule that alone spends longer than the old 15s budget waiting between clicks.
+      { timeout: 45000, intervals: [50, 100, 250] },
     )
     .toBe(target);
 }

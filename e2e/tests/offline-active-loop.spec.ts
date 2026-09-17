@@ -37,14 +37,14 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
     await expect(outboxCountText(page, 2)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
     // A brand-new exercise has no prefill, and a blank weight logs as 0 (see
-    // utils/formulas.js#computePrefillDraft); +5/click on the stepper, clicked twice.
-    await expect(page.getByText('10 lb')).toBeVisible();
+    // utils/formulas.js#computePrefillDraft); +2.5/click on the stepper, clicked twice.
+    await expect(page.getByText('5 lb × 8', { exact: true })).toBeVisible();
 
     await goOnline(page);
     await waitForOutboxDrain(page);
 
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
-    await expect(page.getByText('10 lb')).toBeVisible();
+    await expect(page.getByText('5 lb × 8', { exact: true })).toBeVisible();
   });
 
   // Editing a set that hasn't synced YET (unlike the already-synced case above) used to remove and
@@ -74,7 +74,7 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
 
     // Shows the correction immediately, and now TWO writes are queued -- the original create plus
     // the separate edit -- not one replaced mutation.
-    await expect(page.getByText('10 lb')).toBeVisible();
+    await expect(page.getByText('5 lb × 8', { exact: true })).toBeVisible();
     await expect(outboxCountText(page, 2)).toBeVisible();
 
     await goOnline(page);
@@ -83,9 +83,9 @@ test.describe('Offline mode — the rest of the active-workout loop', () => {
     // The corrected value is what actually landed server-side -- if the edit had been silently
     // dropped (the bug this fixes), a refetch here would have reverted to the original 0 lb.
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
-    await expect(page.getByText('10 lb')).toBeVisible();
+    await expect(page.getByText('5 lb × 8', { exact: true })).toBeVisible();
     await page.reload();
-    await expect(page.getByText('10 lb')).toBeVisible();
+    await expect(page.getByText('5 lb × 8', { exact: true })).toBeVisible();
   });
 
   test('favoriting and saving a session note offline both queue and land on reconnect', async ({ page, request }) => {

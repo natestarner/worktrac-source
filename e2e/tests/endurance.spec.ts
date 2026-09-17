@@ -239,6 +239,52 @@ test.describe('endurance exercises', () => {
     await expect(setRows(page).getByText('0:30', { exact: true })).toBeVisible();
   });
 
+  // Press-and-hold repeats the step. The floor sits one step ABOVE blank, deliberately: a held
+  // finger must never land on an empty field, because a blank duration logs durationValue's 30s
+  // default -- so holding - would silently arm a time nobody chose. Tapping still clears it.
+  test('holding the time down runs to the lowest real value and stops there, without clearing', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Hollis');
+    await pickExercise(page, 'Wall Sit');
+
+    const time = page.locator('.stepper-row').filter({ hasText: 'Time' }).locator('.stepper-value');
+    await expect(time).toHaveValue('0:30');
+
+    // Sampled per animation frame, not polled with a retrying matcher. If the repeat ever ran away
+    // it would CYCLE (0:05 -> blank -> 0:25 -> ...), sitting on a plausible value most of the time
+    // -- so toHaveValue would simply wait the bug out and pass. Only a per-frame record can say
+    // "blank was never displayed".
+    await page.evaluate(() => {
+      const rows = Array.from(document.querySelectorAll('.stepper-row'));
+      const row = rows.find((r) => r.textContent?.includes('Time'));
+      const input = row?.querySelector('.stepper-value') as HTMLInputElement;
+      const w = window as unknown as { __samples: string[]; __raf: number };
+      w.__samples = [];
+      const sample = () => {
+        w.__samples.push(input.value);
+        w.__raf = requestAnimationFrame(sample);
+      };
+      sample();
+    });
+
+    await page.getByTitle('Decrease Time').click({ delay: 2500 });
+
+    const samples: string[] = await page.evaluate(() => {
+      const w = window as unknown as { __samples: string[]; __raf: number };
+      cancelAnimationFrame(w.__raf);
+      return w.__samples;
+    });
+
+    // Without this the whole test passes against a build with no auto-repeat at all: one click
+    // would leave 0:25, which is neither blank nor past the floor.
+    expect(new Set(samples).size).toBeGreaterThanOrEqual(5);
+    expect(samples).not.toContain('');
+    await expect(time).toHaveValue('0:05');
+
+    // ...and the escape hatch survives: blank is still one deliberate tap away.
+    await page.getByTitle('Decrease Time').click();
+    await expect(time).toHaveValue('');
+  });
+
   // The edit modal's - follows the same rule, and used to be the one control that didn't: it
   // clamped at the minimum, so stepping off the bottom parked on 0:01 and the last press did
   // nothing. What 0:00 MEANS is still different here -- an already-logged set has no blank to fall

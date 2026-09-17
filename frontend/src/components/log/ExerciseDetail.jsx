@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useHistory } from '../../hooks/useHistory';
+import { useStepperIncrements } from '../../hooks/useStepperIncrements';
 import { useDurableMutation } from '../../hooks/useDurableMutation';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { queryKeys } from '../../api/queryKeys';
@@ -313,10 +314,11 @@ export default function ExerciseDetail({
     return () => clearTimeout(timer);
   }, [justAddedSetId]);
 
-  const weightStep = defaultUnit === 'kg' ? 2.5 : 5;
-  // 5 seconds is the granularity a hold is worth nudging by -- 1s would take forever to reach a
-  // minute, 15s overshoots the short holds this is mostly used for.
-  const DURATION_STEP = 5;
+  // Both step sizes are a per-person preference now (Settings -> Steppers), read off the /me people
+  // list so they survive a cold offline boot in the auth snapshot. The old unit branch here
+  // (kg ? 2.5 : 5) is gone: a step size is not a weight, so one number is right in either unit --
+  // and the lb default moved to 2.5 to match kg, which is what removed the branch.
+  const { weightIncrement: weightStep, durationIncrement: DURATION_STEP } = useStepperIncrements(personId);
 
   // Prefix-matches the registered defaults in queryClient.js (LOG_SET_MUTATION_KEY = ['logSet']),
   // so the mutationFn, retry policy, serial replay scope, and server-truth reconciliation (onSettled)
@@ -1032,7 +1034,13 @@ export default function ExerciseDetail({
                 value={shownWeight}
                 onDec={decWeight}
                 onInc={incWeight}
-                onChange={(weight) => commitDraft({ weight })}
+                // Clamped like the - button is. parseFloat happily returns -50 for a typed "-50",
+                // and the backend answers a negative weight with a 400 -- which shouldRetryWrite
+                // treats as terminal, so an offline-queued set would be DISCARDED rather than
+                // corrected. Refusing the number here costs nothing; refusing it at the wire costs
+                // the set.
+                onChange={(weight) => commitDraft({ weight: Math.max(0, weight) })}
+                atMin={weightValue <= 0}
               />
               {/* The second stepper is the whole feature: same control, same layout, only its
                   meaning changes with the exercise. A hold shows m:ss -- the same shape the timer
@@ -1051,6 +1059,21 @@ export default function ExerciseDetail({
                 onDec={decSecond}
                 onInc={incSecond}
                 onChange={changeSecond}
+                // Reps dims at 0 because another - genuinely does nothing there. Time deliberately
+                // does NOT: on this screen there is no value where - is inert -- from blank it
+                // jumps to durationValue's ?? 30 default -- so dimming it would be a lie.
+                atMin={!isDuration && repsValue <= 0}
+                // ...but a HELD - on Time floors one step above blank and stops there. Stepping off
+                // the bottom to blank stays reachable by a deliberate tap (that invariant is
+                // load-bearing -- see .claude/rules/log-screen.md), while a finger held down can no
+                // longer land on a blank field that then logs the 30s default. The two answers
+                // differ here and only here, which is why floor is its own prop.
+                holdFloor={isDuration ? durationValue <= DURATION_STEP : repsValue <= 0}
+                // While a hold timer runs this field is a live readout of elapsed seconds, so it
+                // changes on its own: neither of the hook's stop conditions could ever fire and a
+                // held - would repeat indefinitely into a draft that Stop overwrites anyway. Same
+                // reasoning as onPick's suppression above.
+                repeatOnHold={!holdRunning}
               />
             </div>
             {/* Directly under the field it fills -- the timer is a hands-free way to enter a

@@ -269,6 +269,22 @@ register; that list is specifically for behaviour that differs by network state.
     the field reads as a deliberate one-second hold, and it gives the last press of `−` nothing to
     do. **No duration control clamps on its own** — the floor lives on the commit, and only there.
 
+    **A HELD `−` stops one step above that, and the difference is deliberate.** Press-and-hold
+    (`hooks/useHoldRepeat.js`) repeats the step, and `ExerciseDetail` passes it
+    `holdFloor={durationValue <= DURATION_STEP}` — so a finger held down lands on `0:05` and stops,
+    while a deliberate tap still clears to the em dash. Blank is not a validation gate, so a blank
+    field logs `durationValue`'s `?? 30`: reachable by six considered taps is a choice, reachable by
+    leaving a thumb down is an accident. Note `atMin` (the dimmed-bound treatment) is **false** on
+    this control, unlike every other `−` in the app — there is no value here where `−` does
+    nothing, because from blank it jumps back to 25.
+
+    ⚠️ **That `next <= 0 ? null : next` line is now load-bearing twice.** Besides the rule above, it
+    is also what `useHoldRepeat`'s backstop keys on: this is the one control in the app whose
+    decrement never repeats a value on consecutive ticks — it cycles `10 → 5 → null → 25 → 20 → …`
+    — so "the value stopped moving" cannot stop it and only the null arm can. "Simplifying" this to
+    clamp at `MIN_HOLD_SECONDS` would break the documented invariant *and* silently move which half
+    of the backstop is doing the work.
+
     `EditSetModal` differs in what the bottom *means*, not in whether `−` can reach it: an
     already-logged set has no blank to fall back on, so it has no Clear, `0:00` is simply not
     saveable, and its Save is `disabled` below `MIN_HOLD_SECONDS` (the same answer

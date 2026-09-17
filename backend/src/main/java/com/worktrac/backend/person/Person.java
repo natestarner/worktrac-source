@@ -14,6 +14,7 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
@@ -39,6 +40,16 @@ public class Person {
     // -- rest_seconds is recorded regardless.
     @Column(name = "rest_timer_enabled", nullable = false)
     private boolean restTimerEnabled = true;
+
+    // How much this person's +/- stepper buttons move the weight and a hold's duration (V79).
+    // Deliberately unit-agnostic: a step size is not a weight, so one number applies whether the
+    // set is being logged in lb or kg. The defaults match the values these were hardcoded to
+    // before they became a preference.
+    @Column(name = "weight_increment", nullable = false, precision = 5, scale = 2)
+    private BigDecimal weightIncrement = new BigDecimal("2.5");
+
+    @Column(name = "duration_increment_seconds", nullable = false)
+    private int durationIncrementSeconds = 5;
 
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -86,6 +97,22 @@ public class Person {
 
     public void setRestTimerEnabled(boolean restTimerEnabled) {
         this.restTimerEnabled = restTimerEnabled;
+    }
+
+    public BigDecimal getWeightIncrement() {
+        return weightIncrement;
+    }
+
+    public void setWeightIncrement(BigDecimal weightIncrement) {
+        this.weightIncrement = weightIncrement;
+    }
+
+    public int getDurationIncrementSeconds() {
+        return durationIncrementSeconds;
+    }
+
+    public void setDurationIncrementSeconds(int durationIncrementSeconds) {
+        this.durationIncrementSeconds = durationIncrementSeconds;
     }
 
     public Instant getCreatedAt() {
