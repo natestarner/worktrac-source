@@ -16,6 +16,21 @@ async function openAppSettings(page) {
   await expect(page.getByText('Steppers')).toBeVisible();
 }
 
+// Clicks a pill and waits for the write to actually land before returning. The pill is
+// `disabled={busy || !online}` for the length of the request (AppSettingsTab.jsx), so waiting for
+// it to become enabled again is a real signal the gated write settled -- not a fixed pause.
+//
+// Against local loopback this never mattered: the round trip was fast enough that the very next
+// navigation always landed after refreshPeople() had already resolved. Against a real network
+// (lower) it does not resolve in time, and a caller that clicks then immediately navigates away
+// reads back the PRE-write value -- discovered as lower's own e2e-tests job failing 3/3 while the
+// local suite passed 6/6 (both runs against the same commit).
+async function setStepperPill(page, name) {
+  const pill = page.getByRole('button', { name });
+  await pill.click();
+  await expect(pill).toBeEnabled();
+}
+
 const weightValue = (page) =>
   page.locator('.stepper-row').filter({ hasText: 'Weight' }).locator('.stepper-value');
 const timeValue = (page) =>
@@ -31,7 +46,7 @@ test.describe('Stepper increments', () => {
     await expect(weightValue(page)).toHaveValue('2.5');
 
     await openAppSettings(page);
-    await page.getByRole('button', { name: 'Weight step 10 lb for Sloane' }).click();
+    await setStepperPill(page, 'Weight step 10 lb for Sloane');
     await page.getByRole('button', { name: /Back/ }).click();
 
     await expect(weightValue(page)).toHaveValue('2.5');
@@ -43,7 +58,7 @@ test.describe('Stepper increments', () => {
     await registerHousehold(page, request, 'Marlowe');
 
     await openAppSettings(page);
-    await page.getByRole('button', { name: 'Time step 30s for Marlowe' }).click();
+    await setStepperPill(page, 'Time step 30s for Marlowe');
 
     // A reload throws away every in-memory copy; the value has to come back from the server.
     // It reloads onto Settings, which is where we were, so step back out to the Log tab.
@@ -63,7 +78,7 @@ test.describe('Stepper increments', () => {
     await addPerson(page, 'Rune');
 
     await openAppSettings(page);
-    await page.getByRole('button', { name: 'Weight step 10 lb for Odessa' }).click();
+    await setStepperPill(page, 'Weight step 10 lb for Odessa');
     await page.getByRole('button', { name: /Back/ }).click();
 
     // Both people get their own controls, on the one screen. Which one is SELECTED is not
