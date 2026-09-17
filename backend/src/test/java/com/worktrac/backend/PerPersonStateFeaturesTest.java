@@ -15,7 +15,9 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -32,7 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // Covers the backend pieces of the per-person-state rework in one Testcontainers spin-up:
 //  - log-set idempotency (a retried/replayed write with the same key must not double-insert),
 //  - the client timestamp being honored for created_at (so delayed/offline syncs stay accurate),
-//  - the per-person, account-persisted rest-timer preference surfaced on /api/auth/me.
+//  - the per-person, account-persisted rest-timer preference surfaced on /api/auth/me,
+//  - the per-person stepper increments, surfaced the same way (V79).
 @AutoConfigureMockMvc
 class PerPersonStateFeaturesTest extends AbstractIntegrationTest {
 
@@ -136,6 +139,48 @@ class PerPersonStateFeaturesTest extends AbstractIntegrationTest {
 
         JsonNode meAfter = me();
         assertFalse(meAfter.get("people").get(0).get("restTimerEnabled").asBoolean(), "the toggle persists account-side");
+    }
+
+    @Test
+    void stepperIncrementsDefaultToTheValuesTheyWereHardcodedToAndPersist() throws Exception {
+        JsonNode person = me().get("people").get(0);
+        // The defaults are the numbers these steps were hardcoded to before they became a
+        // preference, so an account that never opens Settings behaves exactly as it did.
+        // compareTo, not equals: BigDecimal.equals compares SCALE too, so 2.50 and 2.5 are unequal
+        // even though the number is the same.
+        assertEquals(0, new BigDecimal("2.5").compareTo(person.get("weightIncrement").decimalValue()));
+        assertEquals(5, person.get("durationIncrementSeconds").asInt());
+
+        putIncrements(new BigDecimal("10"), 30).andExpect(status().isOk());
+
+        JsonNode after = me().get("people").get(0);
+        assertEquals(0, new BigDecimal("10").compareTo(after.get("weightIncrement").decimalValue()));
+        assertEquals(30, after.get("durationIncrementSeconds").asInt());
+    }
+
+    // Bounds live in StepperIncrementsRequest rather than in a DB CHECK constraint: a constraint
+    // violation would surface as a 500, which the client treats as transient and retries.
+    @Test
+    void outOfRangeIncrementsAreRefusedAsABadRequest() throws Exception {
+        putIncrements(new BigDecimal("0"), 5).andExpect(status().isBadRequest());
+        putIncrements(new BigDecimal("999"), 5).andExpect(status().isBadRequest());
+        putIncrements(new BigDecimal("2.5"), 0).andExpect(status().isBadRequest());
+        putIncrements(new BigDecimal("2.5"), 5000).andExpect(status().isBadRequest());
+
+        // ...and nothing was written by any of them.
+        JsonNode person = me().get("people").get(0);
+        // compareTo, not equals: BigDecimal.equals compares SCALE too, so 2.50 and 2.5 are unequal
+        // even though the number is the same.
+        assertEquals(0, new BigDecimal("2.5").compareTo(person.get("weightIncrement").decimalValue()));
+        assertEquals(5, person.get("durationIncrementSeconds").asInt());
+    }
+
+    private ResultActions putIncrements(BigDecimal weight, int seconds) throws Exception {
+        return mockMvc.perform(put("/api/people/" + personId + "/stepper-increments")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(
+                        Map.of("weightIncrement", weight, "durationIncrementSeconds", seconds))));
     }
 
     private JsonNode me() throws Exception {

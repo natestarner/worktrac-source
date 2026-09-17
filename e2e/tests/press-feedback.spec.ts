@@ -1,5 +1,6 @@
 import { test, expect, Locator } from '@playwright/test';
 import { registerHousehold } from './support/auth';
+import { pickExercise } from './support/exercises';
 
 // Press feedback is opt-OUT rather than opt-in, and this is the assertion that keeps it that way.
 //
@@ -80,5 +81,29 @@ test.describe('Press feedback', () => {
     expect(styles.touchAction).toBe('manipulation');
     // A long press one-handed on an iPad otherwise starts selecting the button's own label.
     expect(styles.userSelect).toBe('none');
+  });
+
+  // The rule above is global, but it was only ever asserted on a picker button -- and the control
+  // it matters most for is the stepper, which is now genuinely HELD down rather than tapped
+  // (hooks/useHoldRepeat.js). A callout bubble or a selection appearing mid-hold would cover the
+  // number being changed.
+  test('the stepper buttons survive being held down', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Holder');
+    await pickExercise(page, 'Barbell Bench Press');
+
+    const styles = await page.getByTitle('Increase Weight (lb)').evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { touchAction: s.touchAction, userSelect: s.userSelect || s.webkitUserSelect };
+    });
+
+    // Deliberately still `manipulation`, not `none`. A scroll gesture that happens to start on a
+    // 44px stepper button should still pan the page -- the browser classifies the pan long before
+    // the 500ms hold delay, so it steps nothing.
+    expect(styles.touchAction).toBe('manipulation');
+    expect(styles.userSelect).toBe('none');
+    // `-webkit-touch-callout: none` is set alongside these in index.css and is the third thing a
+    // held button needs, but it CANNOT be asserted here: Chromium does not implement the property
+    // at all, so getComputedStyle reports `undefined` rather than a value. It is a Safari/iOS
+    // behaviour with no coverage available in this browser -- verify it on a device.
   });
 });

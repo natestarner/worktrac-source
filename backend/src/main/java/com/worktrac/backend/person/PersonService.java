@@ -11,6 +11,7 @@ import com.worktrac.backend.quota.QuotaService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -146,6 +147,18 @@ public class PersonService {
     public PersonDto setRestTimerEnabled(AccountAccess access, Long personId, boolean enabled) {
         Person person = requireWritablePerson(personId, access);
         person.setRestTimerEnabled(enabled);
+        return PersonDto.from(person);
+    }
+
+    // Both increments are written together because the Settings screen configures them together,
+    // and a single write keeps the two from being half-applied by a connection that drops between
+    // them. Bounds are enforced by StepperIncrementsRequest's bean validation, not here.
+    @Transactional
+    public PersonDto setStepperIncrements(AccountAccess access, Long personId, BigDecimal weightIncrement,
+                                          int durationIncrementSeconds) {
+        Person person = requireWritablePerson(personId, access);
+        person.setWeightIncrement(weightIncrement);
+        person.setDurationIncrementSeconds(durationIncrementSeconds);
         return PersonDto.from(person);
     }
 

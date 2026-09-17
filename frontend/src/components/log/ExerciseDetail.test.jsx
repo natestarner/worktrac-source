@@ -752,7 +752,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
       fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
 
       // The row shows the correction immediately...
-      expect(await screen.findByText('140 lb × 8')).toBeInTheDocument();
+      expect(await screen.findByText('137.5 lb × 8')).toBeInTheDocument();
       // ...but the CREATE itself was never removed or recreated -- same object, same slot in the
       // shared outbox scope, so it can't be pushed out of enqueue order the way the old
       // replacePendingLogSet approach could.
@@ -762,7 +762,7 @@ describe('ExerciseDetail in-flight visual feedback', () => {
       // A separate, genuinely new EDIT_SET write carries the correction.
       const edit = queryClient.getMutationCache().getAll().find((m) => m.options.mutationKey[0] === 'editSet');
       expect(edit).toBeDefined();
-      expect(edit.state.variables).toMatchObject({ weight: 140, reps: 8 });
+      expect(edit.state.variables).toMatchObject({ weight: 137.5, reps: 8 });
       expect(editSet).not.toHaveBeenCalled(); // still paused offline
     } finally {
       onlineManager.setOnline(true);
@@ -1936,5 +1936,142 @@ describe('ExerciseDetail Customize is read-only on somebody else\u2019s screen',
 
     expect(screen.getByRole('button', { name: 'Customize this exercise' })).toBeEnabled();
     expect(screen.getByText('Keep elbows tucked').closest('button')).toBeEnabled();
+  });
+});
+
+
+// The stepper's own behaviour is covered in WeightRepsStepper.test.jsx and useHoldRepeat.test.jsx.
+// What only this file can prove is the WIRING -- that the right expressions reach those props from
+// a real ExerciseDetail, which nothing else asserts.
+describe('ExerciseDetail stepper increments, bounds and hold', () => {
+  const plank = { id: 1, name: 'Plank', trackingType: 'duration', tags: [], isFavorite: true, setupFields: [] };
+
+  function holdFor(title, ms) {
+    fireEvent.pointerDown(screen.getByTitle(title));
+    let left = ms;
+    while (left > 0) {
+      const chunk = Math.min(20, left);
+      act(() => {
+        vi.advanceTimersByTime(chunk);
+      });
+      left -= chunk;
+    }
+    act(() => {
+      window.dispatchEvent(new Event('pointerup'));
+    });
+  }
+
+  function mockPerson(person = {}) {
+    useAuth.mockReturnValue({
+      account: { defaultUnit: 'lb' },
+      people: [{ id: 7, name: 'Nate', ...person }],
+      refreshPeople: vi.fn(),
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPerson();
+    useUI.mockReturnValue({
+      showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn(),
+      holdTimers: {}, startHoldTimer: vi.fn(), stopHoldTimer: vi.fn(),
+    });
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    listSessionSets.mockResolvedValue([]);
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("steps the weight by this person's own configured increment", async () => {
+    const draft = typedDraft({ weight: 135 });
+    useAppState.mockReturnValue(draft);
+    mockPerson({ weightIncrement: 10 });
+    renderExerciseDetail();
+
+    fireEvent.click(await screen.findByTitle('Increase Weight (lb)'));
+
+    expect(draft.setDraft).toHaveBeenCalledWith(expect.objectContaining({ weight: 145, source: 'user' }));
+  });
+
+  it('defaults the weight step to 2.5 when the person row predates the preference', async () => {
+    const draft = typedDraft({ weight: 135 });
+    useAppState.mockReturnValue(draft);
+    renderExerciseDetail();
+
+    fireEvent.click(await screen.findByTitle('Increase Weight (lb)'));
+
+    expect(draft.setDraft).toHaveBeenCalledWith(expect.objectContaining({ weight: 137.5, source: 'user' }));
+  });
+
+  // parseFloat happily returns -50 for a typed "-50", and LogSetRequest answers a negative weight
+  // with a 400 -- which shouldRetryWrite treats as terminal, so an offline-queued set would be
+  // DISCARDED rather than corrected. Clamping here is what keeps an unloggable number off the wire.
+  it('clamps a typed negative weight to zero rather than letting it reach the wire', async () => {
+    const draft = typedDraft({ weight: 135 });
+    useAppState.mockReturnValue(draft);
+    renderExerciseDetail();
+
+    const input = await screen.findByLabelText('Weight (lb)');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '-50' } });
+    fireEvent.blur(input);
+
+    expect(draft.setDraft).toHaveBeenCalledWith(expect.objectContaining({ weight: 0, source: 'user' }));
+  });
+
+  it('marks the weight decrement as at its bound once the weight is zero', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 0 }));
+    renderExerciseDetail();
+
+    expect(await screen.findByTitle('Decrease Weight (lb)')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByTitle('Increase Weight (lb)')).not.toHaveAttribute('aria-disabled');
+  });
+
+  describe('the Time control floor', () => {
+    function durationDraft(durationSeconds) {
+      return {
+        weightDraft: 0, repsDraft: 8, durationDraft: durationSeconds, holdStartedAt: null,
+        draftExerciseId: plank.id, draftSetCount: TYPED_AFTER_EVERYTHING, draftSource: 'user',
+        setDraft: vi.fn(), setHoldStartedAt: vi.fn(), setRestTimer: vi.fn(),
+      };
+    }
+
+    // The floor sits one step ABOVE blank, so a held finger can never land on an empty field that
+    // then logs durationValue's 30-second default. It is deliberately not the same answer as the
+    // dim, which this control never shows -- see ExerciseDetail's comment on holdFloor.
+    it('refuses to repeat at the lowest real value, but still clears on a deliberate tap', async () => {
+      const draft = durationDraft(5);
+      useAppState.mockReturnValue(draft);
+      renderExerciseDetail({ exercise: plank });
+      await screen.findByTitle('Decrease Time');
+
+      vi.useFakeTimers();
+      holdFor('Decrease Time', 4000);
+      expect(draft.setDraft).not.toHaveBeenCalled();
+      vi.useRealTimers();
+
+      // The escape hatch log-screen.md requires: blank stays reachable, just not by holding.
+      fireEvent.click(screen.getByTitle('Decrease Time'));
+      expect(draft.setDraft).toHaveBeenCalledWith(expect.objectContaining({ durationSeconds: null }));
+    });
+
+    // While a hold timer runs the field is a live readout of elapsed seconds, so it changes on its
+    // own: neither of the hook stop conditions could ever fire and a held decrement would repeat
+    // for as long as the finger stayed down, into a draft that Stop overwrites anyway.
+    it('does not repeat at all while a hold timer is running', async () => {
+      const draft = durationDraft(60);
+      useAppState.mockReturnValue({ ...draft, holdStartedAt: Date.now() });
+      useUI.mockReturnValue({
+        showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn(),
+        holdTimers: { 7: { elapsed: 42 } }, startHoldTimer: vi.fn(), stopHoldTimer: vi.fn(),
+      });
+      renderExerciseDetail({ exercise: plank });
+      await screen.findByTitle('Decrease Time');
+
+      vi.useFakeTimers();
+      holdFor('Decrease Time', 4000);
+
+      expect(draft.setDraft).not.toHaveBeenCalled();
+    });
   });
 });

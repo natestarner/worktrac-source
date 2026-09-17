@@ -4,6 +4,7 @@ import { dispatchDurableWrite, EDIT_SET_MUTATION_KEY } from '../../lib/queryClie
 import { patchPendingLogSetDisplay } from '../../lib/offlineSetEdits';
 import { queryKeys } from '../../api/queryKeys';
 import { formatRestTime, MIN_HOLD_SECONDS } from '../../utils/datetime';
+import { useStepperIncrements } from '../../hooks/useStepperIncrements';
 import WeightRepsStepper from '../log/WeightRepsStepper';
 import DurationWheel from './DurationWheel';
 import Modal from './Modal';
@@ -24,8 +25,10 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
   const isDuration = set.durationSeconds != null;
   const [durationSeconds, setDurationSeconds] = useState(set.durationSeconds ?? 0);
   const [showWheel, setShowWheel] = useState(false);
-  const step = set.unit === 'kg' ? 2.5 : 5;
-  const DURATION_STEP = 5;
+  // The same per-person preference the log screen steps by, so correcting a set moves in the jumps
+  // that person chose. Read off the PERSON rather than off set.unit, which is what this used to
+  // branch on: a step size is not a weight, so it applies whatever unit the set was recorded in.
+  const { weightIncrement: step, durationIncrement: DURATION_STEP } = useStepperIncrements(personId);
   // Exactly one measure, matching how the set was logged -- same rule as handleLogSet.
   const measure = isDuration ? { reps: 0, durationSeconds } : { reps, durationSeconds: null };
   // Save refuses a sub-minimum hold rather than quietly rounding it up. EditSetRequest declares
@@ -71,7 +74,11 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
         size="sm"
         onDec={() => setWeight(Math.max(0, Math.round((weight - step) * 2) / 2))}
         onInc={() => setWeight(Math.round((weight + step) * 2) / 2)}
-        onChange={setWeight}
+        // Clamped like the - button is: a typed "-50" parses to -50, and EditSetRequest answers a
+        // negative weight with a 400 -- terminal for a durable write, so the edit would be
+        // discarded rather than corrected.
+        onChange={(next) => setWeight(Math.max(0, next))}
+        atMin={weight <= 0}
       />
       {isDuration ? (
         <>
@@ -94,6 +101,9 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
             onPick={() => setShowWheel((open) => !open)}
             onDec={() => setDurationSeconds(Math.max(0, durationSeconds - DURATION_STEP))}
             onInc={() => setDurationSeconds(durationSeconds + DURATION_STEP)}
+            // Unlike the log screen's Time, this one really does clamp -- 0:00 is its bottom and
+            // Save refuses it -- so the dim and the hold floor are the same answer here.
+            atMin={durationSeconds <= 0}
           />
           {/* Inline, not the bottom sheet the log screen opens. A sheet here would be a modal over
               a modal: two scrims, two focus traps, and an Escape whose target you have to guess.
@@ -115,7 +125,8 @@ export default function EditSetModal({ set, personId, exerciseId, exerciseName, 
           size="sm"
           onDec={() => setReps(Math.max(0, reps - 1))}
           onInc={() => setReps(reps + 1)}
-          onChange={setReps}
+          onChange={(next) => setReps(Math.max(0, next))}
+          atMin={reps <= 0}
         />
       )}
       <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>

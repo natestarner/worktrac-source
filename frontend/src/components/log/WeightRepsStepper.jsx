@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import useHoldRepeat from '../../hooks/useHoldRepeat';
 
 // Reused by the live logging flow (large) and EditSetModal (slightly smaller).
 //
@@ -42,7 +43,47 @@ import { useState } from 'react';
 // aria-label="Time" is what both test layers, the screen reader, and the ± buttons' titles all
 // agree this control is called. Read-only also suppresses the mobile keyboard on tap, which is
 // the whole reason to open a picker instead.
-export default function WeightRepsStepper({ label, value, displayValue, parse, onDec, onInc, onChange, onPick, size = 'lg' }) {
+// Press-and-hold repeats the step (hooks/useHoldRepeat.js). Four decisions in that wiring are
+// easy to "tidy" into bugs:
+//
+//   * `onClick` is untouched, and the repeat hangs off onPointerDown. A tap never reaches the hold
+//     delay, so every existing e2e and unit test that clicks these buttons keeps meaning what it
+//     meant. The click of a press that DID repeat is swallowed, or a held button always lands one
+//     step past wherever the repeat decided to stop.
+//   * No setPointerCapture. Touch pointers get implicit capture at pointerdown, a window-level
+//     pointerup covers the mouse, and jsdom implements none of the capture API -- so adding it
+//     would buy nothing on the target device and cost every unit test that presses a button.
+//   * No pointerleave. Touch cannot report it (implicit capture suppresses boundary events), so
+//     wiring it would give mouse and touch different stop conditions for one gesture. The repeat
+//     runs until you lift.
+//   * `atMin` marks the decrement with aria-disabled and a dimmed class, never the `disabled`
+//     attribute. A disabled button fails Playwright's actionability check, and two specs
+//     deliberately step a control all the way down to its bound; it is also what keeps the log
+//     screen's tap-to-clear escape hatch working on Time, where the dim and the hold floor are
+//     deliberately different answers (see .claude/rules/log-screen.md).
+export default function WeightRepsStepper({
+  label,
+  value,
+  displayValue,
+  parse,
+  onDec,
+  onInc,
+  onChange,
+  onPick,
+  size = 'lg',
+  atMin = false,
+  holdFloor = atMin,
+  repeatOnHold = true,
+}) {
+  // Press-and-hold repeats, via the one hold mechanism (hooks/useHoldRepeat.js). It lives on the
+  // primitive rather than at the two call sites so the log screen and EditSetModal cannot drift.
+  //
+  // `watch` is `value`, the number the step is expected to move; the hook uses it only to notice
+  // that stepping has stopped achieving anything. `floor` is the caller's own answer to "another
+  // step here would be pointless or unwanted" -- only the decrement has one, because nothing in
+  // this app has an upper bound.
+  const dec = useHoldRepeat({ onRepeat: onDec, watch: value, floor: holdFloor, enabled: repeatOnHold });
+  const inc = useHoldRepeat({ onRepeat: onInc, watch: value, enabled: repeatOnHold });
   const isLarge = size === 'lg';
   // Base class always present -- the landscape rules and the e2e helpers both key off it.
   const btnClass = `stepper-circle-btn${isLarge ? '' : ' stepper-circle-btn-sm'} pressable`;
@@ -74,7 +115,24 @@ export default function WeightRepsStepper({ label, value, displayValue, parse, o
     >
       <div style={{ fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semibold)', color: 'var(--color-muted)' }}>{label}</div>
       <div className="stepper-controls" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minWidth: 0 }}>
-        <button type="button" onClick={onDec} title={`Decrease ${label}`} className={btnClass}>
+        <button
+          type="button"
+          onPointerDown={dec.onPointerDown}
+          // Swallows the trailing click of a press that repeated -- otherwise a one-second hold
+          // lands N repeats PLUS one more step on release, which on the Time control would walk
+          // back off the floor the repeat just stopped at.
+          onClick={(e) => {
+            if (dec.wasRepeating()) return;
+            onDec(e);
+          }}
+          title={`Decrease ${label}`}
+          // aria-disabled, never `disabled`: a disabled button fails Playwright's actionability
+          // check, and two existing specs deliberately step this control all the way down to its
+          // bound. It also keeps the log screen's tap-to-clear escape hatch alive, which is the
+          // one place the dim and the hold floor legitimately disagree.
+          aria-disabled={atMin || undefined}
+          className={`${btnClass}${atMin ? ' stepper-circle-btn--at-bound' : ''}`}
+        >
           &minus;
         </button>
         {onPick ? (
@@ -126,7 +184,16 @@ export default function WeightRepsStepper({ label, value, displayValue, parse, o
         ) : (
           <div className={valueClass}>{displayValue ?? value}</div>
         )}
-        <button type="button" onClick={onInc} title={`Increase ${label}`} className={btnClass}>
+        <button
+          type="button"
+          onPointerDown={inc.onPointerDown}
+          onClick={(e) => {
+            if (inc.wasRepeating()) return;
+            onInc(e);
+          }}
+          title={`Increase ${label}`}
+          className={btnClass}
+        >
           +
         </button>
       </div>

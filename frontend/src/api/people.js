@@ -21,3 +21,9 @@ export function removePerson(personId) {
 export function setRestTimerPreference(personId, enabled) {
   return apiClient.put(`/api/people/${personId}/rest-timer-preference`, { enabled });
 }
+
+// The Log screen's +/- step sizes, per person. Both are written together because Settings
+// configures them together and a single write can't be half-applied.
+export function setStepperIncrements(personId, weightIncrement, durationIncrementSeconds) {
+  return apiClient.put(`/api/people/${personId}/stepper-increments`, { weightIncrement, durationIncrementSeconds });
+}

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppSettingsTab from './AppSettingsTab';
 import { createTag } from '../../api/tags';
 import { setMemberVisibility, updateDefaultUnit } from '../../api/account';
-import { setRestTimerPreference } from '../../api/people';
+import { setRestTimerPreference, setStepperIncrements } from '../../api/people';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
@@ -32,7 +32,7 @@ vi.mock('../../api/tags', () => ({
 vi.mock('../../api/account', () => ({ updateDefaultUnit: vi.fn(), setMemberVisibility: vi.fn() }));
 vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
 vi.mock('../../api/dataImport', () => ({ listImports: vi.fn(), undoImport: vi.fn() }));
-vi.mock('../../api/people', () => ({ setRestTimerPreference: vi.fn() }));
+vi.mock('../../api/people', () => ({ setRestTimerPreference: vi.fn(), setStepperIncrements: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 vi.mock('../../hooks/useTags', () => ({ useTags: vi.fn() }));
@@ -309,14 +309,14 @@ describe('AppSettingsTab as a member', () => {
   // stay live -- turning the timer off mid-workout must not require the owner.
   it('shows only their own rest-timer row, still interactive', async () => {
     renderTab();
-    await screen.findByText('Samuel');
+    await screen.findAllByText('Samuel');
     expect(screen.queryByText('Nate')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Rest timer Off for Samuel')).toBeEnabled();
   });
 
   it('hides the whole-household export and import section', async () => {
     renderTab();
-    await screen.findByText('Samuel');
+    await screen.findAllByText('Samuel');
     expect(screen.queryByRole('button', { name: 'Export all data' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Import data' })).not.toBeInTheDocument();
   });
@@ -419,5 +419,76 @@ describe('AppSettingsTab member visibility', () => {
     renderTab();
 
     expect(screen.queryByText(/privacy$/)).not.toBeInTheDocument();
+  });
+});
+
+
+describe('AppSettingsTab stepper increments', () => {
+  let refreshPeople;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listImports.mockResolvedValue([]);
+    onlineManager.setOnline(true);
+    refreshPeople = vi.fn().mockResolvedValue();
+    setStepperIncrements.mockResolvedValue({});
+    useAuth.mockReturnValue({
+      account: { defaultUnit: 'lb' },
+      people: [
+        { id: 7, name: 'Nate', weightIncrement: 2.5, durationIncrementSeconds: 5 },
+        { id: 8, name: 'Sam', weightIncrement: 1, durationIncrementSeconds: 30 },
+      ],
+      refreshPeople,
+    });
+    useUI.mockReturnValue({ openConfirm: vi.fn(), showToast: vi.fn() });
+    useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
+  });
+  afterEach(() => onlineManager.setOnline(true));
+
+  it('configures each person independently, and sends the untouched increment back unchanged', async () => {
+    renderTab();
+
+    expect(screen.getByRole('button', { name: 'Weight step 10 lb for Nate' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Time step 15s for Sam' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Weight step 5 lb for Nate' }));
+
+    // Nate's current 5s duration rides along rather than being left out, so a partial payload can
+    // never half-apply the pair.
+    await waitFor(() => expect(setStepperIncrements).toHaveBeenCalledWith(7, 5, 5));
+    expect(setStepperIncrements).not.toHaveBeenCalledWith(8, expect.anything(), expect.anything());
+    expect(refreshPeople).toHaveBeenCalled();
+  });
+
+  it("changing the time keeps that person's own weight increment", async () => {
+    renderTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Time step 10s for Sam' }));
+
+    await waitFor(() => expect(setStepperIncrements).toHaveBeenCalledWith(8, 1, 10));
+  });
+
+  it('falls back to the defaults for a person row that predates the columns', async () => {
+    useAuth.mockReturnValue({
+      account: { defaultUnit: 'lb' },
+      people: [{ id: 7, name: 'Nate' }],
+      refreshPeople,
+    });
+    renderTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Time step 30s for Nate' }));
+
+    await waitFor(() => expect(setStepperIncrements).toHaveBeenCalledWith(7, 2.5, 30));
+  });
+
+  it('is gated offline like every other Tier-3 setting', async () => {
+    onlineManager.setOnline(false);
+    renderTab();
+
+    const pill = screen.getByRole('button', { name: 'Weight step 5 lb for Nate' });
+    expect(pill).toBeDisabled();
+
+    fireEvent.click(pill);
+    expect(setStepperIncrements).not.toHaveBeenCalled();
   });
 });

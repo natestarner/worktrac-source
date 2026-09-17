@@ -173,6 +173,14 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(Map.of("enabled", false))))
                     .andExpect(status().isOk());
+            // Same person-scoped reasoning as the rest timer: how big a jump the +/- buttons make
+            // is a training preference, not a household setting.
+            mockMvc.perform(put("/api/people/" + memberPersonId + "/stepper-increments")
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("weightIncrement", 5, "durationIncrementSeconds", 10))))
+                    .andExpect(status().isOk());
         }
 
         // A member renaming THEMSELVES is deliberately allowed -- it is their own name, and the
@@ -215,6 +223,13 @@ class MemberPermissionsTest extends AbstractIntegrationTest {
                             .header("Authorization", bearer(memberToken))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(Map.of("enabled", false))))
+                    .andExpect(status().isForbidden());
+
+            mockMvc.perform(put("/api/people/" + ownerPersonId + "/stepper-increments")
+                            .header("Authorization", bearer(memberToken))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(
+                                    Map.of("weightIncrement", 5, "durationIncrementSeconds", 10))))
                     .andExpect(status().isForbidden());
 
             mockMvc.perform(patch("/api/people/" + ownerPersonId)

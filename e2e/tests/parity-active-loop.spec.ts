@@ -111,7 +111,9 @@ forEachConnectivityMode<void>("the weight carries forward from today's previous 
         if (current === 25) return current;
         await weightRow.getByRole('button', { name: current < 25 ? '+' : '−', exact: true }).click();
         return Number(await weightRow.locator('.stepper-value').inputValue());
-      }, { timeout: 15000 })
+        // See offline-reads.spec.ts's setWeight: at the 2.5 default this is ten passes, and
+        // Playwright's default interval ramp would spend most of the budget idling between them.
+      }, { timeout: 45000, intervals: [50, 100, 250] })
       .toBe(25);
 
     await page.getByRole('button', { name: /Log set/ }).click();
@@ -177,19 +179,19 @@ forEachConnectivityMode<void>('correcting a just-logged set applies immediately'
 
     await editButtons(page).click();
     const dialog = page.getByRole('dialog');
-    // +5 lb per click on the weight stepper, starting from the logged 0.
+    // +2.5 lb per click on the weight stepper, starting from the logged 0.
     await dialog.locator('.stepper-row').first().getByRole('button', { name: '+' }).click();
     await dialog.locator('.stepper-row').first().getByRole('button', { name: '+' }).click();
     await dialog.getByRole('button', { name: 'Save' }).click();
   },
   assert: async (page) => {
-    await expect(setRow(page, 10)).toBeVisible();
+    await expect(setRow(page, 5)).toBeVisible();
     await expect(editButtons(page)).toHaveCount(1);
   },
   afterReconnect: async (page) => {
     // If the edit had been swallowed by idempotency dedup on the create's key -- the 2026-07-30
     // bug -- the corrected value would have reverted to the logged 0 once the outbox drained.
-    await expect(setRow(page, 10)).toBeVisible();
+    await expect(setRow(page, 5)).toBeVisible();
     await expect(editButtons(page)).toHaveCount(1);
   },
 });

@@ -6,6 +6,14 @@ import { LOG_SET_MUTATION_KEY } from '../../lib/queryClient';
 import { editSet, logLiveSet } from '../../api/sets';
 import EditSetModal from './EditSetModal';
 
+// EditSetModal reads its step sizes from the person's own preference (useStepperIncrements ->
+// useAuth), so this bare render needs a people list. No weightIncrement/durationIncrementSeconds on
+// the row on purpose: that is the older-snapshot shape, and it must fall back to the defaults the
+// steps were hardcoded to before they became a preference (2.5 / 5s).
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ people: [{ id: 7, name: 'Nate' }], refreshPeople: vi.fn() }),
+}));
+
 vi.mock('../../api/sets', () => ({
   editSet: vi.fn(),
   deleteSet: vi.fn(),
@@ -50,7 +58,7 @@ describe('EditSetModal', () => {
     fireEvent.click(screen.getAllByText('+')[0]); // weight stepper's "+", first of the two
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(editSet).toHaveBeenCalledWith(55, { weight: 140, reps: 5, durationSeconds: null }));
+    await waitFor(() => expect(editSet).toHaveBeenCalledWith(55, { weight: 137.5, reps: 5, durationSeconds: null }));
     expect(onSaved).toHaveBeenCalled();
   });
 
@@ -100,7 +108,7 @@ describe('EditSetModal', () => {
     expect(create).toBe(createBefore);
     expect(create.options.mutationKey[0]).toBe('logSet');
     expect(edit.options.mutationKey[0]).toBe('editSet');
-    expect(edit.state.variables).toMatchObject({ setId: 'temp-a', weight: 140, reps: 5 });
+    expect(edit.state.variables).toMatchObject({ setId: 'temp-a', weight: 137.5, reps: 5 });
     expect(editSet).not.toHaveBeenCalled(); // still paused offline, neither write has dispatched yet
     expect(onSaved).toHaveBeenCalled();
   });
@@ -122,7 +130,7 @@ describe('EditSetModal', () => {
     // pendingBeforeSession in ExerciseDetail.jsx reads for a pre-session row) -- even though the
     // create still commits its original values once it syncs (see the previous test).
     const create = pendingMutations(queryClient).find((m) => m.options.mutationKey[0] === 'logSet');
-    expect(create.state.variables).toMatchObject({ weight: 140, reps: 5 });
+    expect(create.state.variables).toMatchObject({ weight: 137.5, reps: 5 });
   });
 
   it('patches the sessionSets cache row in place so the new value shows without waiting for sync', async () => {
@@ -135,7 +143,7 @@ describe('EditSetModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(queryClient.getQueryData(queryKeys.sessionSets(101, 1))).toEqual([
-      { id: 55, weight: 140, reps: 5, durationSeconds: null, unit: 'lb' },
+      { id: 55, weight: 137.5, reps: 5, durationSeconds: null, unit: 'lb' },
     ]);
   });
 
@@ -199,5 +207,59 @@ describe('EditSetModal', () => {
 
       await waitFor(() => expect(editSet).toHaveBeenCalledWith(55, { weight: 0, reps: 0, durationSeconds: 5 }));
     });
+  });
+});
+
+
+describe('EditSetModal negative values', () => {
+  // Same reasoning as the log screen: EditSetRequest declares @DecimalMin("0") / @Min(0), so a
+  // negative reaches the server as a 400 -- and a definitive 4xx permanently DISCARDS a durable
+  // write rather than bouncing it back to be fixed. The correction would simply vanish.
+  it('clamps a typed negative weight to zero', async () => {
+    renderWithQuery(
+      <EditSetModal
+        set={{ id: 55, weight: 135, reps: 5, unit: 'lb' }}
+        personId={7}
+        exerciseId={1}
+        exerciseName="Bench Press"
+        sessionId={101}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByLabelText('Weight (lb)');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '-50' } });
+    fireEvent.blur(input);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(editSet).toHaveBeenCalledWith(55, { weight: 0, reps: 5, durationSeconds: null }),
+    );
+  });
+
+  it('clamps typed negative reps to zero', async () => {
+    renderWithQuery(
+      <EditSetModal
+        set={{ id: 55, weight: 135, reps: 5, unit: 'lb' }}
+        personId={7}
+        exerciseId={1}
+        exerciseName="Bench Press"
+        sessionId={101}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByLabelText('Reps');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '-3' } });
+    fireEvent.blur(input);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(editSet).toHaveBeenCalledWith(55, { weight: 135, reps: 0, durationSeconds: null }),
+    );
   });
 });
