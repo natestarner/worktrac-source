@@ -156,6 +156,25 @@ deliberate:
 | `isPaidPlan` | paid | **not paid** | Every tier after FREE is paid, so a newer name is paid. But *no plan* is not a plan to call paid — `BillingTab` picks between the "you have Plus" summary and the "here is what Plus costs" one on this, and answering true would show the paid summary to somebody who never paid and hide the control that lets them |
 | `isKnownPlan` | not known | not known | The one "render nothing" case. `PlanBadge` NAMES the plan on screen and there is no safe way to name one you do not recognise |
 
+## Comps are granted from the ADMIN PORTAL, not from config
+
+`CompGrantService` is the **only production writer** of `comped` / `comped_plan`
+(`TestSupportController` is its `@Profile`-gated twin). `COMPED_EMAILS` and `CompBootstrap` are
+retired — existing comped households were unaffected, because a comp was always a row rather than
+a value computed from the list at boot. Full reasoning, including why this reversed a documented
+decision: `docs/architecture/billing.md`. Endpoint invariants: `.claude/rules/admin-portal.md`.
+
+- **⚠️ A comp does not stop the money.** Granting one to a household with a live Stripe
+  subscription is refused (409), or they keep paying for a plan they were just given.
+- **⚠️ No `PlusUpgradedEvent` for a comp.** Its copy presumes a purchase. `AccountPlanChangedEvent`
+  *is* published, and `CompGrantService` is `@Transactional` so the `AFTER_COMMIT` listener
+  actually fires — do not copy `TestSupportController`'s direct `invalidateAccount` call, which
+  exists only because that handler is not transactional.
+- **Revoke recomputes rather than clamping to FREE**, since a household can hold a comp *and* a
+  paying Stripe subscription. Clamping would cut off somebody who is actually paying.
+- **`comp_note` (V80) is the REASON only.** Who granted it and when are audit facts and live in
+  `billing_events`; a mutable column on the subscription row is the wrong place for one.
+
 ## Entitlement is DERIVED, never stored
 
 `SubscriptionService.isEntitled` is the only place the question "is this subscription currently
@@ -175,10 +194,18 @@ column**, and do not let a caller compare statuses itself — each of these beco
 2. **CANCELED is Plus until `current_period_end`.** They bought that period.
 3. **Expiry happens by the clock**, so a cancelled household downgrades whether or not
    `subscription.deleted` ever arrives.
-4. **`comped`** grants Plus with no Stripe object, so founding households need no second code path.
+4. **`comped`** grants a paid tier with no Stripe object, so a comped household needs no second
+   code path anywhere downstream.
 
-`subscriptions.billing_plan` is a materialized cache of the derivation, written only by
-`applyStripeState` so the two cannot be set independently. `entitledPlan` stays the authority.
+`isEntitled` is now literally `comped || isPayingThroughStripe(subscription)`. **That split is a
+NAMED sub-question, not a second derivation** — cases 1-3 live in `isPayingThroughStripe` and
+nowhere else. It exists because `CompGrantService` must ask "is this household paying us through
+Stripe *right now*?", which `isEntitled` cannot answer: it returns true for an already-comped row.
+Do not inline the status comparisons at a call site.
+
+`subscriptions.billing_plan` is a materialized cache of the derivation, written by `applyStripeState`
+and `CompGrantService` — always together with the tier it caches, never independently.
+`entitledPlan` stays the authority.
 
 **A missing subscription row means FREE, never an error.** Registration creates one and V56
 backfilled the rest, so it should be unreachable — but a read of workout history must not fail
@@ -314,7 +341,7 @@ regardless of how many times `applyStripeState` runs for the same household afte
 a redelivered webhook, the reconciliation watchdog self-healing a missed one).
 
 - **`PlusUpgradedEvent` is published from `applyStripeState` only on that first transition** — never
-  for a comp grant (`CompBootstrap`). A comped household was never charged, and the email's copy
+  for a comp grant (`CompGrantService`). A comped household was never charged, and the email's copy
   ("thanks for keeping Huddle going") presumes a purchase just happened.
 - **`PlusUpgradeEmailEventListener` records outcomes to `billing_events`**, not the registration
   audit trail, even though it is structurally the same "send after commit, off the request thread,

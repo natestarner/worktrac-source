@@ -51,3 +51,19 @@ export function previewTestData() {
 export function deleteTestData() {
   return apiClient.delete('/api/admin/test-data', undefined, { timeoutMs: 60000 });
 }
+
+// The admin portal's only writes besides the alert-settings toggle and the e2e test-data purge:
+// grant a household a paid plan outright, or take that grant back. See
+// .claude/rules/admin-portal.md's third sanctioned exception.
+//
+// The body carries the tier, the band (Pro only) and the reason -- and deliberately nothing else.
+// The household is the path segment, and the acting admin is whoever the bearer token says they
+// are: the server reads it from the security context and would ignore an actorEmail here, because
+// an audit trail a caller can write their own name into is not one.
+export function grantComp(accountId, { plan, band, note }) {
+  return apiClient.post(`/api/admin/accounts/${accountId}/comp`, { plan, band, note });
+}
+
+export function revokeComp(accountId) {
+  return apiClient.delete(`/api/admin/accounts/${accountId}/comp`);
+}

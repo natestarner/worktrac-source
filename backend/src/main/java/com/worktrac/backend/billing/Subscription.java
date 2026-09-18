@@ -65,13 +65,19 @@ public class Subscription {
     @Column(name = "cancel_at_period_end", nullable = false)
     private boolean cancelAtPeriodEnd;
 
-    // Grants a paid tier with no Stripe object behind it -- how founding households are kept whole
-    // when the Free-tier window lands, without coupon codes, a card prompt, or an admin write action.
+    // Grants a paid tier with no Stripe object behind it -- how a household is given a paid plan
+    // outright, without coupon codes and without a card prompt.
+    //
+    // Written by exactly one class in production: CompGrantService, reached from the admin portal
+    // (TestSupportController is its non-production twin, and does not exist as a bean outside
+    // local/lower). applyStripeState never touches this column or comped_plan, which is what lets a
+    // comp outlive a webhook about a lapsed card.
     @Column(nullable = false)
     private boolean comped;
 
     // WHICH tier a comp grants. Null means PLUS, which is what every comp meant before Pro existed
-    // and what CompBootstrap still grants -- so V75 needed no backfill.
+    // and what the retired COMPED_EMAILS path always granted -- so V75 needed no backfill, and rows
+    // predating the admin portal still read correctly.
     //
     // It is a separate column rather than reusing billing_plan because the two answer different
     // questions: billing_plan is a cache of what the household is entitled to RIGHT NOW, rewritten
@@ -81,6 +87,15 @@ public class Subscription {
     @Enumerated(EnumType.STRING)
     @Column(name = "comped_plan", length = 20)
     private BillingPlan compedPlan;
+
+    // Why this household was comped, in the granting admin's own words. Null for every row granted
+    // before the admin portal existed, and for a grant whose note was left blank.
+    //
+    // ⚠️ The REASON only. Who granted it and when are audit facts and live in billing_events
+    // (COMP_GRANTED / COMP_REVOKED); putting them in a mutable column on this row would make the
+    // audit trail editable by the next grant. See V80.
+    @Column(name = "comp_note", length = 200)
+    private String compNote;
 
     // How many CLIENTS this subscription is licensed for, from the band that was bought. Null for
     // every household tier (they have no seats) and for an unlimited band.
@@ -201,6 +216,14 @@ public class Subscription {
 
     public void setCompedPlan(BillingPlan compedPlan) {
         this.compedPlan = compedPlan;
+    }
+
+    public String getCompNote() {
+        return compNote;
+    }
+
+    public void setCompNote(String compNote) {
+        this.compNote = compNote;
     }
 
     public Integer getClientSeats() {

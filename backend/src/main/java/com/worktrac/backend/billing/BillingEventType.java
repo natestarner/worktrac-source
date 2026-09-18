@@ -36,5 +36,20 @@ public enum BillingEventType {
     // The welcome-to-Plus email (PlusUpgradedEvent) was sent, or failed to send. Isolated from the
     // audit WRITE the same way registration email outcomes are -- see PlusUpgradeEmailEventListener.
     PLUS_WELCOME_EMAIL_SENT,
-    PLUS_WELCOME_EMAIL_FAILED
+    PLUS_WELCOME_EMAIL_FAILED,
+
+    // An admin granted or removed a comp through the admin portal. These two are the AUDIT TRAIL
+    // for the portal's plan-granting action, and they are the reason it is safe to have one: a
+    // capability to hand out paid plans is only as accountable as its record.
+    //
+    // ⚠️ `detail` must always name the ACTING ADMIN, and that email comes from the authenticated
+    // principal (CurrentUser), never from the request body -- a self-reported actor is not an
+    // audit trail. It also carries the tier, the band and the admin's note, because "what was
+    // granted" is the other half of the question a review asks.
+    //
+    // Recorded through BillingAuditService, which is REQUIRES_NEW: the row survives even if the
+    // grant transaction rolls back afterwards. That bias is deliberate here -- an audit row for a
+    // grant that did not land is a puzzle, while a grant that landed with no row is a hole.
+    COMP_GRANTED,
+    COMP_REVOKED
 }

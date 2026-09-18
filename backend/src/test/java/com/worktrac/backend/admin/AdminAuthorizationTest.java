@@ -3,6 +3,9 @@ package com.worktrac.backend.admin;
 import com.worktrac.backend.support.AbstractIntegrationTest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.email.EmailService;
+import com.worktrac.backend.billing.BillingEvent;
+import com.worktrac.backend.billing.BillingEventRepository;
+import com.worktrac.backend.billing.BillingEventType;
 import com.worktrac.backend.support.RegistrationTestSupport;
 import com.worktrac.backend.user.TestCodeCache;
 import com.worktrac.backend.user.User;
@@ -21,12 +24,14 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -62,6 +67,9 @@ class AdminAuthorizationTest extends AbstractIntegrationTest {
     // registering test users never depends on a real ACS resource.
     @MockitoBean
     private EmailService emailService;
+
+    @Autowired
+    private BillingEventRepository billingEventRepository;
 
     @Autowired
     private MockMvc mockMvc;
@@ -287,5 +295,122 @@ class AdminAuthorizationTest extends AbstractIntegrationTest {
         assertTrue(response.contains("REGISTER_STARTED"));
         assertFalse(response.contains("passwordHash"));
         assertFalse(response.contains("codeHash"));
+    }
+
+    // The two comp routes are the portal's third sanctioned write, and the most privileged thing it
+    // can do -- so they get the same 401/403/success gauntlet the alert-settings PUT gets.
+    // ADMIN_ROUTES above only drives GETs, which is why these need their own block rather than a
+    // new entry in that array.
+    @Test
+    @Order(10)
+    void grantingAPlanIsRefusedForEveryoneButAnAdmin() throws Exception {
+        long accountId = anyAccountId();
+        String body = objectMapper.writeValueAsString(Map.of("plan", "PLUS", "note", "authorization test"));
+
+        mockMvc.perform(post("/api/admin/accounts/" + accountId + "/comp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete("/api/admin/accounts/" + accountId + "/comp"))
+                .andExpect(status().isUnauthorized());
+
+        String nonAdminEmail = uniqueEmail("comp-non-admin");
+        String nonAdminToken = RegistrationTestSupport
+                .registerAndConfirm(mockMvc, objectMapper, testCodeCache, nonAdminEmail, "NonAdmin")
+                .get("token").asText();
+
+        // The whole point of this test: an ordinary authenticated user -- including one who owns a
+        // household of their own -- must not be able to hand anybody a paid plan.
+        mockMvc.perform(post("/api/admin/accounts/" + accountId + "/comp")
+                        .header("Authorization", "Bearer " + nonAdminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/admin/accounts/" + accountId + "/comp")
+                        .header("Authorization", "Bearer " + nonAdminToken))
+                .andExpect(status().isForbidden());
+
+        // Least of all their OWN household, which is the version of this attack somebody would
+        // actually try. Asserting no audit row proves the refusal happened before any write.
+        long theirAccountId = accountIdForOwner(nonAdminEmail);
+        mockMvc.perform(post("/api/admin/accounts/" + theirAccountId + "/comp")
+                        .header("Authorization", "Bearer " + nonAdminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isForbidden());
+        assertTrue(billingEventRepository.findByAccountIdOrderByCreatedAtDesc(theirAccountId).isEmpty());
+
+        mockMvc.perform(post("/api/admin/accounts/" + accountId + "/comp")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @Order(11)
+    void theAuditTrailNamesTheAuthenticatedAdminAndIgnoresASelfReportedOne() throws Exception {
+        long accountId = anyAccountId();
+
+        // A caller trying to write somebody else's name into the audit trail. AdminCompRequest has
+        // no such field and Spring Boot's Jackson ignores unknown properties, so this is accepted as
+        // an ordinary grant -- and must still be recorded against the TOKEN's identity. If an
+        // actorEmail field were ever added to that record, this test is what should start failing.
+        String spoofed = objectMapper.writeValueAsString(Map.of(
+                "plan", "PLUS",
+                "note", "audit test",
+                "actorEmail", "someone-else@example.com"));
+
+        mockMvc.perform(post("/api/admin/accounts/" + accountId + "/comp")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(spoofed))
+                .andExpect(status().isNoContent());
+
+        List<BillingEvent> audit = billingEventRepository.findByAccountIdOrderByCreatedAtDesc(accountId);
+        BillingEvent granted = audit.stream()
+                .filter(e -> e.getEventType() == BillingEventType.COMP_GRANTED)
+                .findFirst().orElseThrow();
+        assertTrue(granted.getDetail().contains(ADMIN_EMAIL));
+        assertFalse(granted.getDetail().contains("someone-else@example.com"));
+
+        // Free is not a grant -- removing one is DELETE, and it has its own audit event.
+        mockMvc.perform(post("/api/admin/accounts/" + accountId + "/comp")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("plan", "FREE"))))
+                .andExpect(status().isBadRequest());
+
+        // A tier this build does not know is refused, never guessed at.
+        mockMvc.perform(post("/api/admin/accounts/" + accountId + "/comp")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("plan", "ENTERPRISE"))))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(delete("/api/admin/accounts/" + accountId + "/comp")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isNoContent());
+        assertTrue(billingEventRepository.findByAccountIdOrderByCreatedAtDesc(accountId).stream()
+                .anyMatch(e -> e.getEventType() == BillingEventType.COMP_REVOKED));
+    }
+
+    private long anyAccountId() throws Exception {
+        return objectMapper.readTree(adminAccountsJson()).get(0).get("id").asLong();
+    }
+
+    private long accountIdForOwner(String email) throws Exception {
+        for (var row : objectMapper.readTree(adminAccountsJson())) {
+            if (email.equals(row.get("userEmail").asText())) {
+                return row.get("id").asLong();
+            }
+        }
+        throw new AssertionError("no household found for " + email);
+    }
+
+    private String adminAccountsJson() throws Exception {
+        return mockMvc.perform(get("/api/admin/accounts").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
     }
 }

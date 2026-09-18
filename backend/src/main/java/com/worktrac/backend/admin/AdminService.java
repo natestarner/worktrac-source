@@ -3,6 +3,7 @@ package com.worktrac.backend.admin;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.billing.BillingPlan;
+import com.worktrac.backend.billing.CompGrantService;
 import com.worktrac.backend.billing.Subscription;
 import com.worktrac.backend.billing.SubscriptionRepository;
 import com.worktrac.backend.billing.SubscriptionService;
@@ -53,6 +54,10 @@ public class AdminService {
     private final ContactMessageService contactMessageService;
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionService subscriptionService;
+    // Read-only here: listAccounts asks it the one question ("would a comp be refused for this
+    // household?") so the Accounts tab does not have to re-derive it. The WRITES it owns are
+    // reached from AdminController directly, not through this read-only service.
+    private final CompGrantService compGrantService;
     private final Clock clock;
 
     // The subset of RegistrationEventType that represents a known email send/delivery outcome
@@ -77,7 +82,8 @@ public class AdminService {
                          RegistrationAlertSettingsService registrationAlertSettingsService,
                          ContactMessageService contactMessageService,
                          SubscriptionRepository subscriptionRepository,
-                         SubscriptionService subscriptionService, Clock clock) {
+                         SubscriptionService subscriptionService,
+                         CompGrantService compGrantService, Clock clock) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.personRepository = personRepository;
@@ -90,6 +96,7 @@ public class AdminService {
         this.contactMessageService = contactMessageService;
         this.subscriptionRepository = subscriptionRepository;
         this.subscriptionService = subscriptionService;
+        this.compGrantService = compGrantService;
         this.clock = clock;
     }
 
@@ -158,6 +165,12 @@ public class AdminService {
                         subscriptionField(subscriptionByAccount, account, Subscription::getCurrentPeriodEnd, null),
                         subscriptionField(subscriptionByAccount, account, Subscription::isCancelAtPeriodEnd, false),
                         subscriptionField(subscriptionByAccount, account, Subscription::isComped, false),
+                        subscriptionField(subscriptionByAccount, account, Subscription::getCompNote, null),
+                        // The server's own answer to "would granting a comp succeed here", so the
+                        // client never re-derives it. Shared with CompGrantService rather than
+                        // mirrored. A missing subscription row is grantable -- getOrCreate makes one.
+                        !compGrantService.blockedByStripe(subscriptionByAccount.get(account.getId())),
+                        subscriptionField(subscriptionByAccount, account, Subscription::getClientSeats, null),
                         subscriptionField(subscriptionByAccount, account, Subscription::getStripeCustomerId, null)))
                 .toList();
     }
