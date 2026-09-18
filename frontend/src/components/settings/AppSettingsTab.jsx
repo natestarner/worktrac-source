@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import SectionLabel from '../shared/SectionLabel';
 import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
@@ -10,6 +10,8 @@ import { accountVocab, capitalize } from '../../utils/accountVocab';
 import { setRestTimerPreference, setStepperIncrements } from '../../api/people';
 import { createTag, deleteTag } from '../../api/tags';
 import { downloadAllPeopleZip } from '../../api/export';
+import { getHistory, getHistoryWindow } from '../../api/sessions';
+import { queryKeys } from '../../api/queryKeys';
 import { listImports, undoImport } from '../../api/dataImport';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import { useOfflinePin } from '../../hooks/useOfflinePin';
@@ -65,6 +67,31 @@ export default function AppSettingsTab() {
   const [imports, setImports] = useState([]);
 
   const queryClient = useQueryClient();
+
+  // Whether "Export all data" has anything to download, across the whole household -- reuses the
+  // exact keys/fetchers History and its window notice already read (queryKeys.history /
+  // .historyWindow), so a household within offlineCacheWarm's MAX_WARMED_PEOPLE cap usually finds
+  // this already cached rather than firing a new request. Empty when isMember since the Data
+  // section never renders for a member (below).
+  //
+  // hiddenSessions > 0 covers a Free household whose only sessions are past the history window --
+  // getHistory comes back empty, but the export is full-history and unclamped, so there IS
+  // something to download. Same reasoning as HistoryTab's own Export data button.
+  const historyQueries = useQueries({
+    queries: (isMember ? [] : people).map((person) => ({
+      queryKey: queryKeys.history(person.id),
+      queryFn: () => getHistory(person.id),
+    })),
+  });
+  const historyWindowQueries = useQueries({
+    queries: (isMember ? [] : people).map((person) => ({
+      queryKey: queryKeys.historyWindow(person.id),
+      queryFn: () => getHistoryWindow(person.id),
+    })),
+  });
+  const anyoneHasLoggedData =
+    historyQueries.some((q) => (q.data?.length ?? 0) > 0) ||
+    historyWindowQueries.some((q) => (q.data?.hiddenSessions ?? 0) > 0);
 
   // One request per person rather than one for the account, because listing imports is
   // person-scoped on the server and that is the property worth keeping -- an import belongs to
@@ -545,7 +572,12 @@ export default function AppSettingsTab() {
           Download a CSV of every set ever logged, for every person on this account. One file per person, zipped together.
         </div>
         <OfflineDisabledWrap message="Exporting needs a connection.">
-          <Button onClick={downloadAllPeopleZip} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          <Button
+            onClick={downloadAllPeopleZip}
+            disabled={!anyoneHasLoggedData}
+            title={anyoneHasLoggedData ? undefined : 'Nothing to export yet.'}
+            style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+          >
             Export all data
           </Button>
         </OfflineDisabledWrap>

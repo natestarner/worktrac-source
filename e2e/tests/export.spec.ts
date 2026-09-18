@@ -19,4 +19,35 @@ test.describe('CSV export', () => {
 
     expect(download.suggestedFilename()).toMatch(/^Casey-workout-data-\d{4}-\d{2}-\d{2}\.csv$/);
   });
+
+  // Offering a control that would only ever produce an empty file reads as unfinished, not as
+  // "nothing here yet". Both export buttons stay disabled until this person -- or, for the
+  // Settings one, anyone in the household -- has actually logged something, then enable
+  // immediately once they do.
+  test('both export buttons stay disabled until something has been logged, then enable', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Drew');
+
+    await page.getByRole('link', { name: 'History' }).click();
+    const historyExport = page.getByRole('button', { name: 'Export data' });
+    await expect(historyExport).toBeDisabled();
+    await expect(historyExport).toHaveAttribute('title', /nothing to export/i);
+
+    await page.locator('.header-bar').getByRole('button').click();
+    await page.getByRole('menuitem', { name: 'App Settings' }).click();
+    const settingsExport = page.getByRole('button', { name: 'Export all data' });
+    await expect(settingsExport).toBeDisabled();
+
+    await page.getByRole('link', { name: 'Log' }).click();
+    await pickExercise(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await expect(page.getByText('New PR!')).toBeVisible();
+    await page.getByText('New PR!').click({ force: true });
+
+    await page.getByRole('link', { name: 'History' }).click();
+    await expect(historyExport).toBeEnabled();
+
+    await page.locator('.header-bar').getByRole('button').click();
+    await page.getByRole('menuitem', { name: 'App Settings' }).click();
+    await expect(settingsExport).toBeEnabled();
+  });
 });

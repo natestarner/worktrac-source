@@ -147,7 +147,16 @@ function HistoryTabContent({ initialExerciseFilter }) {
             apart is what stops "members can see everyone" becoming "any member can walk out with
             the household's complete history in one click". */}
         <OfflineDisabledWrap message="Exporting needs a connection.">
-          <Button onClick={() => downloadPersonCsv(activePersonId)} variant="secondary" style={outlineButtonStyle}>
+          <Button
+            onClick={() => downloadPersonCsv(activePersonId)}
+            variant="secondary"
+            style={outlineButtonStyle}
+            // hiddenFromView > 0 covers a Free household whose only sessions are past the window --
+            // still nothing on screen, but the export is full-history and unclamped, so there IS
+            // something to download. Mirrors the empty-state split below, not just history.length.
+            disabled={history.length === 0 && hiddenFromView === 0}
+            title={history.length === 0 && hiddenFromView === 0 ? 'Nothing to export yet.' : undefined}
+          >
             Export data
           </Button>
         </OfflineDisabledWrap>
