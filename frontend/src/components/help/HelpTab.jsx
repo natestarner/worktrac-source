@@ -613,6 +613,12 @@ export default function HelpTab() {
               <strong>Dots are spaced evenly.</strong> The gap between two of them shows how many
               workouts apart they were, not how much time passed.
             </li>
+            <li>
+              <strong>Some of the five disappear for a bodyweight exercise.</strong> Top weight,
+              Volume and Best set are always zero with no added weight, so they&rsquo;re hidden
+              rather than shown as flat lines at 0. Est. 1RM and Reps stay &mdash; Est. 1RM falls
+              back to your rep count when there&rsquo;s no weight to estimate from.
+            </li>
           </ul>
         </Note>
       </Section>

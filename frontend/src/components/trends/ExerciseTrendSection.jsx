@@ -8,7 +8,7 @@ import ExerciseTrendChart from './ExerciseTrendChart';
 import ExerciseRecordsTable from './ExerciseRecordsTable';
 import SegmentedToggle from '../shared/SegmentedToggle';
 import ChartHelp from '../shared/ChartHelp';
-import { EXERCISE_METRIC_OPTIONS, metricSpec } from './exerciseMetrics';
+import { visibleMetricOptions, metricSpec } from './exerciseMetrics';
 import { exerciseTrendHelp } from './chartHelp';
 import Skeleton from '../shared/Skeleton';
 import Card from '../shared/Card';
@@ -55,7 +55,16 @@ export default function ExerciseTrendSection({
     return null;
   }
 
-  const spec = metricSpec(metric);
+  // Top weight/Volume/Best set are meaningless -- flat zero lines -- for an exercise whose whole
+  // history is bodyweight (see visibleMetricOptions). While records are still loading, show the
+  // unfiltered list rather than gating the switcher on a second loading flag; this query is
+  // range-free and normally cache-warm, so it's a brief state, not a lasting one.
+  const options = visibleMetricOptions(recordsLoading ? false : records?.bodyweightOnly);
+  // The persisted `metric` is one global per-person preference shared across every exercise in the
+  // dropdown, so a bodyweight exercise falls back to est1rm for DISPLAY only -- onMetricChange
+  // below still writes the real preference, so picking a weighted exercise again restores it.
+  const effectiveMetric = options.some((opt) => opt.value === metric) ? metric : 'est1rm';
+  const spec = metricSpec(effectiveMetric);
 
   return (
     <Card size="dense">
@@ -65,7 +74,7 @@ export default function ExerciseTrendSection({
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)' }}>
           Exercise progress &middot; {spec.title}
         </div>
-        <ChartHelp help={exerciseTrendHelp(metric)} />
+        <ChartHelp help={exerciseTrendHelp(effectiveMetric)} />
       </div>
 
       <select value={exerciseId || ''} onChange={(e) => onSelectExercise(Number(e.target.value))} style={selectStyle}>
@@ -79,8 +88,8 @@ export default function ExerciseTrendSection({
       {/* `fill` because five pills at intrinsic width overflow a 390px phone -- see SegmentedToggle. */}
       <div style={{ marginBottom: 12 }}>
         <SegmentedToggle
-          options={EXERCISE_METRIC_OPTIONS}
-          value={metric}
+          options={options}
+          value={effectiveMetric}
           onChange={onMetricChange}
           ariaLabel="Exercise metric"
           fill
@@ -88,7 +97,7 @@ export default function ExerciseTrendSection({
       </div>
 
       {loading && <Skeleton width="100%" height={200} radius={8} />}
-      {!loading && <ExerciseTrendChart points={points} metric={metric} defaultUnit={defaultUnit} />}
+      {!loading && <ExerciseTrendChart points={points} metric={effectiveMetric} defaultUnit={defaultUnit} />}
 
       {points.length > 0 && (
         <div style={{ marginTop: 12 }}>

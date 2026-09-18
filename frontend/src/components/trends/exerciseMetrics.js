@@ -69,3 +69,16 @@ export const EXERCISE_METRIC_OPTIONS = Object.entries(EXERCISE_METRICS).map(([va
 export function metricSpec(metric) {
   return EXERCISE_METRICS[metric] || EXERCISE_METRICS.est1rm;
 }
+
+// heaviest/sessionVolume/bestSetVolume are raw weight or weight x reps, so for an exercise whose
+// whole history is bodyweight (weight always 0) they are flat zero lines no matter the rep count --
+// the chart-switcher equivalent of ExerciseRecordsTable's bodyweightOnly branch, which hides the
+// same three rows from the records table below this chart for the same reason. Est. 1RM survives
+// unfiltered because comparableLb already substitutes rep count for it at weight 0.
+const WEIGHT_ONLY_METRICS = new Set(['heaviest', 'sessionVolume', 'bestSetVolume']);
+
+export function visibleMetricOptions(bodyweightOnly) {
+  return bodyweightOnly
+    ? EXERCISE_METRIC_OPTIONS.filter((opt) => !WEIGHT_ONLY_METRICS.has(opt.value))
+    : EXERCISE_METRIC_OPTIONS;
+}
