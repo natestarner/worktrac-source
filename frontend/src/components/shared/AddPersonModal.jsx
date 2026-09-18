@@ -3,6 +3,7 @@ import { addPerson } from '../../api/people';
 import { useAuth } from '../../context/AuthContext';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useAppState } from '../../context/AppStateContext';
+import { queryClient } from '../../lib/queryClient';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
 import Button from './Button';
@@ -26,6 +27,13 @@ export default function AddPersonModal({ onClose }) {
       }
       const person = await addPerson(trimmed);
       await refreshPeople();
+      // ⚠️ THE ROSTER DERIVES FROM PEOPLE TOO, and it is account-shared rather than person-keyed --
+      // same reasoning as the set-logging invalidation in queryClient.js (see its comment), except
+      // this gap was in the OTHER direction: offlineCacheWarm had already cached the roster from
+      // before this person existed, so a trainer who added a client and immediately checked their
+      // roster saw it as though the client were not there -- for up to a minute, with nothing on
+      // screen looking wrong. Prefix, because the key carries a weeks window this caller cannot know.
+      queryClient.invalidateQueries({ queryKey: ['roster'] });
       selectPerson(person.id);
       onClose();
     },

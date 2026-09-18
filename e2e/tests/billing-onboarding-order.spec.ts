@@ -64,7 +64,10 @@ test.describe('registration arriving from a marketing plan CTA', () => {
     await page.getByPlaceholder('e.g. Alex').fill('Sam');
     await page.getByPlaceholder('you@example.com').fill(email);
     await page.getByPlaceholder('At least 8 characters').fill('password123');
-    await page.getByRole('button', { name: 'Create household' }).click();
+    // Not "Create household" -- a Pro-intent arrival gets account-flavored copy throughout this
+    // page (RegisterPage.jsx's isProIntent), because a blank account-name field here is what a
+    // client later reads back verbatim in their own invite email.
+    await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page).toHaveURL(/\/confirm-email/);
 
     const configResponse = await request.get('/config.json');

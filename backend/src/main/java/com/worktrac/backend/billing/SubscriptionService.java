@@ -2,6 +2,9 @@ package com.worktrac.backend.billing;
 
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.config.StripeProperties;
+import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.AccountRole;
+import com.worktrac.backend.person.PersonRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,18 +54,27 @@ public class SubscriptionService {
     private final SubscriptionRepository subscriptionRepository;
     private final ApplicationEventPublisher events;
     private final StripeProperties stripeProperties;
+    private final PersonRepository personRepository;
+    private final AccountMembershipRepository membershipRepository;
     private final Clock clock;
 
     // ⚠️ Takes StripeProperties for the price->tier map ONLY, never to talk to Stripe. StripeService
     // is still the only class that imports com.stripe.* (billing.md), and this depends on the
     // configuration rather than on the SDK -- which is what keeps applyStripeState unit-testable
     // with a plain properties object and no HTTP stub.
+    //
+    // Takes PersonRepository and AccountMembershipRepository for `describe`'s "12 of 15 clients"
+    // count only -- the same reads QuotaService.requirePersonCapacity already does before adding a
+    // person, just for display rather than for a gate.
     public SubscriptionService(SubscriptionRepository subscriptionRepository,
                                 ApplicationEventPublisher events, StripeProperties stripeProperties,
-                                Clock clock) {
+                                PersonRepository personRepository,
+                                AccountMembershipRepository membershipRepository, Clock clock) {
         this.subscriptionRepository = subscriptionRepository;
         this.events = events;
         this.stripeProperties = stripeProperties;
+        this.personRepository = personRepository;
+        this.membershipRepository = membershipRepository;
         this.clock = clock;
     }
 
@@ -229,8 +241,27 @@ public class SubscriptionService {
     // for the same reason entitledPlan does.
     public SubscriptionDto describe(Long accountId) {
         return subscriptionRepository.findByAccountId(accountId)
-                .map(subscription -> SubscriptionDto.from(subscription, entitledPlan(subscription)))
+                .map(subscription -> {
+                    BillingPlan plan = entitledPlan(subscription);
+                    // Only meaningful on PRO, which is the only tier with seats to count usage
+                    // against -- SubscriptionDto.from clamps this to null on every other tier anyway,
+                    // but skipping both queries for the common (non-Pro) case keeps them off this
+                    // endpoint's cost.
+                    Integer clientCount = plan == BillingPlan.PRO ? currentClientCount(accountId) : null;
+                    return SubscriptionDto.from(subscription, plan, clientCount);
+                })
                 .orElseGet(SubscriptionDto::free);
+    }
+
+    // Everyone on the account minus the two kinds of person who are not a CLIENT: the trainer's own
+    // training profile, and an assistant's (MANAGER's) own -- the same "clientSeats + 1" people
+    // ceiling QuotaService.requirePersonCapacity enforces for the trainer, extended to managers for
+    // the same reason. Neither spends a client seat, so neither should count as one here.
+    private int currentClientCount(Long accountId) {
+        long people = personRepository.countByAccount_Id(accountId);
+        long managersWithAPerson = membershipRepository
+                .countByAccount_IdAndAccountRoleAndPersonIsNotNull(accountId, AccountRole.MANAGER);
+        return (int) Math.max(0, people - 1 - managersWithAPerson);
     }
 
     // Called from RegistrationService the moment an account exists, so "one row per account" is

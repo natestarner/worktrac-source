@@ -264,6 +264,10 @@ export default function BillingTab() {
           pending={pending}
           onManage={handleManageBilling}
           pausableLogins={pausableLogins}
+          interval={interval}
+          proBand={proBand}
+          onProBandChange={setProBand}
+          onUpgrade={handleUpgrade}
         />
       ) : (
         <FreeSummary
@@ -291,7 +295,18 @@ export default function BillingTab() {
 //
 // The tier is asked for ONCE, at the top, and everything below reads that answer. Adding a second
 // `plan === 'PRO'` branch further down is the bug this shape exists to prevent -- see billing.md.
-function PaidSummary({ plan, vocab, subscription, pending, onManage, pausableLogins = [] }) {
+function PaidSummary({
+  plan,
+  vocab,
+  subscription,
+  pending,
+  onManage,
+  pausableLogins = [],
+  interval,
+  proBand,
+  onProBandChange,
+  onUpgrade,
+}) {
   const cancelling = subscription?.cancelAtPeriodEnd === true;
   const periodEnd = subscription?.currentPeriodEnd;
   const comped = subscription?.comped === true;
@@ -319,13 +334,12 @@ function PaidSummary({ plan, vocab, subscription, pending, onManage, pausableLog
         <p style={mutedLineStyle}>
           {comped
             ? `Your ${vocab.account} has ${name} on the house, with our thanks for being here early.`
-            : renewalLine(cancelling, periodEnd, name)}
+            : renewalLine(cancelling, periodEnd, name, plan)}
         </p>
-        {/* What the band actually bought, said in the same words the checkout dropdown used.
-            Deliberately the ALLOWANCE and not "12 of 15": the usage half is a seat count the server
-            derives (people, minus the owner's own person, minus every manager's), and recomputing
-            it here from the people list would be a second derivation free to disagree with the one
-            that actually refuses an invite. Absent on a household tier, which has no seats at all. */}
+        {/* What the band actually bought AND how much of it is used, "12 of 15" -- both halves come
+            from the server (SubscriptionDto.clientSeats / .clientCount), never recomputed here from
+            the people list, which would be a second derivation free to disagree with the one that
+            actually refuses an invite. Absent on a household tier, which has no seats at all. */}
         {seatLine(subscription, plan, vocab) && (
           <p style={mutedLineStyle}>{seatLine(subscription, plan, vocab)}</p>
         )}
@@ -373,6 +387,21 @@ function PaidSummary({ plan, vocab, subscription, pending, onManage, pausableLog
           </Button>
         </OfflineDisabledWrap>
       )}
+
+      {/* Plus -> Pro, the one upgrade path this screen offers a PAYING household. Reuses
+          ProUpgradeCard verbatim rather than a second card -- it is already checked against every
+          other label for the substring rule (billing.md), and the two never share a screen: this
+          renders only for PLUS, ProUpgradeCard's other call site only for FREE. No `cardRef` here --
+          the ?intent=pro scroll-into-view only ever arrives at the FREE screen. */}
+      {plan === 'PLUS' && (
+        <ProUpgradeCard
+          interval={interval}
+          band={proBand}
+          onBandChange={onProBandChange}
+          pending={pending}
+          onUpgrade={onUpgrade}
+        />
+      )}
     </>
   );
 }
@@ -383,18 +412,49 @@ function PaidSummary({ plan, vocab, subscription, pending, onManage, pausableLog
  * ⚠️ Null and "unlimited" are DIFFERENT absences, which is why SubscriptionDto.clientSeats is null
  * rather than a large sentinel: a household tier has no seats to describe, while an Unlimited Pro
  * band has no ceiling to name. A sentinel would render one of them as the other.
+ *
+ * Leads with the BAND NAME ("Starter", "Practice", ...) so a trainer can tell which one they are
+ * actually on without opening the Customer Portal -- looked up by matching `clientSeats` back
+ * against PRO_BANDS rather than carried on the DTO, since the band's client count already is that
+ * lookup key and a second field would just be a second way to disagree with it.
+ *
+ * `clientCount` is USAGE, not the allowance -- deliberately a second field from `clientSeats`
+ * rather than derived from the people list here, for the same reason the server computes it: this
+ * screen has no roster read of its own, and a household on Free never even has `clientCount`
+ * (billing.md's "ask for a feature" -- Pro-only, so SubscriptionDto clamps it there). Its absence
+ * (an older server build predating this field, resilience.md axis D) degrades to the allowance-only
+ * line rather than to nothing.
  */
 function seatLine(subscription, plan, vocab) {
   if (plan !== 'PRO') return null;
   const seats = subscription?.clientSeats;
-  if (seats == null) return `No limit on how many ${vocab.member}s you take on.`;
-  return `Covers up to ${seats} ${vocab.member}${seats === 1 ? '' : 's'}.`;
+  const count = subscription?.clientCount;
+  const band = PRO_BANDS.find((b) => b.clients === seats);
+  const prefix = band ? `${band.name}: ` : '';
+  if (seats == null) {
+    return count == null
+      ? `${prefix}No limit on how many ${vocab.member}s you take on.`
+      : `${prefix}${count} ${vocab.member}${count === 1 ? '' : 's'}, no limit.`;
+  }
+  return count == null
+    ? `${prefix}Covers up to ${seats} ${vocab.member}${seats === 1 ? '' : 's'}.`
+    : `${prefix}${count} of ${seats} ${vocab.member}s.`;
 }
 
 // "ends" vs "renews" is the whole reassurance: someone who has cancelled needs to see that they
 // keep everything until the period they paid for actually runs out.
-function renewalLine(cancelling, periodEnd, name) {
-  if (!periodEnd) return 'Everything in Huddle, with no limits.';
+//
+// ⚠️ "Everything in Huddle, with no limits" is only TRUE of Plus. It used to be the fallback for
+// every paid tier whenever `periodEnd` hadn't loaded yet (subscriptionQuery still in flight, or
+// offline with only the auth snapshot's bare plan name to go on) -- so a Pro Starter household,
+// which has a very real 5-client ceiling, was told in the same breath it had none. Gated on the
+// plan explicitly (`=== 'PLUS'`) rather than on `!== 'PRO'`, so a tier this bundle predates
+// (resilience.md axis D) falls to the honest generic line rather than inheriting an unlimited claim
+// nobody checked.
+function renewalLine(cancelling, periodEnd, name, plan) {
+  if (!periodEnd) {
+    return plan === 'PLUS' ? 'Everything in Huddle, with no limits.' : `You're set up with Huddle ${name}.`;
+  }
   return cancelling
     ? `${name} until ${formatDate(periodEnd)}: you keep everything until then.`
     : `Renews ${formatDate(periodEnd)}.`;

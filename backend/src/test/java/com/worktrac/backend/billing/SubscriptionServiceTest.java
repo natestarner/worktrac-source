@@ -2,6 +2,9 @@ package com.worktrac.backend.billing;
 
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.config.StripeProperties;
+import com.worktrac.backend.membership.AccountMembershipRepository;
+import com.worktrac.backend.membership.AccountRole;
+import com.worktrac.backend.person.PersonRepository;
 import com.worktrac.backend.support.MutableClock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -36,6 +39,8 @@ class SubscriptionServiceTest {
     private MutableClock clock;
     private ApplicationEventPublisher events;
     private StripeProperties stripeProperties;
+    private PersonRepository personRepository;
+    private AccountMembershipRepository membershipRepository;
     private SubscriptionService service;
     private Account account;
 
@@ -55,7 +60,10 @@ class SubscriptionServiceTest {
                 PlanSku.PLUS_MONTH.name(), PLUS_MONTH_PRICE,
                 PlanSku.PLUS_YEAR.name(), PLUS_YEAR_PRICE,
                 PlanSku.PRO_STUDIO_YEAR.name(), PRO_STUDIO_YEAR_PRICE)));
-        service = new SubscriptionService(repository, events, stripeProperties, clock);
+        personRepository = mock(PersonRepository.class);
+        membershipRepository = mock(AccountMembershipRepository.class);
+        service = new SubscriptionService(
+                repository, events, stripeProperties, personRepository, membershipRepository, clock);
         account = new Account("Test Household");
     }
 
@@ -377,6 +385,65 @@ class SubscriptionServiceTest {
             // ...and the map is not vacuously all-true: the two Pro-only features separate the tiers.
             assertThat(service.has(2L, PlanFeature.PRIVATE_MEMBERS)).isFalse();
             assertThat(service.has(3L, PlanFeature.PRIVATE_MEMBERS)).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("describe: clientCount, the \"12\" in \"12 of 15 clients\"")
+    class ClientCount {
+
+        // -1 for the trainer's own training profile -- the same "clientSeats + 1" people ceiling
+        // QuotaService.requirePersonCapacity enforces. A trainer who also trains does not spend a
+        // client seat on themselves, so counting them as one here would overstate the roster.
+        @Test
+        void countsEveryoneButTheTrainerOnPro() {
+            Subscription subscription = subscription(SubscriptionStatus.ACTIVE, BillingPlan.PRO);
+            subscription.setClientSeats(ClientBand.STUDIO.clientLimit());
+            when(repository.findByAccountId(5L)).thenReturn(Optional.of(subscription));
+            when(personRepository.countByAccount_Id(5L)).thenReturn(4L);
+            when(membershipRepository.countByAccount_IdAndAccountRoleAndPersonIsNotNull(5L, AccountRole.MANAGER))
+                    .thenReturn(0L);
+
+            assertThat(service.describe(5L).clientCount()).isEqualTo(3);
+        }
+
+        // An assistant's own training profile is a person on the roster but not a CLIENT of the
+        // practice, same reasoning as the trainer's own -- neither spends a client seat, so neither
+        // should be counted as though it did.
+        @Test
+        void alsoExcludesAManagersOwnPerson() {
+            Subscription subscription = subscription(SubscriptionStatus.ACTIVE, BillingPlan.PRO);
+            subscription.setClientSeats(ClientBand.STUDIO.clientLimit());
+            when(repository.findByAccountId(5L)).thenReturn(Optional.of(subscription));
+            // Trainer + one assistant (with their own person) + 3 real clients = 5 people.
+            when(personRepository.countByAccount_Id(5L)).thenReturn(5L);
+            when(membershipRepository.countByAccount_IdAndAccountRoleAndPersonIsNotNull(5L, AccountRole.MANAGER))
+                    .thenReturn(1L);
+
+            assertThat(service.describe(5L).clientCount()).isEqualTo(3);
+        }
+
+        // Household tiers have no seats to count usage against -- same reasoning as clientSeats
+        // itself, and the query is skipped entirely rather than run and discarded.
+        @Test
+        void isNullOnAHouseholdTier() {
+            Subscription subscription = subscription(SubscriptionStatus.ACTIVE, BillingPlan.PLUS);
+            when(repository.findByAccountId(6L)).thenReturn(Optional.of(subscription));
+
+            assertThat(service.describe(6L).clientCount()).isNull();
+            verify(personRepository, never()).countByAccount_Id(any());
+        }
+
+        // A lapsed Pro row still records PRO in billing_plan's cache, but entitledPlan reads FREE --
+        // and a Free account must not be told it has a roster allowance it is not paying for, same
+        // as clientSeats.
+        @Test
+        void isNullOnceTheTierLapses() {
+            Subscription subscription = subscription(SubscriptionStatus.UNPAID, BillingPlan.PRO);
+            subscription.setClientSeats(ClientBand.STUDIO.clientLimit());
+            when(repository.findByAccountId(7L)).thenReturn(Optional.of(subscription));
+
+            assertThat(service.describe(7L).clientCount()).isNull();
         }
     }
 

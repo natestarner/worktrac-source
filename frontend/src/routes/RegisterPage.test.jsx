@@ -99,13 +99,82 @@ describe('RegisterPage validation', () => {
     fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Sam' } });
     fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'sam@example.com' } });
     fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create household' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
 
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith('/confirm-email', {
         state: { email: 'sam@example.com', wantsPlan: 'PRO' },
       }),
     );
+  });
+
+  // ⚠️ THE BUG: a trainer arriving from for-trainers.html saw "household" throughout this page --
+  // the heading, the field label, the button -- and a client they later invited read it back in
+  // their OWN invite email, because a blank field fell through to RegistrationService's
+  // `personName + "'s Household"` default regardless of intent. Every literal "household" on this
+  // page must flip to "account" for a Pro-intent arrival, and a blank field must submit this
+  // page's OWN default rather than leaving it for the backend to household-flavor.
+  describe('a Pro-intent arrival (?plan=pro) never says "household"', () => {
+    it('relabels the heading, the field, the button and the legal line', () => {
+      renderPage('/register?plan=pro');
+
+      expect(screen.getByRole('heading', { name: 'Create your account' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Account name (optional)')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Create account' })).toBeInTheDocument();
+      expect(screen.getByText(/By creating an account, you agree to our/)).toBeInTheDocument();
+
+      expect(screen.queryByText(/household/i)).not.toBeInTheDocument();
+    });
+
+    it('previews and then SENDS its own default, rather than falling through to the household one', async () => {
+      renderPage('/register?plan=pro');
+
+      const accountField = screen.getByLabelText('Account name (optional)');
+      expect(accountField).toHaveAttribute('placeholder', 'Defaults to your account');
+
+      fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Sam' } });
+      expect(accountField).toHaveAttribute('placeholder', "Defaults to “Sam's Account”");
+
+      fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'sam@example.com' } });
+      fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+
+      await waitFor(() =>
+        expect(register).toHaveBeenCalledWith({
+          accountName: "Sam's Account",
+          email: 'sam@example.com',
+          password: 'password123',
+          personName: 'Sam',
+        }),
+      );
+    });
+
+    // Typing a real name still wins over the computed default -- this page only fills the gap a
+    // blank field would otherwise leave for the backend.
+    it('still sends a typed account name untouched', async () => {
+      renderPage('/register?plan=pro');
+
+      fireEvent.change(screen.getByPlaceholderText('e.g. Alex'), { target: { value: 'Sam' } });
+      fireEvent.change(screen.getByLabelText('Account name (optional)'), { target: { value: 'Iron Peak Training' } });
+      fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'sam@example.com' } });
+      fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
+
+      await waitFor(() =>
+        expect(register).toHaveBeenCalledWith(
+          expect.objectContaining({ accountName: 'Iron Peak Training' }),
+        ),
+      );
+    });
+  });
+
+  // The control case: ?plan=plus (a family) and no plan at all must keep the original household
+  // copy and the original server-default behaviour (a blank field submitted as-is).
+  it('keeps "household" copy for a non-Pro arrival', () => {
+    renderPage('/register?plan=plus');
+
+    expect(screen.getByRole('heading', { name: 'Create your household' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Household name (optional)')).toBeInTheDocument();
   });
 
   it('ignores a plan parameter that names neither paid plan', async () => {

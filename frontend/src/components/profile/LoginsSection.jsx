@@ -279,7 +279,7 @@ function AddPersonWithLoginModal({ onCancel, onSend }) {
         workouts and remove their login &mdash; you will never be able to see or set their password.
       </p>
 
-      <label htmlFor="add-person-name" style={labelStyle}>Their name</label>
+      <label htmlFor="add-person-name" style={labelStyle}>Name</label>
       <input
         id="add-person-name"
         autoComplete="off"

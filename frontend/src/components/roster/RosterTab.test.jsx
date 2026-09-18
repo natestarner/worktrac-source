@@ -119,4 +119,50 @@ describe('RosterTab', () => {
 
     expect(await screen.findByText('Family members')).toBeInTheDocument();
   });
+
+  // The trainer is not their own client. RosterService reads everyone the caller can see, which
+  // includes the trainer's own training profile -- the filter belongs here, not the server, same
+  // "no plan gate, filter is presentation" shape the rest of this screen already has.
+  describe('the owner is not one of their own clients', () => {
+    it('excludes the primary person, matched by id rather than by the viewer’s own identity', async () => {
+      useAuth.mockReturnValue({
+        account: { plan: 'PRO', vocab: PRO_VOCAB },
+        people: [
+          { id: 9, name: 'Coach Dana', isPrimary: true },
+          { id: 1, name: 'Real Client', isPrimary: false },
+        ],
+      });
+      listRoster.mockResolvedValue([
+        entry({ personId: 9, personName: 'Coach Dana' }),
+        entry({ personId: 1, personName: 'Real Client' }),
+      ]);
+      renderTab();
+
+      await screen.findByText('Real Client');
+      expect(screen.queryByText('Coach Dana')).not.toBeInTheDocument();
+    });
+
+    it('shows the empty state once filtering leaves nobody', async () => {
+      useAuth.mockReturnValue({
+        account: { plan: 'PRO', vocab: PRO_VOCAB },
+        people: [{ id: 9, name: 'Coach Dana', isPrimary: true }],
+      });
+      listRoster.mockResolvedValue([entry({ personId: 9, personName: 'Coach Dana' })]);
+      renderTab();
+
+      expect(await screen.findByText('No clients yet')).toBeInTheDocument();
+      expect(screen.queryByText('Coach Dana')).not.toBeInTheDocument();
+    });
+
+    // No `people` at all (an older auth snapshot, or a still-booting render) means no owner can be
+    // identified -- fails open to showing everyone, the same direction every other unknown-state
+    // default in this app takes, rather than guessing and hiding a real client.
+    it('shows everyone when people is unavailable to identify the owner by', async () => {
+      useAuth.mockReturnValue({ account: { plan: 'PRO', vocab: PRO_VOCAB } });
+      listRoster.mockResolvedValue([entry({ personId: 9, personName: 'Coach Dana' })]);
+      renderTab();
+
+      expect(await screen.findByText('Coach Dana')).toBeInTheDocument();
+    });
+  });
 });

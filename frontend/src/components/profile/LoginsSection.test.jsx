@@ -370,7 +370,7 @@ describe('LoginsSection add-and-invite', () => {
     render(<LoginsSection plan="PRO" />);
 
     fireEvent.click(await screen.findByRole('button', { name: '+ Add someone with a login' }));
-    fireEvent.change(screen.getByLabelText('Their name'), { target: { value: 'Dana' } });
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Dana' } });
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'dana@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send invite' }));
 
@@ -381,7 +381,7 @@ describe('LoginsSection add-and-invite', () => {
     render(<LoginsSection plan="PRO" />);
 
     fireEvent.click(await screen.findByRole('button', { name: '+ Add someone with a login' }));
-    fireEvent.change(screen.getByLabelText('Their name'), { target: { value: 'Dana' } });
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Dana' } });
 
     expect(screen.getByRole('button', { name: 'Send invite' })).toBeDisabled();
   });

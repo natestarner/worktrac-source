@@ -148,6 +148,13 @@ uses apart:
   it. Discarding an entry that records nothing loses nothing.
 - **Deleting somebody else's entry answers 404, not 403.** Being refused *differently* would tell a
   client that a private entry about them exists.
+- **The account-menu ENTRY POINT is Pro-only (`PlanFeature.CHECK_INS`); the route and
+  `CheckInController` are not gated by plan at all.** Same ENTRY-POINT-ONLY shape as `ROSTER`
+  above: Free and Plus households used to see a "Check-ins" menu item that made sense only once
+  this is a coaching workflow rather than one family member's private habit tracker, and hiding it
+  is a discovery decision, not an access one. Shown to **every role** the plan is granted to,
+  including the OWNER — a trainer tracking their own bodyweight is the same feature turned on
+  themselves, not a different one, so this must not also become a role gate.
 
 ### ⚠️ This is the THIRD note concept. Keep the labels mutually non-containing.
 
