@@ -318,6 +318,9 @@ describe('HistoryTab and the Free-tier window', () => {
 
     expect(screen.queryByText(/No workouts logged yet/)).not.toBeInTheDocument();
     expect(await screen.findByText(/Your full history has 3 more workouts/)).toBeInTheDocument();
+    // The export is full-history and unclamped, so a session hidden behind the window is still
+    // something to download -- Export data must not read this the same as truly-empty history.
+    expect(screen.getByRole('button', { name: 'Export data' })).not.toBeDisabled();
   });
 
   // The other side of the same branch: with nothing hidden, an empty History really is empty and
@@ -330,6 +333,7 @@ describe('HistoryTab and the Free-tier window', () => {
     renderHistoryTab();
 
     expect(await screen.findByText('No workouts logged yet for Nate.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export data' })).toBeDisabled();
   });
 
   it('marks a populated but clipped list as incomplete', async () => {
