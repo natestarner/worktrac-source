@@ -1,9 +1,8 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePrs } from '../../hooks/usePrs';
 import { useExerciseTrend } from '../../hooks/useExerciseTrend';
 import { useExerciseRecords } from '../../hooks/useExerciseRecords';
-import { formatDateLabel } from '../../utils/datetime';
-import { convertWeight } from '../../utils/formulas';
 import ExerciseTrendChart from './ExerciseTrendChart';
 import ExerciseRecordsTable from './ExerciseRecordsTable';
 import SegmentedToggle from '../shared/SegmentedToggle';
@@ -27,6 +26,20 @@ const selectStyle = {
   marginBottom: 12,
 };
 
+// A ghost-button link, not <Button variant="ghost">: it sits inside a card that already has its
+// own visual weight, and at --text-sm it reads as the tail of the card rather than as a control
+// competing with the metric switcher above it.
+const historyLinkStyle = {
+  background: 'none',
+  border: 'none',
+  padding: 'var(--space-2) 0',
+  font: 'inherit',
+  fontSize: 'var(--text-sm)',
+  fontWeight: 600,
+  color: 'var(--color-accent-text)',
+  cursor: 'pointer',
+};
+
 export default function ExerciseTrendSection({
   personId,
   exerciseId,
@@ -36,6 +49,7 @@ export default function ExerciseTrendSection({
   onMetricChange,
   defaultUnit,
 }) {
+  const navigate = useNavigate();
   // Same cached PR list the PR board reads (queryKeys.prs), so the dropdown can't diverge from it.
   const { prs: loggedExercises } = usePrs(personId);
 
@@ -65,6 +79,9 @@ export default function ExerciseTrendSection({
   // below still writes the real preference, so picking a weighted exercise again restores it.
   const effectiveMetric = options.some((opt) => opt.value === metric) ? metric : 'est1rm';
   const spec = metricSpec(effectiveMetric);
+  // The row backing the <select>'s current value, for the history link's name. Read off the list
+  // already in hand rather than fetched: the link and the dropdown must name the same exercise.
+  const selectedExercise = loggedExercises.find((pr) => pr.exerciseId === exerciseId);
 
   return (
     <Card size="dense">
@@ -99,44 +116,36 @@ export default function ExerciseTrendSection({
       {loading && <Skeleton width="100%" height={200} radius={8} />}
       {!loading && <ExerciseTrendChart points={points} metric={effectiveMetric} defaultUnit={defaultUnit} />}
 
-      {points.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          {points
-            .slice()
-            .reverse()
-            .map((p) => (
-              <div
-                key={p.sessionId}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 0',
-                  borderBottom: '1px solid var(--color-subtle-bg)',
-                  fontSize: 14,
-                }}
-              >
-                <span style={{ color: 'var(--color-muted)' }}>{formatDateLabel(p.date)}</span>
-                <span style={{ fontWeight: 600 }}>
-                  {convertWeight(p.weightLb, 'lb', defaultUnit)} {defaultUnit} &times; {p.reps}
-                </span>
-                {p.isPr && (
-                  <span
-                    style={{
-                      background: 'var(--color-success-bg)',
-                      color: 'var(--color-success)',
-                      fontSize: 11,
-                      fontWeight: 'var(--weight-bold)',
-                      padding: '3px 8px',
-                      borderRadius: 999,
-                      letterSpacing: '0.03em',
-                    }}
-                  >
-                    PR
-                  </span>
-                )}
-              </div>
-            ))}
+      {/* A per-session list of best sets lived here and was removed: the chart above already plots
+          every one of those sessions and already marks the PRs with green dots, so the list was the
+          same data a second time, and "what did I do last time" is answered mid-workout by
+          ExerciseDetail's Last session block. Trends' job is aggregation over time; re-rendering
+          what History owns is the mistake .claude/rules/trends.md records under "Trends does not
+          re-render what another tab already owns". So it links there instead.
+
+          The exercise NAME is in the aria-label, never the visible text. trends.spec.ts's own
+          header warns that bare exercise-name lookups are already ambiguous across the picker,
+          History, PRs and this card's header -- adding a fifth on-screen copy is how unrelated
+          specs have broken before. */}
+      {selectedExercise && (
+        <div style={{ marginTop: 'var(--space-3)' }}>
+          <button
+            className="pressable"
+            aria-label={`View history for ${selectedExercise.exerciseName}`}
+            onClick={() =>
+              navigate('/app/history', {
+                state: {
+                  historyExerciseFilter: {
+                    exerciseId: selectedExercise.exerciseId,
+                    exerciseName: selectedExercise.exerciseName,
+                  },
+                },
+              })
+            }
+            style={historyLinkStyle}
+          >
+            Exercise history &rarr;
+          </button>
         </div>
       )}
 

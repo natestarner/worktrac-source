@@ -1101,6 +1101,14 @@ input[type='search']::-webkit-search-results-decoration {
   scroll-margin-top: var(--sticky-chrome-clearance);
 }
 
+/* TrendsTab scrolls this into view for someone who arrived from a PR row's "View progress".
+   Fourth consumer of --sticky-chrome-clearance, for exactly the reason the other three list:
+   without it `block: 'start'` parks the card's top edge where the sticky .app-chrome paints, so
+   the section we deep-linked to lands behind the tab bar. */
+.trends-exercise-anchor {
+  scroll-margin-top: var(--sticky-chrome-clearance);
+}
+
 .person-pill-bar {
   padding: var(--space-3) var(--space-6);
   padding-left: max(var(--space-6), env(safe-area-inset-left));

@@ -13,48 +13,77 @@
 // screen through metricSpec's fallback like every other field (see the hover-blank-page incident).
 // Three of the five are a single BEST SET; two are session TOTALS. That distinction is the whole
 // reason this copy exists, so every sentence has to say which it is.
+//
+// `recordMeaning` and `sortLabel` are the PRs board's half of the same table (see
+// components/prs/prMeasures.js). The board's record picker offers these same five words, so they
+// live on the SAME spec rather than in a parallel table keyed by metric name -- that parallel table
+// is the raw lookup the hover-blank-page incident was about, one indirection later.
+//
+// recordMeaning cannot just reuse dotMeaning: these sentences describe an ALL-TIME best on a board
+// with no chart on it, so "each dot" would name something that is not on screen. What it must keep
+// is the best-set-vs-session-total distinction, because that is the whole point of both.
 export const EXERCISE_METRICS = {
   est1rm: {
     label: 'Est. 1RM',
     dataKey: 'est1rmLb',
     isWeight: true,
     title: 'est. 1RM',
+    sortLabel: 'Best est. 1RM',
     dotMeaning:
       'Each dot is that session’s best single set, scored by estimated 1RM: one number that ' +
       'combines the weight and the reps. A bodyweight exercise has no weight to estimate from, ' +
       'so it shows your rep count instead.',
+    recordMeaning:
+      'Your best single set ever, scored by estimated 1RM: one number that combines the weight ' +
+      'and the reps. A bodyweight exercise has no weight to estimate from, so it ranks on your ' +
+      'rep count instead, and a timed hold ranks on seconds.',
   },
   heaviest: {
     label: 'Top weight',
     dataKey: 'heaviestWeightLb',
     isWeight: true,
     title: 'heaviest weight',
+    sortLabel: 'Heaviest weight',
     dotMeaning:
       'Each dot is the heaviest weight you touched that session. This is often a different set ' +
       'than your best estimated 1RM: a heavy single tops the bar but loses to a lighter set ' +
       'done for more reps once reps are counted.',
+    recordMeaning:
+      'The heaviest weight you have ever put on this exercise, whatever the reps. This is often ' +
+      'a different set than your best estimated 1RM: a heavy single tops the bar but loses to a ' +
+      'lighter set done for more reps once reps are counted.',
   },
   sessionVolume: {
     label: 'Volume',
     dataKey: 'sessionVolumeLb',
     isWeight: true,
     title: 'volume per session',
+    sortLabel: 'Most volume',
     dotMeaning:
       'Each dot is the whole session added up: weight × reps for every set you did of this ' +
       'exercise. It is a session total, not one set.',
+    recordMeaning:
+      'Your biggest single workout of this exercise: weight × reps for every set you did that ' +
+      'session, added up. It is a session total, not one set.',
   },
   bestSetVolume: {
     label: 'Best set',
     dataKey: 'bestSetVolumeLb',
     isWeight: true,
     title: 'best set volume',
+    sortLabel: 'Best set volume',
     dotMeaning: 'Each dot is your single best set that session, scored by weight × reps.',
+    recordMeaning: 'Your single best set ever, scored by weight × reps. It is one set, not a session total.',
   },
   totalReps: {
     label: 'Reps',
     dataKey: 'totalReps',
     isWeight: false,
     title: 'total reps',
+    sortLabel: 'Most reps',
+    recordMeaning:
+      'The most reps you have ever done of this exercise in one workout, added up across every ' +
+      'set. It is a session total, not one set. A timed hold counts as 0 reps.',
     dotMeaning:
       'Each dot is every rep you did of this exercise that session, added up. It is a session ' +
       'total, not one set. A timed hold counts as 0 reps.',

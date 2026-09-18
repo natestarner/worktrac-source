@@ -88,10 +88,59 @@ test.describe('History and PRs: tags, PR markers, and click-to-filter', () => {
     await expect(page.getByText('Barbell Back Squat')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Legs', exact: true })).toBeVisible();
 
+    // A row now offers both destinations rather than jumping straight to History -- a record leads
+    // two useful places and neither is obviously the default.
     await page.getByText('Barbell Back Squat').click();
+    await page.getByRole('button', { name: 'View history' }).click();
     await expect(page).toHaveURL(/\/app\/history/);
     await expect(page.getByRole('button', { name: 'Stop filtering to Barbell Back Squat' })).toBeVisible();
     await expect(page.getByText('Barbell Bench Press')).toHaveCount(0);
+  });
+
+  // The other half of that chooser. Landing on Trends is not enough: the exercise has to be
+  // SELECTED and the section has to be scrolled to, or it reads as a dead link -- the card sits
+  // far below the fold on a page that is entirely in the DOM, so visibility alone proves nothing.
+  test('a PR row can jump to that exercise\'s progress chart, scrolled into view', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+
+    await pickExercise(page, 'Barbell Back Squat');
+    await logSetAt(page, 225, 5);
+    await page.getByRole('link', { name: 'PRs' }).click();
+    await expect(page.getByText('Barbell Back Squat')).toBeVisible();
+
+    await page.getByText('Barbell Back Squat').click();
+    await page.getByRole('button', { name: 'View progress' }).click();
+
+    await expect(page).toHaveURL(/\/app\/trends/);
+    const heading = page.getByText(/^Exercise progress/);
+    await expect(heading).toBeVisible();
+    // The picker really is on the exercise we came from.
+    await expect(page.getByRole('combobox').filter({ hasText: 'Barbell Back Squat' })).toBeVisible();
+
+    // It actually scrolled, and the card cleared the sticky chrome rather than landing under it.
+    await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    const box = await heading.boundingBox();
+    expect(box!.y).toBeGreaterThan(0);
+
+    // The seed is consumed once: a reload must not re-apply it (React Router persists
+    // location.state into window.history.state).
+    await page.reload();
+    await expect(page.getByText(/^Exercise progress/)).toBeVisible();
+    await expect.poll(async () => page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
+  // The per-session list of best sets under the chart is gone; it repeated what the chart plots.
+  // What replaced it has to actually work.
+  test('the Trends progress card links into a filtered History', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+
+    await pickExercise(page, 'Barbell Back Squat');
+    await logSetAt(page, 225, 5);
+    await page.getByRole('link', { name: 'Trends' }).click();
+
+    await page.getByRole('button', { name: 'View history for Barbell Back Squat' }).click();
+    await expect(page).toHaveURL(/\/app\/history/);
+    await expect(page.getByRole('button', { name: 'Stop filtering to Barbell Back Squat' })).toBeVisible();
   });
 
   test('the exercise screen\'s "View full exercise history" link deep-links into a filtered History with a way back, and the seed does not survive a reload', async ({ page, request }) => {
@@ -145,8 +194,11 @@ test.describe('History and PRs: tags, PR markers, and click-to-filter', () => {
 // The PRs board absorbed "what got better lately" when the Trends Recent PRs card was removed as
 // redundant, so ordering is now a first-class control here rather than a fixed A-Z list.
 test.describe('PRs board sorting', () => {
-  const boardOrder = async (page) =>
-    page.locator('button').filter({ hasText: /^Barbell / }).allTextContents();
+  // Selected by testid, not by text shape. The old form matched every button whose text started
+  // "Barbell ", which coupled this helper to the row's internal layout -- a row gained a chevron
+  // and a destination chooser, and any future control carrying an exercise name would break it
+  // again.
+  const boardOrder = async (page) => page.getByTestId('pr-row').allTextContents();
 
   // Each PR has to land in its OWN session. A PR row is dated by its session's startedAt, so three
   // exercises logged in one workout share a timestamp exactly and fall through to the name
@@ -210,7 +262,7 @@ test.describe('PRs board sorting', () => {
 
     // Epley, not raw weight: the 315x2 deadlift leads, and the 185x8 bench places last despite
     // the squat being the lighter bar.
-    await page.getByLabel('Sort').selectOption('est1rm');
+    await page.getByLabel('Sort').selectOption('record');
     await expect.poll(async () => await boardOrder(page)).toEqual([
       expect.stringContaining('Barbell Deadlift'),
       expect.stringContaining('Barbell Back Squat'),
@@ -222,6 +274,68 @@ test.describe('PRs board sorting', () => {
     await page.getByRole('link', { name: 'Log' }).click();
     await expect(page).toHaveURL(/\/app\/log/);
     await page.getByRole('link', { name: 'PRs' }).click();
-    await expect(page.getByLabel('Sort')).toHaveValue('est1rm');
+    await expect(page.getByLabel('Sort')).toHaveValue('record');
+  });
+
+  // The record picker re-measures the whole board. Est. 1RM and Top weight deliberately DISAGREE
+  // on this data -- Epley rewards reps, so the 185x8 bench out-estimates the 225x3 squat while
+  // losing to it on raw weight. A fixture where they agreed would pass against a picker that did
+  // nothing at all.
+  test('the record picker changes what every row shows, and what the sort ranks on', async ({ page, request }) => {
+    const email = await registerHousehold(page, request, 'Nate');
+    await setBillingPlan(request, email, 'PLUS');
+    await page.reload();
+
+    await logPastPr(page, '2026-01-10', 'Barbell Back Squat', 225, 3); // est 1RM 247.5, top weight 225
+    await logPastPr(page, '2026-02-01', 'Barbell Bench Press', 185, 8); // est 1RM 234.3, top weight 185
+
+    await page.getByRole('link', { name: 'PRs' }).click();
+    await expect(page.getByText('Barbell Back Squat')).toBeVisible();
+
+    await page.getByLabel('Sort').selectOption('record');
+    await expect.poll(async () => await boardOrder(page)).toEqual([
+      expect.stringContaining('Barbell Back Squat'), // 247.5
+      expect.stringContaining('Barbell Bench Press'), // 234.3
+    ]);
+
+    // Switching the record switches the numbers AND the sort's label, since they are one choice.
+    await page.getByLabel('Record', { exact: true }).selectOption('heaviest');
+    await expect(page.getByRole('option', { name: 'Heaviest weight' })).toBeAttached();
+    await expect.poll(async () => await boardOrder(page)).toEqual([
+      expect.stringContaining('225'),
+      expect.stringContaining('185'),
+    ]);
+
+    // Per-person and persisted, exactly like the sort beside it.
+    await page.getByRole('link', { name: 'Log' }).click();
+    await expect(page).toHaveURL(/\/app\/log/);
+    await page.getByRole('link', { name: 'PRs' }).click();
+    await expect(page.getByLabel('Record', { exact: true })).toHaveValue('heaviest');
+  });
+
+  // A pull-up has no top weight at all. It must read as a dash with a reason, never "0 lb", and it
+  // must sink below every ranked row rather than tying at zero and interleaving.
+  test('an exercise the record cannot measure shows a dash and sorts last', async ({ page, request }) => {
+    const email = await registerHousehold(page, request, 'Nate');
+    await setBillingPlan(request, email, 'PLUS');
+    await page.reload();
+
+    await logPastPr(page, '2026-01-10', 'Barbell Back Squat', 225, 3);
+    await logPastPr(page, '2026-02-01', 'Pull-up', 0, 12);
+
+    await page.getByRole('link', { name: 'PRs' }).click();
+    await expect(page.getByText('Pull-up')).toBeVisible();
+
+    await page.getByLabel('Record', { exact: true }).selectOption('heaviest');
+    await page.getByLabel('Sort').selectOption('record');
+
+    const rows = page.getByTestId('pr-row');
+    await expect.poll(async () => (await rows.allTextContents()).map((t) => t.split('\n')[0])).toEqual([
+      expect.stringContaining('Barbell Back Squat'),
+      expect.stringContaining('Pull-up'),
+    ]);
+    await expect(rows.nth(1)).toContainText('—');
+    await expect(rows.nth(1)).toContainText('Bodyweight');
+    await expect(rows.nth(1)).not.toContainText('0 lb');
   });
 });

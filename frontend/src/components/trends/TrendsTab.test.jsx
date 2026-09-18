@@ -73,13 +73,21 @@ describe('TrendsTab', () => {
 
   it('shows a skeleton while the overview is being fetched', () => {
     useTrendsOverview.mockReturnValue({ overview: null, loading: true });
-    renderWithQuery(<TrendsTab />);
+    renderWithQuery(
+      <MemoryRouter>
+        <TrendsTab />
+      </MemoryRouter>,
+    );
     expect(screen.getByTestId('trends-skeleton')).toBeInTheDocument();
   });
 
   it('shows the onboarding empty state only for a person who has never logged anything', () => {
     useTrendsOverview.mockReturnValue({ overview: emptyRange(false), loading: false });
-    renderWithQuery(<TrendsTab />);
+    renderWithQuery(
+      <MemoryRouter>
+        <TrendsTab />
+      </MemoryRouter>,
+    );
     expect(screen.getByText(/no workouts logged yet/i)).toBeInTheDocument();
   });
 
@@ -87,7 +95,11 @@ describe('TrendsTab', () => {
     // The regression this guards: keying the onboarding copy off the selected range alone told
     // someone with years of history "No workouts logged yet" the moment they clicked 4wk.
     useTrendsOverview.mockReturnValue({ overview: emptyRange(true), loading: false });
-    renderWithQuery(<TrendsTab />);
+    renderWithQuery(
+      <MemoryRouter>
+        <TrendsTab />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText(/no workouts in the last 12 weeks/i)).toBeInTheDocument();
     expect(screen.queryByText(/no workouts logged yet/i)).not.toBeInTheDocument();
@@ -95,7 +107,11 @@ describe('TrendsTab', () => {
 
   it('keeps the range toggle usable on the empty-range state so the person can widen it', () => {
     useTrendsOverview.mockReturnValue({ overview: emptyRange(true), loading: false });
-    renderWithQuery(<TrendsTab />);
+    renderWithQuery(
+      <MemoryRouter>
+        <TrendsTab />
+      </MemoryRouter>,
+    );
 
     fireEvent.click(screen.getByText('All'));
     expect(setTrendsRange).toHaveBeenCalledWith(260);
@@ -114,7 +130,11 @@ describe('TrendsTab', () => {
       setTrendsExerciseMetric: vi.fn(),
     });
     useTrendsOverview.mockReturnValue({ overview: emptyRange(true), loading: false });
-    renderWithQuery(<TrendsTab />);
+    renderWithQuery(
+      <MemoryRouter>
+        <TrendsTab />
+      </MemoryRouter>,
+    );
 
     // "All" is 5 years, not 12 weeks -- a hardcoded label got this wrong.
     expect(screen.getByText(/no workouts in the last 5 years/i)).toBeInTheDocument();
@@ -122,7 +142,11 @@ describe('TrendsTab', () => {
 
   it('renders summary cards and every chart section once there is activity in range', () => {
     useTrendsOverview.mockReturnValue({ overview: overviewWithActivity, loading: false });
-    renderWithQuery(<TrendsTab />);
+    renderWithQuery(
+      <MemoryRouter>
+        <TrendsTab />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText('1 week')).toBeInTheDocument();
     expect(screen.getByText('consistency-heatmap')).toBeInTheDocument();
@@ -133,7 +157,11 @@ describe('TrendsTab', () => {
 
   it('lets the user change the range toggle', () => {
     useTrendsOverview.mockReturnValue({ overview: overviewWithActivity, loading: false });
-    renderWithQuery(<TrendsTab />);
+    renderWithQuery(
+      <MemoryRouter>
+        <TrendsTab />
+      </MemoryRouter>,
+    );
 
     fireEvent.click(screen.getByText('4wk'));
     expect(setTrendsRange).toHaveBeenCalledWith(4);
@@ -146,7 +174,11 @@ describe('TrendsTab', () => {
       loading: false,
       updatedAt: new Date('2026-07-22T15:00:00').getTime(),
     });
-    renderWithQuery(<TrendsTab />);
+    renderWithQuery(
+      <MemoryRouter>
+        <TrendsTab />
+      </MemoryRouter>,
+    );
     expect(screen.queryByText(/Offline/)).not.toBeInTheDocument();
 
     act(() => onlineManager.setOnline(false));
@@ -155,8 +187,121 @@ describe('TrendsTab', () => {
   });
 });
 
-// TrendsTab renders no router links until the window notice appears, which is why the rest of this
-// file needs no MemoryRouter and this block does.
+// The pre-existing bug this covers: Trends is deliberately excluded from offlineCacheWarm, so a
+// device that has never opened it online has nothing cached. Offline the query PAUSES, which means
+// isLoading is false and data is undefined at the same time -- so `loading || !overview` latched
+// TrendsSkeleton forever. A spinner over a request that will never succeed is exactly what
+// resilience.md forbids. Registered in that file's divergence table.
+describe('TrendsTab with nothing cached and nothing coming', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppState.mockReturnValue({
+      activePersonId: 7,
+      trendsRangeWeeks: 12,
+      setTrendsRange: vi.fn(),
+      trendsExerciseId: null,
+      selectTrendsExercise: vi.fn(),
+      trendsWeeklyMetric: 'volume',
+      setTrendsWeeklyMetric: vi.fn(),
+      trendsExerciseMetric: 'est1rm',
+      setTrendsExerciseMetric: vi.fn(),
+    });
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' } });
+    useHistoryWindow.mockReturnValue({ historyWindow: null });
+  });
+
+  function renderTrends() {
+    return renderWithQuery(
+      <MemoryRouter>
+        <TrendsTab />
+      </MemoryRouter>,
+    );
+  }
+
+  it('says so when the query is paused offline, instead of spinning forever', () => {
+    useTrendsOverview.mockReturnValue({ overview: null, loading: false, isPaused: true });
+    renderTrends();
+
+    expect(screen.getByText('Trends need a connection')).toBeInTheDocument();
+    expect(screen.queryByTestId('trends-skeleton')).not.toBeInTheDocument();
+    // It must point at what DOES still work, or it reads as the whole app being broken.
+    expect(screen.getByText(/Log, History and PRs tabs still work/)).toBeInTheDocument();
+  });
+
+  it('says the same thing when the request failed and there is no cache to fall back on', () => {
+    useTrendsOverview.mockReturnValue({ overview: null, loading: false, isError: true });
+    renderTrends();
+
+    expect(screen.getByText('Trends need a connection')).toBeInTheDocument();
+    expect(screen.queryByTestId('trends-skeleton')).not.toBeInTheDocument();
+  });
+
+  // The skeleton is still right for a genuine first load -- this must not swallow it.
+  it('still shows the skeleton while a request is actually in flight', () => {
+    useTrendsOverview.mockReturnValue({ overview: null, loading: true, isPaused: false, isError: false });
+    renderTrends();
+
+    expect(screen.getByTestId('trends-skeleton')).toBeInTheDocument();
+    expect(screen.queryByText('Trends need a connection')).not.toBeInTheDocument();
+  });
+
+  // Paused with data already cached is the ordinary offline read: show the cache, not a notice.
+  it('renders the cached overview when paused but warm', () => {
+    useTrendsOverview.mockReturnValue({ overview: overviewWithActivity, loading: false, isPaused: true });
+    renderTrends();
+
+    expect(screen.queryByText('Trends need a connection')).not.toBeInTheDocument();
+    expect(screen.getByText('consistency-heatmap')).toBeInTheDocument();
+  });
+});
+
+describe('TrendsTab deep link from a PR row', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' } });
+    useHistoryWindow.mockReturnValue({ historyWindow: null });
+    useTrendsOverview.mockReturnValue({ overview: overviewWithActivity, loading: false });
+  });
+
+  function mockState(selectTrendsExercise, trendsExerciseId = null) {
+    useAppState.mockReturnValue({
+      activePersonId: 7,
+      trendsRangeWeeks: 12,
+      setTrendsRange: vi.fn(),
+      trendsExerciseId,
+      selectTrendsExercise,
+      trendsWeeklyMetric: 'volume',
+      setTrendsWeeklyMetric: vi.fn(),
+      trendsExerciseMetric: 'est1rm',
+      setTrendsExerciseMetric: vi.fn(),
+    });
+  }
+
+  function renderWithSeed(state) {
+    return renderWithQuery(
+      <MemoryRouter initialEntries={[{ pathname: '/app/trends', state }]}>
+        <TrendsTab />
+      </MemoryRouter>,
+    );
+  }
+
+  it('selects the seeded exercise and persists it, so it is still there next visit', () => {
+    const selectTrendsExercise = vi.fn();
+    mockState(selectTrendsExercise);
+    renderWithSeed({ trendsExerciseFocus: { exerciseId: 42 } });
+
+    expect(selectTrendsExercise).toHaveBeenCalledWith(42);
+  });
+
+  it('does not touch the selection when arriving without a seed', () => {
+    const selectTrendsExercise = vi.fn();
+    mockState(selectTrendsExercise);
+    renderWithSeed(null);
+
+    expect(selectTrendsExercise).not.toHaveBeenCalled();
+  });
+});
+
 describe('TrendsTab and the Free-tier window', () => {
   const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   const clipped = { windowStart: ninetyDaysAgo, hiddenSessions: 21, earliestHiddenAt: '2025-01-02T10:00:00Z' };

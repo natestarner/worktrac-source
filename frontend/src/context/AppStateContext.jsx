@@ -68,6 +68,12 @@ const PERSON_DEFAULTS = {
   // state, deliberately cleared on a person switch -- see useExerciseFilter), a sort is a
   // standing preference, so it persists and survives switching away and back.
   prsSort: 'recent', // see PR_SORTS in utils/prSort.js
+  // Which record the PRs board is showing -- the same five measures the Trends exercise chart
+  // plots. Per person for the same reason as prsSort above, and separate from
+  // trendsExerciseMetric on purpose: the two screens answer different questions ("what is my
+  // best" vs "how is this one lift trending"), so somebody comparing top weights across their
+  // whole board should not have that retarget the chart they left on est. 1RM.
+  prsMeasure: 'est1rm', // see EXERCISE_METRICS in components/trends/exerciseMetrics.js
   // An in-progress Contact Us message: { category, subject, message }, or null.
   //
   // Per person for the obvious reason -- a half-written message must not appear on someone else's
@@ -211,6 +217,8 @@ export function reducer(state, action) {
       return updateActive(state, { trendsExerciseMetric: action.metric });
     case 'SET_PRS_SORT':
       return updateActive(state, { prsSort: action.sort });
+    case 'SET_PRS_MEASURE':
+      return updateActive(state, { prsMeasure: action.measure });
     // One action for both numbers and the whole stamp, deliberately not two. Independent
     // weight/reps writes let a partial update stamp the new exercise while the OTHER field still
     // holds the previous exercise's value -- the same "this number isn't yours" bug this stamp
@@ -391,6 +399,7 @@ export function AppStateProvider({ children }) {
       setTrendsWeeklyMetric: (metric) => dispatch({ type: 'SET_TRENDS_WEEKLY_METRIC', metric }),
       setTrendsExerciseMetric: (metric) => dispatch({ type: 'SET_TRENDS_EXERCISE_METRIC', metric }),
       setPrsSort: (sort) => dispatch({ type: 'SET_PRS_SORT', sort }),
+      setPrsMeasure: (measure) => dispatch({ type: 'SET_PRS_MEASURE', measure }),
       setDraft: ({ exerciseId, weight, reps, durationSeconds, setCount, source }) =>
         dispatch({ type: 'SET_DRAFT', exerciseId, weight, reps, durationSeconds, setCount, source }),
       setHoldStartedAt: (startedAt) => dispatch({ type: 'SET_HOLD_STARTED_AT', startedAt }),

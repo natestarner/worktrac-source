@@ -34,7 +34,7 @@ describe('PRsTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     onlineManager.setOnline(true);
-    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn() });
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn(), prsMeasure: 'est1rm', setPrsMeasure: vi.fn() });
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
     listPersonExercises.mockResolvedValue([]);
     useHistoryWindow.mockReturnValue({ historyWindow: null });
@@ -89,7 +89,7 @@ describe('PRsTab tags, filtering, and row navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     onlineManager.setOnline(true);
-    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn() });
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn(), prsMeasure: 'est1rm', setPrsMeasure: vi.fn() });
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
     listPersonExercises.mockResolvedValue([
       { id: 1, name: 'Bench Press', tags: [{ id: 10, name: 'Push' }] },
@@ -143,13 +143,41 @@ describe('PRsTab tags, filtering, and row navigation', () => {
     expect(screen.queryByText(/board starts filling in/)).not.toBeInTheDocument();
   });
 
-  it('tapping a PR row navigates to History pre-filtered to that exercise', async () => {
+  it('tapping a PR row offers both destinations rather than jumping straight to one', async () => {
     renderPRsTab();
     await screen.findByRole('button', { name: 'Push' });
 
     fireEvent.click(screen.getByText('Bench Press'));
+
+    // The chooser names the exercise, so it is obvious which row was tapped.
+    expect(screen.getByRole('dialog')).toHaveTextContent('Bench Press');
+    expect(screen.getByRole('button', { name: 'View history' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View progress' })).toBeInTheDocument();
+    // Opening the chooser must not navigate by itself.
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('"View history" deep-links into History pre-filtered to that exercise', async () => {
+    renderPRsTab();
+    await screen.findByRole('button', { name: 'Push' });
+
+    fireEvent.click(screen.getByText('Bench Press'));
+    fireEvent.click(screen.getByRole('button', { name: 'View history' }));
+
     expect(mockNavigate).toHaveBeenCalledWith('/app/history', {
       state: { historyExerciseFilter: { exerciseId: 1, exerciseName: 'Bench Press' } },
+    });
+  });
+
+  it('"View progress" deep-links into Trends with that exercise seeded', async () => {
+    renderPRsTab();
+    await screen.findByRole('button', { name: 'Push' });
+
+    fireEvent.click(screen.getByText('Bench Press'));
+    fireEvent.click(screen.getByRole('button', { name: 'View progress' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/app/trends', {
+      state: { trendsExerciseFocus: { exerciseId: 1 } },
     });
   });
 });
@@ -177,7 +205,7 @@ describe('PRsTab sorting', () => {
   afterEach(() => onlineManager.setOnline(true));
 
   it('defaults to most-recent order, absorbing the job the Trends Recent PRs card used to do', async () => {
-    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn() });
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn(), prsMeasure: 'est1rm', setPrsMeasure: vi.fn() });
     renderPRsTab();
 
     await waitFor(() => expect(screen.getByText('Squat')).toBeInTheDocument());
@@ -186,7 +214,7 @@ describe('PRsTab sorting', () => {
   });
 
   it('orders by name when the person has chosen that sort', async () => {
-    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'name', setPrsSort: vi.fn() });
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'name', setPrsSort: vi.fn(), prsMeasure: 'est1rm', setPrsMeasure: vi.fn() });
     renderPRsTab();
 
     await waitFor(() => expect(screen.getByText('Squat')).toBeInTheDocument());
@@ -195,8 +223,11 @@ describe('PRsTab sorting', () => {
     expect(renderedNames()[2]).toMatch(/^Squat/);
   });
 
-  it('orders by estimated 1RM, heaviest first', async () => {
-    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'est1rm', setPrsSort: vi.fn() });
+  // 'est1rm' is the LEGACY persisted sort value, from before the board had a record picker. It has
+  // to keep working: an install that predates the picker hydrates with it, and falling through to
+  // the unknown-key default would silently move those people back to "Most recent".
+  it('orders by the selected record, best first -- including from the legacy est1rm sort value', async () => {
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'est1rm', setPrsSort: vi.fn(), prsMeasure: 'est1rm', setPrsMeasure: vi.fn() });
     renderPRsTab();
 
     await waitFor(() => expect(screen.getByText('Squat')).toBeInTheDocument());
@@ -206,21 +237,167 @@ describe('PRsTab sorting', () => {
 
   it('persists the choice through the per-person store rather than local state', async () => {
     const setPrsSort = vi.fn();
-    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort });
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort, prsMeasure: 'est1rm', setPrsMeasure: vi.fn() });
     renderPRsTab();
 
     await waitFor(() => expect(screen.getByText('Squat')).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'est1rm' } });
-    expect(setPrsSort).toHaveBeenCalledWith('est1rm');
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'record' } });
+    expect(setPrsSort).toHaveBeenCalledWith('record');
+  });
+
+  it('names the value-based sort after the selected record, so the two controls agree', async () => {
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn(), prsMeasure: 'heaviest', setPrsMeasure: vi.fn() });
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('Squat')).toBeInTheDocument());
+    expect(screen.getByRole('option', { name: 'Heaviest weight' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Best est. 1RM' })).not.toBeInTheDocument();
   });
 
   it('hides the sort control when there is nothing to sort', async () => {
-    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn() });
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn(), prsMeasure: 'est1rm', setPrsMeasure: vi.fn() });
     getPrs.mockResolvedValue([]);
     renderPRsTab();
 
     await waitFor(() => expect(screen.getByText(/board starts filling in/)).toBeInTheDocument());
     expect(screen.queryByLabelText('Sort')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Record')).not.toBeInTheDocument();
+  });
+});
+
+describe('PRsTab record picker', () => {
+  // A loaded lift, a bodyweight lift and a hold -- the three shapes that decide which measures
+  // exist. Each carries the measures the backend would send for it, including the nulls.
+  const loaded = {
+    exerciseId: 1,
+    exerciseName: 'Bench Press',
+    best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208, sessionStartedAt: '2026-07-01T00:00:00Z' },
+    measures: {
+      heaviest: { value: 225, weightLb: 225, reps: 1, sessionStartedAt: '2026-07-09T00:00:00Z' },
+      sessionVolume: { value: 4625, weightLb: null, reps: null, sessionStartedAt: '2026-07-01T00:00:00Z' },
+      bestSetVolume: { value: 925, weightLb: 185, reps: 5, sessionStartedAt: '2026-07-01T00:00:00Z' },
+      totalReps: { value: 25, weightLb: null, reps: null, sessionStartedAt: '2026-07-01T00:00:00Z' },
+    },
+    bodyweightOnly: false,
+    durationTracked: false,
+  };
+  const pullUp = {
+    exerciseId: 2,
+    exerciseName: 'Pull-Up',
+    best: { weight: 0, reps: 12, unit: 'lb', est1rm: 0, sessionStartedAt: '2026-07-02T00:00:00Z' },
+    measures: { heaviest: null, sessionVolume: null, bestSetVolume: null, totalReps: { value: 40, weightLb: null, reps: null, sessionStartedAt: '2026-07-02T00:00:00Z' } },
+    bodyweightOnly: true,
+    durationTracked: false,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }], account: { defaultUnit: 'lb' } });
+    listPersonExercises.mockResolvedValue([]);
+    useHistoryWindow.mockReturnValue({ historyWindow: null });
+  });
+
+  function mockState(prsMeasure, setPrsMeasure = vi.fn()) {
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn(), prsMeasure, setPrsMeasure });
+  }
+
+  it('re-measures every row when the record changes', async () => {
+    getPrs.mockResolvedValue([loaded]);
+    mockState('heaviest');
+    renderPRsTab();
+
+    // The top weight and the set behind it -- not the est. 1RM, which is a different set.
+    await waitFor(() => expect(screen.getByText('225 lb')).toBeInTheDocument());
+    expect(screen.queryByText('208 lb')).not.toBeInTheDocument();
+  });
+
+  // Volume and Best set are the pair most easily conflated, and the board shows no difference
+  // between a session total and one set beyond this caption. Asserted as two renders rather than a
+  // rerender, because renderWithQuery owns the QueryClientProvider.
+  it('labels Volume as a session total', async () => {
+    getPrs.mockResolvedValue([loaded]);
+    mockState('sessionVolume');
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('4625 lb')).toBeInTheDocument());
+    expect(screen.getByText('One session')).toBeInTheDocument();
+  });
+
+  it('labels Best set with the single set behind it', async () => {
+    getPrs.mockResolvedValue([loaded]);
+    mockState('bestSetVolume');
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('925 lb')).toBeInTheDocument());
+    expect(screen.getByText('185lb×5')).toBeInTheDocument();
+    expect(screen.queryByText('One session')).not.toBeInTheDocument();
+  });
+
+  it('shows a dash, never a zero, for an exercise the record cannot measure', async () => {
+    getPrs.mockResolvedValue([pullUp]);
+    mockState('heaviest');
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('—')).toBeInTheDocument());
+    // The reason is on screen, not hidden behind hover -- this app is used on an iPad.
+    expect(screen.getByText('Bodyweight')).toBeInTheDocument();
+    expect(screen.queryByText('0 lb')).not.toBeInTheDocument();
+  });
+
+  it('still measures a bodyweight exercise by reps, which is its honest record', async () => {
+    getPrs.mockResolvedValue([pullUp]);
+    mockState('totalReps');
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('40 reps')).toBeInTheDocument());
+    expect(screen.queryByText('—')).not.toBeInTheDocument();
+  });
+
+  it('sorts rows the record cannot measure to the bottom rather than tying them at zero', async () => {
+    getPrs.mockResolvedValue([pullUp, loaded]);
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'record', setPrsSort: vi.fn(), prsMeasure: 'heaviest', setPrsMeasure: vi.fn() });
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('225 lb')).toBeInTheDocument());
+    const rows = screen.getAllByTestId('pr-row').map((r) => r.textContent);
+    expect(rows[0]).toMatch(/^Bench Press/);
+    expect(rows[1]).toMatch(/^Pull-Up/);
+  });
+
+  // resilience.md axis D: a PRs entry restored from a cache written before this shipped has no
+  // `measures` at all. It must degrade to a dash, never throw -- and the DEFAULT record must keep
+  // working, since it reads `best` exactly as it always did.
+  const legacyRow = {
+    exerciseId: 9,
+    exerciseName: 'Row',
+    best: { weight: 135, reps: 8, unit: 'lb', est1rm: 171, sessionStartedAt: '2026-07-03T00:00:00Z' },
+  };
+
+  it('keeps the default record correct for a row cached before measures existed', async () => {
+    getPrs.mockResolvedValue([legacyRow]);
+    mockState('est1rm');
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('171 lb')).toBeInTheDocument());
+  });
+
+  it('degrades a legacy cached row to a dash on the new records rather than throwing', async () => {
+    getPrs.mockResolvedValue([legacyRow]);
+    mockState('sessionVolume');
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('—')).toBeInTheDocument());
+  });
+
+  it('explains what the selected record counts, from the same spec the chart reads', async () => {
+    getPrs.mockResolvedValue([loaded]);
+    mockState('sessionVolume');
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('Bench Press')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'What this board is measuring' }));
+    expect(screen.getByRole('note')).toHaveTextContent('It is a session total, not one set.');
   });
 });
 
@@ -233,7 +410,7 @@ describe('PRsTab and the Free-tier window', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     onlineManager.setOnline(true);
-    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn() });
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn(), prsMeasure: 'est1rm', setPrsMeasure: vi.fn() });
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }], account: { plan: 'FREE' } });
     listPersonExercises.mockResolvedValue([]);
   });

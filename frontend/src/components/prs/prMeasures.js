@@ -1,0 +1,162 @@
+import { EXERCISE_METRICS, metricSpec } from '../trends/exerciseMetrics';
+import { convertWeight, toLb } from '../../utils/formulas';
+import { formatRestTime } from '../../utils/datetime';
+
+// The PRs board's record picker: the five ways one exercise's all-time best can be measured.
+//
+// These are deliberately the SAME five as the Trends exercise chart's metric switcher, read off the
+// same EXERCISE_METRICS specs, so "Volume" cannot mean a session total on one screen and a single
+// set on the other. Adding a measure here means adding it there; there is one table, not two.
+//
+// ONE deliberate divergence from the chart: there is no visibleMetricOptions-style filtering here.
+// The chart shows one exercise at a time, so it can hide the weight-derived metrics for a
+// bodyweight lift. The board is a mix of exercises and the picker is board-wide, so applicability
+// is decided PER ROW instead -- measureEntry returns null and the row renders a dash. Filtering the
+// picker would mean hiding "Top weight" from the whole board because one pull-up row cannot use it.
+
+export const PR_MEASURE_OPTIONS = Object.entries(EXERCISE_METRICS).map(([value, m]) => ({
+  label: m.label,
+  value,
+}));
+
+export const DEFAULT_PR_MEASURE = 'est1rm';
+
+// Unknown/undefined keys fall back rather than throwing -- a persisted UI slice written before this
+// control existed hydrates without one. Never index EXERCISE_METRICS directly from a consumer; this
+// is the same rule metricSpec exists for (see the hover-blank-page incident).
+export function prMeasureSpec(measure) {
+  return metricSpec(measure);
+}
+
+// est. 1RM is not carried inside row.measures -- it IS row.best, the set the backend's
+// comparableValue already picked, with its weight-0 and hold substitutions baked in. Adapting it
+// here rather than having the server send it twice is what keeps the two from drifting.
+//
+// `best` arrives in the SET's own unit (unlike row.measures, which the server normalizes), so the
+// est1rm value goes through toLb for ranking -- the same call prSort.js has always made, now in one
+// place instead of at every comparison.
+function est1rmEntry(row) {
+  const best = row?.best;
+  if (!best) return null;
+  if (best.durationSeconds != null) {
+    return {
+      value: best.durationSeconds,
+      weightLb: toLb(best.weight, best.unit || 'lb'),
+      reps: best.reps,
+      durationSeconds: best.durationSeconds,
+      sessionStartedAt: best.sessionStartedAt,
+    };
+  }
+  // A bodyweight set ranks on reps: Epley collapses to 0 at weight 0, so every pull-up PR would
+  // tie forever. Mirrors StatsService#comparableLb exactly.
+  if (Number(best.weight) === 0) {
+    return {
+      value: best.reps,
+      weightLb: 0,
+      reps: best.reps,
+      durationSeconds: null,
+      sessionStartedAt: best.sessionStartedAt,
+    };
+  }
+  return {
+    value: toLb(best.est1rm, best.unit || 'lb'),
+    weightLb: toLb(best.weight, best.unit || 'lb'),
+    reps: best.reps,
+    durationSeconds: null,
+    sessionStartedAt: best.sessionStartedAt,
+  };
+}
+
+// The one normalized shape the row renders and the sort ranks, whichever measure is selected.
+// Returns null when the measure means nothing for this exercise -- never a zero. A null here is
+// what the dash on the row and the sorts-last rule in prSort.js both key off.
+//
+// Optional chaining throughout is load-bearing, not defensive noise: a PRs entry restored from a
+// query cache written before this shipped has no `measures` at all (resilience.md axis D). Such a
+// row degrades to a dash on the four new measures and stays completely correct on est. 1RM, which
+// reads `best` exactly as it always did.
+export function measureEntry(row, measure) {
+  const key = EXERCISE_METRICS[measure] ? measure : DEFAULT_PR_MEASURE;
+  if (key === 'est1rm') return est1rmEntry(row);
+  const entry = row?.measures?.[key];
+  if (!entry || entry.value == null) return null;
+  return {
+    value: Number(entry.value),
+    weightLb: entry.weightLb == null ? null : Number(entry.weightLb),
+    reps: entry.reps ?? null,
+    durationSeconds: null,
+    sessionStartedAt: entry.sessionStartedAt,
+  };
+}
+
+// Why a row has no value on the selected measure. Shown as an always-visible caption rather than
+// hover-only text: this app is used on an iPad mid-workout, where hover does not exist.
+export function measureUnavailableCaption(row) {
+  if (row?.durationTracked) return 'Timed hold';
+  if (row?.bodyweightOnly) return 'Bodyweight';
+  return 'Not recorded';
+}
+
+export function measureUnavailableTitle(row, measure) {
+  const spec = prMeasureSpec(measure);
+  if (row?.durationTracked) return `A timed hold has no ${spec.label.toLowerCase()}.`;
+  if (row?.bodyweightOnly) return `A bodyweight exercise has no ${spec.label.toLowerCase()}.`;
+  return `No ${spec.label.toLowerCase()} recorded for this exercise.`;
+}
+
+// What the row prints: a headline and the qualifier under it. One derivation for all five measures
+// so the board cannot render "Volume" one way here and another way somewhere else later.
+//
+// Everything arrives in POUNDS (est1rmEntry normalizes; the server already did for the rest) and is
+// converted to the household's unit here. That is a deliberate change from the board's original
+// rendering, which printed the SET's own unit: it meant a kg set on an lb account displayed "100
+// kg" while the sort ranked it as 220 lb, so the order on screen contradicted the numbers on
+// screen. ExerciseRecordsTable has always converted; the board now agrees with it.
+export function formatPrMeasure(entry, measure, row, defaultUnit) {
+  const key = EXERCISE_METRICS[measure] ? measure : DEFAULT_PR_MEASURE;
+  const w = (lb) => convertWeight(lb, 'lb', defaultUnit);
+
+  if (key === 'est1rm') {
+    // A hold has no est. 1RM (the backend sends null), so the record IS the time.
+    if (entry.durationSeconds != null) {
+      return {
+        value: formatRestTime(entry.durationSeconds),
+        caption: entry.weightLb > 0 ? `Longest hold at ${w(entry.weightLb)} ${defaultUnit}` : 'Longest hold',
+      };
+    }
+    if (entry.weightLb === 0) {
+      return { value: `${entry.reps} reps`, caption: 'Bodyweight' };
+    }
+    return {
+      value: `${w(entry.value)} ${defaultUnit}`,
+      caption: `${w(entry.weightLb)}${defaultUnit}×${entry.reps}`,
+    };
+  }
+
+  if (key === 'totalReps') {
+    return { value: `${entry.value} reps`, caption: 'One session' };
+  }
+
+  // Rounded and unseparated, matching ExerciseRecordsTable's "Best session volume" / "Best set
+  // volume" rows exactly. These are the same two records rendered on two screens; a thousands
+  // separator here would be a readability win bought by making one number look like two different
+  // numbers depending on which tab you were on.
+  if (key === 'sessionVolume') {
+    return { value: `${Math.round(w(entry.value))} ${defaultUnit}`, caption: 'One session' };
+  }
+
+  if (key === 'bestSetVolume') {
+    return {
+      value: `${Math.round(w(entry.value))} ${defaultUnit}`,
+      caption: `${w(entry.weightLb)}${defaultUnit}×${entry.reps}`,
+    };
+  }
+
+  // heaviest: the value IS the weight, so repeating it in the qualifier would say nothing. What
+  // the reader does not already know is what it was lifted FOR -- and on a hold, reps are 0, so
+  // naming the record is the only honest caption there.
+  return {
+    value: `${w(entry.value)} ${defaultUnit}`,
+    caption: row?.durationTracked ? 'Heaviest load held' : `× ${entry.reps}`,
+  };
+}

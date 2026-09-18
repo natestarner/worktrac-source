@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CONSISTENCY_HELP, WORKOUT_FREQUENCY_HELP, exerciseTrendHelp, weeklyMetricHelp } from './chartHelp';
+import {
+  CONSISTENCY_HELP,
+  WORKOUT_FREQUENCY_HELP,
+  exerciseTrendHelp,
+  prRecordHelp,
+  weeklyMetricHelp,
+} from './chartHelp';
 import { EXERCISE_METRICS } from './exerciseMetrics';
 import { WEEKLY_METRICS } from './weeklyMetrics';
 
@@ -8,6 +14,7 @@ const allHelp = [
   WORKOUT_FREQUENCY_HELP,
   ...Object.keys(WEEKLY_METRICS).map(weeklyMetricHelp),
   ...Object.keys(EXERCISE_METRICS).map(exerciseTrendHelp),
+  ...Object.keys(EXERCISE_METRICS).map(prRecordHelp),
 ];
 
 describe('chart help copy', () => {
@@ -48,17 +55,64 @@ describe('chart help copy', () => {
     expect(weeklyMetricHelp('nonsense').lines[1]).toBe(WEEKLY_METRICS.volume.barMeaning);
   });
 
-  it('keeps the four button labels mutually non-containing', () => {
-    // All four "?" buttons are on the Trends screen at once, and Playwright matches an accessible
+  it('gives every record its own sentence about what the PRs board is counting', () => {
+    const meanings = Object.keys(EXERCISE_METRICS).map((m) => prRecordHelp(m).lines[1]);
+    expect(meanings.every(Boolean)).toBe(true);
+    expect(new Set(meanings).size).toBe(meanings.length);
+  });
+
+  it('carries the best-set / session-total distinction onto the PRs board too', () => {
+    // Same reason the chart's copy does: nothing on the board says whether a number is one set or
+    // a whole workout, and Volume vs Best set is the pair most easily conflated.
+    expect(prRecordHelp('sessionVolume').lines[1]).toMatch(/session total, not one set/);
+    expect(prRecordHelp('totalReps').lines[1]).toMatch(/session total, not one set/);
+    expect(prRecordHelp('bestSetVolume').lines[1]).toMatch(/single best set/);
+  });
+
+  it('gives every record a sort label, so the two PRs dropdowns can never disagree', () => {
+    const labels = Object.values(EXERCISE_METRICS).map((m) => m.sortLabel);
+    expect(labels.every(Boolean)).toBe(true);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  // est. 1RM is a rep count at weight 0 and seconds for a hold, so calling the PR measure
+  // "estimated 1RM" flat out is wrong for pull-ups and planks. Name all three cases or name none.
+  it('never presents the PR ranking as estimated 1RM alone', () => {
+    expect(prRecordHelp('est1rm').lines[1]).toMatch(/rep count/);
+    expect(prRecordHelp('est1rm').lines[1]).toMatch(/seconds/);
+  });
+
+  it('falls back rather than throwing on a record it does not recognize', () => {
+    expect(prRecordHelp(undefined).lines[1]).toBe(EXERCISE_METRICS.est1rm.recordMeaning);
+    expect(prRecordHelp('nonsense').lines[1]).toBe(EXERCISE_METRICS.est1rm.recordMeaning);
+  });
+
+  it('keeps the five button labels mutually non-containing', () => {
+    // The four Trends "?" buttons are on one screen at once, and Playwright matches an accessible
     // name as a case-insensitive SUBSTRING -- so one label containing another turns a single
-    // getByRole into a strict-mode violation. See .claude/rules/frontend-core.md.
+    // getByRole into a strict-mode violation. The PRs one is on its own screen, but it is checked
+    // against them here because five labels are only easy to compare where they sit together.
+    // See .claude/rules/frontend-core.md.
     const labels = [...new Set(allHelp.map((h) => h.label))];
-    expect(labels).toHaveLength(4);
+    expect(labels).toHaveLength(5);
 
     for (const a of labels) {
       for (const b of labels) {
         if (a !== b) expect(b.toLowerCase()).not.toContain(a.toLowerCase());
       }
+    }
+  });
+
+  // The PRs "?" does not sit beside the other four -- it sits beside the board's two DROPDOWNS,
+  // and those are what it has to stay non-containing with. Checking the help labels only against
+  // each other missed this: "What these records show" contains "Record", which made
+  // getByLabel('Record') resolve to both the picker and this button, and turned every
+  // selectOption on the picker into a strict-mode violation in all six e2e specs that drive it.
+  it('keeps the PRs help label non-containing with the controls it sits beside', () => {
+    const prLabel = prRecordHelp('est1rm').label.toLowerCase();
+    for (const control of ['Record', 'Sort']) {
+      expect(prLabel).not.toContain(control.toLowerCase());
+      expect(control.toLowerCase()).not.toContain(prLabel);
     }
   });
 

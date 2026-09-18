@@ -450,6 +450,10 @@ describe('selectRestTimersByPerson', () => {
 
     expect(restored.byPerson[1].trendsWeeklyMetric).toBe('volume');
     expect(restored.byPerson[1].prsSort).toBe('recent');
+    // prsMeasure is the newest such field. An undefined here would reach prMeasureSpec on the PRs
+    // board's first render for every existing install -- it falls back rather than throwing, but
+    // the <select> would be uncontrolled and the picker would read as having no value at all.
+    expect(restored.byPerson[1].prsMeasure).toBe('est1rm');
     // The draft stamp is the newest such field. Hydrating draftExerciseId as null (rather than
     // undefined) is what makes the restored weightDraft below read as "belongs to no exercise on
     // screen" instead of being painted under whatever exercise the person lands on.
@@ -509,5 +513,29 @@ describe('selectRestTimersByPerson', () => {
 
     state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
     expect(active(state).prsSort).toBe('est1rm');
+  });
+
+  it('SET_PRS_MEASURE is per person -- one person comparing top weights never retargets another\'s board', () => {
+    let state = withPerson(1);
+    state = reducer(state, { type: 'SET_PRS_MEASURE', measure: 'heaviest' });
+    expect(active(state).prsMeasure).toBe('heaviest');
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
+    expect(active(state).prsMeasure).toBe('est1rm');
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
+    expect(active(state).prsMeasure).toBe('heaviest');
+  });
+
+  // The board's record and the chart's metric are separate preferences on purpose: the two screens
+  // answer different questions, so drilling into top weights across the whole board must not
+  // retarget a chart the person left on est. 1RM.
+  it('keeps the PRs record and the Trends chart metric independent', () => {
+    let state = withPerson(1);
+    state = reducer(state, { type: 'SET_PRS_MEASURE', measure: 'heaviest' });
+    expect(active(state).trendsExerciseMetric).toBe('est1rm');
+
+    state = reducer(state, { type: 'SET_TRENDS_EXERCISE_METRIC', metric: 'totalReps' });
+    expect(active(state).prsMeasure).toBe('heaviest');
   });
 });
