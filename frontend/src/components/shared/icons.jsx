@@ -86,6 +86,15 @@ export const IconChevronDown = (props) => (
   </Icon>
 );
 
+// The disclosure indicator: "this row leads somewhere". Its own icon rather than a rotated
+// IconChevronDown so call sites don't carry a transform, and so the two read differently in a
+// diff -- down is "this expands in place", right is "this navigates away".
+export const IconChevronRight = (props) => (
+  <Icon {...props}>
+    <path d="m9 18 6-6-6-6" />
+  </Icon>
+);
+
 export const IconClose = (props) => (
   <Icon {...props}>
     <path d="M18 6 6 18" />

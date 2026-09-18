@@ -15,8 +15,10 @@
 // .claude/rules/trends.md about the tooltip that blanked the page on an unrecognized metric.
 //
 // Each `label` is the "?" button's accessible name. They must stay mutually non-containing:
-// Playwright matches an accessible name as a case-insensitive SUBSTRING, and all four of these
-// buttons are on screen at once.
+// Playwright matches an accessible name as a case-insensitive SUBSTRING, and the four Trends ones
+// are on screen at once. prRecordHelp's label lives here with them even though it renders on the
+// PRs tab, because checking five labels against each other is only easy where they sit side by
+// side -- and that check is what chartHelp.test.js does.
 // Both specs come from the metric-table modules, never from the chart components -- the charts
 // import this file, so reaching back into one would close an import cycle.
 import { metricSpec } from './exerciseMetrics';
@@ -73,6 +75,32 @@ export function exerciseTrendHelp(metric) {
         'lift, rep count for a bodyweight exercise, time for a hold. So a green dot is not always ' +
         'the highest point on this chart.',
       'Dots are spaced evenly, so the gap between two of them does not show how much time passed.',
+    ],
+  };
+}
+
+// The PRs board's record picker. Same shape and same source specs as exerciseTrendHelp above,
+// because the picker and the chart's metric switcher offer the same five words -- the whole reason
+// recordMeaning lives on EXERCISE_METRICS rather than in a table of its own.
+//
+// The dash line is the one thing here the chart has no equivalent of: the chart hides a metric it
+// cannot plot for the selected exercise, while the board is a mix of exercises and shows a dash per
+// row instead. Somebody looking at a column with three dashes in it needs to be told that is an
+// answer, not a gap.
+export function prRecordHelp(measure) {
+  const spec = metricSpec(measure);
+  return {
+    // Deliberately contains neither "Record" nor "Sort" -- the two dropdowns beside it are
+    // labelled exactly that, and Playwright matches an accessible name as a case-insensitive
+    // SUBSTRING. "What these records show" made getByLabel('Record') ambiguous with this button
+    // and every selectOption on the picker a strict-mode violation. Same rule as the four Trends
+    // help labels, one screen over.
+    label: 'What this board is measuring',
+    title: spec.label,
+    lines: [
+      'Every row is your all-time best for that exercise on the record picked above. Changing the record changes the number on every row, and the date beside it.',
+      spec.recordMeaning,
+      'A dash means the record does not apply to that exercise: a pull-up has no top weight, and a timed hold has no reps.',
     ],
   };
 }

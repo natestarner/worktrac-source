@@ -495,9 +495,24 @@ export default function HelpTab() {
           See <a href="#plan">Free and Plus</a>.
         </p>
         <p>
-          Sort three ways: <strong>Most recent</strong> (the default: what got better lately),{' '}
-          <strong>Name A&ndash;Z</strong>, or <strong>Best est. 1RM</strong>. Tap a row to see that
-          record&rsquo;s workout in History. The same search and tag filters from History work here too.
+          <T>Record</T> chooses which best the board is showing &mdash; the same five measures the
+          Trends progress chart plots. Three of them measure a <strong>single best set</strong>; two
+          are <strong>session totals</strong>:
+        </p>
+        <HelpTable
+          head={['Record', 'What it shows']}
+          rows={Object.values(EXERCISE_METRICS).map((m) => [m.label, m.recordMeaning])}
+        />
+        <p>
+          A <strong>dash</strong> means the record doesn&rsquo;t apply to that exercise: a pull-up has
+          no top weight, a plank has no reps. Those rows drop to the bottom when you sort by the
+          record, and stay in place under the other two sorts.
+        </p>
+        <p>
+          <T>Sort</T> orders the board: <strong>Most recent</strong> (the default: what got better
+          lately), <strong>Name A&ndash;Z</strong>, or best-first on whichever record you picked.
+          Tap a row and you can jump to that exercise in History or to its progress chart in Trends.
+          The same search and tag filters from History work here too.
         </p>
 
         <Note title="Not everything is ranked the same way">
@@ -621,6 +636,10 @@ export default function HelpTab() {
             </li>
           </ul>
         </Note>
+        <p>
+          Below the chart, <T>All-time bests</T> lists this exercise&rsquo;s records, and{' '}
+          <T>Exercise history</T> jumps to every workout it appears in, filtered for you in History.
+        </p>
       </Section>
 
       <Section id="personal" title="Notes, tags and favorites">

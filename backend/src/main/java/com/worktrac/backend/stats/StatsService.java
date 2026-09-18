@@ -133,10 +133,90 @@ public class StatsService {
                 .map(sets -> {
                     Exercise exercise = sets.get(0).getExercise();
                     WorkoutSet best = bestSet(sets).orElseThrow();
-                    return new PrRowDto(exercise.getId(), exercise.getName(), toBestDto(best));
+                    // durationTracked is a property of the exercise (every set of one exercise
+                    // shares its measure); bodyweightOnly is "nothing here was ever loaded". The
+                    // same two derivations getExerciseRecords makes, deciding the same thing:
+                    // which measures must be ABSENT rather than zero.
+                    boolean durationTracked = exercise.isDurationTracked();
+                    boolean bodyweightOnly = sets.stream()
+                            .allMatch(s -> s.getWeight().compareTo(BigDecimal.ZERO) == 0);
+                    return new PrRowDto(exercise.getId(), exercise.getName(), toBestDto(best),
+                            buildPrMeasures(sets, bodyweightOnly, durationTracked),
+                            bodyweightOnly, durationTracked);
                 })
                 .sorted(Comparator.comparing(PrRowDto::exerciseName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
+    }
+
+    // The four measures the PRs board can rank by besides est. 1RM, computed in one pass over sets
+    // getPrList has ALREADY loaded and grouped. .claude/rules/trends.md: a new metric folds into an
+    // existing pass or gets a SQL aggregate -- it does not add another findByPerson_Id... call, and
+    // this one adds no query at all.
+    //
+    // The maths mirrors getExerciseRecords' heaviestWeight / bestSetVolume / bestSessionVolume
+    // rather than inventing new comparators. One deliberate difference: totalReps here is the best
+    // SESSION rep total, matching EXERCISE_METRICS.totalReps on the chart, NOT getExerciseRecords'
+    // most-reps-in-a-SET. The board and the chart have to mean the same thing by "Reps" -- the
+    // record picker and the metric switcher are the same five words on two screens.
+    private PrMeasuresDto buildPrMeasures(List<WorkoutSet> sets, boolean bodyweightOnly,
+                                          boolean durationTracked) {
+        // Both volume measures and the rep total are weight x reps or reps, so a hold (reps always
+        // 0) collapses all three to zero exactly as a never-loaded exercise collapses the two
+        // weight-derived ones. Absent beats a column of zeros -- see PrMeasuresDto.
+        boolean noVolumeMeasure = bodyweightOnly || durationTracked;
+
+        WorkoutSet heaviest = null;
+        WorkoutSet bestSetVolume = null;
+        Map<Long, BigDecimal> volumeBySession = new LinkedHashMap<>();
+        Map<Long, Integer> repsBySession = new LinkedHashMap<>();
+        Map<Long, WorkoutSet> anySetInSession = new LinkedHashMap<>();
+
+        for (WorkoutSet s : sets) {
+            if (heaviest == null || isBetter(lbWeight(s), reps(s), lbWeight(heaviest), reps(heaviest))) {
+                heaviest = s;
+            }
+            if (bestSetVolume == null || setVolumeLb(s).compareTo(setVolumeLb(bestSetVolume)) > 0) {
+                bestSetVolume = s;
+            }
+            Long sessionId = s.getSession().getId();
+            volumeBySession.merge(sessionId, setVolumeLb(s), BigDecimal::add);
+            repsBySession.merge(sessionId, s.getReps(), Integer::sum);
+            anySetInSession.putIfAbsent(sessionId, s);
+        }
+
+        return new PrMeasuresDto(
+                bodyweightOnly ? null : setMeasure(lbWeight(heaviest), heaviest),
+                noVolumeMeasure ? null : sessionMeasure(volumeBySession, anySetInSession),
+                noVolumeMeasure ? null : setMeasure(setVolumeLb(bestSetVolume), bestSetVolume),
+                durationTracked ? null : sessionRepMeasure(repsBySession, anySetInSession));
+    }
+
+    // A set-level measure names the set behind it, the way the est.-1RM records row must -- a
+    // number larger than anything you actually lifted reads as a bug without it.
+    private PrMeasureDto setMeasure(BigDecimal value, WorkoutSet set) {
+        return new PrMeasureDto(value.setScale(1, RoundingMode.HALF_UP),
+                lbWeight(set).setScale(1, RoundingMode.HALF_UP), set.getReps(),
+                set.getSession().getStartedAt());
+    }
+
+    // A session-level measure carries no set: weightLb/reps are null because no single set is the
+    // answer, the same shape bestSessionVolume already has on RecordEntryDto.
+    private PrMeasureDto sessionMeasure(Map<Long, BigDecimal> valueBySession,
+                                        Map<Long, WorkoutSet> anySetInSession) {
+        Map.Entry<Long, BigDecimal> best = valueBySession.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .orElseThrow();
+        return new PrMeasureDto(best.getValue().setScale(1, RoundingMode.HALF_UP), null, null,
+                anySetInSession.get(best.getKey()).getSession().getStartedAt());
+    }
+
+    private PrMeasureDto sessionRepMeasure(Map<Long, Integer> repsBySession,
+                                           Map<Long, WorkoutSet> anySetInSession) {
+        Map.Entry<Long, Integer> best = repsBySession.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .orElseThrow();
+        return new PrMeasureDto(BigDecimal.valueOf(best.getValue()), null, null,
+                anySetInSession.get(best.getKey()).getSession().getStartedAt());
     }
 
     private Optional<WorkoutSet> bestSet(List<WorkoutSet> sets) {

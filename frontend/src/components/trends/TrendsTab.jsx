@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTrendsOverview } from '../../hooks/useTrendsOverview';
@@ -89,9 +91,58 @@ export default function TrendsTab() {
     setTrendsExerciseMetric,
   } = useAppState();
   const { account } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const defaultUnit = account?.defaultUnit || 'lb';
 
-  const { overview, loading, isFetching, updatedAt } = useTrendsOverview(activePersonId, trendsRangeWeeks);
+  // Deep link from a PR row's "View progress" (see PRsTab.jsx). Same router-state mechanism as
+  // History's `historyExerciseFilter`, consumed once and scrubbed for the same reason: React Router
+  // persists location.state into window.history.state, so without scrubbing it would reapply on
+  // reload and on Back -- and swUpdate's tryForceUpdate can force a reload on an ordinary tab
+  // switch.
+  //
+  // Read during RENDER, not in an effect, and handed straight to ExerciseTrendSection below. That
+  // ordering is load-bearing: effects run child-first, so ExerciseTrendSection's
+  // default-to-the-first-exercise effect would otherwise fire before this component's consume
+  // effect and briefly select the wrong exercise. Giving it a truthy exerciseId on the very first
+  // render makes that effect a no-op instead.
+  const [seed, setSeed] = useState(() => location.state?.trendsExerciseFocus?.exerciseId ?? null);
+  const [scrollPending, setScrollPending] = useState(() => !!location.state?.trendsExerciseFocus);
+
+  useEffect(() => {
+    if (!location.state?.trendsExerciseFocus) return;
+    // Persisting the arrival is deliberate, and this is the one place it differs from History's
+    // filter, which is ephemeral by design. The Trends exercise selection is a "where I left off"
+    // value; arriving here from a PR row IS leaving off on that exercise, so it should still be
+    // selected next time. After this dispatch the stored value equals the seed, which is what
+    // makes clearing the local copy below seamless rather than a flicker.
+    selectTrendsExercise(location.state.trendsExerciseFocus.exerciseId);
+    navigate(location.pathname, { replace: true, state: null }); // scrub the history entry
+    setSeed(null); // scrub our own copy
+    // One-shot consume-on-mount, not a reactive sync against location.state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A deep link has to SCROLL, and nothing does that for free -- the same lesson the Handbook's
+  // hash links learned (.claude/rules/user-facing-help.md). A callback ref rather than a mount
+  // effect, following BillingTab's ?intent=pro anchor: this component returns a skeleton early
+  // while the overview loads, so the anchor does not exist on the first render and a mount effect
+  // would look for it once and never retry.
+  const scrollPendingRef = useRef(scrollPending);
+  scrollPendingRef.current = scrollPending;
+  const exerciseSectionRef = useCallback((node) => {
+    if (!node || !scrollPendingRef.current) return;
+    scrollPendingRef.current = false;
+    setScrollPending(false);
+    // jsdom computes no layout and defines no scrollIntoView -- degrade to "no scroll" rather
+    // than throwing. Only the e2e scrollY assertion can actually prove this one.
+    node.scrollIntoView?.({ block: 'start' });
+  }, []);
+
+  const { overview, loading, isFetching, isPaused, isError, updatedAt } = useTrendsOverview(
+    activePersonId,
+    trendsRangeWeeks,
+  );
   const { historyWindow } = useHistoryWindow(activePersonId);
 
   const hiddenFromView = historyWindow?.hiddenSessions ?? 0;
@@ -110,6 +161,26 @@ export default function TrendsTab() {
   const windowNotice = (
     <HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} lead={trendsLead} />
   );
+
+  // Nothing cached AND nothing coming. Trends is the one tab deliberately left out of
+  // offlineCacheWarm (warming three keys per person across every person is a costly fan-out, and
+  // unlike Log/History/PRs these charts are not what you reach for mid-workout), so a device that
+  // has never opened Trends online has no fallback data at all.
+  //
+  // Both branches present identically to the old code: while PAUSED, isLoading is false and data is
+  // undefined; on a hard ERROR with no cache, likewise. `loading || !overview` therefore latched
+  // TrendsSkeleton forever -- a spinner over a request that will never succeed, which is precisely
+  // what resilience.md forbids. Saying so is the only honest option left; there is nothing to show
+  // and nothing to queue. Registered in .claude/rules/resilience.md.
+  if (!overview && (isPaused || isError)) {
+    return (
+      <EmptyState
+        icon={IconTrendingUp}
+        title="Trends need a connection"
+        body="These charts are built on the server and aren’t saved for offline use. Your Log, History and PRs tabs still work from here."
+      />
+    );
+  }
 
   if (loading || !overview) {
     return <TrendsSkeleton />;
@@ -175,15 +246,17 @@ export default function TrendsTab() {
         />
       </div>
 
-      <ExerciseTrendSection
-        personId={activePersonId}
-        exerciseId={trendsExerciseId}
-        onSelectExercise={selectTrendsExercise}
-        weeks={trendsRangeWeeks}
-        metric={trendsExerciseMetric}
-        onMetricChange={setTrendsExerciseMetric}
-        defaultUnit={defaultUnit}
-      />
+      <div ref={exerciseSectionRef} className="trends-exercise-anchor">
+        <ExerciseTrendSection
+          personId={activePersonId}
+          exerciseId={seed ?? trendsExerciseId}
+          onSelectExercise={selectTrendsExercise}
+          weeks={trendsRangeWeeks}
+          metric={trendsExerciseMetric}
+          onMetricChange={setTrendsExerciseMetric}
+          defaultUnit={defaultUnit}
+        />
+      </div>
     </div>
   );
 }

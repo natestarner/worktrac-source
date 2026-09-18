@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
@@ -6,16 +6,28 @@ import { usePrs } from '../../hooks/usePrs';
 import { useHistoryWindow } from '../../hooks/useHistoryWindow';
 import { useExerciseTagMap } from '../../hooks/useExerciseTagMap';
 import { useExerciseFilter } from '../../hooks/useExerciseFilter';
-import { formatDateLabel, toLocalDateStr, formatRestTime } from '../../utils/datetime';
+import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import { collectTagVocabulary, filterPrRows } from '../../utils/exerciseFilter';
-import { PR_SORT_OPTIONS, sortPrRows } from '../../utils/prSort';
+import { prSortOptions, sortPrRows } from '../../utils/prSort';
+import {
+  PR_MEASURE_OPTIONS,
+  formatPrMeasure,
+  measureEntry,
+  measureUnavailableCaption,
+  measureUnavailableTitle,
+} from './prMeasures';
+import { prRecordHelp } from '../trends/chartHelp';
 import Skeleton from '../shared/Skeleton';
 import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
 import EmptyState from '../shared/EmptyState';
 import HistoryWindowNotice from '../shared/HistoryWindowNotice';
-import { IconStar } from '../shared/icons';
+import ChartHelp from '../shared/ChartHelp';
+import Select from '../shared/Select';
+import Modal from '../shared/Modal';
+import Button from '../shared/Button';
+import { IconChevronRight, IconScroll, IconStar, IconTrendingUp } from '../shared/icons';
 import { windowLabel } from '../shared/historyWindowCopy';
 import { tagChipStyle } from '../shared/tagChipStyle';
 
@@ -29,13 +41,17 @@ export default function PRsTab() {
 
 function PRsTabContent() {
   const navigate = useNavigate();
-  const { activePersonId, prsSort, setPrsSort } = useAppState();
+  const { activePersonId, prsSort, setPrsSort, prsMeasure, setPrsMeasure } = useAppState();
   const { people, account } = useAuth();
   const { prs, loading, isFetching, updatedAt } = usePrs(activePersonId);
   const { historyWindow } = useHistoryWindow(activePersonId);
   const { tagsByExerciseId } = useExerciseTagMap(activePersonId);
   const filter = useExerciseFilter();
+  // The row whose destination chooser is open, or null. ONE modal for the whole board rather than
+  // one per row -- a board can run to dozens of exercises.
+  const [navTarget, setNavTarget] = useState(null);
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
+  const defaultUnit = account?.defaultUnit || 'lb';
   const hiddenFromView = historyWindow?.hiddenSessions ?? 0;
   // Named on this tab specifically, because a board of "bests" that silently covers only part of a
   // training life is the most misleading of the three clamped screens: the number on the row is a
@@ -58,15 +74,26 @@ function PRsTabContent() {
           tagsByExerciseId,
         ),
         prsSort,
+        prsMeasure,
       ),
-    [prs, filter.text, filter.selectedTagIds, filter.exerciseFilter, tagsByExerciseId, prsSort],
+    [prs, filter.text, filter.selectedTagIds, filter.exerciseFilter, tagsByExerciseId, prsSort, prsMeasure],
   );
 
-  // Jumping to History pre-filtered to this exercise reuses the same deep-link machinery as
-  // ExerciseDetail's "View full exercise history" link (see HistoryTab.jsx) -- just without fromLog, since
-  // there's no exercise-logging screen to offer a "Back to" link for on this path.
-  function handleRowTap(pr) {
-    navigate('/app/history', { state: { historyExerciseFilter: { exerciseId: pr.exerciseId, exerciseName: pr.exerciseName } } });
+  // Both destinations are plain client-side navigations over caches these tabs already read --
+  // deliberately NOT gated on connectivity, and neither is a write.
+  //
+  // History reuses the same deep-link machinery as ExerciseDetail's "View full exercise history"
+  // link (see HistoryTab.jsx), just without fromLog, since there's no exercise-logging screen to
+  // offer a "Back to" link for on this path. Trends mirrors it with its own seed key -- see
+  // TrendsTab.jsx, which consumes and scrubs it the same way.
+  function goHistory(pr) {
+    navigate('/app/history', {
+      state: { historyExerciseFilter: { exerciseId: pr.exerciseId, exerciseName: pr.exerciseName } },
+    });
+  }
+
+  function goProgress(pr) {
+    navigate('/app/trends', { state: { trendsExerciseFocus: { exerciseId: pr.exerciseId } } });
   }
 
   return (
@@ -80,25 +107,31 @@ function PRsTabContent() {
 
       {!loading && prs.length > 0 && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label htmlFor="prs-sort" style={{ fontSize: 13, color: 'var(--color-muted)', fontWeight: 600 }}>
-              Sort
-            </label>
-            {/* A native select rather than the SegmentedToggle the Trends switchers use: three
-                labels this long don't fit a phone-width segmented control, and sort is a
-                set-and-forget preference rather than something you flick between mid-workout. */}
-            <select
-              id="prs-sort"
-              value={prsSort}
-              onChange={(e) => setPrsSort(e.target.value)}
-              style={sortSelectStyle}
+          {/* Record on the left, Sort on the right: the record decides what every number on the
+              board MEANS, the sort only decides their order, so the more consequential control
+              reads first. Both are native selects rather than the SegmentedToggle the Trends
+              switchers use -- these labels are too long for a phone-width segmented control, and
+              both are set-and-forget preferences rather than something you flick between mid-set. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <Select
+              id="prs-measure"
+              label="Record"
+              value={prsMeasure}
+              onChange={setPrsMeasure}
+              options={PR_MEASURE_OPTIONS}
             >
-              {PR_SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              {/* Anchored to the picker it explains: three of these five are a single best set and
+                  two are session totals, and nothing on the board shows the difference. */}
+              <ChartHelp help={prRecordHelp(prsMeasure)} />
+            </Select>
+
+            <Select
+              id="prs-sort"
+              label="Sort"
+              value={prsSort}
+              onChange={setPrsSort}
+              options={prSortOptions(prsMeasure)}
+            />
           </div>
 
           <ExerciseFilterBar
@@ -174,12 +207,22 @@ function PRsTabContent() {
       {!loading &&
         filteredPrs.map((pr) => {
           const tags = tagsByExerciseId.get(pr.exerciseId);
+          const entry = measureEntry(pr, prsMeasure);
+          const shown = entry ? formatPrMeasure(entry, prsMeasure, pr, defaultUnit) : null;
+          // The date follows the measure, so it always names the day the number above it was set.
+          const dateSource = entry?.sessionStartedAt ?? pr.best.sessionStartedAt;
           return (
-            <button key={pr.exerciseId} onClick={() => handleRowTap(pr)} style={rowButtonStyle}>
+            <button
+              key={pr.exerciseId}
+              data-testid="pr-row"
+              className="pressable"
+              onClick={() => setNavTarget(pr)}
+              style={rowButtonStyle}
+            >
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{pr.exerciseName}</div>
                 <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 2 }}>
-                  {formatDateLabel(toLocalDateStr(pr.best.sessionStartedAt))}
+                  {formatDateLabel(toLocalDateStr(dateSource))}
                 </div>
                 {tags?.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
@@ -191,54 +234,64 @@ function PRsTabContent() {
                   </div>
                 )}
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                {pr.best.durationSeconds != null ? (
-                  <>
-                    {/* A hold has no est. 1RM (BestDto sends null), so the record IS the time. */}
-                    <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-pr-text)' }}>
-                      {formatRestTime(pr.best.durationSeconds)}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <div style={{ textAlign: 'right' }}>
+                  {shown ? (
+                    <>
+                      <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-pr-text)' }}>
+                        {shown.value}
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>{shown.caption}</div>
+                    </>
+                  ) : (
+                    // A dash, never a zero: this exercise cannot be measured this way at all, and a
+                    // column of "0 lb" is worse than no column (see .claude/rules/trends.md). The
+                    // caption is always visible rather than hover-only -- this app is used on an
+                    // iPad, where hover does not exist. `title` is the mouse-user bonus, not the
+                    // mechanism.
+                    <div title={measureUnavailableTitle(pr, prsMeasure)}>
+                      <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-muted)' }}>
+                        &mdash;
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
+                        {measureUnavailableCaption(pr)}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
-                      {pr.best.weight > 0 ? `Longest hold at ${pr.best.weight}${pr.best.unit}` : 'Longest hold'}
-                    </div>
-                  </>
-                ) : pr.best.weight === 0 ? (
-                  <>
-                    <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-pr-text)' }}>{pr.best.reps} reps</div>
-                    <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>Bodyweight</div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-pr-text)' }}>
-                      {pr.best.est1rm} {pr.best.unit}
-                    </div>
-                    <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
-                      {pr.best.weight}
-                      {pr.best.unit}×{pr.best.reps}
-                    </div>
-                  </>
-                )}
+                  )}
+                </div>
+                {/* The disclosure indicator. Nothing on this row said it was tappable before --
+                    no chevron and (against frontend-core.md's own rule) no `pressable` either, so
+                    a pointer device got no hover treatment at all. --color-faint is furniture
+                    here, which is one of its sanctioned uses. */}
+                <IconChevronRight size={18} style={{ color: 'var(--color-faint)' }} />
               </div>
             </button>
           );
         })}
+
+      {/* A chooser rather than a straight jump, because a record now leads two useful places and
+          neither is obviously the default. It is also the extensible shape: another destination is
+          a row here, not another control competing for the same 390px. */}
+      {navTarget && (
+        <Modal title={navTarget.exerciseName} onClose={() => setNavTarget(null)} width={320}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            <Button variant="primary" fullWidth onClick={() => goHistory(navTarget)}>
+              <IconScroll size={16} />
+              View history
+            </Button>
+            <Button variant="secondary" fullWidth onClick={() => goProgress(navTarget)}>
+              <IconTrendingUp size={16} />
+              View progress
+            </Button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
 // Was --color-faint (2.07:1 -- effectively unreadable). Empty-state copy is body text
 // and belongs on --color-muted; see the token comments in index.css.
-
-// 16px avoids iOS Safari's zoom-on-focus, same reason as ExerciseFilterBar's search input.
-const sortSelectStyle = {
-  padding: '8px 10px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text)',
-  fontSize: 16,
-  fontWeight: 600,
-};
 
 const rowButtonStyle = {
   width: '100%',

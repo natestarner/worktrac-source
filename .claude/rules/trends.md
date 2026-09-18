@@ -1,6 +1,7 @@
 ---
 paths:
   - "frontend/src/components/trends/**"
+  - "frontend/src/components/prs/**"
   - "backend/src/main/java/com/worktrac/backend/stats/**"
 ---
 
@@ -28,6 +29,30 @@ Full narrative: `docs/architecture/trends.md`.
   falls back the *displayed* metric to `est1rm` when the person's stored preference isn't in the
   filtered list for the currently-selected exercise — it never overwrites that stored preference,
   so switching back to a weighted exercise restores it.
+
+### The PRs board makes the same call PER ROW, not per board
+
+`EXERCISE_METRICS` is now the vocabulary for **two** screens: the chart's metric switcher and the
+PRs board's record picker (`components/prs/prMeasures.js`). They read the same specs so "Volume"
+cannot mean a session total on one and a single set on the other, and a new measure ships with
+`recordMeaning` + `sortLabel` alongside `dotMeaning` — on the spec, never in a parallel table.
+
+Where they legitimately differ is **filtering**, and it is the one divergence to preserve:
+
+- The chart shows ONE exercise, so `visibleMetricOptions` can hide the weight-derived metrics
+  outright for a bodyweight lift.
+- The board is a MIX of exercises and its picker is board-wide, so applicability is decided per
+  row instead: `measureEntry` returns **null**, and the row renders an em dash with a caption
+  naming why. **Do not filter the board's picker** — that would hide "Top weight" from every row
+  because one pull-up cannot use it.
+- A null entry **sorts last**, grouped and name-ordered, and is never coerced to 0. Treating it as
+  a number interleaves unrankable rows through the ranking, putting a pull-up above a genuinely
+  light lift — the generalization of the bodyweight grouping `sortPrRows` has always done.
+- `PrRowDto.bodyweightOnly` / `durationTracked` are what the caption reads. They mirror
+  `ExerciseRecordsDto`'s fields of the same name deliberately; don't add a third spelling.
+
+`PrRowDto.best` **is** the est.-1RM measure and is deliberately not repeated inside `measures` —
+it is the set `comparableValue` picks, substitutions and all. Two copies of one number drift.
 
 ## A hold is the same call as bodyweight, one measure over
 

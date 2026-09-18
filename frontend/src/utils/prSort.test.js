@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PR_SORT, sortPrRows } from './prSort';
+import { DEFAULT_PR_SORT, prSortOptions, sortPrRows } from './prSort';
 
 const row = (name, { weight = 100, reps = 5, unit = 'lb', est1rm = 116.7, date }) => ({
   exerciseId: name.length,
@@ -63,5 +63,95 @@ describe('sortPrRows', () => {
     const input = [bench, squat, curl];
     sortPrRows(input, 'name');
     expect(names(input)).toEqual(['Bench Press', 'Squat', 'Curl']);
+  });
+});
+
+describe('sortPrRows across records', () => {
+  const withMeasures = (name, { est1rm, date, heaviest, heaviestDate }) => ({
+    exerciseId: name.length,
+    exerciseName: name,
+    best: { weight: 100, reps: 5, unit: 'lb', est1rm, sessionStartedAt: date },
+    measures: {
+      heaviest: heaviest == null ? null : { value: heaviest, weightLb: heaviest, reps: 1, sessionStartedAt: heaviestDate ?? date },
+      sessionVolume: null,
+      bestSetVolume: null,
+      totalReps: null,
+    },
+    bodyweightOnly: heaviest == null,
+    durationTracked: false,
+  });
+
+  // Arranged so est. 1RM and top weight DISAGREE: Epley rewards reps, so a lighter set for more
+  // reps can out-rank a heavier single. If the sort ignored the measure this test would pass on
+  // the wrong ordering.
+  const reps = withMeasures('Reps Lift', { est1rm: 300, date: '2026-07-01T09:00:00Z', heaviest: 200 });
+  const single = withMeasures('Single Lift', { est1rm: 250, date: '2026-07-02T09:00:00Z', heaviest: 260 });
+  const bodyweight = withMeasures('Pull-Up', { est1rm: 0, date: '2026-07-03T09:00:00Z', heaviest: null });
+
+  it('ranks on the SELECTED record, not always est. 1RM', () => {
+    expect(names(sortPrRows([single, reps], 'record', 'est1rm'))).toEqual(['Reps Lift', 'Single Lift']);
+    expect(names(sortPrRows([reps, single], 'record', 'heaviest'))).toEqual(['Single Lift', 'Reps Lift']);
+  });
+
+  // Not a tie at zero: a pull-up has no top weight at all, so it is unrankable on that axis rather
+  // than the lowest value on it. Interleaving it would put it above any genuinely light lift.
+  it('groups rows the record cannot measure last, ordered by name', () => {
+    expect(names(sortPrRows([bodyweight, reps, single], 'record', 'heaviest'))).toEqual([
+      'Single Lift',
+      'Reps Lift',
+      'Pull-Up',
+    ]);
+  });
+
+  it('leaves the name sort completely independent of the record', () => {
+    expect(names(sortPrRows([single, bodyweight, reps], 'name', 'heaviest'))).toEqual(
+      names(sortPrRows([single, bodyweight, reps], 'name', 'est1rm')),
+    );
+  });
+
+  // Unrankable rows interleave normally under "Most recent", because that sort never reads a value
+  // -- it falls back to the row's own best date.
+  it('interleaves unmeasurable rows under Most recent rather than sinking them', () => {
+    expect(names(sortPrRows([reps, bodyweight, single], 'recent', 'heaviest'))).toEqual([
+      'Pull-Up',
+      'Single Lift',
+      'Reps Lift',
+    ]);
+  });
+
+  // The date printed on the row follows the measure, so the ordering has to as well -- otherwise
+  // "Most recent" would sort by a date that is not on screen.
+  it('orders Most recent by the date belonging to the selected record', () => {
+    const a = withMeasures('Alpha', { est1rm: 100, date: '2026-07-01T09:00:00Z', heaviest: 100, heaviestDate: '2026-09-01T09:00:00Z' });
+    const b = withMeasures('Beta', { est1rm: 100, date: '2026-08-01T09:00:00Z', heaviest: 100, heaviestDate: '2026-07-15T09:00:00Z' });
+    expect(names(sortPrRows([a, b], 'recent', 'est1rm'))).toEqual(['Beta', 'Alpha']);
+    expect(names(sortPrRows([a, b], 'recent', 'heaviest'))).toEqual(['Alpha', 'Beta']);
+  });
+
+  // An install predating the record picker has this persisted. Falling through to the unknown-key
+  // default would silently move those people back to "Most recent".
+  it('honours the legacy est1rm sort value as the record sort', () => {
+    expect(names(sortPrRows([single, reps], 'est1rm', 'est1rm'))).toEqual(
+      names(sortPrRows([single, reps], 'record', 'est1rm')),
+    );
+    expect(names(sortPrRows([single, reps], 'est1rm', 'est1rm'))).not.toEqual(
+      names(sortPrRows([single, reps], DEFAULT_PR_SORT, 'est1rm')),
+    );
+  });
+});
+
+describe('prSortOptions', () => {
+  it('names the value sort after the selected record', () => {
+    expect(prSortOptions('est1rm').map((o) => o.label)).toEqual([
+      'Most recent',
+      'Name A–Z',
+      'Best est. 1RM',
+    ]);
+    expect(prSortOptions('heaviest')[2].label).toBe('Heaviest weight');
+    expect(prSortOptions('sessionVolume')[2].label).toBe('Most volume');
+  });
+
+  it('keeps stable values while the labels move', () => {
+    expect(prSortOptions('heaviest').map((o) => o.value)).toEqual(['recent', 'name', 'record']);
   });
 });
