@@ -22,13 +22,27 @@ import EmptyState from '../shared/EmptyState';
  */
 export default function RosterTab() {
   const navigate = useNavigate();
-  const { account } = useAuth();
+  const { account, people } = useAuth();
   const vocab = accountVocab(account?.vocab);
 
   const { data: roster, isLoading, isError } = useQuery({
     queryKey: queryKeys.roster(undefined),
     queryFn: () => listRoster(),
   });
+
+  // ⚠️ THE OWNER IS NOT ONE OF THEIR OWN CLIENTS. RosterService reads through PersonService.list,
+  // which returns every person the caller can see -- including the trainer's own training profile,
+  // since visibility (not "is this a client") is the question it answers. Filtering here, rather
+  // than asking the server to exclude the owner, keeps this the same "no plan gate, filter is
+  // presentation" shape the rest of this screen already has.
+  //
+  // Matched by the PRIMARY person, not by the viewer's own identity: useAccountAccess().selfPersonId
+  // is null for an OWNER by design (frontend-core.md), and a manager (assistant) viewing this same
+  // list must not see the trainer counted as their own client either. `people` is undefined on an
+  // older auth snapshot or a still-booting render, and no `people` means no owner to identify --
+  // fails open to showing everyone, same direction as every other unknown-state default in this app.
+  const ownerPersonId = people?.find((p) => p.isPrimary)?.id;
+  const clients = roster?.filter((entry) => String(entry.personId) !== String(ownerPersonId));
 
   return (
     <div>
@@ -57,18 +71,18 @@ export default function RosterTab() {
         </Card>
       )}
 
-      {roster && roster.length === 0 && (
+      {clients && clients.length === 0 && (
         <EmptyState title={`No ${vocab.member}s yet`} body={`Add one from App Settings, or invite them to their own login.`} />
       )}
 
-      {roster && roster.length > 0 && (
+      {clients && clients.length > 0 && (
         <Card flush style={{ marginBottom: 24 }}>
-          {roster.map((entry, index) => (
+          {clients.map((entry, index) => (
             <RosterRow
               key={entry.personId}
               entry={entry}
               vocab={vocab}
-              last={index === roster.length - 1}
+              last={index === clients.length - 1}
             />
           ))}
         </Card>

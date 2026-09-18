@@ -53,6 +53,7 @@ public enum BillingPlan {
         features.add(PlanFeature.PRIVATE_MEMBERS);
         features.add(PlanFeature.MANAGER_ROLE);
         features.add(PlanFeature.ROSTER);
+        features.add(PlanFeature.CHECK_INS);
         return Collections.unmodifiableSet(features);
     }
 

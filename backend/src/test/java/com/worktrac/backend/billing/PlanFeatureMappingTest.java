@@ -94,6 +94,13 @@ class PlanFeatureMappingTest {
                     .contains(PlanFeature.PRIVATE_MEMBERS, PlanFeature.MANAGER_ROLE);
         }
 
+        // Discovery, not access -- CheckInController itself gates on nothing but the person guard.
+        // This is what makes the account-menu link Pro-only without touching what the route allows.
+        @Test
+        void grantsTheRosterAndCheckInsEntryPoints() {
+            assertThat(BillingPlan.PRO.features()).contains(PlanFeature.ROSTER, PlanFeature.CHECK_INS);
+        }
+
         @Test
         void isPaid() {
             assertThat(BillingPlan.PRO.isPaid()).isTrue();

@@ -496,12 +496,12 @@ describe('BillingTab Pro upgrade', () => {
       expect(screen.getByText(/Your whole history/)).toBeInTheDocument();
     });
 
-    // What the band bought, in the words the checkout dropdown used. Deliberately the allowance
-    // and not a usage count -- see seatLine.
-    it('names how many clients the band covers', async () => {
+    // What the band bought, in the words the checkout dropdown used, AND the band's own name --
+    // "Studio" -- so a trainer can tell which band they are on without opening the Portal.
+    it('names the band and how many clients it covers', async () => {
       render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: 15 });
 
-      expect(await screen.findByText('Covers up to 15 clients.')).toBeInTheDocument();
+      expect(await screen.findByText('Studio: Covers up to 15 clients.')).toBeInTheDocument();
     });
 
     // ⚠️ Null seats and unlimited seats are different absences. SubscriptionDto carries null for
@@ -512,12 +512,63 @@ describe('BillingTab Pro upgrade', () => {
       expect(await screen.findByText(/No limit on how many clients/)).toBeInTheDocument();
     });
 
+    // The "12" in "12 of 15 clients" -- usage, not just the allowance.
+    it('names how many of the band is actually used once the server reports it', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: 5, clientCount: 2 });
+
+      expect(await screen.findByText('Starter: 2 of 5 clients.')).toBeInTheDocument();
+    });
+
+    it('counts usage on the Unlimited band too', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: null, clientCount: 8 });
+
+      expect(await screen.findByText('Unlimited: 8 clients, no limit.')).toBeInTheDocument();
+    });
+
     it('says nothing about seats on a household tier, which has none', async () => {
       render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE', clientSeats: null });
 
       expect(await screen.findByText('Huddle Plus')).toBeInTheDocument();
       expect(screen.queryByText(/Covers up to/)).not.toBeInTheDocument();
       expect(screen.queryByText(/No limit on how many/)).not.toBeInTheDocument();
+    });
+
+    // ⚠️ THE BUG: this line used to be a blanket "Everything in Huddle, with no limits" whenever
+    // the subscription query hadn't reported a currentPeriodEnd yet -- true of Plus, false of a
+    // Pro Starter household sitting on a very real 5-client ceiling. None of the fixtures above set
+    // currentPeriodEnd, so every one of them exercises this path; this test names the claim itself.
+    it('never claims Pro has no limits, even before a renewal date has loaded', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: 5 });
+
+      await screen.findByText('Huddle Pro');
+      expect(screen.queryByText(/with no limits/)).not.toBeInTheDocument();
+    });
+
+    // The Plus household this line was actually written for keeps its original, true claim.
+    it('still says Plus has no limits before a renewal date has loaded', async () => {
+      render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE' });
+
+      expect(await screen.findByText('Everything in Huddle, with no limits.')).toBeInTheDocument();
+    });
+
+    // The one upgrade path a paying household gets: Plus -> Pro, right on its own plan screen.
+    it('offers an upgrade to Pro from the Plus summary', async () => {
+      render({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE' });
+      await screen.findByText('Huddle Plus');
+
+      const upgrade = screen.getByRole('button', { name: 'Subscribe to Pro' });
+      fireEvent.click(upgrade);
+
+      await waitFor(() =>
+        expect(createCheckoutSession).toHaveBeenCalledWith('YEAR', { plan: 'PRO', band: 'STARTER' }));
+    });
+
+    // Pro itself has nowhere further up to go -- the card belongs to Plus only.
+    it('does not offer a Pro upgrade from the Pro summary itself', async () => {
+      render(PRO, { plan: 'PRO', status: 'ACTIVE', clientSeats: 15 });
+
+      await screen.findByText('Huddle Pro');
+      expect(screen.queryByRole('button', { name: 'Subscribe to Pro' })).not.toBeInTheDocument();
     });
 
     // A tier added server-side after this bundle shipped (resilience.md axis D). Describing it

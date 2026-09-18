@@ -326,3 +326,30 @@ resend cooldown.
   `TokenAuthenticator`, the same one the filter uses. Reading the header and validating what is in
   it are different jobs, and this route used to do only the first; see the `TokenAuthenticator`
   section above.
+
+## A blank account name defaults to `personName + "'s Household"` — and the client has its own copy
+
+`RegistrationService`'s account-creation overload (around line 265) is the ONLY place that default
+is written; a blank/null `accountNameRaw` always becomes `"'s Household"`, regardless of which
+plan someone eventually buys — Pro is purchased later via checkout, never chosen at registration,
+so this method genuinely cannot know.
+
+⚠️ **`RegisterPage.jsx` (not covered by this file's `paths:`, so it will NOT auto-load on a backend
+edit here) keeps its own mirrored copy of this default**, for two reasons at once:
+
+1. Its placeholder text (`"Defaults to '{name}'s Household'"`) must never promise something the
+   backend doesn't do.
+2. For a Pro-intent arrival (`?plan=pro`, from `marketing/for-trainers.html`'s CTAs — see
+   `MARKETING_PLAN_INTENTS`), a blank field submits `"{name}'s Account"` **explicitly** rather than
+   leaving it blank for this method to household-flavor. Without that override, a trainer's
+   default account name bakes in the literal word "household" — which a client then reads back
+   verbatim in their own invite email (`MembershipInviteIssuedEvent.accountNoun` only fixes the
+   *noun* sentence, "owns this household/practice"; the account's own chosen NAME is a separate,
+   free-text field this method alone controls).
+
+**If this default's shape ever changes here, `RegisterPage.jsx`'s `defaultAccountName` /
+`accountNamePlaceholder` must change with it**, or the placeholder becomes a promise the backend
+no longer keeps. There is no shared constant between the two — the string is duplicated
+deliberately (Java `String.format`-shaped vs. a template literal), same tradeoff as
+`historyWindowCopy.js` deriving from a server value rather than hand-duplicating one, except here
+the shapes live in different languages and repos, so a shared constant isn't available at all.

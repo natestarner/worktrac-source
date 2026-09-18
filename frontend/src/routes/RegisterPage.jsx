@@ -37,6 +37,14 @@ export default function RegisterPage() {
   // account actually holds is derived server-side from the subscription, never from this.
   const [searchParams] = useSearchParams();
   const wantsPlan = MARKETING_PLAN_INTENTS.get(searchParams.get('plan')) ?? null;
+  // Everything on this page that says "household" is family-shaped copy, and it is wrong for
+  // someone who followed a for-trainers.html CTA here: they are about to run a practice, not a
+  // household, and the account NAME they type (or leave blank) is what a client eventually reads
+  // back in their invite email ("You've been added to {accountName}") -- see
+  // MembershipInviteIssuedEvent's accountNoun for the half of that sentence this page cannot fix.
+  // wantsPlan is only a hint from a marketing link, never a guarantee, so this reaches for the
+  // generic "account" rather than presuming "practice" (AccountVocab's actual Pro noun).
+  const isProIntent = wantsPlan === 'PRO';
   const [personName, setPersonName] = useState('');
   const [accountName, setAccountName] = useState('');
   const [email, setEmail] = useState('');
@@ -47,15 +55,22 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Mirrors what the server actually does with a blank household name --
-  // RegistrationService builds `personName + "'s Household"`. Derived from the name field as it is
-  // typed so the placeholder is never a promise the backend doesn't keep. This was previously the
-  // literal string "Defaults to “{name}'s Household”": a plain JSX attribute, so `{name}` was not
-  // interpolated and every new household saw the braces on screen.
+  // Mirrors what the server actually does with a blank name -- RegistrationService builds
+  // `personName + "'s Household"`. Derived from the name field as it is typed so the placeholder
+  // is never a promise the backend doesn't keep. This was previously the literal string
+  // "Defaults to “{name}'s Household”": a plain JSX attribute, so `{name}` was not interpolated
+  // and every new household saw the braces on screen.
+  //
+  // ⚠️ For a Pro-intent arrival, `defaultAccountName` is what actually gets SENT on submit below,
+  // not just previewed -- leaving the field blank must not fall through to the backend's own
+  // "'s Household" default, or the placeholder here would be a promise this page doesn't keep.
   const trimmedPersonName = personName.trim();
-  const householdPlaceholder = trimmedPersonName
-    ? `Defaults to “${trimmedPersonName}'s Household”`
-    : 'Defaults to your household';
+  const defaultAccountName = trimmedPersonName
+    ? `${trimmedPersonName}'s ${isProIntent ? 'Account' : 'Household'}`
+    : null;
+  const accountNamePlaceholder = defaultAccountName
+    ? `Defaults to “${defaultAccountName}”`
+    : `Defaults to your ${isProIntent ? 'account' : 'household'}`;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -79,7 +94,11 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     try {
-      await register({ accountName, email: trimmedEmail, password, personName: trimmedPersonName });
+      // A blank field still falls through to the SERVER's default for Free/Plus (unchanged), but a
+      // Pro-intent arrival supplies its own -- otherwise the field promises "…'s Account" while the
+      // backend silently writes "…'s Household" the moment nobody typed anything.
+      const submittedAccountName = accountName.trim() || (isProIntent ? defaultAccountName : accountName);
+      await register({ accountName: submittedAccountName, email: trimmedEmail, password, personName: trimmedPersonName });
       navigate('/confirm-email', { state: { email: trimmedEmail, wantsPlan } });
     } catch (err) {
       setError(err.message || 'Could not register');
@@ -120,7 +139,9 @@ export default function RegisterPage() {
           />
         </picture>
 
-        <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', margin: '0 0 var(--space-1)', textAlign: 'center' }}>Create your household</h1>
+        <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 'var(--weight-bold)', margin: '0 0 var(--space-1)', textAlign: 'center' }}>
+          {isProIntent ? 'Create your account' : 'Create your household'}
+        </h1>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginBottom: 'var(--space-6)', textAlign: 'center' }}>
           You'll be the primary login — kids and training partners get added inside the app, no login needed.
         </div>
@@ -149,11 +170,13 @@ export default function RegisterPage() {
         />
         {personNameError && <div id="person-name-error" style={fieldErrorStyle}>Enter your name.</div>}
 
-        <label htmlFor="account-name" style={labelStyle}>Household name (optional)</label>
+        <label htmlFor="account-name" style={labelStyle}>
+          {isProIntent ? 'Account name (optional)' : 'Household name (optional)'}
+        </label>
         <input
           id="account-name"
           name="organization"
-          placeholder={householdPlaceholder}
+          placeholder={accountNamePlaceholder}
           value={accountName}
           maxLength={FIELD_LIMITS.accountName}
           onChange={(e) => setAccountName(e.target.value)}
@@ -198,7 +221,7 @@ export default function RegisterPage() {
         {passwordError && <div id="password-error" style={fieldErrorStyle}>Password must be at least 8 characters.</div>}
 
         <button type="submit" disabled={submitting} className="btn btn-primary btn-lg btn-full pressable" style={{ ...primaryButtonStyle, position: 'relative' }}>
-          <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>Create household</span>
+          <span style={{ visibility: submitting ? 'hidden' : 'visible' }}>{isProIntent ? 'Create account' : 'Create household'}</span>
           {submitting && (
             <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Spinner color="currentColor" />
@@ -207,7 +230,7 @@ export default function RegisterPage() {
         </button>
 
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-muted)', marginTop: 'var(--space-4)', textAlign: 'center' }}>
-          By creating a household, you agree to our <LegalLinks />.
+          By creating {isProIntent ? 'an account' : 'a household'}, you agree to our <LegalLinks />.
         </div>
 
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-muted)', marginTop: 'var(--space-5)', textAlign: 'center' }}>

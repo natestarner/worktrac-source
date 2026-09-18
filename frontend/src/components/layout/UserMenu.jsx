@@ -213,13 +213,23 @@ export default function UserMenu({ booting = false }) {
           )}
           {/* Per-PERSON, unlike everything else in this menu -- it opens on whoever is active in
               the person bar, which is how a trainer moves between clients without a second
-              navigation concept. Shown to everyone: a client writing their own weigh-in is half of
-              what the feature is for.
+              navigation concept. Shown to every ROLE once the plan grants it: a client writing
+              their own weigh-in is half of what the feature is for, and that includes the owner's
+              own person -- a trainer tracking their own bodyweight is the same feature turned on
+              themselves, not a different one.
+
+              ⚠️ PlanFeature.CHECK_INS, same ENTRY-POINT-ONLY shape as ROSTER just above: the route
+              and CheckInController carry no plan check at all (a family logging a weigh-in is
+              harmless), so this gates discovery, not access. Without it, Free and Plus saw a menu
+              item that makes sense only once check-ins is a coaching workflow rather than a lone
+              family member's private habit tracker.
 
               ⚠️ "Check-ins" and never "Notes". This is the third note concept in the app and
               "Notes" already exists elsewhere; Playwright matches accessible names as a substring,
               so the overlap would break unrelated specs. See coaching.md. */}
-          <MenuItem label="Check-ins" onClick={() => go('/app/check-ins')} />
+          {planIncludes(account?.plan, 'CHECK_INS') && (
+            <MenuItem label="Check-ins" onClick={() => go('/app/check-ins')} />
+          )}
           <MenuItem label="Profile" onClick={() => go('/app/profile')} />
           <MenuItem label="App Settings" onClick={() => go('/app/settings')} />
           {/* "Plan & billing" -- checked against every other label on this screen for the

@@ -4,6 +4,8 @@ import AddPersonModal from './AddPersonModal';
 import { addPerson } from '../../api/people';
 import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
+import { queryClient } from '../../lib/queryClient';
+import { queryKeys } from '../../api/queryKeys';
 
 vi.mock('../../api/people', () => ({ addPerson: vi.fn() }));
 
@@ -50,5 +52,23 @@ describe('AddPersonModal validation', () => {
     await waitFor(() => expect(addPerson).toHaveBeenCalledWith('Sam'));
     expect(selectPerson).toHaveBeenCalledWith(5);
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // ⚠️ THE ROSTER DERIVES FROM PEOPLE TOO, same reasoning queryClient.js already documents for a
+  // logged set. Without this, a trainer who adds a client and immediately opens their roster sees
+  // it as though the client were not there -- offlineCacheWarm already cached the answer from
+  // before this person existed, and nothing about the screen looks wrong.
+  //
+  // Against the REAL cache, not a spy on invalidateQueries -- a spy passes just as happily on a key
+  // nothing observes.
+  it('invalidates the roster, which is account-shared and derives from people as well as sets', async () => {
+    queryClient.setQueryData(queryKeys.roster(undefined), []);
+    render(<AddPersonModal onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByPlaceholderText('Name'), { target: { value: 'Sam' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => expect(addPerson).toHaveBeenCalledWith('Sam'));
+    expect(queryClient.getQueryState(queryKeys.roster(undefined)).isInvalidated).toBe(true);
   });
 });

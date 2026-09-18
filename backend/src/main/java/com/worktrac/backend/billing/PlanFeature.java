@@ -62,5 +62,17 @@ public enum PlanFeature {
      * sorted by who trained least recently, is not a useful screen; a roster of forty clients is
      * the whole product. That is a discovery decision, not an access one.
      */
-    ROSTER
+    ROSTER,
+
+    /**
+     * Check-ins -- a dated entry (weight, a note) about a person, recorded by themselves or by
+     * whoever trains them.
+     *
+     * <p>⚠️ CHROME ONLY, the same shape as {@link #ROSTER}: {@code CheckInController} carries no
+     * plan check at all, and a family recording their own bodyweight is harmless. What this gates
+     * is the account-menu ENTRY POINT -- a family already has a person switcher and a profile for
+     * that; a coaching relationship is what makes "Check-ins" a feature worth a menu item of its
+     * own rather than noise beside Profile.
+     */
+    CHECK_INS
 }

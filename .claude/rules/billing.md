@@ -133,6 +133,12 @@ to every gate.
 - **Seats are reported only while the tier is in force.** A lapsed Pro row still records the band it
   bought; `entitlementOf` and `SubscriptionDto` both clear seats once the tier reads FREE, or a Free
   account would be told it has a roster allowance it is not paying for.
+- **`SubscriptionDto.clientCount` is the "12" in "12 of 15 clients" — USAGE, computed fresh in
+  `SubscriptionService.describe`, never stored.** It is `people on the account, minus the trainer's
+  own person, minus every MANAGER's own person` — neither spends a client seat
+  (`QuotaService.requirePersonCapacity`'s `clientSeats + 1` ceiling for the trainer), so neither
+  should count as one on the billing screen either. Clamped to `null` alongside `clientSeats` for
+  every non-PRO tier, for the same reason: a household tier has no seats to report usage against.
 - **`SubscriptionService` takes `StripeProperties`, not `StripeService`.** It depends on the price
   *configuration*, never on the SDK — `StripeService` is still the only class importing
   `com.stripe.*`, and this is what keeps `applyStripeState` unit-testable with a plain properties

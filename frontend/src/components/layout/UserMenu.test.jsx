@@ -123,6 +123,45 @@ describe('UserMenu', () => {
     expect(screen.getByRole('button', { name: /^Nate/ })).toBeInTheDocument();
   });
 
+  // Check-ins only makes sense as a coaching workflow -- a family already has a person switcher
+  // and a profile. PlanFeature.CHECK_INS gates the menu item only (CheckInController itself
+  // carries no plan check), same ENTRY-POINT-ONLY shape as Clients/Roster below.
+  describe('Check-ins', () => {
+    it('is hidden on Free and Plus', () => {
+      useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false, account: { plan: 'PLUS' } });
+      renderMenu();
+      openMenu();
+
+      expect(screen.queryByRole('menuitem', { name: 'Check-ins' })).not.toBeInTheDocument();
+    });
+
+    it('shows for a Pro owner', () => {
+      useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false, account: { plan: 'PRO' } });
+      renderMenu();
+      openMenu();
+
+      const item = screen.getByRole('menuitem', { name: 'Check-ins' });
+      fireEvent.click(item);
+      expect(mockNavigate).toHaveBeenCalledWith('/app/check-ins', { state: { from: '/' } });
+    });
+
+    // Every role, including a private client: recording your own weigh-in is half of what the
+    // feature is for, so the plan gate must not become a role gate too.
+    it('shows for a Pro member as well as the owner', () => {
+      useAuth.mockReturnValue({
+        people: [],
+        logout: vi.fn(),
+        isAdmin: false,
+        account: { plan: 'PRO' },
+        membership: { accountRole: 'MEMBER', personId: 2 },
+      });
+      renderMenu();
+      openMenu();
+
+      expect(screen.getByRole('menuitem', { name: 'Check-ins' })).toBeInTheDocument();
+    });
+  });
+
   it('does not show the Admin Portal item for a non-admin user', () => {
     useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false });
     renderMenu();

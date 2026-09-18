@@ -20,14 +20,40 @@ test.describe('Pro — the roster', () => {
   test('is reachable on Pro, in the account’s own vocabulary', async ({ page, request }) => {
     const ownerEmail = await registerHousehold(page, request, 'Nate');
     await setBillingPlan(request, ownerEmail, 'PRO');
+    // The reload has to come BEFORE adding Sam, not after. setBillingPlan is an out-of-band API
+    // call the client doesn't know about until a fresh /me -- the reload is what picks up PRO
+    // (and the "Clients" menu item's plan gate with it), never a step to skip. But the ROSTER
+    // read is warmed with `refreshAfterRestore` deliberately OFF (offlineCacheWarm.js): a reload
+    // AFTER adding Sam would boot from a boot-warmed snapshot that can legitimately predate him,
+    // by design, to keep the busiest network moment (boot) from forcing every read fresh. Adding
+    // Sam in the SAME session as the check instead relies on AddPersonModal's own roster
+    // invalidation (the same "this action changed who's on the roster" rule a logged set already
+    // follows), which is immediate and carries no such exemption.
     await page.reload();
+    await addPerson(page, 'Sam');
 
     await openRoster(page);
 
     // "Clients", not "Family members": the menu label and the heading both come from AccountVocab,
     // which the server derives from the tier.
     await expect(page.getByText('Clients', { exact: true })).toBeVisible();
-    await expect(page.getByText('Nate', { exact: true })).toBeVisible();
+    // The trainer is not their own client -- only Sam belongs on this screen.
+    await expect(page.getByText('Sam', { exact: true })).toBeVisible();
+    await expect(page.getByText('Nate', { exact: true })).not.toBeVisible();
+  });
+
+  // ⚠️ THE TRAINER IS NOT ONE OF THEIR OWN CLIENTS. RosterService reads everyone the caller can
+  // see, which includes the trainer's own training profile -- so with nobody else on the account
+  // yet, filtering it out (RosterTab.jsx) leaves the empty state rather than a roster of one.
+  test('does not list the owner among their own clients', async ({ page, request }) => {
+    const ownerEmail = await registerHousehold(page, request, 'Nate');
+    await setBillingPlan(request, ownerEmail, 'PRO');
+    await page.reload();
+
+    await openRoster(page);
+
+    await expect(page.getByText('No clients yet')).toBeVisible();
+    await expect(page.getByText('Nate', { exact: true })).not.toBeVisible();
   });
 
   // ⚠️ The door is closed on a family tier. Not a refusal -- the endpoint answers a Plus household
@@ -63,17 +89,29 @@ test.describe('Pro — the roster', () => {
 
     await openRoster(page);
 
-    // ⚠️ Wait for the roster to have RENDERED before reading its order. innerText on a locator that
-    // resolves to a stale or still-loading card is a silent -1, not a timeout -- so the assertion
-    // would fail with a confusing off-by-one rather than saying the screen was not ready.
-    //
+    // ⚠️ Wait for the roster to have RENDERED before reading it, and read it ONCE as one block of
+    // text rather than asserting on individual `getByText` locators. Two reasons, not one:
+    //   - The name and activity divs are adjacent siblings under one wrapper with no separator in
+    //     between, so the wrapper's own concatenated text also contains the activity sentence as a
+    //     substring -- a non-exact getByText resolves to both it and the leaf (e2e-tests.md).
+    //   - A roster reached via addPerson + a just-landed logged set can transiently carry TWO
+    //     invalidation sources (the add and the set-log both invalidate ['roster'] independently --
+    //     RosterTab.jsx / queryClient.js), and an in-flight refetch racing a settling one can leave
+    //     a `getByText` locator matching a stale node alongside the fresh one for a beat. Reading
+    //     `.innerText()` once, after the text is confirmed present, takes whatever the DOM shows at
+    //     that single instant rather than asking Playwright to reconcile two async locator resolves.
     // These two also carry their own claim: "never" is a SENTENCE, not a number. RosterEntryDto
-    // sends null rather than a sentinel precisely so this cannot render "9999 days ago".
-    await expect(page.getByText('Has never logged a workout')).toBeVisible();
-    await expect(page.getByText('Trained today')).toBeVisible();
+    // sends null rather than a sentinel precisely so this cannot render "9999 days ago". NOT "Has
+    // never logged a workout" -- that sentence is RosterTab.describeActivity's OTHER never-trained
+    // branch, for somebody with a login. `addPerson` creates a person with none (that needs
+    // `addMemberLogin`), so the correct copy names the no-login case instead.
+    const rosterCard = page.locator('.card.card-flush');
+    await expect(rosterCard).toContainText('No workouts yet — this client has no login');
+    await expect(rosterCard).toContainText('Trained today · 1 week running');
 
-    // The claim is about what a reader sees top to bottom, and innerText is that.
-    const rendered = await page.locator('.card').filter({ hasText: 'Never' }).first().innerText();
+    // The claim is about what a reader sees top to bottom, and innerText is that -- read once,
+    // after the two assertions above confirm the content has actually settled.
+    const rendered = await rosterCard.innerText();
     expect(rendered.indexOf('Never')).toBeLessThan(rendered.indexOf('Busy'));
   });
 

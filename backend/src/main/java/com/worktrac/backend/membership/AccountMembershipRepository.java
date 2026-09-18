@@ -44,6 +44,16 @@ public interface AccountMembershipRepository extends JpaRepository<AccountMember
     long countByUser_Id(Long userId);
 
     /**
+     * How many logins on this account hold a given role AND have a person -- used to keep the
+     * billing screen's "12 of 15 clients" line honest about who is actually a CLIENT. A manager's
+     * own person (their training profile, if they have one) is a person on the roster but not one
+     * of the trainer's clients, same reasoning as excluding the trainer's own. `PersonIsNotNull`
+     * because a membership with no person (legitimate -- see AccountMembership) contributes nothing
+     * to PersonRepository's count in the first place, so counting it here would over-subtract.
+     */
+    long countByAccount_IdAndAccountRoleAndPersonIsNotNull(Long accountId, AccountRole accountRole);
+
+    /**
      * The account's owner, lowest membership id first.
      *
      * <p>Returns a List, not an Optional, on purpose: nothing in the schema stops an account
