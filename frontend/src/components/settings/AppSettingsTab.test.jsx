@@ -10,6 +10,7 @@ import { useUI } from '../../context/UIContext';
 import { useTags } from '../../hooks/useTags';
 import { __resetOfflineModeForTests, isOfflinePinned } from '../../lib/offlineMode';
 import { listImports } from '../../api/dataImport';
+import { getHistory, getHistoryWindow } from '../../api/sessions';
 
 // Every setting here is household-wide -- no dependence on which person is active. The rest timer
 // is per-person but shown for everyone at once, persisted account-side (not localStorage).
@@ -32,6 +33,7 @@ vi.mock('../../api/tags', () => ({
 vi.mock('../../api/account', () => ({ updateDefaultUnit: vi.fn(), setMemberVisibility: vi.fn() }));
 vi.mock('../../api/export', () => ({ downloadAllPeopleZip: vi.fn() }));
 vi.mock('../../api/dataImport', () => ({ listImports: vi.fn(), undoImport: vi.fn() }));
+vi.mock('../../api/sessions', () => ({ getHistory: vi.fn(), getHistoryWindow: vi.fn() }));
 vi.mock('../../api/people', () => ({ setRestTimerPreference: vi.fn(), setStepperIncrements: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
@@ -54,6 +56,8 @@ describe('AppSettingsTab tag management', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listImports.mockResolvedValue([]);
+    getHistory.mockResolvedValue([{ id: 1 }]);
+    getHistoryWindow.mockResolvedValue({ hiddenSessions: 0 });
     onlineManager.setOnline(true);
     createTag.mockResolvedValue({ id: 1, name: 'Legs' });
     refetchTags = vi.fn().mockResolvedValue();
@@ -119,6 +123,8 @@ describe('AppSettingsTab rest timer toggle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listImports.mockResolvedValue([]);
+    getHistory.mockResolvedValue([{ id: 1 }]);
+    getHistoryWindow.mockResolvedValue({ hiddenSessions: 0 });
     onlineManager.setOnline(true);
     refreshPeople = vi.fn().mockResolvedValue();
     setRestTimerPreference.mockResolvedValue({});
@@ -154,6 +160,8 @@ describe('AppSettingsTab offline mode toggle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listImports.mockResolvedValue([]);
+    getHistory.mockResolvedValue([{ id: 1 }]);
+    getHistoryWindow.mockResolvedValue({ hiddenSessions: 0 });
     onlineManager.setOnline(true);
     useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [], refreshPeople: vi.fn() });
     useUI.mockReturnValue({ openConfirm: vi.fn(), showToast: vi.fn() });
@@ -186,6 +194,8 @@ describe('AppSettingsTab offline gating', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listImports.mockResolvedValue([]);
+    getHistory.mockResolvedValue([{ id: 1 }]);
+    getHistoryWindow.mockResolvedValue({ hiddenSessions: 0 });
     onlineManager.setOnline(false);
     useAuth.mockReturnValue({
       account: { defaultUnit: 'lb' },
@@ -286,6 +296,8 @@ describe('AppSettingsTab as a member', () => {
     useUI.mockReturnValue({ openConfirm: vi.fn(), showToast: vi.fn() });
     useTags.mockReturnValue({ tags: [{ id: 1, name: 'Push' }], isLoading: false });
     listImports.mockResolvedValue([]);
+    getHistory.mockResolvedValue([{ id: 1 }]);
+    getHistoryWindow.mockResolvedValue({ hiddenSessions: 0 });
     useAuth.mockReturnValue({
       account: { id: 1, defaultUnit: 'lb', plan: 'PLUS' },
       membership: { accountRole: 'MEMBER', personId: 2, membersSeeEveryone: true },
@@ -357,6 +369,8 @@ describe('AppSettingsTab member visibility', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listImports.mockResolvedValue([]);
+    getHistory.mockResolvedValue([{ id: 1 }]);
+    getHistoryWindow.mockResolvedValue({ hiddenSessions: 0 });
     onlineManager.setOnline(true);
     useUI.mockReturnValue({ openConfirm: vi.fn(), showToast: vi.fn() });
     useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn() });
@@ -429,6 +443,8 @@ describe('AppSettingsTab stepper increments', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listImports.mockResolvedValue([]);
+    getHistory.mockResolvedValue([{ id: 1 }]);
+    getHistoryWindow.mockResolvedValue({ hiddenSessions: 0 });
     onlineManager.setOnline(true);
     refreshPeople = vi.fn().mockResolvedValue();
     setStepperIncrements.mockResolvedValue({});
@@ -490,5 +506,54 @@ describe('AppSettingsTab stepper increments', () => {
 
     fireEvent.click(pill);
     expect(setStepperIncrements).not.toHaveBeenCalled();
+  });
+});
+
+// Export shouldn't be offered as if there's something to download when there isn't -- it reads as
+// unfinished rather than as "nothing here yet". This reuses the exact same signal HistoryTab's own
+// Export data button already relies on (getHistory + the Free history window), fanned out across
+// every person in the household.
+describe('AppSettingsTab "Export all data" enablement', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listImports.mockResolvedValue([]);
+    onlineManager.setOnline(true);
+    useUI.mockReturnValue({ openConfirm: vi.fn(), showToast: vi.fn() });
+    useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn() });
+  });
+  afterEach(() => onlineManager.setOnline(true));
+
+  function withPeople(people) {
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people, refreshPeople: vi.fn() });
+  }
+
+  it('disables it when nobody in the household has ever logged a workout', async () => {
+    getHistory.mockResolvedValue([]);
+    getHistoryWindow.mockResolvedValue({ hiddenSessions: 0 });
+    withPeople([{ id: 7, name: 'Nate' }, { id: 8, name: 'Sam' }]);
+    renderTab();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Export all data' })).toBeDisabled());
+  });
+
+  it('enables it once anyone in the household has logged a workout', async () => {
+    getHistory.mockImplementation((personId) => Promise.resolve(personId === 8 ? [{ id: 1 }] : []));
+    getHistoryWindow.mockResolvedValue({ hiddenSessions: 0 });
+    withPeople([{ id: 7, name: 'Nate' }, { id: 8, name: 'Sam' }]);
+    renderTab();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Export all data' })).not.toBeDisabled());
+  });
+
+  // A Free household's sessions before the window floor are simply absent from getHistory, but the
+  // export itself is full-history and unclamped -- so there IS something to download even though
+  // History's own list (and this same check on an empty getHistory alone) would say otherwise.
+  it('enables it when a session exists only outside the Free history window', async () => {
+    getHistory.mockResolvedValue([]);
+    getHistoryWindow.mockResolvedValue({ hiddenSessions: 1 });
+    withPeople([{ id: 7, name: 'Nate' }]);
+    renderTab();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Export all data' })).not.toBeDisabled());
   });
 });
