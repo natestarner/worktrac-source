@@ -20,7 +20,14 @@ Full narrative: `docs/architecture/trends.md`.
   `bodyweightOnly` (every set at weight 0) switches the records table to a rep-focused view;
   a column of `0 lb` is worse than no column. `bestEst1rm` is `null` for the same reason, and
   `sortPrRows` groups bodyweight rows last under the est.-1RM sort rather than letting them all
-  tie at 0.
+  tie at 0. The exercise chart's metric switcher applies the same rule one level up:
+  `exerciseMetrics.js#visibleMetricOptions` drops "Top weight"/"Volume"/"Best set" (raw weight or
+  weight × reps, so a flat zero line regardless of rep count) whenever `records.bodyweightOnly` is
+  true, reusing that same already-fetched field rather than adding a new one. "Est. 1RM" and
+  "Reps" stay, since the first already substitutes rep count at weight 0. `ExerciseTrendSection`
+  falls back the *displayed* metric to `est1rm` when the person's stored preference isn't in the
+  filtered list for the currently-selected exercise — it never overwrites that stored preference,
+  so switching back to a weighted exercise restores it.
 
 ## A hold is the same call as bodyweight, one measure over
 
