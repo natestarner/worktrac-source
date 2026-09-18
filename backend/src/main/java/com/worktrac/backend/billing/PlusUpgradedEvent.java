@@ -10,7 +10,7 @@ package com.worktrac.backend.billing;
  * permission cache, so it is worth the extra column that makes the guard exact rather than
  * best-effort.
  *
- * <p>Deliberately NOT published for a comp grant ({@code CompBootstrap}). A comped household did
+ * <p>Deliberately NOT published for a comp grant ({@code CompGrantService}). A comped household did
  * not upgrade -- they were never charged -- and the welcome copy says "thanks for keeping Huddle
  * going" in a context that presumes a purchase just happened.
  *

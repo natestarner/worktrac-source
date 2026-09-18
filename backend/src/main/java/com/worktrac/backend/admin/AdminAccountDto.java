@@ -45,5 +45,40 @@ public record AdminAccountDto(
         Instant currentPeriodEnd,
         boolean cancelAtPeriodEnd,
         boolean comped,
+        /**
+         * Why this household was comped, in the granting admin's words. Null for a grant made
+         * before the note existed (every {@code COMPED_EMAILS} one) or left blank.
+         *
+         * <p>Safe to surface: it is text an admin typed into the admin portal, not household data
+         * and not a secret. Who granted it and when are audit facts and live in
+         * {@code billing_events}, not here.
+         */
+        String compNote,
+        /**
+         * Would {@code POST /accounts/{id}/comp} succeed for this household right now?
+         *
+         * <p>The server's own precomputed answer, so the client never re-derives the rule -- the
+         * same contract {@code TagDto.deletable} and {@code ExerciseDto.renamable} have, and the
+         * reason the Accounts tab can hide a control the server would refuse rather than turning a
+         * 409 into a toast ({@code .claude/rules/member-access.md}).
+         *
+         * <p>False means a live Stripe subscription is paying for this household, so comping it
+         * would leave them charged for a plan they were just given. Shared with
+         * {@code CompGrantService.blockedByStripe} rather than mirrored -- one definition, two
+         * readers.
+         */
+        boolean compGrantable,
+        /**
+         * The client ceiling this subscription is licensed for, or null for a household tier and
+         * for Pro's unlimited band.
+         *
+         * <p>Carried so the grant form can preselect the band a Pro household ACTUALLY has. Without
+         * it the form opened on Starter for every comped Pro household, and pressing "Update grant"
+         * to change only the note would silently rewrite a Practice band down to Starter. A band is
+         * a ceiling on adding rather than a revocation, so nothing would have broken for their
+         * existing clients — it would simply have refused the next one, for no reason anybody could
+         * have traced back to this screen.
+         */
+        Integer clientSeats,
         String stripeCustomerId) {
 }

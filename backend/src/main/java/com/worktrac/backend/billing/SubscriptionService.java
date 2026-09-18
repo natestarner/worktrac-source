@@ -94,8 +94,29 @@ public class SubscriptionService {
         if (subscription == null) {
             return false;
         }
-        if (subscription.isComped()) {
-            return true;
+        // Cases 1-3 are Stripe's; case 4 is the comp. Split into a NAMED sub-question rather than
+        // left inline because one caller genuinely needs the Stripe half on its own -- see
+        // isPayingThroughStripe. The disjunction below is the same expression it always was.
+        return subscription.isComped() || isPayingThroughStripe(subscription);
+    }
+
+    /**
+     * The STRIPE half of {@link #isEntitled} — cases 1-3, with the comp deliberately excluded.
+     *
+     * <p>⚠️ This is not a second derivation and must never become one. It exists because
+     * {@code CompGrantService} has to ask "is this household paying us through Stripe <i>right
+     * now</i>?" while deciding whether a comp may be granted, and {@code isEntitled} cannot answer
+     * that: it returns true for an already-comped row, so a household holding a comp AND a long-
+     * lapsed Stripe subscription would look like a paying customer and be refused a perfectly
+     * legitimate change to its own grant.
+     *
+     * <p>Every case still lives in exactly one place — {@code isEntitled} is now literally
+     * {@code comped || isPayingThroughStripe}. Do not inline the status comparisons at a call site;
+     * that is the drift this class exists to prevent.
+     */
+    public boolean isPayingThroughStripe(Subscription subscription) {
+        if (subscription == null) {
+            return false;
         }
         if (ENTITLED_OUTRIGHT.contains(subscription.getStatus())) {
             return true;

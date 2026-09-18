@@ -125,33 +125,93 @@ same reasoning for refusing to persist its own `stepIndex`.
 `BillingTab` releases on unmount, which covers every exit — paying, "Start with Free", or simply
 leaving via a tab — with one mechanism rather than three call sites.
 
-## Existing households when the window lands
+## Comps: giving a household a paid plan for nothing
 
-Clipped like everyone else, except a comped list. `comped` ships as a column in V56, but the list
-itself is **`COMPED_EMAILS`, not a migration** — reusing the `ADMIN_EMAILS` mechanism exactly
-(typed properties plus an `ApplicationRunner`) rather than inventing a second way to grant
-something from a configured list.
+`comped` ships as a column in V56, and `comped_plan` (V75) says which tier it grants. Together they
+are a **standing grant with no Stripe object behind it** — `isEntitled` ends in `OR comped`, and
+`entitledPlan` reads `comped_plan` before `billing_plan`, so a comped household reaches every gate
+through the identical derivation a paying one does. There is no second code path downstream.
 
-Two reasons it is not a migration, and the first is the important one:
+### Granting is an admin portal action (`CompGrantService`)
 
-- **These are other people's personal email addresses.** A migration writes them into git history
-  permanently, in a repository that has no business holding them. An env var sourced from a deploy
-  secret keeps them out of both repos.
-- Comping someone later would otherwise need a new migration each time. This makes it a config
-  change, which is what it actually is.
+`POST` / `DELETE /api/admin/accounts/{id}/comp`. This is the **third sanctioned write** in a
+portal that is otherwise read-only; `.claude/rules/admin-portal.md` carries the sign-off.
 
-`CompBootstrap` is **promote-only**, and that asymmetry is deliberate. `AuthService.login` both
-promotes and demotes admins because losing an admin role costs someone a menu item. Losing a comp
-costs them their entire training history behind a paywall, with no warning and no purchase to point
-at — far too consequential to happen as a side effect of an edited environment variable, or of a
-deploy where the secret was momentarily unset. A household that drops off the list is **logged, not
-revoked**.
+**⚠️ This reverses an earlier decision, deliberately.** This document used to reject exactly this
+button, on the grounds that it would be "a third sanctioned write action in a deliberately
+read-only portal". The argument was sound and the trade has simply changed: the tier roadmap turned
+comping from a one-off act for a handful of founding households into something done routinely, and
+the alternative — editing a deploy secret and redeploying — had become the most expensive way to
+perform a common action. The read-only invariant was never the goal in itself; it was a proxy for
+"an admin action must be deliberate, narrow and accountable", and a narrow endpoint with a confirm
+dialog and an audit row meets that better than a deploy does.
+
+What replaced the old protection:
+
+- **`billing_events` rows** — `COMP_GRANTED` / `COMP_REVOKED`, each naming the acting admin, the
+  tier, the band and the reason. A deploy left a record in the deploy repo's history; this leaves a
+  better one, in the table a support question is already answered from.
+- **The acting admin comes from the authenticated principal**, never from the request body.
+  `AdminCompRequest` has no actor field, and `AdminAuthorizationTest` pins that a caller supplying
+  one is ignored. An audit trail somebody can write their own name into is not one.
+- **The gate is unchanged from every other admin route** — `SecurityConfig`'s
+  `/api/admin/** → hasRole("ADMIN")`, on top of `JwtAuthenticationFilter` re-checking
+  `ADMIN_EMAILS` on every single request (demote-only). Nothing about this feature widens it.
+
+### `COMPED_EMAILS` is retired
+
+The env var and `CompBootstrap` are gone. They were the right shape while comping was rare — the
+reasoning was worth keeping and is recorded here because it still applies to `ADMIN_EMAILS`:
+
+- **These are other people's personal email addresses.** A migration would write them into git
+  history permanently, in a repository that has no business holding them. An env var sourced from a
+  deploy secret kept them out of both repos.
+- Comping someone later would otherwise have needed a new migration each time.
+
+**Retiring it cost existing comped households nothing**, which is the whole reason it was safe: a
+comp was always a row in `subscriptions`, never a value computed from the list at boot.
+`CompBootstrap` only ever wrote that row. Deleting the reader left every row exactly as it was.
+
+The one behaviour genuinely lost: an address on the list that had **not registered yet** used to be
+comped automatically whenever it did, because the runner executed on every startup. That now needs
+a grant by hand after they sign up — checked before the change shipped, and the portal makes it a
+ten-second job rather than a deploy.
+
+It also removed a standing hazard. `CompBootstrap` was **promote-only** on purpose: `AuthService`
+both promotes and demotes admins because losing an admin role costs someone a menu item, whereas
+losing a comp costs them their whole training history behind a paywall with no purchase to point
+at — far too consequential to happen as a side effect of an edited environment variable, or a
+deploy where the secret was momentarily unset. The cost of that asymmetry was that the database and
+the list could silently disagree forever; `warnAboutRevokedComps` logged the drift and could do
+nothing about it. With one writer and an explicit revoke, there is no second source of truth to
+drift from.
+
+### Refusals, and the one that matters
+
+**A comp does not stop the money.** Nothing in `CompGrantService` cancels anything at Stripe, so
+comping a household with a live subscription would leave them paying full price for a plan they had
+just been given — invisible until the next invoice. That is refused outright with a 409 naming the
+remedy, and the Accounts tab disables the control up front from `AdminAccountDto.compGrantable`,
+the server's own precomputed answer (the `TagDto.deletable` contract).
+
+That gate asks `isPayingThroughStripe`, **not** `isEntitled`. `isEntitled` is true for an
+already-comped row, so using it would latch every comped household out of editing its own grant.
+`isEntitled` is now literally `comped || isPayingThroughStripe` — one derivation, with its Stripe
+half named, rather than a second copy of the status comparisons.
+
+Also refused: `FREE` (removing a grant is `DELETE`, which has its own audit event), `PRO` without a
+band, any other tier *with* one — mirroring `PlanSku.of`'s rule about combinations we sell — and a
+note over `comp_note`'s 200 characters, rejected rather than truncated so the admin can shorten it.
+
+**No `PlusUpgradedEvent` is published.** The welcome email's copy ("thanks for keeping Huddle
+going") presumes a purchase, and nobody bought anything.
 
 Rejected: Stripe 100%-off promotion codes. They work (`duration: forever` plus
-`payment_method_collection: 'if_required'` so a $0 total does not demand a card), but for a handful
-of known households they are strictly more moving parts — a code to distribute, a checkout to
-complete, and an expiry to forget. Also rejected: a "comp this account" admin button, which would be
-a third sanctioned write action in a deliberately read-only portal.
+`payment_method_collection: 'if_required'` so a $0 total does not demand a card), but they model a
+gift as a discount on a purchase that never happens — the recipient still has to complete a
+checkout, and what comes out the other side is a subscription that can lapse on a card event.
+`applyStripeState` rewrites `billing_plan` on every webhook, which is precisely why `comped_plan`
+is a separate column; routing grants back through Stripe would re-couple the two.
 
 
 ## Saying what the window is hiding
