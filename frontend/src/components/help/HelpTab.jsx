@@ -589,14 +589,10 @@ export default function HelpTab() {
           </p>
         </Note>
 
-        <h3 className="help-h3">Workouts per week</h3>
-        <p>
-          One bar per week, starting Monday. It counts <strong>sessions</strong>, not exercises
-          and not sets. Two workouts in one day count as two.
-        </p>
-
         <h3 className="help-h3">Weekly totals</h3>
-        <p>Switch between three measures of how much you trained that week:</p>
+        <p>
+          One bar per week, starting Monday. Switch between four measures of that week:
+        </p>
         <HelpTable
           head={['Metric', 'Each bar is']}
           rows={Object.values(WEEKLY_METRICS).map((m) => [m.label, m.barMeaning])}

@@ -160,7 +160,30 @@ one of those passes or gets a projection/`@Query` aggregate — it does not add 
   `--chart-cat-*` slots. Re-validate if you restep it; the categorical validator fails a correct
   sequential ramp by design.
 - Weekly buckets start **Monday** (`DayOfWeek.MONDAY` server-side, `mondayOf` client-side). The
-  heatmap's rows and the bar charts must agree or the same day lands in different weeks.
+  heatmap's rows and the bar chart must agree or the same day lands in different weeks.
+
+### There is ONE weekly bar chart, and a new weekly series is an option on it
+
+`WeeklyMetricChart` plots any column of an `overview.weeks` row: `workoutCount`, `totalVolumeLb`,
+`totalSets`, `totalReps`. Workouts-per-week was a second, visually identical chart
+(`WeeklyFrequencyChart`) sitting directly above it until 2026-09-20, purely because it predated
+the switcher — same card, same height, same accent, same Monday buckets, a sibling field off the
+same row. **Don't add a second weekly bar chart back.** A new weekly series is an entry in
+`WEEKLY_METRICS` with its own `barMeaning`; it must not add a fourth `?` label, because every
+metric shares `'What the weekly totals chart shows'`.
+
+- **A count metric must not be `isWeight`.** `convertWeight` would scale a 4-workout week to 1.8
+  for a kg household.
+- **The tooltip's noun goes through `countNoun`**, which singularizes at 1 — a one-session week is
+  the most common bar this chart draws, and the standalone chart it replaced said "1 workout".
+- **`weeklyMetricSpec`'s fallback tracks `PERSON_DEFAULTS.trendsWeeklyMetric`** (both `workouts`).
+  Two different silent defaults for "unreadable persisted value" and "first visit" is a bug.
+- **Changing the default is only safe because `HYDRATE` underlays `PERSON_DEFAULTS`** — a persisted
+  `volume`/`sets`/`reps` must survive untouched, or the change reads as the app forgetting a
+  setting. Pinned in `AppStateContext.test.js`.
+- `weeklyMetricHelp`'s shared first line says **only** what is true of every metric (the Monday
+  bucket). Scope — "adding up every exercise you did that week" — lives on each `barMeaning`,
+  because it is false of Workouts.
 
 ## Every chart carries a "?" — keep it honest and keep it on screen
 
@@ -179,8 +202,9 @@ session totals — the chart shows no difference between them, which is what thi
   pull-ups and planks on *every* metric, not just the rep ones. Name all three cases, or name
   none. The panel's PR line must also survive the metric switcher unchanged, because the measure
   does: what it owes the reader is why a green dot is not always the plotted line's high point.
-- **The four `?` labels must stay mutually non-containing** — all four are on screen at once and
-  Playwright matches an accessible name as a substring. Also asserted.
+- **The `?` labels must stay mutually non-containing** — the three Trends ones are on screen at
+  once (the PRs one is checked with them), and Playwright matches an accessible name as a
+  substring. Also asserted, as an exact count.
 - **Don't delete `ChartHelp`'s measure-and-nudge effect, and don't replace it with a CSS clamp.**
   `WeeklyMetricChart`'s header wraps on a phone, so its `?` moves mid-row and a right-anchored
   panel lands 45px off the left edge with the text clipped. Where the trigger ends up depends on

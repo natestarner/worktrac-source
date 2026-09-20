@@ -164,7 +164,7 @@ describe('AppStateContext reducer', () => {
     state = reducer(state, { type: 'SET_TRENDS_EXERCISE_METRIC', metric: 'totalReps' });
 
     state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
-    expect(active(state).trendsWeeklyMetric).toBe('volume');
+    expect(active(state).trendsWeeklyMetric).toBe('workouts');
     expect(active(state).trendsExerciseMetric).toBe('est1rm');
 
     state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
@@ -448,7 +448,7 @@ describe('selectRestTimersByPerson', () => {
       byPerson: { 1: slicePersistedBeforeTheseFieldsExisted },
     });
 
-    expect(restored.byPerson[1].trendsWeeklyMetric).toBe('volume');
+    expect(restored.byPerson[1].trendsWeeklyMetric).toBe('workouts');
     expect(restored.byPerson[1].prsSort).toBe('recent');
     // prsMeasure is the newest such field. An undefined here would reach prMeasureSpec on the PRs
     // board's first render for every existing install -- it falls back rather than throwing, but
@@ -476,6 +476,21 @@ describe('selectRestTimersByPerson', () => {
     expect(restored.byPerson[1].weightDraft).toBe(225);
   });
 
+  // The default moved from 'volume' to 'workouts' when the standalone workouts-per-week chart
+  // folded into the weekly metric switcher. Changing a default is only safe because the backfill
+  // above underlays it -- anyone who had actually PICKED one of the three older metrics must keep
+  // it, or the merge reads as the app forgetting a setting rather than gaining an option.
+  it('leaves a weekly metric picked before the default changed exactly where it was', () => {
+    for (const metric of ['volume', 'sets', 'reps']) {
+      const restored = reducer(initialState, {
+        type: 'HYDRATE',
+        activePersonId: 1,
+        byPerson: { 1: { trendsWeeklyMetric: metric } },
+      });
+      expect(restored.byPerson[1].trendsWeeklyMetric).toBe(metric);
+    }
+  });
+
   // Per-person isolation for the draft specifically: a half-written bug report is exactly the kind
   // of thing that must not appear on someone else's screen when they switch in.
   it('keeps every contact draft scoped to its own person', () => {
@@ -499,7 +514,7 @@ describe('selectRestTimersByPerson', () => {
       byPerson: { 1: { weightDraft: 225, lastTab: '/app/trends' } },
       resetTab: true,
     });
-    expect(restored.byPerson[1].trendsWeeklyMetric).toBe('volume');
+    expect(restored.byPerson[1].trendsWeeklyMetric).toBe('workouts');
     expect(restored.byPerson[1].lastTab).toBe('/app/log');
   });
 

@@ -50,8 +50,19 @@ test.describe('Trends analytics', () => {
     await expect(page.getByText(/3 sets across 1 workout/)).toBeVisible();
 
     // --- Weekly metric switcher ---
+    // Workouts is the fourth option and the default. It was a whole separate bar chart above this
+    // one until it folded in, so the guard that matters is that the tab now renders exactly ONE
+    // weekly bar chart and that it opens on the series the old chart drew.
     const weeklyMetric = page.getByRole('group', { name: 'Weekly metric' });
+    await expect(page.getByText('Workouts per week', { exact: true })).toBeVisible();
+    await expect(weeklyMetric).toHaveCount(1);
+    for (const option of ['Workouts', 'Volume', 'Sets', 'Reps']) {
+      await expect(weeklyMetric.getByRole('button', { name: option, exact: true })).toBeVisible();
+    }
+
+    await weeklyMetric.getByRole('button', { name: 'Volume', exact: true }).click();
     await expect(page.getByText(/Volume lifted per week/)).toBeVisible();
+    await expect(page.getByText('Workouts per week', { exact: true })).toBeHidden();
 
     await weeklyMetric.getByRole('button', { name: 'Sets', exact: true }).click();
     await expect(page.getByText('Sets per week', { exact: true })).toBeVisible();
@@ -104,30 +115,38 @@ test.describe('Trends analytics', () => {
 
     await page.getByRole('link', { name: 'Trends' }).click();
 
-    // All four are present and, crucially, closed -- their copy repeats phrases the rest of this
-    // file selects by, so an always-mounted panel would break the specs above.
+    // All three are present and, crucially, closed -- their copy repeats phrases the rest of this
+    // file selects by, so an always-mounted panel would break the specs above. It was four until
+    // workouts-per-week stopped being a chart of its own and became a metric on the weekly
+    // switcher, which took its "?" with it.
     const consistencyHelp = page.getByRole('button', { name: 'What the consistency grid shows' });
-    const workoutsHelp = page.getByRole('button', { name: 'What the workouts chart shows' });
     const weeklyHelp = page.getByRole('button', { name: 'What the weekly totals chart shows' });
     const progressHelp = page.getByRole('button', { name: 'What the progress chart shows' });
-    for (const trigger of [consistencyHelp, workoutsHelp, weeklyHelp, progressHelp]) {
+    for (const trigger of [consistencyHelp, weeklyHelp, progressHelp]) {
       await expect(trigger).toBeVisible();
     }
+    await expect(page.getByRole('button', { name: 'What the workouts chart shows' })).toHaveCount(0);
     await expect(page.getByText(/One dot per workout session/)).toBeHidden();
 
     // --- The heatmap says it ignores the range toggle, which nothing else on screen does ---
     await consistencyHelp.click();
     await expect(page.getByText(/always the last 6 months/)).toBeVisible();
 
-    // --- Workouts per week counts SESSIONS, not exercises or sets ---
-    await workoutsHelp.click();
+    // --- The weekly bars follow their own metric switcher, and open on Workouts ---
+    const weeklyMetric = page.getByRole('group', { name: 'Weekly metric' });
+
+    // Workouts is the default, so this is the first panel a new household sees here. What it has
+    // to say is the same thing the standalone chart's "?" said: a bar is SESSIONS, not exercises
+    // and not sets.
+    await weeklyHelp.click();
     await expect(page.getByText(/always the last 6 months/)).toBeHidden(); // the first one closed
     await expect(page.getByText(/counts separate workout sessions/)).toBeVisible();
 
-    // --- The weekly bars follow their own metric switcher ---
+    await weeklyMetric.getByRole('button', { name: 'Volume', exact: true }).click();
     await weeklyHelp.click();
     await expect(page.getByText(/Volume is weight × reps/)).toBeVisible();
-    await page.getByRole('group', { name: 'Weekly metric' }).getByRole('button', { name: 'Sets', exact: true }).click();
+    await expect(page.getByText(/counts separate workout sessions/)).toBeHidden();
+    await weeklyMetric.getByRole('button', { name: 'Sets', exact: true }).click();
     await weeklyHelp.click();
     await expect(page.getByText(/Every set you logged that week counts once/)).toBeVisible();
 
@@ -181,7 +200,6 @@ test.describe('Trends analytics', () => {
 
     const labels = [
       'What the consistency grid shows',
-      'What the workouts chart shows',
       'What the weekly totals chart shows',
       'What the progress chart shows',
     ];
@@ -223,6 +241,40 @@ test.describe('Trends analytics', () => {
       const overflow = await pill.evaluate((el) => el.scrollWidth - el.clientWidth);
       expect(overflow, `"${label}" pill's label is wider than its own box by ${overflow}px`).toBeLessThanOrEqual(1);
     }
+  });
+
+  // The same measurement one control over. The weekly switcher was a comfortable 3 pills until
+  // workouts-per-week stopped being its own chart and became a fourth option, and SegmentedToggle's
+  // own header puts the limit at "more than ~3" -- so this control crossed the line the exercise
+  // switcher's bug was found on. Two distinct ways it can go wrong and both are invisible to jsdom:
+  // a pill's label overflowing its own box, and the GROUP running off the side of the card.
+  test('the weekly metric pills never overflow their own box or their card on a phone', async ({ page, request }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await registerHousehold(page, request, 'Nate');
+
+    await pickExercise(page, 'Barbell Bench Press');
+    await logSet(page, 185, 8);
+
+    await page.getByRole('link', { name: 'Trends' }).click();
+    const weeklyMetric = page.getByRole('group', { name: 'Weekly metric' });
+    await expect(weeklyMetric).toBeVisible();
+
+    for (const label of ['Workouts', 'Volume', 'Sets', 'Reps']) {
+      const pill = weeklyMetric.getByRole('button', { name: label, exact: true });
+      const overflow = await pill.evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(overflow, `"${label}" pill's label is wider than its own box by ${overflow}px`).toBeLessThanOrEqual(1);
+    }
+
+    // `.seg` is inline-flex with `flex-shrink: 0` items, so four pills that don't fit do not wrap
+    // or shrink -- they push the group straight past the card's edge.
+    const box = (await weeklyMetric.boundingBox())!;
+    expect(box, 'the weekly metric group has no box').not.toBeNull();
+    expect(box.x, 'the weekly metric group runs off the left edge').toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, 'the weekly metric group runs off the right edge').toBeLessThanOrEqual(390);
+
+    // And nothing it does may give the PAGE a horizontal scrollbar.
+    const overflowsPage = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(overflowsPage, 'the Trends tab scrolls horizontally at 390px').toBe(false);
   });
 
   test('a bodyweight-only lift gets a rep-based records view, not a column of zeros', async ({ page, request }) => {

@@ -4,10 +4,12 @@ import { convertWeight } from '../../utils/formulas';
 import SegmentedToggle from '../shared/SegmentedToggle';
 import ChartHelp from '../shared/ChartHelp';
 import { weeklyMetricHelp } from './chartHelp';
-import { WEEKLY_METRIC_OPTIONS, weeklyMetricSpec } from './weeklyMetrics';
+import { WEEKLY_METRIC_OPTIONS, countNoun, weeklyMetricSpec } from './weeklyMetrics';
 
-// One switchable bar chart rather than three stacked ones -- Trends is used mid-workout on a
+// One switchable bar chart rather than four stacked ones -- Trends is used mid-workout on a
 // phone, and three more full-height charts would push the exercise section off the screen.
+// "Workouts" was the fourth of those stacked charts until it moved in here; it was never a
+// different kind of chart, just a different column of the same `overview.weeks` row.
 //
 // The metric table itself now lives in weeklyMetrics.js -- see the note there for why.
 
@@ -32,7 +34,7 @@ export function ChartTooltip({ active, payload, metric, defaultUnit }) {
     >
       <div style={{ fontWeight: 700, marginBottom: 2 }}>{formatDateLabel(point.weekStart)}</div>
       <div style={{ color: 'var(--color-muted)' }}>
-        {value} {spec.isWeight ? defaultUnit : spec.label.toLowerCase()}
+        {value} {spec.isWeight ? defaultUnit : countNoun(spec, value)}
       </div>
     </div>
   );

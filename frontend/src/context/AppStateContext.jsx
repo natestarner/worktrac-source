@@ -61,7 +61,10 @@ const PERSON_DEFAULTS = {
   trendsExerciseId: null,
   // Which series the two Trends metric switchers are plotting. Per person like everything else
   // here: one person drilling into total reps must not retarget someone else's chart.
-  trendsWeeklyMetric: 'volume', // 'volume' | 'sets' | 'reps'
+  // 'workouts' is the default because it is what the tab used to open on: workouts-per-week was a
+  // separate chart above this one, so it was the first bars anyone saw. A persisted 'volume' /
+  // 'sets' / 'reps' from before the merge still resolves, so nobody's preference is reset.
+  trendsWeeklyMetric: 'workouts', // see WEEKLY_METRICS in components/trends/weeklyMetrics.js
   trendsExerciseMetric: 'est1rm', // see EXERCISE_METRICS in components/trends/exerciseMetrics.js
   // How the PRs board is ordered. Per person like the metric switchers above -- one person
   // ranking by est. 1RM must not reorder someone else's board. Unlike the PRs *filter* (local

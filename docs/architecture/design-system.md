@@ -279,5 +279,6 @@ to `0px`. `theme-color` has light and dark variants and tracks `--color-bg`, not
 ## Deliberately not migrated
 
 The admin portal (separate chrome, internal-facing) and the Recharts internals in
-`ExerciseTrendChart` / `WeeklyFrequencyChart` / `WeeklyMetricChart`. Their duplicated tooltip markup
-is worth a pass, but it's a distinct concern.
+`ExerciseTrendChart` / `WeeklyMetricChart`. Their duplicated tooltip markup is worth a pass, but
+it's a distinct concern. (`WeeklyFrequencyChart` was a third copy until it folded into
+`WeeklyMetricChart` as its "Workouts" metric — see `docs/architecture/trends.md`.)
