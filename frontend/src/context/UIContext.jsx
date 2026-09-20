@@ -55,7 +55,7 @@ export function UIProvider({ children }) {
   const [holdTimers, setHoldTimers] = useState({}); // { [personId]: { startedAt, elapsed } }
 
   const toastTimerRef = useRef(null);
-  const celebTimerRef = useRef(null);
+  // No celebration timer: a PR celebration persists until it is dismissed. See showCelebration.
   // Mirrors holdTimers so stopHoldTimer can read the running timer without taking it as a
   // dependency -- holdTimers changes identity every tick, and a stopHoldTimer that changed with it
   // would churn every consumer's memoization once a second.
@@ -65,7 +65,6 @@ export function UIProvider({ children }) {
   useEffect(
     () => () => {
       clearTimeout(toastTimerRef.current);
-      clearTimeout(celebTimerRef.current);
     },
     [],
   );
@@ -203,18 +202,38 @@ export function UIProvider({ children }) {
     }
   }, [confirmDialog]);
 
+  // A celebration STAYS UNTIL IT IS DISMISSED. There is deliberately no auto-dismiss timer.
+  //
+  // It used to clear itself after 2800ms, which meant a PR set while you were mid-conversation --
+  // the single most likely moment, since this app is used standing around one iPad with family --
+  // was simply missed. A record is worth interrupting for; a record nobody saw is not a record
+  // anybody enjoyed.
+  //
+  // A persistent full-screen scrim is an app-bricking shape if it can ever fail to close, so it
+  // has four independent exits: the overlay's own button, Escape, a scrim tap (eight e2e specs
+  // dismiss it this way, and frontend-core.md names it as why this is NOT a Modal), and a reload
+  // -- this state is in memory only and is never persisted, so boot always clears it.
+  //
+  // `data` is { exerciseName, prs: [{ type, valueText, caption }], firstTime }.
   const showCelebration = useCallback((data) => {
-    setCelebration(data);
+    // MERGE rather than replace when one is already on screen. Not reachable today -- the scrim
+    // blocks the input that would raise a second one -- but replacing would silently drop the
+    // first record, and "which PR did I just lose?" is not a question this screen should ever be
+    // able to raise. Cheaper to make it unrepresentable than to rely on the scrim holding.
+    setCelebration((current) => {
+      if (!current || current.exerciseName !== data?.exerciseName) return data;
+      const seen = new Set((current.prs || []).map((p) => p.type));
+      const added = (data?.prs || []).filter((p) => !seen.has(p.type));
+      if (added.length === 0) return current;
+      return { ...current, prs: [...(current.prs || []), ...added], firstTime: current.firstTime && data.firstTime };
+    });
     // Fired where the celebration is RAISED rather than where it renders. PRCelebration returns
     // null until there is something to show, so an effect inside it would fire on mount-with-data
     // -- which also happens on a re-render, and would buzz twice for one PR. This runs exactly
-    // once per celebration, in the same call that starts its timer.
+    // once per celebration.
     tryHaptic('celebrate');
-    clearTimeout(celebTimerRef.current);
-    celebTimerRef.current = setTimeout(() => setCelebration(null), 2800);
   }, []);
   const dismissCelebration = useCallback(() => {
-    clearTimeout(celebTimerRef.current);
     setCelebration(null);
   }, []);
 

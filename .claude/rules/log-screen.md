@@ -125,14 +125,62 @@ logged sets that haven't synced yet?
 
 | Predicate | Where | Question it answers |
 |---|---|---|
-| strict `>` vs previous best | `WorkoutSetService#insertSetAndDetectPr` | "did this set beat my best" → the celebration |
-| strict `>` running best | `historyPrFlags.js`, `StatsService#getExerciseTrend` | "was this a PR *when recorded*" → History ★, trend dots |
+| strict `>` vs prior best | `prDetection.js#setPrTypes` | "did this set beat my best" → **the celebration** |
+| strict `>` running best | `historyPrFlags.js`, `StatsService#getExerciseTrend` | "was this a PR *when recorded*" → History badges, trend dots |
 | `\|Δ\| < 0.5` tie with best | `formulas.js#isPrSet` | "is this my best" → the Log screen pill |
 
 The Log pill is the odd one out **deliberately**: it marks *"this is your best"*, so a repeat of an
-identical best stays flagged. The visible consequence is that hitting your best three times stars
+identical best stays flagged. The visible consequence is that hitting your best three times badges
 one row on History but pills all three on Log. That is intended — **don't "fix" one into another.**
 `historyPrFlags.js`'s header explains why a backend fold was rejected for History's markers.
+
+The first two now share their *maths* (`SET_MEASURE_VALUE` is mirrored in both files) and differ
+only in what "prior best" means — the set before this one, versus the running best as of that
+point in history. That is a narrowing, not a merge: keep them as two functions. Folding History's
+marks into `prDetection` would drag `history`'s whole-array walk onto the log screen's hot path,
+and folding the celebration into `historyPrFlags` would make it depend on a cache that freezes
+offline — the exact thing `mergeBestWithLocalSets` exists to work around.
+
+### The celebration is decided at DISPATCH, client-side — and that is what makes it work offline
+
+`ExerciseDetail#handleLogSet` raises it, reading `effectiveBest` / `effectiveHeaviestLb` before the
+new set joins `displaySets`. It used to hang off the log-set response's `isPR`, which meant it
+**never fired in three of the four connectivity modes**: hard-offline the mutation never settles,
+lie-fi it settles with `data === undefined`, and a write replayed from the outbox after a reload
+has no component observer, so the callback never ran even once the set landed. A record set in a
+gym basement was silently never celebrated.
+
+- **`LogSetResultDto.isPR` still exists on the wire and is deliberately not consumed.** Don't wire
+  it back up "as a fallback": two mechanisms answering one question is the bug `resilience.md`'s
+  table exists to prevent, and they *would* disagree — the server compares against its own best at
+  insert time, which for a queued write can be hours later.
+- **The whole block is wrapped in `try/catch`, and the wrap is load-bearing.** It is decoration
+  over a write that has not been dispatched yet, so any throw in it would take the set with it.
+  Losing a rep because the confetti broke is the worst possible trade.
+- **It cannot double-fire.** A replay has no observer, so `handleLogSet` is never reached twice for
+  one set.
+- **Prior bests come from `exerciseSummary`, NOT from `history`.** `getSummary` applies no Free-tier
+  window (unlike `getPrList`), so a Free household is never congratulated for beating a 90-day best.
+  Deriving them from the `history` cache instead would silently reintroduce that.
+
+### Session volume is a CROSSING, not a flag — don't key it on a session id
+
+`prDetection.js#crossesSessionVolume` asks whether the running total passed the record *with this
+set*. That is inherently once-per-session, because once you are past it `volumeBefore` stays past
+it for the rest of the workout.
+
+**The obvious implementation — "have I already celebrated this session?" — cannot work here.** The
+only natural key is the session id, and `contextSessionId` is `null` for a person's entire
+offline/lie-fi stretch, so the flag would be dead in precisely the modes this feature exists for.
+
+- `bestSessionVolumeLb` **excludes the current session** (`getSummary`'s `excludeSessionId`;
+  offline, `exerciseSummaryFromHistory` excludes by `startedAt` instead). Include it and the record
+  chases itself: after the crossing, today *is* the best, `before <= prior` goes true again, and
+  every later set re-fires. The sibling `heaviestWeightLb` deliberately does **not** exclude it —
+  see `ExerciseSummaryDto`'s header for the table.
+- `PERSON_DEFAULTS.volumePrCelebrated` is a **churn backstop, not the mechanism**. It exists only
+  because `displaySets` can churn mid-drain; if a row ever went missing the total would dip below
+  the record and re-arm the crossing.
 
 ## Weight prefill: blank, then today, then last session
 

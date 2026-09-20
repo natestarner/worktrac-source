@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise, setHoldSeconds } from './support/exercises';
+import { dismissPrCelebration, pickExercise, setHoldSeconds } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // PARITY spec: logging a hold, run across online / lie-fi / hard-offline / pinned-offline from one
@@ -46,6 +46,7 @@ forEachConnectivityMode<void>('a hold logs and reads back as time', {
   act: async (page) => {
     await setHoldSeconds(page, HOLD_SECONDS);
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
   },
   assert: async (page) => {
     // The result, not the sync chrome: the person sees their hold, as a time, in every mode.

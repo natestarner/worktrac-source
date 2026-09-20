@@ -21,6 +21,7 @@ import EmptyState from '../shared/EmptyState';
 import HistoryWindowNotice from '../shared/HistoryWindowNotice';
 import { windowLabel } from '../shared/historyWindowCopy';
 import SetPillRow from '../shared/SetPillRow';
+import PrBadge, { prBadgeLabel } from '../shared/PrBadge';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
 import { tagChipStyle } from '../shared/tagChipStyle';
 import { IconNote, IconScroll } from '../shared/icons';
@@ -75,7 +76,13 @@ function HistoryTabContent({ initialExerciseFilter }) {
 
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
 
-  const prFlags = useMemo(() => buildHistoryPrFlags(history), [history]);
+  // Two lookups out of one fold: setMarks badges individual set pills (est. 1RM, top weight),
+  // sessionMarks badges the exercise ENTRY header (session volume) -- a session total is not a
+  // property of any one set, so picking one to star would be a lie. See historyPrFlags.js.
+  const { setMarks: prSetMarks, sessionMarks: prSessionMarks } = useMemo(
+    () => buildHistoryPrFlags(history),
+    [history],
+  );
 
   const allExerciseIds = useMemo(() => {
     const ids = new Set();
@@ -275,6 +282,15 @@ function HistoryTabContent({ initialExerciseFilter }) {
                       >
                         {entry.exerciseName}
                       </button>
+                      {/* The session-level record, on the entry header rather than a set pill --
+                          "the biggest session of this exercise you have ever done" belongs to the
+                          whole entry. showLabel because, unlike a set pill, there is no number
+                          beside it to give the glyph context. */}
+                      {(prSessionMarks.get(historyPrFlagKey(session.id, entry.exerciseId)) || []).map((type) => (
+                        <span key={type} aria-label={`${prBadgeLabel([type])} for ${entry.exerciseName}`}>
+                          <PrBadge type={type} size={12} showLabel />
+                        </span>
+                      ))}
                       {entry.note && (
                         <div
                           title={entry.note}
@@ -312,7 +328,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
                         ))}
                       </div>
                     )}
-                    <SetPillRow sets={entry.sets} prFlags={prFlags.get(historyPrFlagKey(session.id, entry.exerciseId))} />
+                    <SetPillRow sets={entry.sets} prMarks={prSetMarks.get(historyPrFlagKey(session.id, entry.exerciseId))} />
                   </div>
                 );
               })}

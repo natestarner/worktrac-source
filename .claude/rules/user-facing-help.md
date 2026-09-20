@@ -39,7 +39,7 @@ that isn't one.
 
 | The handbook tells users… | It goes wrong if you change… |
 |---|---|
-| est. 1RM is Epley, `weight × (1 + reps ÷ 30)`, and a single rep is reported as itself | `EpleyCalculator.java`, `utils/formulas.js#epley` |
+| est. 1RM is Epley, `weight × (1 + reps ÷ 30)`, a single rep is reported as itself, **and only the first 12 reps of a set count** | `EpleyCalculator.java` (incl. `EST_1RM_REP_CAP`), `utils/formulas.js#epley` |
 | PRs rank by est. 1RM (loaded), reps (bodyweight), seconds (holds) | `StatsService#comparableValue`, `utils/formulas.js#comparableValue`, `utils/prSort.js` |
 | a workout auto-closes 8 hours after its last set | `WorkoutSessionService.AUTOCLOSE` |
 | the rest timer targets 90s and freezes at 10 min | `utils/restTarget.js` |
@@ -49,6 +49,9 @@ that isn't one.
 | exactly which actions work offline vs. need a connection | `useRequireOnline.js`, `useGatedMutation.js`, or moving a write between the two |
 | import requires `Exercise` + `Date` + (`Reps` or `Duration (sec)`), and every other column's default | `csvimport/**`, `export/**` |
 | adding an exercise you already have opens it instead of duplicating | `utils/exerciseDuplicates.js` |
+| **which records are celebrated** (est. 1RM, top weight, session volume), that volume fires once per workout, that a first-ever set is a baseline rather than a record, and that the celebration stays until dismissed | `exerciseMetrics.js`'s `pr` blocks, `utils/prDetection.js`, `UIContext#showCelebration` |
+| **that PR detection happens on the device, so it works with no signal** | moving detection back to the server's `isPR`, or gating it on `useOnlineStatus` |
+| History badges name WHICH record fell, and a session total badges the entry rather than a set | `utils/historyPrFlags.js`, `components/shared/PrBadge.jsx`, `SetPillRow.jsx` |
 
 **If your change alters a row's left-hand column, update the handbook in the same PR.** If it
 doesn't, no action — this rule is not a prompt to re-read the page on every edit.

@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // Ending a workout now names what was actually done -- "2 exercises · 3 sets" -- in the confirm
@@ -34,13 +34,16 @@ forEachConnectivityMode<{ personName: string }>('ending a workout reports what w
   // dropped the pending rows, cannot pass this.
   act: async (page) => {
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('Set 2')).toBeVisible();
 
     await page.getByRole('button', { name: '← All exercises' }).click();
     await pickExercise(page, 'Barbell Back Squat');
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
 
     await page.getByRole('button', { name: 'End workout' }).click();

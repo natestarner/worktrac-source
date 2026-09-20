@@ -86,7 +86,52 @@ export function measureEntry(row, measure) {
     reps: entry.reps ?? null,
     durationSeconds: null,
     sessionStartedAt: entry.sessionStartedAt,
+    // The work behind a SESSION-level record, collapsed into runs server-side. Absent on a
+    // set-level measure (which names its own set) and absent on any row restored from a query
+    // cache written before this shipped -- hence the same optional chaining as everything else
+    // here, and the 'One session' fallback in formatPrMeasure.
+    sets: entry.sets ?? null,
+    setCount: entry.setCount ?? 0,
   };
+}
+
+// The runs a session-level record is made of, rendered the way a person reads their own workout:
+// "135x10, 3x155x8". Converted to the household's unit here, like every other number on this
+// board.
+//
+// Capped at VISIBLE_RUNS with an honest "+N more" tail rather than silently truncating. The
+// server already caps what it sends (MAX_PR_BREAKDOWN_RUNS) for payload reasons; this second,
+// tighter cap is about the row's right-hand column, which is narrow and shares its line with a
+// value and a chevron. setCount is the TRUE total, so the tail never understates the work.
+const VISIBLE_RUNS = 3;
+
+export function formatPrBreakdown(entry, defaultUnit, { limit = VISIBLE_RUNS } = {}) {
+  const runs = entry?.sets;
+  if (!runs?.length) return null;
+  const w = (lb) => convertWeight(Number(lb), 'lb', defaultUnit);
+  const label = (run) => {
+    const loaded = Number(run.weightLb) !== 0;
+    const isHold = run.durationSeconds != null;
+    // Four shapes, and the weight-0 ones drop the load entirely rather than printing "0lb" -- the
+    // same rule the rest of the board follows (trends.md: a column of zeros is worse than no
+    // column). Bodyweight also drops the "x" separator, or a run of two sets of twelve renders as
+    // the nonsense "2xx12".
+    let body;
+    if (isHold) {
+      body = loaded ? `${w(run.weightLb)}${defaultUnit} ${formatRestTime(run.durationSeconds)}` : formatRestTime(run.durationSeconds);
+    } else {
+      body = loaded ? `${w(run.weightLb)}${defaultUnit}×${run.reps}` : `${run.reps}`;
+    }
+    // A leading multiplier reads as "three sets of", which is how the work was actually done --
+    // and is what keeps a ten-set session from becoming ten unreadable lines.
+    return run.count > 1 ? `${run.count}×${body}` : body;
+  };
+  const shown = runs.slice(0, limit).map(label).join(', ');
+  // Count the SETS the visible runs account for, not the runs -- "+2 more" has to mean two more
+  // sets, or a row with one collapsed run of eight would claim far less work than it holds.
+  const shownSets = runs.slice(0, limit).reduce((n, run) => n + (run.count || 1), 0);
+  const remaining = Math.max(0, (entry.setCount || 0) - shownSets);
+  return remaining > 0 ? `${shown} +${remaining} more` : shown;
 }
 
 // Why a row has no value on the selected measure. Shown as an always-visible caption rather than
@@ -133,8 +178,13 @@ export function formatPrMeasure(entry, measure, row, defaultUnit) {
     };
   }
 
+  // 'One session' is the FALLBACK, not the answer. It is what a row restored from a query cache
+  // written before the breakdown shipped degrades to (resilience.md axis D), and what an
+  // impossible empty session would produce. When the work is known, showing it is the point: a
+  // volume record with no detail is unreadable, and unreadable is what let ten junk sets of an
+  // empty bar look identical to a genuine heavy day.
   if (key === 'totalReps') {
-    return { value: `${entry.value} reps`, caption: 'One session' };
+    return { value: `${entry.value} reps`, caption: formatPrBreakdown(entry, defaultUnit) ?? 'One session' };
   }
 
   // Rounded and unseparated, matching ExerciseRecordsTable's "Best session volume" / "Best set
@@ -142,7 +192,10 @@ export function formatPrMeasure(entry, measure, row, defaultUnit) {
   // separator here would be a readability win bought by making one number look like two different
   // numbers depending on which tab you were on.
   if (key === 'sessionVolume') {
-    return { value: `${Math.round(w(entry.value))} ${defaultUnit}`, caption: 'One session' };
+    return {
+      value: `${Math.round(w(entry.value))} ${defaultUnit}`,
+      caption: formatPrBreakdown(entry, defaultUnit) ?? 'One session',
+    };
   }
 
   if (key === 'bestSetVolume') {

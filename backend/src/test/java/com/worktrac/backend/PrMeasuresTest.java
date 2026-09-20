@@ -117,6 +117,68 @@ class PrMeasuresTest extends AbstractIntegrationTest {
         assertTrue(measures.get("sessionVolume").get("weightLb").isNull());
         assertTrue(measures.get("sessionVolume").get("reps").isNull());
         assertTrue(measures.get("totalReps").get("weightLb").isNull());
+
+        // ...but it DOES name the whole session's work. "One session" on its own was unreadable:
+        // there was no way to tell a genuine heavy day from ten junk sets of an empty bar, which
+        // is precisely how a volume record can be gamed.
+        JsonNode breakdown = measures.get("sessionVolume").get("sets");
+        assertEquals(1, breakdown.size(), "three identical sets collapse into one run");
+        assertEquals(100.0, breakdown.get(0).get("weightLb").asDouble(), 0.01);
+        assertEquals(10, breakdown.get(0).get("reps").asInt());
+        assertEquals(3, breakdown.get(0).get("count").asInt());
+        // The TRUE number of sets, so a truncated list can be labelled honestly.
+        assertEquals(3, measures.get("sessionVolume").get("setCount").asInt());
+    }
+
+    // A set-level measure already names its own set through weightLb/reps, so it carries no
+    // breakdown -- two representations of one thing is what PrRowDto's own header warns about.
+    @Test
+    void setLevelMeasuresCarryNoBreakdown() throws Exception {
+        long session = createPastSession(daysAgo(20));
+        logSet(session, barbellId, 225, 5);
+
+        JsonNode measures = rowFor(barbellId).get("measures");
+
+        assertEquals(0, measures.get("heaviest").get("sets").size());
+        assertEquals(0, measures.get("heaviest").get("setCount").asInt());
+        assertEquals(0, measures.get("bestSetVolume").get("sets").size());
+    }
+
+    // Consecutive identical sets collapse; a change of weight or reps starts a new run. Order is
+    // chronological, so a ramp reads the way it was actually performed.
+    @Test
+    void theBreakdownCollapsesRunsAndKeepsChronologicalOrder() throws Exception {
+        long session = createPastSession(daysAgo(10));
+        logSet(session, barbellId, 135, 10);
+        logSet(session, barbellId, 155, 8);
+        logSet(session, barbellId, 155, 8);
+        logSet(session, barbellId, 175, 6);
+
+        JsonNode breakdown = rowFor(barbellId).get("measures").get("sessionVolume").get("sets");
+
+        assertEquals(3, breakdown.size());
+        assertEquals(135.0, breakdown.get(0).get("weightLb").asDouble(), 0.01);
+        assertEquals(1, breakdown.get(0).get("count").asInt());
+        assertEquals(155.0, breakdown.get(1).get("weightLb").asDouble(), 0.01);
+        assertEquals(2, breakdown.get(1).get("count").asInt());
+        assertEquals(175.0, breakdown.get(2).get("weightLb").asDouble(), 0.01);
+    }
+
+    // ⚠️ The cap exists because this DTO rides on the PRs board -- one row per exercise -- which
+    // offlineCacheWarm persists to IndexedDB. setCount must still report the truth, or a long
+    // workout would be shown as a shorter one.
+    @Test
+    void theBreakdownIsCappedButSetCountStaysHonest() throws Exception {
+        long session = createPastSession(daysAgo(5));
+        // Ten distinct runs, comfortably past the six-run cap.
+        for (int i = 0; i < 10; i++) {
+            logSet(session, barbellId, 100 + i * 5, 5);
+        }
+
+        JsonNode measure = rowFor(barbellId).get("measures").get("sessionVolume");
+
+        assertEquals(6, measure.get("sets").size(), "capped at MAX_PR_BREAKDOWN_RUNS");
+        assertEquals(10, measure.get("setCount").asInt(), "but the true total is still reported");
     }
 
     // Weight-derived measures must be ABSENT, not zero, for an exercise that was never loaded --

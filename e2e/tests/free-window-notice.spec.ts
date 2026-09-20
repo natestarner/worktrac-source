@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // A Free household is told how much more its full history holds, instead of being shown a
@@ -36,6 +36,7 @@ async function logAnOutOfWindowWorkout(page: Page) {
   await expect(page).toHaveURL(/\/app\/log/);
   await pickExercise(page, 'Barbell Bench Press');
   await page.getByRole('button', { name: 'Log set' }).click();
+  await dismissPrCelebration(page);
   await expect(page.getByText('Set 1')).toBeVisible();
 
   await page.getByRole('button', { name: 'Done' }).click();
@@ -68,6 +69,7 @@ test.describe('The Free-tier window names the rest of your history', () => {
     await expect(page).toHaveURL(/\/app\/log/);
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
     await page.getByRole('button', { name: 'Done' }).click();
 

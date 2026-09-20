@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // PARITY specs: one assertion body, run across online / lie-fi / hard-offline / pinned-offline.
@@ -69,6 +69,7 @@ forEachConnectivityMode<void>('logging a set produces the same row', {
   },
   act: async (page) => {
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
   },
   assert: async (page) => {
     // Same row, same default weight, and immediately editable -- in every mode.
@@ -102,6 +103,7 @@ forEachConnectivityMode<void>("the weight carries forward from today's previous 
     // Set 1 logs at the blank default (0). Step it up before set 2 so the carried value is
     // distinguishable from the default it would otherwise fall back to.
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('Set 1', { exact: true })).toHaveCount(1);
 
     const weightRow = page.locator('.stepper-row').filter({ hasText: 'Weight' });
@@ -117,6 +119,7 @@ forEachConnectivityMode<void>("the weight carries forward from today's previous 
       .toBe(25);
 
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('Set 2', { exact: true })).toHaveCount(1);
   },
   assert: async (page) => {
@@ -141,6 +144,7 @@ forEachConnectivityMode<void>('a set is still listed under This session after a 
   },
   act: async (page) => {
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(setRow(page, 0)).toBeVisible();
     // Load-bearing, and deliberately the OPPOSITE of offline-durability's "reload IMMEDIATELY".
     // The bug needs the provisional { id: null } liveSession to have actually reached disk, and the
@@ -175,6 +179,7 @@ forEachConnectivityMode<void>('correcting a just-logged set applies immediately'
   },
   act: async (page) => {
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(editButtons(page)).toHaveCount(1);
 
     await editButtons(page).click();
@@ -208,6 +213,7 @@ forEachConnectivityMode<void>('favoriting and adding a session note both show im
   },
   act: async (page) => {
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(editButtons(page)).toHaveCount(1);
 
     await page.getByRole('button', { name: 'Add to favorites' }).click();

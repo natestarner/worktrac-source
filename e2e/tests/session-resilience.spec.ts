@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { failNetwork, failWithStatus } from './support/faults';
 import { outboxCountText, waitForOutboxDrain } from './support/offline';
 
@@ -21,6 +21,7 @@ test.describe('Session resilience around a backend/DB outage', () => {
 
     const faults = await failNetwork(page, '**/api/**');
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 
     // Simulate having been signed out while a write is still stuck in the outbox -- e.g. a prior

@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // The FIRST set of a workout -- the one that implicitly creates the session -- used to appear,
@@ -74,6 +74,7 @@ forEachConnectivityMode<void>('the first set of a workout never blinks out', {
     }, ROW_LABEL);
 
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
 
     // Hold the sampler open past the point where the write settles and the reconciliation lands.
     // In the degraded modes nothing settles at all, so this is simply a quiet window there; online

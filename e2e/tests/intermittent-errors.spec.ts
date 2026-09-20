@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise, addOwnExercise } from './support/exercises';
+import { addOwnExercise, dismissPrCelebration, pickExercise } from './support/exercises';
 import { API_ONLY, delayNetwork, failNetwork, failWithStatus } from './support/faults';
 import { troubleBanner, goOfflineButton, goBackOnlineButton, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain } from './support/offline';
 
@@ -20,6 +20,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // The log-set mutation's own retry loop supplies the 3 consecutive failures on its own.
     const faults = await failNetwork(page, '**/api/**');
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
 
     await expect(troubleBanner(page)).toBeVisible({ timeout: 10000 });
     // This is NOT the elected-offline banner -- navigator.onLine never flipped.
@@ -38,6 +39,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // never trips reachabilityMonitor. It DOES trip the durable outbox's retry-with-backoff.
     await failWithStatus(page, '**/api/people/*/live-sets', 500, 2);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
 
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1, { timeout: 20000 });
     await expect(page.getByText('Set 1')).toHaveCount(1);
@@ -79,6 +81,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
 
     const faults = await failNetwork(page, '**/api/**');
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(troubleBanner(page)).toBeVisible({ timeout: 10000 });
 
     await goOfflineButton(page).click();
@@ -128,6 +131,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     await registerHousehold(page, request, 'Reagan');
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
     await page.getByRole('button', { name: /All exercises/ }).click();
     await expect(page.getByText('Session exercises')).toBeVisible();
@@ -166,6 +170,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // Cut the backend BEFORE logging, so this set never reaches the server at all.
     const faults = await failNetwork(page, API_ONLY);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
 
     // The row is durable on the exercise screen (Edit/Delete, not an endless spinner) once the
     // write is paused/retrying/errored -- that part already worked.
@@ -194,6 +199,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
 
     const faults = await failNetwork(page, API_ONLY);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 
     await page.reload();
@@ -233,6 +239,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // Logging a set against the just-created (still temp-id) exercise queues right behind the
     // create in the same serial outbox scope.
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(outboxCountText(page, 2)).toBeVisible();
 
     // The core assertion: still on the authenticated app, never bounced to /login, no matter how
@@ -279,6 +286,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // api/client.js's REQUEST_TIMEOUT_MS -- this is a slow backend, not a dead one.
     const slow = await delayNetwork(page, /\/api\/people\/\d+\/live-sets/, 4000);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('0 lb × 8', { exact: true })).toBeVisible();
 
     // Outlast the query persister's 1s throttle so the PROVISIONAL session is what reaches disk --

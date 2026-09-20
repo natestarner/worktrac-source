@@ -256,3 +256,47 @@ sets) that's fine and keeps the logic in one readable place. It does not scale t
 multi-tenant analytics product, and the rules file's "no new full-history loads" line exists to
 stop the pattern spreading further rather than to bless it. The natural next step, if a load ever
 justifies it, is projection queries for the weekly buckets rather than incremental tuning.
+
+## The est.-1RM rep cap
+
+Epley (`weight x (1 + reps/30)`) is unbounded in reps, and that made the est.-1RM record gameable
+in a way that mattered: `135 x 30` estimates to 270 lb and takes the record off a genuine `225 x 3`.
+Sports-science validity for any 1RM formula runs to roughly 10-12 reps; past that it is
+extrapolation presented as a number.
+
+`EpleyCalculator.EST_1RM_REP_CAP` is **12**, applied by clamping reps before the formula, and
+mirrored in `utils/formulas.js#epley`.
+
+**Clamping, not excluding.** The alternative — dropping sets above the cap from candidacy — was
+rejected for two reasons. It creates a cliff where a 12-rep set counts and a 13-rep set vanishes,
+so somebody's hardest set is the one missing from the board with no explanation. And it makes the
+measure non-monotonic from the user's point of view: doing one more rep could remove your record.
+Clamping keeps "more reps never hurts you, it just stops helping", which is the only version of
+this anyone can reason about mid-workout.
+
+**Not applied at weight 0.** `comparableLb` returns the raw rep count for a bodyweight set, and
+that count *is* the record — capping it would tie every pull-up set above 12 forever, which is the
+exact failure the weight-0 branch exists to prevent.
+
+The change is retroactive: it rescores every historical set, and a record set by a very high-rep
+set moves. That was the intent, and it is stated to users in the handbook rather than left to be
+discovered.
+
+## A session-level record names the work behind it
+
+"One session" was the entire caption for the Volume and Reps records, because `PrMeasureDto` sent
+`weightLb`/`reps` as null for a session-level measure — correctly, since no single set is the
+answer. But the number alone was unreadable: nothing distinguished a genuine heavy day from ten
+junk sets of an empty bar.
+
+That is not only a legibility problem. A volume record is the one measure that can be inflated by
+padding a workout with meaningless sets, and the cheapest defence against that is not a rule — it
+is showing the work. `4 x 45lb x 10` is self-evidently not a training record; `135lb x 10, 3 x
+155lb x 8` is. The breakdown makes the record self-policing, which is why it was preferred over
+capping set counts or weighting sets by intensity, both of which would have distorted a number
+people also read on the Trends chart.
+
+`PrSetDto` collapses consecutive identical sets into runs with a `count`, which is both how the
+payload stays small and how a person reads their own workout. It is capped at six runs server-side
+and three client-side with an honest `+N more` — counting **sets**, not runs, so a single collapsed
+run of eight cannot understate the work.

@@ -1,6 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { addMemberLogin, loginAs, registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { outboxCountText, waitForOutboxDrain } from './support/offline';
 import { failNetwork } from './support/faults';
 
@@ -124,6 +124,7 @@ test.describe('One login, two households', () => {
     const blocked = await failNetwork(page, LIVE_SETS);
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: /^Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 
     // Switching is told about it -- and told it is SUSPENDED, not lost.

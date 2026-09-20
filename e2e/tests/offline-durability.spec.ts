@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addOwnExercise, pickExercise } from './support/exercises';
+import { addOwnExercise, dismissPrCelebration, pickExercise } from './support/exercises';
 import { API_ONLY, failNetwork } from './support/faults';
 import { keepHardOfflineAcrossReload, offlineSavedLocallyBanner, outboxCountText } from './support/offline';
 
@@ -81,6 +81,7 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
 
     await page.context().setOffline(true);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
     // Kill + reopen the app while STILL offline: the queued write must survive in the durable
@@ -136,6 +137,7 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     await registerHousehold(page, request, 'Quinn');
     await pickExercise(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
     await page.reload();
@@ -187,6 +189,7 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     // opposite (paused) cohort if the create's own retry hasn't also flipped to paused yet.
     await page.context().setOffline(true);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(outboxCountText(page, 2)).toBeVisible();
 
     await page.reload();

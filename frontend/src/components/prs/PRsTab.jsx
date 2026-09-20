@@ -234,14 +234,26 @@ function PRsTabContent() {
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <div style={{ textAlign: 'right' }}>
+              {/* maxWidth, not flexShrink: 0 alone. The caption for a session-level record is now
+                  a breakdown of the work behind it ("135lb×10, 3×155lb×8"), which is far longer
+                  than the "One session" it replaced -- unbounded it would push the exercise name
+                  on the left out of the row on a phone. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, maxWidth: '58%' }}>
+                <div style={{ textAlign: 'right', minWidth: 0 }}>
                   {shown ? (
                     <>
                       <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-pr-text)' }}>
                         {shown.value}
                       </div>
-                      <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>{shown.caption}</div>
+                      {/* The full, untruncated breakdown for a mouse user; the visible caption is
+                          already capped at three runs plus an honest "+N more", because this app
+                          is used on an iPad where hover does not exist. */}
+                      <div
+                        title={shown.caption}
+                        style={{ fontSize: 13, color: 'var(--color-muted)', lineHeight: 1.35 }}
+                      >
+                        {shown.caption}
+                      </div>
                     </>
                   ) : (
                     // A dash, never a zero: this exercise cannot be measured this way at all, and a

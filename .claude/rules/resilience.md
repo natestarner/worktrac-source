@@ -79,6 +79,12 @@ There is already exactly one way to do each of these. **Adding a second is the b
 `scripts/check-resilience-invariants.sh` enforces the mechanical half of this table; CI and the
 session `Stop` hook both run it.
 
+**Deciding a PR client-side is deliberately NOT on the register below.** It reads values the
+client already holds and runs one code path in every mode — that is the *opposite* of a
+connectivity branch, and it is what removed one (the celebration used to exist only when the
+server answered). Don't add a row for it, and don't reintroduce a server-driven celebration
+beside it: two mechanisms answering one question is what the table above forbids.
+
 ## The register of sanctioned divergences
 
 Behavior legitimately differs by condition **only** in the places below. Each is deliberate and
@@ -95,8 +101,8 @@ is added here with a reason** — and none of these may be "simplified" away.
 | `ExerciseDetail.jsx` | `summaryQuery.isPaused \|\| isError` → derived summary | Hard-offline pauses, lie-fi errors; both need the derived value |
 | `TrendsTab.jsx` | `!overview && (isPaused \|\| isError)` → "Trends need a connection", instead of the skeleton | Trends is the one tab deliberately excluded from `offlineCacheWarm`, so a device that has never opened it online has **no** fallback data. Paused and errored both present as `isLoading === false` with `data === undefined`, so `loading \|\| !overview` latched `TrendsSkeleton` forever — a spinner over a request that will never succeed. There is nothing cached to show and nothing to queue, so saying so is the only honest option. **Not a licence to skip warming elsewhere**: every other read tab degrades to its cache, and this row exists because Trends cannot |
 | `offlineCacheWarm.js` | `refreshAfterRestore` is **opt-in per key** | Forcing a refetch destroys a key holding state that hasn't reached the server |
-| Three PR predicates (`log-screen.md`) | Backend celebration, History ★, and Log pill differ | Deliberately not unified — see `log-screen.md` |
-| `2026-07-30`'s two accepted UX costs | Revert-then-correct flicker; PR celebration reflects the pre-edit value | "Fixing" them reintroduces connectivity-mode special-casing, which is what the redesign exists to remove |
+| Three PR predicates (`log-screen.md`) | Celebration + History badges, and the Log pill, differ | Deliberately not unified — see `log-screen.md`. The celebration moved client-side (2026-09-20) so it fires in every mode; it now shares its predicate with History's badges and diverges only from the Log pill's tie rule |
+| `2026-07-30`'s two accepted UX costs | Revert-then-correct flicker; PR celebration reflects the pre-edit value | "Fixing" them reintroduces connectivity-mode special-casing, which is what the redesign exists to remove. Still true after the celebration moved to dispatch, and now for a simpler reason: it celebrates the values that were **submitted**, and a later `EDIT_SET` is a separate write it never sees |
 | `LogTab.jsx`'s MutationCache subscriber | Calls a state setter inline, unlike the three hooks | Deliberately left alone; see `offline-internals.md` |
 | DB-down, backend-up | A *pinned* user can't unpin (health 503); an *unpinned* user stays "online" (a 503 is a fulfilled response, so lie-fi never trips) | Both degrade correctly by different routes. Do **not** "fix" one to match the other |
 | `AddEditExerciseModal` | Three save paths: rename → gated, `requireSyncedExercise` → gated, everything else → durable outbox | Routines sends the new exercise's id straight into a non-idempotent `createRoutine`, which cannot replay against a temp id. All three now share **one** gate/error mechanism; only the branch itself is local |

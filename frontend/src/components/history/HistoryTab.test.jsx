@@ -155,7 +155,11 @@ describe('HistoryTab PR markers, search/tag filtering, and click-to-filter', () 
     renderHistoryTab();
     // benchSession1's 135 (Bench, first-ever) and 225 (Squat, first-ever) are both PRs; benchSession2's
     // 155 (Bench) beats the prior 135 best and is also a PR -- three PR pills total.
-    await waitFor(() => expect(screen.getAllByTitle('Personal record')).toHaveLength(3));
+    //
+    // Matched as a PREFIX, not an exact string: the title now names which record fell
+    // ("Personal record: top weight, est. 1RM"). The phrase itself is deliberately preserved --
+    // see SetPillRow.jsx.
+    await waitFor(() => expect(screen.getAllByTitle(/^Personal record/)).toHaveLength(3));
   });
 
   it('renders each exercise row\'s applied tags', async () => {

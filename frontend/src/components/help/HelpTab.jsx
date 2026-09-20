@@ -437,7 +437,11 @@ export default function HelpTab() {
         <p className="help-lede">History answers one question: what did I do on this day?</p>
         <p>
           Workouts are listed newest first, each with its date, its time (or a start&ndash;end range),
-          every exercise and every set. Personal records are badged where they happened.
+          every exercise and every set. Personal records are badged where they happened, and the
+          badge says which kind: a star for an estimated 1RM, a double chevron for a top weight. A
+          whole-workout record sits next to the exercise name rather than on one set, because no
+          single set is the answer to &ldquo;most volume&rdquo;. See{' '}
+          <a href="#prs">PRs</a> for what each one means.
         </p>
         <p>
           On <T>Free</T> this shows the last 90 days. Everything before that is still saved in your
@@ -527,6 +531,47 @@ export default function HelpTab() {
           </ul>
         </Note>
 
+        <h3 className="help-h3">What gets celebrated, and when</h3>
+        <p>
+          Break a record while you&rsquo;re logging and Huddle says so on the spot, with a
+          full-screen burst you dismiss when you&rsquo;re ready &mdash; it won&rsquo;t vanish on a
+          timer while you&rsquo;re mid-conversation. Three records trigger it:
+        </p>
+        <ul>
+          <li>
+            <strong>Est. 1RM</strong> &mdash; your best single effort. On a bodyweight exercise this
+            is your rep count, and on a hold it&rsquo;s your time.
+          </li>
+          <li>
+            <strong>Top weight</strong> &mdash; the heaviest you&rsquo;ve ever loaded this exercise.
+            It&rsquo;s the one record nothing can inflate: you have to actually lift more.
+          </li>
+          <li>
+            <strong>Volume</strong> &mdash; the most total work you&rsquo;ve ever done of one
+            exercise in a single workout. This one fires once per workout, on the set that passes
+            your old record, not again on every set after it.
+          </li>
+        </ul>
+        <p>
+          Take more than one at once and you get a single celebration listing all of them, not a
+          queue of pop-ups. Each type has its own icon and colour, and the same icons mark the sets
+          in History so you can tell at a glance which kind of record each one was.
+        </p>
+        <p>
+          The <strong>first set of a brand-new exercise</strong> is treated as a starting point
+          rather than a record. It still appears in History as your best &mdash; it is &mdash; but
+          there&rsquo;s nothing to beat yet, so it gets a quieter welcome.
+        </p>
+        <p>
+          <strong>This all works with no signal.</strong> Records are worked out on your device from
+          what it already knows, so a PR in a basement gym is celebrated the moment you log it,
+          exactly as it would be at home. Nothing waits on the server.
+        </p>
+        <p>
+          While you&rsquo;re logging, if the numbers on screen are within a rep or two of your best,
+          a small line above the button tells you how close you are.
+        </p>
+
         <h3 className="help-h3">Two numbers that disagree on purpose</h3>
         <p>
           On an exercise screen you may see both a <strong>heaviest weight</strong> and a{' '}
@@ -545,11 +590,18 @@ export default function HelpTab() {
             than being inflated by the formula.
           </p>
           <p>
-            It&rsquo;s an estimate, not a measurement, and like every 1RM formula it drifts optimistic
-            at very high rep counts. Other apps and calculators may use Brzycki or Lombardi instead and
-            give a different number for the same set. None of them is wrong. They simply
-            disagree. What matters is that Huddle applies one formula consistently, so your numbers are
-            always comparable to your own past numbers.
+            <strong>Only the first 12 reps of a set count towards the estimate.</strong> Every 1RM
+            formula drifts optimistic at high rep counts &mdash; uncapped, 135&nbsp;lb for 30 reps
+            would estimate to 270&nbsp;lb and out-rank a genuine 225&nbsp;lb triple. So a set of 20
+            is scored as if it were a set of 12. Doing more reps never lowers your estimate; past 12
+            it simply stops raising it, and the extra work still counts towards your volume and rep
+            records.
+          </p>
+          <p>
+            It&rsquo;s an estimate, not a measurement. Other apps and calculators may use Brzycki or
+            Lombardi instead and give a different number for the same set. None of them is wrong.
+            They simply disagree. What matters is that Huddle applies one formula consistently, so
+            your numbers are always comparable to your own past numbers.
           </p>
           <p>
             Two sets never go through it at all: a <strong>bodyweight</strong> set, because Epley

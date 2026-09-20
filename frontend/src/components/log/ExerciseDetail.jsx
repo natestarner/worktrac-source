@@ -20,9 +20,20 @@ import {
   isUnsyncedWrite,
 } from '../../lib/queryClient';
 import { cancelQueuedWritesForSet } from '../../lib/offlineSetEdits';
-import { comparableValue, computePrefillDraft, isPrSet } from '../../utils/formulas';
+import { comparableValue, computePrefillDraft, convertWeight, epley, isPrSet } from '../../utils/formulas';
+import {
+  crossesSessionVolume,
+  isFirstEver,
+  sessionVolumeLb,
+  setPrTypes,
+  setVolumeLb,
+} from '../../utils/prDetection';
 import { resolveRestTargetSeconds } from '../../utils/restTarget';
-import { deriveExerciseSummaryFromHistory, mergeBestWithLocalSets } from '../../utils/exerciseSummaryFromHistory';
+import {
+  deriveExerciseSummaryFromHistory,
+  mergeBestWithLocalSets,
+  mergeHeaviestWithLocalSets,
+} from '../../utils/exerciseSummaryFromHistory';
 import { formatDateLabel, formatRestTime, MIN_HOLD_SECONDS, toLocalDateStr } from '../../utils/datetime';
 import { formatSetSpaced, formatTarget } from '../../utils/formatSet';
 import WeightRepsStepper from './WeightRepsStepper';
@@ -39,6 +50,12 @@ import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
 import { tagChipStyle } from '../shared/tagChipStyle';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
+
+// How far from a record the nudge under the steppers is still worth showing. Past this it stops
+// being encouragement and becomes a reminder of how far off you are -- and it would be on screen
+// for every warm-up set of every exercise. See `prHint`.
+const MAX_HINT_REPS = 3;
+const MAX_HINT_SECONDS = 20;
 
 export default function ExerciseDetail({
   exercise,
@@ -74,6 +91,11 @@ export default function ExerciseDetail({
     setDraft,
     setHoldStartedAt,
     setRestTimer,
+    // Per-person, per-exercise churn backstop for the session-volume celebration. See
+    // PERSON_DEFAULTS.volumePrCelebrated -- the crossing test is the mechanism; this only stops a
+    // re-fire if displaySets ever churns mid-drain.
+    volumePrCelebrated,
+    recordVolumePrCelebrated,
   } = useAppState();
   // holdTimers is defaulted because it is read during RENDER: a context missing it would throw
   // mid-render, and a render-time throw has to be contained rather than allowed to white-screen the
@@ -159,8 +181,14 @@ export default function ExerciseDetail({
   const derivedSummary = useMemo(
     // historyLoading gates this to avoid a false "No sets yet"/"No PR yet" flash from an empty
     // [] default before history's own first fetch has actually resolved (online or offline).
-    () => (historyLoading ? null : deriveExerciseSummaryFromHistory(history, exercise.id, contextSessionId)),
-    [history, historyLoading, exercise.id, contextSessionId],
+    // liveSession?.startedAt is what lets the offline fallback exclude the CURRENT session from
+    // bestSessionVolumeLb without a session id -- onMutate seeds the provisional session with a
+    // real startedAt even while its id is still null. See exerciseSummaryFromHistory.js.
+    () =>
+      historyLoading
+        ? null
+        : deriveExerciseSummaryFromHistory(history, exercise.id, contextSessionId, liveSession?.startedAt),
+    [history, historyLoading, exercise.id, contextSessionId, liveSession?.startedAt],
   );
 
   // Prefer the derived value once the live query has definitively given up -- paused (hard
@@ -393,7 +421,7 @@ export default function ExerciseDetail({
       }
       showToast(error.message || "Couldn't save that set", { tone: 'error' });
     },
-    onSuccess: (result, variables) => {
+    onSuccess: () => {
       // justAddedSetId is deliberately NOT re-stamped to the server id here. The row keeps its
       // tempId as its React key across the optimistic -> confirmed swap (see `rowKey` in the set
       // list below), so the stamp onMutate already set still matches and the 1.1s `set-row-new`
@@ -406,52 +434,20 @@ export default function ExerciseDetail({
       // now a background refetch over an already-correct value, not the thing the set list is
       // blocked on -- TanStack dedupes it against the default's invalidation of the same key.
       if (!editingSessionId) refetchLiveSession?.();
-      // PR celebration is driven by the server's authoritative isPR/best, never a refetch race;
-      // the weight/reps shown come from the exact values submitted (the mutation variables).
-      if (result.isPR) {
-        const isHold = result.best.durationSeconds != null;
-        // Read the LOGGED set's weight, not result.best's. The caption describes the set being
-        // celebrated and setText below comes from the same `variables`, so the two must not be able
-        // to disagree -- the old code mixed the sources for no reason.
-        const loggedWeight = Number(variables.weight) || 0;
-        const setText = formatSetSpaced({
-          weight: variables.weight,
-          reps: variables.reps,
-          durationSeconds: variables.durationSeconds,
-          unit: defaultUnit,
-        });
-        // ONE caption, chosen here rather than a boolean the overlay re-interprets.
-        //
-        // It was `isBodyweight: isBodyweight || isHold`, and PRCelebration renders the literal word
-        // "Bodyweight" for that flag -- so EVERY hold was captioned "Bodyweight", including one
-        // logged with weight on it. The comment said a hold "takes the same rep-focused
-        // presentation branch", which is true of the LAYOUT and false of the LABEL; one flag was
-        // answering both questions.
-        //
-        // PRsTab has had the correct three-way split all along (durationSeconds first, then
-        // weight === 0, then est. 1RM) and says "Longest hold at 25lb" -- so the two surfaces
-        // disagreed about the same set. This brings the celebration in line.
-        //
-        // The caption does not repeat the word "hold": est1rmText above it already reads
-        // "1:00 hold", so what is missing for a weighted hold is only the load.
-        const caption = isHold
-          ? loggedWeight > 0
-            ? `Weighted · ${loggedWeight} ${defaultUnit}`
-            : 'Bodyweight'
-          : loggedWeight === 0
-            ? 'Bodyweight'
-            : `Est. 1RM · ${setText}`;
-        showCelebration({
-          exerciseName: exercise.name,
-          caption,
-          setText,
-          est1rmText: isHold
-            ? `${formatRestTime(variables.durationSeconds)} hold`
-            : loggedWeight === 0
-              ? `${variables.reps} reps`
-              : `${result.best.est1rm} ${defaultUnit}`,
-        });
-      }
+      // ⚠️ THE PR CELEBRATION IS NO LONGER RAISED HERE. It is decided at DISPATCH, in
+      // handleLogSet, from bests the client already holds -- see prDetection.js.
+      //
+      // It used to read the server's `result.isPR` off this response, which meant it never fired
+      // at all in three of the four connectivity modes: hard-offline the mutation never settles,
+      // lie-fi it settles with `data === undefined`, and a write replayed from the outbox after a
+      // reload has no component observer, so this callback does not run even once the set lands.
+      // A record set in a gym basement was silently never celebrated.
+      //
+      // `result.isPR` still exists on the wire (LogSetResultDto) and is simply not consumed.
+      // Do NOT re-add a celebration here as a "belt and braces" second path: two mechanisms
+      // answering one question is the bug resilience.md's mechanism table exists to prevent, and
+      // they would disagree on the same set (the server compares against its own best at insert
+      // time, which for a queued write can be hours later).
     },
     // No onSettled here -- reconciliation (invalidate sets/summary/liveSession/prs/history to server
     // truth) lives in the registered default so it ALSO runs when a queued write replays after a
@@ -547,6 +543,15 @@ export default function ExerciseDetail({
   // Not memoized on purpose: displaySets is rebuilt every render, so a useMemo keyed on it would
   // never hit. The fold is O(sets logged for this exercise this session) -- a handful of rows.
   const effectiveBest = mergeBestWithLocalSets(summary?.best ?? null, displaySets);
+
+  // The same fold, one measure over, for the top-weight record. Both bests have to see the sets
+  // on screen that have not synced, or a PR logged offline goes uncelebrated and the NEXT, lighter
+  // set gets celebrated against the frozen value instead -- the exact failure mergeBestWithLocalSets
+  // was written for.
+  const effectiveHeaviestLb = mergeHeaviestWithLocalSets(
+    summary?.heaviestWeightLb == null ? null : Number(summary.heaviestWeightLb),
+    displaySets,
+  );
 
   // What the DATA says this exercise should prefill to: the same set-index in the most recent
   // prior session, else the last set logged today, else blank. Computed during render, not in an
@@ -731,6 +736,125 @@ export default function ExerciseDetail({
       startRestTimer(personId, restTargetSeconds, restStartedAt);
       setRestTimer({ startedAt: restStartedAt, targetSeconds: restTargetSeconds });
     }
+    // ## The PR celebration, decided HERE rather than from the server's response
+    //
+    // Everything below reads values the client already holds, so it runs identically online, under
+    // lie-fi, hard-offline and pinned-offline. That is the whole point: this used to hang off the
+    // log-set response, which never arrives in three of those four modes. One code path, no
+    // useOnlineStatus, nothing that behaves differently by connectivity -- so it is not a branch
+    // that belongs on resilience.md's register.
+    //
+    // It also cannot double-fire: a write replayed from the outbox has no component observer, so
+    // this function is not reached again for a set already logged.
+    // ⚠️ WRAPPED, AND THE WRAP IS THE POINT: a celebration must never be able to stop a set
+    // being logged. Everything below is decoration over a write that has not been dispatched yet,
+    // so any defect in it -- a measure spec this build does not know, a malformed restored
+    // summary, a context missing its action -- would otherwise throw out of handleLogSet and lose
+    // the set entirely. Losing a rep because the confetti broke is the worst possible trade, and
+    // "show what's cached / queue and retry, never silently lost" is the whole contract.
+    try {
+      const loggedSet = {
+        weight: weightValue,
+        reps: isDuration ? 0 : repsValue,
+        durationSeconds: isDuration ? Math.max(MIN_HOLD_SECONDS, loggedDuration) : null,
+        unit: defaultUnit,
+      };
+      // effectiveBest / effectiveHeaviestLb are the bests BEFORE this set: displaySets has not grown
+      // yet at this point in the tap.
+      const priorBests = {
+        comparable: effectiveBest ? comparableValue(effectiveBest) : null,
+        heaviestLb: effectiveHeaviestLb,
+      };
+      const firstTime = isFirstEver(priorBests);
+      const prTypes = setPrTypes(loggedSet, priorBests);
+
+      // Session volume is the one celebrated measure that is not a property of this set, so it is
+      // asked as a CROSSING: did the running total for this exercise pass the record with this set.
+      // That is inherently once-per-session and needs no session id -- which matters, because
+      // contextSessionId is null for a person's whole offline stretch.
+      const volumeBefore = sessionVolumeLb(displaySets);
+      const volumeAfter = volumeBefore + setVolumeLb(loggedSet);
+      const priorVolumeLb =
+        summary?.bestSessionVolumeLb == null ? null : Number(summary.bestSessionVolumeLb);
+      const alreadyCelebratedLb = volumePrCelebrated?.[exercise.id];
+      const volumePr =
+        crossesSessionVolume(volumeBefore, volumeAfter, priorVolumeLb) &&
+        // The churn backstop, not the mechanism -- see PERSON_DEFAULTS.volumePrCelebrated.
+        (alreadyCelebratedLb == null || volumeAfter > alreadyCelebratedLb);
+      if (volumePr) {
+        prTypes.push('sessionVolume');
+        recordVolumePrCelebrated(exercise.id, volumeAfter);
+      }
+
+      if (prTypes.length > 0) {
+        const setText = formatSetSpaced({
+          weight: loggedSet.weight,
+          reps: loggedSet.reps,
+          durationSeconds: loggedSet.durationSeconds,
+          unit: defaultUnit,
+        });
+        const isHold = loggedSet.durationSeconds != null;
+        const loggedWeight = Number(loggedSet.weight) || 0;
+        const rows = prTypes.map((type) => {
+          if (type === 'heaviest') {
+            return {
+              type,
+              valueText: `${loggedWeight} ${defaultUnit}`,
+              // The value IS the weight, so repeating it would say nothing -- the reps are the
+              // new information. Exactly the rule PRsTab's own "heaviest" branch follows, and it
+              // also keeps this caption distinct from the est.-1RM row's when both fire at once.
+              // On a hold reps are 0, so naming the record is the only honest caption there.
+              caption: isHold ? 'Heaviest load held' : `× ${loggedSet.reps}`,
+            };
+          }
+          if (type === 'sessionVolume') {
+            return {
+              type,
+              valueText: `${Math.round(convertWeight(volumeAfter, 'lb', defaultUnit))} ${defaultUnit}`,
+              caption: `${displaySets.length + 1} sets this workout`,
+            };
+          }
+          // est1rm. ONE caption, chosen here rather than a boolean the overlay re-interprets.
+          //
+          // It was `isBodyweight: isBodyweight || isHold`, and PRCelebration rendered the literal
+          // word "Bodyweight" for that flag -- so EVERY hold was captioned "Bodyweight", including
+          // one logged with weight on it. The comment said a hold "takes the same rep-focused
+          // presentation branch", which is true of the LAYOUT and false of the LABEL; one flag was
+          // answering both questions. The caption does not repeat the word "hold": the value above
+          // it already reads "1:00 hold", so what is missing for a weighted hold is only the load.
+          // The badge above now names the measure, so this no longer prefixes "Est. 1RM ·" --
+          // that read twice in the same row. What is left is the set the estimate came from,
+          // which is what the records table shows in parentheses after the number.
+          const caption = isHold
+            ? loggedWeight > 0
+              ? `Weighted · ${loggedWeight} ${defaultUnit}`
+              : 'Bodyweight'
+            : loggedWeight === 0
+              ? 'Bodyweight'
+              : setText;
+          return {
+            type,
+            // ⚠️ Not "Est. 1RM" in all three cases. comparableValue substitutes a rep count at
+            // weight 0 and seconds for a hold, so that label would be wrong for a pull-up and a
+            // plank -- trends.md's "name all three cases, or name none". The records table already
+            // uses exactly these words.
+            label: isHold ? 'Longest hold' : loggedWeight === 0 ? 'Most reps' : 'Est. 1RM',
+            // epley() now carries the 12-rep cap, so this is the same number the board will show.
+            valueText: isHold
+              ? `${formatRestTime(loggedSet.durationSeconds)} hold`
+              : loggedWeight === 0
+                ? `${loggedSet.reps} reps`
+                : `${epley(loggedWeight, loggedSet.reps)} ${defaultUnit}`,
+            caption,
+          };
+        });
+        showCelebration({ exerciseName: exercise.name, prs: rows, firstTime });
+      }
+    } catch {
+      // Deliberately silent. There is nothing a person could do about it and nothing to retry;
+      // the set below is logged either way, which is the part that matters.
+    }
+
     const tempId = `optimistic-${newId()}`;
     // Button's pending window ends as soon as the optimistic write lands (onMutate, above),
     // not once the server responds -- onMutate has no network dependency, so this resolves
@@ -807,6 +931,49 @@ export default function ExerciseDetail({
   const bestCardLabel = isDuration ? 'Best · Longest hold' : 'Best · Est. 1RM';
 
   const bestComparable = effectiveBest ? comparableValue(effectiveBest) : null;
+
+  // "1 more rep for a PR" -- the nudge, shown under the steppers while the numbers on screen are
+  // CLOSE to a record but not yet one.
+  //
+  // This is the highest-leverage thing on the screen because it is actionable at the moment of
+  // action: it answers "is this set worth one more rep" before the set, not after it. It is
+  // derived during render from effectiveBest -- which already folds in sets that have not synced
+  // -- so it works in every connectivity mode by one code path, with no fetch behind it.
+  //
+  // Bounded to REACHABLE gaps on purpose. "23 more reps for a PR" is not encouragement, it is a
+  // reminder of how far off you are, and it would be on screen for every warm-up set of every
+  // exercise. Silence is the right answer far more often than a number is.
+  const prHint = (() => {
+    if (bestComparable == null) return null; // nothing to beat yet
+    if (isDuration) {
+      const seconds = durationValue;
+      if (!Number.isFinite(seconds) || seconds > bestComparable) return null;
+      const needed = Math.floor(bestComparable) + 1 - seconds;
+      if (needed <= 0 || needed > MAX_HINT_SECONDS) return null;
+      return `${formatRestTime(needed)} longer for a PR`;
+    }
+    const weight = Number(weightValue) || 0;
+    const reps = Number(repsValue) || 0;
+    // ⚠️ Searched forward through comparableValue rather than solved algebraically, and both
+    // reasons are load-bearing:
+    //
+    //   1. THE REP CAP MAKES A CLOSED FORM WRONG. Past EST_1RM_REP_CAP the estimate stops rising,
+    //      so for a heavy enough record NO number of reps at this weight can beat it -- and the
+    //      algebra would cheerfully report one anyway ("4 more reps for a PR" that is not).
+    //      Walking the actual function finds nothing and stays silent, which is the truth.
+    //   2. FLOATING POINT. 30 * (180 / 135 - 1) is 9.999999999999998, not 10, so a floor() lands
+    //      one rep short and the hint under-counts by exactly one at every round number.
+    //
+    // At most MAX_HINT_REPS iterations, and it is automatically correct at weight 0 (where the
+    // comparable IS the rep count) and for any future change to the formula.
+    for (let gap = 1; gap <= MAX_HINT_REPS; gap += 1) {
+      const candidate = comparableValue({ weight, reps: reps + gap, unit: defaultUnit });
+      if (candidate > bestComparable) {
+        return gap === 1 ? '1 more rep for a PR' : `${gap} more reps for a PR`;
+      }
+    }
+    return null;
+  })();
 
   return (
     <div>
@@ -1094,6 +1261,24 @@ export default function ExerciseDetail({
                   {holdRunning ? `Stop timer · ${formatRestTime(runningHoldElapsed)}` : 'Start timer'}
                 </Button>
                 </ReadOnlyWrap>
+              </div>
+            )}
+            {/* The nudge, directly above the button it is about. Rendered only when it has
+                something to say, so it costs no permanent space -- and it never moves the primary
+                button under a thumb mid-set, because it appears while the person is adjusting the
+                steppers, not while they are reaching for Log set. */}
+            {prHint && (
+              <div
+                role="status"
+                style={{
+                  marginBottom: 'var(--space-2)',
+                  textAlign: 'center',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 'var(--weight-semibold)',
+                  color: 'var(--color-pr-est1rm-text)',
+                }}
+              >
+                {prHint}
               </div>
             )}
             {/* The screen's one primary action, and the only place size="lg" is used on

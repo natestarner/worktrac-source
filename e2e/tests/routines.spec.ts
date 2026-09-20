@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine } from './support/exercises';
+import { addExerciseToRoutine, dismissPrCelebration } from './support/exercises';
 
 // The header's account-holder dropdown trigger shows the primary person's name too, so
 // an unscoped getByRole('button', { name: /Name/ }) can match both it and that person's
@@ -90,6 +90,7 @@ test.describe('Routines', () => {
     await expect(page.getByText('3 of 3')).toBeVisible();
 
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('Set 2', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Finish routine' }).click();
@@ -172,6 +173,7 @@ test.describe('Routines', () => {
     // were on -- the set logger is still right there to keep using off-script.
     await expect(page.getByRole('button', { name: 'Log set' })).toBeVisible();
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('Set 1', { exact: true })).toBeVisible();
 
     // And the routine is restartable from the picker, so ending early costs nothing permanent.
@@ -179,7 +181,6 @@ test.describe('Routines', () => {
     // renders it only when NO routine is active (`showRoutineQuickStart`), and it's suppressed for
     // the entire life of one. Its rows are labelled "<name> Start →", not "Start routine" -- that
     // button belongs to the Routines tab.
-    await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
     await page.getByRole('button', { name: /All exercises/ }).click();
     await expect(page.getByText('Start a routine', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Long Day/ })).toBeVisible();
