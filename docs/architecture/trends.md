@@ -95,6 +95,35 @@ card's own padding box, at 320/375/390/393/402/430, and asserts the four pills s
 two-and-two split is a legitimate CSS outcome and therefore has to be asserted against rather than
 assumed away.
 
+##### …and the second version of that test failed on lower, for a different reason worth keeping
+
+Rewritten to measure the card, it passed all six widths locally and then failed `e2e-tests` on
+lower at **320px only**: the four pills split across two lines. Nothing about the change was
+wrong — the *font* was different. The app's stack is `-apple-system, BlinkMacSystemFont, 'SF Pro
+Text'`, which on every non-Apple platform falls through to a substitute, and the Linux CI runner's
+substitute is wider than the Windows dev machine's. The test had been asserting a layout budget
+against whichever font the runner happened to have, which is not asserting it at all.
+
+Two things came out of that:
+
+- **The control got its side inset back.** The toggle row had inherited the title row's `0 8px`
+  padding, which at 320px is ~7% of the usable width for no reason — the chart body below it is
+  already full-bleed to the card's padding. Removing it is worth ~16px exactly where the budget
+  is tightest.
+- **The claim is now asserted under `letter-spacing`, and scoped by width.** Letter-spacing adds a
+  fixed number of pixels per character whatever the face, so it reproduces across platforms in a
+  way a named font does not — and notably, the obvious trick of borrowing `sticky-chrome.spec.ts`'s
+  `"Times New Roman"` tag would have made this test *weaker*, because that serif is **narrower**
+  here than the Windows default sans. Measured headroom: **375px survives 3px/char; 320px wraps
+  between 1.5 and 2.** So one-line is asserted from 375px up — the narrowest iPhone portrait Apple
+  still ships — under a 2px/char widening, and 320px (the 2016 SE, discontinued 2018) keeps only
+  the assertion that actually matters there: nothing overflows the card. Wrapping to two rows on
+  that device is graceful and legible; overflowing would not be.
+
+The general form: **when a layout assertion depends on text metrics, it has to state the margin it
+is claiming and force that margin deterministically.** Otherwise the first environment with a
+different font decides whether the test passes.
+
 The fix is the one `SegmentedToggle`'s own header already prescribed — `fill`, past ~3 options —
 which trades the intrinsic 16px pill padding for `.seg-fill`'s 4px and puts the control on its own
 full-width row. That also makes it match the five-pill exercise switcher directly beneath it, which

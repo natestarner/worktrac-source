@@ -65,10 +65,18 @@ export default function WeeklyMetricChart({ weeks, metric, onMetricChange, defau
           against a 303px row at 375px, which put the "?" outside the card's right border. `.seg`
           cannot wrap, so it overflows rather than reflowing -- measured, not predicted.
           `.seg-fill`'s tighter pill padding is what buys the room back, and its items floor at
-          their own label width, so the four stay on ONE line down to 320px instead of splitting
-          two-and-two. This also matches the exercise switcher directly below it, which is five
-          pills solving the same problem the same way. */}
-      <div style={{ padding: '0 8px 8px' }}>
+          their own label width, so the four stay on ONE line at every iPhone-portrait width Apple
+          still ships (375px and up) instead of splitting two-and-two. At 320px -- the 2016 SE --
+          they fit at the natural font but with less margin than separates one platform's
+          substitute font from another's, so that width is allowed to wrap; `.seg-fill` does it
+          gracefully and nothing overflows. This also matches the exercise switcher directly below
+          it, which is five pills solving the same problem the same way. */}
+      {/* No side inset, unlike the title row above. The pills need every pixel the card will give
+          them at 320px, and 8px a side is ~7% of the usable width there -- enough, measured, to
+          decide whether the four fit on one line under a wide font. It also lines the control up
+          with the chart body below, which is full-bleed to the card's padding for the same
+          reason. */}
+      <div style={{ padding: '0 0 8px' }}>
         <SegmentedToggle options={WEEKLY_METRIC_OPTIONS} value={metric} onChange={onMetricChange} ariaLabel="Weekly metric" fill />
       </div>
       <ResponsiveContainer width="100%" height={160}>
