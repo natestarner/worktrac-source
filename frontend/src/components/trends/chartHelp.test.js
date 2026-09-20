@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   CONSISTENCY_HELP,
-  WORKOUT_FREQUENCY_HELP,
   exerciseTrendHelp,
   prRecordHelp,
   weeklyMetricHelp,
@@ -11,7 +10,6 @@ import { WEEKLY_METRICS } from './weeklyMetrics';
 
 const allHelp = [
   CONSISTENCY_HELP,
-  WORKOUT_FREQUENCY_HELP,
   ...Object.keys(WEEKLY_METRICS).map(weeklyMetricHelp),
   ...Object.keys(EXERCISE_METRICS).map(exerciseTrendHelp),
   ...Object.keys(EXERCISE_METRICS).map(prRecordHelp),
@@ -51,8 +49,8 @@ describe('chart help copy', () => {
     // See docs/incidents/2026-08-08-trends-hover-blank-page.md.
     expect(exerciseTrendHelp(undefined).lines[1]).toBe(EXERCISE_METRICS.est1rm.dotMeaning);
     expect(exerciseTrendHelp('nonsense').lines[1]).toBe(EXERCISE_METRICS.est1rm.dotMeaning);
-    expect(weeklyMetricHelp(undefined).lines[1]).toBe(WEEKLY_METRICS.volume.barMeaning);
-    expect(weeklyMetricHelp('nonsense').lines[1]).toBe(WEEKLY_METRICS.volume.barMeaning);
+    expect(weeklyMetricHelp(undefined).lines[1]).toBe(WEEKLY_METRICS.workouts.barMeaning);
+    expect(weeklyMetricHelp('nonsense').lines[1]).toBe(WEEKLY_METRICS.workouts.barMeaning);
   });
 
   it('gives every record its own sentence about what the PRs board is counting', () => {
@@ -87,14 +85,18 @@ describe('chart help copy', () => {
     expect(prRecordHelp('nonsense').lines[1]).toBe(EXERCISE_METRICS.est1rm.recordMeaning);
   });
 
-  it('keeps the five button labels mutually non-containing', () => {
-    // The four Trends "?" buttons are on one screen at once, and Playwright matches an accessible
+  it('keeps the four button labels mutually non-containing', () => {
+    // The three Trends "?" buttons are on one screen at once, and Playwright matches an accessible
     // name as a case-insensitive SUBSTRING -- so one label containing another turns a single
     // getByRole into a strict-mode violation. The PRs one is on its own screen, but it is checked
-    // against them here because five labels are only easy to compare where they sit together.
+    // against them here because four labels are only easy to compare where they sit together.
     // See .claude/rules/frontend-core.md.
+    //
+    // This count dropping from five is the workouts-per-week chart folding into the weekly metric
+    // switcher: its "?" went with it. Adding a weekly METRIC must not add a label here -- they all
+    // share 'What the weekly totals chart shows', which is the point of the merge.
     const labels = [...new Set(allHelp.map((h) => h.label))];
-    expect(labels).toHaveLength(5);
+    expect(labels).toHaveLength(4);
 
     for (const a of labels) {
       for (const b of labels) {

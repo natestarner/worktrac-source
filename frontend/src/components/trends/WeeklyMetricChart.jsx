@@ -4,10 +4,12 @@ import { convertWeight } from '../../utils/formulas';
 import SegmentedToggle from '../shared/SegmentedToggle';
 import ChartHelp from '../shared/ChartHelp';
 import { weeklyMetricHelp } from './chartHelp';
-import { WEEKLY_METRIC_OPTIONS, weeklyMetricSpec } from './weeklyMetrics';
+import { WEEKLY_METRIC_OPTIONS, countNoun, weeklyMetricSpec } from './weeklyMetrics';
 
-// One switchable bar chart rather than three stacked ones -- Trends is used mid-workout on a
+// One switchable bar chart rather than four stacked ones -- Trends is used mid-workout on a
 // phone, and three more full-height charts would push the exercise section off the screen.
+// "Workouts" was the fourth of those stacked charts until it moved in here; it was never a
+// different kind of chart, just a different column of the same `overview.weeks` row.
 //
 // The metric table itself now lives in weeklyMetrics.js -- see the note there for why.
 
@@ -32,7 +34,7 @@ export function ChartTooltip({ active, payload, metric, defaultUnit }) {
     >
       <div style={{ fontWeight: 700, marginBottom: 2 }}>{formatDateLabel(point.weekStart)}</div>
       <div style={{ color: 'var(--color-muted)' }}>
-        {value} {spec.isWeight ? defaultUnit : spec.label.toLowerCase()}
+        {value} {spec.isWeight ? defaultUnit : countNoun(spec, value)}
       </div>
     </div>
   );
@@ -49,16 +51,25 @@ export default function WeeklyMetricChart({ weeks, metric, onMetricChange, defau
 
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 12px 8px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 8px 8px', flexWrap: 'wrap' }}>
+      {/* The "?" is the last item in the header on every chart, so its right-anchored panel
+          always opens inside the card rather than off the edge of a phone screen. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '0 8px 8px' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-muted)' }}>
           {spec.isWeight ? `${spec.label} lifted per week (${defaultUnit})` : `${spec.label} per week`}
         </div>
-        {/* The "?" is the last item in the header on every chart, so its right-anchored panel
-            always opens inside the card rather than off the edge of a phone screen. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <SegmentedToggle options={WEEKLY_METRIC_OPTIONS} value={metric} onChange={onMetricChange} ariaLabel="Weekly metric" />
-          <ChartHelp help={weeklyMetricHelp(metric)} />
-        </div>
+        <ChartHelp help={weeklyMetricHelp(metric)} />
+      </div>
+      {/* Its own full-width row, and `fill`, for the reason SegmentedToggle's header gives: past
+          ~3 options the pills at intrinsic padding stop fitting an iPhone-portrait card. At three
+          they shared the header row with the "?" and fit; the fourth pushed that pair to ~334px
+          against a 303px row at 375px, which put the "?" outside the card's right border. `.seg`
+          cannot wrap, so it overflows rather than reflowing -- measured, not predicted.
+          `.seg-fill`'s tighter pill padding is what buys the room back, and its items floor at
+          their own label width, so the four stay on ONE line down to 320px instead of splitting
+          two-and-two. This also matches the exercise switcher directly below it, which is five
+          pills solving the same problem the same way. */}
+      <div style={{ padding: '0 8px 8px' }}>
+        <SegmentedToggle options={WEEKLY_METRIC_OPTIONS} value={metric} onChange={onMetricChange} ariaLabel="Weekly metric" fill />
       </div>
       <ResponsiveContainer width="100%" height={160}>
         <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>

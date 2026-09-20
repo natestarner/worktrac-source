@@ -21,7 +21,6 @@ vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useTrendsOverview', () => ({ useTrendsOverview: vi.fn() }));
 vi.mock('../../hooks/useHistoryWindow', () => ({ useHistoryWindow: vi.fn() }));
-vi.mock('./WeeklyFrequencyChart', () => ({ default: () => <div>weekly-frequency-chart</div> }));
 vi.mock('./WeeklyMetricChart', () => ({ default: () => <div>weekly-metric-chart</div> }));
 vi.mock('./ConsistencyHeatmap', () => ({ default: () => <div>consistency-heatmap</div> }));
 vi.mock('./ExerciseTrendSection', () => ({ default: () => <div>exercise-trend-section</div> }));
@@ -150,7 +149,6 @@ describe('TrendsTab', () => {
 
     expect(screen.getByText('1 week')).toBeInTheDocument();
     expect(screen.getByText('consistency-heatmap')).toBeInTheDocument();
-    expect(screen.getByText('weekly-frequency-chart')).toBeInTheDocument();
     expect(screen.getByText('weekly-metric-chart')).toBeInTheDocument();
     expect(screen.getByText('exercise-trend-section')).toBeInTheDocument();
   });

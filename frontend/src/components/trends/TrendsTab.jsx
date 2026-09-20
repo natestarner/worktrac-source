@@ -6,7 +6,6 @@ import { useTrendsOverview } from '../../hooks/useTrendsOverview';
 import { useHistoryWindow } from '../../hooks/useHistoryWindow';
 import RangeToggle, { rangeEmptyLabel } from './RangeToggle';
 import SummaryCards from './SummaryCards';
-import WeeklyFrequencyChart from './WeeklyFrequencyChart';
 import WeeklyMetricChart from './WeeklyMetricChart';
 import ConsistencyHeatmap from './ConsistencyHeatmap';
 import ExerciseTrendSection from './ExerciseTrendSection';
@@ -20,9 +19,9 @@ import { rangeReachesPastWindow, windowLabel } from '../shared/historyWindowCopy
 import Card from '../shared/Card';
 
 
-// One placeholder shape per real chart component below (ConsistencyHeatmap, WeeklyFrequencyChart,
-// WeeklyMetricChart, ExerciseTrendChart) -- each mirrors that component's own
-// padding/label/body dimensions so nothing resizes when real data replaces it.
+// One placeholder shape per real chart component below (ConsistencyHeatmap, WeeklyMetricChart,
+// ExerciseTrendChart) -- each mirrors that component's own padding/label/body dimensions so
+// nothing resizes when real data replaces it.
 function BarChartSkeleton() {
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '16px 12px 8px' }}>
@@ -65,7 +64,6 @@ function TrendsSkeleton() {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
         <HeatmapSkeleton />
-        <BarChartSkeleton />
         <BarChartSkeleton />
       </div>
       <Card size="dense">
@@ -237,7 +235,6 @@ export default function TrendsTab() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
         <ConsistencyHeatmap workoutDays={overview.workoutDays} />
-        <WeeklyFrequencyChart weeks={overview.weeks} />
         <WeeklyMetricChart
           weeks={overview.weeks}
           metric={trendsWeeklyMetric}

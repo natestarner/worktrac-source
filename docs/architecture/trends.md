@@ -46,6 +46,66 @@ segmented pills are borrowed from the range toggle that was already on this scre
 reads as familiar rather than novel. (`SegmentedToggle` was extracted from `RangeToggle` for this;
 three lookalike controls that could drift apart was the alternative.)
 
+#### The argument applied to its own blind spot (2026-09-20)
+
+That reasoning was applied to the three weekly measures and stopped there. Workouts-per-week was
+already on the screen as `WeeklyFrequencyChart` when the switcher was built, so it was left alone —
+not decided, just not revisited. It was the same card, the same height, the same accent bar, the
+same Monday buckets, reading a sibling field (`workoutCount`) off the very same `overview.weeks`
+rows the switcher's three metrics read. Two adjacent bar charts that differ only in which column
+of one row they plot are one chart with a control on it, and the "one chart's worth of vertical
+space" argument above applies to the fourth series exactly as it did to the other three.
+
+So it is now `WEEKLY_METRICS.workouts`, and it is the **default** — it is what the tab opened on
+before the merge, and "did I show up" is the read this household opens Trends for. A persisted
+`volume`/`sets`/`reps` preference still resolves, so the change costs nobody a setting; the
+`PERSON_DEFAULTS` underlay in `AppStateContext` is what makes moving a default safe at all
+(see `.claude/rules/frontend-core.md`).
+
+Two things the merge had to carry rather than drop:
+
+- **The `?` copy.** `WORKOUT_FREQUENCY_HELP`'s sentence about a bar being *sessions, not exercises
+  and not sets* became that spec's `barMeaning`, so it reaches both the in-app `?` and the
+  handbook's table by the ordinary route. The Trends `?` count went from four to three.
+- **Its generic first line.** `weeklyMetricHelp` opened with *"One bar per week, starting Monday,
+  adding up every exercise you did that week"* — true of volume, sets and reps, false of workouts,
+  which counts sessions and does not care how many exercises are in them. That clause moved down
+  onto the three `barMeaning`s that own it.
+
+What did *not* move up into a shared line: the tooltip's singular/plural. A week with one session
+is the most common bar this chart draws, and the old standalone chart said "1 workout" while the
+switcher's tooltip lowercases the option label — which would have read "1 workouts". `countNoun`
+in `weeklyMetrics.js` fixes it for all three count metrics ("1 sets" was already wrong, just
+rarer).
+
+##### The fourth pill did not fit, and the first test said it did
+
+Three pills shared the card's header row with the `?` and fit a phone. The fourth pushed that pair
+to ~334px against a 303px row at 375px — and because `.seg` is `inline-flex` with `flex-shrink: 0`,
+`white-space: nowrap` items, it does not wrap or compress. It overflows. The visible symptom was
+the `?` sitting **outside the card's right border**, with the page gaining a horizontal scrollbar
+at 375px and 320px.
+
+The e2e test written alongside the merge did not catch it, and the reason is worth keeping: it
+asserted the group stayed within the **390px viewport**, which was true the whole time. The
+container that was violated was the card. A geometry assertion has to name the box the element is
+supposed to be inside, and the viewport is almost never that box. It now measures against the
+card's own padding box, at 320/375/390/393/402/430, and asserts the four pills share one line —
+`.seg-fill` is permitted to wrap (that is what rescues the 5-pill exercise switcher), so a
+two-and-two split is a legitimate CSS outcome and therefore has to be asserted against rather than
+assumed away.
+
+The fix is the one `SegmentedToggle`'s own header already prescribed — `fill`, past ~3 options —
+which trades the intrinsic 16px pill padding for `.seg-fill`'s 4px and puts the control on its own
+full-width row. That also makes it match the five-pill exercise switcher directly beneath it, which
+had been solving the same problem the same way since #139. Worth noting the *reason* it was missed:
+the guidance lived in the component being reused, not in the calling site being edited.
+
+One thing this moved without breaking: the Trends `?` buttons no longer sit in a wrapping header,
+which is the case `ChartHelp`'s measure-and-nudge effect was built for. The effect stays — see
+`.claude/rules/trends.md` — but its live trigger on this screen is gone, so a future wrapping
+header is what would re-arm it.
+
 ### Why "at least N reps" for rep maxes
 
 *(Removed 2026-08-08 — kept here because the reasoning explains what replaced it.)*

@@ -946,3 +946,45 @@ Also found while sizing this and left alone: `searchExercises` explicitly never 
 count (a one-letter query renders every match as a full row) and ignores the person's own usage;
 `GET /api/people/{id}/history` returns every session with every set as a bare array, unbounded for
 Plus; and nothing in the app is paginated on either side.
+
+## Update — 2026-09-20: Trends' two weekly bar charts become one, and the fourth pill forces the layout
+
+Trends carried two bar charts stacked on top of each other that differed only in which column of a
+single `overview.weeks` row they plotted. `WeeklyFrequencyChart` drew `workoutCount`;
+`WeeklyMetricChart` drew `totalVolumeLb` / `totalSets` / `totalReps` behind a switcher. Same card,
+same height, same accent bar, same Monday buckets, same already-fetched response.
+
+**Decision: workouts becomes the fourth option on the existing switcher, and the default.** The
+split was never decided — the frequency chart predates the switcher (the 2026-08-07 entry above),
+which folded three charts into one "to keep the screen short on a phone" and left the fourth
+standing because it was already on screen. That argument applies to workouts exactly as it did to
+the other three. It is the default because it is what the tab opened on before, and "did I show up"
+is the question this household opens Trends for. A persisted `volume`/`sets`/`reps` still resolves
+through `HYDRATE`'s `PERSON_DEFAULTS` underlay, so nobody loses a setting — the same mechanism the
+2026-08-08 entry added for a different reason, doing its job a second time.
+
+**This walks back part of the 2026-08-17 entry above, and deliberately.** That entry recorded "a
+popover anchored to a control cannot be positioned by CSS alone when its header wraps", citing
+`WeeklyMetricChart`'s wrapping header as the motivating case. That header no longer wraps: the
+fourth pill pushed the toggle-plus-`?` pair to ~334px against a 303px row at 375px, so the switcher
+moved to its own full-width row with `fill`, and every Trends `?` now sits at its card's right
+edge. `ChartHelp`'s measure-and-nudge effect **stays** — it is the general guard and the next
+wrapping header re-arms it — but its live trigger on this screen is gone. The observation in that
+entry was correct; only its example expired.
+
+**The layout bug is the part worth keeping.** `.seg` is `inline-flex` with `flex-shrink: 0`,
+`white-space: nowrap` items, so a control that stops fitting does not wrap or compress — it
+overflows, and the `?` ended up outside the card's right border with the page gaining a horizontal
+scrollbar at 375px and 320px. `SegmentedToggle`'s own header had already written down the fix
+("use `fill` once there are more than ~3 options"), and the five-pill exercise switcher directly
+beneath it had been applying it since 2026-08-07. It was missed because **the guidance lived in the
+component being reused, not in the call site being edited** — worth remembering the next time a
+shared primitive grows an option.
+
+And the e2e test written alongside the merge did not catch it: it asserted the group stayed inside
+the **390px viewport**, which was true the whole time. The box being violated was the card. A
+geometry assertion has to name the container the element is supposed to be inside, and the viewport
+is almost never that container. It now measures against the card's padding box at six widths from
+320px up, and asserts the four pills share one line — `.seg-fill` is *allowed* to wrap (that is
+what rescues the five-pill switcher), so a two-and-two split is a legitimate CSS outcome and has to
+be asserted against rather than assumed away.

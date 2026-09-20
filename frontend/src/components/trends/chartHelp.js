@@ -15,9 +15,9 @@
 // .claude/rules/trends.md about the tooltip that blanked the page on an unrecognized metric.
 //
 // Each `label` is the "?" button's accessible name. They must stay mutually non-containing:
-// Playwright matches an accessible name as a case-insensitive SUBSTRING, and the four Trends ones
+// Playwright matches an accessible name as a case-insensitive SUBSTRING, and the three Trends ones
 // are on screen at once. prRecordHelp's label lives here with them even though it renders on the
-// PRs tab, because checking five labels against each other is only easy where they sit side by
+// PRs tab, because checking four labels against each other is only easy where they sit side by
 // side -- and that check is what chartHelp.test.js does.
 // Both specs come from the metric-table modules, never from the chart components -- the charts
 // import this file, so reaching back into one would close an import cycle.
@@ -34,21 +34,16 @@ export const CONSISTENCY_HELP = {
   ],
 };
 
-export const WORKOUT_FREQUENCY_HELP = {
-  label: 'What the workouts chart shows',
-  title: 'Workouts per week',
-  lines: [
-    'One bar per week, starting Monday.',
-    'The bar counts separate workout sessions, not exercises and not sets. Two sessions in the same day count as two.',
-  ],
-};
-
 export function weeklyMetricHelp(metric) {
   const spec = weeklyMetricSpec(metric);
   return {
     label: 'What the weekly totals chart shows',
     title: `${spec.label} per week`,
-    lines: ['One bar per week, starting Monday, adding up every exercise you did that week.', spec.barMeaning],
+    // Only the week bucketing is shared by all four metrics now. "…adding up every exercise you
+    // did that week" used to live on this line, and it is false of Workouts -- that bar counts
+    // sessions and is indifferent to how many exercises are inside them. The scope of each bar
+    // moved onto the barMeanings, where it can differ per metric.
+    lines: ['One bar per week, starting Monday.', spec.barMeaning],
   };
 }
 
