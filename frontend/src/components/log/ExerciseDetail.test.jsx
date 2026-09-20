@@ -249,6 +249,54 @@ describe('ExerciseDetail PR celebration payload', () => {
     expect(rowFor('est1rm').caption).toBe('Bodyweight');
   });
 
+  // The three-way naming, asserted on the payload so it cannot drift from History's badge (both
+  // read est1rmLabelForSet). "Est. 1RM" on a pull-up or a plank is the costume problem.
+  it('names a bodyweight record by its reps', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 12 }));
+    renderExerciseDetail();
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(rowFor('est1rm').label).toBe('Most reps');
+  });
+
+  it('names a hold record by its duration, weighted or not', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 25, reps: 0 }));
+    renderExerciseDetail({ exercise: { ...exercise, trackingType: 'duration' } });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(rowFor('est1rm').label).toBe('Longest hold');
+    // A weighted hold ALSO takes the top-weight record: reps are 0 so volume cannot fire, but the
+    // load is real. This is the combination case that produced the old "every hold is Bodyweight"
+    // bug one layer up.
+    expect(rowFor('heaviest')).toMatchObject({ caption: 'Heaviest load held' });
+  });
+
+  // ⚠️ Neither weight-derived record may fire for a bodyweight lift: weight 0 means top weight
+  // and volume are both 0, and 0 is not a record. Without this they would fire on every set.
+  it('celebrates a bodyweight set on reps alone, never on weight or volume', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 12 }));
+    renderExerciseDetail();
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(showCelebration.mock.calls.at(-1)[0].prs.map((pr) => pr.type)).toEqual(['est1rm']);
+  });
+
+  it('celebrates an unloaded hold on time alone', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 0 }));
+    renderExerciseDetail({ exercise: { ...exercise, trackingType: 'duration' } });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(showCelebration.mock.calls.at(-1)[0].prs.map((pr) => pr.type)).toEqual(['est1rm']);
+  });
+
   it('marks a first-ever set as a baseline rather than claiming a stack of records', async () => {
     useAppState.mockReturnValue(typedDraft({ weight: 185, reps: 5 }));
     renderExerciseDetail();

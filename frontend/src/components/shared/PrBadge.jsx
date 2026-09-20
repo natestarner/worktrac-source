@@ -41,9 +41,29 @@ export function prBadgeTone(type) {
   return prSpec(type)?.tone || 'est1rm';
 }
 
+// ⚠️ What to CALL the est.-1RM record for a given set, which is not always "Est. 1RM".
+//
+// comparableValue substitutes a rep count at weight 0 and seconds for a hold, so that name is
+// wrong for a pull-up and wrong for a plank. .claude/rules/trends.md is explicit: name all three
+// cases, or name none. These are the words the records table already uses.
+//
+// One derivation, two consumers -- the celebration overlay's row label and History's accessible
+// name. They must agree: the same record cannot be "Longest hold" in the overlay and "est. 1rm"
+// on the History row it produced.
+export function est1rmLabelForSet(set) {
+  if (set?.durationSeconds != null) return 'Longest hold';
+  if (Number(set?.weight) === 0) return 'Most reps';
+  return 'Est. 1RM';
+}
+
 // "personal record: top weight" -- see the naming note above.
-export function prBadgeLabel(types) {
-  const names = (types || []).map((t) => prSpec(t)?.badgeLabel).filter(Boolean);
+//
+// `set` is optional but should be passed wherever it is known: without it the est.-1RM record
+// falls back to the spec's generic name, which is the costume problem above.
+export function prBadgeLabel(types, set) {
+  const names = (types || [])
+    .map((t) => (t === 'est1rm' && set ? est1rmLabelForSet(set) : prSpec(t)?.badgeLabel))
+    .filter(Boolean);
   if (names.length === 0) return 'personal record';
   return 'personal record: ' + names.join(', ').toLowerCase();
 }

@@ -46,7 +46,9 @@ export default function SetPillRow({ sets, prMarks, style }) {
         const types = prMarks?.[i] || [];
         const isPr = types.length > 0;
         const text = formatSet(s);
-        const label = isPr ? prBadgeLabel(types) : undefined;
+        // The SET is passed so an est.-1RM record on a pull-up reads "most reps" and on a plank
+        // "longest hold", not "est. 1rm" -- see est1rmLabelForSet.
+        const label = isPr ? prBadgeLabel(types, s) : undefined;
         return (
           <span
             key={s.id ?? i}

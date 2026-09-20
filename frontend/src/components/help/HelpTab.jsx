@@ -438,9 +438,11 @@ export default function HelpTab() {
         <p>
           Workouts are listed newest first, each with its date, its time (or a start&ndash;end range),
           every exercise and every set. Personal records are badged where they happened, and the
-          badge says which kind: a star for an estimated 1RM, a double chevron for a top weight. A
-          whole-workout record sits next to the exercise name rather than on one set, because no
-          single set is the answer to &ldquo;most volume&rdquo;. See{' '}
+          badge says which kind: a star for your best single effort, a double chevron for a top
+          weight. On a bodyweight exercise the star means most reps, and on a hold it means longest
+          hold &mdash; the badge names whichever it is. A whole-workout record sits next to the
+          exercise name rather than on one set, because no single set is the answer to
+          &ldquo;most volume&rdquo;. See{' '}
           <a href="#prs">PRs</a> for what each one means.
         </p>
         <p>
@@ -544,12 +546,15 @@ export default function HelpTab() {
           </li>
           <li>
             <strong>Top weight</strong> &mdash; the heaviest you&rsquo;ve ever loaded this exercise.
-            It&rsquo;s the one record nothing can inflate: you have to actually lift more.
+            It&rsquo;s the one record nothing can inflate: you have to actually lift more. A
+            bodyweight exercise has no weight to beat, so it never fires there; a{' '}
+            <em>weighted</em> hold does have one, and gets it.
           </li>
           <li>
             <strong>Volume</strong> &mdash; the most total work you&rsquo;ve ever done of one
             exercise in a single workout. This one fires once per workout, on the set that passes
-            your old record, not again on every set after it.
+            your old record, not again on every set after it. Volume is weight &times; reps, so it
+            doesn&rsquo;t apply to bodyweight exercises or holds.
           </li>
         </ul>
         <p>

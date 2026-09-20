@@ -48,6 +48,7 @@ import ReadOnlyWrap from '../shared/ReadOnlyWrap';
 import { IconMore, IconNote, IconPencil, IconPin, IconStar, IconStarFilled, IconTrash } from '../shared/icons';
 import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
+import { est1rmLabelForSet } from '../shared/PrBadge';
 import { tagChipStyle } from '../shared/tagChipStyle';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
@@ -834,11 +835,10 @@ export default function ExerciseDetail({
               : setText;
           return {
             type,
-            // ⚠️ Not "Est. 1RM" in all three cases. comparableValue substitutes a rep count at
-            // weight 0 and seconds for a hold, so that label would be wrong for a pull-up and a
-            // plank -- trends.md's "name all three cases, or name none". The records table already
-            // uses exactly these words.
-            label: isHold ? 'Longest hold' : loggedWeight === 0 ? 'Most reps' : 'Est. 1RM',
+            // ⚠️ Not "Est. 1RM" in all three cases -- see est1rmLabelForSet. Shared with
+            // History's badge so the same record cannot be named two different things on the two
+            // screens it appears on.
+            label: est1rmLabelForSet(loggedSet),
             // epley() now carries the 12-rep cap, so this is the same number the board will show.
             valueText: isHold
               ? `${formatRestTime(loggedSet.durationSeconds)} hold`
