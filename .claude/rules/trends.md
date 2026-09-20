@@ -184,6 +184,14 @@ metric shares `'What the weekly totals chart shows'`.
 - `weeklyMetricHelp`'s shared first line says **only** what is true of every metric (the Monday
   bucket). Scope — "adding up every exercise you did that week" — lives on each `barMeaning`,
   because it is false of Workouts.
+- **A fifth option needs `.seg-fill`'s budget checked, not just a label.** The control is `fill`
+  on its own row precisely because the fourth pill stopped fitting: at intrinsic padding the
+  toggle plus the `?` came to ~334px against a 303px row on a 375px phone, which put the `?`
+  outside the card's right border. `.seg` cannot wrap, so it overflows rather than reflowing.
+  `trends.spec.ts` measures four widths from 320px up and asserts **one line, inside the card** —
+  deliberately against the card and not the viewport, because the first version of that test
+  checked the viewport, passed, and missed exactly this. Note `.seg-fill` *may* wrap (that is what
+  saves the 5-pill exercise switcher), so "all four on one line" is asserted, never assumed.
 
 ## Every chart carries a "?" — keep it honest and keep it on screen
 
@@ -206,9 +214,14 @@ session totals — the chart shows no difference between them, which is what thi
   once (the PRs one is checked with them), and Playwright matches an accessible name as a
   substring. Also asserted, as an exact count.
 - **Don't delete `ChartHelp`'s measure-and-nudge effect, and don't replace it with a CSS clamp.**
-  `WeeklyMetricChart`'s header wraps on a phone, so its `?` moves mid-row and a right-anchored
-  panel lands 45px off the left edge with the text clipped. Where the trigger ends up depends on
-  the wrap point, so no static rule gets it right. jsdom has no layout — the bounding-box test in
-  `trends.spec.ts` is the only guard.
+  It exists because `WeeklyMetricChart`'s header used to wrap on a phone, moving its `?` mid-row
+  so a right-anchored panel landed 45px off the left edge with the text clipped. Where the trigger
+  ends up depends on the wrap point, so no static rule gets it right. jsdom has no layout — the
+  bounding-box test in `trends.spec.ts` is the only guard.
+
+  **That header no longer wraps** (2026-09-20): the switcher moved to its own full-width row when
+  workouts became its fourth option, so every Trends `?` now sits at its card's right edge. The
+  effect stays anyway — it is the general guard, the next wrapping header re-arms it silently, and
+  the cost of keeping it is one measurement per open.
 - **Keep the panel unmounted while closed.** Its copy repeats phrases other specs on this screen
   select by; an always-mounted panel breaks them.

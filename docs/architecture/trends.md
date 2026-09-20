@@ -78,6 +78,34 @@ switcher's tooltip lowercases the option label — which would have read "1 work
 in `weeklyMetrics.js` fixes it for all three count metrics ("1 sets" was already wrong, just
 rarer).
 
+##### The fourth pill did not fit, and the first test said it did
+
+Three pills shared the card's header row with the `?` and fit a phone. The fourth pushed that pair
+to ~334px against a 303px row at 375px — and because `.seg` is `inline-flex` with `flex-shrink: 0`,
+`white-space: nowrap` items, it does not wrap or compress. It overflows. The visible symptom was
+the `?` sitting **outside the card's right border**, with the page gaining a horizontal scrollbar
+at 375px and 320px.
+
+The e2e test written alongside the merge did not catch it, and the reason is worth keeping: it
+asserted the group stayed within the **390px viewport**, which was true the whole time. The
+container that was violated was the card. A geometry assertion has to name the box the element is
+supposed to be inside, and the viewport is almost never that box. It now measures against the
+card's own padding box, at 320/375/390/393/402/430, and asserts the four pills share one line —
+`.seg-fill` is permitted to wrap (that is what rescues the 5-pill exercise switcher), so a
+two-and-two split is a legitimate CSS outcome and therefore has to be asserted against rather than
+assumed away.
+
+The fix is the one `SegmentedToggle`'s own header already prescribed — `fill`, past ~3 options —
+which trades the intrinsic 16px pill padding for `.seg-fill`'s 4px and puts the control on its own
+full-width row. That also makes it match the five-pill exercise switcher directly beneath it, which
+had been solving the same problem the same way since #139. Worth noting the *reason* it was missed:
+the guidance lived in the component being reused, not in the calling site being edited.
+
+One thing this moved without breaking: the Trends `?` buttons no longer sit in a wrapping header,
+which is the case `ChartHelp`'s measure-and-nudge effect was built for. The effect stays — see
+`.claude/rules/trends.md` — but its live trigger on this screen is gone, so a future wrapping
+header is what would re-arm it.
+
 ### Why "at least N reps" for rep maxes
 
 *(Removed 2026-08-08 — kept here because the reasoning explains what replaced it.)*

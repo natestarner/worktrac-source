@@ -243,39 +243,79 @@ test.describe('Trends analytics', () => {
     }
   });
 
-  // The same measurement one control over. The weekly switcher was a comfortable 3 pills until
-  // workouts-per-week stopped being its own chart and became a fourth option, and SegmentedToggle's
-  // own header puts the limit at "more than ~3" -- so this control crossed the line the exercise
-  // switcher's bug was found on. Two distinct ways it can go wrong and both are invisible to jsdom:
-  // a pill's label overflowing its own box, and the GROUP running off the side of the card.
-  test('the weekly metric pills never overflow their own box or their card on a phone', async ({ page, request }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await registerHousehold(page, request, 'Nate');
+  // The same measurement one control over, across every iPhone-portrait width rather than one.
+  // The weekly switcher was a comfortable 3 pills until workouts-per-week stopped being its own
+  // chart and became a fourth option, and SegmentedToggle's own header puts the limit at "more
+  // than ~3" -- so this control crossed the line the exercise switcher's bug was found on.
+  //
+  // Two requirements, and the second is why this measures against the CARD and not the viewport.
+  // A first cut of this test asserted the group stayed inside the 390px viewport, which it did --
+  // while the "?" beside it sat outside the card's right border at 375px, visible in a screenshot
+  // and invisible to the assertion. The viewport is not the container; the card is.
+  for (const width of [320, 375, 390, 393, 402, 430]) {
+    test(`the weekly metric pills stay on one line inside their card at ${width}px`, async ({ page, request }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await registerHousehold(page, request, 'Nate');
 
-    await pickExercise(page, 'Barbell Bench Press');
-    await logSet(page, 185, 8);
+      await pickExercise(page, 'Barbell Bench Press');
+      await logSet(page, 185, 8);
 
-    await page.getByRole('link', { name: 'Trends' }).click();
-    const weeklyMetric = page.getByRole('group', { name: 'Weekly metric' });
-    await expect(weeklyMetric).toBeVisible();
+      await page.getByRole('link', { name: 'Trends' }).click();
+      const weeklyMetric = page.getByRole('group', { name: 'Weekly metric' });
+      await expect(weeklyMetric).toBeVisible();
 
-    for (const label of ['Workouts', 'Volume', 'Sets', 'Reps']) {
-      const pill = weeklyMetric.getByRole('button', { name: label, exact: true });
-      const overflow = await pill.evaluate((el) => el.scrollWidth - el.clientWidth);
-      expect(overflow, `"${label}" pill's label is wider than its own box by ${overflow}px`).toBeLessThanOrEqual(1);
-    }
+      // ONE LINE. `.seg-fill` is allowed to wrap, and a two-and-two split of four pills is a
+      // legitimate CSS outcome that just isn't the one this control wants -- so it is asserted,
+      // not assumed.
+      const tops: number[] = [];
+      for (const label of ['Workouts', 'Volume', 'Sets', 'Reps']) {
+        const pill = weeklyMetric.getByRole('button', { name: label, exact: true });
+        const box = (await pill.boundingBox())!;
+        expect(box, `"${label}" pill has no box`).not.toBeNull();
+        tops.push(Math.round(box.y));
 
-    // `.seg` is inline-flex with `flex-shrink: 0` items, so four pills that don't fit do not wrap
-    // or shrink -- they push the group straight past the card's edge.
-    const box = (await weeklyMetric.boundingBox())!;
-    expect(box, 'the weekly metric group has no box').not.toBeNull();
-    expect(box.x, 'the weekly metric group runs off the left edge').toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width, 'the weekly metric group runs off the right edge').toBeLessThanOrEqual(390);
+        // A pill whose label is wider than its own box paints on top of its neighbour rather than
+        // wrapping -- the exercise switcher's original bug, one control over.
+        const overflow = await pill.evaluate((el) => el.scrollWidth - el.clientWidth);
+        expect(overflow, `"${label}" pill's label is wider than its own box by ${overflow}px`).toBeLessThanOrEqual(1);
+      }
+      expect(new Set(tops).size, `the four pills split across ${new Set(tops).size} lines at ${width}px`).toBe(1);
 
-    // And nothing it does may give the PAGE a horizontal scrollbar.
-    const overflowsPage = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-    expect(overflowsPage, 'the Trends tab scrolls horizontally at 390px').toBe(false);
-  });
+      // INSIDE THE CARD -- the control and the "?" both, measured against the card's own padding
+      // box rather than the viewport.
+      const card = await weeklyMetric.evaluate((el) => {
+        const c = el.closest('div[style*="border-radius"]')!;
+        const r = c.getBoundingClientRect();
+        const cs = getComputedStyle(c);
+        return { left: r.left + parseFloat(cs.paddingLeft), right: r.right - parseFloat(cs.paddingRight) };
+      });
+      const group = (await weeklyMetric.boundingBox())!;
+      expect(group.x, `the pills start left of the card at ${width}px`).toBeGreaterThanOrEqual(card.left - 1);
+      expect(group.x + group.width, `the pills run past the card at ${width}px`).toBeLessThanOrEqual(card.right + 1);
+
+      const help = (await page.getByRole('button', { name: 'What the weekly totals chart shows' }).boundingBox())!;
+      expect(help.x + help.width, `the "?" sits outside the card at ${width}px`).toBeLessThanOrEqual(card.right + 1);
+
+      // Nothing inside THIS card may reach past the viewport. Deliberately scoped to the weekly
+      // card rather than the whole page: the 26-week consistency grid above is a fixed ~407px and
+      // already overhangs a 320px screen on its own, so a page-wide assertion here would fail on
+      // somebody else's pre-existing layout and read as though the switcher had caused it.
+      const cardOverflow = await weeklyMetric.evaluate((el, vw) => {
+        const card = el.closest('div[style*="border-radius"]')!;
+        let worst: string | null = null;
+        let worstRight = vw + 1;
+        for (const node of Array.from(card.querySelectorAll('*'))) {
+          const r = node.getBoundingClientRect();
+          if (r.width > 0 && r.right > worstRight) {
+            worstRight = r.right;
+            worst = `${node.tagName.toLowerCase()} at ${Math.round(r.right)}px`;
+          }
+        }
+        return worst;
+      }, width);
+      expect(cardOverflow, `the weekly chart card reaches past the ${width}px viewport`).toBeNull();
+    });
+  }
 
   test('a bodyweight-only lift gets a rep-based records view, not a column of zeros', async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
