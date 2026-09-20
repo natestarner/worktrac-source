@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addExerciseToRoutine, pickExercise } from './support/exercises';
+import { addExerciseToRoutine, dismissPrCelebration, pickExercise } from './support/exercises';
 
 // Following a routine doesn't lock you into it: you can back out to the exercise picker,
 // log something not on the routine, and then resume the routine at the same position --
@@ -29,6 +29,7 @@ test.describe('Routine interrupted by off-routine logging', () => {
     await pickExercise(page, 'Barbell Back Squat');
     await expect(page.getByText('1 of 2')).toBeVisible(); // routine banner still shows, unmoved
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('Set 1')).toBeVisible();
 
     // Resume the routine by jumping to its second exercise via the progress chips --

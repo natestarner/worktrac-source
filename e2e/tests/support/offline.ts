@@ -96,6 +96,54 @@ export function goBackOnlineButton(page: Page) {
   return page.getByRole('button', { name: 'Go back online' });
 }
 
+// Waits until the query cache has actually been WRITTEN to IndexedDB, for a spec that is about
+// to reload and read it back.
+//
+// Needed because persistQueryClient's write is THROTTLED AT 1s (resilience.md, axis C:
+// "anything changed inside that window was never written"). That is correct product behaviour --
+// the app is not supposed to write on every cache change -- but it means a spec that logs
+// something and reloads immediately boots from a snapshot taken before it existed, then fails
+// asserting that the thing it just did is missing.
+//
+// waitForOutboxDrain does NOT cover this. It answers "did the write reach the server", which is
+// a different question and is usually already true by the time it is asked.
+//
+// Polled rather than slept, because the throttle is a floor and not a schedule: under load the
+// write lands later than 1s, and a magic number sized for a quiet machine is exactly the kind of
+// thing that only goes red in CI.
+export async function waitForQueryCachePersist(page: Page, mustContain: string) {
+  await expect
+    .poll(
+      async () =>
+        await page.evaluate(
+          (needle) =>
+            new Promise<boolean>((resolve) => {
+              const open = indexedDB.open('keyval-store');
+              open.onerror = () => resolve(false);
+              open.onsuccess = () => {
+                try {
+                  const store = open.result.transaction('keyval', 'readonly').objectStore('keyval');
+                  const get = store.get('worktrac-query-cache');
+                  get.onerror = () => resolve(false);
+                  // The blob is already a JSON STRING; JSON.stringify-ing it again escapes
+                  // every quote, so a needle like '"history"' would never match.
+                  get.onsuccess = () => {
+                    const raw =
+                      typeof get.result === 'string' ? get.result : JSON.stringify(get.result ?? '');
+                    resolve(raw.includes(needle));
+                  };
+                } catch {
+                  resolve(false);
+                }
+              };
+            }),
+          mustContain,
+        ),
+      { timeout: 15000 },
+    )
+    .toBe(true);
+}
+
 export async function unpinOfflineViaBanner(page: Page) {
   await goBackOnlineButton(page).click();
 }

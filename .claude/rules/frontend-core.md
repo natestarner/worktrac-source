@@ -148,8 +148,14 @@ no undo.
 - The X's accessible name is **"Close"**, so no other control in the same dialog may contain that
   string (`OutboxModal`'s footer button is "Done" for this reason).
 
-`PRCelebration` is deliberately **not** a `Modal` — it is a transient celebration overlay, and
-eight e2e specs dismiss it with a scrim click.
+`PRCelebration` is deliberately **not** a `Modal`, and eight e2e specs dismiss it with a scrim
+click. It is no longer *transient*, though — it **persists until dismissed** (the 2800ms
+auto-dismiss is gone, so a record set mid-conversation is not missed), which is why it now installs
+the shared `lib/focusTrap.js` and carries `role="dialog"` + `aria-modal`. A persistent full-screen
+scrim is an app-bricking shape if it can ever fail to close, so it has four independent exits: its
+own button, Escape, a scrim tap, and a reload (the state is in `UIContext` memory and is never
+persisted). **Keep the scrim tap** — that is the one thing that makes it not-a-Modal, and it is
+right here for the same reason it is wrong on a half-built routine: there is nothing to lose.
 
 ### Changing a control's visible text or label can break tests elsewhere
 

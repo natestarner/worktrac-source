@@ -134,6 +134,10 @@ describe('formatPrMeasure', () => {
 
   // The distinction the ? copy exists to make: nothing else on the row says whether a number is one
   // set or a whole session.
+  //
+  // "One session" is now the FALLBACK for a row with no breakdown -- a cache entry written before
+  // that shipped (resilience.md axis D). The fixtures in this block carry no `sets`, so they
+  // exercise exactly that path.
   it('says "One session" for the two session totals, and only those', () => {
     expect(formatPrMeasure(measureEntry(loaded, 'sessionVolume'), 'sessionVolume', loaded, 'lb').caption).toBe(
       'One session',
@@ -187,5 +191,93 @@ describe('measureUnavailableCaption', () => {
     expect(measureUnavailableCaption(pullUp)).toBe('Bodyweight');
     expect(measureUnavailableCaption(plank)).toBe('Timed hold');
     expect(measureUnavailableCaption({})).toBe('Not recorded');
+  });
+
+  // The user-visible point of the breakdown: a volume record with no detail is unreadable, and
+  // unreadable is what let ten junk sets of an empty bar look identical to a genuine heavy day.
+  describe('naming the work behind a session-level record', () => {
+    function withBreakdown(sets, setCount) {
+      return {
+        exerciseId: 1,
+        exerciseName: 'Squat',
+        best: { weight: 185, reps: 5, unit: 'lb', est1rm: 215.8, sessionStartedAt: '2026-07-01T12:00:00Z' },
+        measures: {
+          sessionVolume: {
+            value: 4000,
+            weightLb: null,
+            reps: null,
+            sessionStartedAt: '2026-07-01T12:00:00Z',
+            sets,
+            setCount,
+          },
+        },
+        bodyweightOnly: false,
+        durationTracked: false,
+      };
+    }
+
+    it('lists the runs instead of saying "One session"', () => {
+      const row = withBreakdown(
+        [
+          { weightLb: 135, reps: 10, durationSeconds: null, count: 1 },
+          { weightLb: 155, reps: 8, durationSeconds: null, count: 3 },
+        ],
+        4,
+      );
+      expect(formatPrMeasure(measureEntry(row, 'sessionVolume'), 'sessionVolume', row, 'lb').caption).toBe(
+        '135lb×10, 3×155lb×8',
+      );
+    });
+
+    // ⚠️ "+N more" counts SETS, not runs. A row whose one visible run collapses eight sets would
+    // otherwise claim far less work than it actually holds.
+    it('counts remaining SETS, not remaining runs', () => {
+      const row = withBreakdown(
+        [
+          { weightLb: 135, reps: 10, durationSeconds: null, count: 1 },
+          { weightLb: 155, reps: 8, durationSeconds: null, count: 1 },
+          { weightLb: 165, reps: 8, durationSeconds: null, count: 1 },
+          { weightLb: 175, reps: 6, durationSeconds: null, count: 5 },
+        ],
+        8,
+      );
+      // Three runs shown = three sets accounted for; the other five are the tail.
+      expect(formatPrMeasure(measureEntry(row, 'sessionVolume'), 'sessionVolume', row, 'lb').caption).toBe(
+        '135lb×10, 155lb×8, 165lb×8 +5 more',
+      );
+    });
+
+    it('converts to the household unit like every other number on the board', () => {
+      const row = withBreakdown([{ weightLb: 220.5, reps: 5, durationSeconds: null, count: 2 }], 2);
+      expect(formatPrMeasure(measureEntry(row, 'sessionVolume'), 'sessionVolume', row, 'kg').caption).toBe(
+        '2×100kg×5',
+      );
+    });
+
+    it('falls back to "One session" when the row predates the breakdown', () => {
+      const row = withBreakdown(undefined, 0);
+      expect(formatPrMeasure(measureEntry(row, 'sessionVolume'), 'sessionVolume', row, 'lb').caption).toBe(
+        'One session',
+      );
+    });
+
+    // Reps IS available for a bodyweight exercise, so this is a real row, not a hypothetical.
+    // "0lb" would be the column-of-zeros mistake, and keeping the "x" separator would render two
+    // sets of twelve as the nonsense "2xx12".
+    it('drops the weight for a bodyweight run rather than printing "0lb"', () => {
+      const row = withBreakdown([{ weightLb: 0, reps: 12, durationSeconds: null, count: 2 }], 2);
+      expect(formatPrMeasure(measureEntry(row, 'sessionVolume'), 'sessionVolume', row, 'lb').caption).toBe('2×12');
+    });
+
+    it('renders a hold as a time, with its load only when there is one', () => {
+      const unloaded = withBreakdown([{ weightLb: 0, reps: 0, durationSeconds: 60, count: 3 }], 3);
+      expect(formatPrMeasure(measureEntry(unloaded, 'sessionVolume'), 'sessionVolume', unloaded, 'lb').caption).toBe(
+        '3×1:00',
+      );
+      const loaded = withBreakdown([{ weightLb: 25, reps: 0, durationSeconds: 60, count: 1 }], 1);
+      expect(formatPrMeasure(measureEntry(loaded, 'sessionVolume'), 'sessionVolume', loaded, 'lb').caption).toBe(
+        '25lb 1:00',
+      );
+    });
   });
 });

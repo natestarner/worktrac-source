@@ -988,3 +988,82 @@ is almost never that container. It now measures against the card's padding box a
 320px up, and asserts the four pills share one line — `.seg-fill` is *allowed* to wrap (that is
 what rescues the five-pill switcher), so a two-and-two split is a legitimate CSS outcome and has to
 be asserted against rather than assumed away.
+
+## Update — 2026-09-20: three records celebrate, decided on the device
+
+The app recognised five record types on the PRs board and the Trends chart and celebrated exactly
+one of them, marking History with a single undifferentiated star. Three records now celebrate —
+**est. 1RM, top weight, session volume** — and the decision moved off the server.
+
+**The celebration was a mode-dependent feature, and nothing said so.** It was raised from the
+log-set response's `isPR`, which fired in one of four connectivity modes: lie-fi settles with
+`data === undefined`, a paused mutation never settles, and a write replayed from the outbox after
+a reload has no component observer to run `onSuccess` — so it never fired at all, even once the
+set landed. A record set in a gym basement, which is the app's actual use case, was silently never
+celebrated. Every existing celebration assertion in the suite ran `[online]`, so nothing caught it.
+`utils/prDetection.js` now decides at dispatch from bests the client already holds: one code path,
+no connectivity branch, and it *removed* one rather than adding it.
+
+Three things make that safe rather than merely simpler, and all three are load-bearing:
+
+- **Prior bests come from `exerciseSummary`, not `history`.** `getSummary` applies no Free-tier
+  window (unlike `getPrList`), so a Free household is still never congratulated for beating a
+  90-day best. Deriving them from the window-clamped `history` cache would have reintroduced
+  exactly what `FreeTierHistoryWindowTest` exists to prevent.
+- **The server's `isPR` stays on the wire and is deliberately unread.** Keeping both as a
+  belt-and-braces pair would be two mechanisms answering one question, and they *would* disagree:
+  the server compares against its own best at insert time, which for a queued write can be hours
+  later.
+- **The whole block is wrapped in `try/catch`.** It is decoration in front of a write that has not
+  been dispatched yet, so any throw in it would take the set with it. Losing a rep because the
+  confetti broke is the worst possible trade.
+
+**Session volume is a crossing, not a flag.** "Have I already celebrated this session?" needs a
+key, and the only natural one is the session id — which is `null` for a person's entire offline
+stretch, so the guard would be dead in precisely the modes this exists for. Asking whether the
+running total *crosses* the record with this set is inherently once-per-session and needs no key at
+all. `bestSessionVolumeLb` excludes the current session for the same reason; include it and the
+record chases itself, re-firing on every later set. Its sibling `heaviestWeightLb` deliberately
+does **not** exclude it — a set PR beats everything before it, and earlier sets today are before it.
+
+**Epley is capped at 12 reps.** Uncapped, `135 x 30` estimates to 270 lb and takes the record off a
+genuine `225 x 3`. Clamped rather than excluded, so more reps never *lowers* your score; excluding
+high-rep sets would create a cliff where 12 counts and 13 vanishes, leaving someone's hardest set
+off the board. Not applied at weight 0, where the rep count *is* the record.
+
+**This supersedes one line of the 2026-08-10 modal entry above.** `PRCelebration` is still
+deliberately not a `Modal` and still dismisses on a tap anywhere — but it is no longer *transient*.
+The 2800ms auto-dismiss meant a record set mid-conversation, which is the normal case around one
+iPad, was simply missed. It now waits to be dismissed, which is why it gained the shared focus trap
+and `role="dialog"`. Click-anywhere is what keeps the eight specs that dismiss it working, and a
+`stopPropagation` added to the card during this change broke every one of them before being
+reverted — that is the half of the original decision that must not be touched.
+
+**Naming, twice.** Two records stacked as bare numbers do not say which is which, so the overlay
+labels each. But the est.-1RM measure is a rep count at weight 0 and seconds for a hold, so
+"Est. 1RM" is wrong for a pull-up and a plank — `est1rmLabelForSet` is the single derivation the
+overlay and History's badge both read ("Most reps" / "Longest hold" / "Est. 1RM"). History had the
+generic name for a while, which is how the same record could be "Longest hold" in the overlay and
+"est. 1rm" on the row it produced.
+
+**Colour is the second signal, never the only one.** Each type gets a warm tint from the mark's own
+three hues, darkened until it passes AA. Measured mutual separation between the three text tones is
+**1.05:1 – 1.43:1** — to a red-green colour-blind reader, or anyone glancing at a phone in a bright
+gym, they are one colour. The icon and the accessible name carry the distinction; the acceptance
+test is to view History in greyscale. Reaching for blue/green/purple would have separated them far
+more cheaply and read as a different app bolted on, which is the same argument `index.css` already
+makes about the toast's green.
+
+**"One session" became the work behind the record.** A volume number alone is unreadable: nothing
+distinguished a genuine heavy day from ten junk sets of an empty bar, which is exactly how a volume
+record gets gamed. Showing the sets makes it self-policing, which is why that was preferred over
+capping set counts or weighting by intensity — both would distort a number people also read on the
+Trends chart.
+
+**Two e2e findings worth keeping.** The new four-mode parity spec was verified non-vacuous by
+restoring the old response-driven celebration: it fails in lie-fi, hard-offline and pinned-offline,
+exactly as predicted. And removing the auto-dismiss exposed `intermittent-errors`' lie-fi reload
+spec as passing for two accidents — the un-dismissed overlay was blocking the next click long
+enough to clear the query persister's 1s throttle, and its bare `getByText` matched once *only
+because* the restore was incomplete, in the spec whose whole point is that it is restored. A UI
+timer was load-bearing for an unrelated spec's timing.

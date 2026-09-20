@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { addOwnTimedExercise, logHoldAt, logSetAt, pickExercise, setHoldSeconds } from './support/exercises';
+import { addOwnTimedExercise, dismissPrCelebration, logHoldAt, logSetAt, pickExercise, setHoldSeconds } from './support/exercises';
 import { goHardOffline, goOnline, waitForOutboxDrain } from './support/offline';
 
 // The "This session" list. Scoping to it matters: the Best card above renders the SAME string
@@ -52,6 +52,7 @@ test.describe('endurance exercises', () => {
     await weight.press('Enter');
 
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(setRows(page).getByText('25 lb × 0:30', { exact: true })).toBeVisible();
   });
 
@@ -112,6 +113,7 @@ test.describe('endurance exercises', () => {
     await goHardOffline(page);
     await setHoldSeconds(page, 50);
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
 
     // ⚠️ The row must show the real time while queued, not a blank or a skeleton -- the value is
     // sitting in the mutation's own variables, and pendingBeforeSession is its only source while
@@ -212,6 +214,7 @@ test.describe('endurance exercises', () => {
 
     // Blank is a display state, never a validation gate: Log set still works and logs the default.
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(setRows(page).getByText('0:30', { exact: true })).toBeVisible();
   });
 
@@ -236,6 +239,7 @@ test.describe('endurance exercises', () => {
 
     // And blank is still not a validation gate.
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(setRows(page).getByText('0:30', { exact: true })).toBeVisible();
   });
 
@@ -339,6 +343,7 @@ test.describe('endurance exercises', () => {
 
     await expect(time).toHaveValue('0:20');
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(setRows(page).getByText('0:20', { exact: true })).toBeVisible();
   });
 

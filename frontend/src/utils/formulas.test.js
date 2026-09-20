@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { comparableLb, computePrefillDraft, convertWeight, epley, isPrSet, toLb } from './formulas';
+import {
+  comparableLb,
+  computePrefillDraft,
+  convertWeight,
+  epley,
+  EST_1RM_REP_CAP,
+  isPrSet,
+  toLb,
+} from './formulas';
 
 describe('epley', () => {
   it('returns the rounded weight itself for 1 rep or fewer', () => {
@@ -10,6 +18,39 @@ describe('epley', () => {
   it('applies the Epley formula for more than 1 rep', () => {
     expect(epley(135, 8)).toBe(171);
     expect(epley(225, 5)).toBe(262.5);
+  });
+
+  // ⚠️ The cap is what stops the measure being gamed: Epley is only validated to roughly 10-12
+  // reps and climbs without bound past that, so uncapped 135x30 estimates to 270 lb and takes the
+  // record off a genuine 225x3. Mirrors EpleyCalculator.EST_1RM_REP_CAP -- if these two drift, the
+  // celebration and the PRs board report different numbers for the same set.
+  describe('the rep cap', () => {
+    it('is 12, matching the backend', () => {
+      expect(EST_1RM_REP_CAP).toBe(12);
+    });
+
+    it('leaves everything at or below the cap untouched', () => {
+      expect(epley(135, 11)).toBe(Math.round(135 * (1 + 11 / 30) * 10) / 10);
+      expect(epley(135, 12)).toBe(189);
+    });
+
+    it('scores anything above the cap as if it were exactly 12 reps', () => {
+      expect(epley(135, 13)).toBe(189);
+      expect(epley(135, 20)).toBe(189);
+      expect(epley(135, 30)).toBe(189);
+    });
+
+    // The point of capping rather than excluding: the measure stays monotonic, so more reps never
+    // LOWERS your score. Excluding high-rep sets would instead create a cliff where 12 counts and
+    // 13 vanishes, leaving someone's hardest set off the board.
+    it('never decreases as reps increase', () => {
+      let previous = 0;
+      for (let reps = 1; reps <= 40; reps += 1) {
+        const value = epley(135, reps);
+        expect(value).toBeGreaterThanOrEqual(previous);
+        previous = value;
+      }
+    });
   });
 });
 

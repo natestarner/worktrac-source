@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { addMemberLogin, registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 const EXERCISE = 'Barbell Bench Press';
@@ -91,6 +91,7 @@ forEachConnectivityMode<void>('a set logged after switching household behaves th
   },
   act: async (page) => {
     await page.getByRole('button', { name: /^Log set/ }).click();
+    await dismissPrCelebration(page);
   },
   // The parity claim. No branch on ctx.mode: the row is on screen in every mode, because a durable
   // write is optimistic whether or not it can reach the server.

@@ -69,6 +69,10 @@ export function exerciseTrendHelp(metric) {
         'PRs are judged the same way whatever this chart is showing: estimated 1RM for a loaded ' +
         'lift, rep count for a bodyweight exercise, time for a hold. So a green dot is not always ' +
         'the highest point on this chart.',
+      // The cap changes what this line's own numbers mean, so it is stated where the measure is
+      // described rather than left to the handbook alone.
+      'Only the first 12 reps of a set count towards an estimated 1RM, so a very long light set ' +
+        'cannot out-rank a heavy one.',
       'Dots are spaced evenly, so the gap between two of them does not show how much time passed.',
     ],
   };
@@ -96,6 +100,11 @@ export function prRecordHelp(measure) {
       'Every row is your all-time best for that exercise on the record picked above. Changing the record changes the number on every row, and the date beside it.',
       spec.recordMeaning,
       'A dash means the record does not apply to that exercise: a pull-up has no top weight, and a timed hold has no reps.',
+      // The breakdown replaced a bare "One session", which was unreadable on its own: there was
+      // no way to tell a genuine heavy day from ten junk sets of an empty bar. Saying so here is
+      // what makes the number trustworthy rather than merely large.
+      'For Volume and Reps, the line underneath lists the sets that made the record, so you can ' +
+        'see exactly what the workout was. "3×155lb×8" means three sets of 155 lb for 8 reps.',
     ],
   };
 }

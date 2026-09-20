@@ -100,6 +100,28 @@ const PERSON_DEFAULTS = {
   // Per person, because a trainer switching between two clients mid-thought must not carry one
   // client's note onto the other's screen. Cleared only on a successful save.
   checkInDraft: null,
+
+  // { [exerciseId]: volumeLb } -- the session-volume figure at which this person was last
+  // congratulated for that exercise. A BACKSTOP, not the mechanism.
+  //
+  // The session-volume celebration is decided by a stateless crossing test
+  // (utils/prDetection.js#crossesSessionVolume): "did the running total pass the record with THIS
+  // set". That is inherently once-per-session, because once you are past the record the running
+  // total stays past it. No session id is involved, which is the whole point -- contextSessionId
+  // is null for a person's entire offline stretch, so a flag keyed on it would be dead in exactly
+  // the modes this feature exists for.
+  //
+  // This field only guards the one case the crossing test cannot see: log-screen.md warns that
+  // displaySets can churn while a multi-set outbox drains, and if a row ever went missing the
+  // running total would dip back below the record and re-arm the crossing. Monotonic per
+  // exercise, so a repeat is impossible.
+  //
+  // It needs no clearing between workouts. A later session has to beat the ALL-TIME record, which
+  // is greater than or equal to whatever was last celebrated, so the guard can never suppress a
+  // genuine new record -- and not clearing it is also what makes it survive a reload.
+  //
+  // Per person AND per exercise: two people on one iPad, each mid-workout, must not interfere.
+  volumePrCelebrated: {},
 };
 
 const initialState = {
@@ -222,6 +244,15 @@ export function reducer(state, action) {
       return updateActive(state, { prsSort: action.sort });
     case 'SET_PRS_MEASURE':
       return updateActive(state, { prsMeasure: action.measure });
+    // Merges rather than replaces -- one exercise's latch must never clear another's, and a
+    // person can move between exercises freely within one workout.
+    case 'RECORD_VOLUME_PR_CELEBRATED': {
+      if (action.exerciseId == null) return state;
+      const current = state.byPerson[state.activePersonId]?.volumePrCelebrated || {};
+      return updateActive(state, {
+        volumePrCelebrated: { ...current, [action.exerciseId]: action.volumeLb },
+      });
+    }
     // One action for both numbers and the whole stamp, deliberately not two. Independent
     // weight/reps writes let a partial update stamp the new exercise while the OTHER field still
     // holds the previous exercise's value -- the same "this number isn't yours" bug this stamp
@@ -403,6 +434,8 @@ export function AppStateProvider({ children }) {
       setTrendsExerciseMetric: (metric) => dispatch({ type: 'SET_TRENDS_EXERCISE_METRIC', metric }),
       setPrsSort: (sort) => dispatch({ type: 'SET_PRS_SORT', sort }),
       setPrsMeasure: (measure) => dispatch({ type: 'SET_PRS_MEASURE', measure }),
+      recordVolumePrCelebrated: (exerciseId, volumeLb) =>
+        dispatch({ type: 'RECORD_VOLUME_PR_CELEBRATED', exerciseId, volumeLb }),
       setDraft: ({ exerciseId, weight, reps, durationSeconds, setCount, source }) =>
         dispatch({ type: 'SET_DRAFT', exerciseId, weight, reps, durationSeconds, setCount, source }),
       setHoldStartedAt: (startedAt) => dispatch({ type: 'SET_HOLD_STARTED_AT', startedAt }),

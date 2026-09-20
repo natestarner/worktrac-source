@@ -86,6 +86,34 @@
   --color-pr-border: #f0c4ab;
   --color-pr-text: #a8532c; /* 4.53 on pr-bg */
 
+  /* One trio per celebrated PR type, so a top-weight record and an est.-1RM record are not the
+     same badge with different words in it. All three hues come from the MARK's own three warms
+     (#E8734A orange, #B5542D rust, #F2A65A amber) -- the same family the confetti already uses --
+     darkened until the text passes AA. Reaching for blue/green/purple would have differentiated
+     them far more cheaply and read as a different app bolted on: the toast comment below makes
+     the same argument about green, and the confetti's middle colour WAS green once and was
+     removed for it.
+
+     ⚠️ COLOUR IS THE SECOND SIGNAL, NEVER THE ONLY ONE. Measured mutual separation between the
+     three text tones is only 1.05:1 - 1.43:1, so to a red-green colour-blind reader (and to
+     anyone glancing at a phone in a bright gym) they are the same colour. The ICON and the
+     accessible label are what actually distinguish the types; these tokens reinforce a
+     distinction that is already carried. The acceptance test is to view History in greyscale and
+     confirm the types are still tellable apart.
+
+     Measured against #faf9f7 bg / #ffffff surface. */
+  --color-pr-est1rm-bg: #fbe9e0;
+  --color-pr-est1rm-border: #f0c4ab;
+  --color-pr-est1rm-text: #a8532c; /* 4.53 own bg / 5.07 bg / 5.33 surface */
+
+  --color-pr-heaviest-bg: #f7e4da;
+  --color-pr-heaviest-border: #e3b193;
+  --color-pr-heaviest-text: #8f3f1f; /* 5.89 own bg / 6.89 bg / 7.24 surface */
+
+  --color-pr-volume-bg: #fbf0da;
+  --color-pr-volume-border: #e8cf95;
+  --color-pr-volume-text: #7a5212; /* 6.10 own bg / 6.56 bg / 6.90 surface */
+
   --color-dark: #1c1b19;
 
   /* Toasts are neutral, not green. A saturated success green is the one hue in the palette
@@ -311,6 +339,23 @@
     --color-pr-border: #5a3520;
     /* Left at the light value this sat at ~2.7:1 on the dark pr-bg above. */
     --color-pr-text: #e8935f; /* 6.07 on pr-bg */
+
+    /* The per-type trios, dark. Each text tone clears the >= 1.2:1 separation from
+       --color-danger that the note above requires, so no PR type can be mistaken for a failure:
+       est1rm 1.23, heaviest 1.49, volume 1.76. Measured against #171614 bg / #221f1c surface.
+       Mutual separation between the three is 1.18:1 - 1.43:1 -- see the light block for why that
+       is acceptable and what carries the distinction instead. */
+    --color-pr-est1rm-bg: #3a2417;
+    --color-pr-est1rm-border: #5a3520;
+    --color-pr-est1rm-text: #e8935f; /* 6.07 own bg / 7.55 bg / 6.85 surface */
+
+    --color-pr-heaviest-bg: #3a1e14;
+    --color-pr-heaviest-border: #5c3020;
+    --color-pr-heaviest-text: #f0a882; /* 7.73 own bg / 9.15 bg / 8.30 surface */
+
+    --color-pr-volume-bg: #33290f;
+    --color-pr-volume-border: #554318;
+    --color-pr-volume-text: #f2c073; /* 8.58 own bg / 10.82 bg / 9.81 surface */
 
     /* --color-dark is meant to read as an intentionally-dark "chip" (routine progress button,
        "editing past session" banner, numeric keypad, etc.), always paired with white text. Left

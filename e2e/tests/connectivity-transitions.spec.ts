@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './support/offline';
 
 function personPill(page, name: string) {
@@ -14,6 +14,7 @@ test.describe('Connectivity transitions', () => {
 
     await goHardOffline(page);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
     // Flap several times before the write ever gets a chance to fully settle.
@@ -40,6 +41,7 @@ test.describe('Connectivity transitions', () => {
     await pickExercise(page, 'Barbell Bench Press');
     await goHardOffline(page);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 
     // Switch to Wren (still offline) and log a set for them too -- the banner's outbox count is
@@ -49,6 +51,7 @@ test.describe('Connectivity transitions', () => {
     await pickExercise(page, 'Barbell Bench Press');
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
     await expect(outboxCountText(page, 2)).toBeVisible();
 
@@ -68,6 +71,7 @@ test.describe('Connectivity transitions', () => {
     await pickExercise(page, 'Barbell Bench Press');
     await goHardOffline(page);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(outboxCountText(page, 1)).toBeVisible();
 
     await page.locator('.header-bar').getByRole('button').click();

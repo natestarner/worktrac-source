@@ -32,10 +32,20 @@ Full narrative: `docs/architecture/trends.md`.
 
 ### The PRs board makes the same call PER ROW, not per board
 
-`EXERCISE_METRICS` is now the vocabulary for **two** screens: the chart's metric switcher and the
-PRs board's record picker (`components/prs/prMeasures.js`). They read the same specs so "Volume"
-cannot mean a session total on one and a single set on the other, and a new measure ships with
-`recordMeaning` + `sortLabel` alongside `dotMeaning` — on the spec, never in a parallel table.
+`EXERCISE_METRICS` is now the vocabulary for **three** consumers: the chart's metric switcher, the
+PRs board's record picker (`components/prs/prMeasures.js`) and PR detection itself
+(`utils/prDetection.js` + `utils/historyPrFlags.js`, via the `pr` block). They read the same specs
+so "Volume" cannot mean a session total on one and a single set on the other, and a new measure
+ships with `recordMeaning` + `sortLabel` + `pr` alongside `dotMeaning` — on the spec, never in a
+parallel table.
+
+The `pr` block is `{ scope, celebrates, badgeLabel, tone }`. `scope: 'set'` badges an individual
+set pill in History; `scope: 'session'` badges the exercise **entry header** instead, because no
+single set is the answer to a session total. `CELEBRATED_PR_TYPES` is **derived** from
+`celebrates`, so a measure cannot be marked celebrated and then be silently missing from detection.
+Only `est1rm`, `heaviest` and `sessionVolume` celebrate: `bestSetVolume` is a third scoring of the
+same single set the other two already score, and `totalReps` rewards reps irrespective of load.
+Both remain full records on the board — not celebrating a measure is not the same as dropping it.
 
 Where they legitimately differ is **filtering**, and it is the one divergence to preserve:
 
@@ -53,6 +63,23 @@ Where they legitimately differ is **filtering**, and it is the one divergence to
 
 `PrRowDto.best` **is** the est.-1RM measure and is deliberately not repeated inside `measures` —
 it is the set `comparableValue` picks, substitutions and all. Two copies of one number drift.
+
+### A session-level measure names the work behind it
+
+`PrMeasureDto.sets` carries the winning session's sets, collapsed into runs (`PrSetDto`, with a
+`count`), and `setCount` is the true total. `weightLb`/`reps` stay null — no single set is the
+answer — but "One session" as the whole caption was unreadable: nothing distinguished a genuine
+heavy day from ten junk sets of an empty bar, which is exactly how a volume record gets gamed.
+
+- **Capped at `MAX_PR_BREAKDOWN_RUNS` (6) server-side**, and at 3 runs client-side with an honest
+  `+N more`. This rides on `/prs` — a row per exercise — which `offlineCacheWarm` persists to
+  IndexedDB, so an uncapped breakdown grows that blob without bound.
+- **`+N more` counts SETS, not runs.** A row whose one visible run collapses eight sets would
+  otherwise claim far less work than it holds.
+- **It folds into `buildPrMeasures`'s existing pass**; `getPrList` has already loaded and grouped
+  those rows, so it adds no query.
+- **`'One session'` survives as the fallback** for a `prs` entry restored from a cache written
+  before this shipped (axis D) — same optional-chaining contract as the rest of `measureEntry`.
 
 ## A hold is the same call as bodyweight, one measure over
 
@@ -135,6 +162,11 @@ question instead, via its "Most recent" sort. Before adding anything PR- or sess
 check it isn't already a row on PRs or History.
 
 ## No new full-history loads
+
+`getSummary` now makes **one** load for all four of its fields (it used to make two: `getBest` and
+`getLastSession` each issued their own). `heaviestWeightLb` and `bestSessionVolumeLb` fold into
+that same pass — the endpoint got cheaper, not dearer. ⚠️ Those two exclude the current session
+**differently**, and the asymmetry is load-bearing; the table is on `ExerciseSummaryDto`.
 
 `StatsService` already loads every set a person has ever logged on four separate paths, with zero
 SQL-side aggregation. Weekly sets/reps, `workoutDays` and `hasAnyHistory` are all computed inside

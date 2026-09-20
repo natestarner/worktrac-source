@@ -14,14 +14,19 @@ function entry(exerciseId, sets, note = null) {
 }
 
 describe('deriveExerciseSummaryFromHistory', () => {
+  // null rather than 0 on every measure: prDetection reads null as "no prior best on this
+  // measure" and 0 as a genuine record of zero, and those are different answers for a bodyweight
+  // lift -- a 0 would make the first weighted set look like it beat something.
+  const EMPTY = { lastSession: null, best: null, heaviestWeightLb: null, bestSessionVolumeLb: null };
+
   it('returns null lastSession/best when there is no history at all', () => {
-    expect(deriveExerciseSummaryFromHistory([], SQUAT, null)).toEqual({ lastSession: null, best: null });
-    expect(deriveExerciseSummaryFromHistory(undefined, SQUAT, null)).toEqual({ lastSession: null, best: null });
+    expect(deriveExerciseSummaryFromHistory([], SQUAT, null)).toEqual(EMPTY);
+    expect(deriveExerciseSummaryFromHistory(undefined, SQUAT, null)).toEqual(EMPTY);
   });
 
   it('returns null lastSession/best when the exercise was never logged', () => {
     const history = [session(1, '2026-07-20T00:00:00Z', [entry(BENCH, [{ weight: 100, reps: 5, unit: 'lb' }])])];
-    expect(deriveExerciseSummaryFromHistory(history, SQUAT, null)).toEqual({ lastSession: null, best: null });
+    expect(deriveExerciseSummaryFromHistory(history, SQUAT, null)).toEqual(EMPTY);
   });
 
   it('picks the first (most-recent) session containing the exercise, since history is ordered most-recent-first', () => {

@@ -4,9 +4,24 @@
 
 const LB_PER_KG = 2.20462;
 
+// The highest rep count that still contributes to an estimated 1RM. Mirrors
+// backend/.../stats/EpleyCalculator.java#EST_1RM_REP_CAP -- keep the two in step.
+export const EST_1RM_REP_CAP = 12;
+
+// Epley, with reps clamped at EST_1RM_REP_CAP. The clamp is what stops the measure being gamed:
+// Epley is only validated to roughly 10-12 reps and climbs without bound past that, so an uncapped
+// 135x30 estimates to 270 lb and takes the record off a genuine 225x3.
+//
+// Clamping rather than excluding a high-rep set keeps the measure MONOTONIC -- more reps never
+// lowers your score, it only stops raising it. Excluding them would create a cliff where 12 reps
+// counts and 13 vanishes, leaving someone's hardest set off the board entirely.
+//
+// This is deliberately NOT applied to comparableLb's weight-0 branch below, where a bodyweight set
+// ranks on its raw rep count -- a cap there would tie every pull-up set above 12 forever.
 export function epley(weight, reps) {
   if (reps <= 1) return Math.round(weight * 10) / 10;
-  return Math.round(weight * (1 + reps / 30) * 10) / 10;
+  const effectiveReps = Math.min(reps, EST_1RM_REP_CAP);
+  return Math.round(weight * (1 + effectiveReps / 30) * 10) / 10;
 }
 
 export function toLb(weight, unit) {

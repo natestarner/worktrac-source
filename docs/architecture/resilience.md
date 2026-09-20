@@ -192,3 +192,49 @@ Recorded here rather than fixed silently, so they are visible to the next person
   durable write on either violates the core invariant. The boundary is tested on both sides so the
   carve-out cannot widen into "retry all 4xx", which would head-of-line-block the serial outbox
   scope forever.
+
+## The PR celebration was a mode-dependent feature, and nobody noticed for months
+
+A worked example of the contract's central claim — *degradation is the default case, not an edge
+case* — found in a feature nobody thought of as offline-related at all.
+
+The celebration was raised from `logSetMutation.onSuccess`, reading `isPR` off the log-set
+response. That is a perfectly reasonable design if you think of a PR as something the server
+decides. What it actually produced:
+
+| Mode | What happened |
+|---|---|
+| Online | The response arrives, the overlay fires. |
+| Lie-fi | The mutation settles with `data === undefined`. Nothing fires. |
+| Hard offline / pinned | A paused mutation never settles at all. Nothing fires, for the whole outage. |
+| Reload mid-outage | The replay is rebuilt from `getMutationDefaults` with **no component observer**, so `onSuccess` does not exist. Nothing fires, ever — even once the set lands. |
+
+So the single most motivating moment in the app worked in one of four conditions, and failed
+silently in the one the app is built for: a phone in a gym with no signal. The set was never lost —
+the outbox did its job — but the *feedback* was, and "silently lost" is exactly what the contract
+forbids. It had no register row, no `fixmeModes` entry, and no spec: every celebration assertion
+in the suite ran `[online]`.
+
+**The fix was to stop asking the network a question the client could already answer.** Detection
+moved to dispatch (`utils/prDetection.js`), reading bests the client already holds. That is not a
+connectivity branch — it is one code path in every mode, and it *removed* one.
+
+Three things made it safe rather than merely simpler:
+
+1. **The prior bests come from `exerciseSummary`, not from `history`.** `getSummary` applies no
+   Free-tier window (unlike `getPrList`), so a Free household is still never congratulated for
+   beating a 90-day best. Deriving them from the window-clamped `history` cache would have
+   reintroduced exactly the bug `FreeTierHistoryWindowTest` exists to prevent.
+2. **The server's `isPR` is left on the wire and deliberately unread.** Keeping both as a "belt and
+   braces" pair would have been two mechanisms answering one question — the thing the mechanism
+   table forbids — and they *would* disagree: the server compares against its own best at insert
+   time, which for a queued write can be hours later.
+3. **The whole block is wrapped in `try/catch`.** It is decoration sitting in front of a write that
+   has not been dispatched yet, so any throw in it would take the set with it. Losing a rep because
+   the confetti broke is the worst possible trade.
+
+The general lesson is the one the contract opens with, and it is worth restating because this
+feature looked nothing like an offline feature: **ask of anything that reacts to a write, not just
+anything that performs one, what it does when the response never comes.** `parity-pr-celebration.spec.ts`
+is what keeps the answer honest — and it fails in three of four modes against the old design, which
+is the only way to know it is not vacuous.

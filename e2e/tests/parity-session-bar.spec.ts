@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 // The session bar is the app's bottom chrome: it carries "Session in progress", the start time, the
@@ -30,6 +30,7 @@ forEachConnectivityMode<{ personName: string }>('session bar appears with the re
 
   act: async (page) => {
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
   },
 
   assert: async (page) => {

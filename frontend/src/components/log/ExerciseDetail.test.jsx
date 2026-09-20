@@ -75,6 +75,10 @@ function typedDraft({ weight = 135, reps = 8, exerciseId = exercise.id } = {}) {
     setDraft: vi.fn(),
     setHoldStartedAt: vi.fn(),
     setRestTimer: vi.fn(),
+    // The session-volume celebration's churn backstop. Empty means "nothing celebrated yet",
+    // which is the state every one of these tests starts a workout in.
+    volumePrCelebrated: {},
+    recordVolumePrCelebrated: vi.fn(),
   };
 }
 
@@ -159,11 +163,22 @@ describe('ExerciseDetail tour anchors', () => {
   });
 });
 
-// A bodyweight set (weight === 0) makes Epley's 1RM estimate meaningless -- it collapses
-// to 0 regardless of reps -- so the celebration payload should surface the rep count
-// instead. Mirrors the same weight-0 convention as comparableLb in utils/formulas.js.
+// The celebration payload is now decided AT DISPATCH, from bests the client already holds -- not
+// from the log-set response. That is what makes it fire in every connectivity mode; see
+// prDetection.js. These tests therefore stub getExerciseSummary (the prior bests) rather than
+// logLiveSet's response, and assert the { exerciseName, prs: [...], firstTime } shape.
+//
+// A bodyweight set (weight === 0) makes Epley's 1RM estimate meaningless -- it collapses to 0
+// regardless of reps -- so the payload surfaces the rep count instead. Mirrors the same weight-0
+// convention as comparableLb in utils/formulas.js.
 describe('ExerciseDetail PR celebration payload', () => {
   let showCelebration;
+
+  // Finds the row for one measure inside the single overlay payload.
+  function rowFor(type) {
+    const payload = showCelebration.mock.calls.at(-1)?.[0];
+    return payload?.prs?.find((pr) => pr.type === type);
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -174,6 +189,7 @@ describe('ExerciseDetail PR celebration payload', () => {
     getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
     listSessionSets.mockResolvedValue([]);
     getSessionExerciseNote.mockResolvedValue(null);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
   });
 
   afterEach(() => {
@@ -181,40 +197,27 @@ describe('ExerciseDetail PR celebration payload', () => {
   });
 
   it('shows the rep count instead of a weight/1RM calc for a bodyweight PR', async () => {
-    logLiveSet.mockResolvedValue({
-      isPR: true,
-      best: { weight: 0, reps: 12, unit: 'lb', est1rm: 0 },
-      session: { id: 101 },
-      set: { id: 201 },
-    });
     renderExerciseDetail();
 
     fireEvent.click(await screen.findByText('Log set'));
 
-    await waitFor(() =>
-      expect(showCelebration).toHaveBeenCalledWith(
-        expect.objectContaining({ caption: 'Bodyweight', est1rmText: '12 reps' }),
-      ),
-    );
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(rowFor('est1rm')).toMatchObject({ caption: 'Bodyweight', valueText: '12 reps' });
+    // ⚠️ A bodyweight set weighs 0, and 0 is not a top-weight record.
+    expect(rowFor('heaviest')).toBeUndefined();
   });
 
   it('shows the normal weight/1RM calc for a weighted PR', async () => {
     useAppState.mockReturnValue(typedDraft({ weight: 185, reps: 5 }));
-    logLiveSet.mockResolvedValue({
-      isPR: true,
-      best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208 },
-      session: { id: 101 },
-      set: { id: 201 },
-    });
     renderExerciseDetail();
 
     fireEvent.click(await screen.findByText('Log set'));
 
-    await waitFor(() =>
-      expect(showCelebration).toHaveBeenCalledWith(
-        expect.objectContaining({ caption: 'Est. 1RM · 185 lb × 5', est1rmText: '208 lb' }),
-      ),
-    );
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    // 185 x (1 + 5/30) = 215.83 -> 215.8. Five reps is under the 12-rep cap, so it does not apply.
+    // The caption is the SET behind the estimate, not a repeat of the measure name -- the badge
+    // beside the number already says "Est. 1RM".
+    expect(rowFor('est1rm')).toMatchObject({ caption: '185 lb × 5', valueText: '215.8 lb' });
   });
 
   // THE REGRESSION, reported from the app: create a timed exercise, put a weight AND a time on it,
@@ -226,42 +229,251 @@ describe('ExerciseDetail PR celebration payload', () => {
   // correctly ("Longest hold at 25lb"), so the two surfaces disagreed about the same set.
   it('names the load on a weighted hold rather than calling it bodyweight', async () => {
     useAppState.mockReturnValue(typedDraft({ weight: 25, reps: 0 }));
-    logLiveSet.mockResolvedValue({
-      isPR: true,
-      best: { weight: 25, reps: 0, unit: 'lb', est1rm: null, durationSeconds: 60 },
-      session: { id: 101 },
-      set: { id: 201 },
-    });
     renderExerciseDetail({ exercise: { ...exercise, trackingType: 'duration' } });
 
     fireEvent.click(await screen.findByText('Log set'));
 
-    await waitFor(() =>
-      expect(showCelebration).toHaveBeenCalledWith(
-        expect.objectContaining({ caption: 'Weighted · 25 lb' }),
-      ),
-    );
-    expect(showCelebration).not.toHaveBeenCalledWith(
-      expect.objectContaining({ caption: 'Bodyweight' }),
-    );
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(rowFor('est1rm').caption).toBe('Weighted · 25 lb');
+    expect(rowFor('est1rm').caption).not.toBe('Bodyweight');
   });
 
   // The half that was never wrong: an unweighted hold really is a bodyweight hold.
   it('still calls an unweighted hold bodyweight', async () => {
     useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 0 }));
-    logLiveSet.mockResolvedValue({
-      isPR: true,
-      best: { weight: 0, reps: 0, unit: 'lb', est1rm: null, durationSeconds: 60 },
-      session: { id: 101 },
-      set: { id: 201 },
-    });
     renderExerciseDetail({ exercise: { ...exercise, trackingType: 'duration' } });
 
     fireEvent.click(await screen.findByText('Log set'));
 
-    await waitFor(() =>
-      expect(showCelebration).toHaveBeenCalledWith(expect.objectContaining({ caption: 'Bodyweight' })),
-    );
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(rowFor('est1rm').caption).toBe('Bodyweight');
+  });
+
+  // The three-way naming, asserted on the payload so it cannot drift from History's badge (both
+  // read est1rmLabelForSet). "Est. 1RM" on a pull-up or a plank is the costume problem.
+  it('names a bodyweight record by its reps', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 12 }));
+    renderExerciseDetail();
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(rowFor('est1rm').label).toBe('Most reps');
+  });
+
+  it('names a hold record by its duration, weighted or not', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 25, reps: 0 }));
+    renderExerciseDetail({ exercise: { ...exercise, trackingType: 'duration' } });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(rowFor('est1rm').label).toBe('Longest hold');
+    // A weighted hold ALSO takes the top-weight record: reps are 0 so volume cannot fire, but the
+    // load is real. This is the combination case that produced the old "every hold is Bodyweight"
+    // bug one layer up.
+    expect(rowFor('heaviest')).toMatchObject({ caption: 'Heaviest load held' });
+  });
+
+  // ⚠️ Neither weight-derived record may fire for a bodyweight lift: weight 0 means top weight
+  // and volume are both 0, and 0 is not a record. Without this they would fire on every set.
+  it('celebrates a bodyweight set on reps alone, never on weight or volume', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 12 }));
+    renderExerciseDetail();
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(showCelebration.mock.calls.at(-1)[0].prs.map((pr) => pr.type)).toEqual(['est1rm']);
+  });
+
+  it('celebrates an unloaded hold on time alone', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 0 }));
+    renderExerciseDetail({ exercise: { ...exercise, trackingType: 'duration' } });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(showCelebration.mock.calls.at(-1)[0].prs.map((pr) => pr.type)).toEqual(['est1rm']);
+  });
+
+  it('marks a first-ever set as a baseline rather than claiming a stack of records', async () => {
+    useAppState.mockReturnValue(typedDraft({ weight: 185, reps: 5 }));
+    renderExerciseDetail();
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    expect(showCelebration.mock.calls.at(-1)[0].firstTime).toBe(true);
+  });
+
+  it('reports both set records in ONE payload when a set takes both', async () => {
+    // A prior best well below what is about to be logged, so this is a genuine PR rather than a
+    // first-ever set.
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 100, reps: 5, unit: 'lb', est1rm: 116.7 },
+      heaviestWeightLb: 100,
+      bestSessionVolumeLb: 100000,
+    });
+    useAppState.mockReturnValue(typedDraft({ weight: 185, reps: 5 }));
+    renderExerciseDetail();
+
+    // Wait for the prior best to actually land: `ready` lets "Log set" render while the summary
+    // query is still in flight, so clicking immediately races it and the set reads as first-ever.
+    await screen.findByText(/100lb×5/);
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    const payload = showCelebration.mock.calls.at(-1)[0];
+    expect(showCelebration).toHaveBeenCalledTimes(1);
+    expect(payload.firstTime).toBe(false);
+    // Fixed precedence order, so a given combination always reads the same way round.
+    expect(payload.prs.map((pr) => pr.type)).toEqual(['heaviest', 'est1rm']);
+  });
+
+  it('does not celebrate a set that beats nothing', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 500, reps: 5, unit: 'lb', est1rm: 583.3 },
+      heaviestWeightLb: 500,
+      bestSessionVolumeLb: 100000,
+    });
+    useAppState.mockReturnValue(typedDraft({ weight: 100, reps: 5 }));
+    renderExerciseDetail();
+
+    // Same race as above: without this the summary has not landed, the set looks first-ever, and
+    // the assertion below passes or fails on timing rather than on the rule it is testing.
+    await screen.findByText(/500lb×5/);
+    fireEvent.click(await screen.findByText('Log set'));
+
+    // The set still logs -- that is the part that matters.
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+    expect(showCelebration).not.toHaveBeenCalled();
+  });
+
+  // ⚠️ A celebration must never be able to stop a set being logged. The block is wrapped for
+  // exactly this: decoration over a write that has not been dispatched yet.
+  it('still logs the set when raising the celebration throws', async () => {
+    showCelebration.mockImplementation(() => {
+      throw new Error('boom');
+    });
+    useAppState.mockReturnValue(typedDraft({ weight: 185, reps: 5 }));
+    renderExerciseDetail();
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+  });
+});
+
+// The nudge under the steppers. Derived during render from effectiveBest, which already folds in
+// sets that have not synced -- so it works in every connectivity mode by one code path.
+describe('ExerciseDetail close-to-a-PR hint', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useUI.mockReturnValue({
+      showCelebration: vi.fn(),
+      showToast: vi.fn(),
+      startRestTimer: vi.fn(),
+      openConfirm: vi.fn(),
+    });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+  });
+
+  afterEach(() => vi.clearAllMocks());
+
+  // Best is 135x10 -> 135 * (1 + 10/30) = 180. At 135 lb that needs 11 reps to beat, so a draft
+  // of 9 is two away.
+  function bestOf135x10() {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 135, reps: 10, unit: 'lb', est1rm: 180 },
+      heaviestWeightLb: 135,
+      bestSessionVolumeLb: 100000,
+    });
+  }
+
+  it('names how many more reps would take the record', async () => {
+    bestOf135x10();
+    useAppState.mockReturnValue(typedDraft({ weight: 135, reps: 9 }));
+    renderExerciseDetail();
+
+    expect(await screen.findByText('2 more reps for a PR')).toBeInTheDocument();
+  });
+
+  it('singularizes at one rep', async () => {
+    bestOf135x10();
+    useAppState.mockReturnValue(typedDraft({ weight: 135, reps: 10 }));
+    renderExerciseDetail();
+
+    expect(await screen.findByText('1 more rep for a PR')).toBeInTheDocument();
+  });
+
+  // ⚠️ Silence is the right answer far more often than a number is. Without the bound this would
+  // sit on screen through every warm-up set of every exercise, reading as "you are nowhere near".
+  it('stays quiet when the record is out of reach', async () => {
+    bestOf135x10();
+    useAppState.mockReturnValue(typedDraft({ weight: 95, reps: 5 }));
+    renderExerciseDetail();
+
+    await screen.findByText('Log set');
+    expect(screen.queryByText(/for a PR/)).not.toBeInTheDocument();
+  });
+
+  it('stays quiet once the draft already beats the record', async () => {
+    bestOf135x10();
+    useAppState.mockReturnValue(typedDraft({ weight: 225, reps: 5 }));
+    renderExerciseDetail();
+
+    await screen.findByText('Log set');
+    expect(screen.queryByText(/for a PR/)).not.toBeInTheDocument();
+  });
+
+  it('stays quiet when there is no record to beat yet', async () => {
+    getExerciseSummary.mockResolvedValue({ lastSession: null, best: null });
+    useAppState.mockReturnValue(typedDraft({ weight: 135, reps: 8 }));
+    renderExerciseDetail();
+
+    await screen.findByText('Log set');
+    expect(screen.queryByText(/for a PR/)).not.toBeInTheDocument();
+  });
+
+  // ⚠️ Past the 12-rep cap the estimate stops rising, so for a heavy enough record NO number of
+  // reps at this weight can take it. A closed-form solve would happily report one anyway. The
+  // forward search finds nothing and stays silent, which is the truth.
+  it('stays quiet when the rep cap puts the record out of reach at this weight', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      // 300 lb est. 1RM. At 135 lb the capped ceiling is 135 * (1 + 12/30) = 189, so it is
+      // unreachable however many reps are added.
+      best: { weight: 250, reps: 6, unit: 'lb', est1rm: 300 },
+      heaviestWeightLb: 250,
+      bestSessionVolumeLb: 100000,
+    });
+    useAppState.mockReturnValue(typedDraft({ weight: 135, reps: 11 }));
+    renderExerciseDetail();
+
+    await screen.findByText('Log set');
+    expect(screen.queryByText(/for a PR/)).not.toBeInTheDocument();
+  });
+
+  // At weight 0 the comparable IS the rep count, so the arithmetic that divides by weight would
+  // blow up -- the target is simply one more rep than the best.
+  it('counts reps directly for a bodyweight exercise', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 0, reps: 12, unit: 'lb', est1rm: 0 },
+      heaviestWeightLb: 0,
+      bestSessionVolumeLb: null,
+    });
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 12 }));
+    renderExerciseDetail();
+
+    expect(await screen.findByText('1 more rep for a PR')).toBeInTheDocument();
   });
 });
 

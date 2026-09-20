@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { goHardOffline, goOnline, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain } from './support/offline';
 import { failNetwork } from './support/faults';
 
@@ -81,6 +81,7 @@ test.describe('Offline mode — reads over the warmed cache', () => {
     // assertions below are measuring.
     await setWeight(page, 45);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
     await page.getByRole('link', { name: 'History' }).click();
@@ -106,6 +107,7 @@ test.describe('Offline mode — reads over the warmed cache', () => {
     await pickExercise(page, 'Barbell Bench Press');
     await setWeight(page, 45);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
     // Visit History online first, so its query holds a real fetch timestamp to report.
@@ -119,6 +121,7 @@ test.describe('Offline mode — reads over the warmed cache', () => {
     await goHardOffline(page);
     await setWeight(page, 50);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(2);
     await expect(outboxCountText(page, 1)).toBeVisible();
 
@@ -138,6 +141,7 @@ test.describe('Offline mode — reads over the warmed cache', () => {
     await pickExercise(page, 'Barbell Bench Press');
     await setWeight(page, 45);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
     await page.getByRole('button', { name: '+ Add person' }).click();
@@ -312,6 +316,7 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
     // 55x8 -> comparable 69.7, comfortably past the 57 pre-offline best.
     await setWeight(page, 55);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(rows).toHaveCount(before + 1);
 
     // The offline set is the real PR: badged, and the Best card moves with it even though the
@@ -326,6 +331,7 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
     // stay unbadged. Before the fix this row is what got the badge instead.
     await setWeight(page, 45);
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(rows).toHaveCount(before + 2);
 
     await expect(badges).toHaveCount(1);

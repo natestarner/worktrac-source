@@ -213,6 +213,35 @@ export const IconDumbbell = (props) => (
   </Icon>
 );
 
+// The two PR-type glyphs, beside IconStarFilled (which stays est. 1RM, because that is the marker
+// History has always used and people already read it as "record here").
+//
+// ⚠️ These carry the DISTINCTION BETWEEN PR TYPES, and the colour tokens only reinforce it. The
+// three --color-pr-*-text tones are 1.05:1 - 1.43:1 apart, i.e. the same colour to a colour-blind
+// reader, so whatever tells a top-weight record from an est.-1RM record has to survive greyscale.
+// Shape does; hue does not. Each is aria-hidden as usual -- the accessible name is on the wrapper.
+
+// Top weight: a double chevron, "you went higher than you ever have". Deliberately not
+// IconDumbbell, which already means "an exercise" generically (ExercisePicker's empty state), and
+// deliberately not a single arrow, which is IconArrowUp-adjacent and reads as ordinary navigation.
+export const IconChevronsUp = (props) => (
+  <Icon {...props}>
+    <path d="m17 11-5-5-5 5" />
+    <path d="m17 18-5-5-5 5" />
+  </Icon>
+);
+
+// Session volume: stacked layers, for the one record that is a whole session added up rather than
+// a single set. The stack is the point -- it is the only celebrated measure whose glyph should not
+// read as "one thing".
+export const IconLayers = (props) => (
+  <Icon strokeWidth={1.5} {...props}>
+    <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
+    <path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" />
+    <path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" />
+  </Icon>
+);
+
 // Trends tab: the line-and-arrow "trending up" mark, not a dumbbell -- this screen is about the
 // shape of the data over time, not the fact of a workout.
 export const IconTrendingUp = (props) => (

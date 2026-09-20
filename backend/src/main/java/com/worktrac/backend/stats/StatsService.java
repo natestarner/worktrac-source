@@ -67,9 +67,40 @@ public class StatsService {
     @Transactional(readOnly = true)
     public ExerciseSummaryDto getSummary(AccountAccess access, Long personId, Long exerciseId, Long excludeSessionId) {
         Person person = personService.requireVisiblePerson(personId, access);
-        LastSessionDto lastSession = getLastSession(person.getId(), exerciseId, excludeSessionId).orElse(null);
-        BestDto best = getBest(person.getId(), exerciseId).orElse(null);
-        return new ExerciseSummaryDto(lastSession, best);
+        // ONE load for all four fields. getLastSession and getBest each used to issue their own
+        // findByPerson_IdAndExercise_Id; folding the two new measures into a single shared pass
+        // means this endpoint now makes FEWER queries than before, not more. See
+        // .claude/rules/trends.md: "a new metric folds into one of those passes -- it does not add
+        // a fifth findByPerson_Id... call."
+        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdAndExercise_Id(person.getId(), exerciseId);
+
+        LastSessionDto lastSession = buildLastSession(all, exerciseId, excludeSessionId).orElse(null);
+        BestDto best = bestSet(all).map(this::toBestDto).orElse(null);
+
+        // ⚠️ Deliberately asymmetric exclusion -- see ExerciseSummaryDto's header for the full
+        // reasoning. heaviestWeightLb is all-time INCLUDING today (a set PR beats everything
+        // before it, and earlier sets today are before it); bestSessionVolumeLb EXCLUDES the
+        // session in view, or the record chases itself and re-fires on every subsequent set.
+        BigDecimal heaviestWeightLb = null;
+        Map<Long, BigDecimal> volumeByOtherSession = new LinkedHashMap<>();
+        for (WorkoutSet s : all) {
+            BigDecimal weightLb = lbWeight(s);
+            if (heaviestWeightLb == null || weightLb.compareTo(heaviestWeightLb) > 0) {
+                heaviestWeightLb = weightLb;
+            }
+            Long sessionId = s.getSession().getId();
+            if (excludeSessionId != null && sessionId.equals(excludeSessionId)) {
+                continue;
+            }
+            volumeByOtherSession.merge(sessionId, setVolumeLb(s), BigDecimal::add);
+        }
+        BigDecimal bestSessionVolumeLb = volumeByOtherSession.values().stream()
+                .max(BigDecimal::compareTo)
+                .orElse(null);
+
+        return new ExerciseSummaryDto(lastSession, best,
+                heaviestWeightLb == null ? null : heaviestWeightLb.setScale(1, RoundingMode.HALF_UP),
+                bestSessionVolumeLb == null ? null : bestSessionVolumeLb.setScale(1, RoundingMode.HALF_UP));
     }
 
     // Max estimated 1RM across every set ever logged for this person + exercise,
@@ -83,7 +114,13 @@ public class StatsService {
     // The sets from the most recent *other* session (excluding excludeSessionId) for
     // this person + exercise.
     public Optional<LastSessionDto> getLastSession(Long personId, Long exerciseId, Long excludeSessionId) {
-        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdAndExercise_Id(personId, exerciseId);
+        return buildLastSession(workoutSetRepository.findByPerson_IdAndExercise_Id(personId, exerciseId),
+                exerciseId, excludeSessionId);
+    }
+
+    // The body of getLastSession, over a set list the caller has already loaded, so getSummary can
+    // share one load across all four of its fields.
+    private Optional<LastSessionDto> buildLastSession(List<WorkoutSet> all, Long exerciseId, Long excludeSessionId) {
         Long bestSessionId = null;
         java.time.Instant bestStartedAt = null;
         for (WorkoutSet s : all) {
@@ -170,6 +207,9 @@ public class StatsService {
         Map<Long, BigDecimal> volumeBySession = new LinkedHashMap<>();
         Map<Long, Integer> repsBySession = new LinkedHashMap<>();
         Map<Long, WorkoutSet> anySetInSession = new LinkedHashMap<>();
+        // Every set of every session, kept so a session-level record can name the work behind it.
+        // Free here -- these are rows getPrList has already loaded and grouped; nothing is queried.
+        Map<Long, List<WorkoutSet>> setsBySession = new LinkedHashMap<>();
 
         for (WorkoutSet s : sets) {
             if (heaviest == null || isBetter(lbWeight(s), reps(s), lbWeight(heaviest), reps(heaviest))) {
@@ -182,41 +222,82 @@ public class StatsService {
             volumeBySession.merge(sessionId, setVolumeLb(s), BigDecimal::add);
             repsBySession.merge(sessionId, s.getReps(), Integer::sum);
             anySetInSession.putIfAbsent(sessionId, s);
+            setsBySession.computeIfAbsent(sessionId, k -> new ArrayList<>()).add(s);
         }
 
         return new PrMeasuresDto(
                 bodyweightOnly ? null : setMeasure(lbWeight(heaviest), heaviest),
-                noVolumeMeasure ? null : sessionMeasure(volumeBySession, anySetInSession),
+                noVolumeMeasure ? null : sessionMeasure(volumeBySession, anySetInSession, setsBySession),
                 noVolumeMeasure ? null : setMeasure(setVolumeLb(bestSetVolume), bestSetVolume),
-                durationTracked ? null : sessionRepMeasure(repsBySession, anySetInSession));
+                durationTracked ? null : sessionRepMeasure(repsBySession, anySetInSession, setsBySession));
+    }
+
+    // How many collapsed runs a session-level record's breakdown may carry. A cap rather than the
+    // whole session because this rides on the PRs board -- one row per exercise -- which
+    // offlineCacheWarm persists to IndexedDB. setCount still reports the true total, so a
+    // truncated list can be labelled honestly instead of understating the work.
+    private static final int MAX_PR_BREAKDOWN_RUNS = 6;
+
+    // The work behind a session-level record, with consecutive identical sets collapsed into runs.
+    // Chronological (createdAt) so it reads the way the workout was actually done, ramping and all.
+    private List<PrSetDto> breakdown(List<WorkoutSet> sessionSets) {
+        List<PrSetDto> runs = new ArrayList<>();
+        for (WorkoutSet s : sessionSets.stream().sorted(Comparator.comparing(WorkoutSet::getCreatedAt)).toList()) {
+            BigDecimal weightLb = lbWeight(s).setScale(1, RoundingMode.HALF_UP);
+            PrSetDto last = runs.isEmpty() ? null : runs.get(runs.size() - 1);
+            boolean sameAsLast = last != null
+                    && last.weightLb().compareTo(weightLb) == 0
+                    && last.reps() == s.getReps()
+                    && java.util.Objects.equals(last.durationSeconds(), s.getDurationSeconds());
+            if (sameAsLast) {
+                runs.set(runs.size() - 1, new PrSetDto(last.weightLb(), last.reps(), last.durationSeconds(),
+                        last.count() + 1));
+            } else {
+                if (runs.size() >= MAX_PR_BREAKDOWN_RUNS) {
+                    // Stop adding NEW runs, but keep folding into the last one -- truncating
+                    // mid-run would report a count smaller than the run really was.
+                    continue;
+                }
+                runs.add(new PrSetDto(weightLb, s.getReps(), s.getDurationSeconds(), 1));
+            }
+        }
+        return runs;
     }
 
     // A set-level measure names the set behind it, the way the est.-1RM records row must -- a
     // number larger than anything you actually lifted reads as a bug without it.
     private PrMeasureDto setMeasure(BigDecimal value, WorkoutSet set) {
+        // No breakdown: a set-level measure already names its own set through weightLb/reps.
         return new PrMeasureDto(value.setScale(1, RoundingMode.HALF_UP),
                 lbWeight(set).setScale(1, RoundingMode.HALF_UP), set.getReps(),
-                set.getSession().getStartedAt());
+                set.getSession().getStartedAt(), List.of(), 0);
     }
 
-    // A session-level measure carries no set: weightLb/reps are null because no single set is the
-    // answer, the same shape bestSessionVolume already has on RecordEntryDto.
+    // A session-level measure carries no single set: weightLb/reps stay null because no one set is
+    // the answer, the same shape bestSessionVolume has on RecordEntryDto. What it DOES carry is
+    // the whole session's work, collapsed into runs -- see PrSetDto for why.
     private PrMeasureDto sessionMeasure(Map<Long, BigDecimal> valueBySession,
-                                        Map<Long, WorkoutSet> anySetInSession) {
+                                        Map<Long, WorkoutSet> anySetInSession,
+                                        Map<Long, List<WorkoutSet>> setsBySession) {
         Map.Entry<Long, BigDecimal> best = valueBySession.entrySet().stream()
                 .max(Map.Entry.comparingByValue())
                 .orElseThrow();
+        List<WorkoutSet> sessionSets = setsBySession.getOrDefault(best.getKey(), List.of());
         return new PrMeasureDto(best.getValue().setScale(1, RoundingMode.HALF_UP), null, null,
-                anySetInSession.get(best.getKey()).getSession().getStartedAt());
+                anySetInSession.get(best.getKey()).getSession().getStartedAt(),
+                breakdown(sessionSets), sessionSets.size());
     }
 
     private PrMeasureDto sessionRepMeasure(Map<Long, Integer> repsBySession,
-                                           Map<Long, WorkoutSet> anySetInSession) {
+                                           Map<Long, WorkoutSet> anySetInSession,
+                                           Map<Long, List<WorkoutSet>> setsBySession) {
         Map.Entry<Long, Integer> best = repsBySession.entrySet().stream()
                 .max(Map.Entry.comparingByValue())
                 .orElseThrow();
+        List<WorkoutSet> sessionSets = setsBySession.getOrDefault(best.getKey(), List.of());
         return new PrMeasureDto(BigDecimal.valueOf(best.getValue()), null, null,
-                anySetInSession.get(best.getKey()).getSession().getStartedAt());
+                anySetInSession.get(best.getKey()).getSession().getStartedAt(),
+                breakdown(sessionSets), sessionSets.size());
     }
 
     private Optional<WorkoutSet> bestSet(List<WorkoutSet> sets) {

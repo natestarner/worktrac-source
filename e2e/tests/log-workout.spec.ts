@@ -1,6 +1,6 @@
 import { Page, test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { logSetAt, pickExercise, setStepper } from './support/exercises';
+import { dismissPrCelebration, logSetAt, pickExercise, setStepper } from './support/exercises';
 
 // Full golden-path smoke: register a new household, log the first-ever set (always a
 // PR), confirm the celebration fires, then check every tab renders without error.
@@ -72,6 +72,7 @@ test.describe('Log workout', () => {
     await pickExercise(page, 'Barbell Bench Press');
 
     await page.getByRole('button', { name: /Log set/ }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(1);
 
     await page.getByRole('button', { name: '← All exercises' }).click();
@@ -216,6 +217,7 @@ test.describe('Log workout', () => {
 
     await expect(page.getByRole('textbox', { name: 'Weight (lb)' })).toHaveValue('315');
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('315 lb × 2', { exact: true })).toBeVisible();
   });
 
@@ -231,6 +233,7 @@ test.describe('Log workout', () => {
     // the value from its render closure. setStepper always presses Enter first, so nothing else
     // in the suite covers this ordering.
     await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
     await expect(page.getByText('225 lb × 8', { exact: true })).toBeVisible();
   });
 });

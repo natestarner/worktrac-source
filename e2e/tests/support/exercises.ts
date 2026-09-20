@@ -78,7 +78,7 @@ function stepperValue(page: Page, label: StepperLabel) {
 //
 // Re-verifying the pair after both are set is what closes the window that matters: a re-seed
 // stomps BOTH fields, so checking reps also catches a stomped weight.
-async function setStepperPair(page: Page, weight: number, reps: number) {
+export async function setStepperPair(page: Page, weight: number, reps: number) {
   await expect
     .poll(
       async () => {
@@ -95,6 +95,26 @@ async function setStepperPair(page: Page, weight: number, reps: number) {
       { timeout: 30000 },
     )
     .toBe(`${weight}x${reps}`);
+}
+
+// Dismisses the PR celebration if one is on screen, and does nothing if not.
+//
+// NEEDED AFTER EVERY BARE "Log set" CLICK. The overlay is a full-viewport fixed scrim, so while
+// it is up every subsequent click is intercepted. It used to clear itself after 2800ms, which
+// meant Playwright's actionability auto-wait simply waited it out and no spec had to think about
+// it; it now persists until dismissed (a record set mid-conversation should not be missed), so a
+// spec that logs a PR and then clicks anything else will hang until timeout instead.
+//
+// The isVisible() check is NOT a race, and that is a property of the redesign rather than luck:
+// PR detection is client-side and runs at dispatch, so if a record fell the overlay is already
+// rendered by the time click() resolves. Back when it waited on the log-set response, this exact
+// helper would have been flaky.
+export async function dismissPrCelebration(page: Page) {
+  const celebration = page.getByText('New PR!');
+  if (await celebration.isVisible()) {
+    await celebration.click({ force: true });
+    await expect(celebration).toBeHidden();
+  }
 }
 
 // Logs one set at an exact weight/reps. Every caller so far logs strictly increasing bests, so the
