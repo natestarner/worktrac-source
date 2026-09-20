@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { addOwnExercise, dismissPrCelebration, pickExercise } from './support/exercises';
 import { API_ONLY, delayNetwork, failNetwork, failWithStatus } from './support/faults';
-import { troubleBanner, goOfflineButton, goBackOnlineButton, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain } from './support/offline';
+import { troubleBanner, goOfflineButton, goBackOnlineButton, offlineSavedLocallyBanner, outboxCountText, waitForOutboxDrain, waitForQueryCachePersist } from './support/offline';
 
 // Mode 2: the backend is unreachable or erroring, but the browser is still "online"
 // (navigator.onLine never flips) and the user has NOT elected offline mode. Distinct from a real
@@ -136,6 +136,27 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     await page.getByRole('button', { name: /All exercises/ }).click();
     await expect(page.getByText('Session exercises')).toBeVisible();
 
+    // ⚠️ Wait for the write to land BEFORE reloading, or this spec races the query persister's
+    // 1s throttle and boots from a snapshot taken before the set existed -- axis C in
+    // resilience.md, and expected product behaviour rather than a bug.
+    //
+    // It used to pass without this, by accident: the PR celebration had no dismissal here and
+    // blocked the next click for its full 2800ms auto-dismiss, which cleared the throttle as a
+    // side effect. The overlay now waits to be dismissed, so that accidental delay is gone and
+    // the race is visible. Gate on the real signal instead of on an overlay's timer.
+    //
+    // BOTH gates, because they answer different questions: the drain says the write reached the
+    // server, the persist says the cache this spec is about to read back has actually been
+    // written. The drain alone returns immediately here and proves nothing about the snapshot.
+    await waitForOutboxDrain(page);
+    //
+    // The needle is the logged SET's own data, not a query key. The persister flushes repeatedly,
+    // and every key involved here (history, session-sets, even the exercise catalog) exists in a
+    // snapshot written before the set did -- so waiting on any of them passes against exactly the
+    // stale blob this gate exists to rule out. "exerciseName" appears only inside a history entry,
+    // never in the catalog, which spells the same exercise as "name".
+    await waitForQueryCachePersist(page, '"exerciseName":"Barbell Bench Press"');
+
     // Go lie-fi (backend unreachable, browser still reports online) and reload. The static app
     // shell isn't behind this fault (it only matches /api/), so the reload itself succeeds --
     // only API calls fail, same as the dev server being up but the backend container stopped.
@@ -146,10 +167,19 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // an imperative cache-warm prefetch raced the still-hydrating persisted query cache and left
     // history/live-session data-less against the dead backend (see useOfflineCacheWarming.js).
     await expect(page.getByText('Session exercises')).toBeVisible();
-    await expect(page.getByText('Barbell Bench Press')).toBeVisible();
+    // Scoped to .session-exercises, which exists for exactly this -- SessionSummary's own comment:
+    // "an exercise name legitimately appears here AND in the picker below AND in search results,
+    // so a bare getByText for it is a strict-mode violation waiting to happen."
+    //
+    // It was a bare getByText and passed anyway, because the reload used to land inside the
+    // persister's 1s throttle and the picker's "Other previously logged" chip had no data to
+    // render -- leaving exactly one match. In other words this line was passing BECAUSE the cache
+    // was incompletely restored, in the spec whose whole point is that it is restored. Now that
+    // the gate above guarantees a complete snapshot, both render and the scope is required.
+    await expect(page.locator('.session-exercises').getByText('Barbell Bench Press')).toBeVisible();
 
     await page.getByRole('link', { name: 'History' }).click();
-    await expect(page.getByText('Barbell Bench Press')).toBeVisible();
+    await expect(page.getByText('Barbell Bench Press').first()).toBeVisible();
 
     faults.stop();
   });
