@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { randomUUID } from 'node:crypto';
 import { loginAs, registerHousehold, setBillingPlan } from './support/auth';
 import { logSetAt, pickExercise } from './support/exercises';
+import { waitForOutboxDrain } from './support/offline';
 
 /**
  * The invite round trip, through the real UI: an owner enables a login, the invitee opens the link
@@ -41,6 +42,18 @@ async function openProfile(page: Page) {
 }
 
 async function logout(page: Page) {
+  // ⚠️ Drain FIRST. Logout gates on `getUnsyncedWriteCount`, which counts a write that is still
+  // ON THE WIRE -- so logging out with a log-set mid-flight opens the "will be lost" confirm
+  // instead of signing out, and this helper then times out still on /app/log.
+  //
+  // `logSetAt` used to make this impossible by accident: it waited for the PR celebration, which
+  // only appeared once the SERVER had answered, so the write had always landed by the time it
+  // returned. The celebration is now raised at dispatch (so that it works offline at all), which
+  // removed that implicit wait. Locally the write lands in milliseconds and the race is almost
+  // never lost; against lower it was lost every time -- the same shape as the prefill race in
+  // `docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md`, green locally and red only
+  // against a deployed backend.
+  await waitForOutboxDrain(page);
   await page.locator('.header-bar').getByRole('button').click();
   await page.getByRole('menuitem', { name: 'Logout' }).click();
   await expect(page).toHaveURL(/\/login/);
