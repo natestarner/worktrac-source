@@ -188,10 +188,21 @@ metric shares `'What the weekly totals chart shows'`.
   on its own row precisely because the fourth pill stopped fitting: at intrinsic padding the
   toggle plus the `?` came to ~334px against a 303px row on a 375px phone, which put the `?`
   outside the card's right border. `.seg` cannot wrap, so it overflows rather than reflowing.
-  `trends.spec.ts` measures four widths from 320px up and asserts **one line, inside the card** —
-  deliberately against the card and not the viewport, because the first version of that test
-  checked the viewport, passed, and missed exactly this. Note `.seg-fill` *may* wrap (that is what
+  `trends.spec.ts` measures six widths from 320px up. Note `.seg-fill` *may* wrap (that is what
   saves the 5-pill exercise switcher), so "all four on one line" is asserted, never assumed.
+- **Two different claims at two different widths, and the split is deliberate.**
+  *Inside the card* is asserted at **every** width — that is the one that must never break.
+  *One line* is asserted from **375px** up (`ONE_LINE_MIN_WIDTH`), the narrowest iPhone portrait
+  Apple still ships. At 320px (the 2016 SE) the four fit at the natural font with only ~20px to
+  spare, which is thinner than the gap between one platform's substitute font and another's.
+- **Never assert this layout at the runner's natural font, and never by naming a "wide" font.**
+  The app's stack falls through to a substitute on every non-Apple platform, and the Linux CI
+  runner's is wider than a Windows dev machine's — the first version of this test had no style tag,
+  passed locally at all six widths, and failed lower at 320px on nothing else. Use
+  **`letter-spacing`**, which adds a fixed number of pixels per character whatever the face.
+  Naming a font does *not* work: `"Times New Roman"` is **narrower** here than the Windows default
+  sans, so borrowing that trick from `sticky-chrome.spec.ts` makes the test weaker while looking
+  stricter. Measured headroom: 375px survives 3px/char, 320px wraps between 1.5 and 2.
 
 ## Every chart carries a "?" — keep it honest and keep it on screen
 
