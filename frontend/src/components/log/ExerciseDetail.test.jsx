@@ -79,6 +79,12 @@ function typedDraft({ weight = 135, reps = 8, exerciseId = exercise.id } = {}) {
     // which is the state every one of these tests starts a workout in.
     volumePrCelebrated: {},
     recordVolumePrCelebrated: vi.fn(),
+    // Called on every set edit and delete, because either can LOWER the all-time session-volume
+    // record and leave this latch suppressing every genuine new one below it. Omitting it here
+    // does not fail a test -- it throws out of an event handler, which Vitest reports as an
+    // unhandled `Errors 1` beside a green `Tests` line, and CI fails on it while a casual read of
+    // the summary does not.
+    clearVolumePrCelebrated: vi.fn(),
   };
 }
 
