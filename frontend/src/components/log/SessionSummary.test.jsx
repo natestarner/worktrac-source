@@ -6,6 +6,7 @@ import { LOG_SET_MUTATION_KEY } from '../../lib/queryClient';
 import { useUI } from '../../context/UIContext';
 import { listSessionSets, deleteSet } from '../../api/sets';
 import SessionSummary from './SessionSummary';
+import { buildHistoryPrFlags } from '../../utils/historyPrFlags';
 
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
 vi.mock('../../api/sets', () => ({
@@ -195,5 +196,108 @@ describe('SessionSummary', () => {
 
     await waitFor(() => expect(deleteSet).toHaveBeenCalledWith(55));
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  // ============================================================================================
+  // Record badges — the same marks, from the same fold, as History
+  // ============================================================================================
+  //
+  // These rows ARE entry rows: same shape as History's, same SetPillRow, same PrBadge. Before
+  // this they carried no record marks at all, so a record set mid-workout appeared nowhere until
+  // the workout was over and you opened another tab.
+  describe('record badges', () => {
+    // Built through the real fold rather than hand-written marks, so this cannot pass against a
+    // shape the production caller never produces.
+    function flagsFor(liveEntries, history = []) {
+      return buildHistoryPrFlags(history, {
+        liveSession: { id: 101, startedAt: '2026-09-20T10:00:00Z', entries: liveEntries },
+      });
+    }
+
+    it('badges a set that took a record, naming which one, exactly as History does', () => {
+      const entries = [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 55, weight: 135, reps: 5, unit: 'lb' }] }];
+      renderWithQuery(
+        <SessionSummary
+          entries={entries}
+          prFlags={flagsFor(entries)}
+          loading={false}
+          sessionId={101}
+          onSelectExercise={onSelectExercise}
+          onChanged={onChanged}
+        />,
+      );
+
+      // First-ever set, so it takes both set-level records.
+      expect(screen.getByTitle('Personal record: top weight, est. 1rm')).toBeInTheDocument();
+    });
+
+    it('leaves a set that beat nothing unbadged', () => {
+      const history = [
+        {
+          id: 1,
+          startedAt: '2026-07-01T12:00:00Z',
+          entries: [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ weight: 225, reps: 8, unit: 'lb' }] }],
+        },
+      ];
+      const entries = [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 55, weight: 135, reps: 5, unit: 'lb' }] }];
+      renderWithQuery(
+        <SessionSummary
+          entries={entries}
+          prFlags={flagsFor(entries, history)}
+          loading={false}
+          sessionId={101}
+          onSelectExercise={onSelectExercise}
+          onChanged={onChanged}
+        />,
+      );
+
+      expect(screen.queryByTitle(/^Personal record/)).not.toBeInTheDocument();
+    });
+
+    // A session total belongs to the whole entry, not to any one set -- so it badges the exercise
+    // NAME, which is exactly where History puts it.
+    it('badges the exercise name, not a set, for a session-volume record', () => {
+      const entries = [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 55, weight: 135, reps: 5, unit: 'lb' }] }];
+      renderWithQuery(
+        <SessionSummary
+          entries={entries}
+          prFlags={flagsFor(entries)}
+          loading={false}
+          sessionId={101}
+          onSelectExercise={onSelectExercise}
+          onChanged={onChanged}
+        />,
+      );
+
+      expect(screen.getByLabelText('personal record: volume for Bench Press')).toBeInTheDocument();
+    });
+
+    // resilience.md axis D and the ordinary no-session case: the prop is optional and its absence
+    // must render plain rows rather than throw.
+    it('renders plain rows when no flags are supplied', () => {
+      const entries = [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 55, weight: 135, reps: 5, unit: 'lb' }] }];
+      renderWithQuery(
+        <SessionSummary entries={entries} loading={false} sessionId={101} onSelectExercise={onSelectExercise} onChanged={onChanged} />,
+      );
+
+      expect(screen.getByText('135lb×5')).toBeInTheDocument();
+      expect(screen.queryByTitle(/^Personal record/)).not.toBeInTheDocument();
+    });
+  });
+
+  // LogTab re-arms the volume-celebration latch off this -- removing an entry lowers that
+  // exercise's session-volume record, and a latch left at the old value suppresses every genuine
+  // new record below it, permanently. Reported as an argument rather than read from context here
+  // so this component stays a leaf.
+  it('reports which exercise was removed so the caller can re-arm its volume latch', async () => {
+    const entries = [{ exerciseId: 42, exerciseName: 'Bench Press', sets: [{ id: 55, weight: 135, reps: 5, unit: 'lb' }] }];
+    renderWithQuery(
+      <SessionSummary entries={entries} loading={false} sessionId={101} personId={7} onSelectExercise={onSelectExercise} onChanged={onChanged} />,
+    );
+    listSessionSets.mockResolvedValue([{ id: 55 }]);
+
+    fireEvent.click(screen.getByText('Remove'));
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(42));
   });
 });

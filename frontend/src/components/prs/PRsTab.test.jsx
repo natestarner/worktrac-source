@@ -334,15 +334,44 @@ describe('PRsTab record picker', () => {
     expect(screen.queryByText('One session')).not.toBeInTheDocument();
   });
 
-  it('shows a dash, never a zero, for an exercise the record cannot measure', async () => {
+  // ⚠️ Never a zero -- a column of "0 lb" is worse than no column. But no longer a bare em dash
+  // either: a pull-up has no top weight and still HAS a record, and a dash said "nothing here"
+  // about a row that has a number. "No record" and "no TOP WEIGHT record" looked identical, and
+  // only the second was true. The fallback is that exercise's est.-1RM record, which for a
+  // bodyweight lift is its rep count.
+  it('falls back to the record it does have, never a zero, for an exercise this measure cannot rank', async () => {
     getPrs.mockResolvedValue([pullUp]);
     mockState('heaviest');
     renderPRsTab();
 
-    await waitFor(() => expect(screen.getByText('—')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('12 reps')).toBeInTheDocument());
     // The reason is on screen, not hidden behind hover -- this app is used on an iPad.
     expect(screen.getByText('Bodyweight')).toBeInTheDocument();
     expect(screen.queryByText('0 lb')).not.toBeInTheDocument();
+    expect(screen.queryByText('—')).not.toBeInTheDocument();
+  });
+
+  // ⚠️ The fallback is DISPLAY only. measureEntry still returns null for these rows, so prSort
+  // still groups them last and never coerces them to a number -- showing a rep count must not let
+  // a pull-up outrank a genuinely light lift on a weight-based sort.
+  it('still sorts an unmeasurable row last despite now showing a number', async () => {
+    getPrs.mockResolvedValue([pullUp, loaded]);
+    mockState('heaviest');
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('12 reps')).toBeInTheDocument());
+    const names = screen.getAllByTestId('pr-row').map((r) => r.textContent);
+    expect(names[names.length - 1]).toContain('Pull-Up');
+  });
+
+  // An em dash survives for the genuinely empty case -- a row with no record at all to fall back
+  // on. That is the only thing a dash should ever have meant.
+  it('still shows a dash when there is no record to fall back on', async () => {
+    getPrs.mockResolvedValue([{ exerciseId: 12, exerciseName: 'Sled Push', best: null }]);
+    mockState('heaviest');
+    renderPRsTab();
+
+    await waitFor(() => expect(screen.getByText('—')).toBeInTheDocument());
   });
 
   it('still measures a bodyweight exercise by reps, which is its honest record', async () => {
@@ -382,12 +411,16 @@ describe('PRsTab record picker', () => {
     await waitFor(() => expect(screen.getByText('171 lb')).toBeInTheDocument());
   });
 
-  it('degrades a legacy cached row to a dash on the new records rather than throwing', async () => {
+  // resilience.md axis D: a row cached before `measures` shipped has none at all. It degrades to
+  // the est.-1RM record it does carry -- which is strictly more useful than the dash it used to
+  // show, and reads identically to any other row this measure cannot rank.
+  it('degrades a legacy cached row to the record it does have, rather than throwing', async () => {
     getPrs.mockResolvedValue([legacyRow]);
     mockState('sessionVolume');
     renderPRsTab();
 
-    await waitFor(() => expect(screen.getByText('—')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('171 lb')).toBeInTheDocument());
+    expect(screen.getByText('Not recorded')).toBeInTheDocument();
   });
 
   it('explains what the selected record counts, from the same spec the chart reads', async () => {

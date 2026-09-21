@@ -97,8 +97,8 @@ function buildColumns(onEdit) {
             fontWeight: 700,
             padding: '2px 8px',
             borderRadius: 6,
-            background: row.role === 'ADMIN' ? 'var(--color-pr-bg)' : 'var(--color-subtle-bg)',
-            color: row.role === 'ADMIN' ? 'var(--color-pr-text)' : 'var(--color-muted)',
+            background: row.role === 'ADMIN' ? 'var(--color-highlight-bg)' : 'var(--color-subtle-bg)',
+            color: row.role === 'ADMIN' ? 'var(--color-highlight-text)' : 'var(--color-muted)',
           }}
         >
           {row.role}
@@ -119,8 +119,8 @@ function buildColumns(onEdit) {
             fontWeight: 700,
             padding: '2px 8px',
             borderRadius: 6,
-            background: isPaidPlan(row.plan) ? 'var(--color-pr-bg)' : 'var(--color-subtle-bg)',
-            color: isPaidPlan(row.plan) ? 'var(--color-pr-text)' : 'var(--color-muted)',
+            background: isPaidPlan(row.plan) ? 'var(--color-highlight-bg)' : 'var(--color-subtle-bg)',
+            color: isPaidPlan(row.plan) ? 'var(--color-highlight-text)' : 'var(--color-muted)',
           }}
           title={compTooltip(row)}
         >

@@ -100,7 +100,7 @@ export default function PlusCelebration({ plan, onDismiss }) {
             width: 64,
             height: 64,
             borderRadius: '50%',
-            background: 'var(--color-pr-bg)',
+            background: 'var(--color-highlight-bg)',
             margin: '0 auto 18px',
             display: 'flex',
             alignItems: 'center',
@@ -111,7 +111,7 @@ export default function PlusCelebration({ plan, onDismiss }) {
         >
           {/* The actual mark, not a generic icon -- same reasoning as the header's Plus pill
               (PlanBadge.jsx): paying earns Huddle's own identity. No hairline override needed
-              here, unlike that pill -- this sits on var(--color-pr-bg), a normal theme-aware
+              here, unlike that pill -- this sits on var(--color-highlight-bg), a normal theme-aware
               surface rather than a fixed-light one, so the default --brand-mark-hairline is
               already right in both schemes. */}
           <HuddleMark size={40} />

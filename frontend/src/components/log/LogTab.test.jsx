@@ -85,6 +85,9 @@ function baseAppState(overrides = {}) {
     doneEditingSession: vi.fn(),
     updateEditingSession: vi.fn(),
     setExerciseSearch: vi.fn(),
+    // Passed down to SessionSummary's onChanged: removing an entry lowers that exercise's
+    // session-volume record, so the latch holding the last celebrated value has to be re-armed.
+    clearVolumePrCelebrated: vi.fn(),
     ...overrides,
   };
 }

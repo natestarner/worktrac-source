@@ -14,6 +14,9 @@ import Button from './Button';
 // exerciseId/sessionId are always taken from the caller's own context (ExerciseDetail already
 // knows both) rather than read off `set` -- a synced set carries them too, but an offline-logged,
 // not-yet-synced optimistic row never does, so this is the one code path that works for both.
+// `onSaved` fires after the durable EDIT_SET is queued. The caller does the bookkeeping an edit
+// implies -- notably re-arming the volume-celebration latch, since an edit can lower a record --
+// because this modal is a leaf with no context of its own and should stay that way.
 export default function EditSetModal({ set, personId, exerciseId, exerciseName, sessionId, onClose, onSaved }) {
   // Via context (not the app singleton) so this finds/patches whichever client actually dispatched
   // the pending logSet mutation being edited -- the same client ExerciseDetail's useMutation used.

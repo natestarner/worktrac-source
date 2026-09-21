@@ -46,7 +46,7 @@ export const successBannerStyle = {
   color: 'var(--color-text)',
 };
 
-// Was rendering on --color-pr-bg -- the personal-record celebration peach. A failure and an
+// Was rendering on --color-highlight-bg -- the personal-record celebration peach. A failure and an
 // achievement must never share a colour.
 export const errorBannerStyle = {
   ...bannerBase,

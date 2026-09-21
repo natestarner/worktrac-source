@@ -5,18 +5,19 @@ import { prSpec } from '../trends/exerciseMetrics';
 // headers and the celebration overlay. One component so a top-weight record cannot look like one
 // thing on History and another in the overlay.
 //
-// ## Shape carries the meaning; colour reinforces it
+// ## The GLYPH carries the meaning. There is exactly one record colour.
 //
-// Each PR type gets its own GLYPH and its own accessible label, and those are what distinguish the
-// types. The --color-pr-<tone>-* trios are deliberately a second signal only: measured mutual
-// separation between the three text tones is 1.05:1 - 1.43:1, so to a red-green colour-blind
-// reader -- or anyone glancing at a phone in a bright gym -- they are one colour. The acceptance
-// test is to view History in greyscale and confirm the types are still tellable apart.
+// Each record type gets its own glyph and its own accessible label, and those are the ONLY things
+// that distinguish the types. There were three --color-pr-<tone>-* trios here, and they earned
+// their removal twice over: measured mutual separation between the three text tones was
+// 1.05:1 - 1.43:1 (one colour to a red-green colour-blind reader, or to anyone glancing at a phone
+// in a bright gym), and each of them sat on top of an ALERT fill -- the est.-1RM tint was CIEDE2000
+// 2.21 from --color-danger-bg, below the just-noticeable-difference threshold. A personal record
+// was being drawn in the error colour. See index.css's --color-record-* block for the derivation.
 //
-// The tones come from the mark's own three warms (orange / rust / amber), the family the confetti
-// already uses. Picking blue/green/purple would have separated them far more cheaply and read as a
-// different app bolted on; index.css's toast comment makes the same argument about green, and the
-// confetti's middle colour WAS green once and was removed for exactly this reason.
+// So: don't reintroduce a per-type tint. If two record types need to be told apart, that is a
+// glyph problem or a label problem. The acceptance test is unchanged -- view History in greyscale
+// and confirm the three types are still tellable apart.
 //
 // ## Naming
 //
@@ -35,10 +36,6 @@ const GLYPHS = {
 // persisted UI slice or a restored cache can name a measure this build does not know.
 export function prBadgeGlyph(type) {
   return GLYPHS[type] || IconStarFilled;
-}
-
-export function prBadgeTone(type) {
-  return prSpec(type)?.tone || 'est1rm';
 }
 
 // ⚠️ What to CALL the est.-1RM record for a given set, which is not always "Est. 1RM".
@@ -68,6 +65,14 @@ export function prBadgeLabel(types, set) {
   return 'personal record: ' + names.join(', ').toLowerCase();
 }
 
+// The same name, sentence-cased for a `title` tooltip. Two call sites render this badge with a
+// hover title (History's set pills and the Log screen's set rows) and they must not each own a
+// copy of the capitalisation, or one of them drifts.
+export function prBadgeTitle(types, set) {
+  const label = prBadgeLabel(types, set);
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 // A single type's badge. `size` matches the surrounding text's optical weight; History's set pills
 // pass 12 and the overlay passes 14 with a label.
 //
@@ -78,7 +83,6 @@ export function prBadgeLabel(types, set) {
 // is (it already splits three ways to build the caption), so the caller supplies the word.
 export default function PrBadge({ type, size = 12, showLabel = false, label }) {
   const Glyph = prBadgeGlyph(type);
-  const tone = prBadgeTone(type);
   const spec = prSpec(type);
   const text = label ?? spec?.badgeLabel;
   return (
@@ -87,9 +91,9 @@ export default function PrBadge({ type, size = 12, showLabel = false, label }) {
         display: 'inline-flex',
         alignItems: 'center',
         gap: showLabel ? 'var(--space-1)' : 0,
-        color: 'var(--color-pr-' + tone + '-text)',
-        background: showLabel ? 'var(--color-pr-' + tone + '-bg)' : 'transparent',
-        border: showLabel ? '1px solid var(--color-pr-' + tone + '-border)' : 'none',
+        color: 'var(--color-record-text)',
+        background: showLabel ? 'var(--color-record-bg)' : 'transparent',
+        border: showLabel ? '1px solid var(--color-record-border)' : 'none',
         borderRadius: 'var(--radius-full)',
         padding: showLabel ? 'var(--space-1) var(--space-2)' : 0,
         fontSize: 'var(--text-2xs)',

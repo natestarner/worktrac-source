@@ -313,9 +313,19 @@ test.describe('PRs board sorting', () => {
     await expect(page.getByLabel('Record', { exact: true })).toHaveValue('heaviest');
   });
 
-  // A pull-up has no top weight at all. It must read as a dash with a reason, never "0 lb", and it
-  // must sink below every ranked row rather than tying at zero and interleaving.
-  test('an exercise the record cannot measure shows a dash and sorts last', async ({ page, request }) => {
+  // A pull-up has no top weight at all. It must never read "0 lb", it must say WHY, and it must
+  // sink below every ranked row rather than tying at zero and interleaving.
+  //
+  // ⚠️ It used to render a bare em dash here, and that is what changed (2026-09-20): a dash says
+  // "nothing here" about a row that has a record -- 12 reps -- so "this exercise has no record"
+  // and "this exercise has no TOP WEIGHT record" looked identical, and only the second was true.
+  // The row now falls back to its est.-1RM record (prMeasures.js#measureFallback), drawn in
+  // --color-muted so it can never read as the selected measure.
+  //
+  // The SORT is deliberately untouched by that, and this spec is the guard: measureEntry still
+  // returns null for these rows, so prSort still groups them last. Showing a rep count must not
+  // let a pull-up outrank a genuinely light lift on a weight-based sort.
+  test('an exercise the record cannot measure shows what it does have, and sorts last', async ({ page, request }) => {
     const email = await registerHousehold(page, request, 'Nate');
     await setBillingPlan(request, email, 'PLUS');
     await page.reload();
@@ -334,8 +344,10 @@ test.describe('PRs board sorting', () => {
       expect.stringContaining('Barbell Back Squat'),
       expect.stringContaining('Pull-up'),
     ]);
-    await expect(rows.nth(1)).toContainText('—');
+    // The record it DOES have, plus the reason this measure does not apply -- and still never a zero.
+    await expect(rows.nth(1)).toContainText('12 reps');
     await expect(rows.nth(1)).toContainText('Bodyweight');
     await expect(rows.nth(1)).not.toContainText('0 lb');
+    await expect(rows.nth(1)).not.toContainText('—');
   });
 });

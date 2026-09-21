@@ -20,7 +20,7 @@ import {
   isUnsyncedWrite,
 } from '../../lib/queryClient';
 import { cancelQueuedWritesForSet } from '../../lib/offlineSetEdits';
-import { comparableValue, computePrefillDraft, convertWeight, epley, isPrSet } from '../../utils/formulas';
+import { comparableValue, computePrefillDraft, convertWeight, epley } from '../../utils/formulas';
 import {
   crossesSessionVolume,
   isFirstEver,
@@ -28,6 +28,7 @@ import {
   setPrTypes,
   setVolumeLb,
 } from '../../utils/prDetection';
+import { buildHistoryPrFlags, liveSessionPrFlagKey } from '../../utils/historyPrFlags';
 import { resolveRestTargetSeconds } from '../../utils/restTarget';
 import {
   deriveExerciseSummaryFromHistory,
@@ -48,7 +49,7 @@ import ReadOnlyWrap from '../shared/ReadOnlyWrap';
 import { IconMore, IconNote, IconPencil, IconPin, IconStar, IconStarFilled, IconTrash } from '../shared/icons';
 import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
-import { est1rmLabelForSet } from '../shared/PrBadge';
+import PrBadge, { est1rmLabelForSet, prBadgeLabel, prBadgeTitle } from '../shared/PrBadge';
 import { tagChipStyle } from '../shared/tagChipStyle';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
@@ -97,6 +98,7 @@ export default function ExerciseDetail({
     // re-fire if displaySets ever churns mid-drain.
     volumePrCelebrated,
     recordVolumePrCelebrated,
+    clearVolumePrCelebrated,
   } = useAppState();
   // holdTimers is defaulted because it is read during RENDER: a context missing it would throw
   // mid-render, and a render-time throw has to be contained rather than allowed to white-screen the
@@ -543,7 +545,7 @@ export default function ExerciseDetail({
   // instead of flickering onto a tying row and back off.
   // Not memoized on purpose: displaySets is rebuilt every render, so a useMemo keyed on it would
   // never hit. The fold is O(sets logged for this exercise this session) -- a handful of rows.
-  const effectiveBest = mergeBestWithLocalSets(summary?.best ?? null, displaySets);
+  const effectiveBest = mergeBestWithLocalSets(summary?.best ?? null, displaySets, liveSession?.startedAt);
 
   // The same fold, one measure over, for the top-weight record. Both bests have to see the sets
   // on screen that have not synced, or a PR logged offline goes uncelebrated and the NEXT, lighter
@@ -553,6 +555,26 @@ export default function ExerciseDetail({
     summary?.heaviestWeightLb == null ? null : Number(summary.heaviestWeightLb),
     displaySets,
   );
+
+  // WHICH RECORDS EACH ROW BELOW TOOK -- the same derivation History uses, filtered to this
+  // exercise so it is not a whole-history walk on the app's hottest screen.
+  //
+  // This replaced formulas.js#isPrSet, which asked a different question ("is this my best", a
+  // +-0.5 TIE) and therefore gave a different answer: hitting your best three times pilled all
+  // three rows here and badged one row on History. One idea must not have two answers depending
+  // on the tab. It also only ever knew about est. 1RM, so a top-weight record went unmarked here
+  // while History marked it.
+  //
+  // displaySets, not sessionSets: offline `onMutate` writes no optimistic sessionSets row at all,
+  // so pendingBeforeSession is the only source for those rows -- the same reason effectiveBest
+  // folds displaySets. That is what makes a record set with no signal badge immediately.
+  //
+  // Not memoized, for the same reason effectiveBest isn't: displaySets is rebuilt every render, so
+  // a useMemo keyed on it would never hit.
+  const prMarksForSession = buildHistoryPrFlags(history, {
+    exerciseId: exercise.id,
+    liveSession: { id: contextSessionId, startedAt: liveSession?.startedAt, entries: [{ exerciseId: exercise.id, sets: displaySets }] },
+  }).setMarks.get(liveSessionPrFlagKey(contextSessionId, exercise.id)) || [];
 
   // What the DATA says this exercise should prefill to: the same set-index in the most recent
   // prior session, else the last set logged today, else blank. Computed during render, not in an
@@ -914,6 +936,11 @@ export default function ExerciseDetail({
     // while the mutation is paused offline; the local cache removal above is synchronous, so the
     // dialog closes right away.
     deleteSetMutation.mutate({ setId: set.id, personId, sessionId: contextSessionId, exerciseId: exercise.id, exerciseName: exercise.name });
+    // Re-arm the volume-celebration latch for this exercise. Editing a set down (or deleting one)
+    // can LOWER the all-time session-volume record, and the latch holds the value last celebrated
+    // -- left alone it would suppress every genuine new record below that old high-water mark, for
+    // good, since it is persisted. See PERSON_DEFAULTS.volumePrCelebrated.
+    clearVolumePrCelebrated(exercise.id);
   }
 
   const lastLabel = summary?.lastSession ? formatDateLabel(toLocalDateStr(summary.lastSession.startedAt)) : '';
@@ -929,31 +956,64 @@ export default function ExerciseDetail({
       ? formatSetSpaced(effectiveBest)
       : `${effectiveBest.est1rm} ${effectiveBest.unit}  (${effectiveBest.weight}${effectiveBest.unit}×${effectiveBest.reps})`;
   const bestCardLabel = isDuration ? 'Best · Longest hold' : 'Best · Est. 1RM';
+  // The same pair `lastLabel` uses above -- toLocalDateStr first, because slicing a UTC ISO string
+  // directly lands on the wrong day either side of midnight (see utils/datetime.js).
+  const bestDateLabel = effectiveBest?.sessionStartedAt
+    ? formatDateLabel(toLocalDateStr(effectiveBest.sessionStartedAt))
+    : '';
 
   const bestComparable = effectiveBest ? comparableValue(effectiveBest) : null;
 
-  // "1 more rep for a PR" -- the nudge, shown under the steppers while the numbers on screen are
-  // CLOSE to a record but not yet one.
+  // The nudge under the steppers: how much more the numbers ON SCREEN need before they take a
+  // record, or -- once they already would -- that they already do.
   //
   // This is the highest-leverage thing on the screen because it is actionable at the moment of
   // action: it answers "is this set worth one more rep" before the set, not after it. It is
   // derived during render from effectiveBest -- which already folds in sets that have not synced
   // -- so it works in every connectivity mode by one code path, with no fetch behind it.
   //
+  // ⚠️ IT NAMES THE RECORD, and the name is not always "Est. 1RM". This measures
+  // comparableValue, which substitutes a rep count at weight 0 and seconds for a hold, so
+  // est1rmLabelForSet supplies the right word for the draft on screen -- the same derivation the
+  // badge on the row below and the celebration overlay use. .claude/rules/trends.md is explicit:
+  // name all three cases, or name none. Unnamed, "1 more rep for a PR" was ambiguous against the
+  // other record types the app now marks -- it never meant top weight or volume, and said so
+  // nowhere.
+  //
+  // ⚠️ THE ARRIVED CASE IS THE WHOLE POINT OF THE FIRST BRANCH. The rep search below
+  // starts at gap = 1 and never tested the CURRENT numbers, so once the draft already beat the
+  // record it still reported "1 more rep for a PR" -- the count never reached zero, and no number
+  // of extra reps ever made it say so. The duration branch always had this guard; the rep branch
+  // did not.
+  //
   // Bounded to REACHABLE gaps on purpose. "23 more reps for a PR" is not encouragement, it is a
   // reminder of how far off you are, and it would be on screen for every warm-up set of every
   // exercise. Silence is the right answer far more often than a number is.
   const prHint = (() => {
     if (bestComparable == null) return null; // nothing to beat yet
+    // The draft as a set, so both the measure and its NAME come from the same place the row badge
+    // and the celebration read.
+    const draftSet = isDuration
+      ? { weight: Number(weightValue) || 0, reps: 0, durationSeconds: durationValue, unit: defaultUnit }
+      : { weight: Number(weightValue) || 0, reps: Number(repsValue) || 0, unit: defaultUnit };
+    const recordName = est1rmLabelForSet(draftSet);
+    // "a Est. 1RM PR" is wrong and "an Longest hold PR" is wrong; which one applies depends on the
+    // record's name, which varies by set shape. Sounded from the first letter -- "Est." reads
+    // "ess", so it takes "an".
+    const article = /^[AEIOU]/.test(recordName) ? 'an' : 'a';
+    const current = comparableValue(draftSet);
+    if (Number.isFinite(current) && current > bestComparable) {
+      return { arrived: true, text: `This would be ${article} ${recordName} PR` };
+    }
     if (isDuration) {
       const seconds = durationValue;
-      if (!Number.isFinite(seconds) || seconds > bestComparable) return null;
+      if (!Number.isFinite(seconds)) return null;
       const needed = Math.floor(bestComparable) + 1 - seconds;
       if (needed <= 0 || needed > MAX_HINT_SECONDS) return null;
-      return `${formatRestTime(needed)} longer for a PR`;
+      return { arrived: false, text: `${formatRestTime(needed)} longer for ${article} ${recordName} PR` };
     }
-    const weight = Number(weightValue) || 0;
-    const reps = Number(repsValue) || 0;
+    const weight = draftSet.weight;
+    const reps = draftSet.reps;
     // ⚠️ Searched forward through comparableValue rather than solved algebraically, and both
     // reasons are load-bearing:
     //
@@ -969,7 +1029,8 @@ export default function ExerciseDetail({
     for (let gap = 1; gap <= MAX_HINT_REPS; gap += 1) {
       const candidate = comparableValue({ weight, reps: reps + gap, unit: defaultUnit });
       if (candidate > bestComparable) {
-        return gap === 1 ? '1 more rep for a PR' : `${gap} more reps for a PR`;
+        const noun = gap === 1 ? '1 more rep' : `${gap} more reps`;
+        return { arrived: false, text: `${noun} for ${article} ${recordName} PR` };
       }
     }
     return null;
@@ -1100,8 +1161,10 @@ export default function ExerciseDetail({
                 <Skeleton width={90} height={11} style={{ marginBottom: 8 }} />
                 <Skeleton width={110} height={20} />
               </div>
-              <div className="summary-card" style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 'var(--radius-lg)' }}>
-                <Skeleton width={100} height={11} style={{ marginBottom: 8 }} />
+              <div className="summary-card" style={{ background: 'var(--color-record-bg)', border: '1px solid var(--color-record-border)', borderRadius: 'var(--radius-lg)' }}>
+                {/* 140, not 100: this label now carries a date ("Best · Est. 1RM · Sep 12"), and a
+                    skeleton narrower than the text it stands in for makes the card jump on load. */}
+                <Skeleton width={140} height={11} style={{ marginBottom: 8 }} />
                 <Skeleton width={130} height={20} />
               </div>
             </div>
@@ -1163,9 +1226,16 @@ export default function ExerciseDetail({
                   </div>
                 )}
               </div>
-              <div className="summary-card" style={{ background: 'var(--color-pr-bg)', border: '1px solid var(--color-pr-border)', borderRadius: 'var(--radius-lg)' }}>
-                <div style={{ ...cardLabelStyle, color: 'var(--color-pr-text)' }}>{bestCardLabel}</div>
-                <div className="summary-card-value" style={{ fontWeight: 700, color: 'var(--color-pr-text)' }}>{bestText}</div>
+              <div className="summary-card" style={{ background: 'var(--color-record-bg)', border: '1px solid var(--color-record-border)', borderRadius: 'var(--radius-lg)' }}>
+                {/* The separator belongs to the date, for the same reason it does on the "Last
+                    time" tile: a best merged from a set that predates this field (a query cache
+                    written before it shipped) has no date, and a bare "Best · Est. 1RM ·" leaves a
+                    middot dangling off the end of the card. */}
+                <div style={{ ...cardLabelStyle, color: 'var(--color-record-text)' }}>
+                  {bestCardLabel}
+                  {bestDateLabel && ` · ${bestDateLabel}`}
+                </div>
+                <div className="summary-card-value" style={{ fontWeight: 700, color: 'var(--color-record-text)' }}>{bestText}</div>
               </div>
             </div>
           )}
@@ -1272,13 +1342,21 @@ export default function ExerciseDetail({
                 role="status"
                 style={{
                   marginBottom: 'var(--space-2)',
-                  textAlign: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 'var(--space-1)',
                   fontSize: 'var(--text-sm)',
                   fontWeight: 'var(--weight-semibold)',
-                  color: 'var(--color-pr-est1rm-text)',
+                  color: 'var(--color-record-text)',
                 }}
               >
-                {prHint}
+                {/* The glyph appears only once the draft HAS the record, so the line reads as the
+                    same event the row below is about to show -- same icon, same tint. While still
+                    counting down it stays text-only; a record glyph over a set you have not done
+                    yet would be claiming something untrue. */}
+                {prHint.arrived && <IconStarFilled size={14} />}
+                {prHint.text}
               </div>
             )}
             {/* The screen's one primary action, and the only place size="lg" is used on
@@ -1329,7 +1407,10 @@ export default function ExerciseDetail({
                   // reverse only the rendering, not the numbering, so the most recently logged
                   // set shows on top.
                   const setNumber = displaySets.length - i;
-                  const isPR = isPrSet(set, bestComparable);
+                  // prMarksForSession is index-aligned to displaySets (oldest-first); this list is
+                  // reversed for display only, so index back through the same arithmetic that
+                  // produces setNumber rather than reversing the marks too.
+                  const prTypes = prMarksForSession[setNumber - 1] || [];
                   // One identity for the row's whole life. A confirmed row seeded by LOG_SET's
                   // onSettled carries the tempId its optimistic predecessor was keyed on, so the
                   // temp -> real swap updates the row in place instead of unmounting it and
@@ -1364,23 +1445,23 @@ export default function ExerciseDetail({
                         <div style={{ fontSize: 'var(--text-lg)', fontWeight: 'var(--weight-bold)', color: 'var(--color-text)' }}>
                           {formatSetSpaced(set)}
                         </div>
-                        {isPR && (
-                          // title/aria-label mirror SetPillRow's PR pill -- "PR" alone is
-                          // ambiguous to a screen reader, and colour alone isn't accessible.
+                        {prTypes.length > 0 && (
+                          // The same glyphs, the same tint and the same accessible name History's
+                          // set pills use -- one PrBadge, so a top-weight record cannot look like
+                          // one thing here and another there. This was a green "PR" text token,
+                          // which made green mean "record" on two screens while the other three
+                          // used the warm palette, and which never said WHICH record fell.
+                          //
+                          // The set is passed so an est.-1RM record on a pull-up reads "most reps"
+                          // and on a plank "longest hold" -- see est1rmLabelForSet.
                           <span
-                            title="Personal record"
-                            aria-label="Personal record"
-                            style={{
-                              background: 'var(--color-success-bg)',
-                              color: 'var(--color-success)',
-                              fontSize: 'var(--text-2xs)',
-                              fontWeight: 'var(--weight-bold)',
-                              padding: 'var(--space-1) var(--space-2)',
-                              borderRadius: 'var(--radius-full)',
-                              letterSpacing: 'var(--tracking-label)',
-                            }}
+                            title={prBadgeTitle(prTypes, set)}
+                            aria-label={prBadgeLabel(prTypes, set)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)' }}
                           >
-                            PR
+                            {prTypes.map((type) => (
+                              <PrBadge key={type} type={type} size={14} />
+                            ))}
                           </span>
                         )}
                       </div>
@@ -1480,7 +1561,13 @@ export default function ExerciseDetail({
           exerciseName={exercise.name}
           sessionId={contextSessionId}
           onClose={() => setEditingSet(null)}
-          onSaved={() => setEditingSet(null)}
+          onSaved={() => {
+            setEditingSet(null);
+            // Re-arm the volume-celebration latch: an edit can lower this exercise's all-time
+            // session-volume record, and a latch left at the old value would suppress every
+            // genuine new record below it, permanently. See PERSON_DEFAULTS.volumePrCelebrated.
+            clearVolumePrCelebrated(exercise.id);
+          }}
         />
       )}
 
@@ -1586,9 +1673,9 @@ function setupPillStyle(value) {
     minHeight: 32,
     padding: 'var(--space-1) var(--space-3)',
     borderRadius: 'var(--radius-full)',
-    border: `1px solid ${value ? 'var(--color-border)' : 'var(--color-pr-border)'}`,
-    background: value ? 'var(--color-bg)' : 'var(--color-pr-bg)',
-    color: value ? 'var(--color-text)' : 'var(--color-pr-text)',
+    border: `1px solid ${value ? 'var(--color-border)' : 'var(--color-highlight-border)'}`,
+    background: value ? 'var(--color-bg)' : 'var(--color-highlight-bg)',
+    color: value ? 'var(--color-text)' : 'var(--color-highlight-text)',
     fontSize: 'var(--text-xs)',
     fontWeight: 'var(--weight-semibold)',
     cursor: 'pointer',

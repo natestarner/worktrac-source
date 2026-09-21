@@ -79,6 +79,12 @@ function typedDraft({ weight = 135, reps = 8, exerciseId = exercise.id } = {}) {
     // which is the state every one of these tests starts a workout in.
     volumePrCelebrated: {},
     recordVolumePrCelebrated: vi.fn(),
+    // Called on every set edit and delete, because either can LOWER the all-time session-volume
+    // record and leave this latch suppressing every genuine new one below it. Omitting it here
+    // does not fail a test -- it throws out of an event handler, which Vitest reports as an
+    // unhandled `Errors 1` beside a green `Tests` line, and CI fails on it while a casual read of
+    // the summary does not.
+    clearVolumePrCelebrated: vi.fn(),
   };
 }
 
@@ -402,7 +408,7 @@ describe('ExerciseDetail close-to-a-PR hint', () => {
     useAppState.mockReturnValue(typedDraft({ weight: 135, reps: 9 }));
     renderExerciseDetail();
 
-    expect(await screen.findByText('2 more reps for a PR')).toBeInTheDocument();
+    expect(await screen.findByText('2 more reps for an Est. 1RM PR')).toBeInTheDocument();
   });
 
   it('singularizes at one rep', async () => {
@@ -410,7 +416,25 @@ describe('ExerciseDetail close-to-a-PR hint', () => {
     useAppState.mockReturnValue(typedDraft({ weight: 135, reps: 10 }));
     renderExerciseDetail();
 
-    expect(await screen.findByText('1 more rep for a PR')).toBeInTheDocument();
+    expect(await screen.findByText('1 more rep for an Est. 1RM PR')).toBeInTheDocument();
+  });
+
+  // ⚠️ The hint NAMES the record, and the name is not always "Est. 1RM": the measure behind it is
+  // comparableValue, which substitutes a rep count at weight 0 and seconds for a hold. Naming it
+  // "Est. 1RM" on a pull-up is the "rep count wearing a costume" mistake .claude/rules/trends.md
+  // exists to prevent. The other two shapes are covered below and in the duration suite.
+  it('takes the article from the record name rather than hardcoding one', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 0, reps: 12, unit: 'lb', est1rm: 0 },
+      heaviestWeightLb: 0,
+      bestSessionVolumeLb: null,
+    });
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 11 }));
+    renderExerciseDetail();
+
+    // "a Most reps", not "an Most reps" -- and correspondingly "an Est. 1RM" above.
+    expect(await screen.findByText('2 more reps for a Most reps PR')).toBeInTheDocument();
   });
 
   // ⚠️ Silence is the right answer far more often than a number is. Without the bound this would
@@ -421,16 +445,35 @@ describe('ExerciseDetail close-to-a-PR hint', () => {
     renderExerciseDetail();
 
     await screen.findByText('Log set');
-    expect(screen.queryByText(/for a PR/)).not.toBeInTheDocument();
+    // Covers both shapes the hint can take -- a countdown and the arrived message.
+    expect(screen.queryByText(/PR/)).not.toBeInTheDocument();
   });
 
-  it('stays quiet once the draft already beats the record', async () => {
+  // ⚠️ THIS IS THE BUG THE HINT SHIPPED WITH, and the assertion is deliberately the opposite of
+  // what it used to be. The rep search starts at gap = 1 and never tested the CURRENT numbers, so
+  // once the draft already beat the record it still reported "1 more rep for a PR": the count
+  // never reached zero, and no number of extra reps ever made it say so. It read as broken
+  // because it was. The duration branch always had this guard; the rep branch did not.
+  //
+  // Note the old test passed against the bug: it queried /for a PR/, which "1 more rep for a PR"
+  // matches -- so it asserted silence while the screen said something wrong.
+  it('says the draft would take the record once it already beats it', async () => {
     bestOf135x10();
     useAppState.mockReturnValue(typedDraft({ weight: 225, reps: 5 }));
     renderExerciseDetail();
 
-    await screen.findByText('Log set');
-    expect(screen.queryByText(/for a PR/)).not.toBeInTheDocument();
+    expect(await screen.findByText('This would be an Est. 1RM PR')).toBeInTheDocument();
+    expect(screen.queryByText(/more rep/)).not.toBeInTheDocument();
+  });
+
+  // The boundary itself: exactly tying the record is not beating it, so the countdown still shows.
+  it('still counts down when the draft exactly ties the record', async () => {
+    bestOf135x10();
+    useAppState.mockReturnValue(typedDraft({ weight: 135, reps: 10 }));
+    renderExerciseDetail();
+
+    expect(await screen.findByText('1 more rep for an Est. 1RM PR')).toBeInTheDocument();
+    expect(screen.queryByText(/This would be/)).not.toBeInTheDocument();
   });
 
   it('stays quiet when there is no record to beat yet', async () => {
@@ -439,7 +482,8 @@ describe('ExerciseDetail close-to-a-PR hint', () => {
     renderExerciseDetail();
 
     await screen.findByText('Log set');
-    expect(screen.queryByText(/for a PR/)).not.toBeInTheDocument();
+    // Covers both shapes the hint can take -- a countdown and the arrived message.
+    expect(screen.queryByText(/PR/)).not.toBeInTheDocument();
   });
 
   // ⚠️ Past the 12-rep cap the estimate stops rising, so for a heavy enough record NO number of
@@ -458,7 +502,8 @@ describe('ExerciseDetail close-to-a-PR hint', () => {
     renderExerciseDetail();
 
     await screen.findByText('Log set');
-    expect(screen.queryByText(/for a PR/)).not.toBeInTheDocument();
+    // Covers both shapes the hint can take -- a countdown and the arrived message.
+    expect(screen.queryByText(/PR/)).not.toBeInTheDocument();
   });
 
   // At weight 0 the comparable IS the rep count, so the arithmetic that divides by weight would
@@ -473,7 +518,7 @@ describe('ExerciseDetail close-to-a-PR hint', () => {
     useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 12 }));
     renderExerciseDetail();
 
-    expect(await screen.findByText('1 more rep for a PR')).toBeInTheDocument();
+    expect(await screen.findByText('1 more rep for a Most reps PR')).toBeInTheDocument();
   });
 });
 
@@ -1378,8 +1423,14 @@ describe('ExerciseDetail PR badge folds in sets that have not synced yet', () =>
 
       // The offline set beats the warmed best, so it is the PR -- and the Best card must move
       // with it, even though `history` cannot know about it until the outbox drains.
-      expect(within(rowFor('185 lb × 8')).getByTitle('Personal record')).toBeInTheDocument();
+      expect(within(rowFor('185 lb × 8')).getByTitle(/^Personal record/)).toBeInTheDocument();
       expect(screen.getByText(/234.3 lb\s*\(185lb×8\)/)).toBeInTheDocument();
+
+      // ⚠️ It NAMES which records fell, exactly as History does -- this row took both, because
+      // 185 beats the 135 top weight as well as the 171 est. 1RM. The old green "PR" token said
+      // only "Personal record" and knew about est. 1RM alone, so a top-weight record went
+      // unmarked here while History marked it.
+      expect(within(rowFor('185 lb × 8')).getByTitle('Personal record: top weight, est. 1rm')).toBeInTheDocument();
 
       draftWeight = 135;
       fireEvent.click(screen.getByText('force render'));
@@ -1391,9 +1442,9 @@ describe('ExerciseDetail PR badge folds in sets that have not synced yet', () =>
 
       // The lighter set ties the PRE-offline best (171) but not the real one (234.3). Exactly one
       // badge, and it is still on the 185 row.
-      expect(screen.getAllByTitle('Personal record')).toHaveLength(1);
-      expect(within(rowFor('185 lb × 8')).getByTitle('Personal record')).toBeInTheDocument();
-      expect(within(rowFor('135 lb × 8')).queryByTitle('Personal record')).not.toBeInTheDocument();
+      expect(screen.getAllByTitle(/^Personal record/)).toHaveLength(1);
+      expect(within(rowFor('185 lb × 8')).getByTitle(/^Personal record/)).toBeInTheDocument();
+      expect(within(rowFor('135 lb × 8')).queryByTitle(/^Personal record/)).not.toBeInTheDocument();
       expect(logLiveSet).not.toHaveBeenCalled();
     } finally {
       onlineManager.setOnline(true);
@@ -1415,7 +1466,7 @@ describe('ExerciseDetail PR badge folds in sets that have not synced yet', () =>
     expect(await screen.findByText('185 lb × 8')).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByText(/234.3 lb\s*\(185lb×8\)/)).toBeInTheDocument());
-    expect(within(rowFor('185 lb × 8')).getByTitle('Personal record')).toBeInTheDocument();
+    expect(within(rowFor('185 lb × 8')).getByTitle(/^Personal record/)).toBeInTheDocument();
   });
 
   // The fold is a max over what is on screen, so it can only ever RAISE the best -- it must never
@@ -1449,7 +1500,7 @@ describe('ExerciseDetail PR badge folds in sets that have not synced yet', () =>
       expect(await screen.findByText('185 lb × 8')).toBeInTheDocument();
 
       expect(screen.getByText(/285 lb\s*\(225lb×8\)/)).toBeInTheDocument();
-      expect(screen.queryByTitle('Personal record')).not.toBeInTheDocument();
+      expect(screen.queryByTitle(/^Personal record/)).not.toBeInTheDocument();
     } finally {
       onlineManager.setOnline(true);
     }

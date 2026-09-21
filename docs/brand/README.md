@@ -115,6 +115,6 @@ in there are derived rather than chosen:
 
 One more trap, found by rendering it rather than reasoning about it: the success emails' check
 circle must not be `#F2EDE1`. That is the card colour, so the circle vanishes and leaves a
-checkmark floating in space. It is `#FBE9E0` (the app's `--color-pr-bg`) on light and `#3A2417`
+checkmark floating in space. It is `#FBE9E0` (the app's `--color-highlight-bg`) on light and `#3A2417`
 on dark, with the check in rust `#B5542D` / `#E8935F` — the app's own celebration pair, which is
 also the right meaning for "You're all set!".

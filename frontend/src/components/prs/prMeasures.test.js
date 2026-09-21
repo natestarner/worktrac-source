@@ -229,9 +229,12 @@ describe('measureUnavailableCaption', () => {
       );
     });
 
-    // ⚠️ "+N more" counts SETS, not runs. A row whose one visible run collapses eight sets would
-    // otherwise claim far less work than it actually holds.
-    it('counts remaining SETS, not remaining runs', () => {
+    // ⚠️ EVERY run the server sent is rendered. There used to be a second, tighter client cap of
+    // three runs, whose "+N more" tail was honest about the count but pointed at sets there was no
+    // way to see: the row is one button that opens a destination chooser, so the tail was not
+    // tappable and nothing else revealed them. Showing the work IS the feature -- it is what
+    // distinguishes a real heavy day from ten junk sets of an empty bar.
+    it('shows every run the server sent, with no client-side cap', () => {
       const row = withBreakdown(
         [
           { weightLb: 135, reps: 10, durationSeconds: null, count: 1 },
@@ -241,9 +244,25 @@ describe('measureUnavailableCaption', () => {
         ],
         8,
       );
-      // Three runs shown = three sets accounted for; the other five are the tail.
       expect(formatPrMeasure(measureEntry(row, 'sessionVolume'), 'sessionVolume', row, 'lb').caption).toBe(
-        '135lb×10, 155lb×8, 165lb×8 +5 more',
+        '135lb×10, 155lb×8, 165lb×8, 5×175lb×6',
+      );
+    });
+
+    // ⚠️ "+N more" SURVIVES, and now means the only thing it can: the SERVER truncated
+    // (MAX_PR_BREAKDOWN_RUNS). setCount is the true total, so the tail never understates the work
+    // -- and it still counts SETS, not runs, or a row whose one visible run collapses eight sets
+    // would claim far less than it holds.
+    it('still tails honestly when the server itself truncated, counting SETS not runs', () => {
+      const row = withBreakdown(
+        [
+          { weightLb: 135, reps: 10, durationSeconds: null, count: 1 },
+          { weightLb: 155, reps: 8, durationSeconds: null, count: 3 },
+        ],
+        9, // the server sent 2 runs covering 4 sets, but the session really held 9
+      );
+      expect(formatPrMeasure(measureEntry(row, 'sessionVolume'), 'sessionVolume', row, 'lb').caption).toBe(
+        '135lb×10, 3×155lb×8 +5 more',
       );
     });
 

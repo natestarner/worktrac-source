@@ -39,9 +39,19 @@ so "Volume" cannot mean a session total on one and a single set on the other, an
 ships with `recordMeaning` + `sortLabel` + `pr` alongside `dotMeaning` — on the spec, never in a
 parallel table.
 
-The `pr` block is `{ scope, celebrates, badgeLabel, tone }`. `scope: 'set'` badges an individual
-set pill in History; `scope: 'session'` badges the exercise **entry header** instead, because no
-single set is the answer to a session total. `CELEBRATED_PR_TYPES` is **derived** from
+The `pr` block is `{ scope, celebrates, badgeLabel }`. `scope: 'set'` badges an individual
+set pill; `scope: 'session'` badges the exercise **entry header** instead, because no single set is
+the answer to a session total. Both apply on History *and* on the Log tab's "Session exercises"
+list, which is the same entry shape.
+
+**There is deliberately no `tone` any more** (removed 2026-09-20). Every record renders in the one
+`--color-record-*` trio and the GLYPH carries the type. The three per-type trios failed twice at
+once: they were 1.05:1–1.43:1 apart from each other (indistinguishable), and each one sat on top of
+an **alert** fill — `--color-pr-est1rm-bg` was CIEDE2000 **2.21** from `--color-danger-bg`, below
+the just-noticeable-difference threshold, so a personal record was drawn in the error colour. The
+derivation and the measured margins are in `index.css`'s `--color-record-*` block. Don't
+reintroduce a per-type tint: if two record types need telling apart, that is a glyph or a label
+problem. `CELEBRATED_PR_TYPES` is **derived** from
 `celebrates`, so a measure cannot be marked celebrated and then be silently missing from detection.
 Only `est1rm`, `heaviest` and `sessionVolume` celebrate: `bestSetVolume` is a third scoring of the
 same single set the other two already score, and `totalReps` rewards reps irrespective of load.
@@ -52,9 +62,16 @@ Where they legitimately differ is **filtering**, and it is the one divergence to
 - The chart shows ONE exercise, so `visibleMetricOptions` can hide the weight-derived metrics
   outright for a bodyweight lift.
 - The board is a MIX of exercises and its picker is board-wide, so applicability is decided per
-  row instead: `measureEntry` returns **null**, and the row renders an em dash with a caption
-  naming why. **Do not filter the board's picker** — that would hide "Top weight" from every row
-  because one pull-up cannot use it.
+  row instead: `measureEntry` returns **null**, and the row renders a caption naming why. **Do not
+  filter the board's picker** — that would hide "Top weight" from every row because one pull-up
+  cannot use it.
+- **A null row no longer renders a bare em dash.** `prMeasures.js#measureFallback` shows that
+  exercise's est.-1RM record instead — the one measure that always exists, with the weight-0 → reps
+  and hold → seconds substitutions already baked in. A pull-up has no top weight and still has a
+  record; a dash said "nothing here" about a row that has a number, and "no record" and "no *top
+  weight* record" looked identical. It is drawn in `--color-muted`, never the record colour, so it
+  cannot read as the selected measure. **This is display only** — `measureEntry` still returns
+  null, so the sorting rule below is untouched. An em dash remains for the genuinely empty case.
 - A null entry **sorts last**, grouped and name-ordered, and is never coerced to 0. Treating it as
   a number interleaves unrankable rows through the ranking, putting a pull-up above a genuinely
   light lift — the generalization of the bodyweight grouping `sortPrRows` has always done.
@@ -71,9 +88,16 @@ it is the set `comparableValue` picks, substitutions and all. Two copies of one 
 answer — but "One session" as the whole caption was unreadable: nothing distinguished a genuine
 heavy day from ten junk sets of an empty bar, which is exactly how a volume record gets gamed.
 
-- **Capped at `MAX_PR_BREAKDOWN_RUNS` (6) server-side**, and at 3 runs client-side with an honest
-  `+N more`. This rides on `/prs` — a row per exercise — which `offlineCacheWarm` persists to
-  IndexedDB, so an uncapped breakdown grows that blob without bound.
+- **Capped at `MAX_PR_BREAKDOWN_RUNS` (10) server-side, and nowhere else.** This rides on `/prs` —
+  a row per exercise — which `offlineCacheWarm` persists to IndexedDB, so an uncapped breakdown
+  grows that blob without bound. The **client's** second cap of 3 runs was removed (2026-09-20):
+  its `+N more` tail was honest about the count but pointed at sets there was no way to see, since
+  the row is one button that opens a destination chooser and the tail was not tappable. Showing the
+  work *is* the feature, so a caption you cannot finish reading defeats it. The server cap went
+  6 → 10 to compensate, which is affordable because runs are collapsed.
+- **A session-level caption takes its own full-width line** on the row (`captionOnOwnLine`, keyed
+  on `prSpec(measure).scope`), because an uncapped breakdown does not fit the 58%-wide right-hand
+  column it shares with a value and a chevron.
 - **`+N more` counts SETS, not runs.** A row whose one visible run collapses eight sets would
   otherwise claim far less work than it holds.
 - **It folds into `buildPrMeasures`'s existing pass**; `getPrList` has already loaded and grouped

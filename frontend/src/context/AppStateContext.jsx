@@ -116,9 +116,16 @@ const PERSON_DEFAULTS = {
   // running total would dip back below the record and re-arm the crossing. Monotonic per
   // exercise, so a repeat is impossible.
   //
-  // It needs no clearing between workouts. A later session has to beat the ALL-TIME record, which
-  // is greater than or equal to whatever was last celebrated, so the guard can never suppress a
-  // genuine new record -- and not clearing it is also what makes it survive a reload.
+  // It needs no clearing between WORKOUTS: a later session has to beat the all-time record, which
+  // is >= whatever was last celebrated, so the guard cannot suppress a genuine new record -- and
+  // not clearing it is what makes it survive a reload.
+  //
+  // ⚠️ That argument holds only while records go UP, and a record can go down. Delete or edit down
+  // the session that set a volume record and the all-time record falls below this latch, which
+  // then suppresses every genuine new record beneath the old high-water mark -- permanently, since
+  // this is persisted and nothing else ever cleared it. CLEAR_VOLUME_PR_CELEBRATED re-arms one
+  // exercise, and every set edit/delete dispatches it. The crossing test in prDetection.js is
+  // still the mechanism; re-arming is safe because that test, not this latch, decides.
   //
   // Per person AND per exercise: two people on one iPad, each mid-workout, must not interfere.
   volumePrCelebrated: {},
@@ -244,6 +251,19 @@ export function reducer(state, action) {
       return updateActive(state, { prsSort: action.sort });
     case 'SET_PRS_MEASURE':
       return updateActive(state, { prsMeasure: action.measure });
+    // Re-arm ONE exercise's volume-celebration latch, because the record it was holding may no
+    // longer exist: editing a set down or deleting one lowers the all-time best, and a latch left
+    // at the old value silently suppresses every later record below it. Scoped to the exercise
+    // whose sets changed -- clearing the whole map would re-fire celebrations for exercises
+    // nothing touched.
+    case 'CLEAR_VOLUME_PR_CELEBRATED': {
+      if (action.exerciseId == null) return state;
+      const current = state.byPerson[state.activePersonId]?.volumePrCelebrated || {};
+      if (!(action.exerciseId in current)) return state;
+      const next = { ...current };
+      delete next[action.exerciseId];
+      return updateActive(state, { volumePrCelebrated: next });
+    }
     // Merges rather than replaces -- one exercise's latch must never clear another's, and a
     // person can move between exercises freely within one workout.
     case 'RECORD_VOLUME_PR_CELEBRATED': {
@@ -436,6 +456,8 @@ export function AppStateProvider({ children }) {
       setPrsMeasure: (measure) => dispatch({ type: 'SET_PRS_MEASURE', measure }),
       recordVolumePrCelebrated: (exerciseId, volumeLb) =>
         dispatch({ type: 'RECORD_VOLUME_PR_CELEBRATED', exerciseId, volumeLb }),
+      clearVolumePrCelebrated: (exerciseId) =>
+        dispatch({ type: 'CLEAR_VOLUME_PR_CELEBRATED', exerciseId }),
       setDraft: ({ exerciseId, weight, reps, durationSeconds, setCount, source }) =>
         dispatch({ type: 'SET_DRAFT', exerciseId, weight, reps, durationSeconds, setCount, source }),
       setHoldStartedAt: (startedAt) => dispatch({ type: 'SET_HOLD_STARTED_AT', startedAt }),

@@ -29,7 +29,12 @@
 //                             in History instead; no single set is the answer
 //   celebrates  whether beating it raises the celebration overlay
 //   badgeLabel  the human name used by the badge, the overlay row and the accessible label
-//   tone        selects the --color-pr-<tone>-* token trio (see index.css)
+//
+// There is deliberately NO `tone` here any more. Every record renders in the single
+// --color-record-* trio and the GLYPH says which type it is -- see PrBadge.jsx. A per-type tone
+// failed twice at once: the three were 1.05:1 - 1.43:1 apart (indistinguishable), and each sat on
+// top of an alert fill (the est.-1RM tint was CIEDE2000 2.21 from --color-danger-bg, below the
+// just-noticeable-difference threshold, so a record was drawn in the error colour).
 //
 // Only three measures celebrate. `bestSetVolume` is a third scoring of the same single set that
 // est1rm and heaviest already score, so it fires alongside them almost every time and adds noise
@@ -46,7 +51,7 @@ export const EXERCISE_METRICS = {
     isWeight: true,
     title: 'est. 1RM',
     sortLabel: 'Best est. 1RM',
-    pr: { scope: 'set', celebrates: true, badgeLabel: 'Est. 1RM', tone: 'est1rm' },
+    pr: { scope: 'set', celebrates: true, badgeLabel: 'Est. 1RM' },
     dotMeaning:
       'Each dot is that session’s best single set, scored by estimated 1RM: one number that ' +
       'combines the weight and the reps, counting at most 12 reps. A bodyweight exercise has no ' +
@@ -63,7 +68,7 @@ export const EXERCISE_METRICS = {
     isWeight: true,
     title: 'heaviest weight',
     sortLabel: 'Heaviest weight',
-    pr: { scope: 'set', celebrates: true, badgeLabel: 'Top weight', tone: 'heaviest' },
+    pr: { scope: 'set', celebrates: true, badgeLabel: 'Top weight' },
     dotMeaning:
       'Each dot is the heaviest weight you touched that session. This is often a different set ' +
       'than your best estimated 1RM: a heavy single tops the bar but loses to a lighter set ' +
@@ -79,7 +84,7 @@ export const EXERCISE_METRICS = {
     isWeight: true,
     title: 'volume per session',
     sortLabel: 'Most volume',
-    pr: { scope: 'session', celebrates: true, badgeLabel: 'Volume', tone: 'volume' },
+    pr: { scope: 'session', celebrates: true, badgeLabel: 'Volume' },
     dotMeaning:
       'Each dot is the whole session added up: weight × reps for every set you did of this ' +
       'exercise. It is a session total, not one set.',
@@ -93,7 +98,7 @@ export const EXERCISE_METRICS = {
     isWeight: true,
     title: 'best set volume',
     sortLabel: 'Best set volume',
-    pr: { scope: 'set', celebrates: false, badgeLabel: 'Best set', tone: 'est1rm' },
+    pr: { scope: 'set', celebrates: false, badgeLabel: 'Best set' },
     dotMeaning: 'Each dot is your single best set that session, scored by weight × reps.',
     recordMeaning: 'Your single best set ever, scored by weight × reps. It is one set, not a session total.',
   },
@@ -103,7 +108,7 @@ export const EXERCISE_METRICS = {
     isWeight: false,
     title: 'total reps',
     sortLabel: 'Most reps',
-    pr: { scope: 'session', celebrates: false, badgeLabel: 'Reps', tone: 'volume' },
+    pr: { scope: 'session', celebrates: false, badgeLabel: 'Reps' },
     recordMeaning:
       'The most reps you have ever done of this exercise in one workout, added up across every ' +
       'set. It is a session total, not one set. A timed hold counts as 0 reps.',

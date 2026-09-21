@@ -52,6 +52,8 @@ that isn't one.
 | **which records are celebrated** (est. 1RM, top weight, session volume), that volume fires once per workout, that a first-ever set is a baseline rather than a record, and that the celebration stays until dismissed | `exerciseMetrics.js`'s `pr` blocks, `utils/prDetection.js`, `UIContext#showCelebration` |
 | **that PR detection happens on the device, so it works with no signal** | moving detection back to the server's `isPR`, or gating it on `useOnlineStatus` |
 | History badges name WHICH record fell, and a session total badges the entry rather than a set | `utils/historyPrFlags.js`, `components/shared/PrBadge.jsx`, `SetPillRow.jsx` |
+| **every record is marked the same way everywhere** — same glyph, same single colour, same rule — on History, on the Log screen's set rows and in "Session exercises" | `utils/historyPrFlags.js`, `PrBadge.jsx`, `index.css`'s `--color-record-*` |
+| **a record marks the set that BEAT your previous best**, so repeating your best does not mark it again | `historyPrFlags.js` (the retired `formulas.js#isPrSet` tie rule — see `log-screen.md`) |
 
 **If your change alters a row's left-hand column, update the handbook in the same PR.** If it
 doesn't, no action — this rule is not a prompt to re-read the page on every edit.

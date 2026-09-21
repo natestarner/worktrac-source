@@ -389,9 +389,9 @@ const ownBadgeStyle = {
   display: 'inline-block',
   padding: '4px 10px',
   borderRadius: 999,
-  background: 'var(--color-pr-bg)',
-  color: 'var(--color-pr-text)',
-  border: '1px solid var(--color-pr-border)',
+  background: 'var(--color-highlight-bg)',
+  color: 'var(--color-highlight-text)',
+  border: '1px solid var(--color-highlight-border)',
   fontSize: 12,
   fontWeight: 700,
 };

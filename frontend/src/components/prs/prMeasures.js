@@ -99,13 +99,21 @@ export function measureEntry(row, measure) {
 // "135x10, 3x155x8". Converted to the household's unit here, like every other number on this
 // board.
 //
-// Capped at VISIBLE_RUNS with an honest "+N more" tail rather than silently truncating. The
-// server already caps what it sends (MAX_PR_BREAKDOWN_RUNS) for payload reasons; this second,
-// tighter cap is about the row's right-hand column, which is narrow and shares its line with a
-// value and a chevron. setCount is the TRUE total, so the tail never understates the work.
-const VISIBLE_RUNS = 3;
-
-export function formatPrBreakdown(entry, defaultUnit, { limit = VISIBLE_RUNS } = {}) {
+// Every run the server sent is rendered. There used to be a second, tighter client cap of 3 with
+// a "+N more" tail, which was honest about the count but pointed at sets there was no way to see:
+// the row is one big button that opens a destination chooser, so the tail was not tappable and
+// nothing else revealed them. Showing the work IS the feature -- it is what distinguishes a
+// genuine heavy day from ten junk sets of an empty bar -- so a caption you cannot finish reading
+// defeats the point of having one.
+//
+// This is affordable because runs are COLLAPSED ("3x155x8" is one run, not three) and the server
+// caps them at MAX_PR_BREAKDOWN_RUNS, which bounds the line regardless of how long the workout
+// was. The layout half of this lives in PRsTab: a session-level caption now takes its own
+// full-width line instead of a narrow right-hand column.
+//
+// The "+N more" tail SURVIVES, and now means the only thing it can: the server itself truncated.
+// setCount is the TRUE total, so it never understates the work.
+export function formatPrBreakdown(entry, defaultUnit, { limit = Infinity } = {}) {
   const runs = entry?.sets;
   if (!runs?.length) return null;
   const w = (lb) => convertWeight(Number(lb), 'lb', defaultUnit);
@@ -140,6 +148,27 @@ export function measureUnavailableCaption(row) {
   if (row?.durationTracked) return 'Timed hold';
   if (row?.bodyweightOnly) return 'Bodyweight';
   return 'Not recorded';
+}
+
+// What to show INSTEAD of an em dash on a row the selected measure cannot rank.
+//
+// A pull-up has no top weight and a plank has no volume -- but both have a record, and the row was
+// showing a dash while the number sat unused in `row.best`. "This exercise has no record" and
+// "this exercise has no TOP WEIGHT record" look identical as a dash, and only the second is true.
+// So the row falls back to the est.-1RM measure, which is the one measure that always exists: it
+// IS the set comparableValue picked, with the weight-0 -> reps and hold -> seconds substitutions
+// already baked in. Reusing est1rmEntry + formatPrMeasure rather than formatting it here is what
+// keeps this from becoming a sixth way to render a record.
+//
+// ⚠️ This is a DISPLAY fallback only. measureEntry still returns null for these rows, so
+// prSort.js still groups them last and never coerces them to 0 -- showing a rep count must not
+// make a pull-up rank above a genuinely light lift on a weight-based sort. PRsTab draws it in
+// --color-muted rather than the record colour for the same reason: it is context, not the
+// selected record.
+export function measureFallback(row, defaultUnit) {
+  const entry = est1rmEntry(row);
+  if (!entry) return null;
+  return formatPrMeasure(entry, 'est1rm', row, defaultUnit);
 }
 
 export function measureUnavailableTitle(row, measure) {

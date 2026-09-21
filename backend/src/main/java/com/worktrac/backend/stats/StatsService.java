@@ -236,7 +236,15 @@ public class StatsService {
     // whole session because this rides on the PRs board -- one row per exercise -- which
     // offlineCacheWarm persists to IndexedDB. setCount still reports the true total, so a
     // truncated list can be labelled honestly instead of understating the work.
-    private static final int MAX_PR_BREAKDOWN_RUNS = 6;
+    //
+    // Raised 6 -> 10 when the client's own tighter cap of 3 was removed. That cap existed because
+    // the breakdown shared a narrow right-hand column with a value and a chevron, and its "+N more"
+    // tail pointed at sets there was no way to reach -- the row is one button that opens a
+    // destination chooser, so the tail was not tappable. The caption now takes a full-width line
+    // and shows everything sent, which makes THIS the only cap left, and 6 truncated real sessions.
+    // Runs are collapsed ("3x155x8" is one run), so 10 covers essentially any real workout while
+    // still bounding the cached blob.
+    private static final int MAX_PR_BREAKDOWN_RUNS = 10;
 
     // The work behind a session-level record, with consecutive identical sets collapsed into runs.
     // Chronological (createdAt) so it reads the way the workout was actually done, ramping and all.

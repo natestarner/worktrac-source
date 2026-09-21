@@ -109,10 +109,50 @@ theme and sat at ~3.3:1 — under AA while carrying every success and every dest
 They're re-derived toward the muted/warm end rather than a saturated neon, which would fight the
 terracotta.
 
-One non-obvious constraint: **dark `--color-danger` must stay visually separable from
-`--color-pr-text`.** The obvious brighter reds (`#e8836a`, `#f0907a`) land within 1.1:1 of the PR
-orange — the same colour to the eye — which would make a failure and a personal record
-indistinguishable. `#e07a5f` clears it at 1.23:1.
+One non-obvious constraint: **dark `--color-danger` must stay visually separable from the
+celebratory warms.** The obvious brighter reds (`#e8836a`, `#f0907a`) land within 1.1:1 of
+`--color-highlight-text` — the same colour to the eye — which would make a failure and a
+celebration indistinguishable. `#e07a5f` clears it at 1.23:1.
+
+### Personal records are ONE colour, and it is measured against the alert palette
+
+`--color-record-{bg,border,text}` is the single tint every personal record is drawn in, on every
+screen. The glyph — a star, a double chevron, stacked layers — is what says *which* record.
+
+There were three tints, one per record type, and they failed in both directions at once:
+
+- **They were not distinguishable from each other.** Measured mutual separation between the three
+  text tones was 1.05:1–1.43:1 — one colour to a red-green colour-blind reader, or to anyone
+  glancing at a phone in a bright gym. The tokens' own comment said so and called colour "the
+  second signal"; with one tint that is now simply the whole mechanism.
+- **They were not distinguishable from the ALERT palette**, which is the part nobody had measured.
+  The old comment claimed separation from danger, but it compared *text* tones, while
+  `SetPillRow` tints the entire pill with the **fill**. `--color-pr-est1rm-bg` was `#fbe9e0`
+  against `--color-danger-bg` `#fbe6e0`: a CIEDE2000 distance of **2.21**, below the ~2.3
+  just-noticeable-difference threshold. A personal record was being drawn in the colour the app
+  uses for errors, and the volume tint was the warning palette by the same measure. This reached
+  us as a plain user report: *the records are coloured red and yellow, which look like bad
+  things.*
+
+So the replacement is derived against **both** alert families and measured on the fill as well as
+the text — light: 15.11 / 12.10 ΔE (text vs danger / warning), 10.52 / 11.48 (fill); dark: 18.92 /
+18.12 and 15.82 / 15.05. It stays in the mark's own warm family (`#E8734A` / `#F2A65A` /
+`#B5542D`), on the amber side.
+
+**A pure gold is not available here, and it is worth knowing why before "correcting" this toward
+one:** `--color-warning-text` `#7a5c05` *is* a dark gold. Every candidate at that hue landed
+inside 12 ΔE of it. The amber/apricot band is the only one in this palette that clears red on one
+side and gold on the other.
+
+Green is not the answer either, and is now used for no record anywhere: it carried "PR" on the
+Log screen and on the exercise trend chart while History and the celebration used the warm palette
+— one idea, two colours, depending on the tab. The trend chart's record dot is
+`--color-record-text`, ΔE 20.3 from the line's own `--color-accent`.
+
+`--color-highlight-*` is what the old generic `--color-pr-*` trio became: a warm surface for
+things that are celebratory but are *not* records (the Plus upgrade card, a routine's active step,
+the "no note yet" chip, an admin role pill). Sharing one name for two meanings is exactly the drift
+this change exists to undo.
 
 Shadows are re-derived too. A drop shadow reads as depth by darkening what's behind it, and there
 is nothing left to darken below `#221f1c`, so dark mode deepens the shadow *and* adds
