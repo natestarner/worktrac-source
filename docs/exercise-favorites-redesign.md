@@ -1067,3 +1067,76 @@ spec as passing for two accidents — the un-dismissed overlay was blocking the 
 enough to clear the query persister's 1s throttle, and its bare `getByText` matched once *only
 because* the restore was incomplete, in the spec whose whole point is that it is restored. A UI
 timer was load-bearing for an unrelated spec's timing.
+
+## Update — 2026-09-21: one record colour, one predicate, one fold
+
+The entry above shipped three record types. They were correct individually and did not agree with
+each other: five surfaces rendered a record, in two different colour families, under three
+different rules, and one of them rendered nothing at all. This entry reverses two decisions
+recorded above, and the point of each paragraph is why the original reasoning failed rather than
+that it was superseded.
+
+**Reversed: "colour is the second signal, never the only one" (the three warm tints).** The
+reasoning above is sound and its measurement is real — the three text tones were 1.05:1–1.43:1
+apart, i.e. one colour. What it did not measure is the **fill**, and `SetPillRow` tints the whole
+pill with the fill. Measured now: `--color-pr-est1rm-bg` `#fbe9e0` against `--color-danger-bg`
+`#fbe6e0` is **CIEDE2000 2.21**, below the ~2.3 just-noticeable-difference threshold. The volume
+trio was the warning palette by the same measure, and in dark mode the top-weight fill was 4.05
+from danger. So a personal record was being drawn in the colour the app uses for **errors** —
+which is how it reached us: *"the records are coloured red and yellow, which look like bad
+things."*
+
+The entry above says the tints were "darkened until [each] passes AA". That is the trap worth
+naming. AA is a contrast ratio against the ground; it says nothing about whether two colours look
+alike. Three tints can each pass AA, be indistinguishable from one another, **and** collide with
+the alert palette, all at once — which is exactly what happened. **Separation between two colours
+needs a perceptual distance (CIEDE2000), not a contrast ratio.** `index.css`'s `--color-record-*`
+block carries the derivation and the margins against both alert families, in both schemes.
+
+There is now **one** record tint, and the glyph carries the type — which is what the paragraph
+above already said was doing the work. A pure gold is not reachable in this palette, and it is
+worth knowing why before "correcting" it toward one: `--color-warning-text` `#7a5c05` *is* a dark
+gold, and every candidate at that hue landed inside 12 ΔE of it. Green is not available either,
+and now marks no record anywhere: it carried "PR" on the Log screen and the trend chart while
+History and the celebration used the warm palette — one idea, two colours, depending on the tab.
+
+**Reversed: "three 'is this a PR' predicates coexist on purpose."** `.claude/rules/log-screen.md`
+said not to unify them and named the visible consequence as intended: hitting your best three
+times badged one row on History and pilled all three on Log. Shipped beside two more record types,
+that stopped reading as a deliberate nuance and started reading as the app disagreeing with
+itself. It was also wrong in a second way the rule never mentioned — the Log predicate only knew
+**est. 1RM**, so a top-weight record went unmarked there while History marked it.
+`formulas.js#isPrSet` is gone; every record mark now comes from one fold.
+
+**The objection that kept that fold off the log screen had a cheap answer.** The rule's argument
+was that it would "drag `history`'s whole-array walk onto the log screen's hot path". True, and
+answered by an `exerciseId` filter — the log screen asks about one exercise. The same fold now
+feeds History, the Log screen's set rows and "Session exercises" (which had no record marks at
+all), with the **live session** folded in so a record set with no signal is badged immediately, by
+one code path. Its entries come from caches that already merge queued writes, so this is not a
+connectivity branch and needs no row on the resilience register.
+
+**A latch whose safety argument had an expiry date.** `PERSON_DEFAULTS.volumePrCelebrated` carried
+the comment *"a later session has to beat the ALL-TIME record, which is ≥ whatever was last
+celebrated, so the guard can never suppress a genuine new record."* That holds only while records
+go **up**. Delete or edit down the session that set one and the all-time record falls below the
+latch, which then suppressed every genuine new record beneath the old high-water mark —
+permanently, since it is persisted and nothing ever cleared it. Worth generalising: **a
+monotonicity argument about user data needs the deletion case stated explicitly, or it is an
+assumption wearing a proof.**
+
+**The em dash said the wrong thing.** A row the selected measure cannot rank showed `—`, which
+made "this exercise has no record" and "this exercise has no *top weight* record" look identical —
+and only the second was true; a pull-up's record (its rep count) was sitting unused in `row.best`.
+The row now falls back to that, in `--color-muted` so it cannot read as the selected measure. The
+**sort** is deliberately untouched: `measureEntry` still returns null, so these rows still group
+last. Showing a number must not let a pull-up outrank a genuinely light lift.
+
+**Two testing notes worth keeping.** The new four-mode parity spec is guarded per caller, not
+globally — dropping the live session from `ExerciseDetail` fails spec 1 while spec 2 stays green,
+and vice versa for `LogTab`. A single break would have suggested both were covered. And that spec
+does **not** exercise the null-session-id path despite running hard-offline: its setup logs a set
+online, so a real session id exists before the mode is entered, and making the fold ignore an
+id-less session changes nothing in any of its eight runs. **A spec can run in a degraded mode and
+still never reach the branch that mode exists for** — check which branch your arrangement actually
+lands on before reading a green run as coverage.
