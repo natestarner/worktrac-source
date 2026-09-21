@@ -453,7 +453,7 @@ const rowStyle = {
   padding: '6px 6px 6px 10px',
   borderRadius: 'var(--radius-md)',
   border: '1px solid var(--color-border)',
-  background: 'var(--color-pr-bg)',
+  background: 'var(--color-highlight-bg)',
 };
 
 // 16px font, or iOS Safari zooms the viewport on focus -- the rule every input in this app follows

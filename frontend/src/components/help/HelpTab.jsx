@@ -442,8 +442,15 @@ export default function HelpTab() {
           weight. On a bodyweight exercise the star means most reps, and on a hold it means longest
           hold &mdash; the badge names whichever it is. A whole-workout record sits next to the
           exercise name rather than on one set, because no single set is the answer to
-          &ldquo;most volume&rdquo;. See{' '}
+          &ldquo;most volume&rdquo;. A small key above the list repeats what each shape means. See{' '}
           <a href="#prs">PRs</a> for what each one means.
+        </p>
+        <p>
+          <strong>Records look the same everywhere.</strong> The same shapes, in the same single
+          colour, mark a record on the Log tab while you are still lifting &mdash; on the set you
+          just logged, and beside the exercise in <T>Session exercises</T> &mdash; and here
+          afterwards. A record marks the set that <em>beat</em> your previous best, so matching your
+          best again is not marked a second time.
         </p>
         <p>
           On <T>Free</T> this shows the last 90 days. Everything before that is still saved in your

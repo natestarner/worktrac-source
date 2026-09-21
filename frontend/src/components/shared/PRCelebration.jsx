@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useUI } from '../../context/UIContext';
 import { installFocusTrap } from '../../lib/focusTrap';
-import { prSpec } from '../trends/exerciseMetrics';
 import PrBadge from './PrBadge';
 import Button from './Button';
 
@@ -164,7 +163,7 @@ export default function PRCelebration() {
             width: 64,
             height: 64,
             borderRadius: '50%',
-            background: 'var(--color-pr-bg)',
+            background: 'var(--color-record-bg)',
             margin: '0 auto 18px',
             display: 'flex',
             alignItems: 'center',
@@ -232,7 +231,7 @@ export default function PRCelebration() {
                   style={{
                     fontSize: prs.length > 1 ? 26 : 34,
                     fontWeight: 'var(--weight-bold)',
-                    color: 'var(--color-pr-' + (prSpec(pr.type)?.tone || 'est1rm') + '-text)',
+                    color: 'var(--color-record-text)',
                   }}
                 >
                   {pr.valueText}

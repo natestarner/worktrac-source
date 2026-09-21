@@ -117,29 +117,58 @@ lighter set that happened to tie the *pre-offline* best got badged instead. `eff
 - **Known gap:** because it's a `max` it can only ever *raise* the best. An offline **delete** or
   downward edit of an already-synced set that was the all-time best leaves the best stale-high
   until the outbox drains. Symptom is a *suppressed* badge, not a misplaced one.
+- **It now also carries a DATE.** `mergeBestWithLocalSets` takes the live session's `startedAt` and
+  stamps `sessionStartedAt` on a best that came from an unsynced set, because the Log screen's Best
+  card renders one. Its old comment said the card "doesn't render one" — it does now. Leaving the
+  field undefined blanks the date precisely for the record you just set.
 
 **When adding any other value derived from `history`, ask:** would it be wrong for a person who has
 logged sets that haven't synced yet?
 
-## Three "is this a PR" predicates coexist on purpose — don't unify them
+## TWO "is this a PR" predicates, and the third was retired on purpose (2026-09-20)
 
 | Predicate | Where | Question it answers |
 |---|---|---|
 | strict `>` vs prior best | `prDetection.js#setPrTypes` | "did this set beat my best" → **the celebration** |
-| strict `>` running best | `historyPrFlags.js`, `StatsService#getExerciseTrend` | "was this a PR *when recorded*" → History badges, trend dots |
-| `\|Δ\| < 0.5` tie with best | `formulas.js#isPrSet` | "is this my best" → the Log screen pill |
+| strict `>` running best | `historyPrFlags.js`, `StatsService#getExerciseTrend` | "was this a PR *when recorded*" → **every record badge in the app** + trend dots |
 
-The Log pill is the odd one out **deliberately**: it marks *"this is your best"*, so a repeat of an
-identical best stays flagged. The visible consequence is that hitting your best three times badges
-one row on History but pills all three on Log. That is intended — **don't "fix" one into another.**
-`historyPrFlags.js`'s header explains why a backend fold was rejected for History's markers.
+**⚠️ This section used to say there were THREE and that unifying them was the bug. That was
+reversed by decision, and the third one is gone — don't reintroduce it.** `formulas.js#isPrSet`
+was a `|Δ| < 0.5` **tie** with the all-time best, answering *"is this my best"* for the Log
+screen's pill. Its documented consequence was that hitting your best three times badged one row on
+History and pilled all three on Log. Shipped alongside two more record types, that stopped reading
+as a deliberate nuance and started reading as the app disagreeing with itself — and it was wrong
+in a second way the old text didn't mention: it only ever knew about **est. 1RM**, so a top-weight
+record went unmarked on the Log screen while History marked it.
 
-The first two now share their *maths* (`SET_MEASURE_VALUE` is mirrored in both files) and differ
-only in what "prior best" means — the set before this one, versus the running best as of that
-point in history. That is a narrowing, not a merge: keep them as two functions. Folding History's
-marks into `prDetection` would drag `history`'s whole-array walk onto the log screen's hot path,
-and folding the celebration into `historyPrFlags` would make it depend on a cache that freezes
-offline — the exact thing `mergeBestWithLocalSets` exists to work around.
+The two that remain share their *maths* through **`prDetection.js#SET_MEASURE_VALUE`, which is now
+exported and imported rather than copied** into `historyPrFlags.js`. They differ only in what
+"prior best" means — the set before this one, versus the running best as of that point in history.
+That is a narrowing, not a merge: keep them as two functions. Folding the celebration into
+`historyPrFlags` would make it depend on a cache that freezes offline — the exact thing
+`mergeBestWithLocalSets` exists to work around.
+
+### One fold now feeds History, the Log screen and Session exercises
+
+`historyPrFlags.js#buildHistoryPrFlags(history, { liveSession, exerciseId })` is the single
+derivation behind every record badge. The old objection to putting it on the log screen — that it
+would drag `history`'s whole-array walk onto the hot path — is answered by the **`exerciseId`
+filter**: `ExerciseDetail` asks only about the exercise on screen.
+
+- **`liveSession` is how the workout in progress gets badged at all.** Its sets are not in
+  `history` yet. Entries come from `useSessionEntries` / `displaySets`, both of which already merge
+  still-queued writes, so a record set with no signal is badged immediately, by one code path. This
+  is **not** a connectivity branch and needs no row on `resilience.md`'s register.
+- **Offline its `id` is `null` for the person's whole stretch**, so it is keyed under
+  `LIVE_SESSION_FLAG_KEY`. Look it up with `liveSessionPrFlagKey(sessionId, exerciseId)`, never by
+  building the key by hand.
+- **Once it syncs it is in `history` too** and is matched by id and *replaced*, not folded twice —
+  a double fold compares the session against itself and drops every mark it just earned.
+- **⚠️ `history` is Free-tier window-clamped; `exerciseSummary` (the celebration's source) is not.**
+  So for a Free household whose all-time best predates the window, a badge can appear without the
+  celebration having fired. Pre-existing — it was already true of History's badges — and now
+  visible on one more screen. Do **not** "fix" it by clamping detection; that is what
+  `FreeTierHistoryWindowTest` exists to prevent.
 
 ### The celebration is decided at DISPATCH, client-side — and that is what makes it work offline
 

@@ -216,10 +216,13 @@ export const IconDumbbell = (props) => (
 // The two PR-type glyphs, beside IconStarFilled (which stays est. 1RM, because that is the marker
 // History has always used and people already read it as "record here").
 //
-// ⚠️ These carry the DISTINCTION BETWEEN PR TYPES, and the colour tokens only reinforce it. The
-// three --color-pr-*-text tones are 1.05:1 - 1.43:1 apart, i.e. the same colour to a colour-blind
-// reader, so whatever tells a top-weight record from an est.-1RM record has to survive greyscale.
-// Shape does; hue does not. Each is aria-hidden as usual -- the accessible name is on the wrapper.
+// ⚠️ These carry the DISTINCTION BETWEEN PR TYPES, on their own. There is exactly ONE record
+// colour now (--color-record-*), so shape is not merely the stronger signal -- it is the only one.
+// The three per-type tints that used to sit behind these were 1.05:1 - 1.43:1 apart (the same
+// colour to a colour-blind reader) AND indistinguishable from the alert palette, so they were
+// removed rather than re-derived; see index.css's --color-record-* block. Whatever tells a
+// top-weight record from an est.-1RM record has to survive greyscale. Shape does; hue never did.
+// Each is aria-hidden as usual -- the accessible name is on the wrapper.
 
 // Top weight: a double chevron, "you went higher than you ever have". Deliberately not
 // IconDumbbell, which already means "an exercise" generically (ExercisePicker's empty state), and

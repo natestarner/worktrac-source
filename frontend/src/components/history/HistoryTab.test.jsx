@@ -87,6 +87,44 @@ describe('HistoryTab session notes', () => {
     // vacuously against an icon whether or not a note was rendered.
     expect(screen.queryByLabelText('Note')).not.toBeInTheDocument();
   });
+
+  // ⚠️ The note is on its OWN line, not in the header row beside the exercise name. In that row it
+  // was the only shrinkable item -- the name is flexShrink: 0 and the record badge has no flex
+  // props, while the note carried minWidth: 0 + nowrap + ellipsis -- so it absorbed the whole
+  // deficit. On a 390px phone with a Volume badge present that left it ~47px of text; with a long
+  // exercise name it left the icon and nothing else.
+  //
+  // jsdom computes no layout, so this asserts the STRUCTURE that causes the squeeze rather than
+  // the pixels: the note must not be a sibling of the exercise name inside the header row.
+  it('puts the note on its own line rather than beside the exercise name', async () => {
+    useHistory.mockReturnValue({
+      loading: false,
+      history: [
+        {
+          id: 103,
+          startedAt: '2026-07-03T12:00:00Z',
+          endedAt: '2026-07-03T13:00:00Z',
+          entries: [
+            {
+              exerciseId: 1,
+              exerciseName: 'Barbell Bench Press',
+              sets: [{ weight: 135, reps: 8, unit: 'lb' }],
+              note: 'Shoulder felt off today',
+            },
+          ],
+        },
+      ],
+    });
+
+    renderHistoryTab();
+
+    const note = await screen.findByText('Shoulder felt off today');
+    const name = screen.getByRole('button', { name: 'Show only Barbell Bench Press in history' });
+    // They must no longer be SIBLINGS. That is the precise arrangement that made the note the
+    // only item able to give up space: in the header row it sat next to a flexShrink: 0 name and
+    // a badge with no flex props, so it absorbed the entire deficit.
+    expect(name.parentElement.contains(note)).toBe(false);
+  });
 });
 
 describe('HistoryTab offline', () => {
@@ -359,5 +397,85 @@ describe('HistoryTab and the Free-tier window', () => {
     renderHistoryTab();
 
     expect(await screen.findByText(/Your full history has 12 more workouts/)).toBeInTheDocument();
+  });
+});
+
+// The legend explains three glyphs, which is worth its space only once there is something on
+// screen wearing one. With one record colour (see index.css's --color-record-*) the glyph is the
+// ENTIRE distinction between record types, which is what makes a key for them earn a row at all.
+describe('HistoryTab record legend', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppState.mockReturnValue({ activePersonId: 7, startEditingSession: vi.fn() });
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
+    listPersonExercises.mockResolvedValue([]);
+    useHistoryWindow.mockReturnValue({ historyWindow: null });
+  });
+
+  const withSets = (sets) => ({
+    loading: false,
+    history: [
+      {
+        id: 201,
+        startedAt: '2026-07-01T12:00:00Z',
+        endedAt: '2026-07-01T13:00:00Z',
+        entries: [{ exerciseId: 1, exerciseName: 'Bench Press', sets, note: null }],
+      },
+    ],
+  });
+
+  it('shows the legend once something on screen is badged', async () => {
+    useHistory.mockReturnValue(withSets([{ weight: 135, reps: 8, unit: 'lb' }]));
+    renderHistoryTab();
+
+    expect(await screen.findByRole('note')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'How records work' })).toHaveAttribute('href', '/app/help#history');
+  });
+
+  // ⚠️ Only the EARLIER session's set takes the records; the later one merely ties it and takes
+  // none. This is the retired isPrSet tie rule's visible consequence, now gone: the Log screen
+  // used to pill both, History badged one, and they were describing the same two sets.
+  it('badges only the set that beat the running best, not every set that matches it', async () => {
+    useHistory.mockReturnValue({
+      loading: false,
+      history: [
+        {
+          id: 301,
+          startedAt: '2026-07-02T12:00:00Z',
+          endedAt: '2026-07-02T13:00:00Z',
+          entries: [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ weight: 135, reps: 8, unit: 'lb' }], note: null }],
+        },
+        {
+          id: 302,
+          startedAt: '2026-07-01T12:00:00Z',
+          endedAt: '2026-07-01T13:00:00Z',
+          entries: [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ weight: 135, reps: 8, unit: 'lb' }], note: null }],
+        },
+      ],
+    });
+    renderHistoryTab();
+
+    await screen.findAllByText('Bench Press');
+    expect(screen.getAllByTitle(/^Personal record/)).toHaveLength(1);
+  });
+
+  it('renders no legend at all for a person with no history', async () => {
+    useHistory.mockReturnValue({ loading: false, history: [] });
+    renderHistoryTab();
+
+    await screen.findByText(/No workouts logged yet/);
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  });
+
+  // ⚠️ The legend repeats the badges' own words, and Playwright matches an accessible name as a
+  // SUBSTRING. Left addressable it would add three matches to every `getByTitle(/Personal record/)`
+  // count on this tab that are not records, only a description of them.
+  it('does not add addressable badge names of its own', async () => {
+    useHistory.mockReturnValue(withSets([{ weight: 135, reps: 8, unit: 'lb' }]));
+    renderHistoryTab();
+
+    await screen.findByRole('note');
+    // One badged set on screen -> exactly one titled badge, legend notwithstanding.
+    expect(screen.getAllByTitle(/^Personal record/)).toHaveLength(1);
   });
 });

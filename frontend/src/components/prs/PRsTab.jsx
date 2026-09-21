@@ -13,8 +13,10 @@ import {
   PR_MEASURE_OPTIONS,
   formatPrMeasure,
   measureEntry,
+  measureFallback,
   measureUnavailableCaption,
   measureUnavailableTitle,
+  prMeasureSpec,
 } from './prMeasures';
 import { prRecordHelp } from '../trends/chartHelp';
 import Skeleton from '../shared/Skeleton';
@@ -209,8 +211,20 @@ function PRsTabContent() {
           const tags = tagsByExerciseId.get(pr.exerciseId);
           const entry = measureEntry(pr, prsMeasure);
           const shown = entry ? formatPrMeasure(entry, prsMeasure, pr, defaultUnit) : null;
+          // What a row that cannot be ranked on this measure shows instead of a dash.
+          const fallback = shown ? null : measureFallback(pr, defaultUnit);
+          // A session-level record's caption is a full breakdown of the work behind it, which no
+          // longer fits a narrow right-hand column now that it is uncapped. Set-level captions are
+          // short ("185lb×5") and stay where they were.
+          const captionOnOwnLine = !!shown && prMeasureSpec(prsMeasure).pr?.scope === 'session';
           // The date follows the measure, so it always names the day the number above it was set.
-          const dateSource = entry?.sessionStartedAt ?? pr.best.sessionStartedAt;
+          //
+          // ⚠️ Optional-chained on `best` like everything else that reads a row here. Every access
+          // in prMeasures.js is written this way for resilience.md's axis D -- a row restored from
+          // a cache written by an older build -- and this one was the exception: `pr.best.x` on a
+          // row with no `best` threw, which unmounts the whole tab rather than degrading the one
+          // row. The board must render what it can.
+          const dateSource = entry?.sessionStartedAt ?? pr.best?.sessionStartedAt;
           return (
             <button
               key={pr.exerciseId}
@@ -221,9 +235,11 @@ function PRsTabContent() {
             >
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{pr.exerciseName}</div>
-                <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 2 }}>
-                  {formatDateLabel(toLocalDateStr(dateSource))}
-                </div>
+                {dateSource && (
+                  <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 2 }}>
+                    {formatDateLabel(toLocalDateStr(dateSource))}
+                  </div>
+                )}
                 {tags?.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                     {tags.map((tag) => (
@@ -242,28 +258,33 @@ function PRsTabContent() {
                 <div style={{ textAlign: 'right', minWidth: 0 }}>
                   {shown ? (
                     <>
-                      <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-pr-text)' }}>
+                      <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-record-text)' }}>
                         {shown.value}
                       </div>
-                      {/* The full, untruncated breakdown for a mouse user; the visible caption is
-                          already capped at three runs plus an honest "+N more", because this app
-                          is used on an iPad where hover does not exist. */}
-                      <div
-                        title={shown.caption}
-                        style={{ fontSize: 13, color: 'var(--color-muted)', lineHeight: 1.35 }}
-                      >
-                        {shown.caption}
-                      </div>
+                      {/* A set-level caption only. A session-level one is the whole breakdown and
+                          renders full-width below the row instead -- see captionOnOwnLine. */}
+                      {!captionOnOwnLine && (
+                        <div
+                          title={shown.caption}
+                          style={{ fontSize: 13, color: 'var(--color-muted)', lineHeight: 1.35 }}
+                        >
+                          {shown.caption}
+                        </div>
+                      )}
                     </>
                   ) : (
-                    // A dash, never a zero: this exercise cannot be measured this way at all, and a
-                    // column of "0 lb" is worse than no column (see .claude/rules/trends.md). The
-                    // caption is always visible rather than hover-only -- this app is used on an
-                    // iPad, where hover does not exist. `title` is the mouse-user bonus, not the
-                    // mechanism.
+                    // Never a zero: this exercise cannot be measured this way at all, and a column
+                    // of "0 lb" is worse than no column (see .claude/rules/trends.md). But it is no
+                    // longer a bare em dash either -- a pull-up has no top weight and still has a
+                    // record, and the dash said "nothing here" about a row that has a number. The
+                    // fallback is that number (measureFallback), drawn in --color-muted rather than
+                    // the record colour so it never reads as the selected measure, with the caption
+                    // naming why this measure does not apply. An em dash remains for the genuinely
+                    // empty case. `title` is the mouse-user bonus, not the mechanism -- this app is
+                    // used on an iPad, where hover does not exist.
                     <div title={measureUnavailableTitle(pr, prsMeasure)}>
                       <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-muted)' }}>
-                        &mdash;
+                        {fallback ? fallback.value : <>&mdash;</>}
                       </div>
                       <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
                         {measureUnavailableCaption(pr)}
@@ -277,6 +298,27 @@ function PRsTabContent() {
                     here, which is one of its sanctioned uses. */}
                 <IconChevronRight size={18} style={{ color: 'var(--color-faint)' }} />
               </div>
+              {/* The work behind a SESSION-level record, on its own full-width line.
+                  flexBasis 100% against the row's flexWrap, rather than restructuring the row:
+                  the two columns above keep their exact layout, and this simply wraps under them.
+                  It is here and not in the right-hand column because the breakdown is no longer
+                  capped at three runs -- a ten-set day is a real sentence now, and in a 58%-wide
+                  right-aligned column it either squeezed the exercise name off the row or wrapped
+                  into a ragged stack of two-word lines. */}
+              {captionOnOwnLine && (
+                <div
+                  style={{
+                    flexBasis: '100%',
+                    minWidth: 0,
+                    marginTop: 'var(--space-1)',
+                    fontSize: 13,
+                    lineHeight: 1.35,
+                    color: 'var(--color-muted)',
+                  }}
+                >
+                  {shown.caption}
+                </div>
+              )}
             </button>
           );
         })}
@@ -316,6 +358,9 @@ const rowButtonStyle = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
+  // Wraps so a session-level record's breakdown can take a full-width third line under the two
+  // columns. With no third child the row is unchanged: two items, nothing to wrap.
+  flexWrap: 'wrap',
   gap: 12,
   cursor: 'pointer',
   font: 'inherit',

@@ -170,15 +170,32 @@ class PrMeasuresTest extends AbstractIntegrationTest {
     @Test
     void theBreakdownIsCappedButSetCountStaysHonest() throws Exception {
         long session = createPastSession(daysAgo(5));
-        // Ten distinct runs, comfortably past the six-run cap.
-        for (int i = 0; i < 10; i++) {
+        // Fourteen distinct runs, comfortably past the ten-run cap. (The cap was raised 6 -> 10
+        // when the client's own tighter cap of three runs was removed: this is now the ONLY cap,
+        // so it has to clear a real workout rather than merely bound the payload.)
+        for (int i = 0; i < 14; i++) {
             logSet(session, barbellId, 100 + i * 5, 5);
         }
 
         JsonNode measure = rowFor(barbellId).get("measures").get("sessionVolume");
 
-        assertEquals(6, measure.get("sets").size(), "capped at MAX_PR_BREAKDOWN_RUNS");
-        assertEquals(10, measure.get("setCount").asInt(), "but the true total is still reported");
+        assertEquals(10, measure.get("sets").size(), "capped at MAX_PR_BREAKDOWN_RUNS");
+        assertEquals(14, measure.get("setCount").asInt(), "but the true total is still reported");
+    }
+
+    // The point of raising the cap: a real session of distinct working sets now arrives WHOLE, so
+    // the client has nothing to truncate and no "+N more" to show. At six this was not true.
+    @Test
+    void anOrdinaryWorkoutsBreakdownArrivesComplete() throws Exception {
+        long session = createPastSession(daysAgo(4));
+        for (int i = 0; i < 8; i++) {
+            logSet(session, barbellId, 200 + i * 5, 5);
+        }
+
+        JsonNode measure = rowFor(barbellId).get("measures").get("sessionVolume");
+
+        assertEquals(8, measure.get("sets").size());
+        assertEquals(8, measure.get("setCount").asInt(), "nothing was truncated");
     }
 
     // Weight-derived measures must be ABSENT, not zero, for an exercise that was never loaded --

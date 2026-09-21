@@ -99,11 +99,12 @@ export function comparableValue(set) {
   return comparableLb(set.weight, set.reps, set.unit);
 }
 
-// Whether a logged set matches the person's current best comparable value for that
-// exercise (within a small tolerance for rounding), used to show the inline "PR" badge
-// on session-set rows. bestComparable must come from comparableValue() above, not the
-// raw displayed est1rm, or it inherits the same weight-0 collapse this is guarding against.
-export function isPrSet(set, bestComparable) {
-  if (bestComparable === null || bestComparable === undefined) return false;
-  return Math.abs(comparableValue(set) - bestComparable) < 0.5;
-}
+// ⚠️ `isPrSet` used to live here: a +-0.5 TIE against the all-time best, answering "is this my
+// best" for the Log screen's PR pill. It is gone, deliberately, and should not come back.
+//
+// It was the third of three "is this a PR" predicates, and the only one asking a different
+// question -- so hitting your best three times pilled three rows on the Log screen and badged one
+// on History. It also only ever knew about est. 1RM, so a top-weight record went unmarked there.
+// Every record mark in the app now comes from historyPrFlags.js#buildHistoryPrFlags (strict `>`
+// against the running best), which the celebration's prDetection.js#setPrTypes shares its maths
+// with. See .claude/rules/log-screen.md.

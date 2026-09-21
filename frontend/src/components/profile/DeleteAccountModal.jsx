@@ -84,7 +84,7 @@ export default function DeleteAccountModal({ onClose }) {
       {error && (
         <div
           style={{
-            background: 'var(--color-pr-bg)',
+            background: 'var(--color-highlight-bg)',
             color: 'var(--color-danger)',
             borderRadius: 'var(--radius-md)',
             padding: '10px 14px',

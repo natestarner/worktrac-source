@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { useHistory } from '../../hooks/useHistory';
@@ -10,6 +10,7 @@ import { downloadPersonCsv } from '../../api/export';
 import { formatDateLabel, formatTime, toLocalDateStr } from '../../utils/datetime';
 import { buildHistoryPrFlags, historyPrFlagKey } from '../../utils/historyPrFlags';
 import { collectTagVocabulary, filterHistorySessions } from '../../utils/exerciseFilter';
+import { prSpec, SET_PR_TYPES, SESSION_PR_TYPES } from '../trends/exerciseMetrics';
 import PastSessionModal from './PastSessionModal';
 import Button from '../shared/Button';
 import Skeleton from '../shared/Skeleton';
@@ -84,11 +85,14 @@ function HistoryTabContent({ initialExerciseFilter }) {
     [history],
   );
 
+
+
   const allExerciseIds = useMemo(() => {
     const ids = new Set();
     for (const session of history) for (const entry of session.entries) ids.add(entry.exerciseId);
     return ids;
   }, [history]);
+
   const tagVocabulary = useMemo(
     () => collectTagVocabulary(tagsByExerciseId, allExerciseIds),
     [tagsByExerciseId, allExerciseIds],
@@ -103,6 +107,24 @@ function HistoryTabContent({ initialExerciseFilter }) {
       ),
     [history, filter.text, filter.selectedTagIds, filter.exerciseFilter, tagsByExerciseId],
   );
+
+  // Whether anything CURRENTLY ON SCREEN is badged. The legend explains three glyphs; a key to
+  // marks that aren't there explains nothing and costs a row of vertical space on every visit.
+  //
+  // Derived from `filteredSessions`, not from all of `history`, so the legend can never claim to
+  // explain marks the filter has hidden. In practice the common case it removes is the genuinely
+  // empty one -- a person with no history at all -- because any first-ever set of an exercise IS
+  // a record, so almost any history contains at least one badge.
+  const hasAnyRecordMark = useMemo(() => {
+    for (const { session, entries } of filteredSessions) {
+      for (const entry of entries) {
+        const key = historyPrFlagKey(session.id, entry.exerciseId);
+        if ((prSessionMarks.get(key) || []).length > 0) return true;
+        if ((prSetMarks.get(key) || []).some((marks) => marks.length > 0)) return true;
+      }
+    }
+    return false;
+  }, [filteredSessions, prSetMarks, prSessionMarks]);
 
   // 0 while the window request is unanswered, so an empty History with no server answer keeps the
   // original copy rather than guessing. Both branches render something honest; only one is a fact.
@@ -249,6 +271,8 @@ function HistoryTabContent({ initialExerciseFilter }) {
         />
       )}
 
+      {!loading && hasAnyRecordMark && <RecordLegend />}
+
       {!loading &&
         filteredSessions.map(({ session, entries }) => (
           <div
@@ -273,7 +297,12 @@ function HistoryTabContent({ initialExerciseFilter }) {
                 const entryTags = tagsByExerciseId.get(entry.exerciseId);
                 return (
                   <div key={entry.exerciseId} style={{ padding: '14px 0', borderBottom: i < entries.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none' }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+                    {/* The badge sits NEXT TO the name, not at the far edge of the row. With the
+                        note moved to its own line this row has two children, and `space-between`
+                        would fling the badge to the right margin -- visually detached from the
+                        exercise it labels, and out of step with the identical row in "Session
+                        exercises". Left-grouped, the two surfaces read the same. */}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', marginBottom: 4 }}>
                       <button
                         onClick={() => handleFilterToExercise(entry.exerciseId, entry.exerciseName, session.id)}
                         aria-label={`Show only ${entry.exerciseName} in history`}
@@ -291,34 +320,50 @@ function HistoryTabContent({ initialExerciseFilter }) {
                           <PrBadge type={type} size={12} showLabel />
                         </span>
                       ))}
-                      {entry.note && (
-                        <div
-                          title={entry.note}
+                    </div>
+                    {/* The note gets its OWN full-width line, under the name rather than beside it.
+                        In the header row it was the only item that could shrink -- the exercise
+                        name is flexShrink: 0 and the record badge has no flex props, while this
+                        carried minWidth: 0 + nowrap + ellipsis -- so it absorbed the entire
+                        deficit. On a 390px phone with a "Volume" badge present that left it about
+                        47px of text; with a long exercise name it left the icon and nothing else.
+                        A note you cannot read is the same as a note that isn't there.
+
+                        Clamped to two lines rather than one: it wraps like prose now, and `title`
+                        still carries the whole thing for a pointer device. */}
+                    {entry.note && (
+                      <div
+                        title={entry.note}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 'var(--space-1)',
+                          marginBottom: 6,
+                          fontSize: 12,
+                          fontStyle: 'italic',
+                          color: 'var(--color-muted)',
+                          minWidth: 0,
+                        }}
+                      >
+                        {/* Labelled rather than aria-hidden like most icons here: it's
+                            the only thing marking this line as a note, and it's what
+                            the "no note, no indicator" test asserts on. */}
+                        <span role="img" aria-label="Note" style={{ display: 'flex', flexShrink: 0, marginTop: 2 }}>
+                          <IconNote size={12} />
+                        </span>
+                        <span
                           style={{
-                            fontSize: 12,
-                            fontStyle: 'italic',
-                            color: 'var(--color-muted)',
                             minWidth: 0,
                             overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            textAlign: 'right',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'flex-end',
-                            gap: 'var(--space-1)',
+                            display: '-webkit-box',
+                            WebkitBoxOrient: 'vertical',
+                            WebkitLineClamp: 2,
                           }}
                         >
-                          {/* Labelled rather than aria-hidden like most icons here: it's
-                              the only thing marking this line as a note, and it's what
-                              the "no note, no indicator" test asserts on. */}
-                          <span role="img" aria-label="Note" style={{ display: 'flex', flexShrink: 0 }}>
-                            <IconNote size={12} />
-                          </span>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.note}</span>
-                        </div>
-                      )}
-                    </div>
+                          {entry.note}
+                        </span>
+                      </div>
+                    )}
                     {entryTags?.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
                         {entryTags.map((tag) => (
@@ -337,6 +382,46 @@ function HistoryTabContent({ initialExerciseFilter }) {
         ))}
 
       {showPastSessionModal && <PastSessionModal onClose={() => setShowPastSessionModal(false)} />}
+    </div>
+  );
+}
+
+// What the three record glyphs mean. There is now exactly ONE record colour (see index.css's
+// --color-record-* block), so the glyph is the entire distinction -- which makes a key for them
+// worth its space in a way it would not have been when each type also had its own tint.
+//
+// Shown only when something on screen is actually badged (hasAnyRecordMark). A legend for marks
+// that aren't there explains nothing and costs a row on every visit.
+//
+// ⚠️ These labels repeat the badges' own words, and Playwright matches an accessible name as a
+// SUBSTRING -- so the whole strip is one `aria-hidden` block with a single `aria-label` on the
+// wrapper. Without that, every `getByTitle(/Personal record/)` / `getByLabel` count on this tab
+// would gain three matches that are not records, only a description of them. The information is
+// not lost to a screen reader: each badge in the list below carries its own full accessible name.
+function RecordLegend() {
+  return (
+    <div
+      role="note"
+      aria-label="What the record badges mean: a star is an estimated 1RM record, a double chevron is a top weight record, and stacked layers is a session volume record."
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 'var(--space-2) var(--space-4)',
+        marginBottom: 14,
+        fontSize: 'var(--text-xs)',
+        color: 'var(--color-muted)',
+      }}
+    >
+      {SET_PR_TYPES.concat(SESSION_PR_TYPES).map((type) => (
+        <span key={type} aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+          <PrBadge type={type} size={13} />
+          {prSpec(type)?.badgeLabel}
+        </span>
+      ))}
+      <Link to="/app/help#history" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>
+        How records work
+      </Link>
     </div>
   );
 }

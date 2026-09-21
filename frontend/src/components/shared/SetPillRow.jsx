@@ -1,5 +1,5 @@
 import { formatSet } from '../../utils/formatSet';
-import PrBadge, { prBadgeLabel, prBadgeTone } from './PrBadge';
+import PrBadge, { prBadgeLabel } from './PrBadge';
 
 const pillStyle = {
   display: 'inline-flex',
@@ -13,22 +13,20 @@ const pillStyle = {
   fontWeight: 400,
 };
 
-// A pill that took a record is tinted by the FIRST record it took (precedence order, so top
-// weight wins over est. 1RM when a set takes both) and carries one glyph per record.
+// A pill that took a record carries the one record tint and one glyph PER record it took.
 //
-// ⚠️ The glyphs, not the tint, are what tell the types apart. The three --color-pr-*-text tones
-// are 1.05:1 - 1.43:1 from each other, i.e. one colour to a red-green colour-blind reader or to
-// anyone glancing at a phone in a bright gym. Colour alone was never accessible here -- that is
-// why the original single marker already paired a star with an aria-label -- and three colours
-// does not change the argument, it sharpens it. See PrBadge.jsx.
-function prPillStyle(tone) {
-  return {
-    ...pillStyle,
-    background: 'var(--color-pr-' + tone + '-bg)',
-    color: 'var(--color-pr-' + tone + '-text)',
-    fontWeight: 700,
-  };
-}
+// ⚠️ The glyphs, not the tint, are what tell the types apart -- there is only one tint now, so
+// this is no longer a caveat but the whole mechanism. It used to be tinted by the FIRST record in
+// precedence order, which meant a set taking both top weight and est. 1RM had to pick one costume;
+// worse, the three tints were 1.05:1 - 1.43:1 from each other AND sat on top of the alert palette
+// (the est.-1RM fill was CIEDE2000 2.21 from --color-danger-bg, i.e. below the just-noticeable
+// -difference threshold). See PrBadge.jsx and index.css's --color-record-* block.
+const prPillStyle = {
+  ...pillStyle,
+  background: 'var(--color-record-bg)',
+  color: 'var(--color-record-text)',
+  fontWeight: 700,
+};
 
 // prMarks is an optional array of PR-TYPE ARRAYS index-aligned to `sets` (see historyPrFlags.js).
 // Omitting it (every non-History call site) renders a plain pill, exactly as before.
@@ -52,7 +50,7 @@ export default function SetPillRow({ sets, prMarks, style }) {
         return (
           <span
             key={s.id ?? i}
-            style={isPr ? prPillStyle(prBadgeTone(types[0])) : pillStyle}
+            style={isPr ? prPillStyle : pillStyle}
             title={label ? label.charAt(0).toUpperCase() + label.slice(1) : undefined}
             aria-label={isPr ? `${text}, ${label}` : undefined}
           >

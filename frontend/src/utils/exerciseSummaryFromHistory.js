@@ -40,10 +40,11 @@ function deriveLastSession(history, exerciseId, excludeSessionId) {
 // `exerciseSummary` after a write, and invalidation is a no-op while a query is paused or its
 // refetch is failing. So for a person's whole offline/lie-fi stretch the derived best freezes at
 // the moment connectivity dropped while ExerciseDetail's displaySets keeps growing. Without this,
-// the Log screen's PR pill compares each row against that frozen value -- and because isPrSet asks
-// "does this TIE the all-time best" rather than "did this beat it", the result isn't merely a
-// missing badge: a genuine offline PR goes unbadged while a later, lighter set that happens to tie
-// the PRE-offline best gets badged instead.
+// the Log screen's record badges compare each row against that frozen value: a genuine offline PR
+// goes unbadged while the running best it should have raised stays where it was. (Before the Log
+// screen moved onto History's predicate this was worse than a missing badge -- the old isPrSet
+// asked "does this TIE the all-time best", so a later, lighter set that happened to tie the
+// PRE-offline best got badged instead.)
 //
 // Ranks on comparableLb (never raw est1rm) so the weight-0 bodyweight guard is preserved, and uses
 // strict `>` so an equal set never displaces the one already recorded -- same rules as deriveBest.
@@ -55,7 +56,7 @@ function deriveLastSession(history, exerciseId, excludeSessionId) {
 // comparableLb instead would read its weight-0/reps-0 pair as a comparable of 0, the max would
 // silently become a no-op, and the PR pill would land on the wrong row for the entire outage --
 // the exact failure this function exists to prevent, just via a different measure.
-export function mergeBestWithLocalSets(best, sets) {
+export function mergeBestWithLocalSets(best, sets, localSessionStartedAt) {
   let merged = best ?? null;
   let mergedComparable = merged ? comparableValue(merged) : null;
   for (const set of sets || []) {
@@ -65,15 +66,19 @@ export function mergeBestWithLocalSets(best, sets) {
     const candidateComparable = comparableValue(set);
     if (mergedComparable === null || candidateComparable > mergedComparable) {
       mergedComparable = candidateComparable;
-      // No sessionStartedAt -- a set that hasn't synced has no server session to date it by, and
-      // the Log screen's Best card doesn't render one. The server best keeps its own fields
-      // untouched whenever it wins, since it's returned as-is.
+      // A set that hasn't synced has no SERVER session to date it by, but it does have a date:
+      // it was logged into the session happening right now. `localSessionStartedAt` carries that,
+      // falling back to now for the offline stretch where the session itself has no id or start
+      // yet. The Best card renders this date, so leaving it undefined would blank the one field
+      // that says WHEN -- and blank it precisely for the record you just set. The server best
+      // keeps its own fields untouched whenever it wins, since it's returned as-is.
       //
       // est1rm is null for a hold: Epley over 0 reps is meaningless, and labelling seconds as a
       // weight is the mistake the weight-0 branch exists to avoid. Matches BestDto.
+      const startedAt = localSessionStartedAt ?? new Date().toISOString();
       merged = isHold
-        ? { weight: set.weight, reps: 0, durationSeconds: set.durationSeconds, unit: set.unit || 'lb', est1rm: null }
-        : { weight: set.weight, reps: set.reps, unit: set.unit || 'lb', est1rm: epley(set.weight, set.reps) };
+        ? { weight: set.weight, reps: 0, durationSeconds: set.durationSeconds, unit: set.unit || 'lb', est1rm: null, sessionStartedAt: startedAt }
+        : { weight: set.weight, reps: set.reps, unit: set.unit || 'lb', est1rm: epley(set.weight, set.reps), sessionStartedAt: startedAt };
     }
   }
   return merged;

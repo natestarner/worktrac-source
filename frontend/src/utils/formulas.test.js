@@ -5,7 +5,6 @@ import {
   convertWeight,
   epley,
   EST_1RM_REP_CAP,
-  isPrSet,
   toLb,
 } from './formulas';
 
@@ -129,38 +128,6 @@ describe('computePrefillDraft', () => {
     const draft = computePrefillDraft(lastSession, [], 'lb');
     expect(draft.weight).toBeCloseTo(220.5, 1);
     expect(draft.reps).toBe(5);
-  });
-});
-
-describe('isPrSet', () => {
-  it('is false when there is no best yet', () => {
-    expect(isPrSet({ weight: 135, reps: 8, unit: 'lb' }, null)).toBe(false);
-  });
-
-  it('is true when the set matches the best within tolerance', () => {
-    const bestComparableLb = toLb(epley(135, 8), 'lb'); // 171
-    expect(isPrSet({ weight: 135, reps: 8, unit: 'lb' }, bestComparableLb)).toBe(true);
-  });
-
-  it('is false when the set is meaningfully below the best', () => {
-    const bestComparableLb = toLb(epley(185, 8), 'lb');
-    expect(isPrSet({ weight: 135, reps: 8, unit: 'lb' }, bestComparableLb)).toBe(false);
-  });
-
-  it('compares across units', () => {
-    // 100kg x 5 est1rm ~= 116.67kg =~ 257.2 lb -- should register as the PR set when
-    // the stored best (in lb) is exactly that converted value.
-    const bestComparableLb = toLb(epley(100, 5), 'kg');
-    expect(isPrSet({ weight: 100, reps: 5, unit: 'kg' }, bestComparableLb)).toBe(true);
-    expect(isPrSet({ weight: 135, reps: 5, unit: 'lb' }, bestComparableLb)).toBe(false);
-  });
-
-  it('compares on reps, not est1rm, for a bodyweight (zero-weight) set', () => {
-    // Epley collapses to 0 at weight 0 for any rep count, so without the reps-based
-    // fallback every zero-weight set would trivially "match" the best regardless of reps.
-    const bestComparableLb = comparableLb(0, 10, 'lb');
-    expect(isPrSet({ weight: 0, reps: 10, unit: 'lb' }, bestComparableLb)).toBe(true);
-    expect(isPrSet({ weight: 0, reps: 5, unit: 'lb' }, bestComparableLb)).toBe(false);
   });
 });
 

@@ -79,40 +79,59 @@
   --color-warning-border: #eecd6b;
   --color-warning-text: #7a5c05; /* 5.64 on warning-bg */
 
-  /* PR / celebration. Deliberately distinct from danger: a personal record and
-     a failure must never share a colour, which they did while the auth error
-     banners were rendering on --color-pr-bg. */
-  --color-pr-bg: #fbe9e0;
-  --color-pr-border: #f0c4ab;
-  --color-pr-text: #a8532c; /* 4.53 on pr-bg */
+  /* A warm highlight surface for anything deliberately celebratory or set-apart that is NOT a
+     personal record: the Plus upgrade celebration, the "no note yet" chip, a routine's active
+     step, an admin role pill. It was called --color-pr-* while records were its only user; the
+     record tokens are now --color-record-* below, and sharing one name for two meanings is
+     exactly the drift that made "PR" mean four different things across five screens.
 
-  /* One trio per celebrated PR type, so a top-weight record and an est.-1RM record are not the
-     same badge with different words in it. All three hues come from the MARK's own three warms
-     (#E8734A orange, #B5542D rust, #F2A65A amber) -- the same family the confetti already uses --
-     darkened until the text passes AA. Reaching for blue/green/purple would have differentiated
-     them far more cheaply and read as a different app bolted on: the toast comment below makes
-     the same argument about green, and the confetti's middle colour WAS green once and was
-     removed for it.
+     Deliberately distinct from danger: a celebration and a failure must never share a colour,
+     which they did while the auth error banners were rendering on this token. */
+  --color-highlight-bg: #fbe9e0;
+  --color-highlight-border: #f0c4ab;
+  --color-highlight-text: #a8532c; /* 4.53 on highlight-bg */
 
-     ⚠️ COLOUR IS THE SECOND SIGNAL, NEVER THE ONLY ONE. Measured mutual separation between the
-     three text tones is only 1.05:1 - 1.43:1, so to a red-green colour-blind reader (and to
-     anyone glancing at a phone in a bright gym) they are the same colour. The ICON and the
-     accessible label are what actually distinguish the types; these tokens reinforce a
-     distinction that is already carried. The acceptance test is to view History in greyscale and
-     confirm the types are still tellable apart.
+  /* ONE tint for every personal record, on every screen. The GLYPH says which record it is.
+
+     There were three trios here, one per record type, and they failed in both directions at
+     once. They were not distinguishable from each other -- measured mutual separation between
+     the three text tones was 1.05:1 - 1.43:1, i.e. one colour to a red-green colour-blind
+     reader or to anyone glancing at a phone in a bright gym. And they were not distinguishable
+     from the ALERT palette, which is what a person actually reported: --color-pr-est1rm-bg was
+     #fbe9e0 against --color-danger-bg #fbe6e0, a CIEDE2000 distance of 2.21 -- below the ~2.3
+     just-noticeable-difference threshold, so a personal record was rendering in a fill that is
+     literally indistinguishable from the one the app uses for errors. The volume trio was the
+     warning palette by the same measure. The old comment here claimed separation from danger,
+     but it measured the TEXT tone; SetPillRow tints the whole pill with the FILL.
+
+     So: one trio, derived against both alert families rather than only against danger, and
+     measured on the fill as well as the text.
+
+       text vs --color-danger    CIEDE2000 15.11   (was 6.11)
+       text vs --color-warning   CIEDE2000 12.10
+       text vs --color-success   CIEDE2000 40.67   -- green means PR nowhere any more
+       FILL vs --color-danger-bg CIEDE2000 10.52   (was 2.21, i.e. below JND)
+       FILL vs --color-warning-bg CIEDE2000 11.48
+
+     Still the mark's own warm family (#E8734A orange, #F2A65A amber, #B5542D rust) -- the
+     family the confetti already uses. Blue/green/purple would separate more cheaply and read as
+     a different app bolted on; the toast comment below makes the same argument about green, and
+     the confetti's middle colour WAS green once and was removed for it.
+
+     ⚠️ A pure gold is not available here and it is worth knowing why before "correcting" this
+     toward one: --color-warning-text #7a5c05 IS a dark gold. Every candidate at that hue landed
+     inside 12 CIEDE2000 of the warning tone. This sits deliberately on the amber/apricot side of
+     it, which is the only band in this palette that clears red on one side and gold on the other.
+
+     ⚠️ COLOUR IS STILL THE SECOND SIGNAL, NEVER THE ONLY ONE. With one tint that is now the
+     whole argument rather than a caveat on it: the ICON and the accessible label are what
+     distinguish est. 1RM from top weight from volume. The acceptance test is unchanged -- view
+     History in greyscale and confirm the three types are still tellable apart.
 
      Measured against #faf9f7 bg / #ffffff surface. */
-  --color-pr-est1rm-bg: #fbe9e0;
-  --color-pr-est1rm-border: #f0c4ab;
-  --color-pr-est1rm-text: #a8532c; /* 4.53 own bg / 5.07 bg / 5.33 surface */
-
-  --color-pr-heaviest-bg: #f7e4da;
-  --color-pr-heaviest-border: #e3b193;
-  --color-pr-heaviest-text: #8f3f1f; /* 5.89 own bg / 6.89 bg / 7.24 surface */
-
-  --color-pr-volume-bg: #fbf0da;
-  --color-pr-volume-border: #e8cf95;
-  --color-pr-volume-text: #7a5212; /* 6.10 own bg / 6.56 bg / 6.90 surface */
+  --color-record-bg: #ffd9b8;
+  --color-record-border: #c2853c; /* 3.13 surface */
+  --color-record-text: #8a4c0a; /* 5.09 own bg / 6.40 bg / 6.73 surface */
 
   --color-dark: #1c1b19;
 
@@ -322,7 +341,7 @@
     --color-success-bg: #163524;
 
     /* Constraint worth preserving: dark danger must stay visually separable
-       from --color-pr-text below. The obvious brighter reds (#e8836a, #f0907a)
+       from --color-highlight-text below. The obvious brighter reds (#e8836a, #f0907a)
        land within 1.1:1 of the PR orange -- i.e. the same colour to the eye,
        which would make a failure and a personal record indistinguishable. */
     --color-danger: #e07a5f; /* 6.13 bg / 5.56 surface; 1.23 vs pr-text */
@@ -335,27 +354,25 @@
     --color-warning-border: #5c4a14;
     --color-warning-text: #e8c766;
 
-    --color-pr-bg: #3a2417;
-    --color-pr-border: #5a3520;
-    /* Left at the light value this sat at ~2.7:1 on the dark pr-bg above. */
-    --color-pr-text: #e8935f; /* 6.07 on pr-bg */
+    --color-highlight-bg: #3a2417;
+    --color-highlight-border: #5a3520;
+    /* Left at the light value this sat at ~2.7:1 on the dark highlight-bg above. */
+    --color-highlight-text: #e8935f; /* 6.07 on highlight-bg */
 
-    /* The per-type trios, dark. Each text tone clears the >= 1.2:1 separation from
-       --color-danger that the note above requires, so no PR type can be mistaken for a failure:
-       est1rm 1.23, heaviest 1.49, volume 1.76. Measured against #171614 bg / #221f1c surface.
-       Mutual separation between the three is 1.18:1 - 1.43:1 -- see the light block for why that
-       is acceptable and what carries the distinction instead. */
-    --color-pr-est1rm-bg: #3a2417;
-    --color-pr-est1rm-border: #5a3520;
-    --color-pr-est1rm-text: #e8935f; /* 6.07 own bg / 7.55 bg / 6.85 surface */
+    /* The one record trio, dark -- re-derived against the dark grounds, not flipped. Same
+       measurement as the light block, and the dark per-type trios had the same defect:
+       --color-pr-heaviest-bg was #3a1e14 against --color-danger-bg #3a1f17, CIEDE2000 4.05.
 
-    --color-pr-heaviest-bg: #3a1e14;
-    --color-pr-heaviest-border: #5c3020;
-    --color-pr-heaviest-text: #f0a882; /* 7.73 own bg / 9.15 bg / 8.30 surface */
+         text vs --color-danger     CIEDE2000 18.92
+         text vs --color-warning    CIEDE2000 18.12
+         text vs --color-success    CIEDE2000 45.24
+         FILL vs --color-danger-bg  CIEDE2000 15.82   (was 4.05)
+         FILL vs --color-warning-bg CIEDE2000 15.05
 
-    --color-pr-volume-bg: #33290f;
-    --color-pr-volume-border: #554318;
-    --color-pr-volume-text: #f2c073; /* 8.58 own bg / 10.82 bg / 9.81 surface */
+       Measured against #171614 bg / #221f1c surface. */
+    --color-record-bg: #663300;
+    --color-record-border: #9c5c1c; /* 3.09 surface */
+    --color-record-text: #ff9e3d; /* 5.01 own bg / 8.79 bg / 7.97 surface */
 
     /* --color-dark is meant to read as an intentionally-dark "chip" (routine progress button,
        "editing past session" banner, numeric keypad, etc.), always paired with white text. Left
@@ -1923,7 +1940,7 @@ input[type='search']::-webkit-search-results-decoration {
    class added transiently by ExerciseDetail.jsx, then removed after it plays. */
 @keyframes newSetFlash {
   0% {
-    background-color: var(--color-pr-bg);
+    background-color: var(--color-highlight-bg);
   }
   100% {
     background-color: transparent;

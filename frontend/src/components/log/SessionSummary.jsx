@@ -8,9 +8,16 @@ import { dispatchDurableWrite, DELETE_SET_MUTATION_KEY } from '../../lib/queryCl
 import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import SetPillRow from '../shared/SetPillRow';
+import PrBadge, { prBadgeLabel } from '../shared/PrBadge';
+import { liveSessionPrFlagKey } from '../../utils/historyPrFlags';
 import Card from '../shared/Card';
 
-export default function SessionSummary({ entries, loading, sessionId, personId, onSelectExercise, onChanged }) {
+// `prFlags` is the { setMarks, sessionMarks } pair from historyPrFlags.js#buildHistoryPrFlags,
+// built by LogTab over `history` PLUS the live session. These rows are entry rows with the same
+// shape as History's, so they get the same treatment: set-level records badge the individual set
+// pill, and the session-level record badges the exercise NAME -- no single set is the answer to a
+// session total. Omitting it renders plain rows, exactly as before.
+export default function SessionSummary({ entries, prFlags, loading, sessionId, personId, onSelectExercise, onChanged }) {
   const { openConfirm } = useUI();
   const queryClient = useQueryClient();
 
@@ -45,7 +52,11 @@ export default function SessionSummary({ entries, loading, sessionId, personId, 
         }),
       );
     }
-    onChanged();
+    // The exerciseId is reported upward so LogTab can re-arm its volume-celebration latch:
+    // removing these sets lowers the exercise's all-time session-volume record, and a latch left
+    // at the old value would suppress every genuine new record below it, permanently. Passed as an
+    // argument rather than read from context here, so this component stays a leaf.
+    onChanged(entry.exerciseId);
   }
 
   if (loading) {
@@ -99,9 +110,16 @@ export default function SessionSummary({ entries, loading, sessionId, personId, 
               borderBottom: i < entries.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
             }}
           >
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: 'var(--color-text)' }}>{entry.exerciseName}</div>
-              <SetPillRow sets={entry.sets} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 4 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)' }}>{entry.exerciseName}</div>
+                {(prFlags?.sessionMarks.get(liveSessionPrFlagKey(sessionId, entry.exerciseId)) || []).map((type) => (
+                  <span key={type} aria-label={`${prBadgeLabel([type])} for ${entry.exerciseName}`}>
+                    <PrBadge type={type} size={12} showLabel />
+                  </span>
+                ))}
+              </div>
+              <SetPillRow sets={entry.sets} prMarks={prFlags?.setMarks.get(liveSessionPrFlagKey(sessionId, entry.exerciseId))} />
             </div>
             <div style={{ display: 'flex', gap: 14, flexShrink: 0 }}>
               <button onClick={() => onSelectExercise(entry.exerciseId)} style={editLinkStyle}>

@@ -18,9 +18,10 @@ import { CELEBRATED_PR_TYPES, SET_PR_TYPES } from '../components/trends/exercise
 // ## The predicates this does and does not replace
 //
 // Still strict `>` against the prior best, matching WorkoutSetService#insertSetAndDetectPr, which
-// remains the backend's own answer for its own purposes. It is deliberately NOT formulas.js#isPrSet
-// -- that asks "does this TIE my best", which is the Log screen pill's different question and would
-// re-flag every repeat of an identical set. See .claude/rules/log-screen.md.
+// remains the backend's own answer for its own purposes. formulas.js#isPrSet -- a +-0.5 TIE that
+// answered "is this my best" for the Log screen's pill -- has been removed; every record mark in
+// the app is now strict `>`, and this file and historyPrFlags.js share their maths through
+// SET_MEASURE_VALUE below. See .claude/rules/log-screen.md.
 //
 // ## Applicability is self-guarding -- do not add a bodyweightOnly flag here
 //
@@ -55,7 +56,12 @@ export function sessionVolumeLb(sets) {
 
 // The single number each SET-level celebrated measure ranks on, in a unit-normalized form.
 // comparableValue already carries the weight-0 -> reps and hold -> seconds substitutions.
-const SET_MEASURE_VALUE = {
+//
+// EXPORTED because historyPrFlags.js ranks on exactly the same numbers. It used to hold a
+// byte-identical copy with a comment on each saying it mirrored the other, which is a rule two
+// files have to keep by hand. The two functions stay separate -- they differ in what "prior best"
+// means -- but the MATHS is one table. See .claude/rules/log-screen.md.
+export const SET_MEASURE_VALUE = {
   est1rm: (set) => comparableValue(set),
   heaviest: (set) => toLb(Number(set?.weight) || 0, set?.unit || 'lb'),
 };

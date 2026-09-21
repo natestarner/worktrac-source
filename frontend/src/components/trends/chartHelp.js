@@ -99,7 +99,7 @@ export function prRecordHelp(measure) {
     lines: [
       'Every row is your all-time best for that exercise on the record picked above. Changing the record changes the number on every row, and the date beside it.',
       spec.recordMeaning,
-      'A dash means the record does not apply to that exercise: a pull-up has no top weight, and a timed hold has no reps.',
+      'When a record does not apply to an exercise -- a pull-up has no top weight, a timed hold has no reps -- the row shows that exercise’s best effort in grey instead, and says why underneath. Those rows sort last, because there is nothing to rank them on.',
       // The breakdown replaced a bare "One session", which was unreadable on its own: there was
       // no way to tell a genuine heavy day from ten junk sets of an empty bar. Saying so here is
       // what makes the number trustworthy rather than merely large.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHistoryPrFlags, historyPrFlagKey } from './historyPrFlags';
+import { buildHistoryPrFlags, historyPrFlagKey, liveSessionPrFlagKey, LIVE_SESSION_FLAG_KEY } from './historyPrFlags';
 
 function session(id, startedAt, exerciseId, exerciseName, sets) {
   return { id, startedAt, endedAt: startedAt, manual: false, entries: [{ exerciseId, exerciseName, sets, note: null }] };
@@ -201,6 +201,129 @@ describe('buildHistoryPrFlags', () => {
       ];
       expect(sessionTypes(history, 1, 1)).toBeUndefined();
       expect(sessionTypes(history, 2, 2)).toBeUndefined();
+    });
+  });
+
+  // ============================================================================================
+  // The live session — what makes the Log screen agree with History
+  // ============================================================================================
+  //
+  // The workout in progress is not in `history` yet, and offline it has no server id for the
+  // person's entire stretch. Both the Log screen's set rows and the "Session exercises" list fold
+  // it in here rather than asking a different question, which is what the retired
+  // formulas.js#isPrSet used to do.
+  describe('the live session', () => {
+    const liveEntry = (exerciseId, sets) => ({ exerciseId, exerciseName: 'Bench Press', sets });
+
+    it('marks a record set in the workout in progress, against the history behind it', () => {
+      const history = [session(1, '2026-07-01T12:00:00Z', 1, 'Bench Press', [{ weight: 135, reps: 8, unit: 'lb' }])];
+      const { setMarks } = buildHistoryPrFlags(history, {
+        liveSession: {
+          id: 99,
+          startedAt: '2026-07-08T12:00:00Z',
+          entries: [liveEntry(1, [{ weight: 185, reps: 8, unit: 'lb' }])],
+        },
+      });
+
+      // 185x8 beats both the 135 top weight and the 171 est. 1RM behind it.
+      expect(setMarks.get(historyPrFlagKey(99, 1))).toEqual([['heaviest', 'est1rm']]);
+    });
+
+    // ⚠️ THE OFFLINE CASE, and the reason this feature exists. `contextSessionId` is null for the
+    // person's whole outage, so the session has no id to key on -- it goes under
+    // LIVE_SESSION_FLAG_KEY instead. Without this the Log screen shows no badges in exactly the
+    // mode a record is most likely to go unnoticed.
+    it('marks a record logged with no session id yet, under the live key', () => {
+      const history = [session(1, '2026-07-01T12:00:00Z', 1, 'Bench Press', [{ weight: 135, reps: 8, unit: 'lb' }])];
+      const { setMarks } = buildHistoryPrFlags(history, {
+        liveSession: { id: null, startedAt: undefined, entries: [liveEntry(1, [{ weight: 185, reps: 8, unit: 'lb' }])] },
+      });
+
+      expect(setMarks.get(liveSessionPrFlagKey(null, 1))).toEqual([['heaviest', 'est1rm']]);
+      expect(liveSessionPrFlagKey(null, 1)).toBe(historyPrFlagKey(LIVE_SESSION_FLAG_KEY, 1));
+    });
+
+    // A session with no startedAt must sort LAST, not become NaN and make the comparator
+    // non-transitive -- it is the workout happening now, by definition after everything else.
+    it('folds a dateless live session after the history behind it, not before', () => {
+      const history = [session(1, '2026-07-01T12:00:00Z', 1, 'Bench Press', [{ weight: 225, reps: 8, unit: 'lb' }])];
+      const { setMarks } = buildHistoryPrFlags(history, {
+        liveSession: { id: null, startedAt: undefined, entries: [liveEntry(1, [{ weight: 185, reps: 8, unit: 'lb' }])] },
+      });
+
+      // Sorted first, the 185 would look like a first-ever set and be marked.
+      expect(setMarks.get(liveSessionPrFlagKey(null, 1))).toEqual([[]]);
+      expect(wasPr(history, 1, 1)).toEqual([true]);
+    });
+
+    // ⚠️ Once the session syncs it is in `history` too. Folding both copies would compare the
+    // session against ITSELF -- the history copy sets the running best, then the live copy fails
+    // to beat it -- and every mark it had just earned would silently disappear at the moment it
+    // synced.
+    it('replaces the history copy of a session it has also synced, rather than folding it twice', () => {
+      const history = [
+        session(1, '2026-07-01T12:00:00Z', 1, 'Bench Press', [{ weight: 135, reps: 8, unit: 'lb' }]),
+        session(2, '2026-07-08T12:00:00Z', 1, 'Bench Press', [{ weight: 185, reps: 8, unit: 'lb' }]),
+      ];
+      const { setMarks } = buildHistoryPrFlags(history, {
+        liveSession: {
+          id: 2,
+          startedAt: '2026-07-08T12:00:00Z',
+          // The merged view: the synced set plus one still queued.
+          entries: [liveEntry(1, [{ weight: 185, reps: 8, unit: 'lb' }, { weight: 205, reps: 8, unit: 'lb' }])],
+        },
+      });
+
+      expect(setMarks.get(historyPrFlagKey(2, 1))).toEqual([['heaviest', 'est1rm'], ['heaviest', 'est1rm']]);
+    });
+
+    // The session-level record has to see the live total too, or the "Session exercises" entry
+    // header stays unbadged for the whole workout that earned it.
+    it('marks the session-volume record for the workout in progress', () => {
+      const history = [session(1, '2026-07-01T12:00:00Z', 1, 'Bench Press', [{ weight: 100, reps: 5, unit: 'lb' }])];
+      const { sessionMarks } = buildHistoryPrFlags(history, {
+        liveSession: {
+          id: null,
+          startedAt: undefined,
+          entries: [liveEntry(1, [{ weight: 100, reps: 10, unit: 'lb' }])],
+        },
+      });
+
+      expect(sessionMarks.get(liveSessionPrFlagKey(null, 1))).toEqual(['sessionVolume']);
+    });
+
+    // The log screen asks about ONE exercise. Without the filter this is a whole-history walk on
+    // the app's hottest screen, which is the objection that kept this derivation off it before.
+    it('folds only the requested exercise when one is named', () => {
+      const history = [
+        session(1, '2026-07-01T12:00:00Z', 1, 'Bench Press', [{ weight: 135, reps: 8, unit: 'lb' }]),
+        session(2, '2026-07-02T12:00:00Z', 2, 'Squat', [{ weight: 225, reps: 5, unit: 'lb' }]),
+      ];
+      const { setMarks } = buildHistoryPrFlags(history, { exerciseId: 1 });
+
+      expect(setMarks.get(historyPrFlagKey(1, 1))).toEqual([['heaviest', 'est1rm']]);
+      expect(setMarks.get(historyPrFlagKey(2, 2))).toBeUndefined();
+    });
+
+    // Filtering must not change the ANSWER, only the work -- the running best for an exercise is
+    // unaffected by other exercises either way.
+    it('gives the same answer filtered as unfiltered', () => {
+      const history = [
+        session(1, '2026-07-01T12:00:00Z', 1, 'Bench Press', [{ weight: 135, reps: 8, unit: 'lb' }]),
+        session(2, '2026-07-02T12:00:00Z', 2, 'Squat', [{ weight: 225, reps: 5, unit: 'lb' }]),
+        session(3, '2026-07-03T12:00:00Z', 1, 'Bench Press', [{ weight: 185, reps: 8, unit: 'lb' }]),
+      ];
+      const all = buildHistoryPrFlags(history);
+      const one = buildHistoryPrFlags(history, { exerciseId: 1 });
+
+      expect(one.setMarks.get(historyPrFlagKey(3, 1))).toEqual(all.setMarks.get(historyPrFlagKey(3, 1)));
+    });
+
+    it('is a no-op when there is no live session', () => {
+      const history = [session(1, '2026-07-01T12:00:00Z', 1, 'Bench Press', [{ weight: 135, reps: 8, unit: 'lb' }])];
+
+      expect(buildHistoryPrFlags(history, {}).setMarks).toEqual(buildHistoryPrFlags(history).setMarks);
+      expect(buildHistoryPrFlags(history, { liveSession: { id: 9, entries: [] } }).setMarks.size).toBe(1);
     });
   });
 });

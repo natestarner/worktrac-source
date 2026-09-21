@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import SectionLabel from '../shared/SectionLabel';
 import { useNavigate } from 'react-router-dom';
 import { queryClient, CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
+import { buildHistoryPrFlags } from '../../utils/historyPrFlags';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useExercises } from '../../hooks/useExercises';
@@ -45,6 +46,7 @@ export default function LogTab() {
     doneEditingSession,
     updateEditingSession,
     setExerciseSearch,
+    clearVolumePrCelebrated,
   } = useAppState();
 
   const {
@@ -79,6 +81,19 @@ export default function LogTab() {
     : null;
   const serverSessionEntries = activeSessionId ? history.find((s) => s.id === activeSessionId)?.entries ?? [] : [];
   const sessionEntries = useSessionEntries({ personId: activePersonId, serverEntries: serverSessionEntries, exercises: catalog });
+
+  // Record marks for the workout in progress, from the SAME fold History uses -- so an exercise
+  // row in "Session exercises" and the same row on History cannot disagree about which records
+  // fell. `sessionEntries` already merges still-queued writes off the MutationCache, and the fold
+  // keys an unsynced session under LIVE_SESSION_FLAG_KEY, so this works with no signal by one code
+  // path. Deliberately not a connectivity branch: nothing here reads useOnlineStatus.
+  const sessionPrFlags = useMemo(
+    () =>
+      buildHistoryPrFlags(history, {
+        liveSession: { id: activeSessionId, startedAt: liveSession?.startedAt, entries: sessionEntries },
+      }),
+    [history, activeSessionId, liveSession?.startedAt, sessionEntries],
+  );
 
   useEffect(() => {
     if (activeSessionId && !selectedExerciseId) refetchHistory();
@@ -427,6 +442,7 @@ export default function LogTab() {
       {hasActiveSession && !selectedExercise && (
         <SessionSummary
           entries={sessionEntries}
+          prFlags={sessionPrFlags}
           loading={activeSessionId ? historyLoading : false}
           sessionId={activeSessionId}
           // Load-bearing: the durable DELETE_SET write's reconcileSetChange invalidates
@@ -435,7 +451,13 @@ export default function LogTab() {
           // though its sets were really deleted server-side.
           personId={activePersonId}
           onSelectExercise={selectExercise}
-          onChanged={refetchHistory}
+          onChanged={(removedExerciseId) => {
+            // See PERSON_DEFAULTS.volumePrCelebrated: removing an entry's sets lowers that
+            // exercise's session-volume record, so the latch holding the last celebrated value
+            // has to be re-armed or it suppresses every later record below it.
+            if (removedExerciseId != null) clearVolumePrCelebrated(removedExerciseId);
+            refetchHistory();
+          }}
         />
       )}
 

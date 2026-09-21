@@ -125,9 +125,37 @@ describe('mergeBestWithLocalSets', () => {
   });
 
   it('replaces the best when a local set beats it', () => {
-    const merged = mergeBestWithLocalSets(bestOf(135, 8), [{ weight: 185, reps: 8, unit: 'lb' }]);
+    const merged = mergeBestWithLocalSets(bestOf(135, 8), [{ weight: 185, reps: 8, unit: 'lb' }], '2026-09-20T09:00:00Z');
 
-    expect(merged).toEqual({ weight: 185, reps: 8, unit: 'lb', est1rm: 234.3 });
+    expect(merged).toEqual({ weight: 185, reps: 8, unit: 'lb', est1rm: 234.3, sessionStartedAt: '2026-09-20T09:00:00Z' });
+  });
+
+  // The Log screen's Best card renders a date. A best that came from a set which hasn't synced has
+  // no SERVER session to date it by, but it does have one: the session happening right now.
+  it('dates a local best by the live session it was logged into', () => {
+    const merged = mergeBestWithLocalSets(null, [{ weight: 185, reps: 8, unit: 'lb' }], '2026-09-20T09:00:00Z');
+
+    expect(merged.sessionStartedAt).toBe('2026-09-20T09:00:00Z');
+  });
+
+  // Offline the live session has no id and no startedAt for the person's whole stretch, so there
+  // is nothing to date it by but now -- and an undefined date blanks the card's date line for
+  // precisely the record just set.
+  it('falls back to now when the live session has no start yet', () => {
+    const before = Date.now();
+    const merged = mergeBestWithLocalSets(null, [{ weight: 185, reps: 8, unit: 'lb' }], undefined);
+
+    expect(Date.parse(merged.sessionStartedAt)).toBeGreaterThanOrEqual(before);
+  });
+
+  // The server best is returned AS-IS when it wins, so it keeps its own date rather than being
+  // restamped with today's -- the card must say when the record was actually set.
+  it('leaves the server best its own date when it wins', () => {
+    const best = bestOf(225, 8);
+
+    expect(mergeBestWithLocalSets(best, [{ weight: 185, reps: 8, unit: 'lb' }], '2026-09-20T09:00:00Z').sessionStartedAt).toBe(
+      '2026-07-01T12:00:00Z',
+    );
   });
 
   it('keeps the server best when the local set is below it', () => {
@@ -145,9 +173,9 @@ describe('mergeBestWithLocalSets', () => {
   it('derives a best from local sets alone when the server has none yet', () => {
     // The first-ever set for an exercise, logged offline -- otherwise the card reads "No PR yet"
     // for the whole offline stretch.
-    const merged = mergeBestWithLocalSets(null, [{ weight: 100, reps: 5, unit: 'lb' }]);
+    const merged = mergeBestWithLocalSets(null, [{ weight: 100, reps: 5, unit: 'lb' }], '2026-09-20T09:00:00Z');
 
-    expect(merged).toEqual({ weight: 100, reps: 5, unit: 'lb', est1rm: 116.7 });
+    expect(merged).toEqual({ weight: 100, reps: 5, unit: 'lb', est1rm: 116.7, sessionStartedAt: '2026-09-20T09:00:00Z' });
   });
 
   it('picks the strongest of several local sets, not the last one', () => {
@@ -165,17 +193,17 @@ describe('mergeBestWithLocalSets', () => {
     // comfortably, but a naive 100 < 135 would decide it the wrong way.
     expect(comparableLb(100, 5, 'kg')).toBeGreaterThan(comparableLb(135, 5, 'lb'));
 
-    const merged = mergeBestWithLocalSets(bestOf(135, 5), [{ weight: 100, reps: 5, unit: 'kg' }]);
+    const merged = mergeBestWithLocalSets(bestOf(135, 5), [{ weight: 100, reps: 5, unit: 'kg' }], '2026-09-20T09:00:00Z');
 
-    expect(merged).toEqual({ weight: 100, reps: 5, unit: 'kg', est1rm: 116.7 });
+    expect(merged).toEqual({ weight: 100, reps: 5, unit: 'kg', est1rm: 116.7, sessionStartedAt: '2026-09-20T09:00:00Z' });
   });
 
   it('ranks bodyweight sets on reps, not the collapsed Epley estimate', () => {
     // comparableLb returns reps when weight is 0; without that guard every bodyweight set would
     // tie every other one at est1rm 0.
-    const merged = mergeBestWithLocalSets({ weight: 0, reps: 10, unit: 'lb', est1rm: 0 }, [{ weight: 0, reps: 12, unit: 'lb' }]);
+    const merged = mergeBestWithLocalSets({ weight: 0, reps: 10, unit: 'lb', est1rm: 0 }, [{ weight: 0, reps: 12, unit: 'lb' }], '2026-09-20T09:00:00Z');
 
-    expect(merged).toEqual({ weight: 0, reps: 12, unit: 'lb', est1rm: 0 });
+    expect(merged).toEqual({ weight: 0, reps: 12, unit: 'lb', est1rm: 0, sessionStartedAt: '2026-09-20T09:00:00Z' });
   });
 
   it('does not let a bodyweight local set displace a loaded server best', () => {

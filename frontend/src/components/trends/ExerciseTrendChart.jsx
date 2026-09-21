@@ -15,6 +15,12 @@ import { metricSpec } from './exerciseMetrics';
 // That measure is `StatsService#comparableValue` -- est. 1RM for a loaded lift, but the REP COUNT
 // for a bodyweight set and SECONDS for a hold. Don't describe it as "est. 1RM" flatly (this
 // comment used to, and the chart's help copy inherited the error); see .claude/rules/trends.md.
+// A record dot is --color-record-text, the ONE colour a personal record is drawn in app-wide.
+// It was --color-success, which made green mean "PR" here and on the Log screen while History
+// and the celebration used the warm palette -- one idea, two colours, depending on the tab. Green
+// now means nothing record-shaped anywhere. Measured CIEDE2000 20.3 (light) / 19.5 (dark) from
+// --color-accent, the line's own colour, and the dot is still 50% larger with a surface-coloured
+// stroke, so it reads as a marked point rather than a slightly-off one.
 function TrendDot({ cx, cy, payload }) {
   const isPr = payload.isPr;
   return (
@@ -22,7 +28,7 @@ function TrendDot({ cx, cy, payload }) {
       cx={cx}
       cy={cy}
       r={isPr ? 6 : 4}
-      fill={isPr ? 'var(--color-success)' : 'var(--color-accent)'}
+      fill={isPr ? 'var(--color-record-text)' : 'var(--color-accent)'}
       stroke="var(--color-surface)"
       strokeWidth={2}
     />
@@ -51,7 +57,7 @@ function ChartTooltip({ active, payload, metric, defaultUnit }) {
       <div style={{ color: 'var(--color-muted)', fontSize: 12, marginTop: 2 }}>
         {point.setCount} set{point.setCount === 1 ? '' : 's'} &middot; best {point.weightDisplay} {defaultUnit} &times; {point.reps}
       </div>
-      {point.isPr && <div style={{ color: 'var(--color-success)', fontWeight: 700, marginTop: 2 }}>New PR</div>}
+      {point.isPr && <div style={{ color: 'var(--color-record-text)', fontWeight: 700, marginTop: 2 }}>New PR</div>}
     </div>
   );
 }
