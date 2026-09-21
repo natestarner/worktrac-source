@@ -24,8 +24,7 @@ import { windowLabel } from '../shared/historyWindowCopy';
 import SetPillRow from '../shared/SetPillRow';
 import PrBadge, { prBadgeLabel } from '../shared/PrBadge';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
-import { tagChipStyle } from '../shared/tagChipStyle';
-import { IconNote, IconScroll } from '../shared/icons';
+import { IconHelp, IconNote, IconScroll } from '../shared/icons';
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
@@ -365,9 +364,9 @@ function HistoryTabContent({ initialExerciseFilter }) {
                       </div>
                     )}
                     {entryTags?.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                      <div style={{ marginBottom: 6 }}>
                         {entryTags.map((tag) => (
-                          <span key={tag.id} style={tagChipStyle}>
+                          <span key={tag.id} className="tag-label">
                             {tag.name}
                           </span>
                         ))}
@@ -402,7 +401,7 @@ function RecordLegend() {
   return (
     <div
       role="note"
-      aria-label="What the record badges mean: a star is an estimated 1RM record, a double chevron is a top weight record, and stacked layers is a session volume record."
+      aria-label="What the record badges mean: a trophy is an estimated 1RM record, a double chevron is a top weight record, and stacked layers is a session volume record."
       style={{
         display: 'flex',
         flexWrap: 'wrap',
@@ -419,8 +418,30 @@ function RecordLegend() {
           {prSpec(type)?.badgeLabel}
         </span>
       ))}
-      <Link to="/app/help#history" style={{ color: 'var(--color-accent-text)', fontWeight: 'var(--weight-semibold)' }}>
-        How records work
+      {/* An icon, not the former text link, so the legend stays one compact line instead of
+          growing a fourth, wordier item every time it's on screen. Shrunk to 28px the same way
+          ChartHelp's trigger is -- below the 44px touch target, acceptable for the same reason:
+          the worst case is a missed tap on a link to more explanation, and there is nothing
+          destructive beside it to hit by mistake. `aria-label` carries the exact former link
+          text, so this is still "How records work" to a screen reader and to the existing
+          getByRole('link', { name: 'How records work' }) coverage -- see frontend-core.md's rule
+          on converting a text control to an icon one. */}
+      <Link
+        to="/app/help#history"
+        aria-label="How records work"
+        title="How records work"
+        className="pressable pressable-subtle"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 28,
+          height: 28,
+          borderRadius: 'var(--radius-full)',
+          color: 'var(--color-accent-text)',
+        }}
+      >
+        <IconHelp size={15} aria-hidden="true" />
       </Link>
     </div>
   );

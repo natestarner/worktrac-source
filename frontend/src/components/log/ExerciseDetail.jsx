@@ -46,11 +46,10 @@ import ExerciseNoteModal from '../shared/ExerciseNoteModal';
 import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
 import ReadOnlyWrap from '../shared/ReadOnlyWrap';
-import { IconMore, IconNote, IconPencil, IconPin, IconStar, IconStarFilled, IconTrash } from '../shared/icons';
+import { IconMore, IconNote, IconPencil, IconPin, IconStar, IconStarFilled, IconTrash, IconTrophy } from '../shared/icons';
 import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
 import PrBadge, { est1rmLabelForSet, prBadgeLabel, prBadgeTitle } from '../shared/PrBadge';
-import { tagChipStyle } from '../shared/tagChipStyle';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 // How far from a record the nudge under the steppers is still worth showing. Past this it stops
@@ -843,8 +842,8 @@ export default function ExerciseDetail({
           // word "Bodyweight" for that flag -- so EVERY hold was captioned "Bodyweight", including
           // one logged with weight on it. The comment said a hold "takes the same rep-focused
           // presentation branch", which is true of the LAYOUT and false of the LABEL; one flag was
-          // answering both questions. The caption does not repeat the word "hold": the value above
-          // it already reads "1:00 hold", so what is missing for a weighted hold is only the load.
+          // answering both questions. The caption does not repeat the word "hold": the badge above
+          // already reads "Longest hold", so what is missing for a weighted hold is only the load.
           // The badge above now names the measure, so this no longer prefixes "Est. 1RM ·" --
           // that read twice in the same row. What is left is the set the estimate came from,
           // which is what the records table shows in parentheses after the number.
@@ -862,8 +861,10 @@ export default function ExerciseDetail({
             // screens it appears on.
             label: est1rmLabelForSet(loggedSet),
             // epley() now carries the 12-rep cap, so this is the same number the board will show.
+            // No trailing "hold": the badge above already names it "Longest hold", and repeating
+            // the word on the big number under it was the actual redundancy, not a second naming.
             valueText: isHold
-              ? `${formatRestTime(loggedSet.durationSeconds)} hold`
+              ? formatRestTime(loggedSet.durationSeconds)
               : loggedWeight === 0
                 ? `${loggedSet.reps} reps`
                 : `${epley(loggedWeight, loggedSet.reps)} ${defaultUnit}`,
@@ -1115,9 +1116,9 @@ export default function ExerciseDetail({
             </ReadOnlyWrap>
           </div>
           {exercise.tags?.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
+            <div style={{ marginBottom: 18 }}>
               {exercise.tags.map((tag) => (
-                <span key={tag.id} style={tagChipStyle}>
+                <span key={tag.id} className="tag-label">
                   {tag.name}
                 </span>
               ))}
@@ -1355,7 +1356,7 @@ export default function ExerciseDetail({
                     same event the row below is about to show -- same icon, same tint. While still
                     counting down it stays text-only; a record glyph over a set you have not done
                     yet would be claiming something untrue. */}
-                {prHint.arrived && <IconStarFilled size={14} />}
+                {prHint.arrived && <IconTrophy size={14} />}
                 {prHint.text}
               </div>
             )}
