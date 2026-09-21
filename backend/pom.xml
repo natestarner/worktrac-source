@@ -45,13 +45,13 @@
         <!-- NOTE: verify these are still the latest stable versions on Maven Central
              before your first build. bucket4j_jdk17-core targets JDK 17+ (this project
              is on Java 25); do not use the bucket4j_jdk8-core artifact. -->
-        <bucket4j.version>8.19.0</bucket4j.version>
+        <bucket4j.version>8.20.0</bucket4j.version>
         <caffeine.version>3.2.4</caffeine.version>
         <azure-communication-email.version>1.1.5</azure-communication-email.version>
         <!-- Latest STABLE at time of writing; 33.5.0-beta.1 exists and is deliberately not used.
              The Stripe API version itself is pinned separately via app.stripe.api-version, so an
              SDK bump cannot silently change request/response shapes. -->
-        <stripe-java.version>33.4.1</stripe-java.version>
+        <stripe-java.version>33.4.2</stripe-java.version>
     </properties>
 
     <dependencies>
