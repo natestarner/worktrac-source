@@ -213,8 +213,23 @@ export const IconDumbbell = (props) => (
   </Icon>
 );
 
-// The two PR-type glyphs, beside IconStarFilled (which stays est. 1RM, because that is the marker
-// History has always used and people already read it as "record here").
+// The three PR-type glyphs.
+//
+// est. 1RM used to share IconStarFilled with the favourite toggle -- same shape, same weight, and
+// on the Log screen the two sit close enough together that they read as one control doing two
+// jobs. A trophy is the record; the star stays the favourite's alone.
+export const IconTrophy = (props) => (
+  <Icon strokeWidth={1.5} {...props}>
+    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+    <path d="M4 22h16" />
+    <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+  </Icon>
+);
+
+// The other two PR-type glyphs, beside IconTrophy above.
 //
 // ⚠️ These carry the DISTINCTION BETWEEN PR TYPES, on their own. There is exactly ONE record
 // colour now (--color-record-*), so shape is not merely the stronger signal -- it is the only one.

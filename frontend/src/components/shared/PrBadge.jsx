@@ -1,4 +1,4 @@
-import { IconStarFilled, IconChevronsUp, IconLayers } from './icons';
+import { IconTrophy, IconChevronsUp, IconLayers } from './icons';
 import { prSpec } from '../trends/exerciseMetrics';
 
 // The one badge for "this took a record", used by History's set pills, History's exercise entry
@@ -27,7 +27,7 @@ import { prSpec } from '../trends/exerciseMetrics';
 // that getByLabel('Record') needs { exact: true } against these.
 
 const GLYPHS = {
-  est1rm: IconStarFilled,
+  est1rm: IconTrophy,
   heaviest: IconChevronsUp,
   sessionVolume: IconLayers,
 };
@@ -35,7 +35,7 @@ const GLYPHS = {
 // Falls back to the est.-1RM glyph rather than throwing, the same rule metricSpec exists for: a
 // persisted UI slice or a restored cache can name a measure this build does not know.
 export function prBadgeGlyph(type) {
-  return GLYPHS[type] || IconStarFilled;
+  return GLYPHS[type] || IconTrophy;
 }
 
 // ⚠️ What to CALL the est.-1RM record for a given set, which is not always "Est. 1RM".

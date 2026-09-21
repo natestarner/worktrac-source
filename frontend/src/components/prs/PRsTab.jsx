@@ -31,7 +31,6 @@ import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import { IconChevronRight, IconScroll, IconStar, IconTrendingUp } from '../shared/icons';
 import { windowLabel } from '../shared/historyWindowCopy';
-import { tagChipStyle } from '../shared/tagChipStyle';
 
 // Wrapper: same key={activePersonId} remount pattern as HistoryTab (see its header comment) --
 // isolates the filter across a person switch even though PRsTab has no deep-link seed of its own
@@ -241,9 +240,9 @@ function PRsTabContent() {
                   </div>
                 )}
                 {tags?.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                  <div style={{ marginTop: 6 }}>
                     {tags.map((tag) => (
-                      <span key={tag.id} style={tagChipStyle}>
+                      <span key={tag.id} className="tag-label">
                         {tag.name}
                       </span>
                     ))}

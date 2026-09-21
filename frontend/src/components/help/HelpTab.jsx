@@ -438,8 +438,8 @@ export default function HelpTab() {
         <p>
           Workouts are listed newest first, each with its date, its time (or a start&ndash;end range),
           every exercise and every set. Personal records are badged where they happened, and the
-          badge says which kind: a star for your best single effort, a double chevron for a top
-          weight. On a bodyweight exercise the star means most reps, and on a hold it means longest
+          badge says which kind: a trophy for your best single effort, a double chevron for a top
+          weight. On a bodyweight exercise the trophy means most reps, and on a hold it means longest
           hold &mdash; the badge names whichever it is. A whole-workout record sits next to the
           exercise name rather than on one set, because no single set is the answer to
           &ldquo;most volume&rdquo;. A small key above the list repeats what each shape means. See{' '}

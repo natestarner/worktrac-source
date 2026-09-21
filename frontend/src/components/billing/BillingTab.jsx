@@ -382,7 +382,12 @@ function PaidSummary({
 
       {!comped && (
         <OfflineDisabledWrap message="Managing your plan needs a connection.">
-          <Button variant="secondary" fullWidth onClick={onManage} disabled={pending}>
+          {/* marginBottom, not the ProUpgradeCard SectionLabel below getting a matching marginTop:
+              FreeSummary's copy of that same label already sits under a cardStyle div (its own
+              24px marginBottom), so a margin on the label would double up there. This button is
+              the one place nothing already supplies that gap -- on a narrow phone "Training
+              clients?" landed close enough under it to read as part of the same control. */}
+          <Button variant="secondary" fullWidth onClick={onManage} disabled={pending} style={{ marginBottom: 'var(--space-6)' }}>
             Manage billing
           </Button>
         </OfflineDisabledWrap>
@@ -392,7 +397,13 @@ function PaidSummary({
           ProUpgradeCard verbatim rather than a second card -- it is already checked against every
           other label for the substring rule (billing.md), and the two never share a screen: this
           renders only for PLUS, ProUpgradeCard's other call site only for FREE. No `cardRef` here --
-          the ?intent=pro scroll-into-view only ever arrives at the FREE screen. */}
+          the ?intent=pro scroll-into-view only ever arrives at the FREE screen.
+
+          ctaVariant="primary" here, unlike the FREE call below: this screen's only other button is
+          "Manage billing" (secondary), so nothing competes for the one variant="primary" a screen
+          may carry (frontend-core.md), and a household already paying for Plus is exactly who
+          should see this upsell in the same brand-accent fill as every other primary action rather
+          than blending into the surface behind it. */}
       {plan === 'PLUS' && (
         <ProUpgradeCard
           interval={interval}
@@ -400,6 +411,7 @@ function PaidSummary({
           onBandChange={onProBandChange}
           pending={pending}
           onUpgrade={onUpgrade}
+          ctaVariant="primary"
         />
       )}
     </>
@@ -516,8 +528,16 @@ function FreeSummary({ interval, onIntervalChange, proBand, onProBandChange, pen
  * ⚠️ "Subscribe to Pro" is checked against every other control on this screen for the substring
  * rule -- Upgrade to Plus / Start with Free, decide later / Manage billing / Go Plus. It shares no
  * substring with any of them, and none contains it.
+ *
+ * `ctaVariant` defaults to 'secondary' for the FREE screen below, which already spends its one
+ * variant="primary" on "Upgrade to Plus" sitting above this card -- a second primary button on
+ * the same screen is exactly what frontend-core.md's "at most one visible per screen" rule
+ * forbids. BillingTab's PLUS call site passes 'primary': there this card is the only upgrade on
+ * screen, so it can be the one, and the same neutral outline "Manage billing" uses read as
+ * "nothing to look at here" on a card meant to be noticed, where the accent fill every other
+ * primary action carries reads as "look here".
  */
-function ProUpgradeCard({ interval, band, onBandChange, pending, onUpgrade, cardRef }) {
+function ProUpgradeCard({ interval, band, onBandChange, pending, onUpgrade, cardRef, ctaVariant = 'secondary' }) {
   const selected = PRO_BANDS.find((b) => b.id === band) ?? PRO_BANDS[0];
   // The interval chosen above drives this price too, so the two cards can never quote different
   // billing periods on one screen.
@@ -564,10 +584,10 @@ function ProUpgradeCard({ interval, band, onBandChange, pending, onUpgrade, card
           ))}
         </ul>
 
-        {/* Not variant="primary": this screen allows exactly one, and it belongs to the Plus card
-            that most readers came here for. */}
+        {/* See ctaVariant's header comment above: secondary on the FREE screen (which already has
+            its one primary above this card), primary on the PLUS screen (which has none). */}
         <OfflineDisabledWrap message="Upgrading needs a connection.">
-          <Button variant="secondary" size="lg" fullWidth
+          <Button variant={ctaVariant} size="lg" fullWidth
                   onClick={() => onUpgrade({ plan: 'PRO', band: selected.id })} disabled={pending}>
             Subscribe to Pro
           </Button>
