@@ -57,8 +57,9 @@ import { LOG_SET_MUTATION_KEY, DELETE_SET_MUTATION_KEY } from '../lib/queryClien
 // deleted sets instead of nothing. `formatSessionRecap` even documents the intended behaviour for
 // this case ("a mis-tap on 'Log set' that was then deleted") -- this is what actually delivers it.
 //
-// DELETE_SET's own variables carry the real `setId` it targeted (SessionSummary.jsx,
-// EditSetModal.jsx), and a DELETE_SET write is only ever reachable against an already-synced set
+// DELETE_SET's own variables carry the real `setId` it targeted (SessionSummary.jsx's "remove
+// exercise", ExerciseDetail.jsx's per-set Delete button), and a DELETE_SET write is only ever
+// reachable against an already-synced set
 // (queryClient.js's DELETE_SET comment), so matching by that id is exact -- no session/time
 // scoping needed the way LOG_SET's `clientLoggedAt` guard is. Both sources below drop any set
 // whose real id has a successful-or-inflight delete against it, so the same fix closes the race in
