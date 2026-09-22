@@ -34,6 +34,15 @@ Team is an addition rather than a second retrofit.
   "coach", so that word has to stay free — `AccountVocab` is where it will be spent, as display
   vocabulary, not as a role name. Owner / Manager / Member also reads correctly for a practice, a
   club **and** a second parent on a family account, which no domain-specific ladder does.
+- ⚠️ **`MANAGER` IS SCAFFOLDED BUT NOT YET ASSIGNABLE.** Permissions, vocabulary, `useAccountAccess`
+  and `PlanFeature.MANAGER_ROLE` are all in place, but **no production path sets the role** —
+  `MembershipInviteService` always creates a `MEMBER`. So every "the assistant can…" claim below is
+  verified against the permission map, not against a flow anybody can reach. Whoever builds the
+  promotion path should re-read this file rather than trust that it is already exercised.
+- **An assistant is NOT free.** Seats count people, and the owner's is the only one that doesn't
+  spend one — an assistant with a training profile takes a client place like anybody else. The
+  marketing, Terms and Help copy all said the opposite for a while; the gate never did. See
+  `billing.md` for the one subtraction and the two places that must agree on it.
 - ⚠️ **`MANAGER` does not inherit new permissions the way `OWNER` does.** `OWNER_PERMISSIONS` is
   `EnumSet.allOf`; `MANAGER`'s set is enumerated. That fails closed, which is the right direction,
   but it is silent — the symptom is "the assistant cannot do the new thing", with nothing throwing.

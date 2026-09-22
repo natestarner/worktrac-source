@@ -61,6 +61,13 @@ public class QuotaService {
      * the band's client limit plus one for the trainer's own training profile, since a trainer who
      * also trains must not be spending a client seat on themselves.
      *
+     * <p>⚠️ THAT PLUS-ONE IS THE OWNER, AND NOBODY ELSE. Everyone else on the account is a client
+     * and spends a seat, an assistant (MANAGER) included -- an assistant is a second pair of hands
+     * with a login, not a discount. {@code SubscriptionService.currentClientCount} subtracts the
+     * same single person for the billing screen's "12 of 15", and the two must not drift: it once
+     * also subtracted managers here, which showed a practice "14 of 15 clients" and then 403'd the
+     * next add.
+     *
      * <p>The UNLIMITED band still gets a number ({@code peoplePerProAccount}); "unlimited" is a
      * pricing promise rather than an invitation to create rows without bound.
      *

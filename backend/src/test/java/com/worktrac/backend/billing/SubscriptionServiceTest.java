@@ -1,10 +1,11 @@
 package com.worktrac.backend.billing;
 
 import com.worktrac.backend.account.Account;
+import com.worktrac.backend.common.ForbiddenException;
 import com.worktrac.backend.config.StripeProperties;
-import com.worktrac.backend.membership.AccountMembershipRepository;
-import com.worktrac.backend.membership.AccountRole;
 import com.worktrac.backend.person.PersonRepository;
+import com.worktrac.backend.quota.QuotaProperties;
+import com.worktrac.backend.quota.QuotaService;
 import com.worktrac.backend.support.MutableClock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +17,8 @@ import java.time.Duration;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -40,7 +43,6 @@ class SubscriptionServiceTest {
     private ApplicationEventPublisher events;
     private StripeProperties stripeProperties;
     private PersonRepository personRepository;
-    private AccountMembershipRepository membershipRepository;
     private SubscriptionService service;
     private Account account;
 
@@ -61,9 +63,8 @@ class SubscriptionServiceTest {
                 PlanSku.PLUS_YEAR.name(), PLUS_YEAR_PRICE,
                 PlanSku.PRO_STUDIO_YEAR.name(), PRO_STUDIO_YEAR_PRICE)));
         personRepository = mock(PersonRepository.class);
-        membershipRepository = mock(AccountMembershipRepository.class);
         service = new SubscriptionService(
-                repository, events, stripeProperties, personRepository, membershipRepository, clock);
+                repository, events, stripeProperties, personRepository, clock);
         account = new Account("Test Household");
     }
 
@@ -401,26 +402,63 @@ class SubscriptionServiceTest {
             subscription.setClientSeats(ClientBand.STUDIO.clientLimit());
             when(repository.findByAccountId(5L)).thenReturn(Optional.of(subscription));
             when(personRepository.countByAccount_Id(5L)).thenReturn(4L);
-            when(membershipRepository.countByAccount_IdAndAccountRoleAndPersonIsNotNull(5L, AccountRole.MANAGER))
-                    .thenReturn(0L);
 
             assertThat(service.describe(5L).clientCount()).isEqualTo(3);
         }
 
-        // An assistant's own training profile is a person on the roster but not a CLIENT of the
-        // practice, same reasoning as the trainer's own -- neither spends a client seat, so neither
-        // should be counted as though it did.
+        // ⚠️ THE ASSISTANT IS A CLIENT. Their training profile spends a seat like anybody else's,
+        // and this test is the pin: it used to assert the opposite, on the stated grounds that the
+        // quota gate excluded managers too. It never did -- the gate is `clientSeats + 1` flat --
+        // so the billing screen under-reported and the next add came back 403.
         @Test
-        void alsoExcludesAManagersOwnPerson() {
+        void countsAnAssistantsOwnPersonAsAClient() {
             Subscription subscription = subscription(SubscriptionStatus.ACTIVE, BillingPlan.PRO);
             subscription.setClientSeats(ClientBand.STUDIO.clientLimit());
             when(repository.findByAccountId(5L)).thenReturn(Optional.of(subscription));
-            // Trainer + one assistant (with their own person) + 3 real clients = 5 people.
+            // Trainer + one assistant (with their own person) + 3 other clients = 5 people.
             when(personRepository.countByAccount_Id(5L)).thenReturn(5L);
-            when(membershipRepository.countByAccount_IdAndAccountRoleAndPersonIsNotNull(5L, AccountRole.MANAGER))
-                    .thenReturn(1L);
 
-            assertThat(service.describe(5L).clientCount()).isEqualTo(3);
+            assertThat(service.describe(5L).clientCount()).isEqualTo(4);
+        }
+
+        // The two examples above stated as the invariant they are really about: "12 of 15" on the
+        // billing screen and the 403 from the gate must flip at the SAME person. Walked across the
+        // whole band rather than asserted at one point, because the two drifted by exactly one
+        // person per manager last time -- a single-point check sitting anywhere but the boundary
+        // would have stayed green through that.
+        //
+        // WARNING: Deliberately drives the REAL QuotaService, not a restatement of `clientSeats + 1`.
+        // Restating the ceiling here would make this test agree with itself while the gate went its
+        // own way, which is the precise failure it exists to catch.
+        @Test
+        void clientCountAndTheQuotaCeilingFlipAtTheSamePerson() {
+            int seats = ClientBand.STUDIO.clientLimit();
+            Subscription subscription = subscription(SubscriptionStatus.ACTIVE, BillingPlan.PRO);
+            subscription.setClientSeats(seats);
+            when(repository.findByAccountId(5L)).thenReturn(Optional.of(subscription));
+            QuotaService quotaService = new QuotaService(new QuotaProperties());
+
+            // From "just the trainer" to one person past a full band, whoever those people are --
+            // clients, assistants, or the trainer's own profile. The roles never enter into it.
+            for (long people = 1; people <= seats + 2L; people++) {
+                when(personRepository.countByAccount_Id(5L)).thenReturn(people);
+                int shown = service.describe(5L).clientCount();
+                assertThat(shown).as("clientCount with %d people", people).isEqualTo((int) people - 1);
+
+                long current = people;
+                boolean bandLooksFull = shown >= seats;
+                if (bandLooksFull) {
+                    assertThatThrownBy(() -> quotaService.requirePersonCapacity(
+                            5L, current, BillingPlan.PRO, seats))
+                            .as("the screen shows the band full at %d people, so the gate must refuse", people)
+                            .isInstanceOf(ForbiddenException.class);
+                } else {
+                    assertThatCode(() -> quotaService.requirePersonCapacity(
+                            5L, current, BillingPlan.PRO, seats))
+                            .as("the screen shows room at %d people, so the gate must allow", people)
+                            .doesNotThrowAnyException();
+                }
+            }
         }
 
         // Household tiers have no seats to count usage against -- same reasoning as clientSeats
