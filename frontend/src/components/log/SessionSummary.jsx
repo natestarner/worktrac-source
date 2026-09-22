@@ -9,8 +9,10 @@ import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import SetPillRow from '../shared/SetPillRow';
 import PrBadge, { prBadgeLabel } from '../shared/PrBadge';
+import IconButton from '../shared/IconButton';
 import { liveSessionPrFlagKey } from '../../utils/historyPrFlags';
 import Card from '../shared/Card';
+import { IconPencil, IconTrash } from '../shared/icons';
 
 // `prFlags` is the { setMarks, sessionMarks } pair from historyPrFlags.js#buildHistoryPrFlags,
 // built by LogTab over `history` PLUS the live session. These rows are entry rows with the same
@@ -112,19 +114,24 @@ export default function SessionSummary({ entries, prFlags, loading, sessionId, p
           >
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 4 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)' }}>{entry.exerciseName}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)', minWidth: 0, overflowWrap: 'anywhere' }}>
+                  {entry.exerciseName}
+                </div>
                 {(prFlags?.sessionMarks.get(liveSessionPrFlagKey(sessionId, entry.exerciseId)) || []).map((type) => (
-                  <span key={type} aria-label={`${prBadgeLabel([type])} for ${entry.exerciseName}`}>
+                  <span key={type} style={{ flexShrink: 0 }} aria-label={`${prBadgeLabel([type])} for ${entry.exerciseName}`}>
                     <PrBadge type={type} size={12} showLabel />
                   </span>
                 ))}
               </div>
               <SetPillRow sets={entry.sets} prMarks={prFlags?.setMarks.get(liveSessionPrFlagKey(sessionId, entry.exerciseId))} />
             </div>
-            <div style={{ display: 'flex', gap: 14, flexShrink: 0 }}>
-              <button onClick={() => onSelectExercise(entry.exerciseId)} style={editLinkStyle}>
-                Edit
-              </button>
+            {/* Icon buttons, not text links -- same swap ExerciseDetail's set rows already made for
+                the identical reason (see IconPencil/IconTrash there). Two text links cost the name
+                ~90-110px on every row, long name or not; the labels stay exactly "Edit" and
+                "Remove" as the accessible name, so every e2e assertion that selects these by name
+                (`getByRole('button', { name: 'Edit' })` etc.) is unaffected. */}
+            <div style={{ display: 'flex', gap: 'var(--space-1)', flexShrink: 0 }}>
+              <IconButton onClick={() => onSelectExercise(entry.exerciseId)} label="Edit" icon={IconPencil} tone="accent" />
               {/* Removing an entry with any already-synced set still needs a connection: the deletes
                   themselves are durable now, but enumerating which rows to delete needs a live
                   listSessionSets read. An entry that is only offline-logged so far can still be
@@ -133,12 +140,15 @@ export default function SessionSummary({ entries, prFlags, loading, sessionId, p
                 message="Removing this needs a connection."
                 when={entry.sets.some((s) => !s.optimistic)}
               >
-                <button onClick={() => openConfirm(
+                <IconButton
+                  onClick={() => openConfirm(
                       `Remove ${entry.exerciseName}? The ${entry.sets.length} set${entry.sets.length === 1 ? '' : 's'} you logged for it in this workout will be deleted.`,
                       () => handleRemove(entry),
-                    )} style={removeLinkStyle}>
-                  Remove
-                </button>
+                    )}
+                  label="Remove"
+                  icon={IconTrash}
+                  tone="danger"
+                />
               </OfflineDisabledWrap>
             </div>
           </div>
@@ -147,6 +157,3 @@ export default function SessionSummary({ entries, prFlags, loading, sessionId, p
     </div>
   );
 }
-
-const editLinkStyle = { background: 'none', border: 'none', color: 'var(--color-accent-text)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
-const removeLinkStyle = { background: 'none', border: 'none', color: 'var(--color-danger)', fontSize: 13, fontWeight: 600, cursor: 'pointer' };

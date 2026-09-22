@@ -76,10 +76,12 @@ test.describe('endurance exercises', () => {
     await pickExercise(page, 'Wall Sit');
     await logHoldAt(page, 75);
 
-    await expect(page.getByText('Best · Longest hold')).toBeVisible();
+    // Anchored, not a bare substring: "Xs longer for a Longest hold PR" also contains "Longest
+    // hold" and can be on screen at the same time as this card's own label.
+    await expect(page.getByText(/^Longest hold/)).toBeVisible();
     // Never an est. 1RM -- Epley over zero reps is meaningless, and seconds presented as pounds is
     // the "rep count wearing a costume" mistake the bodyweight branch already guards against.
-    await expect(page.getByText('Best · Est. 1RM')).toHaveCount(0);
+    await expect(page.getByText('Est. 1RM')).toHaveCount(0);
   });
 
   test('a rep-tracked exercise is completely unchanged', async ({ page, request }) => {

@@ -269,7 +269,7 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
 
     // exact: true -- "45lb×8" is also a substring of the Best card's "57 lb  (45lb×8)".
     await expect(page.getByText('45lb×8', { exact: true })).toBeVisible(); // "Last time"
-    await expect(page.getByText(/57 lb/)).toBeVisible(); // "Best · Est. 1RM"
+    await expect(page.getByText(/57 lb/)).toBeVisible(); // "Est. 1RM"
     await goOnline(page);
   });
 
