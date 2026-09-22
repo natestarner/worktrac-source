@@ -81,7 +81,13 @@ export function prBadgeTitle(types, set) {
 // "rep count wearing a costume" mistake .claude/rules/trends.md exists to prevent -- and that rule
 // is explicit that you name all three cases or none. Only the caller knows which case a given set
 // is (it already splits three ways to build the caption), so the caller supplies the word.
-export default function PrBadge({ type, size = 12, showLabel = false, label }) {
+//
+// `pill` draws the background/border independently of `showLabel`, for a spot that has no number
+// beside the glyph to give it context (an entry header, not a set) but also no room for the word
+// -- History's and Session-exercises' entry-header badges. It defaults to `showLabel` so every
+// pre-existing caller (a transparent glyph inside a set pill already carrying the tint, or the
+// overlay's icon+word badge) is unchanged.
+export default function PrBadge({ type, size = 12, showLabel = false, pill = showLabel, label }) {
   const Glyph = prBadgeGlyph(type);
   const spec = prSpec(type);
   const text = label ?? spec?.badgeLabel;
@@ -92,10 +98,10 @@ export default function PrBadge({ type, size = 12, showLabel = false, label }) {
         alignItems: 'center',
         gap: showLabel ? 'var(--space-1)' : 0,
         color: 'var(--color-record-text)',
-        background: showLabel ? 'var(--color-record-bg)' : 'transparent',
-        border: showLabel ? '1px solid var(--color-record-border)' : 'none',
+        background: pill ? 'var(--color-record-bg)' : 'transparent',
+        border: pill ? '1px solid var(--color-record-border)' : 'none',
         borderRadius: 'var(--radius-full)',
-        padding: showLabel ? 'var(--space-1) var(--space-2)' : 0,
+        padding: pill ? 'var(--space-1) var(--space-2)' : 0,
         fontSize: 'var(--text-2xs)',
         fontWeight: 'var(--weight-bold)',
         lineHeight: 1,

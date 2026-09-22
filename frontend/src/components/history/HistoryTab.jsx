@@ -335,17 +335,20 @@ function HistoryTabContent({ initialExerciseFilter }) {
                       className="pressable"
                       style={exerciseHeaderButtonStyle}
                     >
-                      <span style={exerciseNameTextStyle}>{entry.exerciseName}</span>
-                      {/* The session-level record, on the entry header rather than a set pill --
-                          "the biggest session of this exercise you have ever done" belongs to
-                          the whole entry. showLabel because, unlike a set pill, there is no
-                          number beside it to give the glyph context. flexShrink: 0 so a long
-                          name wraps around it instead of squeezing it. */}
+                      {/* The session-level record, leading the entry header rather than a set pill --
+                          "the biggest session of this exercise you have ever done" belongs to the
+                          whole entry. Glyph-only in its own pill (`PrBadge`'s `pill` prop): the
+                          icon+word badge this replaced ran wide enough on a 390px phone to squeeze
+                          the note below down to ~47px of text (see the note's own comment below).
+                          Leading it, matching where a set pill's own glyph sits, rather than
+                          trailing the name as before. flexShrink: 0 so a long name wraps around it
+                          instead of squeezing it. */}
                       {(prSessionMarks.get(historyPrFlagKey(session.id, entry.exerciseId)) || []).map((type) => (
                         <span key={type} style={{ flexShrink: 0 }} aria-label={`${prBadgeLabel([type])} for ${entry.exerciseName}`}>
-                          <PrBadge type={type} size={12} showLabel />
+                          <PrBadge type={type} size={12} pill />
                         </span>
                       ))}
+                      <span style={exerciseNameTextStyle}>{entry.exerciseName}</span>
                     </button>
                     {/* The disclosure indicator, centered on the WHOLE entry (header + sets),
                         matching how it centers on a PRsTab row -- not on the thin header line
