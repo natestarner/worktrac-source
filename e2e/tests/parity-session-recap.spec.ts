@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
@@ -60,4 +60,37 @@ forEachConnectivityMode<{ personName: string }>('ending a workout reports what w
 
     await expect(page.getByText('Workout ended — 2 exercises · 3 sets.')).toBeVisible();
   },
+});
+
+// The bug report this guards: log some sets, delete them all, end the workout -- the recap must
+// report nothing, not the deleted sets. Online only, deliberately not a parity spec: removing an
+// already-synced set needs a live `listSessionSets` read (see SessionSummary's entry in
+// resilience.md's register), so the "Remove" control is unreachable in the degraded modes at all.
+test.describe('Session recap after deleting everything logged', () => {
+  test('reports nothing once every logged set has been removed', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Del');
+
+    await pickExercise(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 1')).toBeVisible();
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 2')).toBeVisible();
+
+    await page.getByRole('button', { name: '← All exercises' }).click();
+    await expect(page.getByText('Barbell Bench Press', { exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Remove' }).click();
+    await page.getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByText('Nothing logged in this workout yet — pick an exercise below to start.')).toBeVisible();
+
+    await page.getByRole('button', { name: 'End workout' }).click();
+    const dialog = page.getByRole('dialog', { name: 'End this workout?' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(/exercises? · \d+ sets?/)).toHaveCount(0);
+
+    await dialog.getByRole('button', { name: 'End workout' }).click();
+    await expect(page.getByText('Workout ended. Logging a set anytime starts a new one.')).toBeVisible();
+  });
 });
