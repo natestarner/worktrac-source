@@ -1067,17 +1067,6 @@ input[type='search']::-webkit-search-results-decoration {
 
 /* --- Chips ------------------------------------------------------------ */
 
-/* A name that is also a control (History's exercise names filter to that exercise). It reads
-   as ordinary text so it matches the same name elsewhere in the app, and only reveals its
-   affordance on hover -- which is desktop-only by design, since on touch there's no hover
-   state to reveal and the aria-label carries the meaning instead. */
-@media (hover: hover) {
-  .name-link:hover {
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-}
-
 .chip {
   display: inline-flex;
   align-items: center;

@@ -13,6 +13,7 @@ import { collectTagVocabulary, filterHistorySessions } from '../../utils/exercis
 import { prSpec, SET_PR_TYPES, SESSION_PR_TYPES } from '../trends/exerciseMetrics';
 import PastSessionModal from './PastSessionModal';
 import Button from '../shared/Button';
+import Modal from '../shared/Modal';
 import Skeleton from '../shared/Skeleton';
 import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
@@ -24,7 +25,7 @@ import { windowLabel } from '../shared/historyWindowCopy';
 import SetPillRow from '../shared/SetPillRow';
 import PrBadge, { prBadgeLabel } from '../shared/PrBadge';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
-import { IconHelp, IconNote, IconScroll } from '../shared/icons';
+import { IconChevronRight, IconHelp, IconNote, IconScroll, IconTrendingUp } from '../shared/icons';
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
@@ -71,6 +72,10 @@ function HistoryTabContent({ initialExerciseFilter }) {
   const { tagsByExerciseId } = useExerciseTagMap(activePersonId);
   const filter = useExerciseFilter(initialExerciseFilter);
   const [showPastSessionModal, setShowPastSessionModal] = useState(false);
+  // The row whose destination chooser is open, or null -- one modal for the whole list rather
+  // than one per row, mirroring PRsTab's identical `navTarget` (see its header comment for why a
+  // record/entry now leads two useful places and neither is obviously the default).
+  const [navTarget, setNavTarget] = useState(null);
   const [scrollToSessionId, setScrollToSessionId] = useState(null);
   const sessionRefs = useRef({});
 
@@ -153,6 +158,18 @@ function HistoryTabContent({ initialExerciseFilter }) {
   function handleFilterToExercise(exerciseId, exerciseName, sessionId) {
     filter.setExerciseFilter({ exerciseId, exerciseName });
     setScrollToSessionId(sessionId);
+  }
+
+  // The chooser's other destination -- same router-state seed PRsTab's "View progress" hands
+  // Trends, so the two entry points can't disagree about how that seed is shaped.
+  function goProgress(exerciseId) {
+    navigate('/app/trends', { state: { trendsExerciseFocus: { exerciseId } } });
+  }
+
+  // Shared by the header line's own button AND the floating chevron hit-zone below -- two
+  // controls, one action, so they can never drift on what they open.
+  function openExerciseOptions(entry, session) {
+    setNavTarget({ exerciseId: entry.exerciseId, exerciseName: entry.exerciseName, sessionId: session.id });
   }
 
   return (
@@ -295,31 +312,62 @@ function HistoryTabContent({ initialExerciseFilter }) {
               {entries.map((entry, i) => {
                 const entryTags = tagsByExerciseId.get(entry.exerciseId);
                 return (
-                  <div key={entry.exerciseId} style={{ padding: '14px 0', borderBottom: i < entries.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none' }}>
-                    {/* The badge sits NEXT TO the name, not at the far edge of the row. With the
-                        note moved to its own line this row has two children, and `space-between`
-                        would fling the badge to the right margin -- visually detached from the
-                        exercise it labels, and out of step with the identical row in "Session
-                        exercises". Left-grouped, the two surfaces read the same. */}
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', marginBottom: 4 }}>
-                      <button
-                        onClick={() => handleFilterToExercise(entry.exerciseId, entry.exerciseName, session.id)}
-                        aria-label={`Show only ${entry.exerciseName} in history`}
-                        className="name-link"
-                        style={exerciseNameLinkStyle}
-                      >
-                        {entry.exerciseName}
-                      </button>
+                  <div
+                    key={entry.exerciseId}
+                    style={{
+                      position: 'relative',
+                      padding: '14px 0',
+                      // Reserves room on the right for the floating chevron below, across every
+                      // line in the entry (header, note, tags, sets) -- not just the header's own
+                      // button -- so nothing wraps underneath it.
+                      paddingRight: 48,
+                      borderBottom: i < entries.length - 1 ? '1px solid var(--color-subtle-bg)' : 'none',
+                    }}
+                  >
+                    {/* The header line is the tap target, not the whole entry -- mirroring PRsTab's
+                        row, which offers the identical two destinations (see the `navTarget` modal
+                        below), but scoped to just the name+badge: the note below wants to stay
+                        selectable prose, the sets aren't part of this control, and a scroll gesture
+                        that terminates on a large row would otherwise fire a tap. */}
+                    <button
+                      onClick={() => openExerciseOptions(entry, session)}
+                      aria-label={`View options for ${entry.exerciseName}`}
+                      className="pressable"
+                      style={exerciseHeaderButtonStyle}
+                    >
+                      <span style={exerciseNameTextStyle}>{entry.exerciseName}</span>
                       {/* The session-level record, on the entry header rather than a set pill --
-                          "the biggest session of this exercise you have ever done" belongs to the
-                          whole entry. showLabel because, unlike a set pill, there is no number
-                          beside it to give the glyph context. */}
+                          "the biggest session of this exercise you have ever done" belongs to
+                          the whole entry. showLabel because, unlike a set pill, there is no
+                          number beside it to give the glyph context. */}
                       {(prSessionMarks.get(historyPrFlagKey(session.id, entry.exerciseId)) || []).map((type) => (
                         <span key={type} aria-label={`${prBadgeLabel([type])} for ${entry.exerciseName}`}>
                           <PrBadge type={type} size={12} showLabel />
                         </span>
                       ))}
-                    </div>
+                    </button>
+                    {/* The disclosure indicator, centered on the WHOLE entry (header + sets),
+                        matching how it centers on a PRsTab row -- not on the thin header line
+                        alone, which would leave it looking pinned to the top of a taller entry
+                        with a note, tags, or several sets underneath. It's a SECOND, decorative
+                        hit-zone for pointer/touch users, not a second control for anyone else:
+                        `aria-hidden` + `tabIndex={-1}` keep it out of the accessibility tree and
+                        the keyboard tab order entirely, so a screen reader or keyboard user still
+                        finds exactly one thing here -- the header button above, whose accessible
+                        name already says what this leads to. `openExerciseOptions` is the same
+                        function the header button calls, so the two can never open different
+                        chooser targets. 40px (`.icon-btn`) rather than the usual 44px touch
+                        target -- the sanctioned dense-row exception, same as every other icon-only
+                        control on this list (see frontend-core.md). */}
+                    <button
+                      onClick={() => openExerciseOptions(entry, session)}
+                      aria-hidden="true"
+                      tabIndex={-1}
+                      className="icon-btn pressable pressable-subtle"
+                      style={exerciseChevronHitZoneStyle}
+                    >
+                      <IconChevronRight size={18} style={{ color: 'var(--color-faint)' }} />
+                    </button>
                     {/* The note gets its OWN full-width line, under the name rather than beside it.
                         In the header row it was the only item that could shrink -- the exercise
                         name is flexShrink: 0 and the record badge has no flex props, while this
@@ -381,6 +429,31 @@ function HistoryTabContent({ initialExerciseFilter }) {
         ))}
 
       {showPastSessionModal && <PastSessionModal onClose={() => setShowPastSessionModal(false)} />}
+
+      {/* The destination chooser -- see PRsTab.jsx's identical `navTarget` modal, which this
+          mirrors deliberately: a tapped exercise now leads two useful places (stay here, filtered,
+          or jump to its progress chart) and neither is obviously the default. */}
+      {navTarget && (
+        <Modal title={navTarget.exerciseName} onClose={() => setNavTarget(null)} width={320}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            <Button
+              variant="primary"
+              fullWidth
+              onClick={() => {
+                handleFilterToExercise(navTarget.exerciseId, navTarget.exerciseName, navTarget.sessionId);
+                setNavTarget(null);
+              }}
+            >
+              <IconScroll size={16} />
+              View this exercise&rsquo;s history
+            </Button>
+            <Button variant="secondary" fullWidth onClick={() => goProgress(navTarget.exerciseId)}>
+              <IconTrendingUp size={16} />
+              View progress
+            </Button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -467,23 +540,48 @@ const editLinkStyle = {
   cursor: 'pointer',
 };
 
-// Only the exercise NAME is the tap target for "filter to this exercise", not the whole row -- a
-// scroll gesture that terminates on a large row would otherwise fire a tap, and the row can also
-// contain a title-bearing note the user may want to read/select.
-//
-// Text colour, not accent: an exercise name is the same thing here as on the Log screen, and
-// colouring it only on this one tab made the app look like it disagreed with itself -- most
-// visibly in dark mode, where these turned orange while Log's stayed white. Discoverability
-// comes from the hover underline (.name-link) and the aria-label rather than from hue.
-const exerciseNameLinkStyle = {
+// The header LINE (name + record badge) is the tap target for "view options for this exercise" --
+// not the whole entry, which still excludes the note/tags/sets below it. A scroll gesture that
+// terminates on a large row would otherwise fire a tap, and the row can also contain a
+// title-bearing note the user may want to read/select; neither lives in this line. The chevron is
+// NOT in here -- see exerciseChevronHitZoneStyle -- because it's centered on the whole entry,
+// including the sets below, to match how it centers on a PRsTab row.
+const exerciseHeaderButtonStyle = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: 'var(--space-2)',
+  marginBottom: 4,
+  width: '100%',
   background: 'none',
   border: 'none',
   padding: 0,
   margin: 0,
   textAlign: 'left',
+  font: 'inherit',
+  color: 'inherit',
+  cursor: 'pointer',
+};
+
+// Text colour, not accent: an exercise name is the same thing here as on the Log screen, and
+// colouring it only on this one tab made the app look like it disagreed with itself -- most
+// visibly in dark mode, where these turned orange while Log's stayed white. Discoverability now
+// comes from the chevron (mirroring PRsTab's row) and the aria-label rather than from hue, so the
+// hover-underline `.name-link` treatment this replaced is gone along with it.
+const exerciseNameTextStyle = {
   color: 'var(--color-text)',
   fontSize: 'var(--text-base)',
   fontWeight: 'var(--weight-semibold)',
   flexShrink: 0,
-  cursor: 'pointer',
+};
+
+// Floating over the entry's own reserved right-hand padding (see the entry's `paddingRight`
+// above), vertically centered on the WHOLE entry rather than flexed alongside the header line --
+// `position: absolute` is what lets it read against the entry's full height (header + sets)
+// instead of just the thin line its sibling button occupies. 40px, matching `.icon-btn`'s
+// dense-row touch target (see frontend-core.md) rather than the usual 44px.
+const exerciseChevronHitZoneStyle = {
+  position: 'absolute',
+  top: '50%',
+  right: 0,
+  transform: 'translateY(-50%)',
 };

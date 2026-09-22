@@ -151,18 +151,18 @@ describe('PRsTab tags, filtering, and row navigation', () => {
 
     // The chooser names the exercise, so it is obvious which row was tapped.
     expect(screen.getByRole('dialog')).toHaveTextContent('Bench Press');
-    expect(screen.getByRole('button', { name: 'View history' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View this exercise’s history' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'View progress' })).toBeInTheDocument();
     // Opening the chooser must not navigate by itself.
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('"View history" deep-links into History pre-filtered to that exercise', async () => {
+  it('"View this exercise’s history" deep-links into History pre-filtered to that exercise', async () => {
     renderPRsTab();
     await screen.findByRole('button', { name: 'Push' });
 
     fireEvent.click(screen.getByText('Bench Press'));
-    fireEvent.click(screen.getByRole('button', { name: 'View history' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View this exercise’s history' }));
 
     expect(mockNavigate).toHaveBeenCalledWith('/app/history', {
       state: { historyExerciseFilter: { exerciseId: 1, exerciseName: 'Bench Press' } },

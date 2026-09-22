@@ -63,12 +63,14 @@ test.describe('History and PRs: tags, PR markers, and click-to-filter', () => {
     await expect(page.getByText('Barbell Bench Press')).toHaveCount(0);
     await page.getByRole('button', { name: 'Clear all' }).click();
 
-    // Clicking an exercise name filters History to just that exercise (requirement 4).
-    await page.getByRole('button', { name: 'Show only Barbell Bench Press in history' }).click();
+    // Clicking an exercise name offers both destinations rather than jumping straight to one
+    // (requirement 4), mirroring PRsTab's identical row chooser below.
+    await page.getByRole('button', { name: 'View options for Barbell Bench Press' }).click();
+    await page.getByRole('button', { name: 'View this exercise’s history' }).click();
     await expect(page.getByRole('button', { name: 'Stop filtering to Barbell Bench Press' })).toBeVisible();
     // "Barbell Bench Press" now also matches the active-filter pill itself, not just the row --
     // assert via the unambiguous row link instead of plain text.
-    await expect(page.getByRole('button', { name: 'Show only Barbell Bench Press in history' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'View options for Barbell Bench Press' })).toBeVisible();
     await expect(page.getByText('Barbell Back Squat')).toHaveCount(0);
 
     // --- Requirement 5: navigating away and back clears the filter ---
@@ -81,7 +83,7 @@ test.describe('History and PRs: tags, PR markers, and click-to-filter', () => {
     await page.getByRole('link', { name: 'History' }).click();
     await expect(page).toHaveURL(/\/app\/history/);
     await expect(page.getByRole('button', { name: 'Stop filtering to Barbell Bench Press' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Show only Barbell Back Squat in history' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'View options for Barbell Back Squat' })).toBeVisible();
 
     // --- PRs tab: tag chip + tapping a row jumps to History pre-filtered ---
     await page.getByRole('link', { name: 'PRs' }).click();
@@ -91,10 +93,28 @@ test.describe('History and PRs: tags, PR markers, and click-to-filter', () => {
     // A row now offers both destinations rather than jumping straight to History -- a record leads
     // two useful places and neither is obviously the default.
     await page.getByText('Barbell Back Squat').click();
-    await page.getByRole('button', { name: 'View history' }).click();
+    await page.getByRole('button', { name: 'View this exercise’s history' }).click();
     await expect(page).toHaveURL(/\/app\/history/);
     await expect(page.getByRole('button', { name: 'Stop filtering to Barbell Back Squat' })).toBeVisible();
     await expect(page.getByText('Barbell Bench Press')).toHaveCount(0);
+  });
+
+  // History's row chooser offers the identical second destination PRsTab's does. The scroll-into-
+  // view assertion itself is covered by the PR-row version of this test just below; this one only
+  // needs to prove History's own chevron-marked row reaches Trends with the right exercise seeded.
+  test('a History row can jump to that exercise\'s progress chart too', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Nate');
+
+    await pickExercise(page, 'Barbell Back Squat');
+    await logSetAt(page, 225, 5);
+    await page.getByRole('link', { name: 'History' }).click();
+    await expect(page.getByText('Barbell Back Squat')).toBeVisible();
+
+    await page.getByRole('button', { name: 'View options for Barbell Back Squat' }).click();
+    await page.getByRole('button', { name: 'View progress' }).click();
+
+    await expect(page).toHaveURL(/\/app\/trends/);
+    await expect(page.getByRole('combobox').filter({ hasText: 'Barbell Back Squat' })).toBeVisible();
   });
 
   // The other half of that chooser. Landing on Trends is not enough: the exercise has to be

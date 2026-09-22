@@ -119,11 +119,11 @@ describe('HistoryTab session notes', () => {
     renderHistoryTab();
 
     const note = await screen.findByText('Shoulder felt off today');
-    const name = screen.getByRole('button', { name: 'Show only Barbell Bench Press in history' });
-    // They must no longer be SIBLINGS. That is the precise arrangement that made the note the
-    // only item able to give up space: in the header row it sat next to a flexShrink: 0 name and
-    // a badge with no flex props, so it absorbed the entire deficit.
-    expect(name.parentElement.contains(note)).toBe(false);
+    const name = screen.getByRole('button', { name: 'View options for Barbell Bench Press' });
+    // The note must not be INSIDE the header button/row. That is the precise arrangement that
+    // made the note the only item able to give up space: in the header row it sat next to a
+    // flexShrink: 0 name and a badge with no flex props, so it absorbed the entire deficit.
+    expect(name.contains(note)).toBe(false);
   });
 });
 
@@ -230,11 +230,41 @@ describe('HistoryTab PR markers, search/tag filtering, and click-to-filter', () 
     expect(screen.queryByText('Bench Press')).not.toBeInTheDocument();
   });
 
-  it('clicking an exercise name filters history to just that exercise', async () => {
+  // A tapped exercise now offers both destinations rather than jumping straight to one --
+  // mirroring PRsTab's identical chooser (see its header comment for why neither is the default).
+  it('tapping an exercise name offers both destinations rather than jumping straight to one', async () => {
     renderHistoryTab();
     await screen.findByRole('button', { name: 'Push' });
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Show only Bench Press in history' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'View options for Bench Press' })[0]);
+
+    // The chooser names the exercise, so it is obvious which row was tapped.
+    expect(screen.getByRole('dialog')).toHaveTextContent('Bench Press');
+    expect(screen.getByRole('button', { name: 'View this exercise’s history' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View progress' })).toBeInTheDocument();
+    // Opening the chooser must not filter or navigate by itself.
+    expect(screen.queryByLabelText('Stop filtering to Bench Press')).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('"View progress" deep-links into Trends with that exercise seeded', async () => {
+    renderHistoryTab();
+    await screen.findByRole('button', { name: 'Push' });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'View options for Bench Press' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'View progress' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/app/trends', {
+      state: { trendsExerciseFocus: { exerciseId: 1 } },
+    });
+  });
+
+  it('clicking an exercise name, then "View this exercise’s history", filters history to just that exercise', async () => {
+    renderHistoryTab();
+    await screen.findByRole('button', { name: 'Push' });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'View options for Bench Press' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'View this exercise’s history' }));
 
     // Both Bench Press sessions remain (2 exercise-name link buttons), plus the active-filter
     // pill itself also reads "Bench Press" -- Squat's session (no Bench Press entry) is gone.
@@ -247,7 +277,8 @@ describe('HistoryTab PR markers, search/tag filtering, and click-to-filter', () 
     renderHistoryTab();
     await screen.findByRole('button', { name: 'Push' });
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Show only Bench Press in history' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'View options for Bench Press' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'View this exercise’s history' }));
     fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
 
     expect(startEditingSession).toHaveBeenCalledTimes(1);
@@ -294,7 +325,8 @@ describe('HistoryTab PR markers, search/tag filtering, and click-to-filter', () 
   it('does not show a "Back to" link for a plain (non-deep-linked) filter', async () => {
     renderHistoryTab();
     await screen.findByRole('button', { name: 'Push' });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Show only Bench Press in history' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'View options for Bench Press' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'View this exercise’s history' }));
     expect(screen.queryByText(/Back to Bench Press/)).not.toBeInTheDocument();
   });
 });
