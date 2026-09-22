@@ -2,7 +2,7 @@ import { MutationObserver, QueryClient, QueryClientProvider } from '@tanstack/re
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSessionRecap } from './useSessionRecap';
-import { LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from '../lib/queryClient';
+import { LOG_SET_MUTATION_KEY, DELETE_SET_MUTATION_KEY, registerOfflineMutationDefaults } from '../lib/queryClient';
 import { queryKeys } from '../api/queryKeys';
 import { logLiveSet } from '../api/sets';
 
@@ -55,6 +55,14 @@ async function logSet(client, { exerciseId, clientLoggedAt = '2026-09-03T18:05:0
       tempId: `temp-${exerciseId}-${clientLoggedAt}`,
     })
     .catch(() => {});
+}
+
+async function dispatchDeleteSet(client, { setId, exerciseId, sessionId = SESSION_ID }) {
+  const observer = new MutationObserver(client, {
+    ...client.getMutationDefaults(DELETE_SET_MUTATION_KEY),
+    mutationKey: DELETE_SET_MUTATION_KEY,
+  });
+  await observer.mutate({ setId, personId: PERSON, exerciseId, sessionId }).catch(() => {});
 }
 
 function renderRecap(client) {
@@ -157,5 +165,56 @@ describe('useSessionRecap', () => {
 
     const { result } = renderRecap(client);
     expect(result.current).toMatchObject({ exerciseCount: 2, setCount: 2 });
+  });
+
+  // THE BUG REPORT: log some sets, delete them all, end the workout. Deleting nets against the
+  // mutation-cache fallback, not just against history -- otherwise the LOG_SET mutations (which
+  // already succeeded, which is the whole reason they're counted at all) keep counting forever.
+  // History is left stale here (still `[]`) to reproduce the exact shape of the bug: the recap has
+  // to net the delete out of the PENDING count, because there is no fresher server count to fall
+  // back on yet.
+  it('reports nothing for sets that were logged and then deleted, before history catches up', async () => {
+    const client = newClient();
+    seed(client, { entries: [] });
+
+    logLiveSet.mockResolvedValueOnce({ isPR: false, best: null, session: { id: SESSION_ID, startedAt: STARTED_AT }, set: { id: 101 } });
+    await logSet(client, { exerciseId: 1 });
+    logLiveSet.mockResolvedValueOnce({ isPR: false, best: null, session: { id: SESSION_ID, startedAt: STARTED_AT }, set: { id: 102 } });
+    await logSet(client, { exerciseId: 1, clientLoggedAt: '2026-09-03T18:06:00.000Z' });
+
+    await dispatchDeleteSet(client, { setId: 101, exerciseId: 1 });
+    await dispatchDeleteSet(client, { setId: 102, exerciseId: 1 });
+
+    const { result } = renderRecap(client);
+    expect(result.current).toMatchObject({ exerciseCount: 0, setCount: 0 });
+  });
+
+  // The same netting, but against a server count that HAS caught up (history already reflects the
+  // delete) -- the surviving set must still be counted, deleting one must not zero the exercise out.
+  it('nets a delete against history once it has caught up, keeping the surviving set', async () => {
+    const client = newClient();
+    seed(client, { entries: [{ exerciseId: 1, exerciseName: 'Bench', sets: [{ id: 201 }, { id: 202 }] }] });
+
+    await dispatchDeleteSet(client, { setId: 201, exerciseId: 1 });
+
+    const { result } = renderRecap(client);
+    expect(result.current).toMatchObject({ exerciseCount: 1, setCount: 1 });
+  });
+
+  // A delete of every set for an exercise must drop the exercise from the count entirely, not
+  // leave it in as a zero -- exerciseCount is the number of exercises actually touched.
+  it('drops an exercise from exerciseCount once every one of its sets is deleted', async () => {
+    const client = newClient();
+    seed(client, {
+      entries: [
+        { exerciseId: 1, exerciseName: 'Bench', sets: [{ id: 301 }] },
+        { exerciseId: 2, exerciseName: 'Squat', sets: [{ id: 302 }] },
+      ],
+    });
+
+    await dispatchDeleteSet(client, { setId: 301, exerciseId: 1 });
+
+    const { result } = renderRecap(client);
+    expect(result.current).toMatchObject({ exerciseCount: 1, setCount: 1 });
   });
 });
