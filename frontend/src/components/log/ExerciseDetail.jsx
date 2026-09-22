@@ -956,7 +956,10 @@ export default function ExerciseDetail({
     : effectiveBest.durationSeconds != null
       ? formatSetSpaced(effectiveBest)
       : `${effectiveBest.est1rm} ${effectiveBest.unit}  (${effectiveBest.weight}${effectiveBest.unit}×${effectiveBest.reps})`;
-  const bestCardLabel = isDuration ? 'Best · Longest hold' : 'Best · Est. 1RM';
+  // No "Best" prefix -- the record-tinted card already reads as a best against the plain "Last
+  // time" card beside it, and the word was pushing the date onto its own wrapped line on iPhone
+  // portrait once a name like "Est. 1RM" and a date both had to fit ("Best · Est. 1RM · Sep 12").
+  const bestCardLabel = isDuration ? 'Longest hold' : 'Est. 1RM';
   // The same pair `lastLabel` uses above -- toLocalDateStr first, because slicing a UTC ISO string
   // directly lands on the wrong day either side of midnight (see utils/datetime.js).
   const bestDateLabel = effectiveBest?.sessionStartedAt
@@ -1163,9 +1166,9 @@ export default function ExerciseDetail({
                 <Skeleton width={110} height={20} />
               </div>
               <div className="summary-card" style={{ background: 'var(--color-record-bg)', border: '1px solid var(--color-record-border)', borderRadius: 'var(--radius-lg)' }}>
-                {/* 140, not 100: this label now carries a date ("Best · Est. 1RM · Sep 12"), and a
-                    skeleton narrower than the text it stands in for makes the card jump on load. */}
-                <Skeleton width={140} height={11} style={{ marginBottom: 8 }} />
+                {/* 110, not 90: this label carries a date ("Est. 1RM · Sep 12"), and a skeleton
+                    narrower than the text it stands in for makes the card jump on load. */}
+                <Skeleton width={110} height={11} style={{ marginBottom: 8 }} />
                 <Skeleton width={130} height={20} />
               </div>
             </div>
@@ -1230,7 +1233,7 @@ export default function ExerciseDetail({
               <div className="summary-card" style={{ background: 'var(--color-record-bg)', border: '1px solid var(--color-record-border)', borderRadius: 'var(--radius-lg)' }}>
                 {/* The separator belongs to the date, for the same reason it does on the "Last
                     time" tile: a best merged from a set that predates this field (a query cache
-                    written before it shipped) has no date, and a bare "Best · Est. 1RM ·" leaves a
+                    written before it shipped) has no date, and a bare "Est. 1RM ·" leaves a
                     middot dangling off the end of the card. */}
                 <div style={{ ...cardLabelStyle, color: 'var(--color-record-text)' }}>
                   {bestCardLabel}

@@ -60,6 +60,8 @@ forEachConnectivityMode<void>('a hold logs and reads back as time', {
     // The half `assert` cannot see while degraded: that the seconds actually reached the server
     // and came back as seconds, rather than being flattened into reps somewhere in the round trip.
     await expect(holdRow(page)).toBeVisible();
-    await expect(page.getByText('Best · Longest hold')).toBeVisible();
+    // Anchored, not a bare substring: "Xs longer for a Longest hold PR" also contains "Longest
+    // hold" and can be on screen at the same time as this card's own label.
+    await expect(page.getByText(/^Longest hold/)).toBeVisible();
   },
 });

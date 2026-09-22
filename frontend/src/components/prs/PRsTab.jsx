@@ -232,83 +232,85 @@ function PRsTabContent() {
               onClick={() => setNavTarget(pr)}
               style={rowButtonStyle}
             >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>{pr.exerciseName}</div>
-                {dateSource && (
-                  <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 2 }}>
-                    {formatDateLabel(toLocalDateStr(dateSource))}
-                  </div>
-                )}
-                {tags?.length > 0 && (
-                  <div style={{ marginTop: 6 }}>
-                    {tags.map((tag) => (
-                      <span key={tag.id} className="tag-label">
-                        {tag.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {/* maxWidth, not flexShrink: 0 alone. The caption for a session-level record is now
-                  a breakdown of the work behind it ("135lb×10, 3×155lb×8"), which is far longer
-                  than the "One session" it replaced -- unbounded it would push the exercise name
-                  on the left out of the row on a phone. */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, maxWidth: '58%' }}>
-                <div style={{ textAlign: 'right', minWidth: 0 }}>
-                  {shown ? (
-                    <>
-                      <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-record-text)' }}>
-                        {shown.value}
-                      </div>
-                      {/* A set-level caption only. A session-level one is the whole breakdown and
-                          renders full-width below the row instead -- see captionOnOwnLine. */}
-                      {!captionOnOwnLine && (
-                        <div
-                          title={shown.caption}
-                          style={{ fontSize: 13, color: 'var(--color-muted)', lineHeight: 1.35 }}
-                        >
-                          {shown.caption}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    // Never a zero: this exercise cannot be measured this way at all, and a column
-                    // of "0 lb" is worse than no column (see .claude/rules/trends.md). But it is no
-                    // longer a bare em dash either -- a pull-up has no top weight and still has a
-                    // record, and the dash said "nothing here" about a row that has a number. The
-                    // fallback is that number (measureFallback), drawn in --color-muted rather than
-                    // the record colour so it never reads as the selected measure, with the caption
-                    // naming why this measure does not apply. An em dash remains for the genuinely
-                    // empty case. `title` is the mouse-user bonus, not the mechanism -- this app is
-                    // used on an iPad, where hover does not exist.
-                    <div title={measureUnavailableTitle(pr, prsMeasure)}>
-                      <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-muted)' }}>
-                        {fallback ? fallback.value : <>&mdash;</>}
-                      </div>
-                      <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
-                        {measureUnavailableCaption(pr)}
-                      </div>
+              {/* The two columns live in their own nowrap row, separate from the button's own
+                  flow. A long exercise name must SHRINK-AND-WRAP inside its column, not push the
+                  value/chevron column onto a line of its own -- those stay exactly where they are
+                  regardless of name length. See rowMainStyle's comment for why this has to be a
+                  nested flex row rather than flex-wrap on the button itself. */}
+              <div style={rowMainStyle}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, overflowWrap: 'anywhere' }}>{pr.exerciseName}</div>
+                  {dateSource && (
+                    <div style={{ fontSize: 13, color: 'var(--color-muted)', marginTop: 2 }}>
+                      {formatDateLabel(toLocalDateStr(dateSource))}
+                    </div>
+                  )}
+                  {tags?.length > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      {tags.map((tag) => (
+                        <span key={tag.id} className="tag-label">
+                          {tag.name}
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>
-                {/* The disclosure indicator. Nothing on this row said it was tappable before --
-                    no chevron and (against frontend-core.md's own rule) no `pressable` either, so
-                    a pointer device got no hover treatment at all. --color-faint is furniture
-                    here, which is one of its sanctioned uses. */}
-                <IconChevronRight size={18} style={{ color: 'var(--color-faint)' }} />
+                {/* maxWidth, not flexShrink: 0 alone. The caption for a session-level record is now
+                    a breakdown of the work behind it ("135lb×10, 3×155lb×8"), which is far longer
+                    than the "One session" it replaced -- unbounded it would push the exercise name
+                    on the left out of the row on a phone. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, maxWidth: '58%' }}>
+                  <div style={{ textAlign: 'right', minWidth: 0 }}>
+                    {shown ? (
+                      <>
+                        <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-record-text)' }}>
+                          {shown.value}
+                        </div>
+                        {/* A set-level caption only. A session-level one is the whole breakdown and
+                            renders full-width below the row instead -- see captionOnOwnLine. */}
+                        {!captionOnOwnLine && (
+                          <div
+                            title={shown.caption}
+                            style={{ fontSize: 13, color: 'var(--color-muted)', lineHeight: 1.35 }}
+                          >
+                            {shown.caption}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      // Never a zero: this exercise cannot be measured this way at all, and a column
+                      // of "0 lb" is worse than no column (see .claude/rules/trends.md). But it is no
+                      // longer a bare em dash either -- a pull-up has no top weight and still has a
+                      // record, and the dash said "nothing here" about a row that has a number. The
+                      // fallback is that number (measureFallback), drawn in --color-muted rather than
+                      // the record colour so it never reads as the selected measure, with the caption
+                      // naming why this measure does not apply. An em dash remains for the genuinely
+                      // empty case. `title` is the mouse-user bonus, not the mechanism -- this app is
+                      // used on an iPad, where hover does not exist.
+                      <div title={measureUnavailableTitle(pr, prsMeasure)}>
+                        <div style={{ fontSize: 18, fontWeight: 'var(--weight-bold)', color: 'var(--color-muted)' }}>
+                          {fallback ? fallback.value : <>&mdash;</>}
+                        </div>
+                        <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>
+                          {measureUnavailableCaption(pr)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* The disclosure indicator. Nothing on this row said it was tappable before --
+                      no chevron and (against frontend-core.md's own rule) no `pressable` either, so
+                      a pointer device got no hover treatment at all. --color-faint is furniture
+                      here, which is one of its sanctioned uses. */}
+                  <IconChevronRight size={18} style={{ color: 'var(--color-faint)' }} />
+                </div>
               </div>
-              {/* The work behind a SESSION-level record, on its own full-width line.
-                  flexBasis 100% against the row's flexWrap, rather than restructuring the row:
-                  the two columns above keep their exact layout, and this simply wraps under them.
-                  It is here and not in the right-hand column because the breakdown is no longer
-                  capped at three runs -- a ten-set day is a real sentence now, and in a 58%-wide
-                  right-aligned column it either squeezed the exercise name off the row or wrapped
-                  into a ragged stack of two-word lines. */}
+              {/* The work behind a SESSION-level record, on its own full-width line below
+                  rowMainStyle's row -- plain block flow now that the row above is its own nested
+                  flex container, rather than a flexBasis: 100% trick against a flex-wrap on the
+                  button itself. */}
               {captionOnOwnLine && (
                 <div
                   style={{
-                    flexBasis: '100%',
-                    minWidth: 0,
                     marginTop: 'var(--space-1)',
                     fontSize: 13,
                     lineHeight: 1.35,
@@ -346,6 +348,14 @@ function PRsTabContent() {
 // Was --color-faint (2.07:1 -- effectively unreadable). Empty-state copy is body text
 // and belongs on --color-muted; see the token comments in index.css.
 
+// Plain block, NOT a flex container -- rowMainStyle owns the flex row now. This used to be
+// `display: flex` + `flexWrap: 'wrap'` so the optional session-level caption could take a
+// flexBasis: 100% third line under the two columns, but that same flexWrap let a long exercise
+// name wrap the value/chevron column onto its OWN new line too: flex-wrap decides line breaks
+// from each item's un-shrunk (max-content) width, before flex-shrink ever gets a say, so a name
+// wider than the leftover space pushed the whole right-hand column down and (since a lone item on
+// a `space-between` line sits at its start) left, instead of shrinking the name in place. See
+// rowMainStyle for the fix.
 const rowButtonStyle = {
   width: '100%',
   boxSizing: 'border-box',
@@ -354,14 +364,19 @@ const rowButtonStyle = {
   border: '1px solid var(--color-border)',
   borderRadius: 16,
   padding: '18px 20px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  // Wraps so a session-level record's breakdown can take a full-width third line under the two
-  // columns. With no third child the row is unchanged: two items, nothing to wrap.
-  flexWrap: 'wrap',
-  gap: 12,
   cursor: 'pointer',
   font: 'inherit',
   color: 'inherit',
+};
+
+// The two-column row, `nowrap` (the default) rather than `wrap`: keeping both columns on ONE flex
+// line is what forces the name column to shrink (and its text to wrap internally) instead of the
+// whole column wrapping below. The value/chevron column's `flexShrink: 0` then guarantees it never
+// gives up so much as a pixel -- shrinking is entirely the name column's job, via its own
+// `minWidth: 0` + `overflowWrap: 'anywhere'`.
+const rowMainStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
 };

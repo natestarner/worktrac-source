@@ -99,7 +99,7 @@ describe('SessionSummary', () => {
       <SessionSummary entries={entries} loading={false} sessionId={101} personId={7} onSelectExercise={onSelectExercise} onChanged={onChanged} />,
     );
 
-    fireEvent.click(screen.getByText('Remove'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
 
     // Still reaches the same api call -- it just routes through the outbox now, so a connection
     // drop mid-remove retries instead of losing the delete.
@@ -121,7 +121,7 @@ describe('SessionSummary', () => {
       <SessionSummary entries={entries} loading={false} sessionId={101} personId={7} onSelectExercise={onSelectExercise} onChanged={onChanged} />,
     );
 
-    fireEvent.click(screen.getByText('Remove'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
 
     await waitFor(() => expect(deleteSet).toHaveBeenCalledWith(55));
     const deleteVars = queryClient
@@ -146,7 +146,7 @@ describe('SessionSummary', () => {
       expect(queryClient.getMutationCache().getAll().filter((m) => m.state.status === 'pending')).toHaveLength(1),
     );
 
-    fireEvent.click(screen.getByText('Remove'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
 
     await waitFor(() =>
       expect(queryClient.getMutationCache().getAll().filter((m) => m.state.status === 'pending')).toHaveLength(0),
@@ -171,7 +171,7 @@ describe('SessionSummary', () => {
       expect(queryClient.getMutationCache().getAll().filter((m) => m.state.status === 'pending')).toHaveLength(1),
     );
 
-    const removeButtons = screen.getAllByText('Remove');
+    const removeButtons = screen.getAllByRole('button', { name: 'Remove' });
     expect(removeButtons[0]).toBeDisabled();
     expect(removeButtons[1]).not.toBeDisabled();
   });
@@ -192,7 +192,7 @@ describe('SessionSummary', () => {
       <SessionSummary entries={entries} loading={false} sessionId={101} onSelectExercise={onSelectExercise} onChanged={onChanged} />,
     );
 
-    fireEvent.click(screen.getByText('Remove'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
 
     await waitFor(() => expect(deleteSet).toHaveBeenCalledWith(55));
     expect(onChanged).toHaveBeenCalled();
@@ -296,7 +296,7 @@ describe('SessionSummary', () => {
     );
     listSessionSets.mockResolvedValue([{ id: 55 }]);
 
-    fireEvent.click(screen.getByText('Remove'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
 
     await waitFor(() => expect(onChanged).toHaveBeenCalledWith(42));
   });

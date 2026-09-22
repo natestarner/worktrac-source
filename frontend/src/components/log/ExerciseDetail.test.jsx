@@ -2017,7 +2017,7 @@ describe('ExerciseDetail duration-tracked exercises', () => {
     });
     renderExerciseDetail({ exercise: plank, liveSession: { id: 101 } });
 
-    expect(await screen.findByText('Best · Longest hold')).toBeInTheDocument();
+    expect(await screen.findByText('Longest hold')).toBeInTheDocument();
     expect(screen.getByText('1:45')).toBeInTheDocument();
   });
 

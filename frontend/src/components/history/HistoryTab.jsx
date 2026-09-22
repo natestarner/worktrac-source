@@ -339,9 +339,10 @@ function HistoryTabContent({ initialExerciseFilter }) {
                       {/* The session-level record, on the entry header rather than a set pill --
                           "the biggest session of this exercise you have ever done" belongs to
                           the whole entry. showLabel because, unlike a set pill, there is no
-                          number beside it to give the glyph context. */}
+                          number beside it to give the glyph context. flexShrink: 0 so a long
+                          name wraps around it instead of squeezing it. */}
                       {(prSessionMarks.get(historyPrFlagKey(session.id, entry.exerciseId)) || []).map((type) => (
-                        <span key={type} aria-label={`${prBadgeLabel([type])} for ${entry.exerciseName}`}>
+                        <span key={type} style={{ flexShrink: 0 }} aria-label={`${prBadgeLabel([type])} for ${entry.exerciseName}`}>
                           <PrBadge type={type} size={12} showLabel />
                         </span>
                       ))}
@@ -567,11 +568,17 @@ const exerciseHeaderButtonStyle = {
 // visibly in dark mode, where these turned orange while Log's stayed white. Discoverability now
 // comes from the chevron (mirroring PRsTab's row) and the aria-label rather than from hue, so the
 // hover-underline `.name-link` treatment this replaced is gone along with it.
+//
+// minWidth: 0 (overriding the flex default of the item's own content width) plus the record
+// badge's flexShrink: 0 above is what makes a long name WRAP inside the row instead of running
+// past its right edge -- without it the header button's `nowrap` flex line simply overflowed the
+// card, since a flex item's default minimum main size is its unwrapped content width.
 const exerciseNameTextStyle = {
   color: 'var(--color-text)',
   fontSize: 'var(--text-base)',
   fontWeight: 'var(--weight-semibold)',
-  flexShrink: 0,
+  minWidth: 0,
+  overflowWrap: 'anywhere',
 };
 
 // Floating over the entry's own reserved right-hand padding (see the entry's `paddingRight`
