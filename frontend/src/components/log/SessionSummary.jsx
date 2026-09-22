@@ -114,14 +114,17 @@ export default function SessionSummary({ entries, prFlags, loading, sessionId, p
           >
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 4 }}>
+                {/* Leads the name, matching History's entry header -- glyph-only in its own pill
+                    (`PrBadge`'s `pill` prop), not the wider icon+word badge this replaced.
+                    flexShrink: 0 so a long name wraps around it instead of squeezing it. */}
+                {(prFlags?.sessionMarks.get(liveSessionPrFlagKey(sessionId, entry.exerciseId)) || []).map((type) => (
+                  <span key={type} style={{ flexShrink: 0 }} aria-label={`${prBadgeLabel([type])} for ${entry.exerciseName}`}>
+                    <PrBadge type={type} size={12} pill />
+                  </span>
+                ))}
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)', minWidth: 0, overflowWrap: 'anywhere' }}>
                   {entry.exerciseName}
                 </div>
-                {(prFlags?.sessionMarks.get(liveSessionPrFlagKey(sessionId, entry.exerciseId)) || []).map((type) => (
-                  <span key={type} style={{ flexShrink: 0 }} aria-label={`${prBadgeLabel([type])} for ${entry.exerciseName}`}>
-                    <PrBadge type={type} size={12} showLabel />
-                  </span>
-                ))}
               </div>
               <SetPillRow sets={entry.sets} prMarks={prFlags?.setMarks.get(liveSessionPrFlagKey(sessionId, entry.exerciseId))} />
             </div>
