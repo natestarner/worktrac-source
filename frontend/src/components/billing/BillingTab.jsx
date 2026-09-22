@@ -593,8 +593,8 @@ function ProUpgradeCard({ interval, band, onBandChange, pending, onUpgrade, card
           </Button>
         </OfflineDisabledWrap>
         <p style={finePrintStyle}>
-          Your own training and your assistants are free &mdash; you pay for clients. Change bands
-          whenever your roster does.
+          Your own training is free &mdash; everyone else on the account takes a client place,
+          assistants included. Change bands whenever your roster does.
         </p>
       </div>
     </>

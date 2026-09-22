@@ -986,6 +986,10 @@ export default function HelpTab() {
             They cannot touch billing, delete the account, change account settings, or export the
             whole practice in one go. If you need somebody to cover sessions, that is the role.
           </p>
+          <p>
+            An assistant who trains here too takes one of your client places, the same as anybody
+            else you add. Your own training is the only one that doesn&rsquo;t.
+          </p>
         </Note>
 
         <Note title="If a client leaves you">
@@ -1013,7 +1017,7 @@ export default function HelpTab() {
         <HelpTable
           head={['', 'Free', 'Plus', 'Pro']}
           rows={[
-            ['People in your household', 'Everyone', 'Everyone', 'You, your assistants, and the clients you pay for'],
+            ['People in your household', 'Everyone', 'Everyone', 'You, plus the client places you pay for'],
             ['Workouts, sets and exercises', 'Unlimited', 'Unlimited', 'Unlimited'],
             ['Logging with no signal', 'Yes', 'Yes', 'Yes'],
             ['PRs, routines, rest timer', 'Yes', 'Yes', 'Yes'],
@@ -1030,7 +1034,7 @@ export default function HelpTab() {
           <p>
             Free and Plus have no seats &mdash; add as many people as your household has. Pro is
             different: you pay by how many <strong>clients</strong> you carry, in bands. Your own
-            training and every assistant you add are free.
+            training is free; everyone else you add takes a place, assistants included.
           </p>
           <p>
             Going over your band never locks anyone out. It stops you adding the{' '}

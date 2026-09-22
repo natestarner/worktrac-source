@@ -119,8 +119,13 @@ to every gate.
   already exists — every client keeps their login, history and programs. Same promise the Plus
   pause makes, and it is not negotiable here either: a billing change must never cost somebody
   *else* their access.
-- **The trainer does not spend a client seat on themselves.** The person ceiling is
-  `clientSeats + 1`, because a trainer who also trains must not pay to log their own squats.
+- **⚠️ THE OWNER IS THE ONLY FREE PERSON. Everyone else on the account is a client, an assistant
+  (`MANAGER`) included.** The person ceiling is `clientSeats + 1` — the one is the trainer's own
+  training profile, because a trainer who also trains must not pay to log their own squats. An
+  assistant is a second pair of hands with a login, not a discount.
+  - Seats count **people**, never logins or roles. That is what keeps this one subtraction rather
+    than a per-role tally, and it is why the answer does not change when `MANAGER` finally becomes
+    assignable (nothing in production sets that role yet — see `coaching.md`).
 - **UNLIMITED still has a number** (`peoplePerProAccount`). "Unlimited" is a pricing promise, not
   an invitation to create rows without bound. `clientLimit()` is **null** rather than a sentinel,
   because "unlimited" and "a very large number" read the same in a comparison and completely
@@ -134,11 +139,17 @@ to every gate.
   bought; `entitlementOf` and `SubscriptionDto` both clear seats once the tier reads FREE, or a Free
   account would be told it has a roster allowance it is not paying for.
 - **`SubscriptionDto.clientCount` is the "12" in "12 of 15 clients" — USAGE, computed fresh in
-  `SubscriptionService.describe`, never stored.** It is `people on the account, minus the trainer's
-  own person, minus every MANAGER's own person` — neither spends a client seat
-  (`QuotaService.requirePersonCapacity`'s `clientSeats + 1` ceiling for the trainer), so neither
-  should count as one on the billing screen either. Clamped to `null` alongside `clientSeats` for
-  every non-PRO tier, for the same reason: a household tier has no seats to report usage against.
+  `SubscriptionService.describe`, never stored.** It is `people on the account, minus one` — the
+  trainer's own — and **that subtraction must stay identical to `QuotaService`'s `clientSeats + 1`
+  ceiling**. The screen's number and the number the gate refuses at are the same number, so a change
+  to either is a change to both.
+  - ⚠️ **It briefly also subtracted every `MANAGER`'s own person**, on the stated grounds that the
+    gate excluded managers too. The gate never did — it is `clientSeats + 1` flat. A practice with
+    an assistant who trains therefore read *"14 of 15 clients"* and got a **403 on the next add**.
+    A display that undercounts the gate is the dangerous direction: it promises room that isn't
+    there. Pinned by `clientCountAndTheQuotaCeilingAgreeOnWhenTheBandIsFull`.
+  - Clamped to `null` alongside `clientSeats` for every non-PRO tier, for the same reason: a
+    household tier has no seats to report usage against.
 - **`SubscriptionService` takes `StripeProperties`, not `StripeService`.** It depends on the price
   *configuration*, never on the SDK — `StripeService` is still the only class importing
   `com.stripe.*`, and this is what keeps `applyStripeState` unit-testable with a plain properties

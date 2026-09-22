@@ -46,6 +46,7 @@ that isn't one.
 | a line-chart dot is one session; three metrics are a best set, two are session totals | `components/trends/exerciseMetrics.js`, `weeklyMetrics.js` |
 | the consistency grid is always 26 weeks and ignores the range toggle, **and that only the last 90 days of it fill in on Free** | `components/trends/**`, `SubscriptionService.FREE_HISTORY_WINDOW` |
 | what Free and Plus each include, that export is free on both, and that PR detection reads the whole history even when display is clamped | `SubscriptionService` (the `isEntitled` derivation, `BillingPlan.features()` and the window), `billing/**`, `csvimport/ImportController` |
+| **that on Pro the trainer's own training is the ONLY person who doesn't take a client place** — an assistant who trains takes one like anybody else | `QuotaService#requirePersonCapacity`'s `clientSeats + 1`, `SubscriptionService#currentClientCount`. ⚠️ Also stated on `marketing/for-trainers.html`, `marketing/pricing.html` and **`marketing/terms.html`**, which is a pricing term — all four move together or the app contradicts the contract |
 | exactly which actions work offline vs. need a connection | `useRequireOnline.js`, `useGatedMutation.js`, or moving a write between the two |
 | import requires `Exercise` + `Date` + (`Reps` or `Duration (sec)`), and every other column's default | `csvimport/**`, `export/**` |
 | adding an exercise you already have opens it instead of duplicating | `utils/exerciseDuplicates.js` |
