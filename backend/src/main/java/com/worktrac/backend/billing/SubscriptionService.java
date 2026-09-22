@@ -2,8 +2,6 @@ package com.worktrac.backend.billing;
 
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.config.StripeProperties;
-import com.worktrac.backend.membership.AccountMembershipRepository;
-import com.worktrac.backend.membership.AccountRole;
 import com.worktrac.backend.person.PersonRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -55,7 +53,6 @@ public class SubscriptionService {
     private final ApplicationEventPublisher events;
     private final StripeProperties stripeProperties;
     private final PersonRepository personRepository;
-    private final AccountMembershipRepository membershipRepository;
     private final Clock clock;
 
     // ⚠️ Takes StripeProperties for the price->tier map ONLY, never to talk to Stripe. StripeService
@@ -63,18 +60,16 @@ public class SubscriptionService {
     // configuration rather than on the SDK -- which is what keeps applyStripeState unit-testable
     // with a plain properties object and no HTTP stub.
     //
-    // Takes PersonRepository and AccountMembershipRepository for `describe`'s "12 of 15 clients"
-    // count only -- the same reads QuotaService.requirePersonCapacity already does before adding a
-    // person, just for display rather than for a gate.
+    // Takes PersonRepository for `describe`'s "12 of 15 clients" count only -- the same read
+    // QuotaService.requirePersonCapacity already does before adding a person, just for display
+    // rather than for a gate.
     public SubscriptionService(SubscriptionRepository subscriptionRepository,
                                 ApplicationEventPublisher events, StripeProperties stripeProperties,
-                                PersonRepository personRepository,
-                                AccountMembershipRepository membershipRepository, Clock clock) {
+                                PersonRepository personRepository, Clock clock) {
         this.subscriptionRepository = subscriptionRepository;
         this.events = events;
         this.stripeProperties = stripeProperties;
         this.personRepository = personRepository;
-        this.membershipRepository = membershipRepository;
         this.clock = clock;
     }
 
@@ -274,15 +269,19 @@ public class SubscriptionService {
                 .orElseGet(SubscriptionDto::free);
     }
 
-    // Everyone on the account minus the two kinds of person who are not a CLIENT: the trainer's own
-    // training profile, and an assistant's (MANAGER's) own -- the same "clientSeats + 1" people
-    // ceiling QuotaService.requirePersonCapacity enforces for the trainer, extended to managers for
-    // the same reason. Neither spends a client seat, so neither should count as one here.
+    // EVERYONE ON THE ACCOUNT BUT THE OWNER IS A CLIENT. One subtraction, for the trainer's own
+    // training profile, because a trainer who also trains must not pay to log their own squats.
+    //
+    // This deliberately mirrors QuotaService.requirePersonCapacity's "clientSeats + 1" ceiling
+    // EXACTLY, and that is the whole contract: the number on the billing screen and the number the
+    // gate refuses at have to be the same number. It briefly also subtracted every MANAGER's own
+    // person, on the stated grounds that the gate did the same -- the gate never did, so a practice
+    // with an assistant who trains read "14 of 15 clients" and got a 403 on the next add.
+    //
+    // An assistant is therefore NOT free: their training profile spends a seat like anybody else's.
+    // If that is ever revisited, it is one edit in TWO places or it is the same bug again.
     private int currentClientCount(Long accountId) {
-        long people = personRepository.countByAccount_Id(accountId);
-        long managersWithAPerson = membershipRepository
-                .countByAccount_IdAndAccountRoleAndPersonIsNotNull(accountId, AccountRole.MANAGER);
-        return (int) Math.max(0, people - 1 - managersWithAPerson);
+        return (int) Math.max(0, personRepository.countByAccount_Id(accountId) - 1);
     }
 
     // Called from RegistrationService the moment an account exists, so "one row per account" is
