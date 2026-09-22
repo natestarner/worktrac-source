@@ -462,8 +462,8 @@ export default function HelpTab() {
           <li><strong>Search</strong> by exercise name.</li>
           <li><strong>Tag chips</strong> narrow the list to a category you&rsquo;ve defined.</li>
           <li>
-            <strong>Tap an exercise name</strong> inside a workout to filter down to just that
-            exercise, then clear it to see the whole day again.
+            <strong>Tap an exercise name</strong> inside a workout to choose whether to filter
+            down to just that exercise or jump to its progress chart in Trends.
           </li>
         </ul>
 

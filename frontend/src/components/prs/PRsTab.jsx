@@ -330,7 +330,7 @@ function PRsTabContent() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
             <Button variant="primary" fullWidth onClick={() => goHistory(navTarget)}>
               <IconScroll size={16} />
-              View history
+              View this exercise&rsquo;s history
             </Button>
             <Button variant="secondary" fullWidth onClick={() => goProgress(navTarget)}>
               <IconTrendingUp size={16} />

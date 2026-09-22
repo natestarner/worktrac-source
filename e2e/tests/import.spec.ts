@@ -81,12 +81,12 @@ test.describe('CSV import', () => {
 
     // Jordan has it...
     await page.getByRole('button', { name: 'View Jordan’s history' }).click();
-    await expect(page.getByRole('button', { name: 'Show only Barbell Bench Press in history' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'View options for Barbell Bench Press' })).toBeVisible();
 
     // ...and Casey still has exactly the one set they logged, not two.
     await personPill(page, 'Casey').click();
     await page.getByRole('link', { name: 'History' }).click();
-    await expect(page.getByRole('button', { name: 'Show only Barbell Bench Press in history' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'View options for Barbell Bench Press' })).toHaveCount(1);
   });
 
   // The same-day rule as a test result rather than a comment: a hand-built file with no Session
@@ -110,7 +110,7 @@ test.describe('CSV import', () => {
     await expect(page.getByText('Import complete')).toBeVisible();
     await page.getByRole('button', { name: 'View Casey’s history' }).click();
 
-    await expect(page.getByRole('button', { name: 'Show only Pull-up in history' })).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'View options for Pull-up' })).toHaveCount(2);
   });
 
   test('an import can be undone from Settings, and History goes back to what it was', async ({ page, request }) => {
