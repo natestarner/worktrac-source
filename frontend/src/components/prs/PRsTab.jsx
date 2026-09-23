@@ -8,7 +8,7 @@ import { useExerciseTagMap } from '../../hooks/useExerciseTagMap';
 import { useExerciseFilter } from '../../hooks/useExerciseFilter';
 import { formatDateLabel, toLocalDateStr } from '../../utils/datetime';
 import { collectTagVocabulary, filterPrRows } from '../../utils/exerciseFilter';
-import { prSortOptions, sortPrRows } from '../../utils/prSort';
+import { PR_SORT_LABELS_ANY_MEASURE, prSortOptions, sortPrRows } from '../../utils/prSort';
 import {
   PR_MEASURE_OPTIONS,
   formatPrMeasure,
@@ -112,14 +112,21 @@ function PRsTabContent() {
               board MEANS, the sort only decides their order, so the more consequential control
               reads first. Both are native selects rather than the SegmentedToggle the Trends
               switchers use -- these labels are too long for a phone-width segmented control, and
-              both are set-and-forget preferences rather than something you flick between mid-set. */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              both are set-and-forget preferences rather than something you flick between mid-set.
+
+              ONE row at every width, never wrapping: stacked, the pair spent ~100px of a phone
+              screen on two preferences. Each starts at its widest option's width and the two
+              share out whatever is left, so they span the row like the search field below. Record
+              never shrinks (its longest label is short); on the narrowest phones Sort gives way
+              and ellipsizes instead. */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 'var(--space-3)' }}>
             <Select
               id="prs-measure"
               label="Record"
               value={prsMeasure}
               onChange={setPrsMeasure}
               options={PR_MEASURE_OPTIONS}
+              style={{ flex: '1 0 auto' }}
             >
               {/* Anchored to the picker it explains: three of these five are a single best set and
                   two are session totals, and nothing on the board shows the difference. */}
@@ -132,6 +139,8 @@ function PRsTabContent() {
               value={prsSort}
               onChange={setPrsSort}
               options={prSortOptions(prsMeasure)}
+              sizeToLabels={PR_SORT_LABELS_ANY_MEASURE}
+              style={{ flex: '1 1 auto' }}
             />
           </div>
 

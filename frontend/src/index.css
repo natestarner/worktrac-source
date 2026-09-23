@@ -918,6 +918,99 @@ button:not(.pressable):active:not(:disabled) {
   color: var(--color-muted);
 }
 
+/* The Select primitive (components/shared/Select.jsx): a caption above a drawn field, with the
+   real <select> stretched transparently over that field so every tap still opens the platform's
+   own picker. See the component's header for why it is drawn at all. */
+.select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* 32px tall whether or not it holds a "?" (ChartHelp's trigger is 32px), so two Selects side by
+   side keep their fields on one line when only one of them has help attached. */
+.select-caption {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 32px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.select-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* Only ever visible between a value that fills the field and its chevron, where every pixel
+     given back here is one less the longest sort label has to lose to an ellipsis on a 375px
+     phone. */
+  gap: var(--space-1);
+  /* 44px touch target -- this app is used on an iPad mid-workout. */
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.select-field > svg {
+  color: var(--color-muted);
+}
+
+/* The native control is invisible, so the global :focus-visible ring on it would be too. Draw the
+   same ring on the field it covers instead. */
+.select-field:has(select:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.select-field > select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  /* 16px, and it must stay 16px: iOS Safari decides whether to zoom on focus from the focused
+     element's OWN font size, and this is the element that takes focus. */
+  font-size: var(--text-md);
+}
+
+/* Every option's label is stacked in one grid cell, invisibly, so the field is always as wide as
+   its WIDEST option: picking "Best set volume" after "Most recent" must not shove its neighbour
+   sideways. `minmax(0, 1fr)` lets it shrink below that on a narrow phone, where the visible label
+   ellipsizes instead of clipping mid-letter. */
+.select-value {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.select-value > span {
+  grid-area: 1 / 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-value-sizer {
+  visibility: hidden;
+}
+
+/* Pseudo-element text, so the sizers add no text nodes a getByText could match. */
+.select-value-sizer::before {
+  content: attr(data-label);
+}
+
 /* type="search" makes WebKit draw its own clear button, which sat right next to the app's
    own styled clear control -- two X's in every search field. The native one can't be
    restyled or repositioned, and the app's version is the one wired to the filter state, so

@@ -1,4 +1,4 @@
-import { measureEntry, prMeasureSpec } from '../components/prs/prMeasures';
+import { measureEntry, PR_MEASURE_OPTIONS, prMeasureSpec } from '../components/prs/prMeasures';
 
 // Sort orders for the PRs board. "Most recent" exists because Trends used to carry a Recent PRs
 // card answering "what got better lately"; that card duplicated this board row-for-row, so the
@@ -46,6 +46,14 @@ export function prSortOptions(measure) {
     label: value === 'record' ? prMeasureSpec(measure).sortLabel : s.label,
   }));
 }
+
+// Every label the sort picker can show under ANY record, for the picker to size itself to. Sizing
+// to the current list instead made the pair's widths re-share every time the record changed, since
+// "Best set volume" is wider than "Best est. 1RM" -- the Record field visibly shrank as you picked
+// in it.
+export const PR_SORT_LABELS_ANY_MEASURE = [
+  ...new Set(PR_MEASURE_OPTIONS.flatMap(({ value }) => prSortOptions(value).map((option) => option.label))),
+];
 
 const byName = (a, b) => a.exerciseName.localeCompare(b.exerciseName, undefined, { sensitivity: 'base' });
 
