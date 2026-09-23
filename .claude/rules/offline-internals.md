@@ -416,6 +416,17 @@ kept `contextSessionId` null forever, so `sessionSets` never ran and a synced se
 never be fresh — so the entry still renders while offline (the refetch merely pauses) but is
 revalidated the moment there is a network.
 
+**Known, accepted cost — don't "discover" it again.** Online, while a workout's first set is still
+saving, that revalidation gets the server's honest "no live session" (204) and wipes the placeholder
+until the create lands. Anything that mounts a new `useLiveSession` observer in that window triggers
+it — notably **opening the End dialog** (its recap reads the session), which then closes itself a
+moment later; a refocus blinks the session bar off the same way. It lasts one create round trip,
+loses nothing, and self-corrects. Left alone on 2026-09-23 as not worth the risk. If it ever needs
+fixing, the shape is "a fetched `null` does not replace the placeholder while this person has an
+unsynced live-set create" — in **both** fetchers of this key (`useLiveSession` and
+`offlineCacheWarm`), with a repro spec first. The mid-save End race it exposes is fixed regardless
+(`docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md`).
+
 **Any new optimistic `setQueryData` that writes a value the server has never confirmed needs one of
 these three**, and which one depends on what a restored copy would be:
 | Restored copy is… | Treatment | Example |
