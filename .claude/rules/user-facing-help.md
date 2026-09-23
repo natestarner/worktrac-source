@@ -8,6 +8,8 @@ paths:
   - "frontend/src/components/help/**"
   - "frontend/src/utils/formulas.js"
   - "frontend/src/utils/prSort.js"
+  - "frontend/src/utils/sessionVolume.js"
+  - "shared/record-rules/**"
   - "frontend/src/utils/restTarget.js"
   - "frontend/src/utils/exerciseDuplicates.js"
   - "frontend/src/hooks/useRequireOnline.js"
@@ -40,7 +42,7 @@ that isn't one.
 | The handbook tells users… | It goes wrong if you change… |
 |---|---|
 | est. 1RM is Epley, `weight × (1 + reps ÷ 30)`, a single rep is reported as itself, **and only the first 12 reps of a set count** | `EpleyCalculator.java` (incl. `EST_1RM_REP_CAP`), `utils/formulas.js#epley` |
-| PRs rank by est. 1RM (loaded), reps (bodyweight), seconds (holds) | `StatsService#comparableValue`, `utils/formulas.js#comparableValue`, `utils/prSort.js` |
+| PRs rank by est. 1RM (loaded), reps (bodyweight), seconds (holds) | `SetMeasures#comparableValue`, `utils/formulas.js#comparableValue`, `utils/prSort.js` |
 | a workout auto-closes 8 hours after its last set | `WorkoutSessionService.AUTOCLOSE` |
 | the rest timer targets 90s and freezes at 10 min | `utils/restTarget.js` |
 | a line-chart dot is one session; three metrics are a best set, two are session totals | `components/trends/exerciseMetrics.js`, `weeklyMetrics.js` |
@@ -51,6 +53,7 @@ that isn't one.
 | import requires `Exercise` + `Date` + (`Reps` or `Duration (sec)`), and every other column's default | `csvimport/**`, `export/**` |
 | adding an exercise you already have opens it instead of duplicating | `utils/exerciseDuplicates.js` |
 | **which records are celebrated** (est. 1RM, top weight, session volume), that volume fires once per workout, that a first-ever set is a baseline rather than a record, and that the celebration stays until dismissed | `exerciseMetrics.js`'s `pr` blocks, `utils/prDetection.js`, `UIContext#showCelebration` |
+| **what volume counts** — weight × reps, total reps on a bodyweight exercise, total time on a hold — and that an exercise's first workout sets the volume baseline rather than a record | `utils/sessionVolume.js`, `stats/SessionVolume.java`, `shared/record-rules/session-volume-cases.json` |
 | **that PR detection happens on the device, so it works with no signal** | moving detection back to the server's `isPR`, or gating it on `useOnlineStatus` |
 | History badges name WHICH record fell, and a session total badges the entry rather than a set | `utils/historyPrFlags.js`, `components/shared/PrBadge.jsx`, `SetPillRow.jsx` |
 | **every record is marked the same way everywhere** — same glyph, same single colour, same rule — on History, on the Log screen's set rows and in "Session exercises" | `utils/historyPrFlags.js`, `PrBadge.jsx`, `index.css`'s `--color-record-*` |

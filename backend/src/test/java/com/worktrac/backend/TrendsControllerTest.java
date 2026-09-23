@@ -334,7 +334,8 @@ class TrendsControllerTest extends AbstractIntegrationTest {
         assertEquals(225.0, point.get("heaviestWeightLb").asDouble(), "heaviest on the bar is a different set");
         assertEquals(1, point.get("heaviestWeightReps").asInt());
         assertEquals(1480.0, point.get("bestSetVolumeLb").asDouble());
-        assertEquals(1705.0, point.get("sessionVolumeLb").asDouble());
+        assertEquals(1705.0, point.get("sessionVolume").asDouble());
+        assertEquals("load", point.get("volumeKind").asText());
         assertEquals(9, point.get("totalReps").asInt());
         assertEquals(2, point.get("setCount").asInt());
     }
@@ -356,5 +357,51 @@ class TrendsControllerTest extends AbstractIntegrationTest {
         assertEquals(12, point.get("heaviestWeightReps").asInt(),
                 "with every set at weight 0 the best rep set should win the tie, not the first one");
         assertEquals(26, point.get("totalReps").asInt());
+        // An unloaded exercise's volume is its total reps, not a flat 0 lb (SessionVolume).
+        assertEquals("reps", point.get("volumeKind").asText());
+        assertEquals(26.0, point.get("sessionVolume").asDouble());
+    }
+
+    // The celebration's prior best. The kind is decided over EVERY set, including the excluded
+    // session's; the best over the earlier sessions only. bestSessionVolumeLb is the pre-kinds
+    // field an old cached client still reads, and must keep meaning weight x reps.
+    @Test
+    void summaryReportsThePriorSessionVolumeInTheExercisesOwnKind() throws Exception {
+        long earlier = createPastSession("2026-01-05T09:00:00Z");
+        logSet(earlier, 0, 10);
+        logSet(earlier, 0, 10);
+        long today = createPastSession("2026-01-12T09:00:00Z");
+        logSet(today, 0, 30);
+
+        JsonNode summary = getSummary(today);
+        assertEquals("reps", summary.get("volumeKind").asText());
+        assertEquals(20.0, summary.get("bestSessionVolume").asDouble(), "today is excluded");
+        assertEquals(0.0, summary.get("bestSessionVolumeLb").asDouble());
+
+        // One loaded set today re-reads the whole exercise in pounds: every earlier session is 0 lb.
+        logSet(today, 10, 5);
+        summary = getSummary(today);
+        assertEquals("load", summary.get("volumeKind").asText());
+        assertEquals(0.0, summary.get("bestSessionVolume").asDouble());
+    }
+
+    // No earlier session: null, never 0 -- the client's first-workout rule keys on exactly this.
+    @Test
+    void summaryHasNoPriorSessionVolumeOnTheFirstWorkout() throws Exception {
+        long today = createPastSession("2026-01-12T09:00:00Z");
+        logSet(today, 100, 5);
+
+        JsonNode summary = getSummary(today);
+        assertEquals("load", summary.get("volumeKind").asText());
+        assertTrue(summary.get("bestSessionVolume").isNull());
+    }
+
+    private JsonNode getSummary(long excludeSessionId) throws Exception {
+        String response = mockMvc.perform(get("/api/people/" + personId + "/exercises/" + exerciseId
+                        + "/summary?excludeSessionId=" + excludeSessionId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response);
     }
 }

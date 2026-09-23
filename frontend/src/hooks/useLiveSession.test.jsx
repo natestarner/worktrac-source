@@ -182,4 +182,32 @@ describe('useLiveSession revalidates a provisional session restored from the per
     expect(getLiveSession).not.toHaveBeenCalledWith(8);
     expect(client.getQueryData(queryKeys.liveSession(8))).toEqual(othersSession);
   });
+
+  // The sibling trap: a restored `null` ("no live session"). Logging the first set online turns
+  // null into a real session, but the persister writes at most once a second -- so a reload inside
+  // that second (swUpdate's post-deploy reload) restores the pre-log null looking fresh, and the
+  // workout just started shows as "Last time" instead of "This session".
+  // docs/incidents/2026-09-22-restored-no-session-hides-first-set.md
+  it('refetches a restored "no session" on mount and reports the real one', async () => {
+    getLiveSession.mockResolvedValue(REAL);
+    const client = reloadWith([[7, null]]);
+
+    const { result } = renderWithClient(client, 7);
+
+    await waitFor(() => expect(result.current.session).toEqual(REAL));
+  });
+
+  // Revalidating a null must not resurrect a workout this device just ended: EndWorkoutConfirmModal
+  // writes that same null, and until the end syncs the server still reports the session as live.
+  it('still suppresses a session this device ended when the refetch returns it', async () => {
+    getLiveSession.mockResolvedValue(REAL);
+    markSessionEnded(7, REAL.id);
+    const client = reloadWith([[7, null]]);
+
+    const { result } = renderWithClient(client, 7);
+
+    await waitFor(() => expect(getLiveSession).toHaveBeenCalledWith(7));
+    await waitFor(() => expect(client.getQueryData(queryKeys.liveSession(7))).toEqual(REAL));
+    expect(result.current.session).toBeNull();
+  });
 });

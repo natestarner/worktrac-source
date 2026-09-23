@@ -10,7 +10,7 @@ import {
 const loaded = {
   exerciseId: 1,
   exerciseName: 'Bench Press',
-  best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208, sessionStartedAt: '2026-07-01T00:00:00Z' },
+  best: { weight: 185, reps: 5, unit: 'lb', est1rm: 215.8, sessionStartedAt: '2026-07-01T00:00:00Z' },
   measures: {
     heaviest: { value: 225, weightLb: 225, reps: 1, sessionStartedAt: '2026-07-09T00:00:00Z' },
     sessionVolume: { value: 4625, weightLb: null, reps: null, sessionStartedAt: '2026-07-01T00:00:00Z' },
@@ -72,7 +72,7 @@ describe('PR measure options', () => {
 
 describe('measureEntry', () => {
   it('reads est. 1RM off `best`, which is where the server keeps it', () => {
-    expect(measureEntry(loaded, 'est1rm')).toMatchObject({ value: 208, weightLb: 185, reps: 5 });
+    expect(measureEntry(loaded, 'est1rm')).toMatchObject({ value: 215.8, weightLb: 185, reps: 5 });
   });
 
   // comparableLb's weight-0 substitution, mirrored client-side: Epley collapses to 0 at weight 0,
@@ -89,9 +89,9 @@ describe('measureEntry', () => {
   // this a kg household would compare 100 against 200 numerically.
   it('normalizes a kg est. 1RM to pounds so mixed-unit history ranks correctly', () => {
     const metric = {
-      best: { weight: 100, reps: 5, unit: 'kg', est1rm: 116, sessionStartedAt: '2026-07-01T00:00:00Z' },
+      best: { weight: 100, reps: 5, unit: 'kg', est1rm: 116.7, sessionStartedAt: '2026-07-01T00:00:00Z' },
     };
-    expect(measureEntry(metric, 'est1rm').value).toBeCloseTo(116 * 2.20462, 3);
+    expect(measureEntry(metric, 'est1rm').value).toBe(257.279154);
   });
 
   it('reads the other four straight off measures', () => {
@@ -115,11 +115,11 @@ describe('measureEntry', () => {
   it('degrades a row cached before measures existed instead of throwing', () => {
     const legacy = { best: loaded.best };
     expect(measureEntry(legacy, 'heaviest')).toBeNull();
-    expect(measureEntry(legacy, 'est1rm')).toMatchObject({ value: 208 });
+    expect(measureEntry(legacy, 'est1rm')).toMatchObject({ value: 215.8 });
   });
 
   it('falls back to the default measure for an unknown key', () => {
-    expect(measureEntry(loaded, 'nonsense')).toMatchObject({ value: 208 });
+    expect(measureEntry(loaded, 'nonsense')).toMatchObject({ value: 215.8 });
   });
 });
 
@@ -167,7 +167,7 @@ describe('formatPrMeasure', () => {
 
   it('renders est. 1RM three ways, matching how the record is actually ranked', () => {
     expect(formatPrMeasure(measureEntry(loaded, 'est1rm'), 'est1rm', loaded, 'lb')).toEqual({
-      value: '208 lb',
+      value: '215.8 lb',
       caption: '185lb×5',
     });
     expect(formatPrMeasure(measureEntry(pullUp, 'est1rm'), 'est1rm', pullUp, 'lb')).toEqual({
@@ -298,5 +298,35 @@ describe('measureUnavailableCaption', () => {
         '25lb 1:00',
       );
     });
+  });
+});
+
+// The board's Volume is in the exercise's own unit, named by the row's volumeKind -- the same
+// formatVolume the celebration and the records table use.
+describe('session volume in each exercise’s own unit', () => {
+  const withVolume = (row, volumeKind, value) => ({
+    ...row,
+    volumeKind,
+    measures: { ...row.measures, sessionVolume: { value, weightLb: null, reps: null, sessionStartedAt: '2026-07-01T00:00:00Z' } },
+  });
+
+  it('reads total reps for a bodyweight exercise', () => {
+    const row = withVolume(pullUp, 'reps', 40);
+    expect(formatPrMeasure(measureEntry(row, 'sessionVolume'), 'sessionVolume', row, 'lb').value).toBe('40 reps');
+  });
+
+  it('reads total time for a hold', () => {
+    const row = withVolume(plank, 'seconds', 150);
+    expect(formatPrMeasure(measureEntry(row, 'sessionVolume'), 'sessionVolume', row, 'kg').value).toBe('2:30');
+  });
+
+  it('reads pounds for a loaded lift, converted for a kg household', () => {
+    const row = withVolume(loaded, 'load', 4625);
+    expect(formatPrMeasure(measureEntry(row, 'sessionVolume'), 'sessionVolume', row, 'lb').value).toBe('4625 lb');
+  });
+
+  // Resilience axis D: a row cached before volumeKind existed was always pounds.
+  it('reads a row cached before volumeKind existed as pounds', () => {
+    expect(formatPrMeasure(measureEntry(loaded, 'sessionVolume'), 'sessionVolume', loaded, 'lb').value).toBe('4625 lb');
   });
 });

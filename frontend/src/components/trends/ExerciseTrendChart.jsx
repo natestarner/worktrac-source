@@ -2,6 +2,7 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import { formatDateLabel } from '../../utils/datetime';
 import { convertWeight } from '../../utils/formulas';
 import { metricSpec } from './exerciseMetrics';
+import { dtoVolumeKind, formatVolume, volumeIsWeight } from '../../utils/sessionVolume';
 
 // PR points reuse the app's existing success-green "PR" status color (see the PR badge in
 // ExerciseDetail.jsx) rather than a categorical hue -- this is a state distinction (new
@@ -12,7 +13,7 @@ import { metricSpec } from './exerciseMetrics';
 // hide the only milestone the chart has. A consequence worth knowing: a green dot need not be the
 // high point of the line currently on screen.
 //
-// That measure is `StatsService#comparableValue` -- est. 1RM for a loaded lift, but the REP COUNT
+// That measure is `SetMeasures#comparableValue` -- est. 1RM for a loaded lift, but the REP COUNT
 // for a bodyweight set and SECONDS for a hold. Don't describe it as "est. 1RM" flatly (this
 // comment used to, and the chart's help copy inherited the error); see .claude/rules/trends.md.
 // A record dot is --color-record-text, the ONE colour a personal record is drawn in app-wide.
@@ -35,10 +36,21 @@ function TrendDot({ cx, cy, payload }) {
   );
 }
 
+// Session volume is in the exercise's own unit (pounds, reps or seconds -- utils/sessionVolume.js),
+// which each point names in `volumeKind`; every other metric's unit is fixed by its spec. A point
+// cached before volumeKind existed was always pounds, which is dtoVolumeKind's default.
+function volumeKindFor(metric, point) {
+  return metric === 'sessionVolume' ? dtoVolumeKind(point) : null;
+}
+
 function ChartTooltip({ active, payload, metric, defaultUnit }) {
   if (!active || !payload || payload.length === 0) return null;
   const point = payload[0].payload;
   const spec = metricSpec(metric);
+  const volumeKind = volumeKindFor(metric, point);
+  const valueText = volumeKind
+    ? formatVolume(point[spec.dataKey], volumeKind, defaultUnit)
+    : `${Math.round(point.metricValue * 10) / 10} ${spec.isWeight ? defaultUnit : 'reps'}`;
   return (
     <div
       style={{
@@ -52,7 +64,7 @@ function ChartTooltip({ active, payload, metric, defaultUnit }) {
     >
       <div style={{ fontWeight: 700, marginBottom: 2 }}>{formatDateLabel(point.date)}</div>
       <div style={{ color: 'var(--color-muted)' }}>
-        {spec.title} {Math.round(point.metricValue * 10) / 10} {spec.isWeight ? defaultUnit : 'reps'}
+        {spec.title} {valueText}
       </div>
       <div style={{ color: 'var(--color-muted)', fontSize: 12, marginTop: 2 }}>
         {point.setCount} set{point.setCount === 1 ? '' : 's'} &middot; best {point.weightDisplay} {defaultUnit} &times; {point.reps}
@@ -75,10 +87,12 @@ export default function ExerciseTrendChart({ points, metric, defaultUnit }) {
   }
 
   const spec = metricSpec(metric);
+  // A volume in reps or seconds is not a weight, so a kg household must not scale it by 2.2.
+  const isWeight = metric === 'sessionVolume' ? volumeIsWeight(volumeKindFor(metric, points[0])) : spec.isWeight;
   const data = points.map((p) => ({
     ...p,
     weightDisplay: convertWeight(p.weightLb, 'lb', defaultUnit),
-    metricValue: spec.isWeight ? convertWeight(p[spec.dataKey], 'lb', defaultUnit) : p[spec.dataKey],
+    metricValue: isWeight ? convertWeight(p[spec.dataKey], 'lb', defaultUnit) : p[spec.dataKey],
   }));
 
   return (
@@ -96,10 +110,10 @@ export default function ExerciseTrendChart({ points, metric, defaultUnit }) {
           // Est. 1RM and top weight are read as "am I moving up", where a zero baseline flattens
           // every real change into noise. Volume and rep counts are magnitudes, so they keep the
           // honest zero baseline the weekly bar charts use.
-          domain={spec.isWeight && spec.dataKey !== 'sessionVolumeLb' && spec.dataKey !== 'bestSetVolumeLb'
+          domain={isWeight && metric !== 'sessionVolume' && metric !== 'bestSetVolume'
             ? ['dataMin', 'dataMax']
             : [0, 'dataMax']}
-          allowDecimals={spec.isWeight}
+          allowDecimals={isWeight}
           tick={{ fontSize: 11, fill: 'var(--color-muted)' }}
           axisLine={false}
           tickLine={false}

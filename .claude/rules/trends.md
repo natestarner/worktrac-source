@@ -3,15 +3,71 @@ paths:
   - "frontend/src/components/trends/**"
   - "frontend/src/components/prs/**"
   - "backend/src/main/java/com/worktrac/backend/stats/**"
+  - "frontend/src/utils/sessionVolume*"
+  - "frontend/src/utils/formulas*"
+  - "frontend/src/utils/historyPrFlags*"
+  - "frontend/src/utils/prDetection*"
+  - "frontend/src/utils/exerciseSummaryFromHistory*"
+  - "shared/record-rules/**"
 ---
 
 # Trends & stats invariants
 
 Full narrative: `docs/architecture/trends.md`.
 
+## Every record measure has ONE definition per side, pinned across both languages
+
+| Measure | Client | Server | Shared cases (run by both suites) |
+|---|---|---|---|
+| est. 1RM, and the number a set ranks by | `formulas.js#epley` / `#comparableValue` | `EpleyCalculator` / `SetMeasures#comparableValue` | `shared/record-rules/set-measures-cases.json` |
+| top weight, and pounds generally | `formulas.js#weightLb` / `#toLb` | `SetMeasures#weightLb` / `UnitConverter` | same file |
+| session volume | `sessionVolume.js` | `SessionVolume` | `shared/record-rules/session-volume-cases.json` |
+
+- **Nothing else re-derives these.** No inline `toLb(set.weight)`, no local copy of the weight-0 /
+  hold branches (`prMeasures.js#est1rmEntry` had one), no `weight × reps` outside `SessionVolume` /
+  `sessionVolume.js`. A second copy is how the two sides drift without any test noticing.
+- **Both sides compute EXACTLY, and the cases compare with no tolerance.** Weights are taken in
+  hundredths (the column is `DECIMAL(6,2)`): Epley is `weight × (30 + reps) / 30` in one division,
+  half-up to 0.1; pounds are `hundredths × 220462 / 1e7`. The browser does it on integers, the
+  server on `BigDecimal`, so the browser's double is always the nearest double to the server's
+  exact decimal. This matters because the old float/10-decimal versions disagreed on every x.x5
+  estimate (187.5 × 7: 231.3 in the celebration, 231.2 on the board), and a float `kg × 2.20462`
+  lands a hair above exact for some weights (32.52 kg) — which, against a server threshold, is a
+  fake top-weight record for re-logging your own best.
+- **`ExerciseSummaryDto` sends its thresholds unrounded** (`heaviestWeightLb`, `bestSessionVolume`)
+  for the same reason: the offline fallback derives them unrounded, and the two must agree.
+
+### Session volume, specifically
+
+`frontend/src/utils/sessionVolume.js` and `stats/SessionVolume.java` are the only places the
+session-volume record's measure is defined. `shared/record-rules/session-volume-cases.json` is run
+by **both** suites (`sessionVolume.test.js`, `SessionVolumeTest.java`) — change the rule on one
+side and a build fails until the other agrees. CI's path filter lists `shared/**` under both
+backend and frontend for that reason; don't drop either entry.
+
+- **The unit is per exercise, decided over its whole set list:** total seconds for a duration
+  exercise, total reps when every set is at weight 0, otherwise weight × reps in pounds. Never per
+  session (a 40-rep day would rank against a 3000 lb day) and never per set (reps added to
+  pounds). One loaded set flips the exercise to pounds and re-reads earlier unloaded sessions as
+  0 lb — accepted, the same "recomputed from current data" rule History's badges already follow.
+- **Every DTO carrying a volume carries its `volumeKind`** (`ExerciseSummaryDto`, `PrRowDto`,
+  `ExerciseRecordsDto`, `ExerciseTrendPointDto`), so a client never guesses the unit of a number
+  it didn't compute. A payload cached before kinds existed reads as pounds (`dtoVolumeKind`),
+  which is exactly what it was.
+- **The first workout of an exercise never takes the volume record** — a null prior is a baseline
+  (`takesSessionVolumeRecord`), for the celebration and for History/Log badges alike. Set-level
+  records still mark a first set. So `bestSessionVolume` must stay **null, never 0**, when there
+  is no earlier session.
+- **The PRs board ranks "Most volume" within a kind** (pounds, then reps, then time) — 60 reps is
+  not less than 4000 lb, it is a different axis (`prSort.js`).
+- **Weekly/monthly volume on Trends is NOT this measure.** It sums across exercises, so it stays
+  weight × reps (`SessionVolume#loadVolumeLb`). So do best-set volume and lifetime volume.
+- `ExerciseSummaryDto.bestSessionVolumeLb` is the pre-kinds field, kept only so a stale cached
+  bundle mid-deploy doesn't read `undefined` as "no prior" and celebrate every first set.
+
 ## Weight 0 is a bodyweight lift, and it breaks every weight-based metric
 
-`StatsService#comparableLb` returns the **rep count** instead of an Epley estimate when
+`SetMeasures#comparableLb` returns the **rep count** instead of an Epley estimate when
 `weight == 0`, because Epley collapses to 0 and every bodyweight set would tie forever.
 `frontend/src/utils/formulas.js` mirrors this. Two consequences any new metric must respect:
 
@@ -22,10 +78,10 @@ Full narrative: `docs/architecture/trends.md`.
   a column of `0 lb` is worse than no column. `bestEst1rm` is `null` for the same reason, and
   `sortPrRows` groups bodyweight rows last under the est.-1RM sort rather than letting them all
   tie at 0. The exercise chart's metric switcher applies the same rule one level up:
-  `exerciseMetrics.js#visibleMetricOptions` drops "Top weight"/"Volume"/"Best set" (raw weight or
+  `exerciseMetrics.js#visibleMetricOptions` drops "Top weight"/"Best set" (raw weight or
   weight × reps, so a flat zero line regardless of rep count) whenever `records.bodyweightOnly` is
-  true, reusing that same already-fetched field rather than adding a new one. "Est. 1RM" and
-  "Reps" stay, since the first already substitutes rep count at weight 0. `ExerciseTrendSection`
+  true, reusing that same already-fetched field rather than adding a new one. "Est. 1RM", "Volume"
+  and "Reps" stay: the first substitutes rep count at weight 0, and Volume is total reps there. `ExerciseTrendSection`
   falls back the *displayed* metric to `est1rm` when the person's stored preference isn't in the
   filtered list for the currently-selected exercise — it never overwrites that stored preference,
   so switching back to a weighted exercise restores it.
@@ -188,7 +244,7 @@ check it isn't already a row on PRs or History.
 ## No new full-history loads
 
 `getSummary` now makes **one** load for all four of its fields (it used to make two: `getBest` and
-`getLastSession` each issued their own). `heaviestWeightLb` and `bestSessionVolumeLb` fold into
+`getLastSession` each issued their own). `heaviestWeightLb` and `bestSessionVolume` fold into
 that same pass — the endpoint got cheaper, not dearer. ⚠️ Those two exclude the current session
 **differently**, and the asymmetry is load-bearing; the table is on `ExerciseSummaryDto`.
 

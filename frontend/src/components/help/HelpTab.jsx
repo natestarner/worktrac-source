@@ -560,8 +560,10 @@ export default function HelpTab() {
           <li>
             <strong>Volume</strong> &mdash; the most total work you&rsquo;ve ever done of one
             exercise in a single workout. This one fires once per workout, on the set that passes
-            your old record, not again on every set after it. Volume is weight &times; reps, so it
-            doesn&rsquo;t apply to bodyweight exercises or holds.
+            your old record, not again on every set after it. Volume is weight &times; reps added
+            up; on a bodyweight exercise it&rsquo;s your total reps, and on a hold your total time.
+            Your first workout of an exercise sets the baseline, so volume can only be beaten from
+            your second workout on.
           </li>
         </ul>
         <p>
@@ -689,10 +691,11 @@ export default function HelpTab() {
               workouts apart they were, not how much time passed.
             </li>
             <li>
-              <strong>Some of the five disappear for a bodyweight exercise.</strong> Top weight,
-              Volume and Best set are always zero with no added weight, so they&rsquo;re hidden
-              rather than shown as flat lines at 0. Est. 1RM and Reps stay &mdash; Est. 1RM falls
-              back to your rep count when there&rsquo;s no weight to estimate from.
+              <strong>Some of the five disappear for a bodyweight exercise.</strong> Top weight and
+              Best set are always zero with no added weight, so they&rsquo;re hidden rather than
+              shown as flat lines at 0. Est. 1RM, Volume and Reps stay &mdash; Est. 1RM falls back
+              to your rep count when there&rsquo;s no weight to estimate from, and Volume becomes
+              your total reps.
             </li>
           </ul>
         </Note>

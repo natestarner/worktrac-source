@@ -1,0 +1,101 @@
+{
+  "about": [
+    "The session-volume record's rule, as data. Run by BOTH frontend/src/utils/sessionVolume.test.js and backend/src/test/java/com/worktrac/backend/stats/SessionVolumeTest.java, so the client (celebration, History/Log badges) and the server (PRs board, records table, Trends chart, the celebration's prior best) cannot compute it differently.",
+    "Each case is one exercise: `sessions` in chronological order, each a list of that session's sets. `kind` is the exercise's volume measure over ALL of its sets; `sessionVolumes` is each session's total in that kind (pounds for load); `records` says whether each session takes the record from every EARLIER session (client-only -- the server never decides a record, so the Java side checks kind and volumes).",
+    "Changing the rule means changing this file, and both suites then fail until both implementations agree."
+  ],
+  "cases": [
+    {
+      "name": "a loaded lift ranks on weight x reps in pounds",
+      "durationTracked": false,
+      "sessions": [
+        [{ "weight": 100, "reps": 10, "unit": "lb" }, { "weight": 100, "reps": 10, "unit": "lb" }],
+        [{ "weight": 200, "reps": 1, "unit": "lb" }],
+        [{ "weight": 100, "reps": 12, "unit": "lb" }, { "weight": 100, "reps": 12, "unit": "lb" }]
+      ],
+      "expected": { "kind": "load", "sessionVolumes": [2000, 200, 2400], "records": [false, false, true] }
+    },
+    {
+      "name": "kg sets are normalized to pounds",
+      "durationTracked": false,
+      "sessions": [
+        [{ "weight": 100, "reps": 5, "unit": "kg" }],
+        [{ "weight": 60, "reps": 10, "unit": "kg" }]
+      ],
+      "expected": { "kind": "load", "sessionVolumes": [1102.31, 1322.772], "records": [false, true] }
+    },
+    {
+      "name": "an unloaded rep exercise ranks on total reps",
+      "durationTracked": false,
+      "sessions": [
+        [{ "weight": 0, "reps": 10, "unit": "lb" }, { "weight": 0, "reps": 8, "unit": "lb" }],
+        [{ "weight": 0, "reps": 12, "unit": "lb" }, { "weight": 0, "reps": 12, "unit": "lb" }],
+        [{ "weight": 0, "reps": 5, "unit": "lb" }]
+      ],
+      "expected": { "kind": "reps", "sessionVolumes": [18, 24, 5], "records": [false, true, false] }
+    },
+    {
+      "name": "one loaded set makes the whole exercise load, and earlier unloaded sessions read as 0 lb",
+      "durationTracked": false,
+      "sessions": [
+        [{ "weight": 0, "reps": 10, "unit": "lb" }, { "weight": 0, "reps": 10, "unit": "lb" }],
+        [{ "weight": 10, "reps": 5, "unit": "lb" }, { "weight": 0, "reps": 8, "unit": "lb" }]
+      ],
+      "expected": { "kind": "load", "sessionVolumes": [0, 50], "records": [false, true] }
+    },
+    {
+      "name": "an unloaded hold ranks on total seconds",
+      "durationTracked": true,
+      "sessions": [
+        [{ "weight": 0, "reps": 0, "durationSeconds": 60, "unit": "lb" }, { "weight": 0, "reps": 0, "durationSeconds": 45, "unit": "lb" }],
+        [{ "weight": 0, "reps": 0, "durationSeconds": 120, "unit": "lb" }]
+      ],
+      "expected": { "kind": "seconds", "sessionVolumes": [105, 120], "records": [false, true] }
+    },
+    {
+      "name": "added load on a hold does not enter its volume",
+      "durationTracked": true,
+      "sessions": [
+        [{ "weight": 25, "reps": 0, "durationSeconds": 90, "unit": "lb" }, { "weight": 10, "reps": 0, "durationSeconds": 130, "unit": "lb" }],
+        [{ "weight": 0, "reps": 0, "durationSeconds": 200, "unit": "lb" }]
+      ],
+      "expected": { "kind": "seconds", "sessionVolumes": [220, 200], "records": [false, false] }
+    },
+    {
+      "name": "the first workout of an exercise is a baseline, not a volume record",
+      "durationTracked": false,
+      "sessions": [[{ "weight": 100, "reps": 5, "unit": "lb" }]],
+      "expected": { "kind": "load", "sessionVolumes": [500], "records": [false] }
+    },
+    {
+      "name": "the first workout of a bodyweight exercise is a baseline too",
+      "durationTracked": false,
+      "sessions": [[{ "weight": 0, "reps": 15, "unit": "lb" }]],
+      "expected": { "kind": "reps", "sessionVolumes": [15], "records": [false] }
+    },
+    {
+      "name": "equalling the record does not take it",
+      "durationTracked": false,
+      "sessions": [
+        [{ "weight": 100, "reps": 10, "unit": "lb" }],
+        [{ "weight": 100, "reps": 10, "unit": "lb" }]
+      ],
+      "expected": { "kind": "load", "sessionVolumes": [1000, 1000], "records": [false, false] }
+    },
+    {
+      "name": "a session of failed sets never takes a record of zero",
+      "durationTracked": false,
+      "sessions": [
+        [{ "weight": 0, "reps": 0, "unit": "lb" }],
+        [{ "weight": 0, "reps": 0, "unit": "lb" }]
+      ],
+      "expected": { "kind": "reps", "sessionVolumes": [0, 0], "records": [false, false] }
+    },
+    {
+      "name": "nothing logged has no measure",
+      "durationTracked": false,
+      "sessions": [],
+      "expected": { "kind": null, "sessionVolumes": [], "records": [] }
+    }
+  ]
+}

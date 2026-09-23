@@ -212,6 +212,7 @@ class ExerciseRecordsControllerTest extends AbstractIntegrationTest {
 
         assertEquals(1860.0, records.get("bestSessionVolume").get("valueLb").asDouble());
         assertEquals("2026-01-05", records.get("bestSessionVolume").get("date").asText());
+        assertEquals("load", records.get("volumeKind").asText());
         assertTrue(records.get("bestSessionVolume").get("weightLb").isNull(),
                 "a session record isn't attributable to one set");
 
@@ -234,6 +235,9 @@ class ExerciseRecordsControllerTest extends AbstractIntegrationTest {
         assertTrue(records.get("bodyweightOnly").asBoolean());
         assertEquals(12.0, records.get("mostReps").get("valueLb").asDouble(),
                 "reps are the only real record for a bodyweight lift");
+        assertEquals("reps", records.get("volumeKind").asText());
+        assertEquals(20.0, records.get("bestSessionVolume").get("valueLb").asDouble(),
+                "session volume for an unloaded exercise is its total reps");
         assertEquals(20, records.get("totalReps").asInt());
         assertEquals(0.0, records.get("totalVolumeLb").asDouble(),
                 "weight x reps is genuinely 0 -- the client shows reps instead of this");

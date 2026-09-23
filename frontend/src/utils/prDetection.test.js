@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { comparableValue } from './formulas';
-import { crossesSessionVolume, isFirstEver, sessionVolumeLb, setPrTypes, setVolumeLb } from './prDetection';
+import { isFirstEver, setPrTypes } from './prDetection';
 
 // The four shapes a set can take in this app. Every assertion below is driven across them rather
 // than hand-picked per case: the bugs this module can have are COMBINATIONS (a hold that is also
@@ -14,28 +14,6 @@ const WEIGHTED_HOLD = { weight: 25, reps: 0, durationSeconds: 60, unit: 'lb' };
 // A prior best that nothing can beat, used to prove a measure is OFF rather than merely unbeaten.
 const UNBEATABLE = { comparable: 1e9, heaviestLb: 1e9 };
 const NOTHING = { comparable: null, heaviestLb: null };
-
-describe('setVolumeLb / sessionVolumeLb', () => {
-  it('is weight x reps, normalized to pounds', () => {
-    expect(setVolumeLb(LOADED)).toBe(1080);
-    expect(setVolumeLb({ weight: 100, reps: 5, unit: 'kg' })).toBeCloseTo(100 * 2.20462 * 5, 3);
-  });
-
-  // The single rule that makes volume self-guarding for the two exercise shapes it cannot
-  // describe -- see prDetection.js's header.
-  it('is zero for a bodyweight set and for any hold, loaded or not', () => {
-    expect(setVolumeLb(BODYWEIGHT)).toBe(0);
-    expect(setVolumeLb(HOLD)).toBe(0);
-    expect(setVolumeLb(WEIGHTED_HOLD)).toBe(0);
-  });
-
-  it('sums a session and tolerates junk entries', () => {
-    expect(sessionVolumeLb([LOADED, LOADED])).toBe(2160);
-    expect(sessionVolumeLb([])).toBe(0);
-    expect(sessionVolumeLb(undefined)).toBe(0);
-    expect(sessionVolumeLb([null, { weight: 'x', reps: 5 }])).toBe(0);
-  });
-});
 
 describe('setPrTypes', () => {
   describe('a first-ever set reports every measure it can actually take', () => {
@@ -127,47 +105,5 @@ describe('isFirstEver', () => {
     expect(isFirstEver(undefined)).toBe(true);
     expect(isFirstEver({ comparable: 0, heaviestLb: null })).toBe(false);
     expect(isFirstEver({ comparable: 171, heaviestLb: 135 })).toBe(false);
-  });
-});
-
-describe('crossesSessionVolume', () => {
-  // ⚠️ The behaviour this whole design exists for. The test is stateless and keyed on nothing, so
-  // it works identically offline where there is no session id to key a flag on.
-  it('fires on the set that passes the record, and not before or after', () => {
-    expect(crossesSessionVolume(0, 500, 1000)).toBe(false); // still short
-    expect(crossesSessionVolume(500, 1000, 1000)).toBe(false); // exactly level is not beating it
-    expect(crossesSessionVolume(500, 1001, 1000)).toBe(true); // the crossing set
-    expect(crossesSessionVolume(1001, 1500, 1000)).toBe(false); // already past it
-  });
-
-  // The once-per-session property, asserted as a whole workout rather than a single call: this is
-  // the claim the feature makes, so it is worth asserting in the shape a person experiences.
-  it('fires exactly once across a whole workout of climbing sets', () => {
-    const prior = 1000;
-    let running = 0;
-    let fired = 0;
-    for (const set of [300, 300, 300, 300, 300, 300]) {
-      const before = running;
-      running += set;
-      if (crossesSessionVolume(before, running, prior)) fired += 1;
-    }
-    expect(fired).toBe(1);
-  });
-
-  it('treats a person with no previous session as crossing on their first set', () => {
-    expect(crossesSessionVolume(0, 100, null)).toBe(true);
-    expect(crossesSessionVolume(0, 100, undefined)).toBe(true);
-  });
-
-  // A hold or a bodyweight exercise contributes 0 volume, so the total never moves off 0 and this
-  // can never fire -- no exercise-type flag needed.
-  it('never fires when the running total is zero', () => {
-    expect(crossesSessionVolume(0, 0, null)).toBe(false);
-    expect(crossesSessionVolume(0, 0, 0)).toBe(false);
-  });
-
-  it('tolerates non-numeric input rather than firing on it', () => {
-    expect(crossesSessionVolume(NaN, 100, 50)).toBe(false);
-    expect(crossesSessionVolume(0, NaN, 50)).toBe(false);
   });
 });

@@ -34,7 +34,17 @@ export function useLiveSession(personId) {
     // the refetch just pauses and the placeholder keeps rendering, so the "Session in progress"
     // banner and the person-pill dot are unaffected. Per-query, so only the person actually holding
     // a provisional session refetches.
-    staleTime: (q) => (q.state.data && q.state.data.id == null ? 0 : 10 * 1000),
+    //
+    // ...AND for `null` ("no live session"), the sibling of the same trap. Logging the first set of
+    // a workout ONLINE turns this entry from null into a real session, but the query persister is
+    // throttled at 1s -- so a reload inside that second (swUpdate's silent post-deploy reload is the
+    // everyday case) restores the pre-log null with a recent dataUpdatedAt. At 10s that counted as
+    // fresh: no refetch, contextSessionId null, and the workout just started showed up as "Last
+    // time" instead of "This session". Revalidating a null costs one 204. It cannot resurrect a
+    // workout this device ended (EndWorkoutConfirmModal also writes null): isSessionEnded below
+    // suppresses that id whatever the refetch returns.
+    // See docs/incidents/2026-09-22-restored-no-session-hides-first-set.md.
+    staleTime: (q) => (q.state.data === null || (q.state.data && q.state.data.id == null) ? 0 : 10 * 1000),
   });
 
   // Invalidates the shared key so all observers (every pill + the banner) refetch together, not

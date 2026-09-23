@@ -1,5 +1,6 @@
 import { formatDateLabel, formatRestTime } from '../../utils/datetime';
 import { convertWeight } from '../../utils/formulas';
+import { dtoVolumeKind, formatVolume } from '../../utils/sessionVolume';
 import Skeleton from '../shared/Skeleton';
 import SectionLabel from '../shared/SectionLabel';
 
@@ -55,6 +56,20 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
 
   const w = (lb) => convertWeight(lb, 'lb', defaultUnit);
 
+  // The session-volume record, in the exercise's own unit (utils/sessionVolume.js): pounds, total
+  // reps for an unloaded exercise, total time for a hold -- the same formatVolume the celebration
+  // and the PRs board use, so one record reads identically on all three. Rendered in every view,
+  // since every exercise now has one. A records payload cached before volumeKind existed held a
+  // 0 lb figure for bodyweight/holds, so those two views skip the row until it refetches rather
+  // than print "0 lb".
+  const sessionVolumeRow = records.bestSessionVolume && (records.volumeKind || !(records.bodyweightOnly || records.durationTracked)) && (
+    <Row
+      label="Best session volume"
+      value={formatVolume(records.bestSessionVolume.valueLb, dtoVolumeKind(records), defaultUnit)}
+      date={records.bestSessionVolume.date}
+    />
+  );
+
   // Same call as bodyweightOnly below, one measure over: a hold carries 0 reps, so every
   // weight- and rep-based record is 0 and a column of zeros is worse than no column. The two
   // records that mean anything are the longest hold and the heaviest load held -- kept separate
@@ -82,6 +97,7 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
             date={records.heaviestLoadHeld.date}
           />
         )}
+        {sessionVolumeRow}
         <Row label="Total time under tension" value={formatRestTime(records.totalHoldSeconds)} />
         <Row label="Total sets" value={records.totalSets} />
       </div>
@@ -90,7 +106,7 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
 
   // Every weight-based record is 0 for an exercise never loaded (pull-ups, push-ups) -- and an
   // est. 1RM there is a rep count wearing a costume. Reps are the real record, so that's all we
-  // show. Mirrors ExerciseRecordsDto.bodyweightOnly / StatsService#comparableLb.
+  // show. Mirrors ExerciseRecordsDto.bodyweightOnly / SetMeasures#comparableLb.
   if (records.bodyweightOnly) {
     return (
       <div style={{ marginTop: 8 }}>
@@ -100,6 +116,7 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
           value={`${records.mostReps.reps} reps`}
           date={records.mostReps.date}
         />
+        {sessionVolumeRow}
         <Row label="Total reps" value={`${records.totalReps} reps`} />
         <Row label="Total sets" value={records.totalSets} />
       </div>
@@ -131,11 +148,7 @@ export default function ExerciseRecordsTable({ records, loading, defaultUnit }) 
         value={`${Math.round(w(records.bestSetVolume.valueLb))} ${defaultUnit}`}
         date={records.bestSetVolume.date}
       />
-      <Row
-        label="Best session volume"
-        value={`${Math.round(w(records.bestSessionVolume.valueLb))} ${defaultUnit}`}
-        date={records.bestSessionVolume.date}
-      />
+      {sessionVolumeRow}
       <Row
         label="Most reps in a set"
         // "8 @ 260 lb", not the app's usual "260 lb × 8" -- this row's subject is the rep count, and

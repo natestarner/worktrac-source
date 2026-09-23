@@ -199,29 +199,34 @@ class PrMeasuresTest extends AbstractIntegrationTest {
     }
 
     // Weight-derived measures must be ABSENT, not zero, for an exercise that was never loaded --
-    // a column of "0 lb" is worse than no column. Reps survive: they are its honest record.
+    // a column of "0 lb" is worse than no column. Reps survive: they are its honest record. So
+    // does session volume, which for an unloaded exercise IS total reps (SessionVolume).
     @Test
-    void weightMeasuresAreNullForABodyweightOnlyExerciseButRepsSurvive() throws Exception {
+    void weightMeasuresAreNullForABodyweightOnlyExerciseButRepsAndVolumeSurvive() throws Exception {
         long pullUpId = createExercise("Measured Pull-Up " + UUID.randomUUID(), "strength");
         long session = createPastSession(daysAgo(20));
         logSet(session, pullUpId, 0, 12);
         logSet(session, pullUpId, 0, 8);
+        long smaller = createPastSession(daysAgo(13));
+        logSet(smaller, pullUpId, 0, 15);
 
         JsonNode row = rowFor(pullUpId);
         JsonNode measures = row.get("measures");
 
         assertTrue(row.get("bodyweightOnly").asBoolean());
+        assertEquals("reps", row.get("volumeKind").asText());
         assertTrue(measures.get("heaviest").isNull());
-        assertTrue(measures.get("sessionVolume").isNull());
         assertTrue(measures.get("bestSetVolume").isNull());
+        assertEquals(20.0, measures.get("sessionVolume").get("value").asDouble(), 0.01,
+                "the 12 + 8 session, not the single 15");
         assertEquals(20.0, measures.get("totalReps").get("value").asDouble(), 0.01);
     }
 
-    // A hold carries reps = 0, so both volume measures and the rep total collapse to zero the same
-    // way a never-loaded exercise collapses the weight ones. Added load still gives a top weight --
-    // that is the "heaviest load held" record.
+    // A hold carries reps = 0, so best-set volume and the rep total collapse to zero the same way a
+    // never-loaded exercise collapses the weight ones. Added load still gives a top weight -- that
+    // is the "heaviest load held" record. Session volume is total seconds held, load or not.
     @Test
-    void repAndVolumeMeasuresAreNullForAHoldButAddedLoadStillCounts() throws Exception {
+    void repMeasuresAreNullForAHoldButVolumeIsTotalTimeAndAddedLoadStillCounts() throws Exception {
         long plankId = createExercise("Measured Plank " + UUID.randomUUID(), "duration");
         long session = createPastSession(daysAgo(20));
         logHold(session, plankId, 25, 90);
@@ -231,16 +236,18 @@ class PrMeasuresTest extends AbstractIntegrationTest {
         JsonNode measures = row.get("measures");
 
         assertTrue(row.get("durationTracked").asBoolean());
+        assertEquals("seconds", row.get("volumeKind").asText());
         assertTrue(measures.get("totalReps").isNull());
-        assertTrue(measures.get("sessionVolume").isNull());
         assertTrue(measures.get("bestSetVolume").isNull());
+        assertEquals(220.0, measures.get("sessionVolume").get("value").asDouble(), 0.01);
         assertEquals(25.0, measures.get("heaviest").get("value").asDouble(), 0.01);
     }
 
-    // An unloaded hold has nothing on any of the four. est. 1RM (row.best) still carries its
-    // duration, which is the whole reason that one is not inside `measures`.
+    // An unloaded hold has nothing on the weight/rep measures. est. 1RM (row.best) still carries
+    // its duration, which is the whole reason that one is not inside `measures`, and its volume is
+    // its total time.
     @Test
-    void anUnloadedHoldHasNoMeasuresAtAllButKeepsItsDuration() throws Exception {
+    void anUnloadedHoldHasOnlyItsTimeAndKeepsItsDuration() throws Exception {
         long plankId = createExercise("Measured Floor Plank " + UUID.randomUUID(), "duration");
         long session = createPastSession(daysAgo(20));
         logHold(session, plankId, 0, 120);
@@ -248,7 +255,7 @@ class PrMeasuresTest extends AbstractIntegrationTest {
         JsonNode row = rowFor(plankId);
 
         assertTrue(row.get("measures").get("heaviest").isNull());
-        assertTrue(row.get("measures").get("sessionVolume").isNull());
+        assertEquals(120.0, row.get("measures").get("sessionVolume").get("value").asDouble(), 0.01);
         assertTrue(row.get("measures").get("bestSetVolume").isNull());
         assertTrue(row.get("measures").get("totalReps").isNull());
         assertEquals(120, row.get("best").get("durationSeconds").asInt());

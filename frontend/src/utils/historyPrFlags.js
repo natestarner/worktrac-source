@@ -1,4 +1,5 @@
-import { sessionVolumeLb, SET_MEASURE_VALUE } from './prDetection';
+import { SET_MEASURE_VALUE } from './prDetection';
+import { sessionVolume, takesSessionVolumeRecord, volumeKindOf } from './sessionVolume';
 import { SET_PR_TYPES, SESSION_PR_TYPES } from '../components/trends/exerciseMetrics';
 
 // Per-set "which records was this when it was recorded" markers, computed entirely client-side
@@ -55,7 +56,9 @@ import { SET_PR_TYPES, SESSION_PR_TYPES } from '../components/trends/exerciseMet
 //
 // Est. 1RM and top weight belong to one SET, so they badge a set pill. Session volume belongs to
 // the whole workout, so it badges the exercise ENTRY header instead -- no single set is the
-// answer, and picking one would be a lie. Two lookups, one pass.
+// answer, and picking one would be a lie. Two lookups, one pass (plus a cheap pre-pass that
+// decides each exercise's volume measure -- pounds, reps or seconds -- over its WHOLE history,
+// because sessionVolume.js defines the measure per exercise, never per session).
 //
 // Returns LOOKUPS (never a transformed copy of `history`) so callers can never accidentally pass
 // an annotated/filtered session object to startEditingSession, which persists whatever it's given
@@ -98,6 +101,20 @@ export function buildHistoryPrFlags(history, { liveSession, exerciseId } = {}) {
   // { [exerciseId]: best session volume so far }, for the session-level marker.
   const runningSessionVolume = new Map();
 
+  // { [exerciseId]: its volume kind over every set in view }. A pre-pass because one loaded set in
+  // a LATER session re-reads every earlier one as pounds -- the kind cannot be known mid-fold.
+  const setsByExercise = new Map();
+  for (const session of sessions) {
+    for (const entry of session.entries || []) {
+      if (exerciseId != null && entry.exerciseId !== exerciseId) continue;
+      const list = setsByExercise.get(entry.exerciseId) || [];
+      for (const set of entry.sets || []) list.push(set);
+      setsByExercise.set(entry.exerciseId, list);
+    }
+  }
+  const volumeKinds = new Map();
+  for (const [id, sets] of setsByExercise) volumeKinds.set(id, volumeKindOf(sets));
+
   for (const session of sessions) {
     for (const entry of session.entries || []) {
       // The Log screen only ever asks about the exercise on screen. Filtering here rather than at
@@ -128,13 +145,17 @@ export function buildHistoryPrFlags(history, { liveSession, exerciseId } = {}) {
 
       // The session-level measure, folded over the same pass. Compared against every EARLIER
       // session only -- this session's own total is what is being tested, exactly as
-      // prDetection.js#crossesSessionVolume requires of its prior best.
-      const volume = sessionVolumeLb(entry.sets);
+      // sessionVolume.js#crossesSessionVolume requires of its prior best. The FIRST session of an
+      // exercise seeds the running best without taking a mark (takesSessionVolumeRecord's
+      // first-workout rule), so a brand-new exercise's entry is not badged for being the only one.
+      const volume = sessionVolume(entry.sets, volumeKinds.get(entry.exerciseId));
       const priorVolume = runningSessionVolume.get(entry.exerciseId);
       const sessionTaken = [];
-      if (volume > 0 && (priorVolume == null || volume > priorVolume)) {
-        runningSessionVolume.set(entry.exerciseId, volume);
+      if (takesSessionVolumeRecord(volume, priorVolume)) {
         for (const type of SESSION_PR_TYPES) sessionTaken.push(type);
+      }
+      if (priorVolume == null || volume > priorVolume) {
+        runningSessionVolume.set(entry.exerciseId, volume);
       }
       if (sessionTaken.length > 0) {
         sessionMarks.set(historyPrFlagKey(session.id, entry.exerciseId), sessionTaken);

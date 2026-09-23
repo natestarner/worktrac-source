@@ -1,0 +1,45 @@
+{
+  "about": [
+    "The SET-level record measures, as data: est. 1RM (Epley), the number a set is ranked by for the est.-1RM record (comparableValue), top weight (weightLb) and the pound conversion under all of them. Run by BOTH frontend/src/utils/formulas.test.js and backend/src/test/java/com/worktrac/backend/stats/SetMeasuresTest.java, so the celebration and badges (client) cannot disagree with the PRs board, records table and Trends chart (server) about the same set.",
+    "Expected values are STRINGS so each side reads them exactly: Java as BigDecimal (compared exactly), JavaScript as the nearest double (compared with ===). Both implementations compute in exact arithmetic, so there is no tolerance anywhere.",
+    "The epley ties (x.x5 before rounding) are the cases that matter: the two sides used to round them opposite ways -- 187.5 x 7 showed 231.3 in the celebration and 231.2 on the PRs board."
+  ],
+  "lbPerKg": "2.20462",
+  "estRepCap": 12,
+  "epley": [
+    { "name": "a tie rounds half UP", "weight": 187.5, "reps": 7, "expected": "231.3" },
+    { "name": "a tie rounds half UP (light)", "weight": 52.5, "reps": 7, "expected": "64.8" },
+    { "name": "a tie the old browser maths rounded DOWN", "weight": 81.25, "reps": 12, "expected": "113.8" },
+    { "name": "a tie at the smallest scale", "weight": 0.75, "reps": 4, "expected": "0.9" },
+    { "name": "an ordinary set", "weight": 185, "reps": 8, "expected": "234.3" },
+    { "name": "an ordinary set, recurring decimal", "weight": 100, "reps": 5, "expected": "116.7" },
+    { "name": "reps are capped at 12", "weight": 135, "reps": 30, "expected": "189.0" },
+    { "name": "exactly at the cap", "weight": 135, "reps": 12, "expected": "189.0" },
+    { "name": "a single is its own 1RM", "weight": 225, "reps": 1, "expected": "225.0" },
+    { "name": "zero reps reports the weight", "weight": 135.24, "reps": 0, "expected": "135.2" },
+    { "name": "a single whose weight is itself a tie", "weight": 102.55, "reps": 1, "expected": "102.6" },
+    { "name": "the estimate is unit-free (kg in, kg out)", "weight": 50, "reps": 5, "expected": "58.3" }
+  ],
+  "toLb": [
+    { "name": "kg converts exactly (floating point lands a hair high here)", "weight": 32.52, "unit": "kg", "expected": "71.6942424" },
+    { "name": "kg converts exactly", "weight": 8.13, "unit": "kg", "expected": "17.9235606" },
+    { "name": "a round kg weight", "weight": 100, "unit": "kg", "expected": "220.462" },
+    { "name": "a plate-step kg weight", "weight": 22.5, "unit": "kg", "expected": "49.60395" },
+    { "name": "lb is unchanged", "weight": 185, "unit": "lb", "expected": "185" }
+  ],
+  "comparableValue": [
+    { "name": "a loaded lb set ranks on its est. 1RM", "set": { "weight": 187.5, "reps": 7, "unit": "lb" }, "expected": "231.3" },
+    { "name": "a loaded kg set ranks on its est. 1RM in pounds", "set": { "weight": 100, "reps": 5, "unit": "kg" }, "expected": "257.279154" },
+    { "name": "a tie in kg converts after rounding", "set": { "weight": 52.5, "reps": 7, "unit": "kg" }, "expected": "142.859376" },
+    { "name": "a bodyweight set ranks on its raw rep count", "set": { "weight": 0, "reps": 12, "unit": "lb" }, "expected": "12" },
+    { "name": "the rep cap does not apply at bodyweight", "set": { "weight": 0, "reps": 20, "unit": "lb" }, "expected": "20" },
+    { "name": "a hold ranks on seconds", "set": { "weight": 0, "reps": 0, "durationSeconds": 90, "unit": "lb" }, "expected": "90" },
+    { "name": "added load does not enter a hold's rank", "set": { "weight": 25, "reps": 0, "durationSeconds": 60, "unit": "kg" }, "expected": "60" }
+  ],
+  "weightLb": [
+    { "name": "bodyweight is zero, so it is never a top-weight record", "set": { "weight": 0, "reps": 10, "unit": "lb" }, "expected": "0" },
+    { "name": "lb is the weight", "set": { "weight": 225, "reps": 1, "unit": "lb" }, "expected": "225" },
+    { "name": "kg converts exactly", "set": { "weight": 32.52, "reps": 5, "unit": "kg" }, "expected": "71.6942424" },
+    { "name": "a weighted hold's load counts", "set": { "weight": 25, "reps": 0, "durationSeconds": 60, "unit": "kg" }, "expected": "55.1155" }
+  ]
+}

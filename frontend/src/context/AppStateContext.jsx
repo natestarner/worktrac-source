@@ -105,7 +105,7 @@ const PERSON_DEFAULTS = {
   // congratulated for that exercise. A BACKSTOP, not the mechanism.
   //
   // The session-volume celebration is decided by a stateless crossing test
-  // (utils/prDetection.js#crossesSessionVolume): "did the running total pass the record with THIS
+  // (utils/sessionVolume.js#crossesSessionVolume): "did the running total pass the record with THIS
   // set". That is inherently once-per-session, because once you are past the record the running
   // total stays past it. No session id is involved, which is the whole point -- contextSessionId
   // is null for a person's entire offline stretch, so a flag keyed on it would be dead in exactly
@@ -124,10 +124,15 @@ const PERSON_DEFAULTS = {
   // the session that set a volume record and the all-time record falls below this latch, which
   // then suppresses every genuine new record beneath the old high-water mark -- permanently, since
   // this is persisted and nothing else ever cleared it. CLEAR_VOLUME_PR_CELEBRATED re-arms one
-  // exercise, and every set edit/delete dispatches it. The crossing test in prDetection.js is
+  // exercise, and every set edit/delete dispatches it. The crossing test in sessionVolume.js is
   // still the mechanism; re-arming is safe because that test, not this latch, decides.
   //
   // Per person AND per exercise: two people on one iPad, each mid-workout, must not interfere.
+  //
+  // Each entry is `{ kind, value }` -- volume is pounds, reps or seconds depending on the exercise
+  // (utils/sessionVolume.js), and a latch in one kind must not gate a record in another. Bare
+  // numbers persisted before kinds existed are read as pounds by sessionVolume.js#latchedVolume,
+  // which is exactly what they were, so this needs no SCHEMA_VERSION bump.
   volumePrCelebrated: {},
 };
 
@@ -270,7 +275,7 @@ export function reducer(state, action) {
       if (action.exerciseId == null) return state;
       const current = state.byPerson[state.activePersonId]?.volumePrCelebrated || {};
       return updateActive(state, {
-        volumePrCelebrated: { ...current, [action.exerciseId]: action.volumeLb },
+        volumePrCelebrated: { ...current, [action.exerciseId]: action.latch },
       });
     }
     // One action for both numbers and the whole stamp, deliberately not two. Independent
@@ -454,8 +459,8 @@ export function AppStateProvider({ children }) {
       setTrendsExerciseMetric: (metric) => dispatch({ type: 'SET_TRENDS_EXERCISE_METRIC', metric }),
       setPrsSort: (sort) => dispatch({ type: 'SET_PRS_SORT', sort }),
       setPrsMeasure: (measure) => dispatch({ type: 'SET_PRS_MEASURE', measure }),
-      recordVolumePrCelebrated: (exerciseId, volumeLb) =>
-        dispatch({ type: 'RECORD_VOLUME_PR_CELEBRATED', exerciseId, volumeLb }),
+      recordVolumePrCelebrated: (exerciseId, latch) =>
+        dispatch({ type: 'RECORD_VOLUME_PR_CELEBRATED', exerciseId, latch }),
       clearVolumePrCelebrated: (exerciseId) =>
         dispatch({ type: 'CLEAR_VOLUME_PR_CELEBRATED', exerciseId }),
       setDraft: ({ exerciseId, weight, reps, durationSeconds, setCount, source }) =>
