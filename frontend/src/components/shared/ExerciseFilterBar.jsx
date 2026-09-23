@@ -20,14 +20,18 @@ export default function ExerciseFilterBar({
   onBackToLog,
 }) {
   return (
-    <div style={{ marginBottom: 18 }}>
+    // One gap-driven stack, and no outer margin: the caller owns the space around it, so History
+    // and PRs can each put their controls block --space-6 above the content it filters (see
+    // design-system.md's "Vertical rhythm"). The rows inside used to carry their own 12/10/10px
+    // margins, which is how the two tabs ended up with different gaps around the same component.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
       {exerciseFilter?.fromLog && onBackToLog && (
         <button onClick={onBackToLog} style={backLinkStyle}>
           &larr; Back to {exerciseFilter.exerciseName}
         </button>
       )}
 
-      <div style={{ position: 'relative', marginBottom: tagVocabulary.length > 0 ? 10 : 0 }}>
+      <div style={{ position: 'relative' }}>
         <input
           type="search"
           inputMode="search"
@@ -48,7 +52,7 @@ export default function ExerciseFilterBar({
       </div>
 
       {tagVocabulary.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', overflowX: 'auto', paddingBottom: 2 }}>
           {tagVocabulary.map((tag) => {
             const active = selectedTagIds.has(tag.id);
             return (
@@ -77,7 +81,7 @@ export default function ExerciseFilterBar({
       )}
 
       {(exerciseFilter || isActive) && (
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
           {exerciseFilter && (
             <span style={exercisePillStyle}>
               {exerciseFilter.exerciseName}
@@ -108,6 +112,7 @@ export default function ExerciseFilterBar({
 
 const backLinkStyle = {
   display: 'block',
+  alignSelf: 'flex-start',
   background: 'none',
   border: 'none',
   color: 'var(--color-accent-text)',
@@ -115,7 +120,6 @@ const backLinkStyle = {
   fontWeight: 600,
   cursor: 'pointer',
   padding: 0,
-  marginBottom: 12,
 };
 
 // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.

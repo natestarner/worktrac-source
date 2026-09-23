@@ -30,6 +30,10 @@ Full reasoning: `docs/architecture/design-system.md`.
     acknowledged a tap with nothing. A replacement for a browser default has to have the same
     reach as the thing it replaces. So a control that forgets `.pressable` is missing polish, not
     missing feedback.
+- **Vertical gaps follow the rhythm table** in `design-system.md` ("Vertical rhythm"): heading →
+  content `--space-2`, control → control `--space-3`, card → card in a list `--space-3`, controls
+  block → content `--space-6`, content block → block `--space-5`. Shared components (`ExerciseFilterBar`) carry no outer margin, so each
+  caller sets the gap around them.
 - **Pick the right accent token.** `--color-accent` is 3.44:1 as small text and **fails AA** — use
   `--color-accent-text` for text, `--color-accent-strong` for small filled buttons, and
   `--color-accent` only for fills behind large bold text, borders, icons and the focus ring.

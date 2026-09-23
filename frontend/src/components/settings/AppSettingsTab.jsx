@@ -495,65 +495,70 @@ export default function AppSettingsTab() {
         </div>
       </Card>
 
+      {/* In a Card like every other settings group. It was the one section drawn straight on the
+          page, so its chips and field read as loose content between two cards rather than as a
+          group of its own. */}
       <SectionLabel>Tags</SectionLabel>
-      <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
-        Shared tags anyone on this account can apply to exercises from an exercise&rsquo;s Customize screen.
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-        {tagsLoading && [88, 64, 104, 72].map((w, i) => <Skeleton key={i} width={w} height={34} radius={999} />)}
-        {!tagsLoading &&
-          tags.map((t) => (
-            <div key={t.id} style={categoryChipStyle}>
-              {t.name}
-              {/* An owner may always delete any tag. A member may delete only one they created
-                  AND that nobody else has applied yet -- the same shape as the (unshipped-to-this-
-                  screen) rename rule, and the server is the one deciding it: `t.deletable` is
-                  TagDto's own answer to "would DELETE succeed for me right now", so this never
-                  re-derives authorship or in-use from raw ids. Hidden rather than disabled -- see
-                  ProfileTab for why a control the server would refuse is not greyed out instead. */}
-              {(!isMember || t.deletable) && (
-              <OfflineDisabledWrap message="Deleting a tag needs a connection.">
-                <button
-                  onClick={() => openConfirm(`Delete tag "${t.name}"? It will be removed from every exercise it's applied to.`, () => guardedDeleteTag(t))}
-                  style={{ background: 'none', border: 'none', color: 'var(--color-muted)', fontSize: 15, cursor: 'pointer' }}
-                >
-                  &times;
-                </button>
-              </OfflineDisabledWrap>
-              )}
-            </div>
-          ))}
-        {!tagsLoading && tags.length === 0 && (
-          <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>No tags yet.</div>
-        )}
-      </div>
+      <Card size="dense" style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 14, color: 'var(--color-muted)', marginBottom: 12 }}>
+          Shared tags anyone on this account can apply to exercises from an exercise&rsquo;s Customize screen.
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
+          {tagsLoading && [88, 64, 104, 72].map((w, i) => <Skeleton key={i} width={w} height={34} radius={999} />)}
+          {!tagsLoading &&
+            tags.map((t) => (
+              <div key={t.id} style={categoryChipStyle}>
+                {t.name}
+                {/* An owner may always delete any tag. A member may delete only one they created
+                    AND that nobody else has applied yet -- the same shape as the (unshipped-to-this-
+                    screen) rename rule, and the server is the one deciding it: `t.deletable` is
+                    TagDto's own answer to "would DELETE succeed for me right now", so this never
+                    re-derives authorship or in-use from raw ids. Hidden rather than disabled -- see
+                    ProfileTab for why a control the server would refuse is not greyed out instead. */}
+                {(!isMember || t.deletable) && (
+                <OfflineDisabledWrap message="Deleting a tag needs a connection.">
+                  <button
+                    onClick={() => openConfirm(`Delete tag "${t.name}"? It will be removed from every exercise it's applied to.`, () => guardedDeleteTag(t))}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-muted)', fontSize: 15, cursor: 'pointer' }}
+                  >
+                    &times;
+                  </button>
+                </OfflineDisabledWrap>
+                )}
+              </div>
+            ))}
+          {!tagsLoading && tags.length === 0 && (
+            <div style={{ fontSize: 13, color: 'var(--color-muted)' }}>No tags yet.</div>
+          )}
+        </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: tagNameError ? 6 : 24 }}>
-        <input
-          value={newTagName}
-          onChange={(e) => {
-            setNewTagName(e.target.value);
-            if (tagNameError) setTagNameError(false);
-          }}
-          placeholder="New tag name"
-          // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
-          style={{
-            flex: 1,
-            padding: '12px 14px',
-            border: `1px solid ${tagNameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
-            borderRadius: 'var(--radius-md)',
-            fontSize: 16,
-          }}
-        />
-        <OfflineDisabledWrap message="Adding a tag needs a connection.">
-          <Button onClick={() => guardedAddTag()} style={{ padding: '12px 20px', background: 'var(--color-dark)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-            Add
-          </Button>
-        </OfflineDisabledWrap>
-      </div>
-      {tagNameError && (
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginBottom: 18 }}>Enter a tag name.</div>
-      )}
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <input
+            value={newTagName}
+            onChange={(e) => {
+              setNewTagName(e.target.value);
+              if (tagNameError) setTagNameError(false);
+            }}
+            placeholder="New tag name"
+            // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
+            style={{
+              flex: 1,
+              padding: '12px 14px',
+              border: `1px solid ${tagNameError ? 'var(--color-danger)' : 'var(--color-border)'}`,
+              borderRadius: 'var(--radius-md)',
+              fontSize: 16,
+            }}
+          />
+          <OfflineDisabledWrap message="Adding a tag needs a connection.">
+            <Button variant="dark" onClick={() => guardedAddTag()}>
+              Add
+            </Button>
+          </OfflineDisabledWrap>
+        </div>
+        {tagNameError && (
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-danger)', marginTop: 6 }}>Enter a tag name.</div>
+        )}
+      </Card>
 
       {/* The whole Data section is household-wide: the export is EVERY person's history in one
           file (EXPORT_ACCOUNT_DATA) and the import writes in bulk (IMPORT_DATA). Both are
@@ -576,7 +581,7 @@ export default function AppSettingsTab() {
             onClick={downloadAllPeopleZip}
             disabled={!anyoneHasLoggedData}
             title={anyoneHasLoggedData ? undefined : 'Nothing to export yet.'}
-            style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+            fullWidth
           >
             Export all data
           </Button>
@@ -591,7 +596,7 @@ export default function AppSettingsTab() {
             every household can always take its own data out. */}
         {canImport ? (
           <OfflineDisabledWrap message="Importing needs a connection.">
-            <Button onClick={() => setShowImportModal(true)} style={{ width: '100%', padding: 14, background: 'var(--color-subtle-bg)', color: 'var(--color-text)', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+            <Button onClick={() => setShowImportModal(true)} fullWidth>
               Import data
             </Button>
           </OfflineDisabledWrap>

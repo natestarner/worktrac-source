@@ -41,7 +41,7 @@ export default function SummaryCards({ overview, defaultUnit }) {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
+    <div className="summary-tiles">
       <Card size="dense">
         <SectionLabel>Streak</SectionLabel>
         <div style={{ fontSize: 22, fontWeight: 'var(--weight-bold)' }}>{streakText(overview.currentStreakWeeks)}</div>

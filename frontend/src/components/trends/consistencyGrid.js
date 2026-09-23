@@ -68,18 +68,31 @@ export function buildGrid(workoutDays, today = new Date()) {
   return cells;
 }
 
+// How many columns a month label needs to itself. A label is ~16px of 9px text and a column is
+// 13px, so two columns clear it and one does not.
+const MIN_LABEL_COLUMNS = 2;
+
 // One label per column that starts a new month, for the strip above the grid. Columns that don't
 // begin a month get an empty string so the label row stays column-aligned with the grid.
+//
+// Column 0 always opens a "new" month, so whenever the 26-week window starts in a month's last
+// days the first two columns were labelled back to back ("Mar" then "Apr") and drew on top of each
+// other. When two labels land closer than MIN_LABEL_COLUMNS, the EARLIER one is dropped: in
+// practice that is only ever the leading partial month, a few days of which are on the grid, and
+// the month that has the next four columns is the one worth naming.
 export function monthLabels(cells) {
   const labels = new Array(HEATMAP_WEEKS).fill('');
   let lastMonth = null;
+  let lastLabelled = null;
   for (let week = 0; week < HEATMAP_WEEKS; week += 1) {
     const firstOfColumn = cells[week * DAYS_PER_WEEK];
     if (!firstOfColumn) continue;
     const month = firstOfColumn.date.getMonth();
     if (month !== lastMonth) {
+      if (lastLabelled !== null && week - lastLabelled < MIN_LABEL_COLUMNS) labels[lastLabelled] = '';
       labels[week] = firstOfColumn.date.toLocaleDateString('en-US', { month: 'short' });
       lastMonth = month;
+      lastLabelled = week;
     }
   }
   return labels;

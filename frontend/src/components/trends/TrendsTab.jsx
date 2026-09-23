@@ -31,6 +31,10 @@ function BarChartSkeleton() {
   );
 }
 
+// The range toggle is this tab's controls row, so it sits --space-6 above the content it scopes,
+// like the controls blocks on History and PRs (design-system.md's "Vertical rhythm").
+const rangeRowStyle = { marginBottom: 'var(--space-6)' };
+
 function HeatmapSkeleton() {
   return (
     <Card size="dense">
@@ -44,10 +48,10 @@ function HeatmapSkeleton() {
 function TrendsSkeleton() {
   return (
     <div data-testid="trends-skeleton">
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <Skeleton width={160} height={34} radius={10} />
+      <div style={rangeRowStyle}>
+        <Skeleton width="100%" height={44} radius={12} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
+      <div className="summary-tiles">
         <Card size="dense">
           <Skeleton width={50} height={11} style={{ marginBottom: 8 }} />
           <Skeleton width={90} height={20} />
@@ -62,7 +66,7 @@ function TrendsSkeleton() {
           <Skeleton width={130} height={20} />
         </Card>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
         <HeatmapSkeleton />
         <BarChartSkeleton />
       </div>
@@ -191,7 +195,7 @@ export default function TrendsTab() {
   if (!hasActivityInRange) {
     return (
       <div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <div style={rangeRowStyle}>
           <RangeToggle weeks={trendsRangeWeeks} onChange={setTrendsRange} />
         </div>
         {/* Three cases now, not two. "Try a wider range" is useless advice to someone on Free whose
@@ -223,7 +227,7 @@ export default function TrendsTab() {
     <div>
       <RefreshIndicator show={isFetching && !loading} />
       <OfflineDataNotice updatedAt={updatedAt} />
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+      <div style={rangeRowStyle}>
         <RangeToggle weeks={trendsRangeWeeks} onChange={setTrendsRange} />
       </div>
 
@@ -233,7 +237,7 @@ export default function TrendsTab() {
 
       <SummaryCards overview={overview} defaultUnit={defaultUnit} />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
         <ConsistencyHeatmap workoutDays={overview.workoutDays} />
         <WeeklyMetricChart
           weeks={overview.weeks}

@@ -1276,6 +1276,36 @@ input[type='search']::-webkit-search-results-decoration {
   scroll-margin-top: var(--sticky-chrome-clearance);
 }
 
+/* Trends' three summary tiles. They were `repeat(auto-fit, minmax(140px, 1fr))`, which on every
+   phone fits two and strands the third alone in a half-width slot beside an empty one -- where its
+   "+110% vs last month" wrapped onto two lines at hero size and made it the tallest tile on the
+   screen. Two columns with the last tile spanning the row instead: nothing sits beside a hole, and
+   the full width lets the volume line stay on one line.
+
+   Three across only from 1000px, i.e. landscape iPad and desktop. Below that a third of the 840px
+   content column is too narrow for "VOLUME · LAST 30 DAYS" and its value without wrapping, which
+   would reintroduce the uneven heights this exists to remove. */
+.summary-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.summary-tiles > :last-child {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 1000px) {
+  .summary-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .summary-tiles > :last-child {
+    grid-column: auto;
+  }
+}
+
 .person-pill-bar {
   padding: var(--space-3) var(--space-6);
   padding-left: max(var(--space-6), env(safe-area-inset-left));

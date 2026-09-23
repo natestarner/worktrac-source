@@ -103,4 +103,22 @@ describe('monthLabels', () => {
       if (i > 0) expect(label).not.toBe(named[i - 1]);
     });
   });
+
+  // The window for 2026-09-23 opens on Monday Mar 30, so column 0 is March and column 1 is already
+  // April. Both used to be labelled, 13px apart, and drew over each other on the grid.
+  it('drops a leading month label that would sit in the column beside the next one', () => {
+    const labels = monthLabels(buildGrid([], local(2026, 9, 23)));
+
+    expect(labels[0]).toBe('');
+    expect(labels[1]).toBe('Apr');
+  });
+
+  it('never leaves two labels in adjacent columns, across a year of window positions', () => {
+    for (let offset = 0; offset < 365; offset += 1) {
+      const labels = monthLabels(buildGrid([], local(2026, 1, 1 + offset)));
+      labels.forEach((label, i) => {
+        if (i > 0 && label) expect(labels[i - 1]).toBe('');
+      });
+    }
+  });
 });

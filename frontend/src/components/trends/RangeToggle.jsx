@@ -15,6 +15,9 @@ export function rangeEmptyLabel(weeks) {
   return RANGE_OPTIONS.find((opt) => opt.value === weeks)?.emptyLabel ?? `last ${weeks} weeks`;
 }
 
+// `fill`: the toggle is the tab's controls row, spanning it the way the metric switchers span the
+// cards below. Right-aligned at its natural width it left two thirds of a row empty and read as
+// something that had drifted to the edge rather than as the control for everything underneath.
 export default function RangeToggle({ weeks, onChange }) {
-  return <SegmentedToggle options={RANGE_OPTIONS} value={weeks} onChange={onChange} ariaLabel="Time range" />;
+  return <SegmentedToggle options={RANGE_OPTIONS} value={weeks} onChange={onChange} ariaLabel="Time range" fill />;
 }

@@ -218,7 +218,10 @@ describe('RoutinesTab reordering', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     });
 
-    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+    // findBy, not getBy: Done is the shared Button, which holds its spinner for a minimum 400ms
+    // after the commit settles and hides the label meanwhile -- so for that beat the button has no
+    // accessible name. What this test pins is that the mode SURVIVES the failure, not how fast.
+    expect(await screen.findByRole('button', { name: 'Done' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reorder: Leg day (2 of 3)' })).toBeInTheDocument();
   });
 
