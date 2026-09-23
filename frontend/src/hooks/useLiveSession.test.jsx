@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider, dehydrate, hydrate, onlineManager } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useLiveSession } from './useLiveSession';
+import { PAGE_LOADED_AT, useLiveSession } from './useLiveSession';
 import { markSessionEnded } from '../lib/endedSessions';
 import { persistOptions } from '../lib/queryClient';
 import { queryKeys } from '../api/queryKeys';
@@ -110,9 +110,11 @@ describe('useLiveSession revalidates a provisional session restored from the per
 
   // Round-trips through the app's REAL persistOptions rather than asserting by inspection, so this
   // reproduces what a reload actually restores -- including the dataUpdatedAt that is the whole bug.
-  function reloadWith(entries) {
+  function reloadWith(entries, { updatedAt } = {}) {
     const beforeReload = new QueryClient();
-    entries.forEach(([personId, data]) => beforeReload.setQueryData(queryKeys.liveSession(personId), data));
+    entries.forEach(([personId, data]) =>
+      beforeReload.setQueryData(queryKeys.liveSession(personId), data, updatedAt ? { updatedAt } : undefined),
+    );
     const onDisk = dehydrate(beforeReload, persistOptions.dehydrateOptions);
 
     const afterReload = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -188,26 +190,31 @@ describe('useLiveSession revalidates a provisional session restored from the per
   // that second (swUpdate's post-deploy reload) restores the pre-log null looking fresh, and the
   // workout just started shows as "Last time" instead of "This session".
   // docs/incidents/2026-09-22-restored-no-session-hides-first-set.md
-  it('refetches a restored "no session" on mount and reports the real one', async () => {
+  //
+  // Stamped just before this "page" loaded -- i.e. restored from disk -- yet well inside the 10s
+  // staleTime, which is the whole trap: without the restored-null rule this reads as fresh.
+  it('refetches a "no session" restored from disk and reports the real one', async () => {
     getLiveSession.mockResolvedValue(REAL);
-    const client = reloadWith([[7, null]]);
+    const client = reloadWith([[7, null]], { updatedAt: PAGE_LOADED_AT - 1 });
 
     const { result } = renderWithClient(client, 7);
 
     await waitFor(() => expect(result.current.session).toEqual(REAL));
   });
 
-  // Revalidating a null must not resurrect a workout this device just ended: EndWorkoutConfirmModal
-  // writes that same null, and until the end syncs the server still reports the session as live.
-  it('still suppresses a session this device ended when the refetch returns it', async () => {
+  // ⚠️ The regression the first version of that fix caused. EndWorkoutConfirmModal writes null
+  // DURING the page; revalidating it right away fetched the session back while the end was still
+  // on its way to the server, into the raw cache -- and the next workout inherited its sets. A null
+  // written this page must keep the old 10s trust.
+  it('does NOT refetch a "no session" written during this page (ending a workout)', async () => {
     getLiveSession.mockResolvedValue(REAL);
-    markSessionEnded(7, REAL.id);
-    const client = reloadWith([[7, null]]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(queryKeys.liveSession(7), null);
 
     const { result } = renderWithClient(client, 7);
 
-    await waitFor(() => expect(getLiveSession).toHaveBeenCalledWith(7));
-    await waitFor(() => expect(client.getQueryData(queryKeys.liveSession(7))).toEqual(REAL));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(getLiveSession).not.toHaveBeenCalled();
     expect(result.current.session).toBeNull();
   });
 });

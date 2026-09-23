@@ -37,17 +37,23 @@ useful moment. Reading the person's history cache all along (the change being sh
 event, and the reload started landing inside the window. Nothing about the new code was wrong;
 it removed an accident the spec had been relying on.
 
-## Fix
+## Fix — and the first fix, which was wrong
 
-`staleTime` is now `0` for `null` as well as for `{ id: null }`. Revalidating a restored null
-costs one 204.
+**First attempt (shipped in #314, reverted here):** `staleTime` 0 for *every* `null`. It fixed the
+spec and broke lower, where the next workout inherited the ended one's sets ("Set 2" on a first
+set). `EndWorkoutConfirmModal` writes `null` too. Revalidating *that* immediately fetched the
+session back while the end was still on its way to the server — into the **raw cache**, where
+`ExerciseDetail`'s `prev ?? provisional` then kept it. The reasoning that `isSessionEnded` covers
+this was wrong: it filters the hook's return value, not what other code reads from the cache.
 
-It cannot resurrect a workout this device ended — `EndWorkoutConfirmModal` also writes `null`, and
-until the end syncs the server still reports the session as live — because `isSessionEnded`
-suppresses that id whatever the refetch returns. `useLiveSession.test.jsx` pins both halves through
-the app's real `persistOptions` round trip; both tests fail against the old `staleTime`.
+**Actual fix:** `staleTime` is 0 only for a `null` **restored from disk**, recognised by a
+`dataUpdatedAt` older than this document (`PAGE_LOADED_AT`). Anything written or fetched during the
+page is newer, so End Workout's `null` keeps the old 10s trust, exactly as before. Revalidating a
+restored null costs one 204.
 
-After the fix the spec passed 16 of 16.
+`useLiveSession.test.jsx` pins both halves through the app's real `persistOptions` round trip: a
+restored null is refetched (fails without the rule), and a null written this page is not (fails
+against the first attempt). After the fix the spec passed 16 of 16.
 
 ## Takeaway
 
@@ -59,3 +65,13 @@ second ago would make the app believe, not just what a copy from an hour ago wou
 And, from how it was found: **when unrelated code makes a spec flaky, bisect before blaming the
 flake, then read the trace before blaming the code.** The bisect showed the change was involved;
 the trace showed it was only the trigger.
+
+And from the first fix: **"a guard downstream suppresses it" is only true for the readers behind
+that guard.** Before widening when a cache entry refetches, list every raw
+`getQueryData`/`setQueryData` on that key, not just the hook's consumers.
+
+A related, pre-existing race surfaced on the same lower run and is **not** fixed here (it also
+failed the deploy before this one): tapping "Remove" on a Session-exercises entry while a set's
+create is still on the wire cancels nothing (a request already sent cannot be recalled), so the set
+lands and the entry comes back. That is what `parity-session-recap.spec.ts` › *reports nothing once
+every logged set has been removed* catches on lower.

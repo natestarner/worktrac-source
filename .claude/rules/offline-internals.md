@@ -399,10 +399,17 @@ these three**, and which one depends on what a restored copy would be:
 1s persist window restores whatever the entry held a second ago — with a `dataUpdatedAt` that says
 "just fetched". `liveSession` is `null` right up until the first set of a workout lands, so a
 restored `null` hid a workout that had just started (it showed as "Last time") until something
-happened to refetch. `useLiveSession`'s `staleTime` is therefore 0 for `null` as well as for
-`{ id: null }`; `isSessionEnded` is what keeps that refetch from resurrecting a workout this device
-ended. **Ask of any entry that decides what the screen treats as *current*: what would a copy from
-one second ago make the app believe?**
+happened to refetch. `useLiveSession`'s `staleTime` is therefore 0 for a `null` **restored from disk**
+(`dataUpdatedAt < PAGE_LOADED_AT`) as well as for `{ id: null }`.
+
+- **⚠️ Never for a `null` written during the page.** `EndWorkoutConfirmModal` writes one, and
+  refetching it at once pulls the ended session back into the raw cache while the end is still in
+  the outbox — `ExerciseDetail`'s `prev ?? provisional` then keeps it and the next workout inherits
+  its sets. `isSessionEnded` does not help there: it filters the hook's return, not the cache.
+  That was the first version of this fix, and lower caught it.
+- **Ask of any entry that decides what the screen treats as *current*: what would a copy from one
+  second ago make the app believe?** And before changing when it refetches, list every raw
+  `getQueryData`/`setQueryData` on the key.
 `docs/incidents/2026-09-22-restored-no-session-hides-first-set.md`.
 
 ## Cold boot offline
