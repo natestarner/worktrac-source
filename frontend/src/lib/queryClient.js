@@ -287,6 +287,30 @@ class UnresolvedSetIdError extends Error {
   }
 }
 
+// "Has someone deleted this set, with the delete still queued?" -- matched on the id the delete was
+// DISPATCHED with, which for a set deleted mid-save is its create's tempId (offlineSetEdits.js's
+// deleteQueuedSet). A create in that state is still pending, so every reader that renders or counts
+// pending creates asks this, or a set someone just deleted reappears until its create lands and the
+// delete behind it runs. Any status counts: a settled delete means the create settled too, and a
+// settled create is no longer read as pending by anything.
+export function isDeleteQueuedFor(client, setId) {
+  return client
+    .getMutationCache()
+    .getAll()
+    .some((m) => m.options.mutationKey?.[0] === DELETE_SET_MUTATION_KEY[0] && m.state.variables?.setId === setId);
+}
+
+// The session a set's create landed in, read off that create's own response -- for a write that
+// targeted the set by tempId before any session existed. Null if the create never landed or has been
+// collected, which leaves the caller no worse off than not asking.
+function landedSessionOf(client, tempId) {
+  const create = client
+    .getMutationCache()
+    .getAll()
+    .find((m) => m.options.mutationKey?.[0] === LOG_SET_MUTATION_KEY[0] && m.state.variables?.tempId === tempId);
+  return create?.state.data?.session?.id ?? null;
+}
+
 function requireResolvedSetId(client, id) {
   const resolved = resolveSetId(id);
   if (isTempSetId(resolved)) {
@@ -416,8 +440,13 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         //     to) -> append
         // `tempId` rides along so ExerciseDetail can hold one React key across the
         // optimistic -> confirmed swap instead of unmounting the row and replaying its flash.
+        //
+        // Unless the set was deleted while this create was still on its way: its DELETE_SET is
+        // queued right behind (isDeleteQueuedFor), and seeding the row here would bring it back
+        // on screen until that delete lands.
         client.setQueryData(queryKeys.sessionSets(sessionId, vars.exerciseId), (old) => {
           const rows = old ?? [];
+          if (isDeleteQueuedFor(client, vars.tempId)) return rows;
           if (rows.some((r) => r.id === data.set.id)) return rows;
           const confirmed = { ...data.set, tempId: vars.tempId };
           const idx = rows.findIndex((r) => r.id === vars.tempId);
@@ -616,26 +645,31 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
 
   // Delete a set. A replay of an already-applied delete comes back 404 -- that's the intended end
   // state (already gone), so treat it as success rather than a stuck error (hardening).
+  //
+  // Also reachable against a set whose create has not landed yet, exactly like EDIT_SET above:
+  // offlineSetEdits.js's deleteQueuedSet targets the create's tempId whenever the create may
+  // already have left the device, because cancelling it then cannot un-send it -- the request lands
+  // anyway and the "deleted" set survives on the server
+  // (docs/incidents/2026-09-23-remove-mid-save-deleted-nothing.md). The shared serial scope runs
+  // the create first; this resolves its id once it has, and a create that can never land ends this
+  // write's retries through the same dependencyIsGone check an orphaned edit gets.
   client.setMutationDefaults(DELETE_SET_MUTATION_KEY, durable({
     mutationFn: async (vars) => {
+      const setId = requireResolvedSetId(client, vars.setId);
       try {
-        return await deleteSet(vars.setId);
+        return await deleteSet(setId);
       } catch (error) {
         if (error?.status === 404) return null;
         throw error;
       }
     },
-    // No response to read a session id from (the endpoint is 204), and none is needed: unlike an
-    // edit, a delete is UNREACHABLE for a set whose create is still queued, at BOTH dispatch sites.
-    // ExerciseDetail's handleDeleteSet cancels the pending create outright for `set.optimistic` and
-    // returns before reaching this; SessionSummary dispatches only for the non-optimistic remainder
-    // and is `OfflineDisabledWrap`ped anyway, because the `listSessionSets` read it needs to
-    // enumerate those rows is online-only. So a DELETE_SET always targets a synced set, whose
-    // session has by definition materialized, and `vars.sessionId` is that real id rather than
-    // null. Passing it explicitly is a no-op today (queryKeys coalesces undefined to null) and
-    // exists to keep the choice visible: if either of those guards is ever removed, this call site
-    // needs the same treatment EDIT_SET just got.
-    onSettled: (_d, _e, vars) => reconcileSetChange(vars, vars.sessionId ?? null),
+    // No response to read a session id from (the endpoint is 204). `vars.sessionId` is the real id
+    // for a synced target, but null for a tempId target dispatched before the session existed --
+    // the first set of a workout. The create it was queued behind knows: it has landed by now (the
+    // serial scope ran it first) and carries the session in its response. Without that, this
+    // invalidates the null-keyed entry while the create's own refetch of the REAL key may already
+    // hold the deleted row, and it stays on screen.
+    onSettled: (_d, _e, vars) => reconcileSetChange(vars, vars.sessionId ?? landedSessionOf(client, vars.setId)),
   }));
 
   // Save/clear a note (blank clears it server-side). Natural idempotent upsert. A live note may

@@ -1,10 +1,10 @@
-import { MutationObserver, onlineManager } from '@tanstack/react-query';
+import { MutationObserver, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
 import { LOG_SET_MUTATION_KEY } from '../../lib/queryClient';
 import { useUI } from '../../context/UIContext';
-import { listSessionSets, deleteSet } from '../../api/sets';
+import { listSessionSets, deleteSet, logLiveSet } from '../../api/sets';
 import SessionSummary from './SessionSummary';
 import { buildHistoryPrFlags } from '../../utils/historyPrFlags';
 
@@ -196,6 +196,65 @@ describe('SessionSummary', () => {
 
     await waitFor(() => expect(deleteSet).toHaveBeenCalledWith(55));
     expect(onChanged).toHaveBeenCalled();
+  });
+
+  // THE BUG, as lower's trace caught it: Remove tapped just after logging. The entry's latest set is
+  // still in flight (an optimistic row), and its earlier set has synced but history has not
+  // refetched, so the row does not list it at all -- the confirm read "The 1 set" for two logged.
+  // Remove used to cancel the in-flight create (which landed anyway) and, seeing no synced set in
+  // the row, never enumerated the server's rows. Both sets survived.
+  // docs/incidents/2026-09-23-remove-mid-save-deleted-nothing.md
+  describe('removing mid-save', () => {
+    const inFlightOnly = [
+      { exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 'optimistic-b', weight: 135, reps: 5, unit: 'lb', optimistic: true }] },
+    ];
+
+    async function landFirstSetAndHoldSecond(queryClient) {
+      logLiveSet.mockResolvedValueOnce({ isPR: false, best: null, session: { id: 101, startedAt: 't' }, set: { id: 55 } });
+      let land;
+      logLiveSet.mockReturnValueOnce(new Promise((resolve) => { land = resolve; }));
+      dispatchLogSet(queryClient, 'optimistic-a');
+      await waitFor(() => expect(queryClient.getMutationCache().getAll()[0].state.status).toBe('success'));
+      dispatchLogSet(queryClient, 'optimistic-b');
+      await waitFor(() => expect(logLiveSet).toHaveBeenCalledTimes(2));
+      return (setId) => land({ isPR: false, best: null, session: { id: 101, startedAt: 't' }, set: { id: setId } });
+    }
+
+    it('deletes the synced set the row does not show yet, and the in-flight one once it lands', async () => {
+      listSessionSets.mockResolvedValue([{ id: 55 }]);
+      const { queryClient } = renderWithQuery(
+        <SessionSummary entries={inFlightOnly} loading={false} sessionId={101} personId={7} onSelectExercise={onSelectExercise} onChanged={onChanged} />,
+      );
+      const land = await landFirstSetAndHoldSecond(queryClient);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+      // Both deletes queue behind the in-flight create -- one serial outbox scope -- so nothing is
+      // sent until it lands, and then the tempId-targeted delete resolves to the id it landed with.
+      await waitFor(() => expect(listSessionSets).toHaveBeenCalledWith(101, 1));
+      expect(deleteSet).not.toHaveBeenCalled();
+
+      land(56);
+
+      await waitFor(() => expect(deleteSet).toHaveBeenCalledWith(56));
+      await waitFor(() => expect(deleteSet).toHaveBeenCalledWith(55));
+    });
+
+    // The offline wrap asks the same question Remove does, so the button is disabled offline exactly
+    // when Remove would need the network to enumerate those rows.
+    it('disables Remove offline while a synced set is missing from the row', async () => {
+      const summary = () => (
+        <SessionSummary entries={inFlightOnly} loading={false} sessionId={101} personId={7} onSelectExercise={onSelectExercise} onChanged={onChanged} />
+      );
+      const { queryClient, rerender } = renderWithQuery(summary());
+      await landFirstSetAndHoldSecond(queryClient);
+      // LogTab re-renders this leaf on every mutation-cache change (useSessionEntries subscribes);
+      // standing alone it has to be re-rendered by hand.
+      rerender(<QueryClientProvider client={queryClient}>{summary()}</QueryClientProvider>);
+      onlineManager.setOnline(false);
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Remove' })).toBeDisabled());
+    });
   });
 
   // ============================================================================================

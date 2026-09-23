@@ -120,6 +120,34 @@ describe('offline outbox persistence', () => {
     expect(logLiveSet).toHaveBeenCalledWith(7, expect.objectContaining({ exerciseId: 1, idempotencyKey: 'idem-1' }));
   });
 
+  // A create persisted mid-attempt may already be on the server, and neither restore path keeps any
+  // trace of that (a re-dispatch starts a fresh failureCount). The stamp is what stops a later
+  // delete of that set from "cancelling" a create that can still land -- the Remove-mid-save bug.
+  // docs/incidents/2026-09-23-remove-mid-save-deleted-nothing.md
+  it('stamps a set create persisted mid-attempt as possibly sent, and leaves a never-attempted one unstamped', async () => {
+    const client1 = newClient();
+    logLiveSet.mockReturnValueOnce(new Promise(() => {}));
+    dispatchLogSet(client1, liveSetVars({ tempId: 'optimistic-in-flight' }));
+    await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalledTimes(1));
+    onlineManager.setOnline(false);
+    dispatchLogSet(client1, liveSetVars({ tempId: 'optimistic-never-sent' }));
+    await persistOutboxNow(client1, ACCOUNT);
+
+    const client2 = newClient();
+    await restoreOutbox(client2, ACCOUNT);
+
+    const restored = Object.fromEntries(
+      client2.getMutationCache().getAll().map((m) => [m.state.variables.tempId, m.state.variables.mayHaveBeenSent]),
+    );
+    expect(restored).toEqual({ 'optimistic-in-flight': true, 'optimistic-never-sent': undefined });
+
+    // The stamp is bookkeeping only -- it never reaches the server.
+    onlineManager.setOnline(true);
+    await client2.resumePausedMutations();
+    await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalledTimes(3));
+    for (const [, payload] of logLiveSet.mock.calls) expect(payload).not.toHaveProperty('mayHaveBeenSent');
+  });
+
   it('replays queued writes strictly in enqueue order', async () => {
     const client1 = newClient();
     onlineManager.setOnline(false);

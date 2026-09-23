@@ -1,7 +1,7 @@
 import { useRef, useSyncExternalStore } from 'react';
 import { notifyManager, useQueryClient } from '@tanstack/react-query';
 import { isTempExerciseId } from '../lib/exerciseIdMap';
-import { isUnsyncedWrite } from '../lib/queryClient';
+import { isDeleteQueuedFor, isUnsyncedWrite } from '../lib/queryClient';
 
 // Every not-yet-synced logSet/createExercise mutation, for ANY person -- the only place an
 // offline-logged set exists before it syncs (see offlineSetEdits.js). Covers the brief online
@@ -27,7 +27,10 @@ function readPendingMutations(queryClient) {
       // isUnsyncedWrite, not `status === 'pending'` -- under lie-fi a write's retries settle into
       // 'error' while it stays queued and durable, and this list used to silently drop it there
       // even though ExerciseDetail still showed the row and the outbox badge still counted it.
-      return isUnsyncedWrite({ status: m.state.status, errorStatus: m.state.error?.status });
+      if (!isUnsyncedWrite({ status: m.state.status, errorStatus: m.state.error?.status })) return false;
+      // A create deleted mid-save stays pending until it lands and the DELETE_SET queued behind it
+      // runs. The person already watched it go, so it is not listed -- see isDeleteQueuedFor.
+      return kind !== 'logSet' || !isDeleteQueuedFor(queryClient, m.state.variables?.tempId);
     });
 }
 

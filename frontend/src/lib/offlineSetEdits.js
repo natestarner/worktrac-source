@@ -1,8 +1,13 @@
+import { dispatchDurableWrite, isDeadWrite, DELETE_SET_MUTATION_KEY } from './queryClient';
+import { resolveSetId } from './setIdMap';
+
 // An offline-logged set (see ExerciseDetail.jsx's `optimisticSet`/`pendingBeforeSession`) has no
 // server row yet -- it's just a still-pending `logSet` mutation sitting in the outbox, keyed by
 // `variables.tempId` (the optimistic row's `id`). Deleting it before it's synced means cancelling
 // that pending CREATE outright (see cancelQueuedWritesForSet below) -- there's no server row yet to
-// delete.
+// delete -- but ONLY while the create provably never left the device. Once its request may be on
+// the wire, cancelling cannot stop it landing, so the delete becomes a real DELETE_SET queued behind
+// it instead (deleteQueuedSet, below).
 //
 // EDITING it, by contrast, is a genuinely separate durable write (EDIT_SET, targeting the create's
 // tempId -- see queryClient.js's requireResolvedSetId/setSetIdMapping) rather than a mutation of the
@@ -73,6 +78,51 @@ export function cancelQueuedWritesForSet(queryClient, tempId) {
         (m.options.mutationKey?.[0] === 'editSet' && m.state.variables?.setId === tempId),
     );
   doomed.forEach((m) => cache.remove(m));
+}
+
+// "Could this create's request have reached the server?" -- asked before cancelling it, because
+// cancelling only removes it from the cache: a request already on the wire lands anyway, and the
+// set the person just deleted survives on the server. That is what made "Remove" on the Log tab
+// delete nothing when tapped mid-save (docs/incidents/2026-09-23-remove-mid-save-deleted-nothing.md).
+//
+// Only a create that PROVABLY never left the device is safe to cancel:
+//   - never executed ('idle'), or paused before its first attempt (offline, or waiting its turn in
+//     the serial outbox scope -- canRun is false) with no failed attempt behind it. A failed attempt
+//     may have reached the server with only the RESPONSE lost -- lie-fi's defining case.
+//   - and not restored from a page that may already have sent it -- restoreOutbox stamps
+//     `mayHaveBeenSent` on those, since a re-dispatch or hydrate starts a fresh failureCount.
+//   - OR dead (isDeadWrite): the server answered with a definitive refusal, or a dependency will
+//     never land. Nothing was stored, and a delete queued behind it could only die with it.
+// Everything else gets a real delete, queued behind it -- see deleteQueuedSet below.
+function createNeverReachedServer(create) {
+  const { state } = create;
+  if (isDeadWrite({ status: state.status, errorStatus: state.error?.status, errorCode: state.error?.code, errorTerminal: state.error?.terminal })) {
+    return true;
+  }
+  if (state.variables?.mayHaveBeenSent) return false;
+  if (state.status === 'idle') return true;
+  return state.status === 'pending' && state.isPaused && state.failureCount === 0;
+}
+
+// Delete a set that is still an optimistic row -- its create has not been confirmed. The one entry
+// point for that, used by ExerciseDetail's per-set Delete and SessionSummary's Remove, so the two
+// can never disagree about when cancelling is safe.
+//
+//   - Never sent (or dead): cancel it and everything targeting it, exactly as before. Nothing
+//     reaches the server, and nothing extra sits in the outbox.
+//   - Possibly sent: queue a DELETE_SET against the create's tempId. The shared serial scope runs
+//     it after the create settles, and it resolves the real id through the set-id map, just as a
+//     queued EDIT_SET does. Until then isDeleteQueuedFor hides the row everywhere a pending create
+//     is shown or counted.
+//   - Create already gone from the cache: delete by the real id if the create lived long enough to
+//     record one; otherwise there is nothing on the server to delete, so just clear its edits.
+export function deleteQueuedSet(queryClient, tempId, { personId, exerciseId, sessionId }) {
+  const create = findPendingLogSet(queryClient, tempId);
+  if (create ? createNeverReachedServer(create) : resolveSetId(tempId) === tempId) {
+    cancelQueuedWritesForSet(queryClient, tempId);
+    return;
+  }
+  dispatchDurableWrite(queryClient, DELETE_SET_MUTATION_KEY, { setId: tempId, personId, exerciseId, sessionId });
 }
 
 // Display-only: patches the pending create's own `state.variables` so a screen reading straight
