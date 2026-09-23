@@ -188,6 +188,44 @@ test.describe('Trends analytics', () => {
     await expect(page.getByText(/session total, not one set/)).toBeHidden();
   });
 
+  // Only a real browser can prove either half of this: jsdom lays nothing out, so scrollWidth is
+  // hardcoded to 0 and there is no real scroll position to assert on (ConsistencyHeatmap.test.jsx
+  // covers the two mechanisms -- the sticky style and the effect's assignment -- in isolation).
+  test('the consistency grid opens scrolled to the most recent days, with weekday labels pinned', async ({ page, request }) => {
+    // 390px is an iPhone in portrait, narrow enough that the fixed 26-week grid overflows its
+    // card -- the scrolling this feature exists to improve.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await registerHousehold(page, request, 'Nate');
+
+    await pickExercise(page, 'Barbell Bench Press');
+    await logSet(page, 185, 8);
+
+    await page.getByRole('link', { name: 'Trends' }).click();
+    await expect(page.getByTestId('consistency-grid')).toBeVisible();
+
+    const scrollContainer = page.getByTestId('consistency-scroll');
+    const { scrollLeft, scrollWidth, clientWidth } = await scrollContainer.evaluate((el) => ({
+      scrollLeft: el.scrollLeft,
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+
+    // Sanity check first: if the grid doesn't actually overflow at this width, the rest of this
+    // test would pass no matter what the scroll position is.
+    expect(scrollWidth, 'the grid should overflow its container at 390px').toBeGreaterThan(clientWidth);
+    // It should have opened scrolled to its end -- today's column -- not its start (26 weeks ago).
+    expect(scrollLeft).toBeGreaterThanOrEqual(scrollWidth - clientWidth - 1);
+
+    // Now prove the weekday labels are pinned to the CONTAINER, not the page: scrolled all the
+    // way to the end, "Mon" must still sit at the container's left edge rather than having
+    // scrolled off with the earliest weeks.
+    const containerBox = (await scrollContainer.boundingBox())!;
+    const mondayLabel = page.getByTestId('consistency-day-labels').getByText('Mon', { exact: true });
+    const labelBox = (await mondayLabel.boundingBox())!;
+    expect(labelBox.x, 'the weekday label scrolled away with the oldest weeks').toBeGreaterThanOrEqual(containerBox.x - 1);
+    expect(labelBox.x, 'the weekday label is not pinned near the left edge').toBeLessThanOrEqual(containerBox.x + 30);
+  });
+
   // Only a real browser can prove this: jsdom computes no layout, so ChartHelp's clamping effect
   // is a no-op in every unit test and this is the sole place the geometry is checked.
   test('a help panel stays fully on screen on a phone, wherever its "?" ended up', async ({ page, request }) => {
