@@ -1,6 +1,7 @@
 import { EXERCISE_METRICS, metricSpec } from '../trends/exerciseMetrics';
-import { convertWeight, toLb } from '../../utils/formulas';
+import { comparableValue, convertWeight, weightLb } from '../../utils/formulas';
 import { formatRestTime } from '../../utils/datetime';
+import { dtoVolumeKind, formatVolume } from '../../utils/sessionVolume';
 
 // The PRs board's record picker: the five ways one exercise's all-time best can be measured.
 //
@@ -32,37 +33,20 @@ export function prMeasureSpec(measure) {
 // comparableValue already picked, with its weight-0 and hold substitutions baked in. Adapting it
 // here rather than having the server send it twice is what keeps the two from drifting.
 //
-// `best` arrives in the SET's own unit (unlike row.measures, which the server normalizes), so the
-// est1rm value goes through toLb for ranking -- the same call prSort.js has always made, now in one
-// place instead of at every comparison.
+// `best` arrives in the SET's own unit (unlike row.measures, which the server normalizes), so it is
+// ranked through formulas.js#comparableValue -- THE est.-1RM ranking rule, seconds for a hold and
+// the rep count at weight 0 included -- and its load through #weightLb. This used to re-implement
+// those three branches here, a second copy of the rule that the shared set-measure cases could not
+// see; now there is nothing here to drift.
 function est1rmEntry(row) {
   const best = row?.best;
   if (!best) return null;
-  if (best.durationSeconds != null) {
-    return {
-      value: best.durationSeconds,
-      weightLb: toLb(best.weight, best.unit || 'lb'),
-      reps: best.reps,
-      durationSeconds: best.durationSeconds,
-      sessionStartedAt: best.sessionStartedAt,
-    };
-  }
-  // A bodyweight set ranks on reps: Epley collapses to 0 at weight 0, so every pull-up PR would
-  // tie forever. Mirrors StatsService#comparableLb exactly.
-  if (Number(best.weight) === 0) {
-    return {
-      value: best.reps,
-      weightLb: 0,
-      reps: best.reps,
-      durationSeconds: null,
-      sessionStartedAt: best.sessionStartedAt,
-    };
-  }
+  const isHold = best.durationSeconds != null;
   return {
-    value: toLb(best.est1rm, best.unit || 'lb'),
-    weightLb: toLb(best.weight, best.unit || 'lb'),
+    value: comparableValue(best),
+    weightLb: weightLb(best),
     reps: best.reps,
-    durationSeconds: null,
+    durationSeconds: isHold ? best.durationSeconds : null,
     sessionStartedAt: best.sessionStartedAt,
   };
 }
@@ -92,6 +76,10 @@ export function measureEntry(row, measure) {
     // here, and the 'One session' fallback in formatPrMeasure.
     sets: entry.sets ?? null,
     setCount: entry.setCount ?? 0,
+    // Session volume is in the exercise's own unit (utils/sessionVolume.js), so the value is only
+    // comparable with rows of the same kind -- prSort.js groups on this. Every other measure here
+    // is pounds or a count across the whole board and carries no kind.
+    volumeKind: key === 'sessionVolume' ? dtoVolumeKind(row) : null,
   };
 }
 
@@ -216,16 +204,18 @@ export function formatPrMeasure(entry, measure, row, defaultUnit) {
     return { value: `${entry.value} reps`, caption: formatPrBreakdown(entry, defaultUnit) ?? 'One session' };
   }
 
-  // Rounded and unseparated, matching ExerciseRecordsTable's "Best session volume" / "Best set
-  // volume" rows exactly. These are the same two records rendered on two screens; a thousands
-  // separator here would be a readability win bought by making one number look like two different
-  // numbers depending on which tab you were on.
+  // In the exercise's own unit -- pounds, total reps for an unloaded exercise, total time for a
+  // hold -- through the same formatVolume the celebration and ExerciseRecordsTable's "Best session
+  // volume" row use, so the one record reads identically on all three.
   if (key === 'sessionVolume') {
     return {
-      value: `${Math.round(w(entry.value))} ${defaultUnit}`,
+      value: formatVolume(entry.value, entry.volumeKind ?? dtoVolumeKind(row), defaultUnit),
       caption: formatPrBreakdown(entry, defaultUnit) ?? 'One session',
     };
   }
+
+  // Rounded and unseparated, matching ExerciseRecordsTable's "Best set volume" row exactly: a
+  // thousands separator here would make one number look like two depending on the tab.
 
   if (key === 'bestSetVolume') {
     return {

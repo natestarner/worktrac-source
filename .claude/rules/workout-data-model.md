@@ -56,7 +56,7 @@ V46 replaced the never-used `'cardio'` reservation with it.
 - **`Exercise.trackingType` has no setter, deliberately.** Flipping it would reinterpret every set
   already logged against that exercise. It is set at construction and `ExerciseService.update`
   (rename) ignores the field.
-- **Ranking a hold uses seconds ALONE** (`StatsService#comparableValue`, mirrored in
+- **Ranking a hold uses seconds ALONE** (`SetMeasures#comparableValue`, mirrored in
   `utils/formulas.js#comparableValue`). Added load deliberately does not enter it — a load-adjusted
   hold needs the person's bodyweight, which the app doesn't store. "Heaviest load held" is a
   separate record instead, the same shape as `heaviestWeight` beside `bestEst1rm`.

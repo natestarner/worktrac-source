@@ -48,19 +48,25 @@ public class StatsService {
     private final SessionExerciseNoteRepository sessionExerciseNoteRepository;
     private final PersonService personService;
     private final EpleyCalculator epleyCalculator;
-    private final UnitConverter unitConverter;
     private final SubscriptionService subscriptionService;
+    // The set-level measures (est.-1RM ranking, top weight) and the session-level one (volume) each
+    // have ONE definition, shared with the client through shared/record-rules/. Nothing in this
+    // class re-derives them -- see SetMeasures and SessionVolume.
+    private final SetMeasures setMeasures;
+    private final SessionVolume sessionVolume;
     private final Clock clock;
 
     public StatsService(WorkoutSetRepository workoutSetRepository, SessionExerciseNoteRepository sessionExerciseNoteRepository,
-                         PersonService personService, EpleyCalculator epleyCalculator, UnitConverter unitConverter,
-                         SubscriptionService subscriptionService, Clock clock) {
+                         PersonService personService, EpleyCalculator epleyCalculator,
+                         SubscriptionService subscriptionService, SetMeasures setMeasures, SessionVolume sessionVolume,
+                         Clock clock) {
         this.workoutSetRepository = workoutSetRepository;
         this.sessionExerciseNoteRepository = sessionExerciseNoteRepository;
         this.personService = personService;
         this.epleyCalculator = epleyCalculator;
-        this.unitConverter = unitConverter;
         this.subscriptionService = subscriptionService;
+        this.setMeasures = setMeasures;
+        this.sessionVolume = sessionVolume;
         this.clock = clock;
     }
 
@@ -79,12 +85,18 @@ public class StatsService {
 
         // ⚠️ Deliberately asymmetric exclusion -- see ExerciseSummaryDto's header for the full
         // reasoning. heaviestWeightLb is all-time INCLUDING today (a set PR beats everything
-        // before it, and earlier sets today are before it); bestSessionVolumeLb EXCLUDES the
+        // before it, and earlier sets today are before it); bestSessionVolume EXCLUDES the
         // session in view, or the record chases itself and re-fires on every subsequent set.
+        //
+        // The volume KIND, though, is decided over every set including today's: it is a property
+        // of the exercise, and the client merges it with the sets it holds that have not synced.
+        SessionVolume.Kind volumeKind = all.isEmpty() ? null
+                : sessionVolume.kindOf(all.get(0).getExercise().isDurationTracked(), all);
         BigDecimal heaviestWeightLb = null;
         Map<Long, BigDecimal> volumeByOtherSession = new LinkedHashMap<>();
+        Map<Long, BigDecimal> loadVolumeByOtherSession = new LinkedHashMap<>();
         for (WorkoutSet s : all) {
-            BigDecimal weightLb = lbWeight(s);
+            BigDecimal weightLb = setMeasures.weightLb(s);
             if (heaviestWeightLb == null || weightLb.compareTo(heaviestWeightLb) > 0) {
                 heaviestWeightLb = weightLb;
             }
@@ -92,15 +104,24 @@ public class StatsService {
             if (excludeSessionId != null && sessionId.equals(excludeSessionId)) {
                 continue;
             }
-            volumeByOtherSession.merge(sessionId, setVolumeLb(s), BigDecimal::add);
+            volumeByOtherSession.merge(sessionId, sessionVolume.setVolume(s, volumeKind), BigDecimal::add);
+            loadVolumeByOtherSession.merge(sessionId, sessionVolume.loadVolumeLb(s), BigDecimal::add);
         }
-        BigDecimal bestSessionVolumeLb = volumeByOtherSession.values().stream()
+        BigDecimal bestSessionVolume = volumeByOtherSession.values().stream()
+                .max(BigDecimal::compareTo)
+                .orElse(null);
+        BigDecimal legacyBestSessionVolumeLb = loadVolumeByOtherSession.values().stream()
                 .max(BigDecimal::compareTo)
                 .orElse(null);
 
-        return new ExerciseSummaryDto(lastSession, best,
-                heaviestWeightLb == null ? null : heaviestWeightLb.setScale(1, RoundingMode.HALF_UP),
-                bestSessionVolumeLb == null ? null : bestSessionVolumeLb.setScale(1, RoundingMode.HALF_UP));
+        // heaviestWeightLb and bestSessionVolume go out UNROUNDED: they are thresholds the client
+        // compares its own unrounded figures against (a 100 kg set is 220.462 lb on both sides).
+        // Rounding them to 0.1 made the online answer differ from the offline fallback, which
+        // derives the same thresholds from history without rounding -- a 220.46 lb best, sent as
+        // 220.5, hid a 100 kg top-weight record online that the offline path correctly found.
+        return new ExerciseSummaryDto(lastSession, best, heaviestWeightLb,
+                bestSessionVolume, volumeKind == null ? null : volumeKind.wire(),
+                scaled(legacyBestSessionVolumeLb));
     }
 
     // Max estimated 1RM across every set ever logged for this person + exercise,
@@ -177,9 +198,10 @@ public class StatsService {
                     boolean durationTracked = exercise.isDurationTracked();
                     boolean bodyweightOnly = sets.stream()
                             .allMatch(s -> s.getWeight().compareTo(BigDecimal.ZERO) == 0);
+                    SessionVolume.Kind volumeKind = sessionVolume.kindOf(durationTracked, sets);
                     return new PrRowDto(exercise.getId(), exercise.getName(), toBestDto(best),
-                            buildPrMeasures(sets, bodyweightOnly, durationTracked),
-                            bodyweightOnly, durationTracked);
+                            buildPrMeasures(sets, bodyweightOnly, durationTracked, volumeKind),
+                            bodyweightOnly, durationTracked, volumeKind.wire());
                 })
                 .sorted(Comparator.comparing(PrRowDto::exerciseName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
@@ -196,10 +218,11 @@ public class StatsService {
     // most-reps-in-a-SET. The board and the chart have to mean the same thing by "Reps" -- the
     // record picker and the metric switcher are the same five words on two screens.
     private PrMeasuresDto buildPrMeasures(List<WorkoutSet> sets, boolean bodyweightOnly,
-                                          boolean durationTracked) {
-        // Both volume measures and the rep total are weight x reps or reps, so a hold (reps always
-        // 0) collapses all three to zero exactly as a never-loaded exercise collapses the two
-        // weight-derived ones. Absent beats a column of zeros -- see PrMeasuresDto.
+                                          boolean durationTracked, SessionVolume.Kind volumeKind) {
+        // Best-set volume and the rep total are weight x reps or reps, so a hold (reps always 0)
+        // collapses both to zero exactly as a never-loaded exercise collapses best-set volume.
+        // Absent beats a column of zeros -- see PrMeasuresDto. Session volume is the exception: it
+        // is measured in the exercise's own unit (SessionVolume), so every exercise has one.
         boolean noVolumeMeasure = bodyweightOnly || durationTracked;
 
         WorkoutSet heaviest = null;
@@ -212,22 +235,22 @@ public class StatsService {
         Map<Long, List<WorkoutSet>> setsBySession = new LinkedHashMap<>();
 
         for (WorkoutSet s : sets) {
-            if (heaviest == null || isBetter(lbWeight(s), reps(s), lbWeight(heaviest), reps(heaviest))) {
+            if (heaviest == null || isBetter(setMeasures.weightLb(s), reps(s), setMeasures.weightLb(heaviest), reps(heaviest))) {
                 heaviest = s;
             }
             if (bestSetVolume == null || setVolumeLb(s).compareTo(setVolumeLb(bestSetVolume)) > 0) {
                 bestSetVolume = s;
             }
             Long sessionId = s.getSession().getId();
-            volumeBySession.merge(sessionId, setVolumeLb(s), BigDecimal::add);
+            volumeBySession.merge(sessionId, sessionVolume.setVolume(s, volumeKind), BigDecimal::add);
             repsBySession.merge(sessionId, s.getReps(), Integer::sum);
             anySetInSession.putIfAbsent(sessionId, s);
             setsBySession.computeIfAbsent(sessionId, k -> new ArrayList<>()).add(s);
         }
 
         return new PrMeasuresDto(
-                bodyweightOnly ? null : setMeasure(lbWeight(heaviest), heaviest),
-                noVolumeMeasure ? null : sessionMeasure(volumeBySession, anySetInSession, setsBySession),
+                bodyweightOnly ? null : setMeasure(setMeasures.weightLb(heaviest), heaviest),
+                sessionMeasure(volumeBySession, anySetInSession, setsBySession),
                 noVolumeMeasure ? null : setMeasure(setVolumeLb(bestSetVolume), bestSetVolume),
                 durationTracked ? null : sessionRepMeasure(repsBySession, anySetInSession, setsBySession));
     }
@@ -251,7 +274,7 @@ public class StatsService {
     private List<PrSetDto> breakdown(List<WorkoutSet> sessionSets) {
         List<PrSetDto> runs = new ArrayList<>();
         for (WorkoutSet s : sessionSets.stream().sorted(Comparator.comparing(WorkoutSet::getCreatedAt)).toList()) {
-            BigDecimal weightLb = lbWeight(s).setScale(1, RoundingMode.HALF_UP);
+            BigDecimal weightLb = setMeasures.weightLb(s).setScale(1, RoundingMode.HALF_UP);
             PrSetDto last = runs.isEmpty() ? null : runs.get(runs.size() - 1);
             boolean sameAsLast = last != null
                     && last.weightLb().compareTo(weightLb) == 0
@@ -277,7 +300,7 @@ public class StatsService {
     private PrMeasureDto setMeasure(BigDecimal value, WorkoutSet set) {
         // No breakdown: a set-level measure already names its own set through weightLb/reps.
         return new PrMeasureDto(value.setScale(1, RoundingMode.HALF_UP),
-                lbWeight(set).setScale(1, RoundingMode.HALF_UP), set.getReps(),
+                setMeasures.weightLb(set).setScale(1, RoundingMode.HALF_UP), set.getReps(),
                 set.getSession().getStartedAt(), List.of(), 0);
     }
 
@@ -312,7 +335,7 @@ public class StatsService {
         WorkoutSet best = null;
         BigDecimal bestComparable = null;
         for (WorkoutSet s : sets) {
-            BigDecimal comparable = comparableValue(s.getWeight(), s.getReps(), s.getDurationSeconds(), s.getUnit());
+            BigDecimal comparable = setMeasures.comparableValue(s);
             if (bestComparable == null || comparable.compareTo(bestComparable) > 0) {
                 bestComparable = comparable;
                 best = s;
@@ -336,37 +359,7 @@ public class StatsService {
     // best must be read BEFORE the new set is inserted, and compared in a common unit.
     public Optional<BigDecimal> getBestComparableValue(Long personId, Long exerciseId) {
         return bestSet(workoutSetRepository.findByPerson_IdAndExercise_Id(personId, exerciseId))
-                .map(s -> comparableValue(s.getWeight(), s.getReps(), s.getDurationSeconds(), s.getUnit()));
-    }
-
-    // The single number a set is ranked by. Every comparison this feeds is within ONE exercise, and
-    // an exercise has exactly one measure, so seconds are never weighed against pounds.
-    //
-    // For a hold the value is the duration, and added load deliberately does NOT enter it: a
-    // load-adjusted hold would need the person's bodyweight, which this app doesn't store, and
-    // inventing a formula produces a number larger than anything they actually did. Load is
-    // surfaced as its own record ("Heaviest load held") instead -- the same shape as heaviestWeight
-    // sitting beside bestEst1rm rather than being fused into it.
-    public BigDecimal comparableValue(BigDecimal weight, int reps, Integer durationSeconds, String unit) {
-        if (durationSeconds != null) {
-            return BigDecimal.valueOf(durationSeconds);
-        }
-        return comparableLb(weight, reps, unit);
-    }
-
-    // Epley's formula multiplies weight by a reps-based factor, so at weight == 0 (a
-    // bodyweight set logged with no added load) it collapses to 0 no matter how many
-    // reps were done -- every bodyweight set would then compare as an exact tie forever,
-    // which both hides genuine rep-count improvement as a new PR and, worse, flags every
-    // single bodyweight set as "matching" the all-time best (see isPrSet in
-    // frontend/src/utils/formulas.js, which mirrors this). Reps are the only real signal
-    // of performance at zero added weight, so use rep count directly as the comparable
-    // value in that case instead of running it through Epley.
-    public BigDecimal comparableLb(BigDecimal weight, int reps, String unit) {
-        if (weight.compareTo(BigDecimal.ZERO) == 0) {
-            return BigDecimal.valueOf(reps);
-        }
-        return unitConverter.toLb(epleyCalculator.estimate1RM(weight, reps), unit);
+                .map(setMeasures::comparableValue);
     }
 
     // "Today"/"this week" only mean the same thing to the viewer as to this bucketing if
@@ -434,8 +427,9 @@ public class StatsService {
             // A hold carries reps 0, so it contributes 0 volume and 0 reps here with no special
             // case -- that is exactly why reps is 0 rather than null (see WorkoutSet). Its work is
             // counted by sessionHoldSeconds and by the set count instead.
-            BigDecimal volumeLb = unitConverter.toLb(s.getWeight().multiply(BigDecimal.valueOf(s.getReps())), s.getUnit());
-            sessionVolumeLb.merge(sessionId, volumeLb, BigDecimal::add);
+            // Weight x reps, deliberately NOT SessionVolume's per-exercise measure: this sums across
+            // exercises, and pounds cannot be added to reps or seconds.
+            sessionVolumeLb.merge(sessionId, sessionVolume.loadVolumeLb(s), BigDecimal::add);
             sessionSetCount.merge(sessionId, 1, Integer::sum);
             sessionRepCount.merge(sessionId, s.getReps(), Integer::sum);
             sessionHoldSeconds.merge(sessionId, s.getDurationSeconds() == null ? 0 : s.getDurationSeconds(), Integer::sum);
@@ -489,11 +483,9 @@ public class StatsService {
         for (WorkoutSet s : all) {
             LocalDate date = sessionDate.get(s.getSession().getId());
             if (!date.isBefore(thisWindowStart) && !date.isAfter(today)) {
-                BigDecimal volumeLb = unitConverter.toLb(s.getWeight().multiply(BigDecimal.valueOf(s.getReps())), s.getUnit());
-                volumeThisMonthLb = volumeThisMonthLb.add(volumeLb);
+                volumeThisMonthLb = volumeThisMonthLb.add(sessionVolume.loadVolumeLb(s));
             } else if (!date.isBefore(lastWindowStart) && !date.isAfter(lastWindowEnd)) {
-                BigDecimal volumeLb = unitConverter.toLb(s.getWeight().multiply(BigDecimal.valueOf(s.getReps())), s.getUnit());
-                volumeLastMonthLb = volumeLastMonthLb.add(volumeLb);
+                volumeLastMonthLb = volumeLastMonthLb.add(sessionVolume.loadVolumeLb(s));
             }
         }
 
@@ -551,6 +543,13 @@ public class StatsService {
         }
 
         List<WorkoutSet> all = workoutSetRepository.findByPerson_IdAndExercise_Id(person.getId(), exerciseId);
+        // Decided over the VISIBLE sets, like getExerciseRecords' and getPrList's, so the chart's
+        // "Volume" line is in the same unit as the records table under it and the board's row.
+        // (Falls back to every set only in the sliver where the window's DATE admits a session its
+        // INSTANT does not -- a point is still plotted there, so it still needs a kind.)
+        List<WorkoutSet> visible = visibleTo(access.accountId(), all);
+        SessionVolume.Kind volumeKind = all.isEmpty() ? null
+                : sessionVolume.kindOf(all.get(0).getExercise().isDurationTracked(), visible.isEmpty() ? all : visible);
 
         // Seed the running best from everything before the window so a PR from outside the
         // requested range isn't wrongly re-flagged as new once it scrolls into view.
@@ -559,7 +558,7 @@ public class StatsService {
         for (WorkoutSet s : all) {
             LocalDate date = LocalDate.ofInstant(s.getSession().getStartedAt(), zoneId);
             if (date.isBefore(rangeStart)) {
-                BigDecimal estLb = comparableValue(s.getWeight(), s.getReps(), s.getDurationSeconds(), s.getUnit());
+                BigDecimal estLb = setMeasures.comparableValue(s);
                 if (estLb.compareTo(runningBestLb) > 0) {
                     runningBestLb = estLb;
                 }
@@ -576,9 +575,8 @@ public class StatsService {
         for (Map.Entry<Long, List<WorkoutSet>> entry : orderedSessions) {
             List<WorkoutSet> sessionSets = entry.getValue();
             WorkoutSet best = bestSet(sessionSets).orElseThrow();
-            BigDecimal weightLb = unitConverter.toLb(best.getWeight(), best.getUnit());
-            BigDecimal est1rmLb = comparableValue(best.getWeight(), best.getReps(), best.getDurationSeconds(),
-                    best.getUnit());
+            BigDecimal weightLb = setMeasures.weightLb(best);
+            BigDecimal est1rmLb = setMeasures.comparableValue(best);
             boolean isPr = est1rmLb.compareTo(runningBestLb) > 0;
             if (isPr) {
                 runningBestLb = est1rmLb;
@@ -590,7 +588,7 @@ public class StatsService {
             BigDecimal heaviestWeightLb = null;
             int heaviestWeightReps = 0;
             BigDecimal bestSetVolumeLb = BigDecimal.ZERO;
-            BigDecimal sessionVolumeLb = BigDecimal.ZERO;
+            BigDecimal sessionVolumeTotal = sessionVolume.sessionVolume(sessionSets, volumeKind);
             int totalReps = 0;
             Integer bestHoldSeconds = null;
             int totalHoldSeconds = 0;
@@ -601,7 +599,7 @@ public class StatsService {
                         bestHoldSeconds = s.getDurationSeconds();
                     }
                 }
-                BigDecimal setWeightLb = unitConverter.toLb(s.getWeight(), s.getUnit());
+                BigDecimal setWeightLb = setMeasures.weightLb(s);
                 // Ties broken by reps so an all-bodyweight session reports its best rep set rather
                 // than whichever 0-weight set happened to come first.
                 int weightComparison = heaviestWeightLb == null ? 1 : setWeightLb.compareTo(heaviestWeightLb);
@@ -609,11 +607,10 @@ public class StatsService {
                     heaviestWeightLb = setWeightLb;
                     heaviestWeightReps = s.getReps();
                 }
-                BigDecimal setVolumeLb = setWeightLb.multiply(BigDecimal.valueOf(s.getReps()));
+                BigDecimal setVolumeLb = sessionVolume.loadVolumeLb(s);
                 if (setVolumeLb.compareTo(bestSetVolumeLb) > 0) {
                     bestSetVolumeLb = setVolumeLb;
                 }
-                sessionVolumeLb = sessionVolumeLb.add(setVolumeLb);
                 totalReps += s.getReps();
             }
 
@@ -623,7 +620,7 @@ public class StatsService {
                     est1rmLb.setScale(1, RoundingMode.HALF_UP), isPr,
                     heaviestWeightLb.setScale(1, RoundingMode.HALF_UP), heaviestWeightReps,
                     bestSetVolumeLb.setScale(1, RoundingMode.HALF_UP),
-                    sessionVolumeLb.setScale(1, RoundingMode.HALF_UP),
+                    sessionVolumeTotal.setScale(1, RoundingMode.HALF_UP), volumeKind.wire(),
                     totalReps, sessionSets.size(),
                     bestHoldSeconds, totalHoldSeconds));
         }
@@ -641,7 +638,7 @@ public class StatsService {
                 workoutSetRepository.findByPerson_IdAndExercise_Id(person.getId(), exerciseId));
         if (all.isEmpty()) {
             return new ExerciseRecordsDto(null, null, null, null, null, null, null, 0, 0, 0,
-                    BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP), false, false);
+                    BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP), false, false, null);
         }
 
         WorkoutSet heaviest = null;
@@ -658,15 +655,16 @@ public class StatsService {
         // Every set of one exercise shares that exercise's measure, so this is a property of the
         // exercise read off the data rather than a per-set mix.
         boolean durationTracked = all.get(0).getExercise().isDurationTracked();
+        SessionVolume.Kind volumeKind = sessionVolume.kindOf(durationTracked, all);
         Map<Long, BigDecimal> volumeBySession = new LinkedHashMap<>();
         Map<Long, WorkoutSet> anySetInSession = new LinkedHashMap<>();
 
         for (WorkoutSet s : all) {
-            BigDecimal weightLb = unitConverter.toLb(s.getWeight(), s.getUnit());
-            BigDecimal setVolumeLb = weightLb.multiply(BigDecimal.valueOf(s.getReps()));
+            BigDecimal weightLb = setMeasures.weightLb(s);
+            BigDecimal setVolumeLb = sessionVolume.loadVolumeLb(s);
 
             // Heaviest weight, more reps as the tiebreak.
-            if (heaviest == null || isBetter(weightLb, reps(s), lbWeight(heaviest), reps(heaviest))) {
+            if (heaviest == null || isBetter(weightLb, reps(s), setMeasures.weightLb(heaviest), reps(heaviest))) {
                 heaviest = s;
             }
             // Deliberately NOT the same thing as `heaviest`: Epley rewards reps, so 185x8 (~234)
@@ -675,9 +673,9 @@ public class StatsService {
             // rep for a lightly-loaded lift. Ties go to the heavier actual load, since Epley
             // extrapolates further (and less reliably) the more reps you feed it.
             if (s.getWeight().compareTo(BigDecimal.ZERO) != 0) {
-                BigDecimal est1rmLb = unitConverter.toLb(
-                        epleyCalculator.estimate1RM(s.getWeight(), s.getReps()), s.getUnit());
-                if (bestEst1rm == null || isBetter(est1rmLb, weightLb, bestEst1rmLb, lbWeight(bestEst1rm))) {
+                // At weight != 0 this IS the Epley estimate in pounds (SetMeasures#comparableLb).
+                BigDecimal est1rmLb = setMeasures.comparableLb(s.getWeight(), s.getReps(), s.getUnit());
+                if (bestEst1rm == null || isBetter(est1rmLb, weightLb, bestEst1rmLb, setMeasures.weightLb(bestEst1rm))) {
                     bestEst1rm = s;
                     bestEst1rmLb = est1rmLb;
                 }
@@ -686,7 +684,7 @@ public class StatsService {
                 bestSetVolume = s;
             }
             // The mirror of `heaviest`: most reps, heavier weight as the tiebreak.
-            if (mostReps == null || isBetter(reps(s), weightLb, reps(mostReps), lbWeight(mostReps))) {
+            if (mostReps == null || isBetter(reps(s), weightLb, reps(mostReps), setMeasures.weightLb(mostReps))) {
                 mostReps = s;
             }
 
@@ -696,11 +694,11 @@ public class StatsService {
             if (s.getDurationSeconds() != null) {
                 totalHoldSeconds += s.getDurationSeconds();
                 if (longestHold == null || isBetter(BigDecimal.valueOf(s.getDurationSeconds()), weightLb,
-                        BigDecimal.valueOf(longestHold.getDurationSeconds()), lbWeight(longestHold))) {
+                        BigDecimal.valueOf(longestHold.getDurationSeconds()), setMeasures.weightLb(longestHold))) {
                     longestHold = s;
                 }
                 if (heaviestLoadHeld == null || isBetter(weightLb, BigDecimal.valueOf(s.getDurationSeconds()),
-                        lbWeight(heaviestLoadHeld), BigDecimal.valueOf(heaviestLoadHeld.getDurationSeconds()))) {
+                        setMeasures.weightLb(heaviestLoadHeld), BigDecimal.valueOf(heaviestLoadHeld.getDurationSeconds()))) {
                     heaviestLoadHeld = s;
                 }
             }
@@ -710,7 +708,7 @@ public class StatsService {
             if (s.getWeight().compareTo(BigDecimal.ZERO) != 0) {
                 bodyweightOnly = false;
             }
-            volumeBySession.merge(s.getSession().getId(), setVolumeLb, BigDecimal::add);
+            volumeBySession.merge(s.getSession().getId(), sessionVolume.setVolume(s, volumeKind), BigDecimal::add);
             anySetInSession.putIfAbsent(s.getSession().getId(), s);
         }
 
@@ -722,7 +720,7 @@ public class StatsService {
         // worse than no column, the same call bodyweightOnly already makes for weight-based rows.
         return new ExerciseRecordsDto(
                 bestEst1rm == null || durationTracked ? null : toRecordEntry(bestEst1rmLb, bestEst1rm, zoneId),
-                toRecordEntry(lbWeight(heaviest), heaviest, zoneId),
+                toRecordEntry(setMeasures.weightLb(heaviest), heaviest, zoneId),
                 toRecordEntry(setVolumeLb(bestSetVolume), bestSetVolume, zoneId),
                 new RecordEntryDto(bestSession.getValue().setScale(1, RoundingMode.HALF_UP), null, null, null,
                         sessionDate(anySetInSession.get(bestSession.getKey()), zoneId)),
@@ -730,13 +728,14 @@ public class StatsService {
                 longestHold == null ? null
                         : toRecordEntry(BigDecimal.valueOf(longestHold.getDurationSeconds()), longestHold, zoneId),
                 heaviestLoadHeld == null ? null
-                        : toRecordEntry(lbWeight(heaviestLoadHeld), heaviestLoadHeld, zoneId),
+                        : toRecordEntry(setMeasures.weightLb(heaviestLoadHeld), heaviestLoadHeld, zoneId),
                 all.size(),
                 totalReps,
                 totalHoldSeconds,
                 totalVolumeLb.setScale(1, RoundingMode.HALF_UP),
                 bodyweightOnly,
-                durationTracked);
+                durationTracked,
+                volumeKind.wire());
     }
 
     // "Is (value, tiebreak) a better record than the incumbent?" -- strictly greater on value, or
@@ -751,12 +750,12 @@ public class StatsService {
         return BigDecimal.valueOf(set.getReps());
     }
 
-    private BigDecimal lbWeight(WorkoutSet set) {
-        return unitConverter.toLb(set.getWeight(), set.getUnit());
+    private BigDecimal setVolumeLb(WorkoutSet set) {
+        return sessionVolume.loadVolumeLb(set);
     }
 
-    private BigDecimal setVolumeLb(WorkoutSet set) {
-        return lbWeight(set).multiply(BigDecimal.valueOf(set.getReps()));
+    private static BigDecimal scaled(BigDecimal value) {
+        return value == null ? null : value.setScale(1, RoundingMode.HALF_UP);
     }
 
     private LocalDate sessionDate(WorkoutSet set, ZoneId zoneId) {
@@ -765,7 +764,7 @@ public class StatsService {
 
     private RecordEntryDto toRecordEntry(BigDecimal valueLb, WorkoutSet set, ZoneId zoneId) {
         return new RecordEntryDto(valueLb.setScale(1, RoundingMode.HALF_UP),
-                lbWeight(set).setScale(1, RoundingMode.HALF_UP), set.getReps(), set.getDurationSeconds(),
+                setMeasures.weightLb(set).setScale(1, RoundingMode.HALF_UP), set.getReps(), set.getDurationSeconds(),
                 sessionDate(set, zoneId));
     }
 }

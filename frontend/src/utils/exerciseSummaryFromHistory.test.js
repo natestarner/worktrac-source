@@ -17,7 +17,7 @@ describe('deriveExerciseSummaryFromHistory', () => {
   // null rather than 0 on every measure: prDetection reads null as "no prior best on this
   // measure" and 0 as a genuine record of zero, and those are different answers for a bodyweight
   // lift -- a 0 would make the first weighted set look like it beat something.
-  const EMPTY = { lastSession: null, best: null, heaviestWeightLb: null, bestSessionVolumeLb: null };
+  const EMPTY = { lastSession: null, best: null, heaviestWeightLb: null, bestSessionVolume: null, volumeKind: null };
 
   it('returns null lastSession/best when there is no history at all', () => {
     expect(deriveExerciseSummaryFromHistory([], SQUAT, null)).toEqual(EMPTY);
@@ -221,5 +221,50 @@ describe('mergeBestWithLocalSets', () => {
     const merged = mergeBestWithLocalSets(null, [{ weight: 185, reps: 8 }]);
 
     expect(merged.unit).toBe('lb');
+  });
+});
+
+// The offline twin of ExerciseSummaryDto's bestSessionVolume + volumeKind: the kind over EVERY
+// session, the best over the earlier ones only.
+describe('deriveExerciseSummaryFromHistory session volume', () => {
+  it('measures a bodyweight exercise in reps and excludes the live session', () => {
+    const history = [
+      session(3, '2026-07-27T00:00:00Z', [entry(SQUAT, [{ weight: 0, reps: 30, unit: 'lb' }])]),
+      session(2, '2026-07-20T00:00:00Z', [
+        entry(SQUAT, [
+          { weight: 0, reps: 8, unit: 'lb' },
+          { weight: 0, reps: 8, unit: 'lb' },
+        ]),
+      ]),
+    ];
+
+    expect(deriveExerciseSummaryFromHistory(history, SQUAT, 3)).toMatchObject({
+      volumeKind: 'reps',
+      bestSessionVolume: 16,
+    });
+  });
+
+  it('measures a hold in seconds', () => {
+    const history = [
+      session(2, '2026-07-20T00:00:00Z', [entry(SQUAT, [{ weight: 20, reps: 0, durationSeconds: 45, unit: 'lb' }])]),
+    ];
+
+    expect(deriveExerciseSummaryFromHistory(history, SQUAT, null)).toMatchObject({
+      volumeKind: 'seconds',
+      bestSessionVolume: 45,
+    });
+  });
+
+  // One loaded set anywhere -- including in the session being excluded -- makes it pounds.
+  it('decides the kind over the live session too, as the server does', () => {
+    const history = [
+      session(3, '2026-07-27T00:00:00Z', [entry(SQUAT, [{ weight: 10, reps: 5, unit: 'lb' }])]),
+      session(2, '2026-07-20T00:00:00Z', [entry(SQUAT, [{ weight: 0, reps: 20, unit: 'lb' }])]),
+    ];
+
+    expect(deriveExerciseSummaryFromHistory(history, SQUAT, 3)).toMatchObject({
+      volumeKind: 'load',
+      bestSessionVolume: 0,
+    });
   });
 });

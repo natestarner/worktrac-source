@@ -46,12 +46,12 @@ describe('PRsTab', () => {
       {
         exerciseId: 1,
         exerciseName: 'Bench Press',
-        best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208, sessionStartedAt: '2026-07-01T00:00:00Z' },
+        best: { weight: 185, reps: 5, unit: 'lb', est1rm: 215.8, sessionStartedAt: '2026-07-01T00:00:00Z' },
       },
     ]);
     renderPRsTab();
 
-    await waitFor(() => expect(screen.getByText('208 lb')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('215.8 lb')).toBeInTheDocument());
     expect(screen.getByText('185lb×5')).toBeInTheDocument();
   });
 
@@ -72,7 +72,7 @@ describe('PRsTab', () => {
 
   it('shows the offline data notice for the cached list only once offline', async () => {
     getPrs.mockResolvedValue([
-      { exerciseId: 1, exerciseName: 'Bench Press', best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208, sessionStartedAt: '2026-07-01T00:00:00Z' } },
+      { exerciseId: 1, exerciseName: 'Bench Press', best: { weight: 185, reps: 5, unit: 'lb', est1rm: 215.8, sessionStartedAt: '2026-07-01T00:00:00Z' } },
     ]);
     renderPRsTab();
 
@@ -96,8 +96,8 @@ describe('PRsTab tags, filtering, and row navigation', () => {
       { id: 2, name: 'Squat', tags: [{ id: 11, name: 'Legs' }] },
     ]);
     getPrs.mockResolvedValue([
-      { exerciseId: 1, exerciseName: 'Bench Press', best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208, sessionStartedAt: '2026-07-01T00:00:00Z' } },
-      { exerciseId: 2, exerciseName: 'Squat', best: { weight: 275, reps: 5, unit: 'lb', est1rm: 310, sessionStartedAt: '2026-07-02T00:00:00Z' } },
+      { exerciseId: 1, exerciseName: 'Bench Press', best: { weight: 185, reps: 5, unit: 'lb', est1rm: 215.8, sessionStartedAt: '2026-07-01T00:00:00Z' } },
+      { exerciseId: 2, exerciseName: 'Squat', best: { weight: 275, reps: 5, unit: 'lb', est1rm: 320.8, sessionStartedAt: '2026-07-02T00:00:00Z' } },
     ]);
   });
   afterEach(() => onlineManager.setOnline(true));
@@ -186,9 +186,9 @@ describe('PRsTab sorting', () => {
   // Deliberately arranged so every sort produces a DIFFERENT order -- otherwise a test can pass
   // while the sort key is being ignored entirely.
   const rows = [
-    { exerciseId: 1, exerciseName: 'Bench Press', best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208, sessionStartedAt: '2026-07-01T00:00:00Z' } },
-    { exerciseId: 2, exerciseName: 'Arnold Press', best: { weight: 95, reps: 8, unit: 'lb', est1rm: 120, sessionStartedAt: '2026-08-05T00:00:00Z' } },
-    { exerciseId: 3, exerciseName: 'Squat', best: { weight: 275, reps: 5, unit: 'lb', est1rm: 310, sessionStartedAt: '2026-06-02T00:00:00Z' } },
+    { exerciseId: 1, exerciseName: 'Bench Press', best: { weight: 185, reps: 5, unit: 'lb', est1rm: 215.8, sessionStartedAt: '2026-07-01T00:00:00Z' } },
+    { exerciseId: 2, exerciseName: 'Arnold Press', best: { weight: 95, reps: 8, unit: 'lb', est1rm: 120.3, sessionStartedAt: '2026-08-05T00:00:00Z' } },
+    { exerciseId: 3, exerciseName: 'Squat', best: { weight: 275, reps: 5, unit: 'lb', est1rm: 320.8, sessionStartedAt: '2026-06-02T00:00:00Z' } },
   ];
 
   // Row order as rendered: each row's name is the first bold line inside its button.
@@ -271,7 +271,7 @@ describe('PRsTab record picker', () => {
   const loaded = {
     exerciseId: 1,
     exerciseName: 'Bench Press',
-    best: { weight: 185, reps: 5, unit: 'lb', est1rm: 208, sessionStartedAt: '2026-07-01T00:00:00Z' },
+    best: { weight: 185, reps: 5, unit: 'lb', est1rm: 215.8, sessionStartedAt: '2026-07-01T00:00:00Z' },
     measures: {
       heaviest: { value: 225, weightLb: 225, reps: 1, sessionStartedAt: '2026-07-09T00:00:00Z' },
       sessionVolume: { value: 4625, weightLb: null, reps: null, sessionStartedAt: '2026-07-01T00:00:00Z' },
@@ -309,7 +309,7 @@ describe('PRsTab record picker', () => {
 
     // The top weight and the set behind it -- not the est. 1RM, which is a different set.
     await waitFor(() => expect(screen.getByText('225 lb')).toBeInTheDocument());
-    expect(screen.queryByText('208 lb')).not.toBeInTheDocument();
+    expect(screen.queryByText('215.8 lb')).not.toBeInTheDocument();
   });
 
   // Volume and Best set are the pair most easily conflated, and the board shows no difference

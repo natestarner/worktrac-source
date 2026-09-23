@@ -313,6 +313,126 @@ describe('ExerciseDetail PR celebration payload', () => {
     expect(showCelebration.mock.calls.at(-1)[0].firstTime).toBe(true);
   });
 
+  // The first workout of an exercise is trivially its biggest, so a volume record there says
+  // nothing. The set records still show (with the "first time" framing) -- only volume waits for a
+  // second workout to have something to beat. Asserted against BOTH summary shapes: the current
+  // one, and the pre-volumeKind one a cached summary may still hold.
+  it.each([
+    ['current', { lastSession: null, best: null, heaviestWeightLb: null, bestSessionVolume: null, volumeKind: null }],
+    ['legacy', { lastSession: null, best: null, heaviestWeightLb: null, bestSessionVolumeLb: null }],
+  ])('never celebrates volume on a first-ever set (%s summary)', async (_, summary) => {
+    getExerciseSummary.mockResolvedValue(summary);
+    useAppState.mockReturnValue(typedDraft({ weight: 185, reps: 5 }));
+    renderExerciseDetail();
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(showCelebration).toHaveBeenCalled());
+    const payload = showCelebration.mock.calls.at(-1)[0];
+    expect(payload.firstTime).toBe(true);
+    expect(payload.prs.map((pr) => pr.type)).toEqual(['heaviest', 'est1rm']);
+  });
+
+  // Waits for the summary to land: `ready` lets "Log set" render while it is in flight, and
+  // clicking then races it into a first-ever set.
+  async function logOnceSummaryLands() {
+    await waitFor(() => expect(screen.queryByText('No PR yet')).not.toBeInTheDocument());
+    fireEvent.click(await screen.findByText('Log set'));
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+  }
+
+  it('measures a bodyweight exercise’s volume in total reps', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 0, reps: 15, unit: 'lb', est1rm: 0 },
+      heaviestWeightLb: 0,
+      bestSessionVolume: 10,
+      volumeKind: 'reps',
+    });
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 12 }));
+    renderExerciseDetail();
+
+    await logOnceSummaryLands();
+
+    // 12 reps beats the best earlier session's 10. The set itself beats nothing (15 is the best).
+    expect(showCelebration).toHaveBeenCalledTimes(1);
+    expect(showCelebration.mock.calls.at(-1)[0].prs.map((pr) => pr.type)).toEqual(['sessionVolume']);
+    expect(rowFor('sessionVolume')).toMatchObject({ valueText: '12 reps', caption: '1 set this workout' });
+  });
+
+  it('measures a hold’s volume in total time', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 0, reps: 0, durationSeconds: 90, unit: 'lb', est1rm: null },
+      heaviestWeightLb: 0,
+      bestSessionVolume: 50,
+      volumeKind: 'seconds',
+    });
+    useAppState.mockReturnValue({ ...typedDraft({ weight: 0, reps: 0 }), durationDraft: 60 });
+    renderExerciseDetail({ exercise: { ...exercise, trackingType: 'duration' } });
+
+    await logOnceSummaryLands();
+
+    expect(showCelebration.mock.calls.at(-1)[0].prs.map((pr) => pr.type)).toEqual(['sessionVolume']);
+    expect(rowFor('sessionVolume').valueText).toBe('1:00');
+  });
+
+  it('does not celebrate a bodyweight session that falls short of the best', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 0, reps: 15, unit: 'lb', est1rm: 0 },
+      heaviestWeightLb: 0,
+      bestSessionVolume: 40,
+      volumeKind: 'reps',
+    });
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 12 }));
+    renderExerciseDetail();
+
+    await logOnceSummaryLands();
+
+    expect(showCelebration).not.toHaveBeenCalled();
+  });
+
+  // The kind is merged across synced history and today's set: the first loaded pull-up turns the
+  // exercise into pounds, every earlier session is then 0 lb, and this workout takes the record.
+  it('switches a bodyweight exercise to pounds the first time it is loaded', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 0, reps: 15, unit: 'lb', est1rm: 0 },
+      heaviestWeightLb: 0,
+      bestSessionVolume: 40,
+      volumeKind: 'reps',
+    });
+    useAppState.mockReturnValue(typedDraft({ weight: 10, reps: 5 }));
+    renderExerciseDetail();
+
+    await logOnceSummaryLands();
+
+    expect(rowFor('sessionVolume')).toMatchObject({ valueText: '50 lb' });
+  });
+
+  // The churn backstop is kind-aware: a latch of 40 REPS from the exercise's bodyweight days must
+  // not suppress a 50 LB record once it is loaded. A bare number is a pre-kinds latch, i.e. pounds.
+  it.each([
+    ['a reps latch', { kind: 'reps', value: 400 }, true],
+    ['a pounds latch above it', { kind: 'load', value: 400 }, false],
+    ['a legacy bare-number latch above it', 400, false],
+  ])('reads %s in its own kind', async (_, latch, fires) => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 0, reps: 15, unit: 'lb', est1rm: 0 },
+      heaviestWeightLb: 0,
+      bestSessionVolume: 40,
+      volumeKind: 'reps',
+    });
+    useAppState.mockReturnValue({ ...typedDraft({ weight: 10, reps: 5 }), volumePrCelebrated: { [exercise.id]: latch } });
+    renderExerciseDetail();
+
+    await logOnceSummaryLands();
+
+    expect(Boolean(rowFor('sessionVolume'))).toBe(fires);
+  });
+
   it('reports both set records in ONE payload when a set takes both', async () => {
     // A prior best well below what is about to be logged, so this is a genuine PR rather than a
     // first-ever set.

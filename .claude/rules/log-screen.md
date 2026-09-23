@@ -194,22 +194,30 @@ gym basement was silently never celebrated.
 
 ### Session volume is a CROSSING, not a flag — don't key it on a session id
 
-`prDetection.js#crossesSessionVolume` asks whether the running total passed the record *with this
+`sessionVolume.js#crossesSessionVolume` asks whether the running total passed the record *with this
 set*. That is inherently once-per-session, because once you are past it `volumeBefore` stays past
 it for the rest of the workout.
+
+What "volume" means (pounds, reps or seconds per exercise), the first-workout rule and the
+cross-language fixture are in `trends.md` → "Every record measure has ONE definition per side". **The celebration
+merges kinds** (`mergeVolumeKinds(summary.volumeKind, kindOf(today's sets))`) because today's sets
+may not have synced, and `priorSessionVolume` re-expresses the summary's best in the merged kind (an
+all-`reps` history read as `load` is exactly 0 lb).
 
 **The obvious implementation — "have I already celebrated this session?" — cannot work here.** The
 only natural key is the session id, and `contextSessionId` is `null` for a person's entire
 offline/lie-fi stretch, so the flag would be dead in precisely the modes this feature exists for.
 
-- `bestSessionVolumeLb` **excludes the current session** (`getSummary`'s `excludeSessionId`;
+- `bestSessionVolume` **excludes the current session** (`getSummary`'s `excludeSessionId`;
   offline, `exerciseSummaryFromHistory` excludes by `startedAt` instead). Include it and the record
   chases itself: after the crossing, today *is* the best, `before <= prior` goes true again, and
   every later set re-fires. The sibling `heaviestWeightLb` deliberately does **not** exclude it —
   see `ExerciseSummaryDto`'s header for the table.
 - `PERSON_DEFAULTS.volumePrCelebrated` is a **churn backstop, not the mechanism**. It exists only
   because `displaySets` can churn mid-drain; if a row ever went missing the total would dip below
-  the record and re-arm the crossing.
+  the record and re-arm the crossing. Entries are `{ kind, value }` and read through
+  `latchedVolume`, so a reps high-water mark never gates a pounds record after an exercise is
+  first loaded; a bare number is a pre-kinds latch, i.e. pounds.
 
 ## Weight prefill: blank, then today, then last session
 

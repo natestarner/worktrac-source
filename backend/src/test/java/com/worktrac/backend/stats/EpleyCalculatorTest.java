@@ -7,11 +7,12 @@ import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Pins the est.-1RM formula, which is the number the celebration, the PRs board, the Trends chart
-// and the records table all ultimately rank on. frontend/src/utils/formulas.js#epley mirrors this
-// exactly, cap included -- if the two drift, the overlay congratulates someone with one number
-// while the board shows another for the same set. formulas.test.js carries the mirror of every
-// case below.
+// Pins the est.-1RM formula's own properties (the cap, monotonicity). Agreement with the client's
+// frontend/src/utils/formulas.js#epley is NOT pinned here -- it is pinned by SetMeasuresTest, which
+// runs shared/record-rules/set-measures-cases.json, the same file formulas.test.js runs. That
+// replaced a "formulas.test.js carries the mirror of every case below" arrangement, which two
+// people had to keep in step by hand and which missed every x.x5 rounding tie: 187.5 x 7 showed
+// 231.3 in the celebration and 231.2 on the PRs board. A new agreement case goes in the shared file.
 //
 // The handbook (HelpTab.jsx, "#prs") states the formula AND the cap to users as fact.
 class EpleyCalculatorTest {

@@ -1,8 +1,14 @@
-// Client-side preview only (under the weight/rep steppers) -- the server is
-// authoritative for PR determination, PRs tab, and CSV export. Mirrors
-// backend/.../stats/EpleyCalculator.java and UnitConverter.java.
+// THE set-level record measures on the client: epley (est. 1RM), comparableValue (the number a set
+// is ranked by) and weightLb (top weight), plus the pound conversion under them. The celebration,
+// History's and the Log screen's badges, the offline summary and the PRs board all read these.
+// Their server twins are EpleyCalculator.java, SetMeasures.java and UnitConverter.java, and the two
+// sides are pinned by shared/record-rules/set-measures-cases.json, which BOTH test suites run
+// (formulas.test.js, SetMeasuresTest.java). Change a rule on one side only and a build fails.
 
 const LB_PER_KG = 2.20462;
+// The same factor as an integer (x 1e5), so toLb can convert without floating-point error. Must
+// equal LB_PER_KG -- and UnitConverter.java's -- which the shared set-measure cases check.
+const LB_PER_KG_E5 = 220462;
 
 // The highest rep count that still contributes to an estimated 1RM. Mirrors
 // backend/.../stats/EpleyCalculator.java#EST_1RM_REP_CAP -- keep the two in step.
@@ -18,14 +24,44 @@ export const EST_1RM_REP_CAP = 12;
 //
 // This is deliberately NOT applied to comparableLb's weight-0 branch below, where a bodyweight set
 // ranks on its raw rep count -- a cap there would tie every pull-up set above 12 forever.
+//
+// ⚠️ EXACT, IN INTEGERS, and it has to be. weight x (30 + reps) / 30, rounded half-up to 0.1, with
+// the weight taken in hundredths -- the database's own precision (DECIMAL(6,2)). This used to be
+// floating point, and the server's version rounded reps/30 to ten decimals first; at every
+// estimate ending exactly in x.x5 the two rounded opposite ways (187.5 x 7 = 231.25 was 231.3 here
+// and 231.2 on the PRs board). shared/record-rules/set-measures-cases.json pins this to
+// EpleyCalculator.java, ties included.
 export function epley(weight, reps) {
-  if (reps <= 1) return Math.round(weight * 10) / 10;
-  const effectiveReps = Math.min(reps, EST_1RM_REP_CAP);
-  return Math.round(weight * (1 + effectiveReps / 30) * 10) / 10;
+  const hundredths = Math.round(Number(weight) * 100);
+  const effectiveReps = reps <= 1 ? 0 : Math.min(reps, EST_1RM_REP_CAP);
+  // tenths = hundredths * (30 + r) / 300, rounded half up -- floor((2n + d) / 2d) on integers.
+  const numerator = hundredths * (30 + effectiveReps);
+  return Math.floor((2 * numerator + 300) / 600) / 10;
 }
 
+// Pounds, as the nearest double to the EXACT decimal the server computes with BigDecimal. The
+// conversion is done on integers (hundredths of the entered weight x 2.20462 x 1e5), divided once:
+// plain `weight * 2.20462` lands a hair above the exact value for some weights (32.52 kg), and
+// since the server sends its thresholds exact, re-logging your own best would then "beat" it.
+// Inputs are weights or est.-1RM values, both of which have at most two decimals.
 export function toLb(weight, unit) {
-  return unit === 'kg' ? weight * LB_PER_KG : weight;
+  return lbE7(weight, unit) / 1e7;
+}
+
+// Pounds x 1e7 as an EXACT integer. Anything that sums pounds (sessionVolume.js) adds these and
+// divides once, so a total is the same exact decimal the server's BigDecimal sum is -- adding
+// already-rounded doubles would drift from it by an ulp and let a repeat of a record "beat" it.
+export function lbE7(weight, unit) {
+  const hundredths = Math.round(Number(weight) * 100);
+  return unit === 'kg' ? hundredths * LB_PER_KG_E5 : hundredths * 100000;
+}
+
+// THE top-weight measure: the load on the bar in pounds, so kg and lb sets rank together. Weight 0
+// (bodyweight) is 0, which is why top weight never fires for one. Also the load half of every
+// weight x reps figure (sessionVolume.js). Mirrors SetMeasures.java#weightLb, pinned by the shared
+// cases -- read it through here, never as an inline toLb(set.weight).
+export function weightLb(set) {
+  return toLb(Number(set?.weight) || 0, set?.unit || 'lb');
 }
 
 export function convertWeight(weight, fromUnit, toUnit) {
@@ -80,14 +116,17 @@ export function computePrefillDraft(lastSession, todaysSets, defaultUnit) {
 // Epley collapses to 0 at weight 0 regardless of reps, so a bodyweight set (no added
 // load) would always tie every other bodyweight set instead of reps actually mattering.
 // Reps are the only real signal of performance with zero added weight, so compare on
-// reps directly in that case. Mirrors backend/.../stats/StatsService.java#comparableLb.
+// reps directly in that case. Mirrors SetMeasures.java#comparableLb (shared cases).
+//
+// Numeric, not `=== 0`: the server compares a DECIMAL, and a weight that reached here as the string
+// "0" (a form field, a CSV-shaped value) is still a bodyweight set.
 export function comparableLb(weight, reps, unit) {
-  if (weight === 0) return reps;
+  if (Number(weight) === 0) return reps;
   return toLb(epley(weight, reps), unit || 'lb');
 }
 
-// The single number a set is ranked by, whichever measure it uses. Mirrors
-// backend/.../stats/StatsService.java#comparableValue -- keep the two in step.
+// THE number a set is ranked by for the est.-1RM record, whichever measure it uses. Mirrors
+// SetMeasures.java#comparableValue, pinned by the shared set-measure cases.
 //
 // Every comparison this feeds is within ONE exercise, and an exercise has exactly one measure, so
 // seconds are never weighed against pounds. For a hold the value is the duration and added load

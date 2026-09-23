@@ -178,3 +178,62 @@ forEachConnectivityMode<{ personName: string }>('a session-volume record fires o
     await expect(page.getByText('New PR!')).toBeHidden();
   },
 });
+
+// Volume is measured in each exercise's own unit (utils/sessionVolume.js): total reps for an
+// unloaded exercise, which weight x reps used to flatten to a permanent 0 lb so the record could
+// never fire. And an exercise's FIRST workout is the volume baseline, never a volume record --
+// while its first set still takes the set-level record, which is what makes the overlay appear
+// in setup at all.
+forEachConnectivityMode<{ personName: string }>('a bodyweight volume record counts reps, and a first workout claims none', {
+  setup: async (page, request) => {
+    const personName = 'BwVol';
+    await registerHousehold(page, request, personName);
+    // Baseline: one workout of 10 chin-ups. The first-ever set celebrates its rep count, and
+    // must NOT list a volume record alongside it.
+    await pickExercise(page, 'Chin-up');
+    await setStepperPair(page, 0, 10);
+    await page.getByRole('button', { name: 'Log set' }).click();
+    const first = page.getByText('New PR!');
+    await expect(first).toBeVisible();
+    await expect(page.getByRole('dialog')).not.toContainText('Volume');
+    await first.click({ force: true });
+    await expect(first).toBeHidden();
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
+    // Out and back in, so exerciseSummary/history are refetched ONLINE holding the baseline.
+    // Ending a workout may already have returned to the picker.
+    const back = page.getByRole('button', { name: /All exercises/ });
+    if (await back.isVisible()) await back.click();
+    await pickExercise(page, 'Chin-up');
+    await expect(page.getByText(/\(0lb×10\)/)).toBeVisible();
+    await page.getByRole('button', { name: /All exercises/ }).click();
+    return { personName };
+  },
+
+  navigate: async (page) => {
+    await pickExercise(page, 'Chin-up');
+  },
+
+  act: async (page) => {
+    // Two sets of 6: neither beats the 10-rep best set, so the only record available is volume --
+    // 6 total (short of 10), then 12 (past it). The SECOND set is the crossing.
+    await setStepperPair(page, 0, 6);
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
+    await expect(page.getByText('New PR!')).toBeHidden();
+
+    await setStepperPair(page, 0, 6);
+    await page.getByRole('button', { name: 'Log set' }).click();
+    const celebration = page.getByText('New PR!');
+    await expect(celebration).toBeVisible();
+  },
+
+  assert: async (page) => {
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Volume');
+    await expect(dialog).toContainText('12 reps');
+    await page.getByText('New PR!').click({ force: true });
+    await expect(page.getByText('New PR!')).toBeHidden();
+  },
+});

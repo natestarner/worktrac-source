@@ -177,8 +177,17 @@ describe('buildHistoryPrFlags', () => {
           { weight: 100, reps: 10, unit: 'lb' },
         ]),
       ];
-      expect(sessionTypes(history, 1, 1)).toEqual(['sessionVolume']); // first ever
       expect(sessionTypes(history, 2, 1)).toEqual(['sessionVolume']); // beat it
+    });
+
+    // A first workout is trivially the biggest, so it is a baseline -- while the SET records in it
+    // still mark (the first set of anything does beat nothing).
+    it('does not mark the first-ever session of an exercise, though its sets still mark', () => {
+      const history = [
+        session(1, '2026-07-01T12:00:00Z', 1, 'Squat', [{ weight: 100, reps: 10, unit: 'lb' }]),
+      ];
+      expect(sessionTypes(history, 1, 1)).toBeUndefined();
+      expect(wasPr(history, 1, 1)).toEqual([true]);
     });
 
     it('does not mark a session that fails to beat an earlier one', () => {
@@ -192,15 +201,42 @@ describe('buildHistoryPrFlags', () => {
       expect(sessionTypes(history, 2, 1)).toBeUndefined();
     });
 
-    // A hold contributes 0 volume (reps are 0), so it can never take a volume record -- again with
-    // no exercise-type flag involved.
-    it('never marks a hold or a bodyweight exercise', () => {
+    // An unloaded rep exercise measures volume in total reps (weight x reps is 0 for all of it).
+    it('ranks a bodyweight exercise on total reps', () => {
       const history = [
-        session(1, '2026-07-01T12:00:00Z', 1, 'Plank', [{ weight: 0, reps: 0, durationSeconds: 60, unit: 'lb' }]),
-        session(2, '2026-07-02T12:00:00Z', 2, 'Pull-Up', [{ weight: 0, reps: 10, unit: 'lb' }]),
+        session(1, '2026-07-01T12:00:00Z', 2, 'Pull-Up', [{ weight: 0, reps: 10, unit: 'lb' }]),
+        session(2, '2026-07-02T12:00:00Z', 2, 'Pull-Up', [
+          { weight: 0, reps: 6, unit: 'lb' },
+          { weight: 0, reps: 6, unit: 'lb' },
+        ]),
+        session(3, '2026-07-03T12:00:00Z', 2, 'Pull-Up', [{ weight: 0, reps: 11, unit: 'lb' }]),
       ];
-      expect(sessionTypes(history, 1, 1)).toBeUndefined();
-      expect(sessionTypes(history, 2, 2)).toBeUndefined();
+      expect(sessionTypes(history, 2, 2)).toEqual(['sessionVolume']); // 12 > 10
+      expect(sessionTypes(history, 3, 2)).toBeUndefined(); // 11 < 12
+    });
+
+    // A hold measures volume in total seconds, whatever load it carried.
+    it('ranks a hold on total time', () => {
+      const history = [
+        session(1, '2026-07-01T12:00:00Z', 1, 'Plank', [{ weight: 25, reps: 0, durationSeconds: 90, unit: 'lb' }]),
+        session(2, '2026-07-02T12:00:00Z', 1, 'Plank', [
+          { weight: 0, reps: 0, durationSeconds: 60, unit: 'lb' },
+          { weight: 0, reps: 0, durationSeconds: 45, unit: 'lb' },
+        ]),
+      ];
+      expect(sessionTypes(history, 2, 1)).toEqual(['sessionVolume']); // 105 s > 90 s
+    });
+
+    // The kind is the exercise's over its WHOLE history, so the first loaded session re-reads every
+    // earlier (unloaded) one as 0 lb -- they never mix reps with pounds.
+    it('re-reads a bodyweight exercise in pounds once any set is loaded', () => {
+      const history = [
+        session(1, '2026-07-01T12:00:00Z', 2, 'Pull-Up', [{ weight: 0, reps: 20, unit: 'lb' }]),
+        session(2, '2026-07-02T12:00:00Z', 2, 'Pull-Up', [{ weight: 0, reps: 25, unit: 'lb' }]),
+        session(3, '2026-07-03T12:00:00Z', 2, 'Pull-Up', [{ weight: 10, reps: 1, unit: 'lb' }]),
+      ];
+      expect(sessionTypes(history, 2, 2)).toBeUndefined(); // 0 lb, not 25 reps
+      expect(sessionTypes(history, 3, 2)).toEqual(['sessionVolume']); // 10 lb > 0 lb
     });
   });
 

@@ -67,10 +67,13 @@ describe('sortPrRows', () => {
 });
 
 describe('sortPrRows across records', () => {
-  const withMeasures = (name, { est1rm, date, heaviest, heaviestDate }) => ({
+  // `best` is ranked through formulas.js#comparableValue from its weight and reps, so those have to
+  // actually produce the est1rm each row claims -- a row that SAYS 300 while holding 100 x 5 would
+  // rank as 116.7, and the est.-1RM ordering below would pass only by alphabetical accident.
+  const withMeasures = (name, { weight, reps, est1rm, date, heaviest, heaviestDate }) => ({
     exerciseId: name.length,
     exerciseName: name,
-    best: { weight: 100, reps: 5, unit: 'lb', est1rm, sessionStartedAt: date },
+    best: { weight, reps, unit: 'lb', est1rm, sessionStartedAt: date },
     measures: {
       heaviest: heaviest == null ? null : { value: heaviest, weightLb: heaviest, reps: 1, sessionStartedAt: heaviestDate ?? date },
       sessionVolume: null,
@@ -84,9 +87,11 @@ describe('sortPrRows across records', () => {
   // Arranged so est. 1RM and top weight DISAGREE: Epley rewards reps, so a lighter set for more
   // reps can out-rank a heavier single. If the sort ignored the measure this test would pass on
   // the wrong ordering.
-  const reps = withMeasures('Reps Lift', { est1rm: 300, date: '2026-07-01T09:00:00Z', heaviest: 200 });
-  const single = withMeasures('Single Lift', { est1rm: 250, date: '2026-07-02T09:00:00Z', heaviest: 260 });
-  const bodyweight = withMeasures('Pull-Up', { est1rm: 0, date: '2026-07-03T09:00:00Z', heaviest: null });
+  // 225 x 10 = 300 est.; 250 x 1 = 250 est. So "Reps Lift" wins on est. 1RM and loses on top weight
+  // -- and it sorts FIRST alphabetically too, so the top-weight order below is the discriminating one.
+  const reps = withMeasures('Reps Lift', { weight: 225, reps: 10, est1rm: 300, date: '2026-07-01T09:00:00Z', heaviest: 200 });
+  const single = withMeasures('Single Lift', { weight: 250, reps: 1, est1rm: 250, date: '2026-07-02T09:00:00Z', heaviest: 260 });
+  const bodyweight = withMeasures('Pull-Up', { weight: 0, reps: 5, est1rm: 0, date: '2026-07-03T09:00:00Z', heaviest: null });
 
   it('ranks on the SELECTED record, not always est. 1RM', () => {
     expect(names(sortPrRows([single, reps], 'record', 'est1rm'))).toEqual(['Reps Lift', 'Single Lift']);
@@ -101,6 +106,26 @@ describe('sortPrRows across records', () => {
       'Reps Lift',
       'Pull-Up',
     ]);
+  });
+
+  // Session volume is in each exercise's own unit. 60 reps is not "less" than 4000 lb, and 300
+  // seconds is not "more" than 60 reps -- so the kinds group (pounds, reps, time) and rank within.
+  it('ranks session volume within its kind rather than across units', () => {
+    const vol = (name, volumeKind, value) => ({
+      exerciseId: name.length,
+      exerciseName: name,
+      best: { weight: 0, reps: 1, unit: 'lb', est1rm: 0, sessionStartedAt: '2026-07-01T09:00:00Z' },
+      measures: { heaviest: null, sessionVolume: { value, sessionStartedAt: '2026-07-01T09:00:00Z' }, bestSetVolume: null, totalReps: null },
+      volumeKind,
+    });
+    const rows = [
+      vol('Plank', 'seconds', 300),
+      vol('Pull-Up', 'reps', 60),
+      vol('Bench', 'load', 4000),
+      vol('Dips', 'reps', 80),
+      vol('Curl', 'load', 900),
+    ];
+    expect(names(sortPrRows(rows, 'record', 'sessionVolume'))).toEqual(['Bench', 'Curl', 'Dips', 'Pull-Up', 'Plank']);
   });
 
   it('leaves the name sort completely independent of the record', () => {
@@ -122,8 +147,8 @@ describe('sortPrRows across records', () => {
   // The date printed on the row follows the measure, so the ordering has to as well -- otherwise
   // "Most recent" would sort by a date that is not on screen.
   it('orders Most recent by the date belonging to the selected record', () => {
-    const a = withMeasures('Alpha', { est1rm: 100, date: '2026-07-01T09:00:00Z', heaviest: 100, heaviestDate: '2026-09-01T09:00:00Z' });
-    const b = withMeasures('Beta', { est1rm: 100, date: '2026-08-01T09:00:00Z', heaviest: 100, heaviestDate: '2026-07-15T09:00:00Z' });
+    const a = withMeasures('Alpha', { weight: 100, reps: 1, est1rm: 100, date: '2026-07-01T09:00:00Z', heaviest: 100, heaviestDate: '2026-09-01T09:00:00Z' });
+    const b = withMeasures('Beta', { weight: 100, reps: 1, est1rm: 100, date: '2026-08-01T09:00:00Z', heaviest: 100, heaviestDate: '2026-07-15T09:00:00Z' });
     expect(names(sortPrRows([a, b], 'recent', 'est1rm'))).toEqual(['Beta', 'Alpha']);
     expect(names(sortPrRows([a, b], 'recent', 'heaviest'))).toEqual(['Alpha', 'Beta']);
   });

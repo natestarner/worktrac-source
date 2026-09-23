@@ -12,6 +12,9 @@ package com.worktrac.backend.stats;
 // the same question one screen over: which readouts must DISAPPEAR rather than render zeros. The
 // board needs them per row (unlike the records table, which is one exercise at a time) because the
 // record picker is board-wide while applicability is per-exercise.
+//
+// volumeKind names the unit measures.sessionVolume is in ("load" = pounds, "reps", "seconds" --
+// see SessionVolume), so the board renders a pull-up's volume as reps without re-deriving it.
 public record PrRowDto(Long exerciseId, String exerciseName, BestDto best, PrMeasuresDto measures,
-                       boolean bodyweightOnly, boolean durationTracked) {
+                       boolean bodyweightOnly, boolean durationTracked, String volumeKind) {
 }

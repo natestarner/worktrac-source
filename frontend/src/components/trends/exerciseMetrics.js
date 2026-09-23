@@ -2,7 +2,7 @@
 // /trends/exercises/{id} response, so switching between them is instant and costs no request.
 //
 // Est. 1RM alone used to be the only view, and it's the wrong default for some work: the backend
-// substitutes rep count for estimated 1RM at weight 0 (see StatsService#comparableLb), so a
+// substitutes rep count for estimated 1RM at weight 0 (see SetMeasures#comparableLb), so a
 // pull-up "1RM" is really a rep count. Total reps is the honest metric there, which is why the
 // switcher exists at all.
 //
@@ -78,19 +78,25 @@ export const EXERCISE_METRICS = {
       'a different set than your best estimated 1RM: a heavy single tops the bar but loses to a ' +
       'lighter set done for more reps once reps are counted.',
   },
+  // `isWeight` is the LOADED case only: this measure is in the exercise's own unit (pounds, total
+  // reps or total seconds -- utils/sessionVolume.js), so a consumer plotting or formatting it asks
+  // sessionVolume.js#volumeIsWeight / formatVolume with the kind the data carries.
   sessionVolume: {
     label: 'Volume',
-    dataKey: 'sessionVolumeLb',
+    dataKey: 'sessionVolume',
     isWeight: true,
     title: 'volume per session',
     sortLabel: 'Most volume',
     pr: { scope: 'session', celebrates: true, badgeLabel: 'Volume' },
     dotMeaning:
       'Each dot is the whole session added up: weight × reps for every set you did of this ' +
-      'exercise. It is a session total, not one set.',
+      'exercise. For a bodyweight exercise it is your total reps, and for a timed hold your total ' +
+      'time. It is a session total, not one set.',
     recordMeaning:
       'Your biggest single workout of this exercise: weight × reps for every set you did that ' +
-      'session, added up. It is a session total, not one set.',
+      'session, added up. For a bodyweight exercise it is your total reps, and for a timed hold ' +
+      'your total time. It is a session total, not one set. Your first workout of an exercise ' +
+      'sets the baseline, so it is never marked as a volume record.',
   },
   bestSetVolume: {
     label: 'Best set',
@@ -152,12 +158,13 @@ export const SESSION_PR_TYPES = CELEBRATED_PR_TYPES.filter(
   (key) => EXERCISE_METRICS[key].pr.scope === 'session',
 );
 
-// heaviest/sessionVolume/bestSetVolume are raw weight or weight x reps, so for an exercise whose
-// whole history is bodyweight (weight always 0) they are flat zero lines no matter the rep count --
-// the chart-switcher equivalent of ExerciseRecordsTable's bodyweightOnly branch, which hides the
-// same three rows from the records table below this chart for the same reason. Est. 1RM survives
-// unfiltered because comparableLb already substitutes rep count for it at weight 0.
-const WEIGHT_ONLY_METRICS = new Set(['heaviest', 'sessionVolume', 'bestSetVolume']);
+// heaviest/bestSetVolume are raw weight or weight x reps, so for an exercise whose whole history is
+// bodyweight (weight always 0) they are flat zero lines no matter the rep count -- the
+// chart-switcher equivalent of ExerciseRecordsTable's bodyweightOnly branch, which hides the same
+// rows from the records table below this chart for the same reason. Est. 1RM survives unfiltered
+// because comparableLb already substitutes rep count for it at weight 0, and Volume survives
+// because it is total reps there (utils/sessionVolume.js).
+const WEIGHT_ONLY_METRICS = new Set(['heaviest', 'bestSetVolume']);
 
 export function visibleMetricOptions(bodyweightOnly) {
   return bodyweightOnly

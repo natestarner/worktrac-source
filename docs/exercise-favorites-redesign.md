@@ -1140,3 +1140,49 @@ online, so a real session id exists before the mode is entered, and making the f
 id-less session changes nothing in any of its eight runs. **A spec can run in a degraded mode and
 still never reach the branch that mode exists for** — check which branch your arrangement actually
 lands on before reading a green run as coverage.
+
+## Update — 2026-09-22: every record measure has one definition per side, pinned by shared cases
+
+Three rule changes to session volume, and then the question of why the same record could be
+computed differently in two places at all.
+
+**Volume is measured in each exercise's own unit.** Weight × reps in pounds for a loaded lift;
+**total reps** when every set is at weight 0; **total seconds** for a hold. Weight × reps was a
+permanent 0 for pull-ups and planks, so the volume record could never fire for them — the 2026-09-20
+entry called that "self-guarding", which was true and not what anyone wanted. The unit is decided
+over the exercise's whole set list, never per session (a 40-rep day must not rank against a 3000 lb
+day) and never per set (reps added to pounds). The accepted consequence: the first loaded pull-up
+re-reads every earlier unloaded session as 0 lb. The PRs board ranks "Most volume" within a unit.
+
+**An exercise's first workout never takes the volume record.** It is trivially the biggest, so
+marking it said nothing. Set-level records still mark a first set.
+
+**Every DTO carrying a volume carries its `volumeKind`**, so no client guesses a unit it didn't
+compute. `ExerciseSummaryDto.bestSessionVolumeLb` survives only for bundles cached mid-deploy.
+
+**Then: one definition per side, and a shared case file both suites run.** `sessionVolume.js` /
+`SessionVolume.java` for volume; `formulas.js` (`epley`, `comparableValue`, `weightLb`, `toLb`) /
+`EpleyCalculator` + `SetMeasures` + `UnitConverter` for the set measures. The files in
+`shared/record-rules/` are the rule as data. The previous arrangement — each side's tests
+"mirroring" the other's by hand — had missed a live disagreement: **Epley rounded x.x5 estimates
+opposite ways on the two sides** (the server rounded `reps/30` to ten decimals first, the browser
+used floats), so 187.5 × 7 celebrated 231.3 and showed 231.2 on the PRs board. 37 of 3,122
+combinations at 2.5 lb steps disagreed. Both sides now compute exactly, and the cases compare with
+no tolerance.
+
+Two more disagreements surfaced once "exactly equal" was the bar:
+
+- A float `kg × 2.20462` lands a hair above the exact value for some weights (32.52 kg). Against a
+  server threshold that is a fake top-weight record for re-logging your own best. Pounds are now
+  integer arithmetic in the browser.
+- The summary rounded its thresholds to 0.1 while the offline fallback didn't, so online and
+  offline could answer "is this a record" differently. It sends them unrounded.
+
+**And one bug the new first-workout rule exposed rather than caused.** `LogTab` read history as
+`useHistory(activeSessionId ? personId : null)` — a null key, not a disabled fetch — so a workout
+with no server id yet (a whole offline stretch) was folded against *no* history. Every offline
+workout had been getting a volume badge for beating nothing; with the first-workout rule it got
+none. `useHistory` now takes `{ fetch }`, and the fold reads the warmed cache.
+
+**Worth keeping:** a hand-mirrored test pair proves only that two people wrote the same examples.
+It says nothing about the inputs neither thought of, and rounding ties are exactly those inputs.

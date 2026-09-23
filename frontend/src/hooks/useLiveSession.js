@@ -4,6 +4,11 @@ import { getLiveSession } from '../api/sessions';
 import { queryKeys } from '../api/queryKeys';
 import { isSessionEnded } from '../lib/endedSessions';
 
+// When this document started. A cache entry whose dataUpdatedAt is older came off disk; anything
+// fetched or written during this page is newer. Exported for the tests, which have to stamp a
+// restored entry on the far side of it.
+export const PAGE_LOADED_AT = Date.now();
+
 // Backed by a single shared query keyed on personId, so EVERY consumer of a person's live
 // session -- the green dot on that person's pill AND the "Session in progress" banner in the Log
 // tab -- reads the exact same cache entry and stays in lockstep. Previously each person pill held
@@ -34,7 +39,27 @@ export function useLiveSession(personId) {
     // the refetch just pauses and the placeholder keeps rendering, so the "Session in progress"
     // banner and the person-pill dot are unaffected. Per-query, so only the person actually holding
     // a provisional session refetches.
-    staleTime: (q) => (q.state.data && q.state.data.id == null ? 0 : 10 * 1000),
+    //
+    // ...AND for a `null` ("no live session") RESTORED FROM DISK, the sibling of the same trap.
+    // Logging the first set of a workout online turns this entry from null into a real session,
+    // but the query persister is throttled at 1s -- so a reload inside that second (swUpdate's
+    // silent post-deploy reload is the everyday case) restores the pre-log null with a recent
+    // dataUpdatedAt. At 10s that counted as fresh: no refetch, contextSessionId null, and the
+    // workout just started showed up as "Last time" instead of "This session".
+    //
+    // ⚠️ ONLY a restored null, never one written during this page. EndWorkoutConfirmModal writes
+    // null too, and revalidating THAT immediately fetches the session back while the end is still
+    // on its way to the server -- into the raw cache, where ExerciseDetail's `prev ?? provisional`
+    // then keeps it, so the next workout inherited the ended one's sets. (isSessionEnded only
+    // filters this hook's return value, not the cache.) A restored entry is recognisable because
+    // its dataUpdatedAt predates this document; anything written since cannot.
+    // See docs/incidents/2026-09-22-restored-no-session-hides-first-set.md.
+    staleTime: (q) => {
+      const data = q.state.data;
+      if (data && data.id == null) return 0;
+      if (data === null && q.state.dataUpdatedAt < PAGE_LOADED_AT) return 0;
+      return 10 * 1000;
+    },
   });
 
   // Invalidates the shared key so all observers (every pill + the banner) refetch together, not
