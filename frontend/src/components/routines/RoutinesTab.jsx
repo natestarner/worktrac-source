@@ -20,6 +20,7 @@ import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import ReadOnlyWrap from '../shared/ReadOnlyWrap';
 import EmptyState from '../shared/EmptyState';
 import Card from '../shared/Card';
+import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
 import { IconClipboardList, IconGripVertical } from '../shared/icons';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
@@ -156,24 +157,35 @@ export default function RoutinesTab() {
   return (
     <div>
       {/* ReadOnlyWrap nests INSIDE OfflineDisabledWrap throughout this file, so the read-only
-          message wins when both apply. See ReadOnlyWrap's header. */}
-      {!reordering && (
-        <OfflineDisabledWrap message="Creating a routine needs a connection.">
-          <ReadOnlyWrap personId={activePersonId}>
-            <button onClick={() => setModalRoutine(null)} data-tour-anchor={TOUR_ANCHORS.NEW_ROUTINE} style={newRoutineButtonStyle}>
-              + New routine
-            </button>
-          </ReadOnlyWrap>
-        </OfflineDisabledWrap>
-      )}
+          message wins when both apply. See ReadOnlyWrap's header.
 
-      {/* One routine can't be reordered, so the control only earns its place at two or more. */}
-      {!loading && routines.length > 1 && (
-        <div style={reorderBarStyle}>
-          {reordering ? (
-            <button onClick={handleDone} style={reorderToggleStyle}>
+          One action row, the same shape as History's: equal secondary buttons side by side.
+          "Reorder routines" used to be a text link on a row of its own below "+ New routine",
+          ~50px of height for one small control. In reorder mode "Done" takes the row as the only
+          primary on screen -- the routine cards and their Start buttons are swapped out for the
+          drag rows while the mode is open. */}
+      <div style={actionRowStyle}>
+        {!reordering && (
+          <OfflineDisabledWrap message="Creating a routine needs a connection.">
+            <ReadOnlyWrap personId={activePersonId}>
+              <Button
+                onClick={() => setModalRoutine(null)}
+                data-tour-anchor={TOUR_ANCHORS.NEW_ROUTINE}
+                style={actionButtonStyle}
+              >
+                + New routine
+              </Button>
+            </ReadOnlyWrap>
+          </OfflineDisabledWrap>
+        )}
+
+        {/* One routine can't be reordered, so the control only earns its place at two or more. */}
+        {!loading &&
+          routines.length > 1 &&
+          (reordering ? (
+            <Button variant="primary" onClick={handleDone} style={actionButtonStyle}>
               Done
-            </button>
+            </Button>
           ) : (
             <OfflineDisabledWrap message="Reordering routines needs a connection.">
               {/* "Reorder routines", not "Reorder": Playwright matches an accessible name by
@@ -182,20 +194,19 @@ export default function RoutinesTab() {
                   the mode is open -- a strict-mode violation, and exactly the mutually-containing
                   labels frontend-core.md warns about. */}
               <ReadOnlyWrap personId={activePersonId}>
-              <button onClick={() => setDraftOrder(routines)} style={reorderToggleStyle}>
-                Reorder routines
-              </button>
+                <Button onClick={() => setDraftOrder(routines)} style={actionButtonStyle}>
+                  Reorder routines
+                </Button>
               </ReadOnlyWrap>
             </OfflineDisabledWrap>
-          )}
-        </div>
-      )}
+          ))}
+      </div>
 
       <RefreshIndicator show={isFetching && !loading} />
       <OfflineDataNotice updatedAt={updatedAt} />
 
       {loading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {Array.from({ length: 3 }).map((_, i) => (
             <Card key={i}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -264,7 +275,7 @@ export default function RoutinesTab() {
       )}
 
       {!loading && !reordering && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {routines.map((r) => (
             <Card key={r.id}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -410,30 +421,12 @@ function SortableRoutineRow({ routine, index, total, onMoveByKey }) {
   );
 }
 
-const newRoutineButtonStyle = {
-  width: '100%',
-  padding: 16,
-  background: 'var(--color-subtle-bg)',
-  color: 'var(--color-text)',
-  border: 'none',
-  borderRadius: 14,
-  fontSize: 15,
-  fontWeight: 700,
-  cursor: 'pointer',
-  marginBottom: 16,
-};
+// The top-of-tab action row, --space-6 above the list like History's and PRs' controls blocks
+// (design-system.md's "Vertical rhythm"). Never empty: outside reorder mode "+ New routine" is
+// always in it, and reorder mode only opens with two or more routines, which is what shows "Done".
+const actionRowStyle = { display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' };
 
-const reorderBarStyle = { display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--space-3)' };
-
-const reorderToggleStyle = {
-  background: 'none',
-  border: 'none',
-  color: 'var(--color-accent-text)',
-  fontSize: 13,
-  fontWeight: 600,
-  cursor: 'pointer',
-  padding: 'var(--space-2)',
-};
+const actionButtonStyle = { flex: 1 };
 
 const reorderRowStyle = {
   display: 'flex',

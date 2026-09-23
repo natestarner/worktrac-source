@@ -4,6 +4,7 @@ import { useAppState } from '../../context/AppStateContext';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import Skeleton from '../shared/Skeleton';
 import Input from '../shared/Input';
+import Button from '../shared/Button';
 import EmptyState from '../shared/EmptyState';
 import { IconChevronDown, IconDumbbell } from '../shared/icons';
 import { searchExercises } from '../../utils/exerciseSearch';
@@ -102,9 +103,9 @@ export default function ExercisePicker({
   return (
     <div>
       {showRoutineQuickStart && (
-        <div style={{ marginBottom: 22 }}>
+        <div style={sectionSpacing}>
           <SectionLabel style={sectionLabelSpacing}>Start a routine</SectionLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             {visibleRoutines.map((r) => (
               <button
                 key={r.id}
@@ -140,7 +141,7 @@ export default function ExercisePicker({
         </div>
       )}
 
-      {showRoutineQuickStart && <SectionLabel>Or pick an exercise</SectionLabel>}
+      {showRoutineQuickStart && <SectionLabel style={sectionLabelSpacing}>Or pick an exercise</SectionLabel>}
 
       {/* The app's most-used input, and it was the only one not going through the primitive: a
           hand-rolled copy of the same recipe that had drifted to a 14px radius and 14px/16px
@@ -155,15 +156,13 @@ export default function ExercisePicker({
         onChange={(e) => setExerciseSearch(e.target.value)}
         onFocus={scrollSearchIntoView}
         placeholder="Search all exercises"
-        style={{
-          marginBottom: 'var(--space-4)',
-        }}
+        style={sectionSpacing}
       />
 
       {loading && (
         <>
-          <Skeleton width={84} height={12} style={{ marginBottom: 10 }} />
-          <div className="picker-chip-wrap" style={{ marginBottom: 20 }}>
+          <Skeleton width={84} height={12} style={sectionLabelSpacing} />
+          <div className="picker-chip-wrap" style={sectionSpacing}>
             {[110, 140, 96].map((w, i) => (
               <Skeleton key={i} width={w} height={46} radius={16} />
             ))}
@@ -173,7 +172,7 @@ export default function ExercisePicker({
 
       {/* Search results across the whole catalog */}
       {!loading && searching && (
-        <div style={{ marginBottom: 20 }}>
+        <div style={sectionSpacing}>
           <SectionLabel style={sectionLabelSpacing}>Search results</SectionLabel>
           <ExerciseSearchResults
             results={searchResults}
@@ -209,14 +208,13 @@ export default function ExercisePicker({
         )
       )}
 
+      {/* The Button primitive's secondary, like the top-of-tab actions on History and Routines. It
+          was a hand-rolled grey fill at off-scale 14px/700 -- the one full-width action in the app
+          still drawn that way once those moved to the primitive. */}
       {!loading && (
-        <button
-          onClick={() => onAddExercise(exerciseSearch)}
-          data-tour-anchor={TOUR_ANCHORS.ADD_EXERCISE}
-          style={addOwnButtonStyle}
-        >
+        <Button onClick={() => onAddExercise(exerciseSearch)} data-tour-anchor={TOUR_ANCHORS.ADD_EXERCISE} fullWidth>
           + Add your own exercise
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -230,7 +228,7 @@ function ChipGroup({ group, expanded, onToggle, onSelectExercise }) {
   const { overflowing, firstHiddenIndex } = useChipRowOverflow(wrapRef, !expanded, group.items.length);
 
   return (
-    <div style={{ marginBottom: 20 }}>
+    <div style={sectionSpacing}>
       <SectionLabel style={sectionLabelSpacing}>{group.name}</SectionLabel>
       <div ref={wrapRef} className={`picker-chip-wrap${expanded ? '' : ' picker-chip-wrap--clipped'}`}>
         {group.items.map((ex, i) => (
@@ -311,7 +309,13 @@ function ExerciseChip({ name, hidden, onSelect }) {
   );
 }
 
+// The screen's two vertical rhythms, shared by every block on it: a heading sits --space-2 above
+// what it heads, and one block sits --space-5 above the next. "Or pick an exercise" was the one
+// heading without the first, so it sat flush on the search field while "Start a routine" and
+// "Favorites" each had a gap -- and the blocks themselves were 22, 16 and 20px apart. See
+// design-system.md's "Vertical rhythm".
 const sectionLabelSpacing = { marginBottom: 'var(--space-2)' };
+const sectionSpacing = { marginBottom: 'var(--space-5)' };
 
 const disclosureStyle = {
   display: 'inline-flex',
@@ -326,17 +330,4 @@ const disclosureStyle = {
   fontWeight: 'var(--weight-semibold)',
   cursor: 'pointer',
   whiteSpace: 'nowrap',
-};
-
-const addOwnButtonStyle = {
-  width: '100%',
-  marginTop: 8,
-  padding: 14,
-  background: 'var(--color-subtle-bg)',
-  color: 'var(--color-text)',
-  border: 'none',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 14,
-  fontWeight: 700,
-  cursor: 'pointer',
 };

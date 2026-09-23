@@ -174,7 +174,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
+      <div style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
         {/* ReadOnlyWrap nests INSIDE OfflineDisabledWrap so the read-only message wins when both
             apply -- see ReadOnlyWrap's header. Telling a member this "needs a connection" would
             send them hunting for signal over something no connection fixes. */}
@@ -217,27 +217,34 @@ function HistoryTabContent({ initialExerciseFilter }) {
         <HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} />
       )}
 
+      {/* The controls block: search, tags, and the key to the badges below. Its rows sit
+          --space-3 apart and the whole block sits --space-6 above the first session, so it reads
+          as one toolbar over the list rather than as more list. The legend lives here, not after
+          the empty states, because it is a key to the content -- it belongs with the controls. */}
       {!loading && history.length > 0 && (
-        <ExerciseFilterBar
-          text={filter.text}
-          onTextChange={filter.setText}
-          tagVocabulary={tagVocabulary}
-          selectedTagIds={filter.selectedTagIds}
-          onToggleTag={filter.toggleTag}
-          exerciseFilter={filter.exerciseFilter}
-          onClearExercise={() => filter.setExerciseFilter(null)}
-          onClearAll={filter.clearAll}
-          isActive={filter.isActive}
-          matchCount={matchedEntryCount}
-          totalCount={totalEntryCount}
-          onBackToLog={() => navigate('/app/log')}
-        />
+        <div style={controlsBlockStyle}>
+          <ExerciseFilterBar
+            text={filter.text}
+            onTextChange={filter.setText}
+            tagVocabulary={tagVocabulary}
+            selectedTagIds={filter.selectedTagIds}
+            onToggleTag={filter.toggleTag}
+            exerciseFilter={filter.exerciseFilter}
+            onClearExercise={() => filter.setExerciseFilter(null)}
+            onClearAll={filter.clearAll}
+            isActive={filter.isActive}
+            matchCount={matchedEntryCount}
+            totalCount={totalEntryCount}
+            onBackToLog={() => navigate('/app/log')}
+          />
+          {hasAnyRecordMark && <RecordLegend />}
+        </div>
       )}
 
       {loading &&
         Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} style={{ marginBottom: 22 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div key={i} style={sessionBlockStyle}>
+            <div style={sessionHeaderStyle}>
               <Skeleton width={150} height={14} />
               <Skeleton width={32} height={13} />
             </div>
@@ -287,8 +294,6 @@ function HistoryTabContent({ initialExerciseFilter }) {
         />
       )}
 
-      {!loading && hasAnyRecordMark && <RecordLegend />}
-
       {!loading &&
         filteredSessions.map(({ session, entries }) => (
           <div
@@ -296,9 +301,9 @@ function HistoryTabContent({ initialExerciseFilter }) {
             ref={(el) => {
               sessionRefs.current[session.id] = el;
             }}
-            style={{ marginBottom: 22 }}
+            style={sessionBlockStyle}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div style={sessionHeaderStyle}>
               <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-muted)' }}>
                 {formatDateLabel(toLocalDateStr(session.startedAt))} &middot; {timeLabelFor(session)}
               </div>
@@ -483,8 +488,14 @@ function RecordLegend() {
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'center',
-        gap: 'var(--space-2) var(--space-4)',
-        marginBottom: 14,
+        // Hugs its content rather than spanning the row, on a subtle fill: a key to the badges,
+        // set apart from the session headers below. As bare muted text it was the same colour and
+        // weight as those headers and read as the first line of the list.
+        alignSelf: 'flex-start',
+        gap: 'var(--space-1) var(--space-4)',
+        padding: 'var(--space-1) var(--space-1) var(--space-1) var(--space-3)',
+        background: 'var(--color-subtle-bg)',
+        borderRadius: 'var(--radius-md)',
         fontSize: 'var(--text-xs)',
         color: 'var(--color-muted)',
       }}
@@ -532,6 +543,25 @@ function RecordLegend() {
 // outlined on --color-surface -- with no rule saying what the difference meant. Both are
 // secondary; they now look it. Neither is this screen's primary action.
 const secondaryButtonStyle = { flex: 1 };
+
+// The vertical rhythm (design-system.md's "Vertical rhythm"): controls --space-3 apart, the
+// controls block --space-6 above the list, a heading --space-2 above what it heads, and one session
+// --space-5 above the next. These were 20/18/14/22/10px, none of them the same gap twice.
+const controlsBlockStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'var(--space-3)',
+  marginBottom: 'var(--space-6)',
+};
+
+const sessionBlockStyle = { marginBottom: 'var(--space-5)' };
+
+const sessionHeaderStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginBottom: 'var(--space-2)',
+};
 
 const outlineButtonStyle = { flex: 1 };
 

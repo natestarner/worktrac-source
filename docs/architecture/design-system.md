@@ -176,6 +176,41 @@ treatments and no rule saying what the difference meant. Both are `secondary` no
 Minimum heights are the iOS 44px target (`sm` is 40px for dense contexts). The primary navigation
 was ~35px and the Trends switchers ~28px before this.
 
+## Vertical rhythm
+
+The space scale says which values exist; this says which one a gap gets. Before it, each tab picked
+its own: the Log picker's blocks sat 22, 16 and 20px apart, History's controls 20/18/14px, and the
+PRs tab put one flat 10px between everything from a field label to the first record. Nothing was
+wrong at any one gap. The screens just had no pattern the eye could learn, so controls ran into the
+content they controlled and the History legend read as the first line of the list.
+
+| Relationship | Gap | Where |
+|---|---|---|
+| A heading to what it heads | `--space-2` | `SectionLabel` → its cards/chips/field; a History date → its card |
+| One control to the next, inside a controls block | `--space-3` | Search → tag chips → legend; the History/Routines button row → search |
+| A controls block (or top action row) to the content it acts on | `--space-6` | History, PRs and Routines |
+| One card to the next, inside a list | `--space-3` | Log quick-start routines, PRs rows, Routines cards, Trends tiles and charts |
+| One content block to the next | `--space-5` | Log picker sections; History sessions; Trends tiles → charts |
+
+The two ends are what matter. Controls sit **tighter** together than content does and are set
+**further** from it, so a toolbar reads as one thing that sits over the list. (Lists were 8, 10, 10
+and 12px apart depending on the tab.)
+
+Two structural consequences:
+
+- **A shared component carries no outer margin.** `ExerciseFilterBar` used to end in its own 18px
+  `marginBottom`, so History and PRs could not put the same gap below it. It is now a gap-driven
+  stack and each caller wraps it in its controls block.
+- **Top-of-tab actions are one row of equal secondary buttons** (History's "Log a past workout" /
+  "Export data", Routines' "New routine" / "Reorder routines"). A lone text link on its own row
+  costs as much height as a button row and is harder to hit. Trends' range toggle is that tab's
+  controls row, so it spans the width too.
+- **Full-width actions are `Button` secondary**, not a hand-rolled grey fill — "+ Add your own
+  exercise" and Settings' Export / Import were the last three drawn that way.
+- **Trends' summary tiles never leave a hole** (`.summary-tiles`): two columns with the last tile
+  spanning the row, three across only from 1000px, where a third of the content column fits the
+  volume tile's label and value without wrapping.
+
 ## Motion
 
 `--dur-fast` (120ms) for press, `--dur-base` (180ms) for hover and colour, `--dur-slow` (280ms) for
