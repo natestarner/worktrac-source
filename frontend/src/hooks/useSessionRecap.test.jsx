@@ -217,4 +217,20 @@ describe('useSessionRecap', () => {
     const { result } = renderRecap(client);
     expect(result.current).toMatchObject({ exerciseCount: 1, setCount: 1 });
   });
+
+  // A set deleted while its create was still on the wire (offlineSetEdits.js's deleteQueuedSet):
+  // the DELETE_SET targets the create's tempId, because no real id exists yet. The create is still
+  // counted as pending, so the recap has to recognise the delete by that tempId -- or "log a set,
+  // remove it mid-save, end the workout" reports the removed set.
+  it('reports nothing for a set deleted by its tempId while its create is still in flight', async () => {
+    const client = newClient();
+    seed(client, { entries: [] });
+    logLiveSet.mockReturnValueOnce(new Promise(() => {}));
+    logSet(client, { exerciseId: 1 });
+    // Not awaited: it queues behind the create, which never settles here.
+    dispatchDeleteSet(client, { setId: 'temp-1-2026-09-03T18:05:00.000Z', exerciseId: 1, sessionId: null });
+
+    const { result } = renderRecap(client);
+    expect(result.current).toMatchObject({ exerciseCount: 0, setCount: 0 });
+  });
 });

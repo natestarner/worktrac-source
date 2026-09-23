@@ -57,11 +57,11 @@ import { LOG_SET_MUTATION_KEY, DELETE_SET_MUTATION_KEY } from '../lib/queryClien
 // deleted sets instead of nothing. `formatSessionRecap` even documents the intended behaviour for
 // this case ("a mis-tap on 'Log set' that was then deleted") -- this is what actually delivers it.
 //
-// DELETE_SET's own variables carry the real `setId` it targeted (SessionSummary.jsx's "remove
-// exercise", ExerciseDetail.jsx's per-set Delete button), and a DELETE_SET write is only ever
-// reachable against an already-synced set
-// (queryClient.js's DELETE_SET comment), so matching by that id is exact -- no session/time
-// scoping needed the way LOG_SET's `clientLoggedAt` guard is. Both sources below drop any set
+// DELETE_SET's own variables carry the `setId` it targeted (SessionSummary.jsx's "remove
+// exercise", ExerciseDetail.jsx's per-set Delete button): the real id for a synced set, or the
+// create's own `tempId` for a set deleted while its create may still have been on the wire
+// (offlineSetEdits.js's deleteQueuedSet). A LOG_SET is matched on either, so matching is exact --
+// no session/time scoping needed the way LOG_SET's `clientLoggedAt` guard is. Both sources below drop any set
 // whose real id has a successful-or-inflight delete against it, so the same fix closes the race in
 // both directions: a delete that outran `history`'s refetch, and a delete that outran eviction of
 // its target's original LOG_SET mutation from the cache.
@@ -110,7 +110,7 @@ export function useSessionRecap(personId) {
       if (Number.isFinite(loggedMs) && loggedMs < startedMs) continue;
     }
     // A set logged and then deleted within the same workout must not count -- see above.
-    if (data?.set?.id != null && deletedSetIds.has(data.set.id)) continue;
+    if (deletedSetIds.has(vars.tempId) || (data?.set?.id != null && deletedSetIds.has(data.set.id))) continue;
     pendingCounts.set(vars.exerciseId, (pendingCounts.get(vars.exerciseId) ?? 0) + 1);
   }
 

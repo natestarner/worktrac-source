@@ -124,6 +124,19 @@ cache, never a network one, and stamps `terminal` on the unresolved-id error;
   dependency that later succeeds takes its dependents with it in the same pass.
 - **Deleting a not-yet-synced set must cancel every write targeting it**, not just the create —
   `cancelQueuedWritesForSet`, which is the source-level half of the same fix.
+- **…but only while the create provably never left the device.** Cancelling removes a mutation
+  from the cache; it cannot un-send a request, and TanStack cannot abort one. A create that is in
+  flight, has failed an attempt (possibly with only the response lost), or was restored as
+  `mayHaveBeenSent` lands anyway, and the deleted set survives on the server. Always delete an
+  optimistic set through **`deleteQueuedSet`** (`offlineSetEdits.js`). It cancels only the
+  provably-unsent (or dead), and otherwise queues a `DELETE_SET` against the create's **tempId**,
+  which the serial scope runs after the create lands. Never call `cancelQueuedWritesForSet`
+  directly from a delete path. `docs/incidents/2026-09-23-remove-mid-save-deleted-nothing.md`.
+- **A create with a delete queued against it is still `pending`, but it's gone for the person.**
+  Every reader that renders or counts pending creates must skip it via `isDeleteQueuedFor`
+  (`useSessionEntries`, `ExerciseDetail`'s pending rows, `LOG_SET`'s confirmed-row seed,
+  `useSessionRecap`'s tempId match). A new reader that forgets brings the set back on screen
+  until the delete lands.
 - **`App.jsx` must `await` both id maps BEFORE `restoreOutbox`, sequentially.** They were one
   `Promise.all`, and a restored dependent could beat its own mapping off disk. Survivable only
   while unresolved ids retried forever; now it would fail a write whose mapping is sitting in

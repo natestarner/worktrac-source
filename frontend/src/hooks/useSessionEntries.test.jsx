@@ -2,7 +2,12 @@ import { MutationObserver, QueryClient, QueryClientProvider, onlineManager } fro
 import { render, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSessionEntries } from './useSessionEntries';
-import { CREATE_EXERCISE_MUTATION_KEY, LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from '../lib/queryClient';
+import {
+  CREATE_EXERCISE_MUTATION_KEY,
+  DELETE_SET_MUTATION_KEY,
+  LOG_SET_MUTATION_KEY,
+  registerOfflineMutationDefaults,
+} from '../lib/queryClient';
 import { logLiveSet } from '../api/sets';
 import { addExercise } from '../api/exercises';
 
@@ -282,5 +287,22 @@ describe('useSessionEntries mutation-cache notification scheduling', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  // A set deleted while its create may already have been on the wire: its DELETE_SET is queued
+  // against the create's tempId, and the create stays pending until it lands. The person watched
+  // it go, so it must not come back into the list meanwhile (offlineSetEdits.js's deleteQueuedSet).
+  it('does not list a pending create that has a delete queued against its tempId', async () => {
+    const client = newClient();
+    onlineManager.setOnline(false);
+    const vars = { mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb', tempId: 'optimistic-gone', clientLoggedAt: 't' };
+    dispatch(client, LOG_SET_MUTATION_KEY, vars);
+    dispatch(client, LOG_SET_MUTATION_KEY, { ...vars, tempId: 'optimistic-kept' });
+    const { result } = renderWithClient(client, { personId: 7, serverEntries: [], exercises });
+    await vi.waitFor(() => expect(result.current[0]?.sets).toHaveLength(2));
+
+    dispatch(client, DELETE_SET_MUTATION_KEY, { setId: 'optimistic-gone', personId: 7, exerciseId: 1, sessionId: null });
+
+    await vi.waitFor(() => expect(result.current[0].sets.map((set) => set.id)).toEqual(['optimistic-kept']));
   });
 });

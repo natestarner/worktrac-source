@@ -1,8 +1,15 @@
 import { MutationObserver, QueryClient, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cancelQueuedWritesForSet, patchPendingLogSetDisplay } from './offlineSetEdits';
-import { EDIT_SET_MUTATION_KEY, LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from './queryClient';
-import { editSet, logLiveSet } from '../api/sets';
+import { cancelQueuedWritesForSet, deleteQueuedSet, patchPendingLogSetDisplay } from './offlineSetEdits';
+import {
+  DELETE_SET_MUTATION_KEY,
+  EDIT_SET_MUTATION_KEY,
+  LOG_SET_MUTATION_KEY,
+  isDeleteQueuedFor,
+  registerOfflineMutationDefaults,
+} from './queryClient';
+import { clearSetIdMap } from './setIdMap';
+import { deleteSet, editSet, logLiveSet } from '../api/sets';
 
 vi.mock('../api/sets', () => ({
   logLiveSet: vi.fn(),
@@ -188,6 +195,99 @@ describe('offlineSetEdits', () => {
     it('is a no-op when no mutation matches the tempId (already synced or never existed)', () => {
       const client = newClient();
       expect(() => patchPendingLogSetDisplay(client, 'no-such-temp-id', { weight: 100, reps: 1 })).not.toThrow();
+    });
+  });
+
+  // The Remove-mid-save bug (docs/incidents/2026-09-23-remove-mid-save-deleted-nothing.md):
+  // cancelling a create only takes it out of the cache, so one whose request may already be on the
+  // wire has to be deleted for real instead -- by a DELETE_SET queued behind it, against its tempId.
+  describe('deleteQueuedSet', () => {
+    const DELETE_VARS = { personId: 7, exerciseId: 1, sessionId: null };
+
+    function queuedDeletes(client) {
+      return client.getMutationCache().getAll().filter((m) => m.options.mutationKey?.[0] === DELETE_SET_MUTATION_KEY[0]);
+    }
+
+    beforeEach(() => clearSetIdMap());
+
+    it('cancels a create that never left the device, queuing nothing', async () => {
+      const client = newClient();
+      onlineManager.setOnline(false);
+      dispatchLogSet(client);
+      await vi.waitFor(() => expect(pendingMutations(client)).toHaveLength(1));
+
+      deleteQueuedSet(client, 'optimistic-a', DELETE_VARS);
+
+      expect(client.getMutationCache().getAll()).toHaveLength(0);
+      onlineManager.setOnline(true);
+      await client.resumePausedMutations();
+      expect(logLiveSet).not.toHaveBeenCalled();
+      expect(deleteSet).not.toHaveBeenCalled();
+    });
+
+    // THE BUG. The create is in flight when the person deletes it: cancelling cannot stop it
+    // landing, so the delete must run after it, against the id it lands with.
+    it('queues a real delete behind a create that is already in flight, resolving its id once it lands', async () => {
+      const client = newClient();
+      let land;
+      logLiveSet.mockReturnValueOnce(new Promise((resolve) => { land = resolve; }));
+      deleteSet.mockResolvedValue(null);
+      dispatchLogSet(client);
+      await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalledTimes(1));
+
+      deleteQueuedSet(client, 'optimistic-a', DELETE_VARS);
+
+      // The create is left alone -- it is what records the id the delete needs.
+      expect(pendingMutations(client).map((m) => m.options.mutationKey[0])).toEqual(['logSet', 'deleteSet']);
+      expect(isDeleteQueuedFor(client, 'optimistic-a')).toBe(true);
+      expect(deleteSet).not.toHaveBeenCalled();
+
+      land({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+
+      await vi.waitFor(() => expect(deleteSet).toHaveBeenCalledWith(201));
+      await vi.waitFor(() => expect(pendingMutations(client)).toHaveLength(0));
+    });
+
+    // Restored from a page that may already have sent it -- restoreOutbox's stamp. Paused offline
+    // with a fresh failureCount it looks never-sent by state alone, which is exactly why the stamp exists.
+    it('queues a real delete for a paused create restored as possibly sent', async () => {
+      const client = newClient();
+      onlineManager.setOnline(false);
+      dispatchLogSet(client, { mayHaveBeenSent: true });
+      await vi.waitFor(() => expect(pendingMutations(client)).toHaveLength(1));
+
+      deleteQueuedSet(client, 'optimistic-a', DELETE_VARS);
+
+      expect(queuedDeletes(client)).toHaveLength(1);
+      expect(queuedDeletes(client)[0].state.variables).toMatchObject({ setId: 'optimistic-a', personId: 7 });
+      onlineManager.setOnline(true);
+      await client.resumePausedMutations();
+      await vi.waitFor(() => expect(deleteSet).toHaveBeenCalledWith(201));
+    });
+
+    // The server answered with a definitive refusal, so nothing was stored -- and a delete queued
+    // behind it could only die with it, sitting in the outbox as a write that "couldn't sync".
+    it('cancels a create the server definitively refused', async () => {
+      const client = newClient();
+      logLiveSet.mockRejectedValueOnce(Object.assign(new Error('Bad request'), { status: 400 }));
+      dispatchLogSet(client);
+      await vi.waitFor(() => expect(client.getMutationCache().getAll()[0].state.status).toBe('error'));
+
+      deleteQueuedSet(client, 'optimistic-a', DELETE_VARS);
+
+      expect(client.getMutationCache().getAll()).toHaveLength(0);
+    });
+
+    it('deletes by real id when the create already landed and left the cache', async () => {
+      const client = newClient();
+      deleteSet.mockResolvedValue(null);
+      dispatchLogSet(client);
+      await vi.waitFor(() => expect(client.getMutationCache().getAll()[0].state.status).toBe('success'));
+      client.getMutationCache().clear();
+
+      deleteQueuedSet(client, 'optimistic-a', DELETE_VARS);
+
+      await vi.waitFor(() => expect(deleteSet).toHaveBeenCalledWith(201));
     });
   });
 });

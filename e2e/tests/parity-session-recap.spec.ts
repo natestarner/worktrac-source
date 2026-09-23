@@ -1,6 +1,8 @@
-import { expect, test } from '@playwright/test';
+import { APIRequestContext, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { delayNetwork } from './support/faults';
+import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
 // Ending a workout now names what was actually done -- "2 exercises · 3 sets" -- in the confirm
@@ -93,4 +95,86 @@ test.describe('Session recap after deleting everything logged', () => {
     await dialog.getByRole('button', { name: 'End workout' }).click();
     await expect(page.getByText('Workout ended. Logging a set anytime starts a new one.')).toBeVisible();
   });
+
+  // The same flow, pinned to the timing that made the spec above fail on lower -- and each time it
+  // did, it was the app, not the spec. Tapping Remove just after logging, on a slow backend, lands
+  // in a window where:
+  //   - the exercise's LATEST set is still in flight, so the row holds it as an optimistic set; and
+  //   - its EARLIER set has synced but `history` has not refetched yet, so the row does not list it
+  //     at all (the confirm read "The 1 set" for two logged).
+  // Remove then "cancelled" the in-flight create, which cannot un-send a request already on the
+  // wire, and skipped enumerating server rows because the row showed none. Nothing was deleted, and
+  // both sets came back once history caught up. Both holds below let the requests through for real;
+  // they only make the window wide enough to hit every time.
+  //
+  // Squat is logged first so `history` has an answer to show (not a loading skeleton) while its
+  // refetch is held -- the answer lower had, one set behind.
+  test('removing an exercise mid-save deletes every set it had, synced or in flight', async ({ page, request }) => {
+    const email = await registerHousehold(page, request, 'Mid');
+
+    await pickExercise(page, 'Barbell Back Squat');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 1')).toBeVisible();
+    await page.getByRole('button', { name: '← All exercises' }).click();
+    const sessionList = page.locator('.session-exercises');
+    await expect(sessionList.getByText('Barbell Back Squat', { exact: true })).toBeVisible();
+
+    const heldHistory = await delayNetwork(page, /\/api\/people\/\d+\/history$/, 3000);
+    await pickExercise(page, 'Barbell Bench Press');
+    // Only the SECOND bench set is held -- the first must have synced for the row to be missing it.
+    const firstBenchSynced = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && /\/api\/people\/\d+\/live-sets$/.test(r.url()) && r.ok(),
+    );
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 1')).toBeVisible();
+    await firstBenchSynced;
+    const heldCreate = await delayNetwork(page, /\/api\/people\/\d+\/live-sets$/, 3000);
+    const secondBenchLanded = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && /\/api\/people\/\d+\/live-sets$/.test(r.url()),
+    );
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 2')).toBeVisible();
+
+    await page.getByRole('button', { name: '← All exercises' }).click();
+    await expect(sessionList.getByText('Barbell Bench Press', { exact: true })).toBeVisible();
+    // Second row: server entries come first and a pending-only exercise is appended after them
+    // (useSessionEntries), and the icon buttons are all named just "Remove".
+    await sessionList.getByRole('button', { name: 'Remove' }).nth(1).click();
+    await page.getByRole('button', { name: 'Delete' }).click();
+    await expect(sessionList.getByText('Barbell Bench Press', { exact: true })).toHaveCount(0);
+
+    heldCreate.stop();
+    heldHistory.stop();
+
+    // Asked of the SERVER, and only once the held create has landed and every write behind it has
+    // drained. Both halves matter: before the create lands, the bug is invisible (the set is not on
+    // the server YET), so any earlier read -- including the recap, which converges on history --
+    // passes against the unfixed code. It did, until this waited.
+    await secondBenchLanded;
+    await waitForOutboxDrain(page);
+    const logged = await liveWorkoutOnServer(request, email);
+    expect(logged).toEqual([{ exercise: 'Barbell Back Squat', sets: 1 }]);
+
+    await expect(sessionList.getByText('Barbell Back Squat', { exact: true })).toBeVisible();
+    await expect(sessionList.getByText('Barbell Bench Press', { exact: true })).toHaveCount(0);
+  });
 });
+
+// What the live workout holds according to the server itself, bypassing every client cache -- the
+// only read that can tell "deleted" from "not synced yet". Signs in over the API for its own token.
+async function liveWorkoutOnServer(request: APIRequestContext, email: string) {
+  const { apiUrl } = await (await request.get('/config.json')).json();
+  const login = await request.post(`${apiUrl}/api/auth/login`, { data: { email, password: 'password123' } });
+  expect(login.status()).toBe(200);
+  const headers = { Authorization: `Bearer ${(await login.json()).token}` };
+  const me = await (await request.get(`${apiUrl}/api/auth/me`, { headers })).json();
+  const history = await (await request.get(`${apiUrl}/api/people/${me.people[0].id}/history`, { headers })).json();
+  const live = history.find((session: { endedAt: string | null }) => session.endedAt === null);
+  return (live?.entries ?? []).map((entry: { exerciseName: string; sets: unknown[] }) => ({
+    exercise: entry.exerciseName,
+    sets: entry.sets.length,
+  }));
+}

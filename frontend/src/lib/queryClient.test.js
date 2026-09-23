@@ -3,6 +3,7 @@ import { MutationObserver, QueryClient, dehydrate, hydrate, onlineManager } from
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CREATE_EXERCISE_MUTATION_KEY,
+  DELETE_SET_MUTATION_KEY,
   EDIT_SET_MUTATION_KEY,
   LOG_SET_MUTATION_KEY,
   clearOutboxMutations,
@@ -20,7 +21,7 @@ import {
 import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './exerciseIdMap';
 import { _getMappingForTest, clearSetIdMap, setSetIdMapping } from './setIdMap';
 import { markSessionEnded } from './endedSessions';
-import { editSet, logLiveSet, logSetIntoSession } from '../api/sets';
+import { deleteSet, editSet, logLiveSet, logSetIntoSession } from '../api/sets';
 import { addExercise, favoriteExercise } from '../api/exercises';
 import { queryKeys } from '../api/queryKeys';
 import { setAuthToken } from '../api/client';
@@ -940,6 +941,51 @@ describe('logSet onSettled reconciles from the response (first-set flash)', () =
     const rows = client.getQueryData(queryKeys.sessionSets(55, EXERCISE));
     expect(rows).toHaveLength(2);
     expect(rows[1]).toEqual({ ...SET, tempId: 'optimistic-abc' });
+  });
+
+  // Deleted while this create was still on the wire: its DELETE_SET is queued right behind
+  // (offlineSetEdits.js's deleteQueuedSet), and seeding the confirmed row would put the set back on
+  // screen until that delete lands.
+  it('does not seed a row for a set deleted while its create was in flight', async () => {
+    let land;
+    logLiveSet.mockReturnValue(new Promise((resolve) => { land = resolve; }));
+    deleteSet.mockResolvedValue(null);
+    const created = dispatch();
+    await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+    new MutationObserver(client, { ...client.getMutationDefaults(DELETE_SET_MUTATION_KEY), mutationKey: DELETE_SET_MUTATION_KEY })
+      .mutate({ setId: 'optimistic-abc', personId: PERSON, exerciseId: EXERCISE, sessionId: null })
+      .catch(() => {});
+
+    land({ isPR: false, best: null, session: SESSION, set: SET });
+    await created;
+
+    expect(client.getQueryData(queryKeys.sessionSets(55, EXERCISE)) ?? []).toEqual([]);
+    await vi.waitFor(() => expect(deleteSet).toHaveBeenCalledWith(SET.id));
+  });
+
+  // The first set of a workout, deleted while its create was in flight: the delete was dispatched
+  // with sessionId null (none existed yet), but the row that matters lives under the session the
+  // create landed in. Reconciling the null key alone left a row fetched between the two writes on
+  // screen.
+  it('reconciles a tempId delete against the session its create landed in', async () => {
+    let land;
+    let finishDelete;
+    logLiveSet.mockReturnValue(new Promise((resolve) => { land = resolve; }));
+    deleteSet.mockReturnValue(new Promise((resolve) => { finishDelete = resolve; }));
+    const created = dispatch();
+    await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+    new MutationObserver(client, { ...client.getMutationDefaults(DELETE_SET_MUTATION_KEY), mutationKey: DELETE_SET_MUTATION_KEY })
+      .mutate({ setId: 'optimistic-abc', personId: PERSON, exerciseId: EXERCISE, sessionId: null })
+      .catch(() => {});
+    land({ isPR: false, best: null, session: SESSION, set: SET });
+    await created;
+    await vi.waitFor(() => expect(deleteSet).toHaveBeenCalledWith(SET.id));
+    // What the create's own refetch could have brought back before the delete landed.
+    client.setQueryData(queryKeys.sessionSets(55, EXERCISE), [SET]);
+
+    finishDelete(null);
+
+    await vi.waitFor(() => expect(client.getQueryState(queryKeys.sessionSets(55, EXERCISE)).isInvalidated).toBe(true));
   });
 
   it('is a no-op when the server row is already present (a replay)', async () => {

@@ -17,9 +17,10 @@ import { getSessionExerciseNote } from '../../api/notes';
 import {
   DELETE_SET_MUTATION_KEY,
   FAVORITE_MUTATION_KEY,
+  isDeleteQueuedFor,
   isUnsyncedWrite,
 } from '../../lib/queryClient';
-import { cancelQueuedWritesForSet } from '../../lib/offlineSetEdits';
+import { deleteQueuedSet } from '../../lib/offlineSetEdits';
 import { comparableValue, computePrefillDraft, convertWeight, epley } from '../../utils/formulas';
 import { isFirstEver, setPrTypes } from '../../utils/prDetection';
 import {
@@ -485,7 +486,10 @@ export default function ExerciseDetail({
       unit: mutation.state.variables?.unit,
       clientLoggedAt: mutation.state.variables?.clientLoggedAt,
     }),
-  }).filter((m) => m.tempId && isUnsyncedWrite(m));
+  })
+    // A create deleted mid-save is still pending until it lands and the DELETE_SET queued behind it
+    // runs (offlineSetEdits.js's deleteQueuedSet) -- the row is gone as far as the person is concerned.
+    .filter((m) => m.tempId && isUnsyncedWrite(m) && !isDeleteQueuedFor(queryClient, m.tempId));
 
   // "Saving..." is reserved for a write's very first attempt while it's genuinely in flight.
   // Once it's paused (offline), already failed at least once and is retrying, or sitting in a
@@ -937,9 +941,10 @@ export default function ExerciseDetail({
       );
     }
     if (set.optimistic) {
-      // Not yet synced -- there's no server row to delete, only a still-pending create. Cancel it
-      // outright rather than queuing a delete that would 404 (see offlineSetEdits.js).
-      cancelQueuedWritesForSet(queryClient, set.id);
+      // Not yet synced -- no confirmed server row, only a still-pending create. deleteQueuedSet
+      // cancels it if it provably never left the device, and otherwise queues a real delete behind
+      // it, since a create that may have reached the server cannot be un-sent (offlineSetEdits.js).
+      deleteQueuedSet(queryClient, set.id, { personId, exerciseId: exercise.id, sessionId: contextSessionId });
       return;
     }
     // Durable mutation reconciles sets/PRs/History on sync and treats a replay 404 (already
@@ -1496,8 +1501,8 @@ export default function ExerciseDetail({
                       ) : (
                         // A paused-offline (or transient-erroring) set -- still just a pending create
                         // in the outbox, no server row yet -- is just as editable/deletable as a
-                        // synced one -- see offlineSetEdits.js. Delete cancels the pending create
-                        // outright rather than queuing a delete against a set id that doesn't exist yet.
+                        // synced one -- see offlineSetEdits.js. Delete cancels the pending create if it
+                        // never left the device, and otherwise queues a real delete behind it.
                         //
                         // Icon buttons, not text links. As 13px text with padding: 0 these
                         // were ~16px tall and sat 14px apart -- Edit immediately beside a

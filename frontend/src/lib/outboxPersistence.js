@@ -314,8 +314,20 @@ export async function restoreOutbox(queryClient, scope) {
     const maxSeq = dehydrated.mutations.reduce((max, m) => Math.max(max, m.state.variables?.enqueueSeq ?? 0), 0);
     seedOutboxSeq(maxSeq + 1);
 
+    // A set create persisted mid-attempt (not paused) or after a failed one may already have reached
+    // the server, and both restore paths below start it over with no record of that: a re-dispatch
+    // gets a fresh failureCount, and the signed-out path forces isPaused. Stamped into `variables`
+    // (which the dehydrate/hydrate round trip keeps, and the create's payload never reads) so
+    // offlineSetEdits.js's deleteQueuedSet never "cancels" a create that could still land -- the
+    // Remove-mid-save bug, restored-from-stale-state edition. Sticky across later reloads.
+    const restored = dehydrated.mutations.map((m) =>
+      m.mutationKey?.[0] === 'logSet' && (!m.state.isPaused || m.state.failureCount > 0)
+        ? { ...m, state: { ...m.state, variables: { ...m.state.variables, mayHaveBeenSent: true } } }
+        : m,
+    );
+
     if (!getAuthToken()) {
-      const asPaused = dehydrated.mutations
+      const asPaused = restored
         .slice()
         .sort(byEnqueueOrder)
         .map((m) => ({ ...m, state: { ...m.state, isPaused: true, status: 'pending' } }));
@@ -323,7 +335,7 @@ export async function restoreOutbox(queryClient, scope) {
       return;
     }
 
-    const ordered = dehydrated.mutations.slice().sort(byEnqueueOrder);
+    const ordered = restored.slice().sort(byEnqueueOrder);
 
     ordered.forEach((m) => {
       if (m.state.isPaused) {

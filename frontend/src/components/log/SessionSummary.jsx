@@ -3,7 +3,7 @@ import SectionLabel from '../shared/SectionLabel';
 import { useUI } from '../../context/UIContext';
 import { listSessionSets } from '../../api/sets';
 import { queryKeys } from '../../api/queryKeys';
-import { cancelQueuedWritesForSet } from '../../lib/offlineSetEdits';
+import { deleteQueuedSet } from '../../lib/offlineSetEdits';
 import { dispatchDurableWrite, DELETE_SET_MUTATION_KEY } from '../../lib/queryClient';
 import Skeleton from '../shared/Skeleton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
@@ -19,16 +19,47 @@ import { IconPencil, IconTrash } from '../shared/icons';
 // shape as History's, so they get the same treatment: set-level records badge the individual set
 // pill, and the session-level record badges the exercise NAME -- no single set is the answer to a
 // session total. Omitting it renders plain rows, exactly as before.
+// "Could the server hold rows for this entry that Remove has to enumerate and delete?"
+//
+// Not "does the row show a synced set" -- the row is built from `history`, which lags a set that has
+// just synced by one refetch. In that window a synced set is in NEITHER source the row reads: its
+// LOG_SET has succeeded, so it has left the pending list, and history has not caught up. Tapping
+// Remove then saw an entry of only optimistic sets, skipped listSessionSets, and left the synced set
+// on the server. A succeeded LOG_SET for this exercise INTO THIS SESSION is the local evidence of
+// such a row; it lingers in the mutation cache well past history's refetch. Evaluated before any
+// cancelling, and also what gates the offline wrap below, so the button is disabled offline exactly
+// when Remove needs the network.
+function mayHaveServerRows(queryClient, entry, { personId, sessionId }) {
+  if (!sessionId) return false;
+  if (entry.sets.some((s) => !s.optimistic)) return true;
+  return queryClient
+    .getMutationCache()
+    .getAll()
+    .some(
+      (m) =>
+        m.options.mutationKey?.[0] === 'logSet' &&
+        m.state.status === 'success' &&
+        m.state.variables?.personId === personId &&
+        m.state.variables?.exerciseId === entry.exerciseId &&
+        m.state.data?.session?.id === sessionId,
+    );
+}
+
 export default function SessionSummary({ entries, prFlags, loading, sessionId, personId, onSelectExercise, onChanged }) {
   const { openConfirm } = useUI();
   const queryClient = useQueryClient();
 
   async function handleRemove(entry) {
-    // Not-yet-synced sets in this entry (see useSessionEntries.js) have no server row -- cancel
-    // their pending creates outright instead of trying to delete something that doesn't exist yet.
+    // Decided before anything below touches the mutation cache -- see mayHaveServerRows.
+    const enumerateServerRows = mayHaveServerRows(queryClient, entry, { personId, sessionId });
+
+    // Not-yet-confirmed sets in this entry (see useSessionEntries.js) go through deleteQueuedSet:
+    // cancelled if the create never left the device, otherwise a real delete queued behind it. A
+    // create tapped away mid-save is already on the wire, and cancelling that deleted nothing
+    // (docs/incidents/2026-09-23-remove-mid-save-deleted-nothing.md).
     const optimisticIds = entry.sets.filter((s) => s.optimistic).map((s) => s.id);
     optimisticIds.forEach((tempId) => {
-      cancelQueuedWritesForSet(queryClient, tempId);
+      deleteQueuedSet(queryClient, tempId, { personId, exerciseId: entry.exerciseId, sessionId });
       if (sessionId) {
         queryClient.setQueryData(queryKeys.sessionSets(sessionId, entry.exerciseId), (old = []) =>
           old.filter((s) => s.id !== tempId),
@@ -43,7 +74,10 @@ export default function SessionSummary({ entries, prFlags, loading, sessionId, p
     // whose replay-404 was not already treated as success. The OfflineDisabledWrap around the
     // entry point stays for now -- see the register in .claude/rules/resilience.md -- because the
     // listSessionSets read this needs to enumerate the rows is itself an online-only fetch.
-    if (optimisticIds.length < entry.sets.length) {
+    //
+    // A row listed here that is ALSO still queued by tempId above just gets two deletes; the
+    // second 404s, which DELETE_SET treats as done.
+    if (enumerateServerRows) {
       const sets = await listSessionSets(sessionId, entry.exerciseId);
       sets.forEach((s) =>
         dispatchDurableWrite(queryClient, DELETE_SET_MUTATION_KEY, {
@@ -135,13 +169,13 @@ export default function SessionSummary({ entries, prFlags, loading, sessionId, p
                 (`getByRole('button', { name: 'Edit' })` etc.) is unaffected. */}
             <div style={{ display: 'flex', gap: 'var(--space-1)', flexShrink: 0 }}>
               <IconButton onClick={() => onSelectExercise(entry.exerciseId)} label="Edit" icon={IconPencil} tone="accent" />
-              {/* Removing an entry with any already-synced set still needs a connection: the deletes
+              {/* Removing an entry that may have server rows still needs a connection: the deletes
                   themselves are durable now, but enumerating which rows to delete needs a live
-                  listSessionSets read. An entry that is only offline-logged so far can still be
-                  removed offline -- that path just cancels the pending creates locally. */}
+                  listSessionSets read (see mayHaveServerRows). An entry that is only offline-logged
+                  so far can still be removed offline -- deleteQueuedSet handles each pending create. */}
               <OfflineDisabledWrap
                 message="Removing this needs a connection."
-                when={entry.sets.some((s) => !s.optimistic)}
+                when={mayHaveServerRows(queryClient, entry, { personId, sessionId })}
               >
                 <IconButton
                   onClick={() => openConfirm(
