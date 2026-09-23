@@ -10,7 +10,7 @@ import { getAuthToken } from '../api/client';
 import { OUTBOX_SCOPE_ID } from './outboxPersistence';
 import { resolveExerciseId, setExerciseIdMapping, isTempExerciseId } from './exerciseIdMap';
 import { resolveSetId, setSetIdMapping, isTempSetId } from './setIdMap';
-import { isSessionEnded } from './endedSessions';
+import { isCreateInEndedWorkout, isSessionEnded, markSessionEnded } from './endedSessions';
 import { byEnqueueOrder, withEnqueueSeq } from './outboxSequence';
 
 // Bump when the shape of anything we cache changes incompatibly -- the persister discards a
@@ -428,6 +428,14 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         // isSessionEnded stops a write replaying after End Workout from resurrecting a finished
         // session. useLiveSession already suppresses that on read; this keeps a stale copy from
         // being written and persisted in the first place.
+        //
+        // And a set logged before its workout was ENDED -- the End tap came while this create was
+        // still pending, so there was no id to mark then (endedSessions.js#markCreatesEnded). Its
+        // session is marked now, before anything can treat it as live: this write is skipped, and
+        // useLiveSession suppresses the same id when the invalidation below fetches it back.
+        if (vars.mode !== 'session' && isCreateInEndedWorkout(vars.personId, vars.tempId)) {
+          markSessionEnded(vars.personId, data.session.id);
+        }
         if (vars.mode !== 'session' && !isSessionEnded(vars.personId, data.session.id)) {
           client.setQueryData(queryKeys.liveSession(vars.personId), data.session);
         }

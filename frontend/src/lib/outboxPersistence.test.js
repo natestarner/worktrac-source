@@ -15,6 +15,8 @@ import {
 } from './outboxPersistence';
 import { CREATE_EXERCISE_MUTATION_KEY, LOG_SET_MUTATION_KEY, registerOfflineMutationDefaults } from './queryClient';
 import { clearExerciseIdMap, newTempExerciseId } from './exerciseIdMap';
+import { isSessionEnded, markCreatesEnded } from './endedSessions';
+import { queryKeys } from '../api/queryKeys';
 import { logLiveSet } from '../api/sets';
 import { addExercise, favoriteExercise } from '../api/exercises';
 import { setAuthToken } from '../api/client';
@@ -146,6 +148,31 @@ describe('offline outbox persistence', () => {
     await client2.resumePausedMutations();
     await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalledTimes(3));
     for (const [, payload] of logLiveSet.mock.calls) expect(payload).not.toHaveProperty('mayHaveBeenSent');
+  });
+
+  // End tapped while the workout's first set was still queued, then a reload before it synced.
+  // The End's record of that create lives in localStorage (synchronous), and the create comes
+  // back through restore with the same tempId -- so when it finally lands, its session is still
+  // recognised as the ended workout and never promoted to live.
+  // docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md
+  it('a create restored after a reload still lands as part of the workout that was ended', async () => {
+    const client1 = newClient();
+    onlineManager.setOnline(false);
+    dispatchLogSet(client1, liveSetVars({ tempId: 'optimistic-ended' }));
+    await vi.waitFor(() => expect(client1.getMutationCache().getAll().filter((m) => m.state.isPaused)).toHaveLength(1));
+    markCreatesEnded(7, ['optimistic-ended']);
+    await persistOutboxNow(client1, ACCOUNT);
+
+    const client2 = newClient();
+    await restoreOutbox(client2, ACCOUNT);
+    onlineManager.setOnline(true);
+    await client2.resumePausedMutations();
+
+    await vi.waitFor(() => expect(logLiveSet).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(isSessionEnded(7, 101)).toBe(true));
+    expect(client2.getQueryData(queryKeys.liveSession(7))).toBeUndefined();
+    localStorage.removeItem('worktrac-ended-creates:7');
+    localStorage.removeItem('worktrac-ended-session:7');
   });
 
   it('replays queued writes strictly in enqueue order', async () => {

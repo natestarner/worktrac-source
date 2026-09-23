@@ -20,7 +20,7 @@ import {
 } from './queryClient';
 import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './exerciseIdMap';
 import { _getMappingForTest, clearSetIdMap, setSetIdMapping } from './setIdMap';
-import { markSessionEnded } from './endedSessions';
+import { isSessionEnded, markCreatesEnded, markSessionEnded } from './endedSessions';
 import { deleteSet, editSet, logLiveSet, logSetIntoSession } from '../api/sets';
 import { addExercise, favoriteExercise } from '../api/exercises';
 import { queryKeys } from '../api/queryKeys';
@@ -1037,6 +1037,41 @@ describe('logSet onSettled reconciles from the response (first-set flash)', () =
     await dispatch();
 
     expect(client.getQueryData(queryKeys.liveSession(PERSON))).toBeUndefined();
+  });
+
+  // Ended while this create was still pending -- no session id existed to mark at the tap, so the
+  // End recorded the create instead. When it lands, its session is the ENDED workout: marked, and
+  // never written back as live. docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md
+  it('marks the session a create of an ended workout lands in as ended, and does not promote it', async () => {
+    markCreatesEnded(PERSON, ['optimistic-abc']);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET });
+
+    await dispatch();
+
+    expect(client.getQueryData(queryKeys.liveSession(PERSON))).toBeUndefined();
+    expect(isSessionEnded(PERSON, SESSION.id)).toBe(true);
+  });
+
+  // The other half: a set logged AFTER that End starts the next workout, which must go live.
+  it('still promotes the session of a create logged after the End', async () => {
+    markCreatesEnded(PERSON, ['optimistic-earlier']);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET });
+
+    await dispatch();
+
+    expect(client.getQueryData(queryKeys.liveSession(PERSON))).toEqual(SESSION);
+    expect(isSessionEnded(PERSON, SESSION.id)).toBe(false);
+  });
+
+  // A past-session edit logs into a session that is not the live one; the marker is about live
+  // workouts only, so it must not touch the session being edited.
+  it('leaves a session-edit create alone even if its tempId was recorded', async () => {
+    markCreatesEnded(PERSON, ['optimistic-abc']);
+    logSetIntoSession.mockResolvedValue({ isPR: false, best: null, session: { id: 999, startedAt: 'x' }, set: { ...SET, sessionId: 999 } });
+
+    await dispatch({ mode: 'session', sessionId: 999 });
+
+    expect(isSessionEnded(PERSON, 999)).toBe(false);
   });
 
   // ---- Degraded conditions: the whole block must be inert ------------------------------------

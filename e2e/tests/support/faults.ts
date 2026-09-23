@@ -85,6 +85,38 @@ export async function delayNetwork(page: Page, urlPattern: string | RegExp, dela
   };
 }
 
+// Holds matching requests open until the test calls `.release()`, then lets them through for
+// real. delayNetwork's fixed wait is enough to widen a race; this is for a spec that must decide
+// exactly WHEN a write lands relative to its own steps -- "the set's create has landed but the
+// end-workout behind it has not" is a state no fixed delay pins down across four modes.
+//
+// Only requests that arrive while holding are held; anything after `.release()` passes straight
+// through. `held()` counts what is currently parked, so a spec can wait for the request to have
+// actually been sent before acting on it.
+export async function holdNetwork(page: Page, urlPattern: string | RegExp) {
+  let releaseAll: () => void = () => {};
+  let released = false;
+  const gate = new Promise<void>((resolve) => {
+    releaseAll = resolve;
+  });
+  let parked = 0;
+  await page.route(urlPattern, async (route: Route) => {
+    if (!released) {
+      parked += 1;
+      await gate;
+      parked -= 1;
+    }
+    await route.continue();
+  });
+  return {
+    release: () => {
+      released = true;
+      releaseAll();
+    },
+    held: () => parked,
+  };
+}
+
 export async function clearFaults(page: Page, urlPattern: string | RegExp) {
   await page.unroute(urlPattern);
 }
