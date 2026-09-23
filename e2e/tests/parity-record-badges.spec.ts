@@ -130,6 +130,13 @@ forEachConnectivityMode<{ personName: string }>('the session-exercises list badg
     await page.getByRole('button', { name: 'End workout' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
     await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
+    // The badge compares against the earlier workout through the CACHED `history`, and the modes
+    // below read that cache without refetching it -- so wait until it actually holds the baseline.
+    // The summary card further down is a different query and proves nothing about history; on
+    // lower, the mode could start before history's refetch landed, leaving nothing to beat.
+    await page.getByRole('link', { name: 'History' }).click();
+    await expect(page.getByText('100lb×10', { exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Log' }).click();
     // Ending a workout may already have returned to the picker.
     const back = page.getByRole('button', { name: /All exercises/ });
     if (await back.isVisible()) await back.click();
