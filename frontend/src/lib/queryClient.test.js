@@ -22,10 +22,12 @@ import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './e
 import { _getMappingForTest, clearSetIdMap, setSetIdMapping } from './setIdMap';
 import { isSessionEnded, markCreatesEnded, markSessionEnded } from './endedSessions';
 import { deleteSet, editSet, logLiveSet, logSetIntoSession } from '../api/sets';
+import { getHistory } from '../api/sessions';
 import { addExercise, favoriteExercise } from '../api/exercises';
 import { queryKeys } from '../api/queryKeys';
 import { setAuthToken } from '../api/client';
 
+vi.mock('../api/sessions', async (importOriginal) => ({ ...(await importOriginal()), getHistory: vi.fn() }));
 vi.mock('../api/sets', () => ({
   logLiveSet: vi.fn(),
   logSetIntoSession: vi.fn(),
@@ -1050,6 +1052,25 @@ describe('logSet onSettled reconciles from the response (first-set flash)', () =
 
     expect(client.getQueryData(queryKeys.liveSession(PERSON))).toBeUndefined();
     expect(isSessionEnded(PERSON, SESSION.id)).toBe(true);
+  });
+
+  // That session never becomes live on this device, and the Log tab only fetches history while one
+  // is -- so an invalidation alone reached nothing that acted on it, and history never learned the
+  // ended workout existed (the next workout's first set then celebrated as the first ever). The
+  // landing FETCHES it, with no observer mounted at all.
+  it('fetches history when a create of an ended workout lands, with nothing observing it', async () => {
+    markCreatesEnded(PERSON, ['optimistic-abc']);
+    // The app's clients treat history as fresh for a minute (the default below is 0), and it was
+    // fetched moments before this set landed -- so a fetch that honoured that would skip it.
+    client.setQueryDefaults(queryKeys.history(PERSON), { staleTime: 60 * 1000 });
+    client.setQueryData(queryKeys.history(PERSON), []);
+    getHistory.mockResolvedValue([{ id: SESSION.id, entries: [{ exerciseId: EXERCISE, sets: [SET] }] }]);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: SESSION, set: SET });
+
+    await dispatch();
+
+    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledWith(PERSON));
+    await vi.waitFor(() => expect(client.getQueryData(queryKeys.history(PERSON))).toHaveLength(1));
   });
 
   // The other half: a set logged AFTER that End starts the next workout, which must go live.

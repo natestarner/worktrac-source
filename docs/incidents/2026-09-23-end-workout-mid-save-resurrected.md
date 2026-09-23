@@ -82,6 +82,49 @@ Getting the repro to measure the right thing took two tries, and both are worth 
   could be confirmed. On lower the tap landed inside that read's round trip. The spec holds the
   read to pin the same order.
 
+## Follow-up: the fix removed a history refresh the bug had been providing
+
+Lower's first run of the fix above was green, but `parity-pr-celebration`'s bodyweight spec needed
+a retry in two modes, failing at a new line. The next workout's first set, 6 reps against a
+10-rep workout, celebrated **"New PR! · Most reps · 6 reps — First time logging this one"**.
+
+It came from the fix. On the pre-fix code, with the celebration check moved ahead of the Set count
+so the old failure could not mask it, it passed in every mode (12/12). The mechanism:
+
+- When a set lands, `LOG_SET` **invalidates** history. On the Log tab, the only history observer
+  fetches **only while a workout is live** (`LogTab`'s `fetch: !!activeSessionId`).
+- Before the fix, the ended workout wrongly coming back as live is what enabled that observer, so
+  history refetched **by accident** and learned about the workout.
+- With the fix, the workout never becomes live on the device. The invalidation reaches no observer
+  that acts on it, so history never learns the ended workout existed. Degraded, "Last time" and
+  the record fold are derived from history, so the next set was judged as the first ever.
+
+**Fix:** in the same `LOG_SET` branch, **fetch** history instead of only invalidating it, using
+`prefetchQuery` with the same `queryFn` as `useHistory` and `offlineCacheWarm`, and `staleTime: 0`.
+The entry looks fresh from moments before the set landed, and the app's 60s default would skip it.
+The unit test pins that detail using the app's staleness. It also covers the more common path: a
+workout logged and ended entirely offline, whose sets land on reconnect.
+
+A second parity spec in `parity-end-workout-mid-save.spec.ts` asserts the no-false-record claim.
+It was red 3/3 in hard-offline with the fetch reverted, and green with it.
+
+Rejected: letting the Log tab always fetch history (undoes part of 09-22 everywhere) and
+`refetchQueries({ type: 'all' })` (TanStack skips a query whose only observer is disabled).
+
+### A separate, pre-existing bug found alongside it — lie-fi (NOT fixed)
+
+In **lie-fi**, the same no-false-record spec still failed with the history fetch in place. A
+control with **no mid-save race at all** (an ordinary workout whose set lands long before End)
+fails the same way, 3/3, and so does the code from **before either fix**.
+
+In lie-fi, the exercise's cached summary is still being retried when Log set is tapped (it is keyed
+on "no live session" and was fetched before the last workout). The record check reads that stale
+summary before the fallback to history kicks in, which only happens once the retries give up.
+`parity-pr-celebration`'s setup has long worked around this by re-opening the exercise online.
+
+It is recorded as `fixmeModes: ['lie-fi']` on the new spec, which is the reproduction. It is not
+sanctioned: it belongs fixed or on `resilience.md`'s register, and that decision is open.
+
 ## Takeaways
 
 - **"Ended" needs a name for the thing that was ended, even before the server has named it.** An
@@ -89,5 +132,8 @@ Getting the repro to measure the right thing took two tries, and both are worth 
   offline, plus any ended in the moment its first set is saving.
 - **Every raw reader of a suppressed cache entry is a second place the bug can live** (again —
   09-22 said this). The hook hid the ended session; the placeholder seed still kept it.
+- **Removing a bug can remove what it was doing by accident.** The ended workout coming back was
+  also what refreshed history. When a fix stops something happening, list what that something
+  triggered. The same lesson as 09-22, from the other side.
 - **A spec whose setup does "log first set, End" is a probe for this race.** It hit lower from two
   unrelated specs in one day, which is what finally made it visible.
