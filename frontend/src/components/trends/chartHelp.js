@@ -60,7 +60,7 @@ export function exerciseTrendHelp(metric) {
       'One dot per workout session that included this exercise, not one per day. Two sessions in the same day give you two dots.',
       spec.dotMeaning,
       // Deliberately NOT "a new best estimated 1RM". PR marking runs through
-      // StatsService#comparableValue, which ranks a bodyweight set by its rep count and a hold by
+      // SetMeasures#comparableValue, which ranks a bodyweight set by its rep count and a hold by
       // its seconds -- calling either an estimated 1RM is the "rep count wearing a costume"
       // mistake .claude/rules/trends.md exists to prevent, and it would be wrong on every metric,
       // not just this one. What the reader actually needs from this line is why a green dot is

@@ -58,14 +58,15 @@ describe('ExerciseTrendSection metric switcher', () => {
   });
 
   // The bug being fixed: weight and weight x reps are always 0 for a bodyweight lift, so these
-  // three metrics were flat zero lines no matter the rep count. Hidden, not disabled -- a column
+  // two metrics were flat zero lines no matter the rep count. Hidden, not disabled -- a column
   // of zeros is worse than no column (see ExerciseRecordsTable's identical bodyweightOnly branch).
-  it('hides Top weight, Volume and Best set for a bodyweight-only exercise', () => {
+  // Volume stays: for a bodyweight exercise it is total reps (utils/sessionVolume.js).
+  it('hides Top weight and Best set for a bodyweight-only exercise, but keeps Volume', () => {
     setup({ bodyweightOnly: true });
     expect(screen.getByRole('button', { name: 'Est. 1RM' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reps' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Volume' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Top weight' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Volume' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Best set' })).not.toBeInTheDocument();
   });
 
@@ -74,7 +75,7 @@ describe('ExerciseTrendSection metric switcher', () => {
   // never overwrite the stored preference, or picking a weighted exercise again would lose it.
   it('falls back to est. 1RM for display when the stored preference is hidden here, without overwriting it', () => {
     const onMetricChange = vi.fn();
-    setup({ bodyweightOnly: true, metric: 'sessionVolume', onMetricChange });
+    setup({ bodyweightOnly: true, metric: 'heaviest', onMetricChange });
 
     expect(screen.getByRole('button', { name: 'Est. 1RM' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('chart-metric:est1rm')).toBeInTheDocument();

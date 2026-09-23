@@ -256,7 +256,33 @@ describe('SessionSummary', () => {
 
     // A session total belongs to the whole entry, not to any one set -- so it badges the exercise
     // NAME, which is exactly where History puts it.
+    // An earlier, smaller workout is what makes today's total a record: a first-ever workout of an
+    // exercise is a baseline and takes no volume badge (the next test).
+    const EARLIER_BENCH = [
+      {
+        id: 90,
+        startedAt: '2026-09-13T10:00:00Z',
+        entries: [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 9, weight: 100, reps: 5, unit: 'lb' }] }],
+      },
+    ];
+
     it('badges the exercise name, not a set, for a session-volume record', () => {
+      const entries = [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 55, weight: 135, reps: 5, unit: 'lb' }] }];
+      renderWithQuery(
+        <SessionSummary
+          entries={entries}
+          prFlags={flagsFor(entries, EARLIER_BENCH)}
+          loading={false}
+          sessionId={101}
+          onSelectExercise={onSelectExercise}
+          onChanged={onChanged}
+        />,
+      );
+
+      expect(screen.getByLabelText('personal record: volume for Bench Press')).toBeInTheDocument();
+    });
+
+    it('does not badge volume on the first workout of an exercise', () => {
       const entries = [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 55, weight: 135, reps: 5, unit: 'lb' }] }];
       renderWithQuery(
         <SessionSummary
@@ -269,7 +295,39 @@ describe('SessionSummary', () => {
         />,
       );
 
-      expect(screen.getByLabelText('personal record: volume for Bench Press')).toBeInTheDocument();
+      expect(screen.queryByLabelText('personal record: volume for Bench Press')).not.toBeInTheDocument();
+    });
+
+    it('badges a bodyweight exercise’s volume record on total reps', () => {
+      const earlier = [
+        {
+          id: 90,
+          startedAt: '2026-09-13T10:00:00Z',
+          entries: [{ exerciseId: 2, exerciseName: 'Pull-Up', sets: [{ id: 9, weight: 0, reps: 10, unit: 'lb' }] }],
+        },
+      ];
+      const entries = [
+        {
+          exerciseId: 2,
+          exerciseName: 'Pull-Up',
+          sets: [
+            { id: 55, weight: 0, reps: 6, unit: 'lb' },
+            { id: 56, weight: 0, reps: 6, unit: 'lb' },
+          ],
+        },
+      ];
+      renderWithQuery(
+        <SessionSummary
+          entries={entries}
+          prFlags={flagsFor(entries, earlier)}
+          loading={false}
+          sessionId={101}
+          onSelectExercise={onSelectExercise}
+          onChanged={onChanged}
+        />,
+      );
+
+      expect(screen.getByLabelText('personal record: volume for Pull-Up')).toBeInTheDocument();
     });
 
     // resilience.md axis D and the ordinary no-session case: the prop is optional and its absence

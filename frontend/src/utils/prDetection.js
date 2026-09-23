@@ -1,4 +1,4 @@
-import { comparableValue, toLb } from './formulas';
+import { comparableValue, weightLb } from './formulas';
 import { CELEBRATED_PR_TYPES, SET_PR_TYPES } from '../components/trends/exerciseMetrics';
 
 // Which records a set just set. ONE derivation, three consumers: the celebration overlay
@@ -28,31 +28,17 @@ import { CELEBRATED_PR_TYPES, SET_PR_TYPES } from '../components/trends/exercise
 // Every measure requires `value > 0`, and that single rule makes the meaningless cases impossible
 // without the caller having to classify the exercise:
 //
-//   bodyweight lift  weight 0, so toLb(weight) and weight x reps are both 0  -> heaviest/volume never fire
-//   timed hold       reps 0, so weight x reps is 0                           -> volume never fires
+//   bodyweight lift  weight 0, so toLb(weight) is 0                          -> heaviest never fires
 //   failed set       0 reps at weight 0 -> comparable 0                      -> nothing fires
+//
+// Session volume is deliberately NOT one of these set measures and is not decided in this file: it
+// is measured in each exercise's own unit (pounds, reps or seconds) and has its own first-workout
+// rule, and both live in sessionVolume.js -- the one definition the server's SessionVolume.java is
+// pinned to.
 //
 // It also gets the transition right in the one direction that matters: the first time someone puts
 // 10 lb on a previously-bodyweight pull-up, 10 > 0 and a top-weight PR fires, which is correct and
 // is exactly the moment worth marking.
-
-// Weight x reps in pounds -- the volume contribution of one set. A hold carries reps 0, so it
-// contributes nothing, which is why volume never fires for a duration-tracked exercise. Mirrors
-// StatsService#setVolumeLb.
-export function setVolumeLb(set) {
-  if (!set) return 0;
-  const weight = Number(set.weight);
-  const reps = Number(set.reps);
-  if (!Number.isFinite(weight) || !Number.isFinite(reps)) return 0;
-  return toLb(weight, set.unit || 'lb') * reps;
-}
-
-// Total volume across a list of sets, in pounds.
-export function sessionVolumeLb(sets) {
-  let total = 0;
-  for (const set of sets || []) total += setVolumeLb(set);
-  return total;
-}
 
 // The single number each SET-level celebrated measure ranks on, in a unit-normalized form.
 // comparableValue already carries the weight-0 -> reps and hold -> seconds substitutions.
@@ -63,7 +49,7 @@ export function sessionVolumeLb(sets) {
 // means -- but the MATHS is one table. See .claude/rules/log-screen.md.
 export const SET_MEASURE_VALUE = {
   est1rm: (set) => comparableValue(set),
-  heaviest: (set) => toLb(Number(set?.weight) || 0, set?.unit || 'lb'),
+  heaviest: (set) => weightLb(set),
 };
 
 // Which set-level records this set takes, given the bests BEFORE it.
@@ -89,28 +75,6 @@ export function setPrTypes(set, priorBests) {
 // the overlay says "first time" and skips the confetti instead of claiming three PRs.
 export function isFirstEver(priorBests) {
   return priorBests?.comparable == null;
-}
-
-// Whether this set is the one that takes the session-volume record.
-//
-// ⚠️ Deliberately stateless, and that is what makes it work offline. A "have I already celebrated
-// this session?" flag has to be keyed on something, and the only natural key -- the session id --
-// is `null` for a person's ENTIRE offline/lie-fi stretch (contextSessionId, see log-screen.md), so
-// it would disable the guard in precisely the modes this feature exists for.
-//
-// Asking whether the running total CROSSES the record is inherently once-per-session instead: once
-// you are past it, `before` stays above the record for the rest of the workout and this cannot
-// return true again. No flag, no session identity, no lifecycle events to keep in step.
-//
-// `priorBestSessionVolumeLb` must EXCLUDE the current session, or the record chases itself: after
-// the crossing the current session becomes the best, `before <= prior` goes true again, and the
-// next set re-fires. Both callers exclude it -- online via getSummary's excludeSessionId, offline
-// by dropping sessions at or after the live session's startedAt.
-export function crossesSessionVolume(volumeBefore, volumeAfter, priorBestSessionVolumeLb) {
-  if (!Number.isFinite(volumeAfter) || volumeAfter <= 0) return false;
-  if (!Number.isFinite(volumeBefore)) return false;
-  const prior = Number.isFinite(priorBestSessionVolumeLb) ? priorBestSessionVolumeLb : 0;
-  return volumeBefore <= prior && volumeAfter > prior;
 }
 
 export { CELEBRATED_PR_TYPES };

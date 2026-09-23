@@ -1,4 +1,5 @@
 import { measureEntry, prMeasureSpec } from '../components/prs/prMeasures';
+import { VOLUME_KINDS } from './sessionVolume';
 
 // Sort orders for the PRs board. "Most recent" exists because Trends used to carry a Recent PRs
 // card answering "what got better lately"; that card duplicated this board row-for-row, so the
@@ -68,6 +69,11 @@ export function sortPrRows(rows, sort, measure) {
       // interleave, which is exactly what treating a missing value as a number would do.
       if (!aEntry !== !bEntry) return aEntry ? -1 : 1;
       if (!aEntry) return byName(a, b);
+      // Session volume is measured in each exercise's own unit (pounds, reps or seconds), and 50
+      // reps is not "less" than 5000 lb -- it is a different axis. So rows rank within their
+      // kind, and the kinds group in VOLUME_KINDS order. Other measures carry no kind.
+      const kindOrder = VOLUME_KINDS.indexOf(aEntry.volumeKind) - VOLUME_KINDS.indexOf(bEntry.volumeKind);
+      if (kindOrder) return kindOrder;
       return bEntry.value - aEntry.value || byName(a, b);
     });
   }

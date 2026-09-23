@@ -42,11 +42,15 @@ jobs:
         uses: dorny/paths-filter@v4
         id: filter
         with:
+          # shared/** is on BOTH sides: it holds rule fixtures (shared/record-rules/) that the
+          # backend and frontend test suites each run, so a change there must re-run both.
           filters: |
             backend:
               - 'backend/**'
+              - 'shared/**'
             frontend:
               - 'frontend/**'
+              - 'shared/**'
             marketing:
               - 'marketing/**'
 

@@ -30,12 +30,13 @@ import { forEachConnectivityMode } from './support/parity';
 // the set itself. Only the degraded modes depend on the live fold -- which is exactly the shape
 // the old response-driven celebration had, and exactly what this spec exists to stop coming back.
 //
-// ⚠️ WHAT THIS SPEC DOES **NOT** COVER: the null-session-id path. `setup` logs a set online, so a
-// real session id already exists by the time the mode is entered and `contextSessionId` is never
-// null here -- making the fold ignore an id-less live session changes nothing in any of these
-// eight runs. That branch (LIVE_SESSION_FLAG_KEY, which carries a person's entire offline stretch
-// before a session materializes) is covered in historyPrFlags.test.js's "the live session" block.
-// Don't read a green run here as evidence about it.
+// ⚠️ The FIRST spec does not cover the null-session-id path: its `setup` logs a set online, so a
+// real session id already exists by the time the mode is entered. The SECOND spec does, since its
+// setup ends that workout -- so in the degraded modes the workout under test has no id at all
+// (LIVE_SESSION_FLAG_KEY; also covered in historyPrFlags.test.js's "the live session" block). It
+// also guards LogTab reading the person's CACHED history while that id is null: its volume badge
+// needs the earlier workout to beat (a first workout is a baseline), and keying the history read
+// on a null id hid that cache -- which failed lie-fi, hard-offline and pinned-offline.
 //
 // Note `assert` never branches on ctx.mode. That is the rule, and it is also the claim.
 
@@ -124,7 +125,14 @@ forEachConnectivityMode<{ personName: string }>('the session-exercises list badg
     await registerHousehold(page, request, personName);
     await pickExercise(page, 'Barbell Bench Press');
     await logSetAt(page, 100, 10);
-    await backToPicker(page);
+    // A separate, EARLIER workout: an exercise's first workout is a volume baseline, never a
+    // volume record (utils/sessionVolume.js), so the workout under test needs one to beat.
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
+    // Ending a workout may already have returned to the picker.
+    const back = page.getByRole('button', { name: /All exercises/ });
+    if (await back.isVisible()) await back.click();
     await pickExercise(page, 'Barbell Bench Press');
     await expect(page.getByText(/\(100lb×10\)/)).toBeVisible();
     await backToPicker(page);

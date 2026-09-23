@@ -1,12 +1,39 @@
 import { describe, expect, it } from 'vitest';
+import shared from '../../../shared/record-rules/set-measures-cases.json';
 import {
   comparableLb,
+  comparableValue,
   computePrefillDraft,
   convertWeight,
   epley,
   EST_1RM_REP_CAP,
   toLb,
+  weightLb,
 } from './formulas';
+
+// The shared cases are the contract with SetMeasuresTest.java -- the same file, run by both suites.
+// Compared with toBe against the nearest double to each exact expected value: both sides compute in
+// exact arithmetic, so there is no tolerance to hide a rounding disagreement behind. A new RULE case
+// belongs in that file, not here, or the server can drift from it.
+describe('the shared set-measure rules', () => {
+  it('agree on the constants', () => {
+    expect(EST_1RM_REP_CAP).toBe(shared.estRepCap);
+    expect(toLb(1, 'kg')).toBe(Number(shared.lbPerKg));
+  });
+
+  for (const c of shared.epley) {
+    it(`epley: ${c.name}`, () => expect(epley(c.weight, c.reps)).toBe(Number(c.expected)));
+  }
+  for (const c of shared.toLb) {
+    it(`toLb: ${c.name}`, () => expect(toLb(c.weight, c.unit)).toBe(Number(c.expected)));
+  }
+  for (const c of shared.comparableValue) {
+    it(`comparableValue: ${c.name}`, () => expect(comparableValue(c.set)).toBe(Number(c.expected)));
+  }
+  for (const c of shared.weightLb) {
+    it(`weightLb: ${c.name}`, () => expect(weightLb(c.set)).toBe(Number(c.expected)));
+  }
+});
 
 describe('epley', () => {
   it('returns the rounded weight itself for 1 rep or fewer', () => {
@@ -29,7 +56,7 @@ describe('epley', () => {
     });
 
     it('leaves everything at or below the cap untouched', () => {
-      expect(epley(135, 11)).toBe(Math.round(135 * (1 + 11 / 30) * 10) / 10);
+      expect(epley(135, 11)).toBe(184.5);
       expect(epley(135, 12)).toBe(189);
     });
 

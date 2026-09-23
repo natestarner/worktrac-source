@@ -70,7 +70,16 @@ export default function LogTab() {
   // offline) has no server id to key history on, but it IS an active session -- the summary list
   // below must still show for it, sourced from pending mutations instead (see useSessionEntries).
   const hasActiveSession = !!editingSession || !!liveSession;
-  const { history, loading: historyLoading, refetch: refetchHistory } = useHistory(activeSessionId ? activePersonId : null);
+  // Fetched only once there is a server session to show, but READ from the person's cache always:
+  // sessionPrFlags below folds the live workout against every earlier one, and a workout that has
+  // not synced yet (no id -- the whole of an offline stretch) must still be measured against the
+  // history already warmed. Keying on a null person here used to hide that cache entirely, so an
+  // offline workout's records were compared against nothing.
+  const {
+    history,
+    loading: historyLoading,
+    refetch: refetchHistory,
+  } = useHistory(activePersonId, { fetch: !!activeSessionId });
   const [addExerciseName, setAddExerciseName] = useState(null); // null = closed; string = create modal prefilled with this name
   const [routineBannerDismissed, setRoutineBannerDismissed] = useState(false);
   const routinePillRefs = useRef({});

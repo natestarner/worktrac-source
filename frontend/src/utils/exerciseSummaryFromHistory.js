@@ -1,5 +1,5 @@
-import { comparableValue, epley, toLb } from './formulas';
-import { setVolumeLb } from './prDetection';
+import { comparableValue, epley, weightLb } from './formulas';
+import { sessionVolume, volumeKindOf } from './sessionVolume';
 
 // Client-side mirror of StatsService#getLastSession / #getBest
 // (backend/.../stats/StatsService.java), computed over the already-warmed `history` query
@@ -12,7 +12,7 @@ export function deriveExerciseSummaryFromHistory(history, exerciseId, excludeSes
     lastSession: deriveLastSession(history, exerciseId, excludeSessionId),
     best: deriveBest(history, exerciseId),
     heaviestWeightLb: deriveHeaviestWeightLb(history, exerciseId),
-    bestSessionVolumeLb: deriveBestSessionVolumeLb(history, exerciseId, excludeSessionId, liveSessionStartedAt),
+    ...deriveBestSessionVolume(history, exerciseId, excludeSessionId, liveSessionStartedAt),
   };
 }
 
@@ -117,7 +117,7 @@ function deriveBest(history, exerciseId) {
 //
 //   heaviestWeightLb      all-time, INCLUDING today. A set PR asks "did this beat everything
 //                         before it", and earlier sets logged today count as before it.
-//   bestSessionVolumeLb   EXCLUDES the current session. The current session's running total is the
+//   bestSessionVolume     EXCLUDES the current session. The current session's running total is the
 //                         thing being tested, so including it makes the record chase itself: after
 //                         the crossing, today becomes the best, `before <= prior` goes true again
 //                         and the next set re-fires.
@@ -127,8 +127,8 @@ function deriveBest(history, exerciseId) {
 // logSetMutation.onMutate seeds the provisional session with a real
 // `{ id: null, startedAt: clientLoggedAt }` even when the id is not yet known.
 
-// Heaviest raw weight ever put on this exercise, normalized to pounds. Mirrors
-// StatsService's heaviest-weight record. Returns null when nothing has been logged, which
+// Heaviest raw weight ever put on this exercise, in pounds (formulas.js#weightLb, the one top-weight
+// measure). Mirrors getSummary's heaviestWeightLb. Returns null when nothing has been logged, which
 // prDetection reads as "no prior best" rather than as zero.
 function deriveHeaviestWeightLb(history, exerciseId) {
   let heaviest = null;
@@ -136,16 +136,25 @@ function deriveHeaviestWeightLb(history, exerciseId) {
     const entry = findEntry(session, exerciseId);
     if (!entry) continue;
     for (const set of entry.sets) {
-      const weightLb = toLb(Number(set.weight) || 0, set.unit || 'lb');
-      if (heaviest === null || weightLb > heaviest) heaviest = weightLb;
+      const lb = weightLb(set);
+      if (heaviest === null || lb > heaviest) heaviest = lb;
     }
   }
   return heaviest;
 }
 
-// Biggest single-session volume for this exercise, in pounds, across every session OTHER than the
-// one in progress -- see the asymmetry note above.
-function deriveBestSessionVolumeLb(history, exerciseId, excludeSessionId, liveSessionStartedAt) {
+// Biggest single-session volume for this exercise across every session OTHER than the one in
+// progress -- see the asymmetry note above -- together with the kind it is measured in. Mirrors
+// ExerciseSummaryDto's bestSessionVolume + volumeKind: the kind is decided over EVERY session
+// (including the live one, as the server does), the best over the earlier ones only.
+function deriveBestSessionVolume(history, exerciseId, excludeSessionId, liveSessionStartedAt) {
+  const allSets = [];
+  for (const session of history || []) {
+    const entry = findEntry(session, exerciseId);
+    if (entry) allSets.push(...entry.sets);
+  }
+  const volumeKind = volumeKindOf(allSets);
+
   const liveStartedMs = liveSessionStartedAt ? new Date(liveSessionStartedAt).getTime() : null;
   let best = null;
   for (const session of history || []) {
@@ -158,11 +167,10 @@ function deriveBestSessionVolumeLb(history, exerciseId, excludeSessionId, liveSe
     }
     const entry = findEntry(session, exerciseId);
     if (!entry) continue;
-    let total = 0;
-    for (const set of entry.sets) total += setVolumeLb(set);
+    const total = sessionVolume(entry.sets, volumeKind);
     if (best === null || total > best) best = total;
   }
-  return best;
+  return { bestSessionVolume: best, volumeKind };
 }
 
 // Fold client-only sets into the all-time heaviest, for the same reason mergeBestWithLocalSets
@@ -177,8 +185,8 @@ export function mergeHeaviestWithLocalSets(heaviestLb, sets) {
   let merged = heaviestLb ?? null;
   for (const set of sets || []) {
     if (set?.weight == null) continue;
-    const weightLb = toLb(Number(set.weight) || 0, set.unit || 'lb');
-    if (merged === null || weightLb > merged) merged = weightLb;
+    const lb = weightLb(set);
+    if (merged === null || lb > merged) merged = lb;
   }
   return merged;
 }

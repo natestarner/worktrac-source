@@ -369,6 +369,8 @@ test.describe('Trends analytics', () => {
     await expect(page.getByText('Records · bodyweight')).toBeVisible();
     await expect(recordRow(page, 'Most reps in a set')).toContainText('12 reps');
     await expect(recordRow(page, 'Total reps')).toContainText('12 reps');
+    // Session volume for an unloaded exercise is total reps, not a hidden 0 lb.
+    await expect(recordRow(page, 'Best session volume')).toContainText('12 reps');
 
     // The weight-based rows are suppressed entirely -- see StatsService#comparableLb for why
     // every weight record is meaningless at weight 0. That includes the est. 1RM, which Epley
@@ -386,15 +388,15 @@ test.describe('Trends analytics', () => {
 
     await page.getByRole('link', { name: 'Trends' }).click();
 
-    // Top weight/Volume/Best set are raw weight or weight x reps, always 0 for a bodyweight lift
-    // -- hidden from the switcher rather than shown as flat zero lines, the chart-switcher
-    // equivalent of the records table's rep-focused view above. Est. 1RM survives (it already
-    // substitutes rep count at weight 0) and so does Reps.
+    // Top weight/Best set are raw weight or weight x reps, always 0 for a bodyweight lift -- hidden
+    // from the switcher rather than shown as flat zero lines, the chart-switcher equivalent of the
+    // records table's rep-focused view above. Est. 1RM survives (it already substitutes rep count
+    // at weight 0), and so do Reps and Volume (which is total reps for a bodyweight exercise).
     const exerciseMetric = page.getByRole('group', { name: 'Exercise metric' });
     await expect(exerciseMetric.getByRole('button', { name: 'Est. 1RM', exact: true })).toBeVisible();
     await expect(exerciseMetric.getByRole('button', { name: 'Reps', exact: true })).toBeVisible();
+    await expect(exerciseMetric.getByRole('button', { name: 'Volume', exact: true })).toBeVisible();
     await expect(exerciseMetric.getByRole('button', { name: 'Top weight', exact: true })).toBeHidden();
-    await expect(exerciseMetric.getByRole('button', { name: 'Volume', exact: true })).toBeHidden();
     await expect(exerciseMetric.getByRole('button', { name: 'Best set', exact: true })).toBeHidden();
   });
 

@@ -21,13 +21,16 @@ import {
 } from '../../lib/queryClient';
 import { cancelQueuedWritesForSet } from '../../lib/offlineSetEdits';
 import { comparableValue, computePrefillDraft, convertWeight, epley } from '../../utils/formulas';
+import { isFirstEver, setPrTypes } from '../../utils/prDetection';
 import {
   crossesSessionVolume,
-  isFirstEver,
-  sessionVolumeLb,
-  setPrTypes,
-  setVolumeLb,
-} from '../../utils/prDetection';
+  formatVolume,
+  latchedVolume,
+  mergeVolumeKinds,
+  priorSessionVolume,
+  sessionVolume,
+  volumeKindOf,
+} from '../../utils/sessionVolume';
 import { buildHistoryPrFlags, liveSessionPrFlagKey } from '../../utils/historyPrFlags';
 import { resolveRestTargetSeconds } from '../../utils/restTarget';
 import {
@@ -184,7 +187,7 @@ export default function ExerciseDetail({
     // historyLoading gates this to avoid a false "No sets yet"/"No PR yet" flash from an empty
     // [] default before history's own first fetch has actually resolved (online or offline).
     // liveSession?.startedAt is what lets the offline fallback exclude the CURRENT session from
-    // bestSessionVolumeLb without a session id -- onMutate seeds the provisional session with a
+    // bestSessionVolume without a session id -- onMutate seeds the provisional session with a
     // real startedAt even while its id is still null. See exerciseSummaryFromHistory.js.
     () =>
       historyLoading
@@ -794,18 +797,25 @@ export default function ExerciseDetail({
       // asked as a CROSSING: did the running total for this exercise pass the record with this set.
       // That is inherently once-per-session and needs no session id -- which matters, because
       // contextSessionId is null for a person's whole offline stretch.
-      const volumeBefore = sessionVolumeLb(displaySets);
-      const volumeAfter = volumeBefore + setVolumeLb(loggedSet);
-      const priorVolumeLb =
-        summary?.bestSessionVolumeLb == null ? null : Number(summary.bestSessionVolumeLb);
-      const alreadyCelebratedLb = volumePrCelebrated?.[exercise.id];
+      //
+      // The measure (pounds, reps or seconds) is the exercise's over EVERYTHING known: the
+      // summary's kind covers synced history, and today's sets -- this one included -- may not
+      // have synced yet. One loaded set flips an all-bodyweight exercise to pounds, which is why
+      // the kind is merged rather than read off either side alone. A never-logged exercise has no
+      // prior at all, so its first workout never celebrates volume (sessionVolume.js).
+      const todaysSets = [...displaySets, loggedSet];
+      const volumeKind = mergeVolumeKinds(summary?.volumeKind ?? null, volumeKindOf(todaysSets));
+      const volumeBefore = sessionVolume(displaySets, volumeKind);
+      const volumeAfter = sessionVolume(todaysSets, volumeKind);
+      const priorVolume = priorSessionVolume(summary, volumeKind);
+      const alreadyCelebrated = latchedVolume(volumePrCelebrated?.[exercise.id], volumeKind);
       const volumePr =
-        crossesSessionVolume(volumeBefore, volumeAfter, priorVolumeLb) &&
+        crossesSessionVolume(volumeBefore, volumeAfter, priorVolume) &&
         // The churn backstop, not the mechanism -- see PERSON_DEFAULTS.volumePrCelebrated.
-        (alreadyCelebratedLb == null || volumeAfter > alreadyCelebratedLb);
+        (alreadyCelebrated == null || volumeAfter > alreadyCelebrated);
       if (volumePr) {
         prTypes.push('sessionVolume');
-        recordVolumePrCelebrated(exercise.id, volumeAfter);
+        recordVolumePrCelebrated(exercise.id, { kind: volumeKind, value: volumeAfter });
       }
 
       if (prTypes.length > 0) {
@@ -832,8 +842,8 @@ export default function ExerciseDetail({
           if (type === 'sessionVolume') {
             return {
               type,
-              valueText: `${Math.round(convertWeight(volumeAfter, 'lb', defaultUnit))} ${defaultUnit}`,
-              caption: `${displaySets.length + 1} sets this workout`,
+              valueText: formatVolume(volumeAfter, volumeKind, defaultUnit),
+              caption: `${todaysSets.length} ${todaysSets.length === 1 ? 'set' : 'sets'} this workout`,
             };
           }
           // est1rm. ONE caption, chosen here rather than a boolean the overlay re-interprets.

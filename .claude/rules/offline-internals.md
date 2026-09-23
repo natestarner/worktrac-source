@@ -395,6 +395,16 @@ these three**, and which one depends on what a restored copy would be:
 | actively wrong | a synchronous localStorage marker beside the cache | `endedSessions.js` |
 | **never true at all** | never let it count as fresh (`staleTime` 0 for that shape) | the provisional liveSession |
 
+**The throttle makes a server answer stale too, not only an invented one.** A reload inside the
+1s persist window restores whatever the entry held a second ago — with a `dataUpdatedAt` that says
+"just fetched". `liveSession` is `null` right up until the first set of a workout lands, so a
+restored `null` hid a workout that had just started (it showed as "Last time") until something
+happened to refetch. `useLiveSession`'s `staleTime` is therefore 0 for `null` as well as for
+`{ id: null }`; `isSessionEnded` is what keeps that refetch from resurrecting a workout this device
+ended. **Ask of any entry that decides what the screen treats as *current*: what would a copy from
+one second ago make the app believe?**
+`docs/incidents/2026-09-22-restored-no-session-hides-first-set.md`.
+
 ## Cold boot offline
 
 `AuthContext` boots authenticated-but-`offline:true` from a saved identity snapshot when `/me`

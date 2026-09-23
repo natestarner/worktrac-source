@@ -10,6 +10,7 @@ import com.worktrac.backend.membership.Permission;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
 import com.worktrac.backend.stats.BestDto;
+import com.worktrac.backend.stats.SetMeasures;
 import com.worktrac.backend.stats.StatsService;
 import com.worktrac.backend.workoutsession.WorkoutSession;
 import com.worktrac.backend.workoutsession.WorkoutSessionDto;
@@ -34,12 +35,13 @@ public class WorkoutSetService {
     private final AccountRepository accountRepository;
     private final PersonService personService;
     private final StatsService statsService;
+    private final SetMeasures setMeasures;
     private final Clock clock;
 
     public WorkoutSetService(WorkoutSetRepository workoutSetRepository, WorkoutSessionRepository workoutSessionRepository,
                               WorkoutSessionService workoutSessionService, ExerciseRepository exerciseRepository,
                               AccountRepository accountRepository, PersonService personService, StatsService statsService,
-                              Clock clock) {
+                              SetMeasures setMeasures, Clock clock) {
         this.workoutSetRepository = workoutSetRepository;
         this.workoutSessionRepository = workoutSessionRepository;
         this.workoutSessionService = workoutSessionService;
@@ -47,6 +49,7 @@ public class WorkoutSetService {
         this.accountRepository = accountRepository;
         this.personService = personService;
         this.statsService = statsService;
+        this.setMeasures = setMeasures;
         this.clock = clock;
     }
 
@@ -208,7 +211,7 @@ public class WorkoutSetService {
                 new WorkoutSet(session, person, exercise, weight, measure.reps(), measure.durationSeconds(), unit,
                         restSeconds, createdAt, clientKey));
 
-        BigDecimal newComparable = statsService.comparableValue(weight, measure.reps(), measure.durationSeconds(), unit);
+        BigDecimal newComparable = setMeasures.comparableValue(weight, measure.reps(), measure.durationSeconds(), unit);
         boolean isPR = prevBestComparable.isEmpty() || newComparable.compareTo(prevBestComparable.get()) > 0;
         var best = statsService.getBest(person.getId(), exercise.getId()).orElseThrow();
 
