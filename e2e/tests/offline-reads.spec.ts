@@ -251,6 +251,18 @@ test.describe('Offline mode — Exercise Detail summary derived from warmed hist
     // live" snapshot would freeze that way forever offline (a paused query can never revalidate
     // it away), wrongly excluding this very session from "Last time" on the next visit.
     await expect(personPill(page, personName).getByTestId('live-session-dot')).toHaveCount(0);
+    // ...and that the end has actually REACHED the server. The dot clears optimistically on the
+    // tap, so it proves nothing about the write, and the end is queued behind the set's create in
+    // the serial outbox. Against lower's latency the create can still be in flight when End is
+    // tapped, so the end is sent only after it lands. A caller that then cuts the connection kills
+    // the end in flight, leaving "1 change waiting to sync" where it expects "saved on this device".
+    // That failed lower 3/3 on e3d293e.
+    //
+    // It also left the ended workout showing as in progress, a separate, known app issue: ending a
+    // workout whose first set is still saving has no session id to mark ended, so the create's
+    // response brings the session back until the end syncs. Not what these specs are about, so
+    // they wait it out rather than depend on it.
+    await waitForOutboxDrain(page);
   }
 
   test('derives Last time/Best est. 1RM hard offline for an (exercise, no-live-session) key never fetched before', async ({
