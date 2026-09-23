@@ -5,7 +5,7 @@ import { queryKeys } from '../api/queryKeys';
 import { logLiveSet, logSetIntoSession, editSet, deleteSet } from '../api/sets';
 import { addExercise, favoriteExercise, unfavoriteExercise } from '../api/exercises';
 import { saveLiveExerciseNote, saveSessionExerciseNote } from '../api/notes';
-import { endWorkout } from '../api/sessions';
+import { endWorkout, getHistory } from '../api/sessions';
 import { getAuthToken } from '../api/client';
 import { OUTBOX_SCOPE_ID } from './outboxPersistence';
 import { resolveExerciseId, setExerciseIdMapping, isTempExerciseId } from './exerciseIdMap';
@@ -435,6 +435,20 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         // useLiveSession suppresses the same id when the invalidation below fetches it back.
         if (vars.mode !== 'session' && isCreateInEndedWorkout(vars.personId, vars.tempId)) {
           markSessionEnded(vars.personId, data.session.id);
+          // ...and FETCH history, not merely invalidate it. This is the one path where a set lands
+          // for a workout that never becomes live on this device, and the Log tab only fetches
+          // history while a workout is live (LogTab's `fetch: !!activeSessionId`) -- so the
+          // invalidation below would reach no observer that acts on it. History then never learned
+          // the workout existed, and every read derived from it -- "Last time" and the record fold
+          // -- judged the next workout's first set as the first ever ("New PR! · Most reps") until
+          // something else refetched. Before the marker above, the ended workout coming back as
+          // live was what fetched it, by accident. Same queryFn as useHistory and offlineCacheWarm;
+          // staleTime 0 because the entry can look fresh from moments before this set landed.
+          client.prefetchQuery({
+            queryKey: queryKeys.history(vars.personId),
+            queryFn: () => getHistory(vars.personId),
+            staleTime: 0,
+          });
         }
         if (vars.mode !== 'session' && !isSessionEnded(vars.personId, data.session.id)) {
           client.setQueryData(queryKeys.liveSession(vars.personId), data.session);

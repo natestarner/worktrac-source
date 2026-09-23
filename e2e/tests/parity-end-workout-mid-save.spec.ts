@@ -1,6 +1,6 @@
-import { APIRequestContext, expect } from '@playwright/test';
+import { APIRequestContext, Page, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
-import { dismissPrCelebration, pickExercise } from './support/exercises';
+import { dismissPrCelebration, pickExercise, setStepperPair } from './support/exercises';
 import { holdNetwork } from './support/faults';
 import { forEachConnectivityMode } from './support/parity';
 
@@ -21,41 +21,7 @@ import { forEachConnectivityMode } from './support/parity';
 type State = { email: string; heldEnd: Awaited<ReturnType<typeof holdNetwork>> };
 
 forEachConnectivityMode<State>('ending a workout mid-save ends it, and the next workout starts clean', {
-  setup: async (page, request) => {
-    const email = await registerHousehold(page, request, 'Mids');
-    await pickExercise(page, 'Barbell Bench Press');
-
-    // Held too, until End is confirmed. The `{ id: null }` placeholder always revalidates
-    // (useLiveSession's staleTime), and while the create is held the server truthfully answers
-    // "no live session" -- which takes the session bar, and the End dialog with it, off screen. On
-    // lower the End tap landed inside that read's round trip (the 204 was still in flight at the
-    // confirm); holding it pins the same order.
-    const heldLiveRead = await holdNetwork(page, /\/api\/people\/\d+\/sessions\/live$/);
-    const heldCreate = await holdNetwork(page, /\/api\/people\/\d+\/live-sets$/);
-    await page.getByRole('button', { name: 'Log set' }).click();
-    // A first-ever set always takes a record, and the overlay is decided on the device, so it is up
-    // while the create is still held. Waited for explicitly: dismissPrCelebration only checks, and
-    // an overlay that arrives a beat later sits animating over the End confirm.
-    const celebration = page.getByText('New PR!');
-    await expect(celebration).toBeVisible();
-    await celebration.click({ force: true });
-    await expect(celebration).toBeHidden();
-    await expect.poll(() => heldCreate.held()).toBe(1);
-
-    const heldEnd = await holdNetwork(page, /\/api\/people\/\d+\/sessions\/live\/end$/);
-    await page.getByRole('button', { name: 'End workout' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
-    heldLiveRead.release();
-
-    const createLanded = page.waitForResponse(
-      (r) => r.request().method() === 'POST' && /\/api\/people\/\d+\/live-sets$/.test(r.url()) && r.ok(),
-    );
-    heldCreate.release();
-    await createLanded;
-    // The end-workout is next in the serial outbox, so it is sent as soon as the create settles.
-    await expect.poll(() => heldEnd.held()).toBe(1);
-    return { email, heldEnd };
-  },
+  setup: (page, request) => endWorkoutMidSave(page, request, 'Barbell Bench Press'),
 
   navigate: async (page) => {
     // Ending from the exercise screen returns to the picker, but not necessarily in every mode's
@@ -88,6 +54,82 @@ forEachConnectivityMode<State>('ending a workout mid-save ends it, and the next 
       { ended: true, sets: 1 },
     ]);
   },
+});
+
+// Logs a first set with its create held, ends the workout, then lets the create land while the
+// end stays held -- the state lower reached by chance. Shared by both specs below.
+async function endWorkoutMidSave(page: Page, request: APIRequestContext, exercise: string, reps?: number): Promise<State> {
+  const email = await registerHousehold(page, request, 'Mids');
+  await pickExercise(page, exercise);
+  if (reps !== undefined) await setStepperPair(page, 0, reps);
+
+  // Held too, until End is confirmed. The `{ id: null }` placeholder always revalidates
+  // (useLiveSession's staleTime), and while the create is held the server truthfully answers
+  // "no live session" -- which takes the session bar, and the End dialog with it, off screen. On
+  // lower the End tap landed inside that read's round trip (the 204 was still in flight at the
+  // confirm); holding it pins the same order.
+  const heldLiveRead = await holdNetwork(page, /\/api\/people\/\d+\/sessions\/live$/);
+  const heldCreate = await holdNetwork(page, /\/api\/people\/\d+\/live-sets$/);
+  await page.getByRole('button', { name: 'Log set' }).click();
+  // A first-ever set always takes a record, and the overlay is decided on the device, so it is up
+  // while the create is still held. Waited for explicitly: dismissPrCelebration only checks, and
+  // an overlay that arrives a beat later sits animating over the End confirm.
+  const celebration = page.getByText('New PR!');
+  await expect(celebration).toBeVisible();
+  await celebration.click({ force: true });
+  await expect(celebration).toBeHidden();
+  await expect.poll(() => heldCreate.held()).toBe(1);
+
+  const heldEnd = await holdNetwork(page, /\/api\/people\/\d+\/sessions\/live\/end$/);
+  await page.getByRole('button', { name: 'End workout' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+  heldLiveRead.release();
+
+  const createLanded = page.waitForResponse(
+    (r) => r.request().method() === 'POST' && /\/api\/people\/\d+\/live-sets$/.test(r.url()) && r.ok(),
+  );
+  heldCreate.release();
+  await createLanded;
+  // The end-workout is next in the serial outbox, so it is sent as soon as the create settles.
+  await expect.poll(() => heldEnd.held()).toBe(1);
+  return { email, heldEnd };
+}
+
+// The next workout's first set is judged against the ended one, not as the first ever.
+//
+// The fix above keeps the ended workout from coming back as live -- and with it, the history refresh
+// its comeback had been triggering by accident: the Log tab fetches history only while a workout is
+// live. Without the explicit fetch in LOG_SET's onSettled, history never learned the ended workout
+// existed, and degraded, "Last time" and the record fold judged this 6-rep set as the first ever
+// ("New PR! · Most reps · 6 reps"). docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md
+//
+// ⚠️ lie-fi is fixme'd for a DIFFERENT, older bug, reproduced with no mid-save race at all and on
+// the code from before either fix: in lie-fi the exercise's cached summary (keyed on "no live
+// session", fetched before the ended workout) is still being retried when Log set is tapped, and
+// the record check reads it before falling back to history. Recorded here as the reproduction; it
+// belongs fixed or on resilience.md's register -- not silently passing.
+forEachConnectivityMode<State>('a workout ended mid-save still counts toward the next workout\'s records', {
+  setup: (page, request) => endWorkoutMidSave(page, request, 'Chin-up', 10),
+
+  navigate: async (page) => {
+    const back = page.getByRole('button', { name: /All exercises/ });
+    if (await back.isVisible()) await back.click();
+    await pickExercise(page, 'Chin-up');
+  },
+
+  // 6 reps against a 10-rep workout: no record of any kind, set or session.
+  act: async (page) => {
+    await setStepperPair(page, 0, 6);
+    await page.getByRole('button', { name: 'Log set' }).click();
+  },
+
+  assert: async (page, { heldEnd }) => {
+    await expect(page.getByText('New PR!')).toBeHidden();
+    await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
+    heldEnd.release();
+  },
+
+  fixmeModes: ['lie-fi'],
 });
 
 async function workoutsOnServer(request: APIRequestContext, email: string) {

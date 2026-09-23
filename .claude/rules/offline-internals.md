@@ -291,6 +291,19 @@ whole outage when degraded. tempIds, never the tap's time: `clientLoggedAt` is t
 and a clock correction between the tap and the next set would misfile a new workout.
 `docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md`.
 
+**That same branch must FETCH history, not just invalidate it.** A session marked ended there never
+becomes live on the device, and `LogTab` fetches history only while one is (`fetch:
+!!activeSessionId`), so the invalidation reaches nothing that acts on it. History then never learns
+the workout existed, and degraded, the next workout's first set is celebrated as the first ever.
+The resurrection bug had been doing that refresh by accident. `prefetchQuery` with `staleTime: 0`
+(the entry looks fresh from moments earlier). Don't drop it as redundant with the invalidation.
+
+**Known open bug, not fixed: a false "first time" record in lie-fi.** Opening an exercise whose
+cached summary (keyed on "no live session") predates the last workout, then logging immediately:
+the record check reads the stale summary while its fetch is still retrying, before the fallback to
+history. Reproduced with no race and on pre-2026-09-23 code. `parity-end-workout-mid-save.spec.ts`
+carries it as `fixmeModes: ['lie-fi']`.
+
 **A reader of the RAW `liveSession` cache must treat an ended session as absent.** The hook
 suppresses one, but the cache can still hold it (restored, or fetched back before its end reached
 the server). `ExerciseDetail`'s placeholder seed kept it via `prev ?? placeholder`, so the new
