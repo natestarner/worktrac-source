@@ -103,11 +103,16 @@ async function endWorkoutMidSave(page: Page, request: APIRequestContext, exercis
 // existed, and degraded, "Last time" and the record fold judged this 6-rep set as the first ever
 // ("New PR! · Most reps · 6 reps"). docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md
 //
-// ⚠️ lie-fi is fixme'd for a DIFFERENT, older bug, reproduced with no mid-save race at all and on
-// the code from before either fix: in lie-fi the exercise's cached summary (keyed on "no live
-// session", fetched before the ended workout) is still being retried when Log set is tapped, and
-// the record check reads it before falling back to history. Recorded here as the reproduction; it
-// belongs fixed or on resilience.md's register -- not silently passing.
+// ⚠️ lie-fi AND online are fixme'd for a DIFFERENT, older bug, reproduced with no mid-save race at
+// all and on the code from before either fix. The exercise's cached summary (keyed on "no live
+// session", fetched before the ended workout) is what the record check reads while it is being
+// refetched -- online for one round trip, in lie-fi for the whole retry run -- and it predates the
+// workout, so the set is judged as the first ever. Only when the summary is paused (hard offline,
+// pinned) or has errored does the check fall back to history, which is what the history fetch in
+// LOG_SET's onSettled fixed. Online passes locally (a ~5ms round trip beats the tap) and failed 3/3
+// on lower; an ordinary-workout control with 800ms on the summary fails 3/3 on both sides of today's
+// fixes. Recorded here as the reproduction; it belongs fixed or on resilience.md's register -- not
+// silently passing.
 forEachConnectivityMode<State>('a workout ended mid-save still counts toward the next workout\'s records', {
   setup: (page, request) => endWorkoutMidSave(page, request, 'Chin-up', 10),
 
@@ -129,7 +134,7 @@ forEachConnectivityMode<State>('a workout ended mid-save still counts toward the
     heldEnd.release();
   },
 
-  fixmeModes: ['lie-fi'],
+  fixmeModes: ['lie-fi', 'online'],
 });
 
 async function workoutsOnServer(request: APIRequestContext, email: string) {

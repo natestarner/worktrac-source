@@ -111,7 +111,7 @@ It was red 3/3 in hard-offline with the fetch reverted, and green with it.
 Rejected: letting the Log tab always fetch history (undoes part of 09-22 everywhere) and
 `refetchQueries({ type: 'all' })` (TanStack skips a query whose only observer is disabled).
 
-### A separate, pre-existing bug found alongside it — lie-fi (NOT fixed)
+### A separate, pre-existing bug found alongside it — lie-fi and online (NOT fixed)
 
 In **lie-fi**, the same no-false-record spec still failed with the history fetch in place. A
 control with **no mid-save race at all** (an ordinary workout whose set lands long before End)
@@ -122,8 +122,20 @@ on "no live session" and was fetched before the last workout). The record check 
 summary before the fallback to history kicks in, which only happens once the retries give up.
 `parity-pr-celebration`'s setup has long worked around this by re-opening the exercise online.
 
-It is recorded as `fixmeModes: ['lie-fi']` on the new spec, which is the reproduction. It is not
-sanctioned: it belongs fixed or on `resilience.md`'s register, and that decision is open.
+**Online too, on lower.** The deploy of that fix went red on the same spec in **online**, 3/3,
+while it passed locally. The trace shows that the history fetch worked (it landed before the tap).
+Re-opening the exercise started a summary refetch, but Log set was tapped before it returned.
+Online, the record check reads the cached summary, not history, and that summary predates the
+workout. Locally the refetch returns in about 5ms and wins. A control with an ordinary workout (no
+race) and 800ms on the summary request fails 3/3 on the current code **and** on the code from
+before either fix.
+
+The bug is the same in both modes. The null-key summary is never refreshed when a workout ends,
+and until its refetch lands, the record check trusts it over history.
+
+It is recorded as `fixmeModes: ['lie-fi', 'online']` on the new spec, which is the reproduction.
+Hard-offline and pinned-offline still guard the history fix. It is not sanctioned: it belongs
+fixed or on `resilience.md`'s register, and that decision is open.
 
 ## Takeaways
 

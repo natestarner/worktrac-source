@@ -298,11 +298,14 @@ the workout existed, and degraded, the next workout's first set is celebrated as
 The resurrection bug had been doing that refresh by accident. `prefetchQuery` with `staleTime: 0`
 (the entry looks fresh from moments earlier). Don't drop it as redundant with the invalidation.
 
-**Known open bug, not fixed: a false "first time" record in lie-fi.** Opening an exercise whose
-cached summary (keyed on "no live session") predates the last workout, then logging immediately:
-the record check reads the stale summary while its fetch is still retrying, before the fallback to
-history. Reproduced with no race and on pre-2026-09-23 code. `parity-end-workout-mid-save.spec.ts`
-carries it as `fixmeModes: ['lie-fi']`.
+**Known open bug, not fixed: a false "first time" record, online and in lie-fi.** Open an
+exercise whose cached summary (keyed on "no live session") predates the last workout, then log
+immediately. The record check reads that stale summary while its refetch is in flight: for one
+round trip online, and for the whole retry run in lie-fi. It falls back to history only once the
+summary is paused or errored. The summary is never refreshed when a workout ends. This was
+reproduced with no race and on pre-2026-09-23 code. Locally only lie-fi shows it (a ~5ms round
+trip beats the tap); lower's latency shows it online too. `parity-end-workout-mid-save.spec.ts`
+carries it as `fixmeModes: ['lie-fi', 'online']`.
 
 **A reader of the RAW `liveSession` cache must treat an ended session as absent.** The hook
 suppresses one, but the cache can still hold it (restored, or fetched back before its end reached
