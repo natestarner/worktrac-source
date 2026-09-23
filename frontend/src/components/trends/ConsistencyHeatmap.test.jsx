@@ -74,4 +74,27 @@ describe('ConsistencyHeatmap', () => {
     fireEvent.click(screen.getByTestId('heat-2026-07-15'));
     expect(screen.getByText('Wed, Jul 15: 8 sets across 1 workout')).toBeInTheDocument();
   });
+
+  // jsdom computes no layout, so the pixel-scrolling claim itself can only be proven in e2e
+  // (trends.spec.ts) -- this pins the thing that IS visible from here: the day labels stay
+  // pinned to the scroll container rather than the page.
+  it('pins the weekday labels to the scroll container, not the page', () => {
+    render(<ConsistencyHeatmap workoutDays={[]} />);
+    const dayLabels = screen.getByTestId('consistency-day-labels');
+    expect(dayLabels).toHaveStyle({ position: 'sticky', left: '0px' });
+  });
+
+  it('scrolls the grid container to its end on mount, so it opens on the most recent days', () => {
+    // jsdom hardcodes scrollWidth at 0 for every element (it lays nothing out), which would make
+    // this assertion pass whether or not the effect ever ran. Stub it so the effect's assignment
+    // (scrollLeft = scrollWidth) has a real, non-zero value to prove it copied.
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollWidth');
+    Object.defineProperty(Element.prototype, 'scrollWidth', { configurable: true, value: 3000 });
+    try {
+      render(<ConsistencyHeatmap workoutDays={[]} />);
+      expect(screen.getByTestId('consistency-scroll').scrollLeft).toBe(3000);
+    } finally {
+      Object.defineProperty(Element.prototype, 'scrollWidth', original);
+    }
+  });
 });

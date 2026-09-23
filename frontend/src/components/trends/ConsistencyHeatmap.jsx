@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildGrid, monthLabels, DAYS_PER_WEEK, HEATMAP_WEEKS } from './consistencyGrid';
 import ChartHelp from '../shared/ChartHelp';
 import { CONSISTENCY_HELP } from './chartHelp';
@@ -48,12 +48,22 @@ function Legend() {
 
 export default function ConsistencyHeatmap({ workoutDays }) {
   const [activeKey, setActiveKey] = useState(null);
+  const scrollRef = useRef(null);
 
   const cells = useMemo(() => buildGrid(workoutDays), [workoutDays]);
   const labels = useMemo(() => monthLabels(cells), [cells]);
 
   const activeCell = cells.find((c) => c.key === activeKey) || null;
   const activeDays = cells.filter((c) => c.setCount > 0).length;
+
+  // The grid always ends at today, so on a phone narrow enough to scroll it, the interesting
+  // edge is the right one -- open there rather than making someone swipe past 6 months of the
+  // past to reach the present. jsdom lays out nothing, so scrollWidth is always 0 there; this is
+  // a real-browser-only effect, proven in e2e (trends.spec.ts), same as ChartHelp's clamp.
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (node) node.scrollLeft = node.scrollWidth;
+  }, []);
 
   return (
     <Card size="dense">
@@ -68,9 +78,24 @@ export default function ConsistencyHeatmap({ workoutDays }) {
       </div>
 
       {/* Narrow phones scroll the grid rather than squeezing the squares below tap size. */}
-      <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
+      <div ref={scrollRef} data-testid="consistency-scroll" style={{ overflowX: 'auto', paddingBottom: 4 }}>
         <div style={{ display: 'flex', gap: 6, minWidth: 'min-content' }}>
-          <div style={{ display: 'grid', gridTemplateRows: `repeat(${DAYS_PER_WEEK}, ${CELL}px)`, gap: GAP, paddingTop: 16 }}>
+          {/* Sticky within the scroll container (not the page), so the weekday labels stay
+              readable at whatever week someone has scrolled to. Needs its own background -- it's
+              sitting in front of grid cells now, not beside them. */}
+          <div
+            data-testid="consistency-day-labels"
+            style={{
+              display: 'grid',
+              gridTemplateRows: `repeat(${DAYS_PER_WEEK}, ${CELL}px)`,
+              gap: GAP,
+              paddingTop: 16,
+              position: 'sticky',
+              left: 0,
+              background: 'var(--color-surface)',
+              zIndex: 1,
+            }}
+          >
             {DAY_LABELS.map((label, i) => (
               <div key={i} style={{ fontSize: 9, lineHeight: `${CELL}px`, color: 'var(--color-muted)', textAlign: 'right' }}>
                 {label}
