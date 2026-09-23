@@ -4,6 +4,7 @@ import { onlineManager, MutationObserver, QueryClient, QueryClientProvider } fro
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
 import { queryKeys } from '../../api/queryKeys';
+import { markSessionEnded } from '../../lib/endedSessions';
 import { registerOfflineMutationDefaults } from '../../lib/queryClient';
 import ExerciseDetail from './ExerciseDetail';
 import { useAuth } from '../../context/AuthContext';
@@ -1219,6 +1220,32 @@ describe('ExerciseDetail in-flight visual feedback', () => {
       );
     } finally {
       onlineManager.setOnline(true);
+    }
+  });
+
+  // The raw cache can still hold a session this device has ENDED -- useLiveSession hides it, so
+  // this screen sees no session, but `prev ?? placeholder` used to keep it, leaving the new workout
+  // with no placeholder at all: no banner, no dot. docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md
+  it('seeds a fresh provisional session over an ended one left in the cache', async () => {
+    listSessionSets.mockResolvedValue([]);
+    logLiveSet.mockImplementation(() => new Promise(() => {}));
+    const { queryClient } = renderExerciseDetail({ liveSession: null });
+    queryClient.setQueryData(queryKeys.liveSession(7), { id: 88, startedAt: '2026-09-23T10:00:00Z' });
+    markSessionEnded(7, 88);
+
+    onlineManager.setOnline(false);
+    try {
+      fireEvent.click(await screen.findByText('Log set'));
+
+      await waitFor(() =>
+        expect(queryClient.getQueryData(queryKeys.liveSession(7))).toEqual(
+          expect.objectContaining({ id: null, startedAt: expect.any(String) }),
+        ),
+      );
+    } finally {
+      onlineManager.setOnline(true);
+      // No global storage reset between tests -- don't leave an ended id behind for later ones.
+      localStorage.removeItem('worktrac-ended-session:7');
     }
   });
 

@@ -82,6 +82,10 @@ load-bearing together:
 - **The session promotion is guarded on `mode !== 'session'` and `isSessionEnded`.** A
   `mode: 'session'` response carries the PAST session being edited, not the live one; and a set
   replaying after End Workout must not resurrect a finished session into the cache.
+- **…and a create the End recorded (`isCreateInEndedWorkout`) marks its session ended first.** A
+  workout ended before its first set synced has no id at the tap, so its session is only
+  identifiable when that set lands. The mark must come BEFORE the `isSessionEnded` guard, which
+  then skips the promotion. `docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md`.
 
 **None of this may become a connectivity branch.** It sits behind `if (data?.set?.id &&
 data?.session?.id)`, and `data` is non-undefined only when the server answered — so it is

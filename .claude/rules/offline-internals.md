@@ -278,7 +278,23 @@ corrects it on the next refetch; **offline nothing can**, so it stands for the w
 clear (`EndWorkoutConfirmModal`), which `useLiveSession` consults. localStorage specifically
 because the write cannot be beaten by a reload — the same reasoning as `offlineMode.js`'s manual
 pin and `outboxPersistence.js`'s scope pointer. The marker is never cleared and needs no
-clearing: it suppresses exactly one id, and session ids are never reused.
+clearing: each id suppresses exactly one session, and session ids are never reused. It holds the
+**last ten** ended ids per person, not one: two workouts ended offline replay as create, end,
+create, end, and a single slot let marking the second unmark the first.
+
+**Ending a workout with no session id yet** (its first set still saving, or everything logged
+offline) has no id to mark. The End records the **tempIds of the pending live-set creates** instead
+(`markCreatesEnded`), and when one lands, `LOG_SET`'s onSettled marks the session in its response
+ended **before** the promotion guard runs. Without it, the response wrote the ended workout back as
+live, and the next workout's sets were shown as part of it ("Set 2" on a first set) — for the
+whole outage when degraded. tempIds, never the tap's time: `clientLoggedAt` is the device clock,
+and a clock correction between the tap and the next set would misfile a new workout.
+`docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md`.
+
+**A reader of the RAW `liveSession` cache must treat an ended session as absent.** The hook
+suppresses one, but the cache can still hold it (restored, or fetched back before its end reached
+the server). `ExerciseDetail`'s placeholder seed kept it via `prev ?? placeholder`, so the new
+workout got no placeholder — no banner, no dot. It now seeds over an ended `prev`.
 
 **Any other cache entry whose staleness would be actively wrong rather than merely old needs the
 same treatment** — a throttled persist plus a reload you can't predict means the query cache alone

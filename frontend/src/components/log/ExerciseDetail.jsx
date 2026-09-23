@@ -21,6 +21,7 @@ import {
   isUnsyncedWrite,
 } from '../../lib/queryClient';
 import { deleteQueuedSet } from '../../lib/offlineSetEdits';
+import { isSessionEnded } from '../../lib/endedSessions';
 import { comparableValue, computePrefillDraft, convertWeight, epley } from '../../utils/formulas';
 import { isFirstEver, setPrTypes } from '../../utils/prDetection';
 import {
@@ -391,9 +392,14 @@ export default function ExerciseDetail({
           // never clobbers a real (or already-seeded) session. The real session (with the
           // correct startedAt) replaces this once it actually syncs, via the registered
           // liveSession invalidation; EndWorkoutConfirmModal already clears it the same way.
+          //
+          // ...except an ENDED session, which is not "a real session" to keep. The raw cache can
+          // still hold one that useLiveSession suppresses -- restored after a reload (2026-08-08), or
+          // fetched back before its end reached the server -- and keeping it here left the new
+          // workout with no placeholder at all: no banner, no dot, while its sets were logged.
           queryClient.setQueryData(
             queryKeys.liveSession(personId),
-            (prev) => prev ?? { id: null, startedAt: vars.clientLoggedAt },
+            (prev) => (prev && !isSessionEnded(personId, prev.id) ? prev : { id: null, startedAt: vars.clientLoggedAt }),
           );
           setJustAddedSetId(vars.tempId);
           return {};
