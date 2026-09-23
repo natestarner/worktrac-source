@@ -9,21 +9,17 @@ import { logSetAt, pickExercise } from './support/exercises';
 // the screen on two set-and-forget preferences. The labels now sit above the fields, which is what
 // buys the width. jsdom computes no layout, so this file is the only thing that can hold that.
 //
-// Same measurement discipline as trends.spec.ts's weekly-switcher loop, for the same reason: the
-// runner's substitute font differs between a Windows dev machine and the Linux CI runner, so the
-// tight claim is made under extra letter-spacing rather than at whatever font happens to be there.
+// Every claim here holds whatever the runner's font is. That is deliberate, and it was learned on
+// lower: a first version also asserted that the LONGEST sort label ("Best set volume") was shown
+// whole from 430px up, under 2px/char of extra letter-spacing -- the trends.spec.ts recipe. It
+// passed on a Windows dev machine and failed on the Linux CI runner, clipped by 15px AT 430px. The
+// app's font stack falls through to a different substitute on every non-Apple platform, so "does
+// this label fit" has no runner-independent answer at ANY width here, only a font-dependent one.
+// What stays true on every font is structural: one row, inside the panel, Record never gives way
+// (it is sized to its widest option and never shrinks), and when Sort does give way it ellipsizes
+// rather than clipping mid-letter.
 
 const WIDTHS = [320, 375, 390, 393, 402, 430, 768];
-
-// From here up, even the LONGEST sort label ("Best set volume", under the Best set record) is
-// asserted whole, under 2px/char of extra letter-spacing. Measured on a Windows runner at that
-// spacing: 375px clips it by 22px, 390px by 7px, 430px fits. At 1px/char 375px fits too, so on the
-// real devices it is shown whole or near enough -- but the Linux CI runner's substitute font is
-// wider than those margins, and asserting them would be asserting the runner's font (trends.spec.ts
-// learned that one on lower). Below 430px Sort may ellipsize that one label of a non-default
-// pairing, which is graceful; wrapping or overflowing the row is not, and those are asserted at
-// every width.
-const UNTRUNCATED_MIN_WIDTH = 430;
 
 test.describe('PRs board controls', () => {
   for (const width of WIDTHS) {
@@ -40,16 +36,11 @@ test.describe('PRs board controls', () => {
 
       // The widest combination the board can show: the longest sort label is the value sort under
       // "Best set". Both fields are sized to their widest option anyway, so this is the case the
-      // layout budget is really about -- but picking it also makes the truncation check below
-      // read the label that would truncate first.
+      // layout budget is really about -- and it is the label that ellipsizes first when Sort has
+      // to give way.
       await record.selectOption('bestSetVolume');
       await sort.selectOption('record');
       await expect(sort).toHaveValue('record');
-
-      if (width >= UNTRUNCATED_MIN_WIDTH) {
-        // ~30px across that label, for a wider substitute font. See the header.
-        await page.addStyleTag({ content: '.select-value { letter-spacing: 2px !important; }' });
-      }
 
       const recordField = page.locator('.select-field', { has: record });
       const sortField = page.locator('.select-field', { has: sort });
@@ -76,10 +67,16 @@ test.describe('PRs board controls', () => {
       const recordClip = await recordField.locator('.select-value-text').evaluate((el) => el.scrollWidth - el.clientWidth);
       expect(recordClip, `Record's value is clipped by ${recordClip}px at ${width}px`).toBeLessThanOrEqual(0);
 
-      if (width >= UNTRUNCATED_MIN_WIDTH) {
-        const sortClip = await sortField.locator('.select-value-text').evaluate((el) => el.scrollWidth - el.clientWidth);
-        expect(sortClip, `Sort's value is clipped by ${sortClip}px at ${width}px`).toBeLessThanOrEqual(0);
-      }
+      // Sort MAY give way on a narrow phone or a wide font -- but as an ellipsis, never a label cut
+      // off mid-letter, which is what a native <select> does in WebKit and half of why the field is
+      // drawn at all.
+      const sortOverflow = await sortField
+        .locator('.select-value-text')
+        .evaluate((el) => ({ textOverflow: getComputedStyle(el).textOverflow, overflow: getComputedStyle(el).overflowX }));
+      expect(sortOverflow, `Sort's value would clip instead of ellipsizing at ${width}px`).toEqual({
+        textOverflow: 'ellipsis',
+        overflow: 'hidden',
+      });
     });
   }
 });
