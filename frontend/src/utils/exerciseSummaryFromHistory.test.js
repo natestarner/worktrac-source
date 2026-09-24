@@ -3,6 +3,7 @@ import {
   deriveExerciseSummaryFromHistory,
   mergeBestWithHistory,
   mergeBestWithLocalSets,
+  mergeLastSessionWithHistory,
   mergePriorWithHistory,
 } from './exerciseSummaryFromHistory';
 import { comparableLb } from './formulas';
@@ -382,5 +383,94 @@ describe('mergePriorWithHistory', () => {
     expect(mergePriorWithHistory('abc', 100)).toBe(100);
     expect(mergePriorWithHistory(NaN, null)).toBeNull();
     expect(mergePriorWithHistory(Infinity, 5)).toBe(5);
+  });
+});
+
+// #326's second half: "Last time" (and the weight prefill it seeds) had the same out-of-date
+// summary problem as the record priors. The server's lastSession and deriveLastSession pick the same
+// session by the same rule (most recent by startedAt with sets for the exercise, sets in createdAt
+// order), so taking the MORE RECENT of the two is taking the fresher answer.
+describe('mergeLastSessionWithHistory', () => {
+  const last = (sessionId, startedAt, reps = [10], note = null) => ({
+    sessionId,
+    startedAt,
+    sets: reps.map((r) => ({ weight: 0, reps: r, durationSeconds: null, unit: 'lb' })),
+    note,
+  });
+
+  it('returns null when neither side has a last session', () => {
+    expect(mergeLastSessionWithHistory(null, null)).toBeNull();
+    expect(mergeLastSessionWithHistory(undefined, undefined)).toBeNull();
+  });
+
+  // The exercise-notes flake: a summary fetched before the workout's set had landed.
+  it('returns history\'s when the summary has none', () => {
+    const fromHistory = last(2, '2026-09-22T12:00:00Z');
+
+    expect(mergeLastSessionWithHistory(null, fromHistory)).toBe(fromHistory);
+    expect(mergeLastSessionWithHistory(undefined, fromHistory)).toBe(fromHistory);
+  });
+
+  it('returns the summary\'s untouched when history has nothing usable', () => {
+    const fromSummary = last(1, '2026-09-20T12:00:00Z');
+
+    for (const nothing of [null, undefined, {}, 'x', 42, { sessionId: 2 }, { sessionId: 2, startedAt: 'not a date', sets: [] }, { sessionId: 2, startedAt: '2026-09-22T12:00:00Z', sets: 'x' }]) {
+      expect(mergeLastSessionWithHistory(fromSummary, nothing)).toBe(fromSummary);
+    }
+  });
+
+  it('never lets a malformed summary entry beat a real history one, and never throws on one', () => {
+    const fromHistory = last(2, '2026-09-22T12:00:00Z');
+
+    expect(mergeLastSessionWithHistory({}, fromHistory)).toBe(fromHistory);
+    expect(mergeLastSessionWithHistory({ sessionId: 1, startedAt: null, sets: [] }, fromHistory)).toBe(fromHistory);
+  });
+
+  it('returns whatever the summary held when both are unusable', () => {
+    const malformed = {};
+
+    expect(mergeLastSessionWithHistory(malformed, null)).toBe(malformed);
+  });
+
+  // The realistic one: the summary still names the workout before last.
+  it('takes history\'s when it names a more recent session', () => {
+    const stale = last(1, '2026-09-20T12:00:00Z', [10]);
+    const fresh = last(2, '2026-09-22T12:00:00Z', [12], 'felt strong');
+
+    expect(mergeLastSessionWithHistory(stale, fresh)).toBe(fresh);
+  });
+
+  // ⚠️ The Free-tier guard: a Free household's history is window-clamped, so it can only ever MISS
+  // a session the summary knows, never be ahead of it in a way the summary is not. A more recent
+  // summary session wins.
+  it('keeps the summary\'s when it names the more recent session', () => {
+    const fromSummary = last(3, '2026-09-24T12:00:00Z');
+
+    expect(mergeLastSessionWithHistory(fromSummary, last(2, '2026-09-22T12:00:00Z'))).toBe(fromSummary);
+  });
+
+  // Same workout, possibly fetched at different moments: neither copy can be shown to be fresher,
+  // so this stays exactly what the screen showed before this change.
+  it('keeps the summary\'s copy when both name the same session', () => {
+    const fromSummary = last(2, '2026-09-22T12:00:00Z', [10]);
+
+    expect(mergeLastSessionWithHistory(fromSummary, last(2, '2026-09-22T12:00:00Z', [10, 8]))).toBe(fromSummary);
+  });
+
+  it('keeps the summary\'s on an exact start-time tie between two sessions (strict >)', () => {
+    const fromSummary = last(1, '2026-09-22T12:00:00Z');
+
+    expect(mergeLastSessionWithHistory(fromSummary, last(2, '2026-09-22T12:00:00Z'))).toBe(fromSummary);
+  });
+
+  // ExerciseDetail passes the result to an effect's dependency list, so it must be one of its two
+  // inputs -- never a freshly built object, which would re-run the effect on every render.
+  it('always returns one of its inputs by reference, never a new object', () => {
+    const a = last(1, '2026-09-20T12:00:00Z');
+    const b = last(2, '2026-09-22T12:00:00Z');
+
+    expect([a, b]).toContain(mergeLastSessionWithHistory(a, b));
+    expect([a, b]).toContain(mergeLastSessionWithHistory(b, a));
+    expect(mergeLastSessionWithHistory(a, a)).toBe(a);
   });
 });

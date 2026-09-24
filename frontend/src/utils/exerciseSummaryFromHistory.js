@@ -213,8 +213,8 @@ export function mergeHeaviestWithLocalSets(heaviestLb, sets) {
 // uncelebrated. The client cannot tell which source is stale; a missed celebration is the cheaper
 // mistake.
 //
-// Deliberately NOT applied to `lastSession` ("Last time" and the weight prefill) -- that is a
-// separate, later change.
+// `lastSession` ("Last time" and the weight prefill) gets the same treatment, by recency rather
+// than by max -- see mergeLastSessionWithHistory at the end of this block.
 
 // A best that can be ranked: an object whose comparableValue is a real number. Anything else --
 // null, a partial row, a cached shape from an older build -- is "nothing on record" and never wins.
@@ -247,4 +247,39 @@ export function mergePriorWithHistory(value, historyValue) {
   if (a == null) return b;
   if (b == null) return a;
   return Math.max(a, b);
+}
+
+// A last session that can be compared: an id, a parseable start and a set list. Anything else --
+// a partial row, a cached shape from an older build -- is "nothing known" and never wins.
+function isUsableLastSession(last) {
+  return (
+    last != null &&
+    typeof last === 'object' &&
+    last.sessionId != null &&
+    Number.isFinite(Date.parse(last.startedAt)) &&
+    Array.isArray(last.sets)
+  );
+}
+
+// "Last time" is the summary's lastSession checked against history's -- the same out-of-date
+// no-live-session summary as the priors above, just a different field. Here "stronger" means MORE
+// RECENT: StatsService#buildLastSession and deriveLastSession pick the same session by the same rule
+// (most recent by startedAt among sessions with sets for the exercise, sets in createdAt order), so
+// whichever names the later session is the fresher answer.
+//
+//   - Same session on both sides: the summary's copy, i.e. exactly what the card showed before this.
+//     Two copies of one workout fetched at different moments cannot be ranked by freshness.
+//   - A strict `>` on startedAt, so a tie between two sessions also keeps the summary's.
+//   - The Free-tier window can only make history MISS a session, never be ahead of the summary, so
+//     a more recent summary session wins and nothing a Free household knows is hidden by this.
+//   - Accepted cost, the same as the priors': a session deleted or edited on another device can
+//     linger in history until it refetches (up to its 60s staleTime) and show here for that long.
+//
+// ⚠️ ALWAYS returns one of its two inputs, never a new object. ExerciseDetail puts the result in an
+// effect's dependency list (the prefill recorder); a fresh object per render would re-run it forever.
+export function mergeLastSessionWithHistory(lastSession, historyLastSession) {
+  if (!isUsableLastSession(historyLastSession)) return lastSession ?? null;
+  if (!isUsableLastSession(lastSession)) return historyLastSession;
+  if (historyLastSession.sessionId === lastSession.sessionId) return lastSession;
+  return Date.parse(historyLastSession.startedAt) > Date.parse(lastSession.startedAt) ? historyLastSession : lastSession;
 }

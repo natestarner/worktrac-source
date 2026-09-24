@@ -391,6 +391,12 @@ the re-seed that write triggers has fired before the next call types anything. *
   break unrelated specs elsewhere on the same screen. Put the repeated name in an `aria-label`,
   not visible text.
 - `new RegExp(email)` breaks on the `+` in `huddle+e2e-...` addresses — escape it.
+- **An in-page frame sampler must read `textContent`, never `innerText`.** `innerText` applies CSS,
+  and the Log screen's card labels are `text-transform: uppercase` — so it reads "LAST TIME", a
+  match on "Last time" never fires, and the sampler reports "never saw it" against the unfixed
+  code. `parity-stale-summary-record.spec.ts`'s Last-time sampler passed vacuously for exactly this
+  reason until it was run red-first. (Playwright's own `getByText` matches the DOM text, so it is
+  unaffected — this bites only hand-written `page.evaluate` checks.)
 
 ## Cleanup
 
