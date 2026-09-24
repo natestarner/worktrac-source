@@ -192,9 +192,32 @@ gym basement was silently never celebrated.
   Losing a rep because the confetti broke is the worst possible trade.
 - **It cannot double-fire.** A replay has no observer, so `handleLogSet` is never reached twice for
   one set.
-- **Prior bests come from `exerciseSummary`, NOT from `history`.** `getSummary` applies no Free-tier
-  window (unlike `getPrList`), so a Free household is never congratulated for beating a 90-day best.
-  Deriving them from the `history` cache instead would silently reintroduce that.
+- **Prior bests come from `exerciseSummary`, checked against `history` — never replaced by it.**
+  `getSummary` applies no Free-tier window (unlike `getPrList`), so a Free household is never
+  congratulated for beating a 90-day best; deriving the priors from the window-clamped `history`
+  cache *instead* would reintroduce that. But the summary alone was wrong the other way (#326): its
+  no-live-session cache entry is fetched before a workout and never refreshed when that workout
+  ends, so until its refetch lands (a round trip online, the whole retry run in lie-fi) it can be a
+  workout or more out of date — "New PR! · Most reps · 11" with 12 done last time. So every prior
+  (est.-1RM best, top weight, session volume) is the **stronger** of the two:
+  `exerciseSummaryFromHistory.js#mergeBestWithHistory` / `#mergePriorWithHistory`.
+  - **A max is what makes adding history safe.** Each source is at or below the true best, so the
+    stronger one is too — it can withhold a false record and never invent one. The Free-tier guard
+    holds because the summary still wins whenever it knows more.
+  - **It feeds `effectiveBest`, not just the celebration**, so the Best card, the close-to-a-PR hint
+    and the celebration cannot disagree. Folding it into `handleLogSet` alone would let the hint
+    promise a record the celebration then refuses.
+  - **Session volume is merged in ONE kind**: both kinds join `mergeVolumeKinds`, and each prior is
+    re-expressed through `priorSessionVolume` *before* the max. Never compare the two raw numbers.
+  - **Accepted cost, pinned in `ExerciseDetail.test.jsx`:** right after the best set is edited down
+    or deleted, `history` can be the stale-HIGH source until it refetches (a round trip on the same
+    device, up to its 60s `staleTime` from another), and a genuine record between the two values goes
+    uncelebrated. The client cannot tell which source is stale; a missed celebration is the cheaper
+    mistake.
+  - **Not a connectivity branch** — one code path in every mode, and the identity while paused or
+    errored (there `summary` *is* `derivedSummary`). No row on `resilience.md`'s register.
+  - `lastSession` ("Last time", and the weight prefill it seeds) is deliberately **not** merged yet;
+    it is still the summary's alone, and can show the workout before last for the same window.
 
 ### Session volume is a CROSSING, not a flag — don't key it on a session id
 

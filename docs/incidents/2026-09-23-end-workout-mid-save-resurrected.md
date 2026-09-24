@@ -111,7 +111,7 @@ It was red 3/3 in hard-offline with the fetch reverted, and green with it.
 Rejected: letting the Log tab always fetch history (undoes part of 09-22 everywhere) and
 `refetchQueries({ type: 'all' })` (TanStack skips a query whose only observer is disabled).
 
-### A separate, pre-existing bug found alongside it — lie-fi and online (NOT fixed)
+### A separate, pre-existing bug found alongside it — lie-fi and online (FIXED in #326, 2026-09-24)
 
 In **lie-fi**, the same no-false-record spec still failed with the history fetch in place. A
 control with **no mid-save race at all** (an ordinary workout whose set lands long before End)
@@ -133,9 +133,28 @@ before either fix.
 The bug is the same in both modes. The null-key summary is never refreshed when a workout ends,
 and until its refetch lands, the record check trusts it over history.
 
-It is recorded as `fixmeModes: ['lie-fi', 'online']` on the new spec, which is the reproduction.
-Hard-offline and pinned-offline still guard the history fix. It is not sanctioned: it belongs
-fixed or on `resilience.md`'s register, and that decision is open.
+It was recorded as `fixmeModes: ['lie-fi', 'online']` on the new spec until it was fixed.
+
+**Fixed (2026-09-24, #326).** It was not only a "first time" bug: the same stale summary also
+celebrated a set against a best already beaten (12 reps last time, 11 today, "New PR!"), and that
+version is what a real person hits on weak gym signal. The record priors (est.-1RM best, top weight,
+session volume) are now the **stronger** of the summary's and history's
+(`exerciseSummaryFromHistory.js#mergeBestWithHistory` / `#mergePriorWithHistory`). A max can only
+raise the bar, which is what keeps the Free-tier rule intact: the unclamped summary still wins
+whenever it knows more. The cache was deliberately left alone. Invalidating the no-session key on
+End refreshes nothing (TanStack refetches only active queries, and the exercise screen is usually
+gone by then), and forcing a refetch would be a per-exercise fan-out in the cache-timing area this
+incident is about.
+
+- Measured on the unfixed code with an 800ms summary delay, 3 runs per mode: online and lie-fi
+  failed every run, both for the "first time" case and the out-of-date-best case; hard-offline and
+  pinned passed. With the fix: all four modes, 5 runs each, pass.
+- `parity-stale-summary-record.spec.ts` is the reproduction, with no mid-save race in it. The
+  records spec above runs in every mode again, with its assertion reordered (row first, then the
+  overlay) so it cannot pass before the overlay had a chance to render.
+- **Accepted cost:** right after the best set is edited down or deleted, `history` can be the
+  stale-high source until it refetches, and a genuine record between the two values goes
+  uncelebrated for that window. Pinned in `ExerciseDetail.test.jsx`, and in `log-screen.md`.
 
 ## Takeaways
 

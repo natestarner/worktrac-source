@@ -190,3 +190,61 @@ export function mergeHeaviestWithLocalSets(heaviestLb, sets) {
   }
   return merged;
 }
+
+// ## The two merges below: the server summary's priors, checked against `history` (#326)
+//
+// ExerciseDetail's summary query is keyed on "no live session" between workouts, so the entry it
+// reads on the next visit was fetched BEFORE the last workout and is never refreshed when that
+// workout ends. staleTime 0 revalidates it on mount, but until that refetch lands -- one round
+// trip online, the whole retry run in lie-fi -- it is a workout (or several) out of date. A record
+// check in that window judged the set against a best that no longer stood: "New PR! · Most reps · 11"
+// with 12 done last time, or "First time logging this one" on an exercise done the week before.
+// `history` does not share the collapsed key and is refetched after every set, so the record priors
+// take the STRONGER of the two.
+//
+// ⚠️ A MAX, and that is what makes it safe to add history here at all. `history` is Free-tier
+// window-clamped and the summary is not (log-screen.md), so REPLACING the summary with history would
+// congratulate a Free household for beating a 90-day best. Each source is at or below the true best,
+// so the stronger of them is too: this can withhold a false record, never invent one.
+//
+// The accepted cost, pinned in ExerciseDetail.test.jsx: right after the best set is edited down or
+// deleted, `history` can be the stale-HIGH source until it refetches (a round trip on the same
+// device, up to its 60s staleTime from another), and a genuine record between the two values goes
+// uncelebrated. The client cannot tell which source is stale; a missed celebration is the cheaper
+// mistake.
+//
+// Deliberately NOT applied to `lastSession` ("Last time" and the weight prefill) -- that is a
+// separate, later change.
+
+// A best that can be ranked: an object whose comparableValue is a real number. Anything else --
+// null, a partial row, a cached shape from an older build -- is "nothing on record" and never wins.
+function isRankableBest(best) {
+  return best != null && typeof best === 'object' && Number.isFinite(comparableValue(best));
+}
+
+// The stronger of the summary's best and history's, ranked like every other best (comparableValue,
+// strict `>` so the summary's stands on a tie). With no usable history best this returns `best`
+// untouched -- including whatever the summary held -- so a missing, empty or failed history leaves
+// the record check exactly as it was.
+export function mergeBestWithHistory(best, historyBest) {
+  if (!isRankableBest(historyBest)) return best ?? null;
+  if (!isRankableBest(best)) return historyBest;
+  return comparableValue(historyBest) > comparableValue(best) ? historyBest : best;
+}
+
+// The higher of two numeric priors (top weight, or a session volume already re-expressed in one
+// kind by sessionVolume.js#priorSessionVolume). null/undefined/non-numeric means "none on record".
+// ⚠️ 0 is a VALUE, not "none": prDetection and takesSessionVolumeRecord read null ("no earlier
+// session", a baseline) and 0 ("an earlier session of 0 lb") as different answers.
+export function mergePriorWithHistory(value, historyValue) {
+  const toPrior = (v) => {
+    if (v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const a = toPrior(value);
+  const b = toPrior(historyValue);
+  if (a == null) return b;
+  if (b == null) return a;
+  return Math.max(a, b);
+}

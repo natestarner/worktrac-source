@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { deriveExerciseSummaryFromHistory, mergeBestWithLocalSets } from './exerciseSummaryFromHistory';
+import {
+  deriveExerciseSummaryFromHistory,
+  mergeBestWithHistory,
+  mergeBestWithLocalSets,
+  mergePriorWithHistory,
+} from './exerciseSummaryFromHistory';
 import { comparableLb } from './formulas';
 
 const SQUAT = 1;
@@ -266,5 +271,116 @@ describe('deriveExerciseSummaryFromHistory session volume', () => {
       volumeKind: 'load',
       bestSessionVolume: 0,
     });
+  });
+});
+
+// #326. The server summary the celebration reads can be OUT OF DATE while its refetch is in flight
+// (online: one round trip; lie-fi: the whole retry run), because its no-live-session cache entry is
+// fetched before a workout and never refreshed when that workout ends. `history` is refreshed after
+// every set, so the priors take the STRONGER of the two. A max can only ever raise the bar -- each
+// source is at or below the true best -- so it can suppress a false record but never invent one.
+describe('mergeBestWithHistory', () => {
+  const best = (weight, reps, extra = {}) => ({ weight, reps, unit: 'lb', est1rm: 0, sessionStartedAt: '2026-09-01T12:00:00Z', ...extra });
+
+  it('returns the summary best untouched when history has nothing usable', () => {
+    const summaryBest = best(135, 8);
+
+    for (const nothing of [null, undefined, {}, { weight: 'x' }, 'not an object', 42]) {
+      expect(mergeBestWithHistory(summaryBest, nothing)).toBe(summaryBest);
+    }
+  });
+
+  // The false "first time" record: a summary fetched before the only earlier workout.
+  it('returns the history best when the summary has none', () => {
+    const historyBest = best(0, 10);
+
+    expect(mergeBestWithHistory(null, historyBest)).toBe(historyBest);
+    expect(mergeBestWithHistory(undefined, historyBest)).toBe(historyBest);
+  });
+
+  it('never lets a malformed summary best beat a real history best, and never throws on one', () => {
+    const historyBest = best(0, 10);
+
+    expect(mergeBestWithHistory({}, historyBest)).toBe(historyBest);
+    expect(mergeBestWithHistory({ weight: null, reps: 'x' }, historyBest)).toBe(historyBest);
+  });
+
+  it('returns null when neither side has a best, and whatever the summary held when both are unusable', () => {
+    expect(mergeBestWithHistory(null, null)).toBeNull();
+    expect(mergeBestWithHistory(undefined, undefined)).toBeNull();
+    const malformed = {};
+    expect(mergeBestWithHistory(malformed, null)).toBe(malformed);
+  });
+
+  // The realistic one: 12 reps last workout, a summary still saying 10.
+  it('takes the history best when it is stronger, keeping its own date', () => {
+    const stale = best(0, 10);
+    const fresh = best(0, 12, { sessionStartedAt: '2026-09-20T12:00:00Z' });
+
+    expect(mergeBestWithHistory(stale, fresh)).toBe(fresh);
+  });
+
+  // ⚠️ The Free-tier guard. `history` is window-clamped for a Free household and the summary is
+  // not, so an all-time best from outside the window lives only in the summary. It must still win.
+  it('keeps the summary best when it is stronger than anything history can see', () => {
+    const allTime = best(225, 5);
+    const insideWindow = best(185, 5);
+
+    expect(mergeBestWithHistory(allTime, insideWindow)).toBe(allTime);
+  });
+
+  it('keeps the summary best on an exact tie (strict >, so the recorded one stands)', () => {
+    const summaryBest = best(135, 8);
+
+    expect(mergeBestWithHistory(summaryBest, best(135, 8))).toBe(summaryBest);
+  });
+
+  it('is the identity when both sides are the same object (paused or errored: summary IS derived)', () => {
+    const same = best(135, 8);
+
+    expect(mergeBestWithHistory(same, same)).toBe(same);
+  });
+
+  it('ranks on comparableValue: reps at bodyweight, seconds for a hold, pounds across units', () => {
+    expect(mergeBestWithHistory(best(0, 10), best(0, 11)).reps).toBe(11);
+    expect(mergeBestWithHistory(best(0, 0, { durationSeconds: 60 }), best(0, 0, { durationSeconds: 90 })).durationSeconds).toBe(90);
+    // 100 kg x 5 is ~257 lb est. 1RM, well above 200 lb x 5.
+    const kg = { weight: 100, reps: 5, unit: 'kg', est1rm: 116.7, sessionStartedAt: '2026-09-20T12:00:00Z' };
+    expect(mergeBestWithHistory(best(200, 5), kg)).toBe(kg);
+  });
+});
+
+describe('mergePriorWithHistory', () => {
+  it('returns null when neither side has a value', () => {
+    expect(mergePriorWithHistory(null, null)).toBeNull();
+    expect(mergePriorWithHistory(undefined, undefined)).toBeNull();
+    expect(mergePriorWithHistory(null, undefined)).toBeNull();
+  });
+
+  it('returns the other side when one has no value', () => {
+    expect(mergePriorWithHistory(null, 10)).toBe(10);
+    expect(mergePriorWithHistory(135, undefined)).toBe(135);
+  });
+
+  it('takes the higher of two values', () => {
+    expect(mergePriorWithHistory(10, 12)).toBe(12);
+    expect(mergePriorWithHistory(225, 185)).toBe(225);
+  });
+
+  // 0 is a genuine prior (a bodyweight lift's top weight, an all-bodyweight history read in pounds),
+  // and prDetection/sessionVolume read null and 0 as different answers. Never collapse one into the
+  // other.
+  it('treats 0 as a real value, not as "none"', () => {
+    expect(mergePriorWithHistory(0, null)).toBe(0);
+    expect(mergePriorWithHistory(null, 0)).toBe(0);
+    expect(mergePriorWithHistory(0, 5)).toBe(5);
+  });
+
+  // The server sends BigDecimals, which can arrive as numbers or numeric strings.
+  it('accepts numeric strings and ignores anything non-numeric', () => {
+    expect(mergePriorWithHistory('135.00', 100)).toBe(135);
+    expect(mergePriorWithHistory('abc', 100)).toBe(100);
+    expect(mergePriorWithHistory(NaN, null)).toBeNull();
+    expect(mergePriorWithHistory(Infinity, 5)).toBe(5);
   });
 });

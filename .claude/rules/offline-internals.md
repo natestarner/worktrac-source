@@ -298,14 +298,18 @@ the workout existed, and degraded, the next workout's first set is celebrated as
 The resurrection bug had been doing that refresh by accident. `prefetchQuery` with `staleTime: 0`
 (the entry looks fresh from moments earlier). Don't drop it as redundant with the invalidation.
 
-**Known open bug, not fixed: a false "first time" record, online and in lie-fi.** Open an
-exercise whose cached summary (keyed on "no live session") predates the last workout, then log
-immediately. The record check reads that stale summary while its refetch is in flight: for one
-round trip online, and for the whole retry run in lie-fi. It falls back to history only once the
-summary is paused or errored. The summary is never refreshed when a workout ends. This was
-reproduced with no race and on pre-2026-09-23 code. Locally only lie-fi shows it (a ~5ms round
-trip beats the tap); lower's latency shows it online too. `parity-end-workout-mid-save.spec.ts`
-carries it as `fixmeModes: ['lie-fi', 'online']`.
+**Fixed (#326): a false record, online and in lie-fi, from a summary a workout out of date.** An
+exercise's cached summary (keyed on "no live session") is fetched before a workout and never
+refreshed when it ends, and the record check read it while its refetch was in flight — a round
+trip online, the whole retry run in lie-fi — so a set could be celebrated as a "first time", or as
+a record against a best already beaten. The priors are now the stronger of the summary's and
+history's (`log-screen.md` → "Prior bests come from `exerciseSummary`, checked against `history`").
+**The cache itself is unchanged**, deliberately: invalidating the no-session key when a workout
+ends refreshes nothing, because TanStack refetches only *active* queries and the exercise screen
+is usually gone by then, and forcing it would be a per-exercise fetch fan-out in exactly the area
+that seesawed. `parity-stale-summary-record.spec.ts` reproduces it with no mid-save race (its
+summary delay is the condition under test — locally a ~5ms round trip beats the tap), and
+`parity-end-workout-mid-save.spec.ts` runs in every mode again.
 
 **A reader of the RAW `liveSession` cache must treat an ended session as absent.** The hook
 suppresses one, but the cache can still hold it (restored, or fetched back before its end reached
