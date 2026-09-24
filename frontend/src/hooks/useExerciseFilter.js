@@ -16,6 +16,10 @@ export function useExerciseFilter(initialExerciseFilter = null) {
   const [text, setText] = useState('');
   const [selectedTagIds, setSelectedTagIds] = useState(() => new Set());
   const [exerciseFilter, setExerciseFilter] = useState(initialExerciseFilter);
+  // `{ from, to }` or null -- always a RANGE, even for one day (see utils/dateRange.js). Only
+  // History offers a date control; on PRs this simply stays null. Same lifetime as everything else
+  // here: gone on navigate-away, isolated per person by the caller's key remount.
+  const [dateRange, setDateRange] = useState(null);
 
   function toggleTag(tagId) {
     setSelectedTagIds((prev) => {
@@ -30,9 +34,21 @@ export function useExerciseFilter(initialExerciseFilter = null) {
     setText('');
     setSelectedTagIds(new Set());
     setExerciseFilter(null);
+    setDateRange(null);
   }
 
-  const isActive = !!(text.trim() || selectedTagIds.size || exerciseFilter);
+  const isActive = !!(text.trim() || selectedTagIds.size || exerciseFilter || dateRange);
 
-  return { text, setText, selectedTagIds, toggleTag, exerciseFilter, setExerciseFilter, clearAll, isActive };
+  return {
+    text,
+    setText,
+    selectedTagIds,
+    toggleTag,
+    exerciseFilter,
+    setExerciseFilter,
+    dateRange,
+    setDateRange,
+    clearAll,
+    isActive,
+  };
 }

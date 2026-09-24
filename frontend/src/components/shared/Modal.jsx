@@ -35,7 +35,8 @@ const FOCUSABLE_NOT_CLOSE = FOCUSABLE.split(', ')
 
 // `initialFocus` picks where focus lands on open:
 //   'first'  (default) -- the first real control, so a keyboard user starts on the name field,
-//             the note box or the first stepper rather than at the top of the page.
+//             the note box or the first stepper rather than at the top of the page. A descendant
+//             marked `data-autofocus` wins over DOM order.
 //   'dialog' -- the dialog container itself. For a modal whose first control is a SEGMENTED input
 //             (<input type="date"> / type="time">), where focusing it makes the browser highlight
 //             the active segment: the month reads as a stray selected number the moment the modal
@@ -77,7 +78,13 @@ export default function Modal({
     // Runs exactly once, on open -- see the ref note above. `initialFocus` is read rather than
     // depended on for the same reason: this effect is mount-only, and its value at mount is
     // exactly the one that matters.
-    const first = initialFocus === 'dialog' ? null : dialog.querySelector(FOCUSABLE_NOT_CLOSE);
+    // A child may name its own landing spot with `data-autofocus` -- the date picker's grid does,
+    // because the WAI-ARIA date-picker pattern lands on the selected (or today's) DAY, and the
+    // first control in DOM order there is "Previous month". A child's own mount effect cannot do
+    // this itself: children's effects run before this one, which would immediately move focus off
+    // whatever the child chose.
+    const first =
+      initialFocus === 'dialog' ? null : dialog.querySelector('[data-autofocus]') || dialog.querySelector(FOCUSABLE_NOT_CLOSE);
     (first || dialog).focus({ preventScroll: true });
 
     function onKeyDown(event) {

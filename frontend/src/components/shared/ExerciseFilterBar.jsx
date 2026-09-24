@@ -1,3 +1,8 @@
+import { useState } from 'react';
+import DatePickerSheet from './DatePickerSheet';
+import { IconCalendar } from './icons';
+import { formatDateRangeLabel } from '../../utils/dateRange';
+
 // Shared search + tag-filter chrome for History and PRs. Each tab instantiates its own
 // useExerciseFilter (see that hook), so a filter set on one tab never leaks into the other.
 //
@@ -5,6 +10,11 @@
 // TabsNav and eat scarce vertical space exactly where the landscape max-height:900px rules (see
 // index.css) make it scarcest. Not debounced -- consistent with the rest of the app (no debounce
 // utility exists anywhere) and filtering is a synchronous pass over an already-fetched array.
+//
+// DATE SEARCH is opt-in: it renders only when the caller passes `onDateRangeChange` (History does;
+// PRs, whose rows carry no session to date, does not). `dateRange` is always a `{ from, to }`
+// range -- one day is from === to -- so a range picker later changes DatePickerSheet's `mode`
+// and nothing here. `workoutCounts` and `dateBounds` feed the calendar's dots and navigation.
 export default function ExerciseFilterBar({
   text,
   onTextChange,
@@ -18,7 +28,15 @@ export default function ExerciseFilterBar({
   matchCount,
   totalCount,
   onBackToLog,
+  dateRange = null,
+  onDateRangeChange,
+  workoutCounts,
+  dateBounds,
 }) {
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const dateSearch = typeof onDateRangeChange === 'function';
+  const dateLabel = dateRange ? formatDateRangeLabel(dateRange) : '';
+
   return (
     // One gap-driven stack, and no outer margin: the caller owns the space around it, so History
     // and PRs can each put their controls block --space-6 above the content it filters (see
@@ -31,25 +49,58 @@ export default function ExerciseFilterBar({
         </button>
       )}
 
-      <div style={{ position: 'relative' }}>
-        <input
-          type="search"
-          inputMode="search"
-          enterKeyHint="search"
-          autoCapitalize="none"
-          autoCorrect="off"
-          aria-label="Search exercises"
-          placeholder="Search exercises"
-          value={text}
-          onChange={(e) => onTextChange(e.target.value)}
-          style={searchInputStyle}
-        />
-        {text && (
-          <button onClick={() => onTextChange('')} aria-label="Clear search" style={clearButtonStyle}>
-            &times;
+      {/* The search field and, on History, the calendar trigger to its right: one row, one
+          height. The field flexes; the trigger is a fixed 48px square stretched to match it. */}
+      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+          <input
+            type="search"
+            inputMode="search"
+            enterKeyHint="search"
+            autoCapitalize="none"
+            autoCorrect="off"
+            aria-label="Search exercises"
+            placeholder="Search exercises"
+            value={text}
+            onChange={(e) => onTextChange(e.target.value)}
+            style={searchInputStyle}
+          />
+          {text && (
+            <button onClick={() => onTextChange('')} aria-label="Clear search" style={clearButtonStyle}>
+              &times;
+            </button>
+          )}
+        </div>
+        {dateSearch && (
+          // The accessible name stays "Search by date" whether or not a date is applied -- the
+          // chip below carries WHICH date, and a label that changed with the value would break
+          // every selector that finds this button. aria-haspopup tells a screen reader it opens
+          // a dialog rather than acting in place.
+          <button
+            type="button"
+            className="date-search-trigger pressable"
+            data-active={dateRange ? '' : undefined}
+            aria-label="Search by date"
+            title="Search by date"
+            aria-haspopup="dialog"
+            aria-expanded={showDatePicker}
+            onClick={() => setShowDatePicker(true)}
+          >
+            <IconCalendar size={20} />
           </button>
         )}
       </div>
+
+      {showDatePicker && (
+        <DatePickerSheet
+          value={dateRange}
+          onChange={onDateRangeChange}
+          onClose={() => setShowDatePicker(false)}
+          workoutCounts={workoutCounts}
+          minDate={dateBounds?.min}
+          maxDate={dateBounds?.max}
+        />
+      )}
 
       {tagVocabulary.length > 0 && (
         <div style={{ display: 'flex', gap: 'var(--space-2)', overflowX: 'auto', paddingBottom: 2 }}>
@@ -82,6 +133,30 @@ export default function ExerciseFilterBar({
 
       {(exerciseFilter || isActive) && (
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+          {dateRange && (
+            // The date leads the row: it picks WHICH workouts, and the exercise pill beside it
+            // narrows within them. The pill text re-opens the picker (to change the date); the x
+            // removes it -- the same split as a filter chip in Gmail or Google Photos.
+            <span style={exercisePillStyle}>
+              <button
+                type="button"
+                onClick={() => setShowDatePicker(true)}
+                aria-label={`Change date, ${dateLabel}`}
+                style={pillTextButtonStyle}
+              >
+                <IconCalendar size={14} />
+                {dateLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => onDateRangeChange(null)}
+                aria-label={`Stop filtering to ${dateLabel}`}
+                style={removePillButtonStyle}
+              >
+                &times;
+              </button>
+            </span>
+          )}
           {exerciseFilter && (
             <span style={exercisePillStyle}>
               {exerciseFilter.exerciseName}
@@ -149,16 +224,33 @@ const clearButtonStyle = {
   cursor: 'pointer',
 };
 
+// --color-accent-strong, not --color-accent: 13px white text on the brand accent is 3.44:1 and
+// fails AA (frontend-core.md's accent tokens). Shared by the exercise and date pills, which sit
+// side by side and must read as the same kind of thing.
 const exercisePillStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: 6,
   padding: '6px 6px 6px 12px',
   borderRadius: 999,
-  background: 'var(--color-accent)',
-  color: '#fff',
+  background: 'var(--color-accent-strong)',
+  color: 'var(--color-accent-contrast)',
   fontSize: 13,
   fontWeight: 700,
+};
+
+// The date pill's text is itself a button (re-open the picker to change the date). It inherits
+// everything from the pill so it looks like plain pill text; the pill supplies the tap area's look.
+const pillTextButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  color: 'inherit',
+  font: 'inherit',
+  cursor: 'pointer',
 };
 
 const removePillButtonStyle = {
