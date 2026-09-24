@@ -88,8 +88,21 @@ async function endWorkoutMidSave(page: Page, request: APIRequestContext, exercis
   const createLanded = page.waitForResponse(
     (r) => r.request().method() === 'POST' && /\/api\/people\/\d+\/live-sets$/.test(r.url()) && r.ok(),
   );
+  // And the history fetch LOG_SET's onSettled makes once that create lands (the ended-workout
+  // branch's prefetchQuery) -- waited for until a response actually HOLDS the set, not merely
+  // returns. On lower that read takes ~500ms, and entering the mode before it lands meant neither
+  // source the record check reads knew about the workout: the no-live-session summary predates it
+  // (#326) and history had not caught up, so the next set was judged the first ever. A person
+  // cannot end a workout mid-save and log that exercise again inside half a second; a spec can.
+  // Registered before the release so the response cannot slip past between the two.
+  const historyHoldsTheWorkout = page.waitForResponse(async (r) => {
+    if (r.request().method() !== 'GET' || !/\/api\/people\/\d+\/history$/.test(r.url()) || !r.ok()) return false;
+    const sessions = await r.json().catch(() => []);
+    return Array.isArray(sessions) && sessions.some((s) => s.entries?.some((e: { sets?: unknown[] }) => e.sets?.length));
+  });
   heldCreate.release();
   await createLanded;
+  await historyHoldsTheWorkout;
   // The end-workout is next in the serial outbox, so it is sent as soon as the create settles.
   await expect.poll(() => heldEnd.held()).toBe(1);
   return { email, heldEnd };
