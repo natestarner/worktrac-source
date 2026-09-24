@@ -1,5 +1,5 @@
 import { onlineManager, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithQuery } from '../../test/queryWrapper';
@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useHistory } from '../../hooks/useHistory';
 import { useHistoryWindow } from '../../hooks/useHistoryWindow';
 import { listPersonExercises } from '../../api/exercises';
+import { formatTime } from '../../utils/datetime';
 
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
@@ -328,6 +329,209 @@ describe('HistoryTab PR markers, search/tag filtering, and click-to-filter', () 
     fireEvent.click(screen.getAllByRole('button', { name: 'View options for Bench Press' })[0]);
     fireEvent.click(screen.getByRole('button', { name: 'View this exercise’s history' }));
     expect(screen.queryByText(/Back to Bench Press/)).not.toBeInTheDocument();
+  });
+});
+
+describe('HistoryTab search by date', () => {
+  // Noon UTC, so each is the same local day in any realistic test-machine zone.
+  const july1 = {
+    id: 1,
+    startedAt: '2026-07-01T12:00:00Z',
+    endedAt: '2026-07-01T13:00:00Z',
+    entries: [
+      { exerciseId: 1, exerciseName: 'Bench Press', sets: [{ weight: 135, reps: 8, unit: 'lb' }], note: null },
+      { exerciseId: 2, exerciseName: 'Squat', sets: [{ weight: 225, reps: 5, unit: 'lb' }], note: null },
+    ],
+  };
+  const july8 = {
+    id: 2,
+    startedAt: '2026-07-08T12:00:00Z',
+    endedAt: '2026-07-08T13:00:00Z',
+    entries: [{ exerciseId: 3, exerciseName: 'Deadlift', sets: [{ weight: 315, reps: 3, unit: 'lb' }], note: null }],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Only Date is faked: "today" decides the calendar's month and its max, and RTL needs real timers.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 6, 10, 10, 0)); // Fri Jul 10 2026, local
+    useAppState.mockReturnValue({ activePersonId: 7, startEditingSession: vi.fn() });
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }], account: { plan: 'PLUS' } });
+    listPersonExercises.mockResolvedValue([]);
+    useHistory.mockReturnValue({ loading: false, history: [july8, july1] });
+    useHistoryWindow.mockReturnValue({ historyWindow: null });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function pickDay(name) {
+    fireEvent.click(screen.getByRole('button', { name: 'Search by date' }));
+    const dialog = screen.getByRole('dialog', { name: 'Choose a date' });
+    fireEvent.click(within(dialog).getByRole('button', { name: new RegExp(`^${name}`) }));
+  }
+
+  it('sits beside the search field and opens a calendar with a dot on each workout day', async () => {
+    renderHistoryTab();
+    const trigger = await screen.findByRole('button', { name: 'Search by date' });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+    // Same row as the search field.
+    expect(trigger.parentElement).toContainElement(screen.getByLabelText('Search exercises'));
+
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'Choose a date' });
+    expect(within(dialog).getByRole('button', { name: 'Wednesday, July 1, 2026, 1 workout' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Wednesday, July 8, 2026, 1 workout' })).toBeInTheDocument();
+    // Nothing before the first workout's month to page back to.
+    expect(within(dialog).getByRole('button', { name: 'Previous month' })).toBeDisabled();
+  });
+
+  it('shows only the workouts from the chosen day, with every exercise and set in them', async () => {
+    renderHistoryTab();
+    await screen.findByText('Deadlift');
+
+    pickDay('Wednesday, July 1, 2026');
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('Bench Press')).toBeInTheDocument();
+    expect(screen.getByText('Squat')).toBeInTheDocument();
+    expect(screen.getByText('135lb×8')).toBeInTheDocument();
+    expect(screen.queryByText('Deadlift')).not.toBeInTheDocument();
+    // The chip names the day, and the count covers what is shown.
+    expect(screen.getByRole('button', { name: 'Change date, Wed, Jul 1' })).toBeInTheDocument();
+    expect(screen.getByText('2 of 3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Search by date' })).toHaveAttribute('data-active');
+  });
+
+  it('removing the date chip restores every workout', async () => {
+    renderHistoryTab();
+    await screen.findByText('Deadlift');
+    pickDay('Wednesday, July 1, 2026');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop filtering to Wed, Jul 1' }));
+
+    expect(screen.getByText('Deadlift')).toBeInTheDocument();
+    expect(screen.getByText('Bench Press')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Search by date' })).not.toHaveAttribute('data-active');
+  });
+
+  it('tapping the chip reopens the picker on that date', async () => {
+    renderHistoryTab();
+    await screen.findByText('Deadlift');
+    pickDay('Wednesday, July 8, 2026');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change date, Wed, Jul 8' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Choose a date' });
+    expect(within(dialog).getByRole('button', { name: /^Wednesday, July 8, 2026/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('composes with the exercise search: the date picks the workout, the search narrows within it', async () => {
+    renderHistoryTab();
+    await screen.findByText('Deadlift');
+    pickDay('Wednesday, July 1, 2026');
+
+    fireEvent.change(screen.getByLabelText('Search exercises'), { target: { value: 'squat' } });
+
+    expect(screen.getByText('Squat')).toBeInTheDocument();
+    expect(screen.queryByText('Bench Press')).not.toBeInTheDocument();
+    expect(screen.queryByText('Deadlift')).not.toBeInTheDocument();
+  });
+
+  it('names the day when nothing was logged on it, and offers the way back', async () => {
+    renderHistoryTab();
+    await screen.findByText('Deadlift');
+    pickDay('Thursday, July 2, 2026');
+
+    expect(screen.getByText('No workouts on Thu, Jul 2.')).toBeInTheDocument();
+    expect(screen.queryByText('No exercises match this filter.')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show all dates' }));
+    expect(screen.getByText('Deadlift')).toBeInTheDocument();
+  });
+
+  it('keeps the generic message when the day has workouts but the search matches none of them', async () => {
+    renderHistoryTab();
+    await screen.findByText('Deadlift');
+    pickDay('Wednesday, July 1, 2026');
+    fireEvent.change(screen.getByLabelText('Search exercises'), { target: { value: 'deadlift' } });
+
+    expect(screen.getByText('No exercises match this filter.')).toBeInTheDocument();
+    expect(screen.queryByText(/No workouts on/)).not.toBeInTheDocument();
+  });
+
+  it('Clear all clears the date too', async () => {
+    renderHistoryTab();
+    await screen.findByText('Deadlift');
+    pickDay('Wednesday, July 1, 2026');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+
+    expect(screen.getByText('Deadlift')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Change date/ })).not.toBeInTheDocument();
+  });
+
+  describe('a workout that crosses midnight', () => {
+    // 11:30 PM Friday Jul 3 -> 12:40 AM Saturday Jul 4, in local wall-clock time.
+    const lateNight = {
+      id: 3,
+      startedAt: new Date(2026, 6, 3, 23, 30).toISOString(),
+      endedAt: new Date(2026, 6, 4, 0, 40).toISOString(),
+      entries: [{ exerciseId: 4, exerciseName: 'Overhead Press', sets: [{ weight: 95, reps: 5, unit: 'lb' }], note: null }],
+    };
+
+    beforeEach(() => {
+      useHistory.mockReturnValue({ loading: false, history: [july8, lateNight, july1] });
+    });
+
+    it('has a dot on both days it ran across', async () => {
+      renderHistoryTab();
+      fireEvent.click(await screen.findByRole('button', { name: 'Search by date' }));
+      const dialog = screen.getByRole('dialog', { name: 'Choose a date' });
+      expect(within(dialog).getByRole('button', { name: 'Friday, July 3, 2026, 1 workout' })).toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: 'Saturday, July 4, 2026, 1 workout' })).toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: 'Sunday, July 5, 2026' })).toBeInTheDocument();
+    });
+
+    it.each([
+      ['the day it started', 'Friday, July 3, 2026'],
+      ['the day it ended', 'Saturday, July 4, 2026'],
+    ])('is found by searching %s', async (_, dayName) => {
+      renderHistoryTab();
+      await screen.findByText('Deadlift');
+      pickDay(dayName);
+      expect(screen.getByText('Overhead Press')).toBeInTheDocument();
+      expect(screen.queryByText('Deadlift')).not.toBeInTheDocument();
+      expect(screen.queryByText('Bench Press')).not.toBeInTheDocument();
+    });
+
+    it('names both dates in its heading, so finding it under the second day does not look wrong', async () => {
+      renderHistoryTab();
+      await screen.findByText('Overhead Press');
+      const expected = `Jul 3, ${formatTime(lateNight.startedAt)} – Jul 4, ${formatTime(lateNight.endedAt)}`;
+      expect(screen.getByText(expected)).toBeInTheDocument();
+      // A same-day workout keeps the one-date form.
+      expect(screen.getByText(`Jul 8 · ${formatTime(july8.startedAt)}–${formatTime(july8.endedAt)}`)).toBeInTheDocument();
+    });
+  });
+
+  it('on Free, a day before the window says it may be in the full history, not that nothing happened', async () => {
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }], account: { plan: 'FREE' } });
+    // The window starts partway into the month the calendar opens on (Jul 5), so a day before it
+    // (Jul 2) is reachable in the picker.
+    useHistoryWindow.mockReturnValue({
+      historyWindow: { windowStart: new Date(2026, 6, 5, 0, 0).toISOString(), hiddenSessions: 4, earliestHiddenAt: '2026-03-02T10:00:00Z' },
+    });
+    useHistory.mockReturnValue({ loading: false, history: [july8] });
+
+    renderHistoryTab();
+    await screen.findByText('Deadlift');
+    pickDay('Thursday, July 2, 2026');
+
+    expect(screen.getByText('No workouts on Thu, Jul 2.')).toBeInTheDocument();
+    expect(screen.getByText(/still part of Nate's full history/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show all dates' })).not.toBeInTheDocument();
   });
 });
 

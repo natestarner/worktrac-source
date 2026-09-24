@@ -460,6 +460,12 @@ export default function HelpTab() {
         <h3 className="help-h3">Finding something</h3>
         <ul>
           <li><strong>Search</strong> by exercise name.</li>
+          <li>
+            <strong>Search by date</strong> with the calendar button beside the search box. Days you
+            trained carry a dot; tap one to see just that day&rsquo;s workouts, with every set.
+            A workout that ran past midnight counts on both days, and its heading shows both dates.
+            Tap the date chip to pick another day, or its &times; to see everything again.
+          </li>
           <li><strong>Tag chips</strong> narrow the list to a category you&rsquo;ve defined.</li>
           <li>
             <strong>Tap an exercise name</strong> inside a workout to choose whether to filter

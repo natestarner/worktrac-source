@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { collectTagVocabulary, filterHistorySessions, filterPrRows, isFilterActive, matchesFilter } from './exerciseFilter';
+import {
+  collectTagVocabulary,
+  filterHistorySessions,
+  filterPrRows,
+  isFilterActive,
+  matchesFilter,
+  sessionDaySpan,
+  sessionMatchesDateRange,
+} from './exerciseFilter';
+import { toLocalDateStr } from './datetime';
 
 const chest = { id: 1, name: 'Chest' };
 const back = { id: 2, name: 'Back' };
@@ -77,6 +86,7 @@ describe('filterHistorySessions', () => {
   const sessionA = {
     id: 1,
     startedAt: '2026-07-01T12:00:00Z',
+    endedAt: '2026-07-01T12:00:00Z',
     entries: [
       { exerciseId: 1, exerciseName: 'Bench Press', sets: [{ weight: 135, reps: 8, unit: 'lb' }] },
       { exerciseId: 2, exerciseName: 'Squat', sets: [{ weight: 225, reps: 5, unit: 'lb' }] },
@@ -85,6 +95,7 @@ describe('filterHistorySessions', () => {
   const sessionB = {
     id: 2,
     startedAt: '2026-07-08T12:00:00Z',
+    endedAt: '2026-07-08T12:00:00Z',
     entries: [{ exerciseId: 2, exerciseName: 'Squat', sets: [{ weight: 235, reps: 5, unit: 'lb' }] }],
   };
   const history = [sessionB, sessionA];
@@ -111,6 +122,96 @@ describe('filterHistorySessions', () => {
     expect(session).toBe(sessionA);
     expect(session.entries).toHaveLength(2); // untouched -- still both entries
   });
+
+  // Noon UTC, so the local day is the same in every zone a test machine realistically runs in.
+  describe('by date', () => {
+    it('keeps only sessions that started on the chosen day, with ALL their entries', () => {
+      const result = filterHistorySessions(history, { ...noFilter, dateRange: { from: '2026-07-01', to: '2026-07-01' } }, new Map());
+      expect(result).toEqual([{ session: sessionA, entries: sessionA.entries }]);
+      // Not narrowed within the session: the date picks whole workouts.
+      expect(result[0].entries).toBe(sessionA.entries);
+    });
+
+    it('is inclusive at both ends of a range', () => {
+      const result = filterHistorySessions(history, { ...noFilter, dateRange: { from: '2026-07-01', to: '2026-07-08' } }, new Map());
+      expect(result.map((r) => r.session)).toEqual([sessionB, sessionA]);
+    });
+
+    it('returns nothing for a day with no workout', () => {
+      expect(filterHistorySessions(history, { ...noFilter, dateRange: { from: '2026-07-02', to: '2026-07-02' } }, new Map())).toEqual([]);
+    });
+
+    it('composes with the exercise filters: the date picks sessions, the rest narrows within them', () => {
+      const filter = { ...noFilter, text: 'bench', dateRange: { from: '2026-07-01', to: '2026-07-08' } };
+      expect(filterHistorySessions(history, filter, new Map())).toEqual([{ session: sessionA, entries: [sessionA.entries[0]] }]);
+    });
+
+    it('counts as an active filter on its own', () => {
+      expect(isFilterActive({ ...noFilter, dateRange: { from: '2026-07-01', to: '2026-07-01' } })).toBe(true);
+    });
+
+    it('matches on the session’s LOCAL start day', () => {
+      const r = { from: toLocalDateStr(sessionA.startedAt), to: toLocalDateStr(sessionA.startedAt) };
+      expect(sessionMatchesDateRange(sessionA, r)).toBe(true);
+      expect(sessionMatchesDateRange(sessionA, null)).toBe(true);
+    });
+  });
+});
+
+// Built from LOCAL wall-clock times, so "11:30 PM Friday" means that in whatever zone the tests run.
+const at = (y, mo, d, h, mi = 0) => new Date(y, mo - 1, d, h, mi).toISOString();
+const day = (d) => ({ from: d, to: d });
+
+describe('sessionDaySpan / sessionMatchesDateRange: a workout counts on every day it ran across', () => {
+  const lateNight = {
+    startedAt: at(2026, 7, 3, 23, 30), // Fri -> Sat
+    endedAt: at(2026, 7, 4, 0, 40),
+    entries: [{ exerciseId: 1, exerciseName: 'Bench Press', sets: [] }],
+  };
+
+  it('a workout inside one day spans just that day', () => {
+    expect(sessionDaySpan({ startedAt: at(2026, 7, 3, 9), endedAt: at(2026, 7, 3, 10) })).toEqual(day('2026-07-03'));
+  });
+
+  it('a workout that crosses midnight is found by searching either day, and not the days around it', () => {
+    expect(sessionDaySpan(lateNight)).toEqual({ from: '2026-07-03', to: '2026-07-04' });
+    expect(sessionMatchesDateRange(lateNight, day('2026-07-03'))).toBe(true);
+    expect(sessionMatchesDateRange(lateNight, day('2026-07-04'))).toBe(true);
+    expect(sessionMatchesDateRange(lateNight, day('2026-07-02'))).toBe(false);
+    expect(sessionMatchesDateRange(lateNight, day('2026-07-05'))).toBe(false);
+  });
+
+  // The case "starts OR ends inside the range" gets wrong: a workout enclosing the whole range.
+  it('a workout that spans the whole searched range is found, even though neither end is inside it', () => {
+    const long = { startedAt: at(2026, 7, 3, 22), endedAt: at(2026, 7, 6, 1) };
+    expect(sessionMatchesDateRange(long, { from: '2026-07-04', to: '2026-07-05' })).toBe(true);
+    expect(sessionMatchesDateRange(long, day('2026-07-05'))).toBe(true);
+  });
+
+  it('an unfinished workout runs until now, so last night’s still-open workout is part of today', () => {
+    const open = { startedAt: at(2026, 7, 3, 23, 30), endedAt: null };
+    const now = new Date(2026, 6, 4, 1, 15).getTime();
+    expect(sessionDaySpan(open, now)).toEqual({ from: '2026-07-03', to: '2026-07-04' });
+    expect(sessionMatchesDateRange(open, day('2026-07-04'), now)).toBe(true);
+  });
+
+  // The server auto-closes a stale workout only when that person's live workout is next READ, and
+  // History returns endedAt as stored -- so a forgotten one can sit "in progress" for weeks.
+  it('an unfinished workout left open for weeks spreads no further than 8 hours past its start', () => {
+    const forgotten = { startedAt: at(2026, 7, 3, 9), endedAt: null };
+    const threeWeeksLater = new Date(2026, 6, 24, 12).getTime();
+    expect(sessionDaySpan(forgotten, threeWeeksLater)).toEqual(day('2026-07-03'));
+    expect(sessionMatchesDateRange(forgotten, day('2026-07-10'), threeWeeksLater)).toBe(false);
+  });
+
+  it('never produces a backwards span from an end stamped before the start', () => {
+    expect(sessionDaySpan({ startedAt: at(2026, 7, 4, 9), endedAt: at(2026, 7, 3, 9) })).toEqual(day('2026-07-04'));
+  });
+
+  it('filterHistorySessions uses the same rule', () => {
+    const result = filterHistorySessions([lateNight], { ...noFilter, dateRange: day('2026-07-04') }, new Map());
+    expect(result.map((r) => r.session)).toEqual([lateNight]);
+  });
 });
 
 describe('filterPrRows', () => {
@@ -125,5 +226,9 @@ describe('filterPrRows', () => {
 
   it('filters by text', () => {
     expect(filterPrRows(prs, { ...noFilter, text: 'squat' }, new Map())).toEqual([prs[1]]);
+  });
+
+  it('ignores a date range -- a PR row has no session to date', () => {
+    expect(filterPrRows(prs, { ...noFilter, dateRange: { from: '2026-07-01', to: '2026-07-01' } }, new Map())).toBe(prs);
   });
 });

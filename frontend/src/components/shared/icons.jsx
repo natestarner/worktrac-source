@@ -95,6 +95,23 @@ export const IconChevronRight = (props) => (
   </Icon>
 );
 
+// Paging backwards (the date picker's previous month). Its own icon for the same reason as
+// IconChevronRight: no transform at the call site.
+export const IconChevronLeft = (props) => (
+  <Icon {...props}>
+    <path d="m15 18-6-6 6-6" />
+  </Icon>
+);
+
+export const IconCalendar = (props) => (
+  <Icon {...props}>
+    <path d="M8 2v4" />
+    <path d="M16 2v4" />
+    <rect width="18" height="18" x="3" y="4" rx="2" />
+    <path d="M3 10h18" />
+  </Icon>
+);
+
 export const IconClose = (props) => (
   <Icon {...props}>
     <path d="M18 6 6 18" />

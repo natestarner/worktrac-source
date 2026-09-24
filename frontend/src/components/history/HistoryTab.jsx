@@ -9,7 +9,8 @@ import { useExerciseFilter } from '../../hooks/useExerciseFilter';
 import { downloadPersonCsv } from '../../api/export';
 import { formatDateLabel, formatTime, toLocalDateStr } from '../../utils/datetime';
 import { buildHistoryPrFlags, historyPrFlagKey } from '../../utils/historyPrFlags';
-import { collectTagVocabulary, filterHistorySessions } from '../../utils/exerciseFilter';
+import { collectTagVocabulary, filterHistorySessions, sessionDaySpan, sessionMatchesDateRange } from '../../utils/exerciseFilter';
+import { eachDay, formatDateRangeLabel, normalizeRange, startOfMonth, todayStr } from '../../utils/dateRange';
 import { prSpec, SET_PR_TYPES, SESSION_PR_TYPES } from '../trends/exerciseMetrics';
 import PastSessionModal from './PastSessionModal';
 import Button from '../shared/Button';
@@ -25,12 +26,35 @@ import { windowLabel } from '../shared/historyWindowCopy';
 import SetPillRow from '../shared/SetPillRow';
 import PrBadge, { prBadgeLabel } from '../shared/PrBadge';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
-import { IconChevronRight, IconDownload, IconHelp, IconNote, IconPlus, IconScroll, IconTrendingUp } from '../shared/icons';
+import { IconCalendar, IconChevronRight, IconDownload, IconHelp, IconNote, IconPlus, IconScroll, IconTrendingUp } from '../shared/icons';
+
+// Whether a searched date ends before the Free window's first visible day, while the server says
+// something IS hidden. Only then is "no workouts that day" possibly untrue. The window start is an
+// instant, so it is compared as the local day it falls on, the same way every session is.
+function beforeWindow(dateRange, historyWindow) {
+  if (!dateRange || !historyWindow?.windowStart || !(historyWindow.hiddenSessions > 0)) return false;
+  return normalizeRange(dateRange).to < toLocalDateStr(historyWindow.windowStart);
+}
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
   if (session.endedAt !== session.startedAt) return `${formatTime(session.startedAt)}–${formatTime(session.endedAt)}`;
   return formatTime(session.startedAt);
+}
+
+// The session header. A finished workout that crossed midnight names BOTH days --
+// "Sep 12, 11:30 PM – Sep 13, 12:40 AM" -- because a date search finds it under either, and
+// finding it under Sep 13 beneath a header that says only "Sep 12" reads as the app getting the
+// date wrong. Everything else keeps the one-date form.
+function sessionHeaderLabel(session) {
+  const startDay = toLocalDateStr(session.startedAt);
+  if (session.endedAt !== null && toLocalDateStr(session.endedAt) !== startDay) {
+    return (
+      `${formatDateLabel(startDay)}, ${formatTime(session.startedAt)} – ` +
+      `${formatDateLabel(toLocalDateStr(session.endedAt))}, ${formatTime(session.endedAt)}`
+    );
+  }
+  return `${formatDateLabel(startDay)} · ${timeLabelFor(session)}`;
 }
 
 // Thin wrapper: owns the deep-link filter seed (from ExerciseDetail's "View full exercise history" link,
@@ -106,11 +130,43 @@ function HistoryTabContent({ initialExerciseFilter }) {
     () =>
       filterHistorySessions(
         history,
-        { text: filter.text, selectedTagIds: filter.selectedTagIds, exerciseFilter: filter.exerciseFilter },
+        {
+          text: filter.text,
+          selectedTagIds: filter.selectedTagIds,
+          exerciseFilter: filter.exerciseFilter,
+          dateRange: filter.dateRange,
+        },
         tagsByExerciseId,
       ),
-    [history, filter.text, filter.selectedTagIds, filter.exerciseFilter, tagsByExerciseId],
+    [history, filter.text, filter.selectedTagIds, filter.exerciseFilter, filter.dateRange, tagsByExerciseId],
   );
+
+  // What the date picker needs from history, folded once: how many workouts each local day holds
+  // (its dots), and the earliest day, which bounds how far back it pages -- there is nothing to
+  // find before a person's first workout, so "Previous month" stops there rather than paging
+  // through empty months.
+  //
+  // A workout counts on EVERY day it ran across (sessionDaySpan), the same rule the search uses,
+  // so the dots and the results can never disagree: a workout from 11:30 PM Friday to 12:40 AM
+  // Saturday dots both days, and searching either finds it.
+  //
+  // Derived from the cached `history`, like everything else on this tab, so the dots are the same
+  // online and offline -- there is no date-search request to fail.
+  const { workoutCounts, dateBounds } = useMemo(() => {
+    const counts = new Map();
+    let earliest = null;
+    for (const session of history) {
+      const span = sessionDaySpan(session);
+      for (const day of eachDay(span.from, span.to)) counts.set(day, (counts.get(day) || 0) + 1);
+      if (!earliest || span.from < earliest) earliest = span.from;
+    }
+    const today = todayStr();
+    return { workoutCounts: counts, dateBounds: { min: earliest ? startOfMonth(earliest) : startOfMonth(today), max: today } };
+  }, [history]);
+
+  // Whether the date alone rules everything out, as opposed to the date plus a text/tag filter.
+  // The two need different empty states: "nothing on that day" versus "nothing on that day matches".
+  const dateHasNoWorkouts = !!filter.dateRange && !history.some((s) => sessionMatchesDateRange(s, filter.dateRange));
 
   // Whether anything CURRENTLY ON SCREEN is badged. The legend explains three glyphs; a key to
   // marks that aren't there explains nothing and costs a row of vertical space on every visit.
@@ -238,6 +294,10 @@ function HistoryTabContent({ initialExerciseFilter }) {
             matchCount={matchedEntryCount}
             totalCount={totalEntryCount}
             onBackToLog={() => navigate('/app/log')}
+            dateRange={filter.dateRange}
+            onDateRangeChange={filter.setDateRange}
+            workoutCounts={workoutCounts}
+            dateBounds={dateBounds}
           />
           {hasAnyRecordMark && <RecordLegend />}
         </div>
@@ -288,7 +348,32 @@ function HistoryTabContent({ initialExerciseFilter }) {
         />
       )}
 
-      {!loading && history.length > 0 && filteredSessions.length === 0 && (
+      {/* A date with nothing on it gets its own answer, naming the day -- "no exercises match this
+          filter" would send someone checking their search text for a typo that isn't there. On
+          Free, a day before the visible window is not "no workouts": it may well hold some, in the
+          full history, so that case says so and offers the same notice the top of the tab does. */}
+      {!loading && history.length > 0 && filteredSessions.length === 0 && dateHasNoWorkouts && (
+        <EmptyState
+          icon={IconCalendar}
+          title={`No workouts on ${formatDateRangeLabel(filter.dateRange)}.`}
+          body={
+            beforeWindow(filter.dateRange, historyWindow)
+              ? `That's before ${windowLabel(historyWindow?.windowStart)}. It's still part of ${activePersonName}'s full history.`
+              : 'Days with a dot on the calendar have workouts.'
+          }
+          action={
+            beforeWindow(filter.dateRange, historyWindow) ? (
+              <HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} />
+            ) : (
+              <Button variant="secondary" size="sm" onClick={() => filter.setDateRange(null)}>
+                Show all dates
+              </Button>
+            )
+          }
+        />
+      )}
+
+      {!loading && history.length > 0 && filteredSessions.length === 0 && !dateHasNoWorkouts && (
         <EmptyState
           icon={IconScroll}
           title="No exercises match this filter."
@@ -307,7 +392,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
           >
             <div style={sessionHeaderStyle}>
               <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-muted)' }}>
-                {formatDateLabel(toLocalDateStr(session.startedAt))} &middot; {timeLabelFor(session)}
+                {sessionHeaderLabel(session)}
               </div>
               <ReadOnlyWrap personId={activePersonId}>
                 <button onClick={() => handleEdit(session)} style={editLinkStyle}>

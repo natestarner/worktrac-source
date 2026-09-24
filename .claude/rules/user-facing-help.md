@@ -12,6 +12,7 @@ paths:
   - "shared/record-rules/**"
   - "frontend/src/utils/restTarget.js"
   - "frontend/src/utils/exerciseDuplicates.js"
+  - "frontend/src/utils/exerciseFilter.js"
   - "frontend/src/hooks/useRequireOnline.js"
   - "frontend/src/hooks/useGatedMutation.js"
   # Member logins. The handbook now states, as fact, who can see and do what in a household --
@@ -58,6 +59,7 @@ that isn't one.
 | History badges name WHICH record fell, and a session total badges the entry rather than a set | `utils/historyPrFlags.js`, `components/shared/PrBadge.jsx`, `SetPillRow.jsx` |
 | **every record is marked the same way everywhere** — same glyph, same single colour, same rule — on History, on the Log screen's set rows and in "Session exercises" | `utils/historyPrFlags.js`, `PrBadge.jsx`, `index.css`'s `--color-record-*` |
 | **a record marks the set that BEAT your previous best**, so repeating your best does not mark it again | `historyPrFlags.js` (the retired `formulas.js#isPrSet` tie rule — see `log-screen.md`) |
+| History's date search: **a workout that ran past midnight counts on both days, and its heading shows both dates** | `utils/exerciseFilter.js#sessionDaySpan`, `HistoryTab.jsx#sessionHeaderLabel` |
 
 **If your change alters a row's left-hand column, update the handbook in the same PR.** If it
 doesn't, no action — this rule is not a prompt to re-read the page on every edit.
