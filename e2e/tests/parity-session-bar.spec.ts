@@ -1,7 +1,21 @@
-import { expect } from '@playwright/test';
+import { expect, Page } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
+
+const EXERCISE = 'Barbell Bench Press';
+
+// See parity-active-loop.spec.ts -- the picker filters CLIENT-SIDE over the single `exercises`
+// query, so a mode entered before the boot warm finished leaves it permanently empty. Pay that
+// online and explicitly, or the test measures the warm race instead of the flow. Without it this
+// spec timed out in `navigate` under full-suite load (issue #189); holding `GET /api/exercises`
+// past mode entry reproduces that every time ("No exercises match"), and this step removes it.
+async function warmCatalog(page: Page) {
+  const search = page.getByPlaceholder('Search all exercises');
+  await search.fill(EXERCISE);
+  await expect(page.getByRole('button', { name: EXERCISE, exact: true })).toBeVisible();
+  await search.fill('');
+}
 
 // The session bar is the app's bottom chrome: it carries "Session in progress", the start time, the
 // rest readout, and the only "End workout" control. It replaced an in-flow banner at the top of the
@@ -21,11 +35,12 @@ forEachConnectivityMode<{ personName: string }>('session bar appears with the re
   setup: async (page, request) => {
     const personName = 'Bar';
     await registerHousehold(page, request, personName);
+    await warmCatalog(page);
     return { personName };
   },
 
   navigate: async (page) => {
-    await pickExercise(page, 'Barbell Bench Press');
+    await pickExercise(page, EXERCISE);
   },
 
   act: async (page) => {
