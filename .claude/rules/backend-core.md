@@ -213,6 +213,12 @@ small test and break at that scale. `HistoryScaleTest` seeds 2,150 sessions to g
   "session")` because every caller reads `session.startedAt`; without it that was one lazy SELECT
   per session (~2,000 statements per `/prs` or trends request). Use a per-method graph, not a global
   `hibernate.default_batch_fetch_size`, which changes every lazy load in the app.
+- **History's transfer is gzip + a weak, shallow ETag** (`server.compression`, `HistoryEtagConfig`).
+  Keep the tag **shallow** (a hash of the response bytes): a version-stamp tag would skip the read
+  but serve a stale History with a 304 the first time a write path forgot to bump it. Keep it
+  **weak**: Tomcat will not gzip a response with a strong tag. Keep `ETag` in `CorsConfig`'s exposed
+  headers, or the deployed (cross-origin) app can't read it. `HistoryEtagTest` runs against a real
+  Tomcat and pins all three.
 
 ## Error handling
 

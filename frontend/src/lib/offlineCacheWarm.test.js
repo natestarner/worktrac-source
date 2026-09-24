@@ -60,7 +60,7 @@ describe('warmOfflineCache', () => {
       expect(listPersonExercises).toHaveBeenCalledWith(person.id);
       expect(listRoutines).toHaveBeenCalledWith(person.id);
       expect(getLiveSession).toHaveBeenCalledWith(person.id);
-      expect(getHistory).toHaveBeenCalledWith(person.id);
+      expect(getHistory).toHaveBeenCalledWith(person.id, { readCached: expect.any(Function) });
       expect(getPrs).toHaveBeenCalledWith(person.id);
       expect(client.getQueryData(queryKeys.history(person.id))).toEqual([]);
       expect(client.getQueryData(queryKeys.prs(person.id))).toEqual([]);

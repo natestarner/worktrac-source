@@ -6,6 +6,7 @@ import { logLiveSet, logSetIntoSession, editSet, deleteSet } from '../api/sets';
 import { addExercise, favoriteExercise, unfavoriteExercise } from '../api/exercises';
 import { saveLiveExerciseNote, saveSessionExerciseNote } from '../api/notes';
 import { endWorkout, getHistory } from '../api/sessions';
+import { carryHistoryEtag } from './historyEtags';
 import { getAuthToken } from '../api/client';
 import { OUTBOX_SCOPE_ID } from './outboxPersistence';
 import { resolveExerciseId, setExerciseIdMapping, isTempExerciseId } from './exerciseIdMap';
@@ -470,7 +471,9 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
           // staleTime 0 because the entry can look fresh from moments before this set landed.
           client.prefetchQuery({
             queryKey: queryKeys.history(vars.personId),
-            queryFn: () => getHistory(vars.personId),
+            queryFn: () => getHistory(vars.personId, {
+              readCached: () => client.getQueryData(queryKeys.history(vars.personId)),
+            }),
             staleTime: 0,
           });
         }
@@ -761,6 +764,16 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
 }
 
 registerOfflineMutationDefaults(queryClient);
+
+// History's one query default: keep its ETag attached across TanStack's structural sharing (see
+// lib/historyEtags.js#carryHistoryEtag). By key PREFIX, so it covers every person's history and every
+// path that fetches it -- useHistory, offlineCacheWarm, the ended-workout prefetch above, Settings.
+// A client without it (some tests build their own) still fetches correctly, only never conditionally.
+export function registerHistoryQueryDefaults(client) {
+  client.setQueryDefaults(['history'], { structuralSharing: carryHistoryEtag });
+}
+
+registerHistoryQueryDefaults(queryClient);
 
 // Fire a durable write against an EXPLICIT client, without a React observer. Shared by
 // enqueueOutboxWrite below (the app singleton) and by any caller that already has its own

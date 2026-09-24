@@ -36,6 +36,18 @@ server:
   # itself and takes the LAST entry -- the one hop ACA appends and vouches for -- so
   # forward-headers-strategy stays "none" (the default) and Spring never touches getRemoteAddr().
   forward-headers-strategy: none
+  # gzip for any response a client says it can take (every browser does). `/history` is the reason:
+  # it is a person's whole history in one unpaginated response -- ~3.7 MB of JSON at five years of
+  # daily training, which compresses ~20x -- and the app refetches it after every logged set.
+  #
+  # Encoding only: the bytes a client decodes are identical, so no caller can tell. Boot's default
+  # mime-types cover application/json and deliberately exclude the CSV/ZIP exports (a ZIP is already
+  # compressed). There is no streaming endpoint here for buffering to hold back. It is safe whether
+  # or not the Azure ingress also compresses -- a proxy does not re-encode a response that already
+  # carries Content-Encoding. `min-response-size` keeps small replies (most of the API) untouched.
+  compression:
+    enabled: true
+    min-response-size: 2KB
 
 # Emits the MDC values RequestDiagnosticsFilter and JwtAuthenticationFilter set, so every log line
 # a request produces carries the browser's correlation id and (once authenticated) the user id.

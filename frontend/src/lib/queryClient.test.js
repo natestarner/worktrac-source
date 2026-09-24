@@ -1108,7 +1108,7 @@ describe('logSet onSettled reconciles from the response (first-set flash)', () =
 
     await dispatch();
 
-    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledWith(PERSON));
+    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledWith(PERSON, { readCached: expect.any(Function) }));
     await vi.waitFor(() => expect(client.getQueryData(queryKeys.history(PERSON))).toHaveLength(1));
   });
 

@@ -332,6 +332,22 @@ as such — it has no response body, and is unreachable for an unsynced set.
 Assert this against a **real cache**, never a spy on `invalidateQueries`: a spy passes just as
 happily on a key nothing observes, which is exactly the failure mode.
 
+### History is fetched conditionally — a 304 only ever returns the copy its tag came with
+
+`/history` is a person's whole history and is refetched after every set and on every warm, so
+`api/sessions.js#getHistory` sends the cached copy's ETag and takes a 304 as "keep what you have"
+(`HistoryEtagConfig.java` is the server half; `api/client.js#getConditional` the transport).
+
+- **Every history fetcher passes `readCached`** — `useHistory`, `offlineCacheWarm`, the
+  ended-workout prefetch in `queryClient.js`, `AppSettingsTab`. One that doesn't is still correct,
+  just always a full download.
+- **Tags live in a WeakMap keyed by the exact array** (`lib/historyEtags.js`), so a restored,
+  hydrated or hand-set copy has no tag and cannot be "confirmed" by a 304. A 304 is also discarded
+  if the cache no longer holds that object when it arrives.
+- **`registerHistoryQueryDefaults` carries the tag across structural sharing** — TanStack stores a
+  merge, not the returned object. Drop it and nothing breaks except the saving, silently.
+  `api/sessions.test.js` pins it through a real `QueryClient`.
+
 ## Writes: durable vs online-gated
 
 | Feature | Offline? |
