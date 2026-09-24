@@ -3,8 +3,8 @@ import { registerHousehold, setBillingPlan } from './support/auth';
 import { dismissPrCelebration, pickExercise } from './support/exercises';
 
 // Full "Log a past workout" round trip: create a retroactive session, add and remove
-// sets into it without triggering the live rest timer, edit its date from the "Editing
-// past session" banner, then Done back to History and confirm it landed correctly.
+// sets into it without triggering the live rest timer, edit its date from the "Adding/editing
+// past session" header, then Done back to History and confirm it landed correctly.
 test.describe('Log a past workout', () => {
   test('create a retroactive session, edit its sets and date, and see it in History', async ({ page, request }) => {
     // Plus, because the retroactive date below is months back -- outside the Free tier's 90-day
@@ -29,7 +29,7 @@ test.describe('Log a past workout', () => {
     await modal.getByRole('button', { name: 'Start adding sets' }).click();
 
     await expect(page).toHaveURL(/\/app\/log/);
-    await expect(page.getByText('Editing past session')).toBeVisible();
+    await expect(page.getByText('Adding/editing past session')).toBeVisible();
     await expect(page.locator('input[type="date"]')).toHaveValue('2026-01-15');
 
     // Log two sets into the retroactive session (picker is empty for a new person -- search).
@@ -47,6 +47,14 @@ test.describe('Log a past workout', () => {
     await expect(page.getByRole('img', { name: /^Rest [0-9]/ })).toHaveCount(0);
     await expect(page.getByText(/Session in progress/)).toHaveCount(0);
 
+    // The whole screen -- not just the header -- sits inside the past-session frame, so the mode
+    // stays visible below the fold. A drawn outline, not merely a wrapper: the header alone
+    // scrolls away on the exercise screen.
+    const frame = page.getByRole('region', { name: 'Adding/editing past session' });
+    await expect(frame.getByRole('button', { name: 'Log set' })).toBeVisible();
+    await expect(frame).toHaveCSS('border-top-style', 'solid');
+    await expect(frame).not.toHaveCSS('border-left-width', '0px');
+
     // Remove the newest set (rows render newest-first, so the first "Delete" link in DOM
     // order belongs to Set 2's row). Two "Delete" buttons exist before the confirm dialog
     // opens (one per row), so `.first()` disambiguates; the dialog's own "Delete" button
@@ -56,7 +64,7 @@ test.describe('Log a past workout', () => {
     await expect(page.getByText('Set 2')).toHaveCount(0);
     await expect(page.getByText('Set 1')).toBeVisible();
 
-    // Edit the session's date from the "Editing past session" banner (a second,
+    // Edit the session's date from the "Adding/editing past session" header (a second,
     // independent edit path from the creation modal above).
     await page.locator('input[type="date"]').fill('2026-01-16');
     await expect(page.locator('input[type="date"]')).toHaveValue('2026-01-16');
@@ -66,5 +74,13 @@ test.describe('Log a past workout', () => {
 
     await expect(page.getByText('Jan 16')).toBeVisible();
     await expect(page.getByText('Barbell Bench Press')).toBeVisible();
+
+    // …and once Done, the Log tab is unframed: that outline must mean "past session" and nothing
+    // else. Wait for the tab's own content first, or the zero count passes before it renders.
+    await page.getByRole('link', { name: 'Log', exact: true }).click();
+    await expect(
+      page.getByRole('button', { name: 'Log set' }).or(page.getByPlaceholder('Search all exercises')),
+    ).toBeVisible();
+    await expect(page.locator('.past-session-frame')).toHaveCount(0);
   });
 });

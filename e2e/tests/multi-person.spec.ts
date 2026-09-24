@@ -193,13 +193,13 @@ test.describe('Multi-person switching', () => {
     await page.getByRole('button', { name: 'Log a past workout' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Start adding sets' }).click();
     await expect(page).toHaveURL(/\/app\/log/);
-    await expect(page.getByText('Editing past session')).toBeVisible();
+    await expect(page.getByText('Adding/editing past session')).toBeVisible();
 
     // Switch away to Sam, then back to Alex -- Alex must still be editing that same
     // past session, not dropped back to normal live logging.
     await personPill(page, 'Sam').click();
     await personPill(page, 'Alex').click();
-    await expect(page.getByText('Editing past session')).toBeVisible();
+    await expect(page.getByText('Adding/editing past session')).toBeVisible();
   });
 
   test('each person has their own independent rest timer', async ({ page, request }) => {

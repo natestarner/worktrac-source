@@ -69,7 +69,7 @@ test.describe('Exercise notes', () => {
     // editing routes through the Log screen; History itself stays read-only. ---
     await page.getByRole('button', { name: 'Edit' }).first().click();
     await expect(page).toHaveURL(/\/app\/log/);
-    await expect(page.getByText('Editing past session')).toBeVisible();
+    await expect(page.getByText('Adding/editing past session')).toBeVisible();
     await page.getByRole('button', { name: 'Edit' }).click();
 
     await expect(page.getByRole('button', { name: 'Edit note for this session' })).toBeVisible();
