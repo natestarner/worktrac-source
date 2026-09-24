@@ -12,7 +12,7 @@ export function useHistory(personId, { fetch = true } = {}) {
 
   const query = useQuery({
     queryKey: queryKeys.history(personId),
-    queryFn: () => getHistory(personId),
+    queryFn: () => getHistory(personId, { readCached: () => queryClient.getQueryData(queryKeys.history(personId)) }),
     enabled: !!personId && fetch,
   });
 

@@ -80,7 +80,7 @@ export default function AppSettingsTab() {
   const historyQueries = useQueries({
     queries: (isMember ? [] : people).map((person) => ({
       queryKey: queryKeys.history(person.id),
-      queryFn: () => getHistory(person.id),
+      queryFn: () => getHistory(person.id, { readCached: () => queryClient.getQueryData(queryKeys.history(person.id)) }),
     })),
   });
   const historyWindowQueries = useQueries({

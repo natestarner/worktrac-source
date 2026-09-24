@@ -90,10 +90,13 @@ export function isOfflineError(error) {
 // cannot use from a live session whose server is briefly unreachable, so it would sit retrying
 // /me forever against a credential the server refuses by design. Passing it per-call keeps its
 // lifetime bounded by the one request that needs it.
+//
+// `ifNoneMatch` / `withEtag` are getConditional's, and nothing else passes them.
 async function request(path, { method = 'GET', body, isFormData = false, timeoutMs = REQUEST_TIMEOUT_MS,
-                                bearerOverride } = {}) {
+                                bearerOverride, ifNoneMatch, withEtag = false } = {}) {
   const headers = {};
   if (!isFormData) headers['Content-Type'] = 'application/json';
+  if (ifNoneMatch) headers['If-None-Match'] = ifNoneMatch;
   const hadToken = Boolean(token);
   if (bearerOverride) headers['Authorization'] = `Bearer ${bearerOverride}`;
   else if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -145,6 +148,19 @@ async function request(path, { method = 'GET', body, isFormData = false, timeout
     throw new ApiError(401, 'Session expired — please log in again.');
   }
 
+  // "What you already have is current." Only a request that SENT a tag can be answered this way, so
+  // a 304 on any other request still falls through to the !ok branch below as an error, exactly as
+  // before. Checked after the 401 branch on purpose: an expired session is never "not modified".
+  //
+  // The (empty) body is still read, like every other response here. Left unread, the browser
+  // cancels the body load -- harmless to the app, whose fetch has already resolved, but it leaves
+  // the connection to be reclaimed by GC and makes every 304 show up as a failed request in DevTools
+  // and Playwright (net::ERR_ABORTED), which reads exactly like a network fault.
+  if (response.status === 304 && ifNoneMatch) {
+    await response.text();
+    return { notModified: true };
+  }
+
   if (response.status === 204) return null;
 
   const contentType = response.headers.get('content-type') || '';
@@ -154,11 +170,17 @@ async function request(path, { method = 'GET', body, isFormData = false, timeout
     const message = (payload && payload.message) || 'Something went wrong on our end. Try again in a moment.';
     throw new ApiError(response.status, message, payload && payload.code);
   }
-  return payload;
+  return withEtag ? { data: payload, etag: response.headers.get('ETag') } : payload;
 }
 
 export const apiClient = {
   get: (path) => request(path),
+  // A GET that can be answered "not modified". Resolves to `{ notModified: true }` when the server
+  // confirms `etag` still describes the resource, else `{ data, etag }` with the response's own tag
+  // (null if it sent none). With no `etag` it is an ordinary GET that also reports the tag. Every
+  // failure path -- timeout, 401, 5xx, reachability reporting -- is `request`'s, unchanged.
+  // Only History uses it: see api/sessions.js#getHistory for what makes a 304 safe to act on.
+  getConditional: (path, etag) => request(path, { ifNoneMatch: etag, withEtag: true }),
   // Takes options for the same reason `delete` already does: `request` supports a per-call
   // timeoutMs, and nothing exported could reach it. Import needs the longer bound below.
   post: (path, body, options) => request(path, { method: 'POST', body, ...options }),

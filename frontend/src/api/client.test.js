@@ -247,3 +247,54 @@ describe('isOfflineError', () => {
     expect(isOfflineError({ status: 409 })).toBe(false);
   });
 });
+
+// getConditional is only as safe as its 304 handling: "not modified" must never be reported for a
+// request that did not ask the question, and must never outrank an expired session.
+describe('apiClient.getConditional', () => {
+  beforeEach(() => {
+    setAuthToken('abc123');
+    setUnauthorizedHandler(null);
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sends the tag as If-None-Match and reports a 304 as not modified', async () => {
+    global.fetch.mockResolvedValue(new Response(null, { status: 304 }));
+
+    await expect(apiClient.getConditional('/api/thing', 'W/"abc"')).resolves.toEqual({ notModified: true });
+    expect(global.fetch.mock.calls[0][1].headers['If-None-Match']).toBe('W/"abc"');
+  });
+
+  it('returns the body together with the response tag on a 200', async () => {
+    global.fetch.mockResolvedValue(
+      new Response(JSON.stringify([1, 2]), { status: 200, headers: { 'content-type': 'application/json', ETag: 'W/"new"' } }),
+    );
+
+    await expect(apiClient.getConditional('/api/thing', 'W/"old"')).resolves.toEqual({ data: [1, 2], etag: 'W/"new"' });
+  });
+
+  it('sends no If-None-Match without a tag, and reports a missing response tag as null', async () => {
+    global.fetch.mockResolvedValue(jsonResponse([1]));
+
+    await expect(apiClient.getConditional('/api/thing', undefined)).resolves.toEqual({ data: [1], etag: null });
+    expect(global.fetch.mock.calls[0][1].headers['If-None-Match']).toBeUndefined();
+  });
+
+  it('treats a 304 to a request that sent no tag as an error, never as "not modified"', async () => {
+    global.fetch.mockResolvedValue(new Response(null, { status: 304 }));
+
+    await expect(apiClient.getConditional('/api/thing', undefined)).rejects.toMatchObject({ status: 304 });
+  });
+
+  it('still signs out on a 401, tag or no tag', async () => {
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+    global.fetch.mockResolvedValue(jsonResponse({ message: 'nope' }, 401));
+
+    await expect(apiClient.getConditional('/api/thing', 'W/"abc"')).rejects.toMatchObject({ status: 401 });
+    expect(onUnauthorized).toHaveBeenCalled();
+  });
+});
