@@ -23,7 +23,7 @@ export const TOUR_ANCHORS = {
   SET_ENTRY: 'set-entry', // ExerciseDetail.jsx, .stepper-pair
   LOG_SET: 'log-set', // ExerciseDetail.jsx, the primary Log-set Button
   CUSTOMIZE_EXERCISE: 'customize-exercise', // ExerciseDetail.jsx, the Customize IconButton
-  NEW_ROUTINE: 'new-routine', // RoutinesTab.jsx, "+ New routine"
+  NEW_ROUTINE: 'new-routine', // RoutinesTab.jsx, "New routine"
   ACCOUNT_MENU: 'account-menu', // UserMenu.jsx, the trigger button
 };
 

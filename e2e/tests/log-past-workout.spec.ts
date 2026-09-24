@@ -21,7 +21,7 @@ test.describe('Log a past workout', () => {
     await page.reload();
 
     await page.getByRole('link', { name: 'History' }).click();
-    await page.getByRole('button', { name: '+ Log a past workout' }).click();
+    await page.getByRole('button', { name: 'Log a past workout' }).click();
 
     const modal = page.getByRole('dialog');
     await modal.locator('input[type="date"]').fill('2026-01-15');

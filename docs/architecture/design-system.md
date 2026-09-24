@@ -169,7 +169,7 @@ retired. Spend 700 sparingly or it stops meaning anything — which is exactly w
 
 `primary` / `secondary` / `ghost` / `danger` / `danger-solid` / `dark`, in `sm` / `md` / `lg`.
 
-**At most one `primary` visible per screen.** The History tab previously put "+ Log a past workout"
+**At most one `primary` visible per screen.** The History tab previously put "Log a past workout"
 (filled) directly beside "Export data" (outlined) — two equal-weight actions with two different
 treatments and no rule saying what the difference meant. Both are `secondary` now.
 

@@ -152,7 +152,7 @@ describe('HistoryTab offline', () => {
     renderHistoryTab();
     await act(async () => {}); // let the background person-exercises (tag map) query settle
 
-    expect(screen.getByRole('button', { name: '+ Log a past workout' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Log a past workout' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Export data' })).toBeDisabled();
   });
 });

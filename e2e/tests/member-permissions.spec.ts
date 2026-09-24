@@ -65,7 +65,7 @@ test.describe('Member logins', () => {
 
     // Their own screen is fully live -- no notice, and the write available.
     await expect(page.getByRole('status').filter({ hasText: 'Viewing' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: '+ Log a past workout' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Log a past workout' })).toBeEnabled();
 
     // Switching to the sibling: the write control goes read-only, and the reason is on screen in
     // words rather than only as grey (there is no hover on the devices this app targets).
@@ -76,7 +76,7 @@ test.describe('Member logins', () => {
     // Log rather than staying on History -- go back deliberately rather than assuming.
     await page.getByRole('link', { name: 'History' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Viewing Nate' })).toBeVisible();
-    await expect(page.getByRole('button', { name: '+ Log a past workout' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Log a past workout' })).toBeDisabled();
   });
 
   // ⚠️ THE ASSERTION THAT CANNOT BE MADE ANYWHERE ELSE.
@@ -249,6 +249,6 @@ test.describe('Member logins', () => {
     await expect(page.locator('.app-chrome').getByRole('button', { name: 'Nate', exact: true })).toHaveCount(0);
     // And their own screen is still fully live.
     await page.getByRole('link', { name: 'History' }).click();
-    await expect(page.getByRole('button', { name: '+ Log a past workout' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Log a past workout' })).toBeEnabled();
   });
 });

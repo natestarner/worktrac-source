@@ -28,7 +28,7 @@ test.describe('Offline mode — sync-count UX and Tier-3 gating', () => {
     await page.getByRole('link', { name: 'History' }).click();
     await goHardOffline(page);
 
-    const logPast = page.getByRole('button', { name: '+ Log a past workout' });
+    const logPast = page.getByRole('button', { name: 'Log a past workout' });
     await expect(logPast).toBeDisabled();
     await expect(logPast).toHaveAttribute('title', /needs a connection/i);
 
@@ -49,7 +49,7 @@ test.describe('Offline mode — sync-count UX and Tier-3 gating', () => {
     await expect(addPerson).toHaveAttribute('title', /needs a connection/i);
 
     await page.getByRole('link', { name: 'Routines' }).click();
-    const newRoutine = page.getByRole('button', { name: '+ New routine' });
+    const newRoutine = page.getByRole('button', { name: 'New routine' });
     await expect(newRoutine).toBeDisabled();
     await expect(newRoutine).toHaveAttribute('title', /needs a connection/i);
 

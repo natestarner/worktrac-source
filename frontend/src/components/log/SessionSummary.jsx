@@ -130,7 +130,7 @@ export default function SessionSummary({ entries, prFlags, loading, sessionId, p
     // this list -- an exercise name legitimately appears here AND in the picker below AND in
     // search results, so a bare getByText for it is a strict-mode violation waiting to happen.
     <div className="session-exercises" style={{ marginBottom: 16 }}>
-      <SectionLabel>
+      <SectionLabel style={{ marginBottom: 'var(--space-2)' }}>
         Session exercises
       </SectionLabel>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 16, padding: '0 20px' }}>

@@ -50,7 +50,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     await registerHousehold(page, request, 'Rory');
     await page.getByRole('link', { name: 'Routines' }).click();
 
-    const newRoutineButton = page.getByRole('button', { name: '+ New routine' });
+    const newRoutineButton = page.getByRole('button', { name: 'New routine' });
     // Not gated -- useRequireOnline/OfflineDisabledWrap only react to navigator.onLine/the pin,
     // neither of which this scenario touches.
     await expect(newRoutineButton).toBeEnabled();
@@ -92,7 +92,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
 
     // Tier-3 gating now applies -- it only reacts to the elected/hard-offline signal, not "trouble".
     await page.getByRole('link', { name: 'Routines' }).click();
-    await expect(page.getByRole('button', { name: '+ New routine' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'New routine' })).toBeDisabled();
 
     faults.stop();
     await page.context().setOffline(false);
@@ -103,7 +103,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // though the button's logic and the Settings toggle both drive the exact same pin flag.
     await goBackOnlineButton(page).click();
     await expect(page.getByText(/Still can.t reach the server/)).toBeHidden();
-    await expect(page.getByRole('button', { name: '+ New routine' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'New routine' })).toBeEnabled();
   });
 
   test('creating an exercise while lie-fi closes the dialog immediately instead of hanging, and syncs once reachable', async ({ page, request }) => {

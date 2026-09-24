@@ -26,7 +26,7 @@ function outOfWindowDate(): string {
 // .claude/rules/offline-internals.md).
 async function logAnOutOfWindowWorkout(page: Page) {
   await page.getByRole('link', { name: 'History' }).click();
-  await page.getByRole('button', { name: '+ Log a past workout' }).click();
+  await page.getByRole('button', { name: 'Log a past workout' }).click();
 
   const modal = page.getByRole('dialog');
   await modal.locator('input[type="date"]').fill(outOfWindowDate());
@@ -50,7 +50,7 @@ test.describe('The Free-tier window names the rest of your history', () => {
     await registerHousehold(page, request, 'Jamie');
 
     await page.getByRole('link', { name: 'History' }).click();
-    await page.getByRole('button', { name: '+ Log a past workout' }).click();
+    await page.getByRole('button', { name: 'Log a past workout' }).click();
     const modal = page.getByRole('dialog');
 
     // Today is inside the window, so there is nothing to say yet.

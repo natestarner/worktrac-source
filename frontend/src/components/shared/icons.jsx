@@ -152,6 +152,26 @@ export const IconTrash = (props) => (
   </Icon>
 );
 
+// Export / download a file (History's "Export data"). Lucide's download.
+export const IconDownload = (props) => (
+  <Icon {...props}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M12 15V3" />
+  </Icon>
+);
+
+// Entering a reorder mode (Routines' "Reorder routines"). Lucide's arrow-up-down -- deliberately
+// NOT the grip below, which marks the handle you drag once the mode is open.
+export const IconArrowUpDown = (props) => (
+  <Icon {...props}>
+    <path d="m21 16-4 4-4-4" />
+    <path d="M17 20V4" />
+    <path d="m3 8 4-4 4 4" />
+    <path d="M7 4v16" />
+  </Icon>
+);
+
 // Drag handle for a reorderable row (routine builder). Lucide's grip-vertical: two columns
 // of three dots, recognisable as "grab this" independent of any tooltip or label.
 export const IconGripVertical = (props) => (

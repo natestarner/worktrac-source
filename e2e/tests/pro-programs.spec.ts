@@ -22,7 +22,7 @@ test.describe('Pro — programs', () => {
     await page.reload();
 
     await openRoutines(page);
-    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Squat Day');
     await page.getByPlaceholder('Search all exercises').fill('Barbell Bench Press');
     await page.getByRole('button', { name: 'Barbell Bench Press', exact: true }).click();
@@ -47,7 +47,7 @@ test.describe('Pro — programs', () => {
     await page.reload();
 
     await openRoutines(page);
-    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Heavy');
     await page.getByPlaceholder('Search all exercises').fill('Barbell Bench Press');
     await page.getByRole('button', { name: 'Barbell Bench Press', exact: true }).click();

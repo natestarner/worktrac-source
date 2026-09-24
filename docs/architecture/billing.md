@@ -218,7 +218,7 @@ is a separate column; routing grants back through Stripe would re-couple the two
 
 The clamp shipped correct and silent, and silent was the bug. Two shapes of it:
 
-- **The acute one.** A Free household taps "+ Log a past workout", picks a date months back, logs
+- **The acute one.** A Free household taps "Log a past workout", picks a date months back, logs
   the sets, taps Done — and lands on History reading *"No workouts logged yet."* The work is saved
   and returns with Plus, but the app has just told them it does not exist. `log-past-workout.spec.ts`
   flagged this in a comment and worked around it by forcing the household to Plus.

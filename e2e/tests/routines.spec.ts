@@ -14,7 +14,7 @@ test.describe('Routines', () => {
     await registerHousehold(page, request, 'Jordan');
 
     await page.getByRole('link', { name: 'Routines' }).click();
-    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
 
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Push Day');
 
@@ -55,7 +55,7 @@ test.describe('Routines', () => {
     await registerHousehold(page, request, 'Quinn');
 
     await page.getByRole('link', { name: 'Routines' }).click();
-    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Cycle');
 
     await addExerciseToRoutine(page, 'Barbell Bench Press');
@@ -104,7 +104,7 @@ test.describe('Routines', () => {
     await registerHousehold(page, request, 'Avery');
 
     await page.getByRole('link', { name: 'Routines' }).click();
-    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Drag Day');
 
     await addExerciseToRoutine(page, 'Barbell Bench Press');
@@ -149,7 +149,7 @@ test.describe('Routines', () => {
     await registerHousehold(page, request, 'Riley');
 
     await page.getByRole('link', { name: 'Routines' }).click();
-    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Long Day');
     await addExerciseToRoutine(page, 'Barbell Bench Press');
     await addExerciseToRoutine(page, 'Dumbbell Overhead Press');
@@ -195,7 +195,7 @@ test.describe('Routines', () => {
 
     await personPill(page, 'Jordan').click();
     await page.getByRole('link', { name: 'Routines' }).click();
-    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Push Day');
     await addExerciseToRoutine(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Save routine' }).click();

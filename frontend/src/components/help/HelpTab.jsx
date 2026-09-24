@@ -378,7 +378,7 @@ export default function HelpTab() {
 
         <h3 className="help-h3">Building one</h3>
         <p>
-          <T>Routines</T> tab &rarr; <T>+ New routine</T>. Name it (Push Day, Legs, Warm-up) and add
+          <T>Routines</T> tab &rarr; <T>New routine</T>. Name it (Push Day, Legs, Warm-up) and add
           exercises from your library in the order you&rsquo;ll do them. An exercise
           can appear more than once; each position is its own step, so a routine that opens and closes
           with the same movement works fine. <ChipWait />
@@ -476,7 +476,7 @@ export default function HelpTab() {
 
         <h3 className="help-h3">Logging something you did days ago</h3>
         <p>
-          <T>+ Log a past workout</T> creates a session on a date you choose, so you can backfill a
+          <T>Log a past workout</T> creates a session on a date you choose, so you can backfill a
           workout you did away from your phone. <ChipWait />
         </p>
 
