@@ -198,6 +198,22 @@ Contact Us bug report could only be matched to the container logs by timestamp. 
   backend.** A second retry mechanism next to the outbox is precisely what `resilience.md`'s
   "reuse the mechanism" table exists to prevent.
 
+## Queries must survive years of history
+
+Every test seeds a handful of sessions; a daily lifter has ~365 a year. Two shapes pass every
+small test and break at that scale. `HistoryScaleTest` seeds 2,150 sessions to guard both.
+
+- **Never bind an id list that grows with a person's history** (`findBy..._IdIn(sessionIds)`).
+  SQL Server refuses a statement with more than **2,100 parameters**, so it fails outright, not
+  slowly — History and CSV export both returned 503 past ~2,100 sessions until they were re-keyed
+  on the person (`SessionExerciseNoteRepository#findBySession_Person_Id`). Key on the owner and
+  group in memory, or join.
+- **A whole-history load must fetch the associations its callers read per row.**
+  `WorkoutSetRepository`'s two whole-history methods carry `@EntityGraph(attributePaths =
+  "session")` because every caller reads `session.startedAt`; without it that was one lazy SELECT
+  per session (~2,000 statements per `/prs` or trends request). Use a per-method graph, not a global
+  `hibernate.default_batch_fetch_size`, which changes every lazy load in the app.
+
 ## Error handling
 
 - `GlobalExceptionHandler` (`common/`) must answer **every** failure mode with an honest

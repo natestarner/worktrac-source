@@ -1,5 +1,6 @@
 package com.worktrac.backend.workoutset;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,6 +19,15 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     long countByAccountId(@Param("accountId") Long accountId);
 
 
+    // Whole-history reads. Both load the set's session in the SAME query (@EntityGraph), because
+    // every caller reads session.startedAt for every row -- chronology, the Free-tier window, the
+    // weekly buckets. Loaded lazily, that was one SELECT per session: ~2,000 statements for one
+    // /prs or trends request at 2,000 sessions. The join is on a NOT NULL foreign key, so it adds a
+    // column set to each row and never changes which rows come back or their order.
+    // Guarded by HistoryScaleTest. Don't drop the graph to "simplify" these into plain derived
+    // queries; don't reach for a global hibernate.default_batch_fetch_size instead either -- that
+    // changes every lazy load in the app, not just these two.
+    @EntityGraph(attributePaths = "session")
     List<WorkoutSet> findByPerson_IdAndExercise_Id(Long personId, Long exerciseId);
 
     // The "has a logged set" half of a person's Log picker: every exercise they've ever
@@ -39,6 +49,9 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     // carries seconds, so an imported pair genuinely lands on the same instant -- and without a
     // tiebreaker SQL Server is free to return those two in either order. That made an export
     // non-deterministic for exactly the data an import produces.
+    //
+    // Loads each set's session in the same query -- see findByPerson_IdAndExercise_Id above.
+    @EntityGraph(attributePaths = "session")
     List<WorkoutSet> findByPerson_IdOrderByCreatedAtAscIdAsc(Long personId);
 
     Optional<WorkoutSet> findByIdAndPerson_Id(Long id, Long personId);

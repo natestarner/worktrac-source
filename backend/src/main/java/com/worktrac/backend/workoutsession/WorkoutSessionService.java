@@ -160,9 +160,10 @@ public class WorkoutSessionService {
 
         // One bulk query for every session note across this person's history, rather than
         // one query per (session, exercise) entry -- grouped in memory the same way sets
-        // already are above.
+        // already are above. A note on a session with no sets is loaded too and simply never
+        // looked up, because only sessions in setsBySession become History rows.
         Map<Long, Map<Long, String>> notesBySessionThenExercise = new LinkedHashMap<>();
-        for (SessionExerciseNote n : sessionExerciseNoteRepository.findBySession_IdIn(List.copyOf(setsBySession.keySet()))) {
+        for (SessionExerciseNote n : sessionExerciseNoteRepository.findBySession_Person_Id(person.getId())) {
             notesBySessionThenExercise
                     .computeIfAbsent(n.getSession().getId(), k -> new LinkedHashMap<>())
                     .put(n.getExercise().getId(), n.getNote());
