@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { pickExercise, setStepperPair } from './support/exercises';
+import { waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
 // ⚠️ THIS IS THE SPEC THE WHOLE CLIENT-SIDE-DETECTION CHANGE EXISTS FOR.
@@ -129,6 +130,10 @@ forEachConnectivityMode<{ personName: string }>('a session-volume record fires o
     await page.getByRole('button', { name: 'End workout' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
     await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
+    // The baseline set and the End on the server before re-entering. Without this, against lower's
+    // ~800ms writes, the re-entry fetched a summary from before the set landed, nothing refetched
+    // it, and the "Last time" guard below timed out. See the bodyweight spec below.
+    await waitForOutboxDrain(page);
     // Back to the picker and in again, so exerciseSummary and history are refetched ONLINE with
     // the baseline workout in them -- see the note in the spec above for why that matters.
     const back = page.getByRole('button', { name: /All exercises/ });
@@ -201,12 +206,25 @@ forEachConnectivityMode<{ personName: string }>('a bodyweight volume record coun
     await page.getByRole('button', { name: 'End workout' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
     await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
+    // The baseline set AND the End on the server before anything below reads them back. THIS is
+    // the load-bearing line. The End queues behind the set in the serial outbox, and against
+    // lower's ~800ms writes neither had landed by the time this setup used to return -- so the mode
+    // began over caches that did not hold the baseline yet: a first set celebrated as a first-ever
+    // one, a volume crossing that never fired, or the ended workout's set listed as "Set 1".
+    // Measured locally with every API call delayed 750ms: 0/32 passed without this, 32/32 with it.
+    await waitForOutboxDrain(page);
     // Out and back in, so exerciseSummary/history are refetched ONLINE holding the baseline.
     // Ending a workout may already have returned to the picker.
     const back = page.getByRole('button', { name: /All exercises/ });
     if (await back.isVisible()) await back.click();
     await pickExercise(page, 'Chin-up');
-    await expect(page.getByText(/\(0lb×10\)/)).toBeVisible();
+    // ⚠️ The "Last time" card, NOT the Best card's "(0lb×10)". The Best card folds in sets that are
+    // still saving (effectiveBest over pendingBeforeSession -- which includes a create from a
+    // workout already ended), so it passed on the in-flight baseline write itself and proved
+    // nothing about the server. "Last time" is only ever filled by a summary the server returned,
+    // so if the drain above ever stops doing its job this fails HERE, in setup, instead of letting
+    // the mode run over the wrong data.
+    await expect(page.getByText('0lb×10', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: /All exercises/ }).click();
     return { personName };
   },

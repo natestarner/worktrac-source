@@ -294,6 +294,17 @@ Phases, in order — `setup` runs **online**, everything after runs **in the mod
   it roughly doubled suite wall-clock, and two consecutive full runs then died to the
   load-dependent Vite death. Reads say nothing about whether the outbox drained; filter to
   non-GET/HEAD.
+- **A setup that writes online and then reads it back must drain first, and must guard on a value
+  only the SERVER can produce.** On lower a write takes ~800ms and later writes (an End) queue
+  behind it serially, so a setup that just clicks on can return with its baseline still in the
+  outbox. Locally that never shows (~5ms round trips). The trap is that the obvious guard passes
+  anyway: the Log screen's **Best card** folds in still-saving sets (`effectiveBest` over
+  `pendingBeforeSession`, which includes a create from an already-ended workout), so
+  `getByText(/\(135lb×5\)/)` is satisfied by the in-flight write itself and proves nothing. The
+  **Last time** card is only ever filled by a server summary. `waitForOutboxDrain` after the
+  writes, then a Last-time guard — this cost `parity-pr-celebration`'s bodyweight spec 14 of 68
+  lower runs. To reproduce lower's timing locally, `delayNetwork(page, API_ONLY, 750)` in setup
+  (400ms was not enough).
 - **A `fixmeModes` entry is a hypothesis, not a diagnosis.** Recording a found divergence instead of
   blind-patching is right, but confirm the reproduction measures what it claims before reasoning
   from *which* modes it names — the 2026-08-12 entry's mode list was an artifact of how long each
