@@ -69,10 +69,10 @@ public class WorkoutRowProjection {
 
         // Session notes are scoped to (session, exercise), so a nested lookup -- mirrors
         // WorkoutSessionService.getHistory's bulk-then-group-in-memory approach rather than
-        // querying per session/exercise.
+        // querying per session/exercise. Keyed on the person, not a list of session ids -- see
+        // SessionExerciseNoteRepository#findBySession_Person_Id for the SQL Server parameter cap.
         Map<Long, Map<Long, String>> sessionNoteByExerciseBySession = new HashMap<>();
-        List<Long> sessionIds = sessionsAscending.stream().map(WorkoutSession::getId).toList();
-        for (SessionExerciseNote note : sessionExerciseNoteRepository.findBySession_IdIn(sessionIds)) {
+        for (SessionExerciseNote note : sessionExerciseNoteRepository.findBySession_Person_Id(person.getId())) {
             sessionNoteByExerciseBySession
                     .computeIfAbsent(note.getSession().getId(), k -> new HashMap<>())
                     .put(note.getExercise().getId(), note.getNote());
