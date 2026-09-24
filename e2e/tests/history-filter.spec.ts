@@ -232,7 +232,7 @@ test.describe('PRs board sorting', () => {
     await modal.locator('input[type="date"]').fill(date);
     await modal.locator('input[type="time"]').fill('09:00');
     await modal.getByRole('button', { name: 'Start adding sets' }).click();
-    await expect(page.getByText('Editing past session')).toBeVisible();
+    await expect(page.getByText('Adding/editing past session')).toBeVisible();
 
     await pickExercise(page, exercise);
     // logSetAt rather than a bare setStepper pair: the draft is re-seeded when the summary queries

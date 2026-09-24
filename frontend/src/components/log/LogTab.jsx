@@ -312,214 +312,223 @@ export default function LogTab() {
         </div>
       )}
 
-      {editingSession && (
-        <div style={{ background: 'var(--color-dark)', borderRadius: 16, padding: '16px 20px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            {/* var(--color-accent-contrast) (always white) rather than var(--color-bg) -- the
-                latter is meant as "page background", which is light in light mode but flips to
-                near-black in dark mode, making this text unreadable against the always-dark
-                chip background it sits on. */}
-            <SectionLabel style={{ color: 'var(--color-accent-contrast)' }}>
-              Editing past session
-            </SectionLabel>
-            <button
-              onClick={() => {
-                doneEditingSession();
-                navigate('/app/history');
-              }}
-              style={{ background: '#fff', border: 'none', color: 'var(--color-dark)', fontSize: 13, fontWeight: 700, cursor: 'pointer', padding: '8px 14px', borderRadius: 8 }}
-            >
-              Done
-            </button>
-          </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <input
-              type="date"
-              value={toLocalDateStr(editingSession.startedAt)}
-              onChange={handleEditingDateChange}
-              // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
-              style={{ flex: 1, padding: '10px 12px', border: 'none', borderRadius: 8, fontSize: 16 }}
-            />
-            <input
-              type="time"
-              value={toLocalTimeStr(editingSession.startedAt)}
-              onChange={handleEditingTimeChange}
-              style={{ flex: 1, padding: '10px 12px', border: 'none', borderRadius: 8, fontSize: 16 }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* The "Session in progress" card used to render HERE, above everything else in the tab. It
-          mounted the instant a set was logged (at onMutate, so in every connectivity mode) and cost
-          ~66px in flow, shoving the primary "Log set" button down out from under the thumb that had
-          just pressed it. It now lives in SessionBar -- fixed bottom chrome, mounted app-wide, which
-          reserves its own space rather than displacing anything. The "Editing past session" card
-          above stays in flow deliberately: that one is a form, not a status. */}
-
-      {activeRoutine && (
-        <Card size="dense" style={{ marginBottom: 16 }}>
-          {/* "End routine" lives up here, in the one piece of chrome that's on screen for the
-              whole life of a routine (this card renders above BOTH the picker and the exercise
-              screen). Before it, the only exit was "Finish routine" below -- which appears solely
-              on the last step, and only while an exercise is open -- so leaving a routine early
-              meant scrubbing the pill strip to its end and tapping in. Muted rather than the
-              `ghost` variant's accent text: it sits beside the accent-coloured "n of m" counter,
-              and two accent items in one row blur into each other. */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)', marginBottom: 12 }}>
-            <SectionLabel>
-              {activeRoutine.name}
-            </SectionLabel>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent-text)' }}>
-                {Math.min(routineIndex + 1, activeRoutine.exercises.length)} of {activeRoutine.exercises.length}
-              </div>
-              {/* The negative block margin keeps the 40px touch target while stopping it from
-                  becoming the ROW's height. This is a row of small text -- an 12px uppercase
-                  label and a 13px counter -- and .btn-sm's min-height was defining it at 40px,
-                  so the label rode centred with 11px of dead space above it. Added to the card's
-                  own 16px that read as 28px of gap above the label and looked unfinished.
-                  Nothing paints here to look cramped: .btn-ghost has no hover background, so the
-                  overflowing target is invisible, and .card sets no overflow, so the focus ring
-                  is not clipped. Same trade, and the same -px shape, as Modal.jsx's close button. */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleEndRoutine}
-                style={{ color: 'var(--color-muted)', marginTop: -10, marginBottom: -10 }}
+      {/* While adding to or editing a PAST session, everything below is framed, with the date/time
+          card as the frame's header -- so a backfill can't be mistaken for a live workout even
+          after the header has scrolled away. The wrapper and body are ALWAYS rendered, only their
+          classes change: toggling a wrapper element in and out would change the tree position of
+          ExercisePicker/ExerciseDetail below and remount them, dropping their local state. */}
+      <section
+        className={editingSession ? 'past-session-frame' : undefined}
+        aria-labelledby={editingSession ? 'past-session-frame-title' : undefined}
+      >
+        {editingSession && (
+          <div className="past-session-frame__header">
+            <div className="past-session-frame__title-row">
+              {/* "Adding/editing", not "Editing": "Log a past workout" lands here with a brand-new,
+                  empty session, where nothing is being edited yet. */}
+              <SectionLabel id="past-session-frame-title" className="past-session-frame__title">
+                Adding/editing past session
+              </SectionLabel>
+              <button
+                className="past-session-frame__done pressable"
+                onClick={() => {
+                  doneEditingSession();
+                  navigate('/app/history');
+                }}
               >
-                End routine
-              </Button>
+                Done
+              </button>
+            </div>
+            <div className="past-session-frame__fields">
+              <input
+                type="date"
+                aria-label="Session date"
+                value={toLocalDateStr(editingSession.startedAt)}
+                onChange={handleEditingDateChange}
+              />
+              <input
+                type="time"
+                aria-label="Session time"
+                value={toLocalTimeStr(editingSession.startedAt)}
+                onChange={handleEditingTimeChange}
+              />
             </div>
           </div>
-          {/* .hscroll, not an inline overflowX: this strip gets a deliberately thick, always-
-              visible scrollbar so it can be scrubbed mid-workout. See index.css. */}
-          <div className="hscroll" style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            {activeRoutine.exercises.map((rc, idx) => {
-              const isCurrent = idx === routineIndex;
-              const isDone = idx < routineIndex;
-              return (
-                <button
-                  key={`${rc.exerciseId}-${idx}`}
-                  ref={(el) => {
-                    routinePillRefs.current[idx] = el;
-                  }}
-                  onClick={() => jumpToRoutineIndex(idx, activeRoutine.exercises.map((e) => e.exerciseId))}
-                  style={{
-                    flexShrink: 0,
-                    padding: '9px 14px',
-                    borderRadius: 'var(--radius-md)',
-                    border: 'none',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    background: isCurrent ? 'var(--color-accent)' : isDone ? 'var(--color-success-bg)' : 'var(--color-subtle-bg)',
-                    color: isCurrent ? '#fff' : isDone ? 'var(--color-success)' : 'var(--color-muted)',
-                  }}
-                >
-                  {rc.exerciseName}
-                </button>
-              );
-            })}
-          </div>
+        )}
 
-          {/* Not gated on `selectedExercise`. That condition was carried over verbatim in #64 when
-              this button moved up here out of ExerciseDetail (which only ever renders WITH an
-              exercise open), so it was incidental rather than a decision -- and it meant backing
-              out to the picker mid-routine hid the only way to advance. The label stays honest on
-              both screens: from the picker, "Next exercise" advances a step and opens it. */}
-          <button
-            onClick={handleNextExercise}
-            style={{
-              width: '100%',
-              marginTop: 12,
-              padding: 14,
-              background: 'var(--color-dark)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 12,
-              fontSize: 15,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            {routineIndex + 1 >= activeRoutine.exercises.length ? 'Finish routine' : 'Next exercise'}
-          </button>
-        </Card>
-      )}
+        <div className={editingSession ? 'past-session-frame__body' : undefined}>
+          {/* The "Session in progress" card used to render HERE, above everything else in the tab. It
+              mounted the instant a set was logged (at onMutate, so in every connectivity mode) and cost
+              ~66px in flow, shoving the primary "Log set" button down out from under the thumb that had
+              just pressed it. It now lives in SessionBar -- fixed bottom chrome, mounted app-wide, which
+              reserves its own space rather than displacing anything. The past-session header
+              above stays in flow deliberately: that one is a form, not a status. */}
 
-      {hasActiveSession && !selectedExercise && (
-        <SessionSummary
-          entries={sessionEntries}
-          prFlags={sessionPrFlags}
-          loading={activeSessionId ? historyLoading : false}
-          sessionId={activeSessionId}
-          // Load-bearing: the durable DELETE_SET write's reconcileSetChange invalidates
-          // history/prs/summary/trends by personId. Without it those invalidations target
-          // `undefined`, nothing refetches, and a removed exercise stays on screen forever even
-          // though its sets were really deleted server-side.
-          personId={activePersonId}
-          onSelectExercise={selectExercise}
-          onChanged={(removedExerciseId) => {
-            // See PERSON_DEFAULTS.volumePrCelebrated: removing an entry's sets lowers that
-            // exercise's session-volume record, so the latch holding the last celebrated value
-            // has to be re-armed or it suppresses every later record below it.
-            if (removedExerciseId != null) clearVolumePrCelebrated(removedExerciseId);
-            refetchHistory();
-          }}
-        />
-      )}
+          {activeRoutine && (
+            <Card size="dense" style={{ marginBottom: 16 }}>
+              {/* "End routine" lives up here, in the one piece of chrome that's on screen for the
+                  whole life of a routine (this card renders above BOTH the picker and the exercise
+                  screen). Before it, the only exit was "Finish routine" below -- which appears solely
+                  on the last step, and only while an exercise is open -- so leaving a routine early
+                  meant scrubbing the pill strip to its end and tapping in. Muted rather than the
+                  `ghost` variant's accent text: it sits beside the accent-coloured "n of m" counter,
+                  and two accent items in one row blur into each other. */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-2)', marginBottom: 12 }}>
+                <SectionLabel>
+                  {activeRoutine.name}
+                </SectionLabel>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-accent-text)' }}>
+                    {Math.min(routineIndex + 1, activeRoutine.exercises.length)} of {activeRoutine.exercises.length}
+                  </div>
+                  {/* The negative block margin keeps the 40px touch target while stopping it from
+                      becoming the ROW's height. This is a row of small text -- an 12px uppercase
+                      label and a 13px counter -- and .btn-sm's min-height was defining it at 40px,
+                      so the label rode centred with 11px of dead space above it. Added to the card's
+                      own 16px that read as 28px of gap above the label and looked unfinished.
+                      Nothing paints here to look cramped: .btn-ghost has no hover background, so the
+                      overflowing target is invisible, and .card sets no overflow, so the focus ring
+                      is not clipped. Same trade, and the same -px shape, as Modal.jsx's close button. */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleEndRoutine}
+                    style={{ color: 'var(--color-muted)', marginTop: -10, marginBottom: -10 }}
+                  >
+                    End routine
+                  </Button>
+                </div>
+              </div>
+              {/* .hscroll, not an inline overflowX: this strip gets a deliberately thick, always-
+                  visible scrollbar so it can be scrubbed mid-workout. See index.css. */}
+              <div className="hscroll" style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                {activeRoutine.exercises.map((rc, idx) => {
+                  const isCurrent = idx === routineIndex;
+                  const isDone = idx < routineIndex;
+                  return (
+                    <button
+                      key={`${rc.exerciseId}-${idx}`}
+                      ref={(el) => {
+                        routinePillRefs.current[idx] = el;
+                      }}
+                      onClick={() => jumpToRoutineIndex(idx, activeRoutine.exercises.map((e) => e.exerciseId))}
+                      style={{
+                        flexShrink: 0,
+                        padding: '9px 14px',
+                        borderRadius: 'var(--radius-md)',
+                        border: 'none',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        background: isCurrent ? 'var(--color-accent)' : isDone ? 'var(--color-success-bg)' : 'var(--color-subtle-bg)',
+                        color: isCurrent ? '#fff' : isDone ? 'var(--color-success)' : 'var(--color-muted)',
+                      }}
+                    >
+                      {rc.exerciseName}
+                    </button>
+                  );
+                })}
+              </div>
 
-      {!selectedExercise && (
-        <ExercisePicker
-          // Remount on person switch, for the same reason ExerciseDetail below carries this key:
-          // the picker holds local "I expanded this section" state, and unlike ExerciseDetail it
-          // is NOT unmounted by a person switch on its own (AppShell just navigates to that
-          // person's lastTab, which is usually this one). Without the key, one person's expanded
-          // Favorites list would be showing on the next person's screen.
-          key={activePersonId}
-          personExercises={personExercises}
-          catalog={catalog}
-          routines={routines}
-          loading={personExercisesLoading}
-          onSelectExercise={selectExercise}
-          onAddExercise={(term) => setAddExerciseName((term || '').trim())}
-          onStartRoutine={handleStartRoutine}
-          hasActiveRoutine={!!activeRoutine}
-        />
-      )}
+              {/* Not gated on `selectedExercise`. That condition was carried over verbatim in #64 when
+                  this button moved up here out of ExerciseDetail (which only ever renders WITH an
+                  exercise open), so it was incidental rather than a decision -- and it meant backing
+                  out to the picker mid-routine hid the only way to advance. The label stays honest on
+                  both screens: from the picker, "Next exercise" advances a step and opens it. */}
+              <button
+                onClick={handleNextExercise}
+                style={{
+                  width: '100%',
+                  marginTop: 12,
+                  padding: 14,
+                  background: 'var(--color-dark)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 12,
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {routineIndex + 1 >= activeRoutine.exercises.length ? 'Finish routine' : 'Next exercise'}
+              </button>
+            </Card>
+          )}
 
-      {selectedExercise && (
-        <ExerciseDetail
-          // Remount on person switch so no local component state (keypad, editing-set, just-added
-          // highlight) can bleed from one person to the next -- the per-person isolation guarantee.
-          key={activePersonId}
-          exercise={selectedExercise}
-          personId={activePersonId}
-          tags={tags}
-          onPersonalizationChanged={refreshPersonalization}
-          editingSessionId={editingSession?.id || null}
-          liveSession={liveSession}
-          refetchLiveSession={refetchLiveSession}
-          onBack={backToPicker}
-          // What the trainer prescribed for THIS position in the routine being followed.
-          //
-          // ⚠️ Read by routineIndex, not by exercise id. The same exercise can legitimately appear
-          // twice in one routine at different numbers (a top set and a back-off set), and matching
-          // by id would show the first one's target at both positions -- which is worse than
-          // showing none, because it is confidently wrong.
-          //
-          // Null whenever no routine is running, which is most of the time.
-          prescribed={activeRoutine?.exercises?.[routineIndex] ?? null}
-          // Deep-links into History pre-filtered to this exercise. fromLog:true is what tells
-          // HistoryTab's filter bar to show a "Back to {exercise}" link -- selectedExerciseId is
-          // untouched by this navigation, so returning via that link (or the Log tab itself)
-          // lands back on this exact exercise screen.
-          onViewAllHistory={(exerciseId, exerciseName) =>
-            navigate('/app/history', { state: { historyExerciseFilter: { exerciseId, exerciseName, fromLog: true } } })
-          }
-        />
-      )}
+          {hasActiveSession && !selectedExercise && (
+            <SessionSummary
+              entries={sessionEntries}
+              prFlags={sessionPrFlags}
+              loading={activeSessionId ? historyLoading : false}
+              sessionId={activeSessionId}
+              // Load-bearing: the durable DELETE_SET write's reconcileSetChange invalidates
+              // history/prs/summary/trends by personId. Without it those invalidations target
+              // `undefined`, nothing refetches, and a removed exercise stays on screen forever even
+              // though its sets were really deleted server-side.
+              personId={activePersonId}
+              onSelectExercise={selectExercise}
+              onChanged={(removedExerciseId) => {
+                // See PERSON_DEFAULTS.volumePrCelebrated: removing an entry's sets lowers that
+                // exercise's session-volume record, so the latch holding the last celebrated value
+                // has to be re-armed or it suppresses every later record below it.
+                if (removedExerciseId != null) clearVolumePrCelebrated(removedExerciseId);
+                refetchHistory();
+              }}
+            />
+          )}
+
+          {!selectedExercise && (
+            <ExercisePicker
+              // Remount on person switch, for the same reason ExerciseDetail below carries this key:
+              // the picker holds local "I expanded this section" state, and unlike ExerciseDetail it
+              // is NOT unmounted by a person switch on its own (AppShell just navigates to that
+              // person's lastTab, which is usually this one). Without the key, one person's expanded
+              // Favorites list would be showing on the next person's screen.
+              key={activePersonId}
+              personExercises={personExercises}
+              catalog={catalog}
+              routines={routines}
+              loading={personExercisesLoading}
+              onSelectExercise={selectExercise}
+              onAddExercise={(term) => setAddExerciseName((term || '').trim())}
+              onStartRoutine={handleStartRoutine}
+              hasActiveRoutine={!!activeRoutine}
+            />
+          )}
+
+          {selectedExercise && (
+            <ExerciseDetail
+              // Remount on person switch so no local component state (keypad, editing-set, just-added
+              // highlight) can bleed from one person to the next -- the per-person isolation guarantee.
+              key={activePersonId}
+              exercise={selectedExercise}
+              personId={activePersonId}
+              tags={tags}
+              onPersonalizationChanged={refreshPersonalization}
+              editingSessionId={editingSession?.id || null}
+              liveSession={liveSession}
+              refetchLiveSession={refetchLiveSession}
+              onBack={backToPicker}
+              // What the trainer prescribed for THIS position in the routine being followed.
+              //
+              // ⚠️ Read by routineIndex, not by exercise id. The same exercise can legitimately appear
+              // twice in one routine at different numbers (a top set and a back-off set), and matching
+              // by id would show the first one's target at both positions -- which is worse than
+              // showing none, because it is confidently wrong.
+              //
+              // Null whenever no routine is running, which is most of the time.
+              prescribed={activeRoutine?.exercises?.[routineIndex] ?? null}
+              // Deep-links into History pre-filtered to this exercise. fromLog:true is what tells
+              // HistoryTab's filter bar to show a "Back to {exercise}" link -- selectedExerciseId is
+              // untouched by this navigation, so returning via that link (or the Log tab itself)
+              // lands back on this exact exercise screen.
+              onViewAllHistory={(exerciseId, exerciseName) =>
+                navigate('/app/history', { state: { historyExerciseFilter: { exerciseId, exerciseName, fromLog: true } } })
+              }
+            />
+          )}
+        </div>
+      </section>
 
       {addExerciseName !== null && (
         <AddEditExerciseModal

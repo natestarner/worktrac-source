@@ -470,7 +470,8 @@ export default function HelpTab() {
         <h3 className="help-h3">Fixing an old workout</h3>
         <p>
           Tap <T>Edit</T> on a session and it reopens on the Log tab in editing mode, with a date and
-          time field at the top. Add a set you forgot, correct a number, or fix the timestamp. Tap{' '}
+          time field at the top and an outline around the whole screen, so you can&rsquo;t mistake it
+          for a live workout. Add a set you forgot, correct a number, or fix the timestamp. Tap{' '}
           <T>Done</T> when finished.
         </p>
 

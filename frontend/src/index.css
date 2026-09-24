@@ -1402,6 +1402,78 @@ input[type='search']::-webkit-search-results-decoration {
   padding: var(--space-5) var(--space-6) 0;
 }
 
+/* The Log tab while adding to / editing a PAST session (LogTab.jsx). The date/time card is the
+   frame's header, and the frame's outline runs down both sides of everything below it, so the
+   mode stays visible while scrolling long after the header itself has scrolled away -- a live
+   workout and a backfill share every other pixel of this screen, and logging into the wrong one
+   is easy to do and tedious to undo.
+
+   The outline bleeds into .tab-panel's gutter by exactly the body's side padding, so the cards
+   inside lose only the border's width rather than a whole extra gutter on a phone.
+
+   No overflow here, deliberately: clipping would cut off focus rings and the picker's chips at
+   the edges, and the header's own radius already follows the frame's corners. */
+.past-session-frame {
+  --past-session-frame-w: 2px;
+  border: var(--past-session-frame-w) solid var(--color-dark);
+  border-radius: var(--radius-lg);
+  margin: 0 calc(-1 * var(--space-3));
+}
+
+.past-session-frame__header {
+  background: var(--color-dark);
+  /* Inner radius = outer radius minus the border, or the corners show a sliver of page between
+     the fill and the outline. */
+  border-radius: calc(var(--radius-lg) - var(--past-session-frame-w))
+    calc(var(--radius-lg) - var(--past-session-frame-w)) 0 0;
+  padding: var(--space-4) var(--space-4);
+}
+
+.past-session-frame__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+/* Always white, not --color-bg: --color-dark stays dark in both schemes, and --color-bg flips to
+   near-black in dark mode. */
+.past-session-frame__title {
+  color: var(--color-accent-contrast);
+}
+
+.past-session-frame__done {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-contrast);
+  color: var(--color-dark);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+}
+
+.past-session-frame__fields {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.past-session-frame__fields input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-md); /* iOS zooms the viewport on focus below 16px */
+}
+
+.past-session-frame__body {
+  padding: var(--space-4) calc(var(--space-3) - var(--past-session-frame-w)) var(--space-3);
+}
+
 /* The one sticky box. WHAT is inside it is decided in AppShell.jsx (the tab bar always; the
    person bar only for a household of two or more) -- but it is always a contiguous run ending
    at the tab bar, which is what lets this stay a single element at top:0 instead of a stack of

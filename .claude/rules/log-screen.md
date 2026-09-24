@@ -598,3 +598,21 @@ Mechanism and the general form of the rule: `.claude/rules/offline-internals.md`
 `editableTempIds` is what gives a paused/retrying/errored row its Edit and Delete controls
 immediately instead of an indefinite "Saving…" spinner. "Saving…" is only for a write's first
 in-flight attempt.
+
+## The past-session frame
+
+While `editingSession` is set (History's "Log a past workout" or a session's Edit), `LogTab`
+draws its date/time card as the header of a frame whose outline (`.past-session-frame` in
+`index.css`) runs down both sides of everything below it — picker, routine card, summary and
+`ExerciseDetail`. The header alone scrolls away on the exercise screen; the outline is what keeps
+"this is a backfill, not a live workout" visible at every scroll position.
+
+- **The wrapper `<section>` and its body `<div>` are always rendered; only their classes toggle.**
+  Rendering them conditionally would change the tree position of `ExercisePicker`/`ExerciseDetail`
+  and remount them on entering or leaving the mode, dropping their local state.
+- **The outline means "past session" and nothing else.** Don't reuse it for another mode — a live
+  workout is deliberately unframed. `log-past-workout.spec.ts` asserts both halves.
+- The heading says **"Adding/editing"**, not "Editing": "Log a past workout" lands here on a
+  brand-new, empty session. Four e2e specs select it by that text.
+- Not a connectivity branch — it keys off client state only, so it is not on `resilience.md`'s
+  register.
