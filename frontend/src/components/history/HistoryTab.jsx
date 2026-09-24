@@ -25,7 +25,7 @@ import { windowLabel } from '../shared/historyWindowCopy';
 import SetPillRow from '../shared/SetPillRow';
 import PrBadge, { prBadgeLabel } from '../shared/PrBadge';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
-import { IconChevronRight, IconHelp, IconNote, IconScroll, IconTrendingUp } from '../shared/icons';
+import { IconChevronRight, IconDownload, IconHelp, IconNote, IconPlus, IconScroll, IconTrendingUp } from '../shared/icons';
 
 function timeLabelFor(session) {
   if (session.endedAt === null) return `${formatTime(session.startedAt)} · In progress`;
@@ -181,7 +181,8 @@ function HistoryTabContent({ initialExerciseFilter }) {
         <OfflineDisabledWrap message="Logging a past workout needs a connection.">
           <ReadOnlyWrap personId={activePersonId}>
             <button onClick={() => setShowPastSessionModal(true)} className="btn btn-secondary btn-md pressable" style={secondaryButtonStyle}>
-              + Log a past workout
+              <IconPlus size={16} />
+              Log a past workout
             </button>
           </ReadOnlyWrap>
         </OfflineDisabledWrap>
@@ -202,6 +203,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
             disabled={history.length === 0 && hiddenFromView === 0}
             title={history.length === 0 && hiddenFromView === 0 ? 'Nothing to export yet.' : undefined}
           >
+            <IconDownload size={16} />
             Export data
           </Button>
         </OfflineDisabledWrap>
@@ -584,12 +586,15 @@ const exerciseHeaderButtonStyle = {
   display: 'flex',
   alignItems: 'baseline',
   gap: 'var(--space-2)',
-  marginBottom: 4,
   width: '100%',
   background: 'none',
   border: 'none',
   padding: 0,
-  margin: 0,
+  // The same 6px the note and tag lines below each leave, so every line in an entry sits the same
+  // distance from the next. This used to be `marginBottom: 4` followed by `margin: 0`, and the
+  // shorthand silently won -- invisible under a note or tags (they carry their own gap) but
+  // leaving the set pills flush against the name on an entry with neither.
+  margin: '0 0 6px',
   textAlign: 'left',
   font: 'inherit',
   color: 'inherit',

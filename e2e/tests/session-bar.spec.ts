@@ -130,7 +130,7 @@ test.describe('Session bar stacking', () => {
     await registerHousehold(page, request, 'Toasty');
 
     await page.getByRole('link', { name: 'Routines' }).click();
-    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Push Day');
     await addExerciseToRoutine(page, 'Barbell Bench Press');
     await page.getByRole('button', { name: 'Save routine' }).click();

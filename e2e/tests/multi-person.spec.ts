@@ -190,7 +190,7 @@ test.describe('Multi-person switching', () => {
     // Alex starts logging a past workout.
     await personPill(page, 'Alex').click();
     await page.getByRole('link', { name: 'History' }).click();
-    await page.getByRole('button', { name: '+ Log a past workout' }).click();
+    await page.getByRole('button', { name: 'Log a past workout' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Start adding sets' }).click();
     await expect(page).toHaveURL(/\/app\/log/);
     await expect(page.getByText('Editing past session')).toBeVisible();

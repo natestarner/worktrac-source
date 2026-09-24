@@ -10,7 +10,7 @@ test.describe('Routine interrupted by off-routine logging', () => {
     await registerHousehold(page, request, 'Drew');
 
     await page.getByRole('link', { name: 'Routines' }).click();
-    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Push Day');
     await addExerciseToRoutine(page, 'Barbell Bench Press');
     await addExerciseToRoutine(page, 'Dumbbell Overhead Press');
@@ -48,7 +48,7 @@ test.describe('Routine interrupted by off-routine logging', () => {
     await registerHousehold(page, request, 'Sasha');
 
     await page.getByRole('link', { name: 'Routines' }).click();
-    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Push Day');
     await addExerciseToRoutine(page, 'Barbell Bench Press');
     await addExerciseToRoutine(page, 'Dumbbell Overhead Press');

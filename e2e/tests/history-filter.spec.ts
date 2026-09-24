@@ -226,7 +226,7 @@ test.describe('PRs board sorting', () => {
   // the two sorts apart. Retroactive sessions are the only way to get genuinely distinct dates.
   async function logPastPr(page, date: string, exercise: string, weight: number, reps: number) {
     await page.getByRole('link', { name: 'History' }).click();
-    await page.getByRole('button', { name: '+ Log a past workout' }).click();
+    await page.getByRole('button', { name: 'Log a past workout' }).click();
 
     const modal = page.getByRole('dialog');
     await modal.locator('input[type="date"]').fill(date);

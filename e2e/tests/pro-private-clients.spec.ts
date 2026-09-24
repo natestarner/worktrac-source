@@ -42,7 +42,7 @@ test.describe('Pro — private clients', () => {
 
     // And their own screen is fully live -- private is not read-only.
     await page.getByRole('link', { name: 'History' }).click();
-    await expect(page.getByRole('button', { name: '+ Log a past workout' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Log a past workout' })).toBeEnabled();
   });
 
   test("a client's own exercise stays out of a sibling's catalogue", async ({ page, request }) => {

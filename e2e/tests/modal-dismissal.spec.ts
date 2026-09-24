@@ -49,7 +49,7 @@ test.describe('Modal dismissal', () => {
     await registerHousehold(page, request, 'Gray');
 
     await page.getByRole('link', { name: 'Routines' }).click();
-    await page.getByRole('button', { name: '+ New routine' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
     await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Leg Day');
     await addExerciseToRoutine(page, 'Barbell Bench Press');
 

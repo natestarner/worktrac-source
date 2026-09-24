@@ -22,7 +22,7 @@ import EmptyState from '../shared/EmptyState';
 import Card from '../shared/Card';
 import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
-import { IconClipboardList, IconGripVertical } from '../shared/icons';
+import { IconArrowUpDown, IconClipboardList, IconGripVertical, IconPlus } from '../shared/icons';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 
 // Routines are listed in the person's OWN order (routines.sort_order, V61/V62), which they set
@@ -160,7 +160,7 @@ export default function RoutinesTab() {
           message wins when both apply. See ReadOnlyWrap's header.
 
           One action row, the same shape as History's: equal secondary buttons side by side.
-          "Reorder routines" used to be a text link on a row of its own below "+ New routine",
+          "Reorder routines" used to be a text link on a row of its own below "New routine",
           ~50px of height for one small control. In reorder mode "Done" takes the row as the only
           primary on screen -- the routine cards and their Start buttons are swapped out for the
           drag rows while the mode is open. */}
@@ -173,7 +173,8 @@ export default function RoutinesTab() {
                 data-tour-anchor={TOUR_ANCHORS.NEW_ROUTINE}
                 style={actionButtonStyle}
               >
-                + New routine
+                <IconPlus size={16} />
+                New routine
               </Button>
             </ReadOnlyWrap>
           </OfflineDisabledWrap>
@@ -195,6 +196,7 @@ export default function RoutinesTab() {
                   labels frontend-core.md warns about. */}
               <ReadOnlyWrap personId={activePersonId}>
                 <Button onClick={() => setDraftOrder(routines)} style={actionButtonStyle}>
+                  <IconArrowUpDown size={16} />
                   Reorder routines
                 </Button>
               </ReadOnlyWrap>
@@ -422,7 +424,7 @@ function SortableRoutineRow({ routine, index, total, onMoveByKey }) {
 }
 
 // The top-of-tab action row, --space-6 above the list like History's and PRs' controls blocks
-// (design-system.md's "Vertical rhythm"). Never empty: outside reorder mode "+ New routine" is
+// (design-system.md's "Vertical rhythm"). Never empty: outside reorder mode "New routine" is
 // always in it, and reorder mode only opens with two or more routines, which is what shows "Done".
 const actionRowStyle = { display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-6)' };
 

@@ -51,7 +51,7 @@ describe('RoutinesTab offline', () => {
   it('leaves New/Edit/Copy/Delete enabled and hides the offline notice while online', () => {
     renderWithQuery(<MemoryRouter><RoutinesTab /></MemoryRouter>);
 
-    expect(screen.getByRole('button', { name: '+ New routine' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'New routine' })).not.toBeDisabled();
     expect(screen.getByRole('button', { name: 'Edit' })).not.toBeDisabled();
     expect(screen.getByRole('button', { name: 'Copy to…' })).not.toBeDisabled();
     expect(screen.getByRole('button', { name: 'Delete' })).not.toBeDisabled();
@@ -60,7 +60,7 @@ describe('RoutinesTab offline', () => {
 
   // Cheap and high-value: stops a refactor silently deleting an attribute nothing else in this
   // file references. OfflineDisabledWrap clones its child in place, which must preserve it.
-  it('anchors "+ New routine" for the onboarding tour', () => {
+  it('anchors "New routine" for the onboarding tour', () => {
     const { container } = renderWithQuery(<MemoryRouter><RoutinesTab /></MemoryRouter>);
     expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.NEW_ROUTINE}"]`)).not.toBeNull();
   });
@@ -70,7 +70,7 @@ describe('RoutinesTab offline', () => {
 
     act(() => onlineManager.setOnline(false));
 
-    expect(screen.getByRole('button', { name: '+ New routine' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'New routine' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Copy to…' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled();
@@ -143,7 +143,7 @@ describe('RoutinesTab reordering', () => {
 
     enterReorderMode();
     expect(screen.queryByRole('button', { name: 'Start routine' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '+ New routine' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New routine' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reorder: Push day (1 of 3)' })).toBeInTheDocument();
 
     await act(async () => {

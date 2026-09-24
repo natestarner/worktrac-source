@@ -62,7 +62,7 @@ test.describe('Exercise notes', () => {
     // Wait for a History-only marker first, so the note check below can't catch a
     // mid-transition DOM state where the previous route's elements haven't fully
     // unmounted yet (seen as a flaky strict-mode double-match under parallel workers).
-    await expect(page.getByRole('button', { name: '+ Log a past workout' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Log a past workout' })).toBeVisible();
     await expect(page.getByText('Shoulder felt off today, cut it short')).toBeVisible();
 
     // --- Delete the session note via History's "Edit" -> the exercise's note glyph. All
