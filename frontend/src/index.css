@@ -363,16 +363,24 @@
        measurement as the light block, and the dark per-type trios had the same defect:
        --color-pr-heaviest-bg was #3a1e14 against --color-danger-bg #3a1f17, CIEDE2000 4.05.
 
-         text vs --color-danger     CIEDE2000 18.92
-         text vs --color-warning    CIEDE2000 18.12
-         text vs --color-success    CIEDE2000 45.24
-         FILL vs --color-danger-bg  CIEDE2000 15.82   (was 4.05)
-         FILL vs --color-warning-bg CIEDE2000 15.05
+       Toned down from #663300 / #ff9e3d, which cleared every bar below but read as a loud
+       orange slab on a dark screen -- a History day with several records looked like a warning
+       list. This is a muted warm brown fill with a soft apricot text: it still separates from
+       every alert fill well past the ~2.3 JND (and comparably to the light block's 10.52), it
+       is plainly lifted off the surface, and the text contrast actually went UP. The glyph and
+       the label remain the primary signal, exactly as the light block says.
+
+         text vs --color-danger     CIEDE2000 18.11
+         text vs --color-warning    CIEDE2000 14.23
+         text vs --color-success    CIEDE2000 38.73
+         FILL vs --color-danger-bg  CIEDE2000 8.65    (was 4.05 before the trio existed)
+         FILL vs --color-warning-bg CIEDE2000 9.46
+         FILL vs --color-surface    CIEDE2000 8.06
 
        Measured against #171614 bg / #221f1c surface. */
-    --color-record-bg: #663300;
-    --color-record-border: #9c5c1c; /* 3.09 surface */
-    --color-record-text: #ff9e3d; /* 5.01 own bg / 8.79 bg / 7.97 surface */
+    --color-record-bg: #382b1f;
+    --color-record-border: #8f6a45; /* 3.37 surface */
+    --color-record-text: #efb27c; /* 7.39 own bg / 9.76 bg / 8.85 surface */
 
     /* --color-dark is meant to read as an intentionally-dark "chip" (routine progress button,
        "editing past session" banner, numeric keypad, etc.), always paired with white text. Left
@@ -1991,6 +1999,22 @@ input[type='search']::-webkit-search-results-decoration {
     left var(--dur-slow) var(--ease-out),
     width var(--dur-slow) var(--ease-out),
     height var(--dur-slow) var(--ease-out);
+}
+
+/* Dark mode needs more than a darker scrim. The light-mode dim works by darkening a bright page,
+   but a 55% near-black over #171614 barely changes it -- the "dimmed" app and the undimmed hole
+   read as the same near-black, and people could not tell what a step was pointing at. So the
+   scrim goes deeper (pure black, so it still reads as a dimmer rather than a colour) and a soft
+   cream ring draws the hole's edge, which is the part that actually does the work on a dark
+   ground. Cream at partial opacity, not the terracotta accent: several anchors ARE accent-filled
+   buttons, and an accent ring round an accent button disappears into it. Still a static ring --
+   see the "no pulsing ring" note below. */
+@media (prefers-color-scheme: dark) {
+  .tour-spotlight {
+    box-shadow:
+      0 0 0 2px rgba(241, 239, 234, 0.7),
+      0 0 0 9999px rgba(0, 0, 0, 0.72);
+  }
 }
 
 .tour-card {
