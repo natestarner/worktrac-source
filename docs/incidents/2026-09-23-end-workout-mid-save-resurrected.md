@@ -156,6 +156,18 @@ incident is about.
   stale-high source until it refetches, and a genuine record between the two values goes
   uncelebrated for that window. Pinned in `ExerciseDetail.test.jsx`, and in `log-screen.md`.
 
+**The second half, the same day: "Last time" and the prefill.** The same out-of-date summary also
+fed the "Last time" card and the weight/reps prefill, so after two workouts, reopening the exercise
+showed (and pre-filled from) the workout *before* last until the refetch landed. It was also the
+root cause of `exercise-notes.spec.ts`'s lower flake, the worst remaining one (about half of runs,
+and it turned the #326 deploy red): the reopened exercise's summary was fetched **before the
+workout's set had landed** (~1.1s on lower), so it had no last session, and nothing refetched it,
+while history held the workout and its note a second later. (First read as "the server leaves a
+live session out of Last time"; `StatsService#buildLastSession` excludes only `excludeSessionId`,
+so that reading was wrong.) `mergeLastSessionWithHistory` now takes the more recent of the two.
+Measured: `exercise-notes` with the set save delayed 1.1s failed 4/4 unfixed and passed 5/5 fixed;
+the new Last-time parity scenario failed online and lie-fi 3/3 unfixed and passed 20/20 fixed.
+
 ## Takeaways
 
 - **"Ended" needs a name for the thing that was ended, even before the server has named it.** An

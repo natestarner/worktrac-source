@@ -654,6 +654,155 @@ describe('ExerciseDetail record priors: an out-of-date summary and history (#326
   });
 });
 
+// #326, second half: "Last time" and the weight prefill read the same out-of-date summary. They now
+// take the MORE RECENT of the summary's lastSession and history's (mergeLastSessionWithHistory).
+// Same waiting rule as the record-priors block above: wait for the queries, never for UI text.
+describe('ExerciseDetail Last time and prefill: an out-of-date summary and history (#326)', () => {
+  const set = (weight, reps) => ({ weight, reps, durationSeconds: null, unit: 'lb' });
+  const summaryLast = (sessionId, startedAt, sets, note = null) => ({ sessionId, startedAt, sets, note });
+  const workout = (id, startedAt, sets, note = null) => ({
+    id,
+    startedAt,
+    endedAt: startedAt,
+    manual: false,
+    entries: [{ exerciseId: exercise.id, exerciseName: exercise.name, sets, note }],
+  });
+  const summaryWith = (lastSession) => ({ lastSession, best: null, heaviestWeightLb: null, bestSessionVolume: null, volumeKind: null });
+
+  // Not the person's own draft, so what is shown is the computed prefill.
+  const prefillDraft = () => ({ ...typedDraft(), draftSource: 'prefill', draftSetCount: 0 });
+
+  async function bothLanded(queryClient, historyStatus = 'success') {
+    await waitFor(() => {
+      expect(queryClient.getQueryState(queryKeys.exerciseSummary(7, exercise.id, null))?.status).toBe('success');
+      expect(queryClient.getQueryState(queryKeys.history(7))?.status).toBe(historyStatus);
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+  });
+
+  afterEach(() => vi.clearAllMocks());
+
+  it('shows the more recent workout from history when the summary still names the one before it', async () => {
+    getExerciseSummary.mockResolvedValue(summaryWith(summaryLast(1, '2026-09-20T12:00:00Z', [set(135, 5)], 'old note')));
+    getHistory.mockResolvedValue([
+      workout(2, '2026-09-22T12:00:00Z', [set(185, 3)], 'new note'),
+      workout(1, '2026-09-20T12:00:00Z', [set(135, 5)], 'old note'),
+    ]);
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient } = renderExerciseDetail();
+
+    await bothLanded(queryClient);
+
+    expect(await screen.findByText('new note')).toBeInTheDocument();
+    expect(screen.getByText('185lb×3')).toBeInTheDocument();
+    expect(screen.queryByText('old note')).not.toBeInTheDocument();
+  });
+
+  // The exercise-notes lower flake: the summary was fetched before the workout's set had landed, so
+  // it had no last session at all, while history held the workout and its note a second later.
+  it('shows history\'s workout when the summary has none', async () => {
+    getExerciseSummary.mockResolvedValue(summaryWith(null));
+    getHistory.mockResolvedValue([workout(1, '2026-09-22T12:00:00Z', [set(0, 8)], 'Shoulder felt off today')]);
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient } = renderExerciseDetail();
+
+    await bothLanded(queryClient);
+
+    expect(await screen.findByText('Shoulder felt off today')).toBeInTheDocument();
+    expect(screen.queryByText('No sets yet')).not.toBeInTheDocument();
+  });
+
+  it('pre-fills from the more recent workout', async () => {
+    getExerciseSummary.mockResolvedValue(summaryWith(summaryLast(1, '2026-09-20T12:00:00Z', [set(135, 5)])));
+    getHistory.mockResolvedValue([workout(2, '2026-09-22T12:00:00Z', [set(185, 3)]), workout(1, '2026-09-20T12:00:00Z', [set(135, 5)])]);
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient } = renderExerciseDetail();
+
+    await bothLanded(queryClient);
+
+    await waitFor(() => expect(screen.getByLabelText('Weight (lb)')).toHaveValue('185'));
+    expect(screen.getByLabelText('Reps')).toHaveValue('3');
+  });
+
+  // Same workout, two copies fetched at different moments: neither can be shown to be fresher, so
+  // the screen shows exactly what it showed before this change -- the summary's.
+  it('keeps the summary\'s copy when both name the same workout', async () => {
+    getExerciseSummary.mockResolvedValue(summaryWith(summaryLast(2, '2026-09-22T12:00:00Z', [set(135, 5)])));
+    getHistory.mockResolvedValue([workout(2, '2026-09-22T12:00:00Z', [set(135, 5), set(135, 3)])]);
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient } = renderExerciseDetail();
+
+    await bothLanded(queryClient);
+
+    expect(await screen.findByText('135lb×5')).toBeInTheDocument();
+    expect(screen.queryByText('135lb×3')).not.toBeInTheDocument();
+  });
+
+  // A history that is loading, failed, empty, or has nothing for this exercise must leave the card
+  // exactly as the summary had it.
+  it.each([
+    ['fails to load', () => getHistory.mockRejectedValue(new Error('history down')), 'error'],
+    ['is empty', () => getHistory.mockResolvedValue([]), 'success'],
+    ['has no sessions for this exercise', () => getHistory.mockResolvedValue([{ ...workout(1, '2026-09-22T12:00:00Z', []), entries: [] }]), 'success'],
+  ])('shows the summary\'s last session alone when history %s', async (_, arrange, historyStatus) => {
+    arrange();
+    getExerciseSummary.mockResolvedValue(summaryWith(summaryLast(1, '2026-09-20T12:00:00Z', [set(135, 5)], 'summary note')));
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient } = renderExerciseDetail();
+
+    await bothLanded(queryClient, historyStatus);
+
+    expect(await screen.findByText('summary note')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText('Weight (lb)')).toHaveValue('135'));
+  });
+
+  // ⚠️ THE PREFILL GUARD (docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md). History
+  // landing late now changes the computed prefill, and the recording effect re-runs on it. A value
+  // the person typed must survive that: no 'prefill' write may land while they own the draft.
+  // VERIFIED NON-VACUOUS: drop `userOwnsDraft` from that effect's early return and this fails.
+  it('never records a prefill over a typed value when history lands late', async () => {
+    let releaseHistory;
+    getHistory.mockReturnValue(new Promise((resolve) => { releaseHistory = resolve; }));
+    getExerciseSummary.mockResolvedValue(summaryWith(summaryLast(1, '2026-09-20T12:00:00Z', [set(135, 5)])));
+    const draft = typedDraft({ weight: 200, reps: 4 });
+    useAppState.mockReturnValue(draft);
+    const { queryClient } = renderExerciseDetail();
+    await waitFor(() => expect(queryClient.getQueryState(queryKeys.exerciseSummary(7, exercise.id, null))?.status).toBe('success'));
+
+    await act(async () => releaseHistory([workout(2, '2026-09-22T12:00:00Z', [set(185, 3)])]));
+    await bothLanded(queryClient);
+
+    expect(screen.getByLabelText('Weight (lb)')).toHaveValue('200');
+    expect(draft.setDraft).not.toHaveBeenCalledWith(expect.objectContaining({ source: 'prefill' }));
+  });
+
+  // The other half of the same effect: when nobody owns the draft, the recorded prefill follows
+  // history's newer workout once it lands, rather than staying on the summary's.
+  it('records the newer workout as the prefill once history lands', async () => {
+    let releaseHistory;
+    getHistory.mockReturnValue(new Promise((resolve) => { releaseHistory = resolve; }));
+    getExerciseSummary.mockResolvedValue(summaryWith(summaryLast(1, '2026-09-20T12:00:00Z', [set(135, 5)])));
+    const draft = prefillDraft();
+    useAppState.mockReturnValue(draft);
+    const { queryClient } = renderExerciseDetail();
+    await waitFor(() => expect(queryClient.getQueryState(queryKeys.exerciseSummary(7, exercise.id, null))?.status).toBe('success'));
+
+    await act(async () => releaseHistory([workout(2, '2026-09-22T12:00:00Z', [set(185, 3)])]));
+    await bothLanded(queryClient);
+
+    await waitFor(() =>
+      expect(draft.setDraft).toHaveBeenLastCalledWith(expect.objectContaining({ weight: 185, reps: 3, source: 'prefill' })),
+    );
+  });
+});
+
 // The nudge under the steppers. Derived during render from effectiveBest, which already folds in
 // sets that have not synced -- so it works in every connectivity mode by one code path.
 describe('ExerciseDetail close-to-a-PR hint', () => {

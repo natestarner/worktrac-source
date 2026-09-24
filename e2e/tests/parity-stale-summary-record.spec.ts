@@ -69,6 +69,55 @@ forEachConnectivityMode<Record<string, never>>('no false "first time" record aft
   assert: expectNoRecord,
 });
 
+// "Last time" read the same out-of-date summary (#326, second half): after two workouts, reopening
+// the exercise showed the workout BEFORE last until the summary's refetch landed -- a round trip
+// online, the whole retry run in lie-fi. It now takes the more recent of the summary's and history's
+// (mergeLastSessionWithHistory).
+//
+// ⚠️ SAMPLED PER ANIMATION FRAME, not asserted with a retrying matcher. The stale card corrects
+// itself once the refetch lands, so `toBeVisible('0lb×12')` would simply wait the bug out and pass
+// against the unfixed code (e2e-tests.md: "a retrying matcher cannot assert 'this was never shown'").
+// The sampler starts before the exercise is reopened and records whether the Last time card EVER
+// held the previous workout's 10.
+forEachConnectivityMode<Record<string, never>>('Last time shows the workout just finished, never the one before it', {
+  setup: async (page, request) => {
+    await registerHousehold(page, request, 'Stale');
+    await workout(page, 10);
+    await workout(page, 12);
+    await delayNetwork(page, SUMMARY, LOWER_LIKE_LATENCY_MS);
+    return {};
+  },
+  navigate: async (page) => {
+    await page.evaluate(() => {
+      const w = window as unknown as { __staleLastTime: boolean; __stopSampling: boolean };
+      w.__staleLastTime = false;
+      w.__stopSampling = false;
+      // textContent, NOT innerText: the card label is `text-transform: uppercase`, and innerText
+      // applies CSS -- it reads "LAST TIME", so a first cut matching "Last time" never recognised
+      // the card and passed against the unfixed code.
+      const tick = () => {
+        for (const card of document.querySelectorAll<HTMLElement>('.summary-card')) {
+          const text = card.textContent ?? '';
+          if (text.startsWith('Last time') && text.includes('0lb×10')) w.__staleLastTime = true;
+        }
+        if (!w.__stopSampling) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    await reopenChinUp(page);
+  },
+  act: async () => {},
+  assert: async (page) => {
+    await expect(page.getByText('0lb×12', { exact: true })).toBeVisible();
+    const sawStale = await page.evaluate(() => {
+      const w = window as unknown as { __staleLastTime: boolean; __stopSampling: boolean };
+      w.__stopSampling = true;
+      return w.__staleLastTime;
+    });
+    expect(sawStale, 'the Last time card showed the workout before last').toBe(false);
+  },
+});
+
 // The realistic one, and not about "first time" at all. Opening Chin-up at the start of workout 2
 // caches the no-live-session summary with a best of 10; nothing refreshes it after the 12. So on the
 // third visit it still says 10, and 11 would have been celebrated as a record with 12 on the books.

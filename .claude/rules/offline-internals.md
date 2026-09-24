@@ -303,7 +303,10 @@ exercise's cached summary (keyed on "no live session") is fetched before a worko
 refreshed when it ends, and the record check read it while its refetch was in flight — a round
 trip online, the whole retry run in lie-fi — so a set could be celebrated as a "first time", or as
 a record against a best already beaten. The priors are now the stronger of the summary's and
-history's (`log-screen.md` → "Prior bests come from `exerciseSummary`, checked against `history`").
+history's, and "Last time" (with the prefill it seeds) the more recent of the two (`log-screen.md` →
+"Prior bests come from `exerciseSummary`, checked against `history`"). The "Last time" half was also
+the root cause of `exercise-notes.spec.ts`'s lower flake: the reopened exercise's summary was fetched
+before the workout's set had landed, so it had no last session, and nothing refetched it.
 **The cache itself is unchanged**, deliberately: invalidating the no-session key when a workout
 ends refreshes nothing, because TanStack refetches only *active* queries and the exercise screen
 is usually gone by then, and forcing it would be a per-exercise fetch fan-out in exactly the area

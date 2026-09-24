@@ -40,6 +40,7 @@ import {
   mergeBestWithHistory,
   mergeBestWithLocalSets,
   mergeHeaviestWithLocalSets,
+  mergeLastSessionWithHistory,
   mergePriorWithHistory,
 } from '../../utils/exerciseSummaryFromHistory';
 import { formatDateLabel, formatRestTime, MIN_HOLD_SECONDS, toLocalDateStr } from '../../utils/datetime';
@@ -610,7 +611,15 @@ export default function ExerciseDetail({
   // many sets they log; `pendingBeforeSession` is the only source for those rows. Reading
   // sessionSets here would freeze the set-index walk at set 1 and make the carry-forward invisible
   // for exactly as long as the outage lasts.
-  const prefill = summary ? computePrefillDraft(summary.lastSession, displaySets, defaultUnit) : null;
+  //
+  // "Last time" -- this prefill's source, and the Last time card's -- is the summary's lastSession
+  // checked against history's (mergeLastSessionWithHistory, #326): the no-live-session summary can
+  // be a workout out of date while its refetch is in flight, and history is not. Still gated on
+  // `summary` exactly as before, so first-load behaviour (em dash until the summary lands) is
+  // unchanged; only WHICH last session is used once there is one. Always one of its two inputs, so
+  // it is safe in the recording effect's dependency list below.
+  const lastSession = summary ? mergeLastSessionWithHistory(summary.lastSession ?? null, derivedSummary?.lastSession ?? null) : null;
+  const prefill = summary ? computePrefillDraft(lastSession, displaySets, defaultUnit) : null;
 
   // A set was ADDED since the draft was seeded -- the carry-forward re-seed, and the only thing
   // allowed to replace a value the person typed.
@@ -756,8 +765,11 @@ export default function ExerciseDetail({
       source: 'prefill',
     });
     // `prefill` is deliberately not a dep -- it's a fresh object every render, which would loop.
+    // `lastSession` IS one (#326): history can now change the prefill without `summary` changing, and
+    // the recorded seed must follow it. It is always one of two stable cached objects, never a fresh
+    // one, so it cannot loop -- and `userOwnsDraft` above still keeps it off a typed value.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exercise.id, summary, displaySets.length, userOwnsDraft]);
+  }, [exercise.id, summary, lastSession, displaySets.length, userOwnsDraft]);
 
   function handleLogSet() {
     // A running hold is the value being logged -- take it rather than the stale draft, and clear
@@ -988,7 +1000,7 @@ export default function ExerciseDetail({
     clearVolumePrCelebrated(exercise.id);
   }
 
-  const lastLabel = summary?.lastSession ? formatDateLabel(toLocalDateStr(summary.lastSession.startedAt)) : '';
+  const lastLabel = lastSession ? formatDateLabel(toLocalDateStr(lastSession.startedAt)) : '';
   // Both read effectiveBest, not summary.best -- the card and the pills must agree with each other
   // and with the rows on screen, in every connectivity mode.
   //
@@ -1252,12 +1264,12 @@ export default function ExerciseDetail({
                     `lastLabel` is empty and a bare "Last time ·" left a middot dangling off the
                     end of the card -- in both themes, on the app's most-used screen. */}
                 <div style={cardLabelStyle}>Last time{lastLabel && ` · ${lastLabel}`}</div>
-                {summary?.lastSession ? (
-                  <SetPillRow sets={summary.lastSession.sets} style={{ marginTop: 2 }} />
+                {lastSession ? (
+                  <SetPillRow sets={lastSession.sets} style={{ marginTop: 2 }} />
                 ) : (
                   <div className="summary-card-value" style={{ fontWeight: 'var(--weight-bold)' }}>No sets yet</div>
                 )}
-                {summary?.lastSession?.note && (
+                {lastSession?.note && (
                   <div
                     style={{
                       display: 'flex',
@@ -1270,7 +1282,7 @@ export default function ExerciseDetail({
                     }}
                   >
                     <IconNote size={12} style={{ marginTop: 2 }} />
-                    <span>{summary.lastSession.note}</span>
+                    <span>{lastSession.note}</span>
                   </div>
                 )}
               </div>

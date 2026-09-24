@@ -216,8 +216,25 @@ gym basement was silently never celebrated.
     mistake.
   - **Not a connectivity branch** — one code path in every mode, and the identity while paused or
     errored (there `summary` *is* `derivedSummary`). No row on `resilience.md`'s register.
-  - `lastSession` ("Last time", and the weight prefill it seeds) is deliberately **not** merged yet;
-    it is still the summary's alone, and can show the workout before last for the same window.
+  - **`lastSession` ("Last time", and the weight prefill it seeds) gets the same treatment by
+    RECENCY:** `mergeLastSessionWithHistory` returns whichever names the later session. The server's
+    `buildLastSession` and `deriveLastSession` pick by the same rule (most recent `startedAt` among
+    sessions with sets for the exercise; sets in `createdAt` order; history never holds a note-only
+    entry), so the later one is the fresher answer. Same session on both sides, or a start-time tie
+    → the summary's copy, i.e. exactly what showed before. The Free-tier window can only make
+    history *miss* a session, so a more recent summary session always wins.
+    - **It must return one of its two inputs, never a new object** — it is in the prefill-recording
+      effect's dependency list (history can now change the prefill without `summary` changing), and
+      a fresh object per render would re-run that effect forever.
+    - **The prefill guard is unchanged and load-bearing:** that effect's `userOwnsDraft` early return
+      is what keeps a late-landing history off a typed value
+      (`docs/incidents/2026-08-12-prefill-overwrites-typed-weight.md`). `ExerciseDetail.test.jsx`
+      pins it, verified non-vacuous by removing the guard.
+    - Still gated on `summary` exactly as before, so first-load behaviour is unchanged — only WHICH
+      last session is used once there is one.
+    - **Accepted cost**, the same as the priors': a last session deleted or edited on another device
+      can linger in `history` for up to its 60s `staleTime` and show here, and seed the prefill, for
+      that long.
 
 ### Session volume is a CROSSING, not a flag — don't key it on a session id
 
