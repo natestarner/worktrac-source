@@ -328,10 +328,34 @@ function requireResolvedSetId(client, id) {
 // trends because *warming* them is a high-cost fan-out across every household member. Marking them
 // stale costs nothing: Trends isn't mounted while you're logging, so no refetch fires until the tab
 // is actually opened.
+// ⚠️ CANCEL, THEN INVALIDATE -- a bare invalidation is swallowed during a first load.
+//
+// TanStack v5's Query#fetch cancels an in-flight fetch only when the query already HAS data. During
+// a FIRST load it joins the request already running instead (query-core's `fetch`: `if (data !==
+// undefined && cancelRefetch) cancel(); else return this.#retryer.promise`). Trends is the one tab
+// offlineCacheWarm deliberately does not warm, so opening it is always a first load -- and a set
+// whose save lands during that load had its invalidation absorbed: the load's answer, fetched before
+// the set existed, arrived, marked the query fresh, and stood for the full 60s staleTime. Trends
+// said "No workouts logged yet" mid-workout (lower's records-table retries, four specs,
+// docs/incidents/2026-09-24-trends-first-load-swallows-invalidation.md).
+//
+// Cancelling first reverts an in-flight first load to "no data yet", so the invalidation then
+// starts a genuinely new request. With data already cached it changes nothing (invalidation
+// cancels and refetches there anyway), with nothing in flight the cancel is a no-op, and a paused
+// fetch is cancelled and simply paused again -- one code path in every mode.
+//
+// Safe HERE because nothing ever writes optimistic data into a trends key: a cancel reverts the
+// query to its state from before the fetch began, so on a key that is seeded mid-fetch (LOG_SET's
+// sessionSets / exerciseSummary seeds, below) the same pattern would throw that seed away. Do not
+// generalize it to those keys. See frontend-core.md.
 function invalidateTrends(client, personId) {
-  client.invalidateQueries({ queryKey: queryKeys.trendsForPerson(personId) });
-  client.invalidateQueries({ queryKey: queryKeys.exerciseTrendsForPerson(personId) });
-  client.invalidateQueries({ queryKey: queryKeys.exerciseRecordsForPerson(personId) });
+  for (const queryKey of [
+    queryKeys.trendsForPerson(personId),
+    queryKeys.exerciseTrendsForPerson(personId),
+    queryKeys.exerciseRecordsForPerson(personId),
+  ]) {
+    client.cancelQueries({ queryKey }).then(() => client.invalidateQueries({ queryKey }));
+  }
 }
 
 // A bulk import (or its undo) rewrites more of a person's history in one go than any other write

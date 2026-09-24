@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { MutationObserver, QueryClient, dehydrate, hydrate, onlineManager } from '@tanstack/react-query';
+import { MutationObserver, QueryClient, QueryObserver, dehydrate, hydrate, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CREATE_EXERCISE_MUTATION_KEY,
@@ -253,12 +253,51 @@ describe('registerOfflineMutationDefaults dispatches to the right endpoint', () 
 
     await dispatch({ mode: 'live', personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k3', clientLoggedAt: 't' });
 
-    expect(isStale(overview4)).toBe(true);
-    expect(isStale(overview12)).toBe(true);
-    expect(isStale(trendFor3)).toBe(true);
-    expect(isStale(recordsFor3)).toBe(true);
+    // Waited for, not read at once: invalidateTrends cancels any in-flight trends load FIRST and
+    // invalidates when that cancel settles (see the first-load test below for why), so the stale
+    // flag lands a microtask after the write settles rather than in the same tick.
+    await vi.waitFor(() => {
+      expect(isStale(overview4)).toBe(true);
+      expect(isStale(overview12)).toBe(true);
+      expect(isStale(trendFor3)).toBe(true);
+      expect(isStale(recordsFor3)).toBe(true);
+    });
     // Person scoping still holds -- one person's set must not invalidate another's trends.
     expect(isStale(otherPerson)).toBe(false);
+  });
+
+  // ⚠️ THE ONE THE TEST ABOVE CANNOT SEE: an invalidation that arrives while a trends view's FIRST
+  // load is still in flight. TanStack v5's Query#fetch cancels an in-flight fetch only when the
+  // query already HAS data; during a first load it joins the in-flight request instead
+  // (`return this.#retryer.promise`). So the set's invalidation was silently absorbed, the first
+  // load's answer -- fetched before the set existed -- landed, marked the query fresh, and stood
+  // for the full 60s staleTime. Trends is the one tab not warmed by offlineCacheWarm, so opening it
+  // is always a first load: log a set, open Trends before the save lands, and it said "No workouts
+  // logged yet" for a minute. Lower's four records-table retries were this.
+  // docs/incidents/2026-09-24-trends-first-load-swallows-invalidation.md
+  //
+  // A real QueryObserver keeps the query ACTIVE, as the mounted Trends tab does -- an inactive one
+  // is only marked stale and refetched on its next mount, which the test above already covers.
+  it.each([
+    ['the overview', queryKeys.trendsOverview(7, 12)],
+    ['an exercise trend', queryKeys.exerciseTrend(7, 3, 12)],
+    ['the records table', queryKeys.exerciseRecords(7, 3)],
+  ])('refetches %s when a set lands during its first load, rather than keeping the pre-set answer', async (_, key) => {
+    let answerFromBeforeTheSet;
+    const queryFn = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { answerFromBeforeTheSet = resolve; }))
+      .mockResolvedValue({ includesTheSet: true });
+    const observer = new QueryObserver(client, { queryKey: key, queryFn, retry: false });
+    const unsubscribe = observer.subscribe(() => {});
+    await vi.waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
+
+    await dispatch({ mode: 'live', personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k-first-load', clientLoggedAt: 't' });
+    answerFromBeforeTheSet({ includesTheSet: false });
+
+    await vi.waitFor(() => expect(client.getQueryData(key)).toEqual({ includesTheSet: true }));
+    expect(queryFn).toHaveBeenCalledTimes(2);
+    unsubscribe();
   });
 
   // The same rule, for the count of what the Free-tier window is hiding. It is derived from logged
