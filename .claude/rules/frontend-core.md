@@ -294,6 +294,26 @@ Note this is the opposite call from `offlineCacheWarm.js`, which deliberately *e
 warming them is a costly prefetch fan-out across every person, whereas invalidating them is free
 (nothing refetches until the tab is actually mounted).
 
+### An invalidation during a FIRST load is swallowed — cancel first, where that is safe
+
+TanStack v5's `Query#fetch` cancels an in-flight fetch on refetch **only when the query already has
+data**. During a first load it joins the request already running. So a write's invalidation that
+lands mid-first-load is absorbed: the load's answer — computed before the write existed — arrives,
+marks the query fresh, and stands for the whole 60s `staleTime`. Trends, the one unwarmed tab, hit
+it whenever a set landed just after Trends was opened ("No workouts logged yet" mid-workout; four
+lower specs retrying). `invalidateTrends` now **cancels, then invalidates**, which reverts a first
+load to "no data yet" so the invalidation starts a genuinely new request
+(`docs/incidents/2026-09-24-trends-first-load-swallows-invalidation.md`).
+
+- **Only where nothing writes into the key mid-fetch.** A cancel reverts the query to its state from
+  *before* the fetch began, so on a key seeded during a fetch — `LOG_SET`'s `sessionSets` /
+  `exerciseSummary` seeds — it throws that seed away. Trends keys have no optimistic writer, which is
+  why the pattern is confined to them.
+- **The invalidation is one microtask later** (it runs when the cancel settles). Assert on it with
+  `vi.waitFor`, not synchronously after the write.
+- **A tab that is warmed rarely hits this** (it has data, and a refetch cancels normally). If a new
+  read is added *without* warming, ask: can a write land during its first load?
+
 ### Invalidate the key the screen READS — a session id captured at dispatch may be null
 
 Getting the key *list* right is only half of it. `sessionSets` and `exerciseSummary` are keyed on a
