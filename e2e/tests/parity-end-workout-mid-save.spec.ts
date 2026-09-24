@@ -103,16 +103,12 @@ async function endWorkoutMidSave(page: Page, request: APIRequestContext, exercis
 // existed, and degraded, "Last time" and the record fold judged this 6-rep set as the first ever
 // ("New PR! · Most reps · 6 reps"). docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md
 //
-// ⚠️ lie-fi AND online are fixme'd for a DIFFERENT, older bug, reproduced with no mid-save race at
-// all and on the code from before either fix. The exercise's cached summary (keyed on "no live
-// session", fetched before the ended workout) is what the record check reads while it is being
-// refetched -- online for one round trip, in lie-fi for the whole retry run -- and it predates the
-// workout, so the set is judged as the first ever. Only when the summary is paused (hard offline,
-// pinned) or has errored does the check fall back to history, which is what the history fetch in
-// LOG_SET's onSettled fixed. Online passes locally (a ~5ms round trip beats the tap) and failed 3/3
-// on lower; an ordinary-workout control with 800ms on the summary fails 3/3 on both sides of today's
-// fixes. Recorded here as the reproduction; it belongs fixed or on resilience.md's register -- not
-// silently passing.
+// lie-fi and online were fixme'd here until #326, a DIFFERENT and older bug: the exercise's cached
+// summary (keyed on "no live session", fetched before the ended workout) was what the record check
+// read while it was being refetched, and it predated the workout, so the set was judged the first
+// ever. The record priors are now checked against history's (exerciseSummaryFromHistory.js
+// #mergeBestWithHistory). That bug's own reproduction, with no mid-save race in it, is
+// parity-stale-summary-record.spec.ts; this spec runs in every mode again.
 forEachConnectivityMode<State>('a workout ended mid-save still counts toward the next workout\'s records', {
   setup: (page, request) => endWorkoutMidSave(page, request, 'Chin-up', 10),
 
@@ -128,13 +124,14 @@ forEachConnectivityMode<State>('a workout ended mid-save still counts toward the
     await page.getByRole('button', { name: 'Log set' }).click();
   },
 
+  // The row first, THEN the overlay: the celebration is decided before the set is written, so once
+  // the row is on screen the overlay has had its chance. In the old order "hidden" could pass before
+  // the overlay had rendered at all.
   assert: async (page, { heldEnd }) => {
-    await expect(page.getByText('New PR!')).toBeHidden();
     await expect(page.getByText(/^Set \d+$/)).toHaveCount(1);
+    await expect(page.getByText('New PR!')).toBeHidden();
     heldEnd.release();
   },
-
-  fixmeModes: ['lie-fi', 'online'],
 });
 
 async function workoutsOnServer(request: APIRequestContext, email: string) {

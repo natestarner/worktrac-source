@@ -55,6 +55,15 @@ vi.mock('../../api/notes', () => ({
 vi.mock('../../api/sessions', () => ({
   getHistory: vi.fn().mockResolvedValue([]),
 }));
+// ...and RESTORED before every test, because vi.clearAllMocks() keeps a mocked return value. Two
+// describes below set a Bench Press history and never put the default back, so it leaked into every
+// later test -- including the plank tests, which reuse exercise id 1. That was invisible while the
+// Best card ignored history online; since #326 it reads history too, and a leaked weighted set is a
+// stronger "best" than any hold. A describe that wants a history still sets one in its own
+// beforeEach, which runs after this.
+beforeEach(() => {
+  getHistory.mockResolvedValue([]);
+});
 const exercise = { id: 1, name: 'Bench Press', tags: [], isFavorite: true, setupFields: [] };
 
 // "Typed more recently than anything currently on screen." ExerciseDetail only re-seeds the draft
@@ -491,6 +500,157 @@ describe('ExerciseDetail PR celebration payload', () => {
     fireEvent.click(await screen.findByText('Log set'));
 
     await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+  });
+});
+
+// #326: the summary the record check reads is keyed on "no live session", fetched BEFORE a workout
+// and never refreshed when that workout ends. So on the next visit it can be a workout (or several)
+// out of date while its refetch is in flight -- online for a round trip, in lie-fi for the whole
+// retry run. `history` is refreshed after every set, so the priors are the stronger of the two.
+//
+// Every test here waits for BOTH queries to have landed before tapping, rather than for UI text:
+// what the cards show differs between the unfixed and fixed code, so a text wait would make the
+// "before" run measure a different moment from the "after" run.
+describe('ExerciseDetail record priors: an out-of-date summary and history (#326)', () => {
+  let showCelebration;
+
+  const bw = (reps) => ({ weight: 0, reps, durationSeconds: null, unit: 'lb' });
+  const workout = (id, startedAt, sets) => ({
+    id,
+    startedAt,
+    endedAt: startedAt,
+    manual: false,
+    entries: [{ exerciseId: exercise.id, exerciseName: exercise.name, sets, note: null }],
+  });
+  const EMPTY_SUMMARY = { lastSession: null, best: null, heaviestWeightLb: null, bestSessionVolume: null, volumeKind: null };
+
+  async function tapOnceBothLand(queryClient, historyStatus = 'success') {
+    await waitFor(() => {
+      expect(queryClient.getQueryState(queryKeys.exerciseSummary(7, exercise.id, null))?.status).toBe('success');
+      expect(queryClient.getQueryState(queryKeys.history(7))?.status).toBe(historyStatus);
+    });
+    fireEvent.click(await screen.findByText('Log set'));
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+  }
+
+  const prTypes = () => showCelebration.mock.calls.at(-1)?.[0]?.prs?.map((pr) => pr.type);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    showCelebration = vi.fn();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useUI.mockReturnValue({ showCelebration, showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+    logLiveSet.mockResolvedValue({ isPR: false, best: null, session: { id: 101 }, set: { id: 201 } });
+  });
+
+  afterEach(() => vi.clearAllMocks());
+
+  // The false "first time" record: 10 reps last workout, and a summary from before it.
+  it('does not celebrate a first-ever record when only the summary is out of date', async () => {
+    getExerciseSummary.mockResolvedValue(EMPTY_SUMMARY);
+    getHistory.mockResolvedValue([workout(1, '2026-09-20T12:00:00Z', [bw(10)])]);
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 6 }));
+    const { queryClient } = renderExerciseDetail();
+
+    await tapOnceBothLand(queryClient);
+
+    expect(showCelebration).not.toHaveBeenCalled();
+  });
+
+  // The realistic one, and not about "first time" at all: 12 reps last workout, a summary that still
+  // says 10, and 11 today. The same inputs also pin the ACCEPTED COST of this fix: had the summary
+  // been the fresh one (the 12 since edited down or deleted) and history the stale one, 11 would be a
+  // genuine record that goes uncelebrated until history refetches. The client cannot tell which
+  // source is stale, and a missed celebration is the cheaper mistake. See .claude/rules/log-screen.md.
+  it('does not celebrate against a best that is one workout out of date', async () => {
+    getExerciseSummary.mockResolvedValue({ ...EMPTY_SUMMARY, best: { ...bw(10), est1rm: 0 }, heaviestWeightLb: 0, bestSessionVolume: 10, volumeKind: 'reps' });
+    getHistory.mockResolvedValue([workout(2, '2026-09-22T12:00:00Z', [bw(12)]), workout(1, '2026-09-20T12:00:00Z', [bw(10)])]);
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 11 }));
+    const { queryClient } = renderExerciseDetail();
+
+    await tapOnceBothLand(queryClient);
+
+    expect(showCelebration).not.toHaveBeenCalled();
+  });
+
+  it('measures the volume record against history when the summary predates the only earlier workout', async () => {
+    getExerciseSummary.mockResolvedValue(EMPTY_SUMMARY);
+    getHistory.mockResolvedValue([workout(1, '2026-09-20T12:00:00Z', [bw(10)])]);
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 12 }));
+    const { queryClient } = renderExerciseDetail();
+
+    await tapOnceBothLand(queryClient);
+
+    // A real record on reps AND on the session's volume -- not a "first time" baseline, which would
+    // have claimed no volume record at all.
+    expect(showCelebration).toHaveBeenCalledTimes(1);
+    expect(showCelebration.mock.calls.at(-1)[0].firstTime).toBe(false);
+    expect(prTypes()).toEqual(['est1rm', 'sessionVolume']);
+  });
+
+  it('still celebrates a genuine record over both sources, as a record rather than a first time', async () => {
+    getExerciseSummary.mockResolvedValue({ ...EMPTY_SUMMARY, best: { ...bw(10), est1rm: 0 }, heaviestWeightLb: 0, bestSessionVolume: 10, volumeKind: 'reps' });
+    getHistory.mockResolvedValue([workout(2, '2026-09-22T12:00:00Z', [bw(12)]), workout(1, '2026-09-20T12:00:00Z', [bw(10)])]);
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 13 }));
+    const { queryClient } = renderExerciseDetail();
+
+    await tapOnceBothLand(queryClient);
+
+    expect(showCelebration).toHaveBeenCalledTimes(1);
+    expect(showCelebration.mock.calls.at(-1)[0].firstTime).toBe(false);
+    expect(prTypes()).toContain('est1rm');
+  });
+
+  // ⚠️ The Free-tier guard, end to end. For a Free household `history` is window-clamped and the
+  // summary is not, so an all-time best from outside the window is known ONLY to the summary. Taking
+  // the stronger of the two keeps it: a set between the window's best and the all-time best is not
+  // a record, and must not be celebrated as one.
+  it('keeps a summary best that a window-clamped history cannot see', async () => {
+    getExerciseSummary.mockResolvedValue({
+      ...EMPTY_SUMMARY,
+      best: { weight: 225, reps: 5, unit: 'lb', est1rm: 262.5 },
+      heaviestWeightLb: 225,
+      bestSessionVolume: 1125,
+      volumeKind: 'load',
+    });
+    getHistory.mockResolvedValue([workout(1, '2026-09-20T12:00:00Z', [{ weight: 185, reps: 5, durationSeconds: null, unit: 'lb' }])]);
+    useAppState.mockReturnValue(typedDraft({ weight: 200, reps: 5 }));
+    const { queryClient } = renderExerciseDetail();
+
+    await tapOnceBothLand(queryClient);
+
+    expect(showCelebration).not.toHaveBeenCalled();
+  });
+
+  // A history that failed to load (or is empty) must leave the summary's answer exactly as it was.
+  it.each([
+    ['fails to load', () => getHistory.mockRejectedValue(new Error('history down')), 'error'],
+    ['is empty', () => getHistory.mockResolvedValue([]), 'success'],
+    ['has no sessions for this exercise', () => getHistory.mockResolvedValue([{ ...workout(1, '2026-09-20T12:00:00Z', []), entries: [] }]), 'success'],
+  ])('falls back to the summary alone when history %s', async (_, arrange, historyStatus) => {
+    arrange();
+    getExerciseSummary.mockResolvedValue({ ...EMPTY_SUMMARY, best: { ...bw(10), est1rm: 0 }, heaviestWeightLb: 0, bestSessionVolume: 10, volumeKind: 'reps' });
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 11 }));
+    const { queryClient } = renderExerciseDetail();
+
+    await tapOnceBothLand(queryClient, historyStatus);
+
+    // 11 beats the summary's 10 on reps and on volume; nothing else is known, so both are records.
+    expect(prTypes()).toEqual(['est1rm', 'sessionVolume']);
+    expect(showCelebration.mock.calls.at(-1)[0].firstTime).toBe(false);
+  });
+
+  // The Best card and the "N more reps" hint read the same fold, so they cannot promise a record the
+  // celebration then refuses.
+  it('points the close-to-a-PR hint at the stronger best', async () => {
+    getExerciseSummary.mockResolvedValue({ ...EMPTY_SUMMARY, best: { ...bw(10), est1rm: 0 }, heaviestWeightLb: 0, bestSessionVolume: 10, volumeKind: 'reps' });
+    getHistory.mockResolvedValue([workout(2, '2026-09-22T12:00:00Z', [bw(12)]), workout(1, '2026-09-20T12:00:00Z', [bw(10)])]);
+    useAppState.mockReturnValue(typedDraft({ weight: 0, reps: 11 }));
+    renderExerciseDetail();
+
+    expect(await screen.findByText('2 more reps for a Most reps PR')).toBeInTheDocument();
   });
 });
 

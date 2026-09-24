@@ -37,8 +37,10 @@ import { buildHistoryPrFlags, liveSessionPrFlagKey } from '../../utils/historyPr
 import { resolveRestTargetSeconds } from '../../utils/restTarget';
 import {
   deriveExerciseSummaryFromHistory,
+  mergeBestWithHistory,
   mergeBestWithLocalSets,
   mergeHeaviestWithLocalSets,
+  mergePriorWithHistory,
 } from '../../utils/exerciseSummaryFromHistory';
 import { formatDateLabel, formatRestTime, MIN_HOLD_SECONDS, toLocalDateStr } from '../../utils/datetime';
 import { formatSetSpaced, formatTarget } from '../../utils/formatSet';
@@ -557,14 +559,24 @@ export default function ExerciseDetail({
   // instead of flickering onto a tying row and back off.
   // Not memoized on purpose: displaySets is rebuilt every render, so a useMemo keyed on it would
   // never hit. The fold is O(sets logged for this exercise this session) -- a handful of rows.
-  const effectiveBest = mergeBestWithLocalSets(summary?.best ?? null, displaySets, liveSession?.startedAt);
+  //
+  // ...and the summary's best is first checked against history's (mergeBestWithHistory, #326): the
+  // summary can be a workout out of date while its refetch is in flight, and history is not. A max,
+  // so it can only raise the bar. It feeds the Best card, the close-to-a-PR hint and the celebration
+  // alike, so the three cannot disagree. When paused or errored `summary` IS derivedSummary, and the
+  // merge is the identity. Not a connectivity branch: one code path in every mode.
+  const effectiveBest = mergeBestWithLocalSets(
+    mergeBestWithHistory(summary?.best ?? null, derivedSummary?.best ?? null),
+    displaySets,
+    liveSession?.startedAt,
+  );
 
   // The same fold, one measure over, for the top-weight record. Both bests have to see the sets
   // on screen that have not synced, or a PR logged offline goes uncelebrated and the NEXT, lighter
   // set gets celebrated against the frozen value instead -- the exact failure mergeBestWithLocalSets
-  // was written for.
+  // was written for. Checked against history first for the same #326 reason as effectiveBest.
   const effectiveHeaviestLb = mergeHeaviestWithLocalSets(
-    summary?.heaviestWeightLb == null ? null : Number(summary.heaviestWeightLb),
+    mergePriorWithHistory(summary?.heaviestWeightLb, derivedSummary?.heaviestWeightLb),
     displaySets,
   );
 
@@ -814,10 +826,21 @@ export default function ExerciseDetail({
       // the kind is merged rather than read off either side alone. A never-logged exercise has no
       // prior at all, so its first workout never celebrates volume (sessionVolume.js).
       const todaysSets = [...displaySets, loggedSet];
-      const volumeKind = mergeVolumeKinds(summary?.volumeKind ?? null, volumeKindOf(todaysSets));
+      //
+      // History's kind and prior join the summary's for #326 (see effectiveBest): an out-of-date
+      // summary can miss the last workout, including the first loaded set that turned the exercise
+      // into pounds. Each prior is re-expressed in the ONE merged kind before the max, so pounds are
+      // never compared with reps.
+      const volumeKind = mergeVolumeKinds(
+        mergeVolumeKinds(summary?.volumeKind ?? null, derivedSummary?.volumeKind ?? null),
+        volumeKindOf(todaysSets),
+      );
       const volumeBefore = sessionVolume(displaySets, volumeKind);
       const volumeAfter = sessionVolume(todaysSets, volumeKind);
-      const priorVolume = priorSessionVolume(summary, volumeKind);
+      const priorVolume = mergePriorWithHistory(
+        priorSessionVolume(summary, volumeKind),
+        priorSessionVolume(derivedSummary, volumeKind),
+      );
       const alreadyCelebrated = latchedVolume(volumePrCelebrated?.[exercise.id], volumeKind);
       const volumePr =
         crossesSessionVolume(volumeBefore, volumeAfter, priorVolume) &&
