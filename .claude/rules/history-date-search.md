@@ -46,6 +46,13 @@ these are the parts a future change can break without any test obviously pointin
   chip's controls are `"Change date, <label>"` / `"Stop filtering to <label>"`. Keep labels on
   History mutually non-containing (Playwright matches names as substrings) — `"Clear date"` lives
   only inside the picker for that reason.
+- **The grid is always six rows (`monthGrid`), and every row is a day tall even when empty
+  (`.date-cal-spacer`).** Months need 4–6 weeks; a grid that tracked that changed the picker's
+  height on every page, and the phone sheet is bottom-anchored, so its header — the chevrons being
+  tapped — jumped 46px under the thumb. Don't "tidy away" the blank trailing row, and keep the day
+  buttons and spacers block-level (an inline box in a cell adds descender space, so a full row and
+  an empty one would differ). `e2e/tests/date-picker-stable-header.spec.ts` measures it in real
+  pixels; jsdom can't.
 - **Focus lands on the selected day (or today)** via `data-autofocus`, which `Modal` prefers over
   DOM order. Without it focus lands on "Previous month", against the WAI-ARIA date-picker pattern.
 

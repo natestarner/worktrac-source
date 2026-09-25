@@ -66,7 +66,9 @@ describe('monthGrid', () => {
     expect(weeks[0]).toEqual([null, null, '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05']);
     expect(weeks.every((w) => w.length === 7)).toBe(true);
     expect(weeks.flat().filter(Boolean)).toHaveLength(30);
-    expect(weeks.at(-1)).toEqual(['2026-09-27', '2026-09-28', '2026-09-29', '2026-09-30', null, null, null]);
+    expect(weeks[4]).toEqual(['2026-09-27', '2026-09-28', '2026-09-29', '2026-09-30', null, null, null]);
+    // Padded to six with an empty week -- see the next test.
+    expect(weeks[5]).toEqual([null, null, null, null, null, null, null]);
   });
 
   it('honours a Monday week start', () => {
@@ -74,9 +76,13 @@ describe('monthGrid', () => {
     expect(weeks[0].slice(0, 2)).toEqual([null, '2026-09-01']);
   });
 
-  it('uses only as many rows as the month needs', () => {
-    // February 2026 starts on a Sunday: exactly four rows.
-    expect(monthGrid('2026-02-01', 0)).toHaveLength(4);
+  // A grid whose height tracked the month moved the picker's header under the thumb on every page.
+  // These three months need four, five and six calendar weeks respectively.
+  it('is always six rows, whatever the month needs, so the picker never changes height', () => {
+    expect(monthGrid('2026-02-01', 0)).toHaveLength(6); // Feb 2026: starts Sunday, needs 4
+    expect(monthGrid('2026-09-01', 0)).toHaveLength(6); // Sep 2026: needs 5
+    expect(monthGrid('2026-08-01', 0)).toHaveLength(6); // Aug 2026: starts Saturday, needs 6
+    expect(monthGrid('2026-08-01', 0)[5].filter(Boolean)).toEqual(['2026-08-30', '2026-08-31']);
   });
 });
 

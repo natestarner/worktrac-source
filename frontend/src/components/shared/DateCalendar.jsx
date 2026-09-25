@@ -166,7 +166,15 @@ export default function DateCalendar({
           {weeks.map((week, wi) => (
             <tr key={wi}>
               {week.map((date, di) => {
-                if (!date) return <td key={di} role="gridcell" className="date-cal-cell" />;
+                if (!date) {
+                  // The spacer is sized exactly like a day button, so a row with no days in it
+                  // (the padding weeks that keep the grid at six rows) is still a full row tall.
+                  return (
+                    <td key={di} role="gridcell" className="date-cal-cell">
+                      <span className="date-cal-spacer" aria-hidden="true" />
+                    </td>
+                  );
+                }
                 const disabled = (minDate && date < minDate) || (maxDate && date > maxDate);
                 const selected = !!range && isDateInRange(date, range);
                 const isStart = !!range && date === range.from;
