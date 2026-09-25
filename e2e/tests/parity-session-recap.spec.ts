@@ -120,7 +120,7 @@ test.describe('Session recap after deleting everything logged', () => {
     const sessionList = page.locator('.session-exercises');
     await expect(sessionList.getByText('Barbell Back Squat', { exact: true })).toBeVisible();
 
-    const heldHistory = await delayNetwork(page, /\/api\/people\/\d+\/history$/, 3000);
+    const heldHistory = await delayNetwork(page, /\/api\/people\/\d+\/history\/sync$/, 3000);
     await pickExercise(page, 'Barbell Bench Press');
     // Only the SECOND bench set is held -- the first must have synced for the row to be missing it.
     const firstBenchSynced = page.waitForResponse(

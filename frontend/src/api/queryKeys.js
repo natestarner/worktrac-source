@@ -30,6 +30,11 @@ export const queryKeys = {
   // What the Free-tier window is hiding from this person. Its own key rather than a field on
   // `history`, because PRs and Trends ask the same question without reading the history list.
   historyWindow: (personId) => ['history-window', personId],
+  // Prefix forms of the two above, across EVERY person: for the writes that change what everyone's
+  // History says at once -- renaming an exercise (History carries names, and exercises are
+  // household-wide) and a plan change (the Free window clamps every person).
+  historyForEveryone: () => ['history'],
+  historyWindowForEveryone: () => ['history-window'],
   routines: (personId) => ['routines', personId],
   // Per person, like every other read about one person's training. What a caller SEES under
   // this key depends on who they are -- a trainer's private notes are filtered out server-side

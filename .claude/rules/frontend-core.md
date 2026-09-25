@@ -332,21 +332,50 @@ as such — it has no response body, and is unreachable for an unsynced set.
 Assert this against a **real cache**, never a spy on `invalidateQueries`: a spy passes just as
 happily on a key nothing observes, which is exactly the failure mode.
 
-### History is fetched conditionally — a 304 only ever returns the copy its tag came with
+### History is cached a month at a time — read it through `flattenHistory`
 
-`/history` is a person's whole history and is refetched after every set and on every warm, so
-`api/sessions.js#getHistory` sends the cached copy's ETag and takes a 304 as "keep what you have"
-(`HistoryEtagConfig.java` is the server half; `api/client.js#getConditional` the transport).
+`queryKeys.history(personId)` holds `{ format: 2, months: { 'yyyy-mm': { fp, sessions } },
+fullSyncedAt }`, refreshed by `api/sessions.js#getHistory` through `POST /history/sync`: it sends
+each held month's fingerprint and keeps every month the server does not resend
+(`lib/historySync.js`; the server half and its invariants are in `backend-core.md`).
 
+- **Every reader gets the flat, newest-first array through `select: flattenHistory`** (`useHistory`,
+  `AppSettingsTab`). A raw `getQueryData(queryKeys.history(...))` is the synced shape, not a list —
+  only `getHistory` itself reads it that way.
+- **`flattenHistory` passes a plain array through untouched.** That is a cache persisted by a build
+  from before the sync (axis D): it must still render, and `heldForSync` treats it as holding
+  nothing, so the first sync replaces it. Many unit tests seed History as an array for the same
+  reason — keep that working.
 - **Every history fetcher passes `readCached`** — `useHistory`, `offlineCacheWarm`, the
   ended-workout prefetch in `queryClient.js`, `AppSettingsTab`. One that doesn't is still correct,
   just always a full download.
-- **Tags live in a WeakMap keyed by the exact array** (`lib/historyEtags.js`), so a restored,
-  hydrated or hand-set copy has no tag and cannot be "confirmed" by a 304. A 304 is also discarded
-  if the cache no longer holds that object when it arrives.
-- **`registerHistoryQueryDefaults` carries the tag across structural sharing** — TanStack stores a
-  merge, not the returned object. Drop it and nothing breaks except the saving, silently.
-  `api/sessions.test.js` pins it through a real `QueryClient`.
+- **A reply that lists a month it neither sent nor that is held THROWS** (`applyHistorySync`), so the
+  query keeps what it had and retries. Never "tolerate" it by dropping the month.
+- **The daily full sync is the backstop** (`FULL_SYNC_INTERVAL_MS`): once a day the client offers
+  nothing and gets everything, bounding any fingerprint or merge bug to a day. A missing, NaN or
+  future `fullSyncedAt` counts as due. Don't remove it as redundant.
+- **History still has no optimistic writer.** It holds only what the server sent, which is what keeps
+  it on `offlineCacheWarm`'s `refreshAfterRestore` list — now nearly free, since a restored month
+  whose fingerprint still matches comes back as nothing.
+- **⚠️ Every write refreshes History through `refreshHistory(client, personId)`, never a bare
+  `invalidateQueries`** (`lib/queryClient.js`). It cancels a History fetch still in flight, marks the
+  query stale, then fetches **whether or not anything observes it**. A bare invalidation left
+  History showing an ended workout as in progress in every degraded mode: after an End, the Log
+  tab's History observer is disabled, TanStack does not cancel an inactive query's in-flight fetch,
+  and that fetch — begun before the End reached the server — finished, stored its stale answer as
+  fresh and cleared the invalidation. Found by the parity convergence check below; pinned by
+  `queryClient.test.js`'s `refreshHistory` block (verified red against the old invalidation).
+- **A write that changes EVERY person's History uses `refreshHistoryForEveryone`** — an exercise
+  rename (History carries names; `LogTab.refreshPersonalization` is the live rename path) and a plan
+  change (`BillingTab`, with `historyWindowForEveryone()`). Cheap: an unchanged month costs a
+  fingerprint, not a download.
+- **Every parity spec ends by asserting the app's persisted History equals `GET /history`**
+  (`e2e/tests/support/historyConvergence.ts`, called from `parity.ts`). Don't opt a spec out of it —
+  if it fails, History is behind after reconnecting, and its message says whether the app never
+  asked or asked and was answered wrongly.
+- **The daily full sync is also a production canary** (`findDrift`): a month whose fingerprint
+  matched but whose content did not is reported to `POST /history/drift` and logged as
+  `History drift:`. Best-effort, never awaited, month ids only.
 
 ## Writes: durable vs online-gated
 

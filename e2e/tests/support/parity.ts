@@ -1,5 +1,6 @@
 import { APIRequestContext, Page, test } from '@playwright/test';
 import { API_ONLY, failNetwork } from './faults';
+import { expectHistoryMatchesServer } from './historyConvergence';
 import {
   goHardOffline,
   goOnline,
@@ -136,6 +137,9 @@ export function forEachConnectivityMode<T>(title: string, spec: ParitySpec<T>) {
         await waitForOutboxDrain(page);
         await spec.afterReconnect(page, state, ctx);
       }
+      // Every parity spec, every mode: once reconnected and drained, the History the app holds is
+      // exactly the server's. What the flow did while degraded must never leave it behind for good.
+      await expectHistoryMatchesServer(page, request);
     });
   }
 }

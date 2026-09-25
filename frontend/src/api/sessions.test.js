@@ -3,22 +3,26 @@ import { QueryClient } from '@tanstack/react-query';
 import { getHistory } from './sessions';
 import { setAuthToken } from './client';
 import { queryKeys } from './queryKeys';
-import { registerHistoryQueryDefaults } from '../lib/queryClient';
+import { FULL_SYNC_INTERVAL_MS, HISTORY_FORMAT, flattenHistory } from '../lib/historySync';
 
-// History's conditional fetch. The property every test here protects: a 304 is only ever turned
-// into data the device ALREADY holds for exactly that tag. Anything else -- no tag, a copy the tag
-// doesn't belong to, a cache that changed mid-request -- is a full download.
+// History's month-by-month sync, through the real transport and a real QueryClient. The property
+// every test here protects: what the cache ends up holding is exactly the server's month list, each
+// month either freshly sent or kept from the copy whose fingerprint the server just confirmed --
+// never a month the server did not vouch for, and never a month silently dropped.
 
-function historyResponse(body, etag) {
-  const headers = { 'content-type': 'application/json' };
-  if (etag) headers.ETag = etag;
-  return new Response(JSON.stringify(body), { status: 200, headers });
-}
+const reply = (months, changed = {}) =>
+  new Response(JSON.stringify({ months, changed }), { status: 200, headers: { 'content-type': 'application/json' } });
 
-const notModified = () => new Response(null, { status: 304 });
-const sentTag = (call) => global.fetch.mock.calls[call][1].headers['If-None-Match'];
+const sentHave = (call) => JSON.parse(global.fetch.mock.calls[call][1].body).have;
+const sentUrl = (call) => global.fetch.mock.calls[call][0];
 
-const session = (id, reps) => ({ id, startedAt: `2026-09-0${id}T12:00:00Z`, entries: [{ exerciseId: 1, sets: [{ weight: 100, reps }] }] });
+const session = (id, month, reps) => ({
+  id,
+  startedAt: `${month}-1${id}T12:00:00Z`,
+  entries: [{ exerciseId: 1, sets: [{ weight: 100, reps }] }],
+});
+
+const synced = (months, fullSyncedAt = Date.now()) => ({ format: HISTORY_FORMAT, months, fullSyncedAt });
 
 describe('getHistory', () => {
   beforeEach(() => {
@@ -28,155 +32,177 @@ describe('getHistory', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
-  it('sends no tag when nothing is cached', async () => {
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], 'W/"a"'));
+  it('asks for everything when nothing is cached, and returns the months newest first', async () => {
+    global.fetch.mockResolvedValueOnce(reply(['2026-06', '2026-05'], {
+      '2026-06': { fp: 'a', sessions: [session(2, '2026-06', 5)] },
+      '2026-05': { fp: 'b', sessions: [session(1, '2026-05', 5)] },
+    }));
 
-    await expect(getHistory(7, { readCached: () => undefined })).resolves.toEqual([session(1, 5)]);
-    expect(sentTag(0)).toBeUndefined();
+    const result = await getHistory(7, { readCached: () => undefined });
+
+    expect(sentUrl(0)).toMatch(/\/api\/people\/7\/history\/sync$/);
+    expect(global.fetch.mock.calls[0][1].method).toBe('POST');
+    expect(sentHave(0)).toEqual({});
+    expect(flattenHistory(result).map((s) => s.id)).toEqual([2, 1]);
   });
 
-  it('sends the tag of the cached copy and returns that same copy on a 304', async () => {
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], 'W/"a"'));
-    const cached = await getHistory(7);
+  it('sends the fingerprint of every month it holds, and keeps each month the server did not resend', async () => {
+    const june = { fp: 'a', sessions: [session(2, '2026-06', 5)] };
+    const may = { fp: 'b', sessions: [session(1, '2026-05', 5)] };
+    const cached = synced({ '2026-06': june, '2026-05': may });
+    const newJune = { fp: 'a2', sessions: [session(2, '2026-06', 6)] };
+    global.fetch.mockResolvedValueOnce(reply(['2026-06', '2026-05'], { '2026-06': newJune }));
 
-    global.fetch.mockResolvedValueOnce(notModified());
-    const again = await getHistory(7, { readCached: () => cached });
+    const result = await getHistory(7, { readCached: () => cached });
 
-    expect(sentTag(1)).toBe('W/"a"');
-    expect(again).toBe(cached);
+    expect(sentHave(0)).toEqual({ '2026-06': 'a', '2026-05': 'b' });
+    expect(result.months['2026-06']).toEqual(newJune);
+    expect(result.months['2026-05']).toBe(may);   // the very object held -- no copy, no refetch
+    expect(result.fullSyncedAt).toBe(cached.fullSyncedAt);
   });
 
-  it('returns the new history on a 200, never the cached copy', async () => {
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], 'W/"a"'));
-    const cached = await getHistory(7);
+  it('drops a held month the server no longer lists', async () => {
+    const cached = synced({
+      '2026-06': { fp: 'a', sessions: [session(2, '2026-06', 5)] },
+      '2026-03': { fp: 'c', sessions: [session(1, '2026-03', 5)] },
+    });
+    global.fetch.mockResolvedValueOnce(reply(['2026-06']));
 
-    global.fetch.mockResolvedValueOnce(historyResponse([session(2, 8), session(1, 5)], 'W/"b"'));
-    const fresh = await getHistory(7, { readCached: () => cached });
+    const result = await getHistory(7, { readCached: () => cached });
 
-    expect(fresh).toEqual([session(2, 8), session(1, 5)]);
+    expect(Object.keys(result.months)).toEqual(['2026-06']);
   });
 
-  it('never sends a tag for a copy that did not come from a tagged response (a restored cache)', async () => {
-    // Deep-equal to a tagged response, but a different object -- exactly what hydrating the
-    // persisted cache after a reload produces. Its content is unverified, so it gets no tag.
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], 'W/"a"'));
-    await getHistory(7);
-    const restored = [session(1, 5)];
+  // A server bug, but the one that would silently lose a month if it were tolerated.
+  it('rejects a reply that lists a month it neither sent nor that is held, rather than drop it', async () => {
+    global.fetch.mockResolvedValueOnce(reply(['2026-06', '2026-05'], { '2026-06': { fp: 'a', sessions: [] } }));
 
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], 'W/"a"'));
-    await getHistory(7, { readCached: () => restored });
-
-    expect(sentTag(1)).toBeUndefined();
+    await expect(getHistory(7, { readCached: () => undefined })).rejects.toThrow(/2026-05/);
   });
 
-  it('sends no tag when the response carried none', async () => {
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], null));
-    const cached = await getHistory(7);
+  // A device upgrading from a build that cached History as one flat array has nothing to offer the
+  // sync, so it asks for everything -- and until then the array itself stays readable.
+  it('treats a cached plain array from an older build as holding nothing', async () => {
+    global.fetch.mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] } }));
 
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], null));
+    const result = await getHistory(7, { readCached: () => [session(1, '2026-06', 5)] });
+
+    expect(sentHave(0)).toEqual({});
+    expect(result.format).toBe(HISTORY_FORMAT);
+  });
+
+  it('asks for everything once a day, whatever it holds, and restarts the clock', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00Z') });
+    const cached = synced({ '2026-06': { fp: 'a', sessions: [] } }, Date.now() - FULL_SYNC_INTERVAL_MS - 1);
+    global.fetch.mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [] } }));
+
+    const result = await getHistory(7, { readCached: () => cached });
+
+    expect(sentHave(0)).toEqual({});
+    expect(result.fullSyncedAt).toBe(Date.now());
+  });
+
+  // The production canary: the daily full sync re-reads months the device had been trusting, and one
+  // whose fingerprint matched while its content did not is reported -- month ids only.
+  it('reports a month whose fingerprint matched but whose content did not, on the daily full sync', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00Z') });
+    const cached = synced({ '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] } }, Date.now() - FULL_SYNC_INTERVAL_MS - 1);
+    global.fetch
+      .mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 6)] } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
     await getHistory(7, { readCached: () => cached });
 
-    expect(sentTag(1)).toBeUndefined();
+    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+    expect(sentUrl(1)).toMatch(/\/api\/people\/7\/history\/drift$/);
+    expect(JSON.parse(global.fetch.mock.calls[1][1].body)).toEqual({ months: ['2026-06'] });
   });
 
-  it('refetches in full when the cache changed while a conditional request was out', async () => {
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], 'W/"a"'));
-    const cached = await getHistory(7);
-    const replacement = [session(3, 1)];
-    let current = cached;
+  it('reports nothing when the full sync finds every trusted month exactly as held', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00Z') });
+    const june = { fp: 'a', sessions: [session(1, '2026-06', 5)] };
+    const cached = synced({ '2026-06': june }, Date.now() - FULL_SYNC_INTERVAL_MS - 1);
+    global.fetch.mockResolvedValueOnce(reply(['2026-06'], { '2026-06': june }));
 
-    global.fetch.mockImplementationOnce(() => {
-      current = replacement; // something replaced the cached copy mid-flight
-      return Promise.resolve(notModified());
-    });
-    global.fetch.mockResolvedValueOnce(historyResponse([session(2, 8)], 'W/"c"'));
+    await getHistory(7, { readCached: () => cached });
 
-    const result = await getHistory(7, { readCached: () => current });
-
-    expect(result).toEqual([session(2, 8)]);
-    expect(result).not.toBe(cached);
-    expect(sentTag(2)).toBeUndefined();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('fails exactly like an ordinary fetch when the server is down', async () => {
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], 'W/"a"'));
-    const cached = await getHistory(7);
+  it('never lets a failed drift report fail the sync that found it', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00Z') });
+    const cached = synced({ '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] } }, Date.now() - FULL_SYNC_INTERVAL_MS - 1);
+    global.fetch
+      .mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 6)] } }))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'));
 
-    global.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ message: 'down' }), { status: 503, headers: { 'content-type': 'application/json' } }));
+    const result = await getHistory(7, { readCached: () => cached });
 
-    await expect(getHistory(7, { readCached: () => cached })).rejects.toMatchObject({ status: 503 });
+    expect(flattenHistory(result)[0].entries[0].sets[0].reps).toBe(6);
+  });
+
+  it('does not force a full sync before the day is up', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00Z') });
+    const cached = synced({ '2026-06': { fp: 'a', sessions: [] } }, Date.now() - FULL_SYNC_INTERVAL_MS + 60_000);
+    global.fetch.mockResolvedValueOnce(reply(['2026-06']));
+
+    await getHistory(7, { readCached: () => cached });
+
+    expect(sentHave(0)).toEqual({ '2026-06': 'a' });
   });
 });
 
-// The same flow through a real QueryClient, because TanStack's structural sharing STORES a merge of
-// old and new rather than the object getHistory returned. Without registerHistoryQueryDefaults the
-// tag would be stranded on the returned object and every fetch after a change would silently go
-// back to a full download. With it, the stored merge carries the tag -- and the 304 hands back that
-// exact stored object, so nothing downstream even sees a change.
-describe('getHistory through the query cache', () => {
+// The same, as the app actually runs it: a query whose cached value is what the NEXT sync sends.
+describe('getHistory through a real QueryClient', () => {
   let client;
+  const key = queryKeys.history(7);
+  const fetchHistory = () =>
+    client.fetchQuery({ queryKey: key, queryFn: () => getHistory(7, { readCached: () => client.getQueryData(key) }), staleTime: 0 });
 
   beforeEach(() => {
     setAuthToken('t');
     global.fetch = vi.fn();
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    registerHistoryQueryDefaults(client);
   });
 
   afterEach(() => {
+    client.clear();
     vi.restoreAllMocks();
-    client.clear();
   });
 
-  const fetchHistory = () =>
-    client.fetchQuery({
-      queryKey: queryKeys.history(7),
-      queryFn: () => getHistory(7, { readCached: () => client.getQueryData(queryKeys.history(7)) }),
-      staleTime: 0,
-    });
+  it('sends back the fingerprints it was given, and an unchanged month survives by identity', async () => {
+    const may = { fp: 'b', sessions: [session(1, '2026-05', 5)] };
+    global.fetch.mockResolvedValueOnce(reply(['2026-06', '2026-05'], {
+      '2026-06': { fp: 'a', sessions: [session(2, '2026-06', 5)] },
+      '2026-05': may,
+    }));
+    await fetchHistory();
+    const mayHeld = client.getQueryData(key).months['2026-05'];
 
-  it('keeps the tag across a partial change, then serves the stored copy on a 304', async () => {
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], 'W/"a"'));
+    global.fetch.mockResolvedValueOnce(reply(['2026-06', '2026-05'], {
+      '2026-06': { fp: 'a2', sessions: [session(2, '2026-06', 6), session(3, '2026-06', 5)] },
+    }));
     await fetchHistory();
 
-    // A new session: the merge keeps session 1's object but is a new array.
-    global.fetch.mockResolvedValueOnce(historyResponse([session(2, 8), session(1, 5)], 'W/"b"'));
-    await fetchHistory();
-    const stored = client.getQueryData(queryKeys.history(7));
-    expect(stored).toEqual([session(2, 8), session(1, 5)]);
-
-    global.fetch.mockResolvedValueOnce(notModified());
-    const afterNotModified = await fetchHistory();
-
-    expect(sentTag(1)).toBe('W/"a"');
-    expect(sentTag(2)).toBe('W/"b"');
-    expect(afterNotModified).toBe(stored);
-    expect(client.getQueryData(queryKeys.history(7))).toBe(stored);
+    expect(sentHave(1)).toEqual({ '2026-06': 'a', '2026-05': 'b' });
+    expect(client.getQueryData(key).months['2026-05']).toBe(mayHeld);
+    expect(flattenHistory(client.getQueryData(key)).map((s) => s.id)).toEqual([2, 3, 1]);
   });
 
-  it('keeps each person on their own tag', async () => {
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], 'W/"seven"'));
+  // Degraded, a sync simply fails -- and the months already held are what the screen keeps showing.
+  it('keeps every held month when a sync fails', async () => {
+    global.fetch.mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] } }));
     await fetchHistory();
+    const before = client.getQueryData(key);
 
-    global.fetch.mockResolvedValueOnce(historyResponse([session(4, 2)], 'W/"eight"'));
-    await client.fetchQuery({
-      queryKey: queryKeys.history(8),
-      queryFn: () => getHistory(8, { readCached: () => client.getQueryData(queryKeys.history(8)) }),
-    });
+    global.fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: 'down' }), { status: 503, headers: { 'content-type': 'application/json' } }),
+    );
+    await expect(fetchHistory()).rejects.toMatchObject({ status: 503 });
 
-    expect(sentTag(1)).toBeUndefined();
-  });
-
-  it('starts over with a full fetch after the cache is cleared (sign-out, account switch)', async () => {
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], 'W/"a"'));
-    await fetchHistory();
-    client.clear();
-
-    global.fetch.mockResolvedValueOnce(historyResponse([session(1, 5)], 'W/"a"'));
-    await fetchHistory();
-
-    expect(sentTag(1)).toBeUndefined();
+    expect(client.getQueryData(key)).toBe(before);
   });
 });

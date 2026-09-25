@@ -35,11 +35,7 @@ public class CorsConfig {
         // "<Person>-workout-data-<date>.csv". Same-origin requests (local dev, behind the
         // Vite proxy) never hit this restriction, which is why it only surfaces once
         // frontend and backend are on genuinely different deployed origins.
-        //
-        // ETag is exposed for the same reason: `/history` answers with one (HistoryEtagConfig) and
-        // the client sends it back as If-None-Match. Unexposed, the browser hides it from the app
-        // on the deployed origins only, and every History fetch silently stays a full download.
-        configuration.setExposedHeaders(List.of("Content-Disposition", "ETag"));
+        configuration.setExposedHeaders(List.of("Content-Disposition"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import SectionLabel from '../shared/SectionLabel';
 import { useNavigate } from 'react-router-dom';
-import { queryClient, CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
+import { queryClient, refreshHistoryForEveryone, CREATE_EXERCISE_MUTATION_KEY } from '../../lib/queryClient';
 import { buildHistoryPrFlags } from '../../utils/historyPrFlags';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
@@ -183,6 +183,12 @@ export default function LogTab() {
   }
 
   async function refreshPersonalization() {
+    // History too, and for EVERY person: this is also how ConfigureExerciseModal reports a rename,
+    // and History carries each entry's exercise name for everyone who logged it. Not awaited --
+    // History is not what this screen is waiting on -- and cheap when nothing changed, since the
+    // sync then sends fingerprints and gets nothing back. The app's own client, as for the outbox
+    // subscription below.
+    refreshHistoryForEveryone(queryClient);
     await Promise.all([refetchPersonExercises(), refetchTags(), refetchCatalog()]);
   }
 

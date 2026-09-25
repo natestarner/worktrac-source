@@ -242,7 +242,11 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 #     boot.
 # Every one is commented at its site with why losing that error cannot lose anything: a queued
 # write in the outbox's case, a restored routine position in app state's.
-EXPECTED_LIB_SWALLOWS=54
+# 55 with queryClient.js#refreshHistory (History month sync): its fetch is fire-and-forget after a
+#   write. A failed or paused fetch loses nothing -- the query keeps the months it holds and was
+#   already marked stale in the step before, so the next reader refetches; queryClient.test.js's
+#   "leaves History marked stale when the fetch cannot complete" pins exactly that.
+EXPECTED_LIB_SWALLOWS=55
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

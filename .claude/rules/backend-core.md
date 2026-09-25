@@ -213,12 +213,67 @@ small test and break at that scale. `HistoryScaleTest` seeds 2,150 sessions to g
   "session")` because every caller reads `session.startedAt`; without it that was one lazy SELECT
   per session (~2,000 statements per `/prs` or trends request). Use a per-method graph, not a global
   `hibernate.default_batch_fetch_size`, which changes every lazy load in the app.
-- **History's transfer is gzip + a weak, shallow ETag** (`server.compression`, `HistoryEtagConfig`).
-  Keep the tag **shallow** (a hash of the response bytes): a version-stamp tag would skip the read
-  but serve a stale History with a 304 the first time a write path forgot to bump it. Keep it
-  **weak**: Tomcat will not gzip a response with a strong tag. Keep `ETag` in `CorsConfig`'s exposed
-  headers, or the deployed (cross-origin) app can't read it. `HistoryEtagTest` runs against a real
-  Tomcat and pins all three.
+- **Ordering by a timestamp needs an id tie-break.** Two workouts can start at the same instant (an
+  import with equal date and time; a frozen test clock), and without one their order is whatever the
+  query plan returns — adding an index (V82) once flipped CSV export's. `WorkoutRowProjection` and
+  `HistoryMonths` both break ties by id.
+- History's transfer is gzip (`server.compression`).
+
+## History is synced a month at a time — the fingerprint must cover every input
+
+The app reads History through `POST /api/people/{id}/history/sync`: the client sends the
+fingerprint of each month it holds, and gets back only the months whose fingerprint changed.
+A month the client holds is trusted **for as long as its fingerprint matches**, so a change that
+does not move the fingerprint is a device showing stale History until the daily full sync. Full
+narrative: `docs/architecture/history-sync.md`.
+
+- **The fingerprint is `COUNT` + `SUM(row_version)` per month** over the visible sessions, sets and
+  notes, plus the `row_version` of every exercise the month's sets name, plus a full-history flag
+  (`HistoryFingerprints`). `row_version` is a SQL Server `ROWVERSION` (V81): the **database** stamps
+  it on every insert and update, so there is no write path — JPA, native SQL, import, a cascade —
+  that can forget to bump it. That is what made this safe where #337 rejected a "version-stamp ETag".
+  **Never replace it with an app-maintained `updated_at`.**
+- **`SUM`, not `MAX`.** A transaction that commits late holds a row_version lower than rows already
+  visible; MAX misses it, SUM does not. Every added value is greater than every removed one, so any
+  change — including "delete one, add one" at the same count — moves the sum.
+- **Hash the full-history flag, never the Free floor.** The floor is `now - 90 days` and moves every
+  instant. Only rows it admits are aggregated, so a workout aging out lowers its month's count.
+- **⚠️ If History ever reads a new column or table, fold it into BOTH fingerprint computations** —
+  the aggregate (`HistoryFingerprints`) and the per-row totals (`HistoryMonths`). History carries
+  exercise *names*, which is why `exercises` has a row_version at all.
+  `HistoryFingerprintTest#everyFieldHistorySendsIsCoveredByTheFingerprint` fails on a new DTO field
+  until it is declared covered; every other test there asserts that no month's History content
+  changed without its fingerprint changing, and that the two computations agree.
+- **Changed months are built in ONE statement** (`HistoryMonths`, a `UNION ALL` of sessions, sets and
+  notes with their row_versions), and each month's fingerprint is summed from exactly those rows.
+  Under RCSI one statement is one snapshot, so content and fingerprint cannot disagree. Splitting it
+  into per-table loads reintroduces a phantom (a set added and deleted mid-load) paired with a
+  fingerprint the client would then trust.
+- **Every month the client KEEPS is re-checked after the load; a mismatch is a 503**, which the
+  client's ordinary query retry answers. It is not a backend retry loop, and must not become one
+  (see Concurrency above).
+- **`GET /history` is the same builder, flattened** — for API readers and installed clients that
+  predate the sync. Not a second implementation; don't let it grow one.
+- **A month is the UTC calendar month of `started_at`**, computed by the database
+  (`CONVERT(CHAR(7), started_at, 126)`). The client never computes one. Pass instants to native
+  queries as UTC `LocalDateTime`s, never `java.sql.Timestamp` (which the JVM's zone would shift).
+- **The property is tested directly, not just case by case.** `HistoryConvergenceTest` runs seeded
+  random sequences of every History write (plan flips and clock aging included) against five
+  simulated devices at different staleness, and after each write requires one sync to leave each
+  holding exactly `GET /history`; it also asserts every write kind was actually *accepted*, so it
+  cannot pass on a stream of refusals. `HistoryConcurrencyTest` does it under contention and requires
+  every state a device reached to converge in one quiet sync. Replay or lengthen with
+  `-Dhistory.convergence.seed=… -Dhistory.convergence.steps=…`.
+- **⚠️ The shared integration-test databases do NOT enable `READ_COMMITTED_SNAPSHOT`**, unlike Azure
+  SQL and local dev. `HistoryConcurrencyTest` turns it on for its own database because the
+  one-statement load's consistency is exactly what RCSI provides; any test whose claim depends on
+  RCSI must do the same, or it is testing a database production doesn't run.
+- **`POST /history/drift` is the production canary** — a device's daily full sync found a month whose
+  fingerprint matched while its content did not. It only logs (`History drift:` at WARN, month ids
+  only). If it ever appears in the logs, a History input is missing from the fingerprint.
+- **Auto-close is not a write until something writes.** `GET /sessions/live` computes it read-only,
+  so History (and the fingerprint) change only when the next set's write saves it —
+  `HistoryFingerprintTest` pins both halves.
 
 ## Error handling
 

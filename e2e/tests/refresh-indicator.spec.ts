@@ -3,7 +3,7 @@ import { registerHousehold } from './support/auth';
 import { pickExercise } from './support/exercises';
 import { delayNetwork } from './support/faults';
 
-const HISTORY_REQUEST = /\/api\/people\/\d+\/history$/;
+const HISTORY_REQUEST = /\/api\/people\/\d+\/history\/sync$/;
 
 // Deliberately NOT a parity spec. The refresh indicator is sync chrome, and `e2e-tests.md` is
 // explicit that sync chrome legitimately differs by connectivity mode (offline there is no
