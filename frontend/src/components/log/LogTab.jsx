@@ -15,13 +15,14 @@ import { useSessionEntries } from '../../hooks/useSessionEntries';
 import { isTempExerciseId, resolveExerciseId } from '../../lib/exerciseIdMap';
 import { editSession } from '../../api/sessions';
 import { localDateTimeToIso, toLocalDateStr, toLocalTimeStr } from '../../utils/datetime';
+import { routineProgress } from '../../utils/routineProgress';
 import ExercisePicker from './ExercisePicker';
 import ExerciseDetail from './ExerciseDetail';
 import SessionSummary from './SessionSummary';
 import AddEditExerciseModal from '../settings/AddEditExerciseModal';
 import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
-import { IconClose } from '../shared/icons';
+import { IconCheck, IconClose } from '../shared/icons';
 import Card from '../shared/Card';
 
 function routineBannerDismissKey(personId) {
@@ -36,6 +37,7 @@ export default function LogTab() {
     selectedExerciseId,
     activeRoutineId,
     routineIndex,
+    routineLoggedSteps,
     editingSession,
     selectExercise,
     backToPicker,
@@ -43,6 +45,8 @@ export default function LogTab() {
     jumpToRoutineIndex,
     nextExerciseInRoutine,
     endRoutine,
+    recordRoutineStepLogged,
+    forgetRoutineStepsLogged,
     doneEditingSession,
     updateEditingSession,
     setExerciseSearch,
@@ -90,6 +94,18 @@ export default function LogTab() {
     : null;
   const serverSessionEntries = activeSessionId ? history.find((s) => s.id === activeSessionId)?.entries ?? [] : [];
   const sessionEntries = useSessionEntries({ personId: activePersonId, serverEntries: serverSessionEntries, exercises: catalog });
+
+  // Which routine steps are done / skipped, and where "Next exercise" goes -- see
+  // utils/routineProgress.js. sessionEntries already includes still-queued sets, so a step logged
+  // with no signal turns green at once, by the same path as online.
+  const progress = activeRoutine
+    ? routineProgress(
+        activeRoutine.exercises,
+        routineIndex,
+        routineLoggedSteps,
+        new Set(sessionEntries.filter((entry) => entry.sets.length > 0).map((entry) => entry.exerciseId)),
+      )
+    : null;
 
   // Record marks for the workout in progress, from the SAME fold History uses -- so an exercise
   // row in "Session exercises" and the same row on History cannot disagree about which records
@@ -251,10 +267,23 @@ export default function LogTab() {
 
   function handleNextExercise() {
     if (!activeRoutine) return;
-    const exerciseIds = activeRoutine.exercises.map((e) => e.exerciseId);
-    const wasLast = routineIndex + 1 >= exerciseIds.length;
-    nextExerciseInRoutine(exerciseIds);
-    if (wasLast) showToast('Routine complete!', 2400);
+    nextExerciseInRoutine(
+      activeRoutine.exercises.map((e) => e.exerciseId),
+      progress.nextIndex,
+    );
+    if (progress.nextIndex == null) {
+      const skippedCount = progress.done.filter((isDone) => !isDone).length;
+      showToast(skippedCount === 0 ? 'Routine complete!' : `Routine finished — ${skippedCount} skipped`, 2400);
+    }
+  }
+
+  // Marks the current step as logged -- but only when the set is for the current step's exercise.
+  // A set logged off-script from the picker leaves routineIndex where it was, and must not be
+  // credited to a step it has nothing to do with.
+  function handleSetLogged() {
+    if (activeRoutine?.exercises[routineIndex]?.exerciseId === selectedExercise?.id) {
+      recordRoutineStepLogged(routineIndex);
+    }
   }
 
   // Bailing out of a routine partway through, as distinct from completing it via "Finish
@@ -401,10 +430,16 @@ export default function LogTab() {
               </div>
               {/* .hscroll, not an inline overflowX: this strip gets a deliberately thick, always-
                   visible scrollbar so it can be scrubbed mid-workout. See index.css. */}
-              <div className="hscroll" style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <div className="hscroll" data-testid="routine-pills" style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                {/* Green means a set was logged at that step, not that it is behind you -- see
+                    utils/routineProgress.js. A step passed over with nothing logged gets a dashed
+                    outline instead, so a skip reads as a skip. The check mark and the aria-label's
+                    status carry the same meaning without relying on colour. Every pill has a 1px
+                    border (transparent unless skipped) so changing state never changes its size. */}
                 {activeRoutine.exercises.map((rc, idx) => {
                   const isCurrent = idx === routineIndex;
-                  const isDone = idx < routineIndex;
+                  const isDone = progress.done[idx];
+                  const isSkipped = progress.skipped[idx];
                   return (
                     <button
                       key={`${rc.exerciseId}-${idx}`}
@@ -412,11 +447,16 @@ export default function LogTab() {
                         routinePillRefs.current[idx] = el;
                       }}
                       onClick={() => jumpToRoutineIndex(idx, activeRoutine.exercises.map((e) => e.exerciseId))}
+                      aria-current={isCurrent ? 'step' : undefined}
+                      aria-label={isDone ? `${rc.exerciseName}, done` : isSkipped ? `${rc.exerciseName}, skipped` : undefined}
                       style={{
                         flexShrink: 0,
-                        padding: '9px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--space-1)',
+                        padding: '8px 13px',
                         borderRadius: 'var(--radius-md)',
-                        border: 'none',
+                        border: isSkipped ? '1px dashed var(--color-faint)' : '1px solid transparent',
                         fontSize: 13,
                         fontWeight: 700,
                         cursor: 'pointer',
@@ -424,6 +464,7 @@ export default function LogTab() {
                         color: isCurrent ? '#fff' : isDone ? 'var(--color-success)' : 'var(--color-muted)',
                       }}
                     >
+                      {isDone && <IconCheck size={14} />}
                       {rc.exerciseName}
                     </button>
                   );
@@ -450,7 +491,7 @@ export default function LogTab() {
                   cursor: 'pointer',
                 }}
               >
-                {routineIndex + 1 >= activeRoutine.exercises.length ? 'Finish routine' : 'Next exercise'}
+                {progress.nextIndex == null ? 'Finish routine' : 'Next exercise'}
               </button>
             </Card>
           )}
@@ -472,6 +513,15 @@ export default function LogTab() {
                 // exercise's session-volume record, so the latch holding the last celebrated value
                 // has to be re-armed or it suppresses every later record below it.
                 if (removedExerciseId != null) clearVolumePrCelebrated(removedExerciseId);
+                // Removing an exercise from the session is saying it wasn't done, so its routine
+                // steps stop reading as done -- see utils/routineProgress.js for why this is explicit.
+                if (removedExerciseId != null && activeRoutine) {
+                  forgetRoutineStepsLogged(
+                    activeRoutine.exercises
+                      .map((e, idx) => (e.exerciseId === removedExerciseId ? idx : -1))
+                      .filter((idx) => idx >= 0),
+                  );
+                }
                 refetchHistory();
               }}
             />
@@ -518,6 +568,7 @@ export default function LogTab() {
               //
               // Null whenever no routine is running, which is most of the time.
               prescribed={activeRoutine?.exercises?.[routineIndex] ?? null}
+              onSetLogged={handleSetLogged}
               // Deep-links into History pre-filtered to this exercise. fromLog:true is what tells
               // HistoryTab's filter bar to show a "Back to {exercise}" link -- selectedExerciseId is
               // untouched by this navigation, so returning via that link (or the Log tab itself)

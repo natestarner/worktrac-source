@@ -83,6 +83,9 @@ export default function ExerciseDetail({
   // The routine exercise being followed at this position, when a routine is running -- carrying
   // whatever the trainer prescribed. Null the rest of the time.
   prescribed = null,
+  // Optional: called once per set logged here, after the write is dispatched. LogTab uses it to
+  // mark the routine step the set was logged at.
+  onSetLogged,
 }) {
   const { account, people } = useAuth();
   const activePersonName = people.length >= 2 ? people.find((p) => p.id === personId)?.name : null;
@@ -967,6 +970,7 @@ export default function ExerciseDetail({
       idempotencyKey: newId(),
       clientLoggedAt: new Date().toISOString(),
     });
+    onSetLogged?.();
     return ack;
   }
 

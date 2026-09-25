@@ -109,15 +109,69 @@ describe('AppStateContext reducer', () => {
     expect(active(state).selectedExerciseId).toBe(10);
   });
 
-  it('advancing past the last exercise in a routine ends it', () => {
+  it('advancing goes to the given step, and a null next step finishes the routine', () => {
     let state = reducer(withPerson(1), { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20] });
-    state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20] });
+    state = reducer(state, { type: 'RECORD_ROUTINE_STEP_LOGGED', index: 0 });
+    state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20], nextIndex: 1 });
     expect(active(state).routineIndex).toBe(1);
     expect(active(state).selectedExerciseId).toBe(20);
+    expect(active(state).routineLoggedSteps).toEqual([0]);
 
-    state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20] });
+    state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20], nextIndex: null });
     expect(active(state).activeRoutineId).toBeNull();
     expect(active(state).selectedExerciseId).toBeNull();
+    expect(active(state).routineLoggedSteps).toEqual([]);
+  });
+
+  it('advancing can skip over steps already done', () => {
+    let state = reducer(withPerson(1), { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20, 30] });
+    state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20, 30], nextIndex: 2 });
+    expect(active(state).routineIndex).toBe(2);
+    expect(active(state).selectedExerciseId).toBe(30);
+  });
+
+  it('records each routine step a set was logged at, once', () => {
+    let state = reducer(withPerson(1), { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20, 30] });
+    state = reducer(state, { type: 'RECORD_ROUTINE_STEP_LOGGED', index: 2 });
+    state = reducer(state, { type: 'RECORD_ROUTINE_STEP_LOGGED', index: 0 });
+    const before = state;
+    state = reducer(state, { type: 'RECORD_ROUTINE_STEP_LOGGED', index: 2 });
+
+    expect(active(state).routineLoggedSteps).toEqual([2, 0]);
+    // A repeat is a no-op, so it does not re-render or re-persist.
+    expect(state).toBe(before);
+  });
+
+  it('forgets the given logged routine steps and keeps the rest', () => {
+    let state = reducer(withPerson(1), { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20, 10] });
+    state = reducer(state, { type: 'RECORD_ROUTINE_STEP_LOGGED', index: 0 });
+    state = reducer(state, { type: 'RECORD_ROUTINE_STEP_LOGGED', index: 1 });
+    state = reducer(state, { type: 'RECORD_ROUTINE_STEP_LOGGED', index: 2 });
+
+    state = reducer(state, { type: 'FORGET_ROUTINE_STEPS_LOGGED', indexes: [0, 2] });
+    expect(active(state).routineLoggedSteps).toEqual([1]);
+
+    const before = state;
+    state = reducer(state, { type: 'FORGET_ROUTINE_STEPS_LOGGED', indexes: [0] });
+    expect(state).toBe(before);
+  });
+
+  it('starting a routine clears the steps logged in the previous one', () => {
+    let state = reducer(withPerson(1), { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20] });
+    state = reducer(state, { type: 'RECORD_ROUTINE_STEP_LOGGED', index: 1 });
+    state = reducer(state, { type: 'START_ROUTINE', routineId: 8, exerciseIds: [30, 40] });
+    expect(active(state).routineLoggedSteps).toEqual([]);
+  });
+
+  it("keeps each person's logged routine steps their own", () => {
+    let state = reducer(withPerson(1), { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20] });
+    state = reducer(state, { type: 'RECORD_ROUTINE_STEP_LOGGED', index: 1 });
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
+    expect(active(state).routineLoggedSteps).toEqual([]);
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
+    expect(active(state).routineLoggedSteps).toEqual([1]);
   });
 
   it('done editing session clears both editingSession and selectedExerciseId', () => {
@@ -130,7 +184,7 @@ describe('AppStateContext reducer', () => {
 
   it('backing out to the picker while a routine is active preserves routine position for resuming', () => {
     let state = reducer(withPerson(1), { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20, 30] });
-    state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20, 30] });
+    state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20, 30], nextIndex: 1 });
     expect(active(state).routineIndex).toBe(1);
 
     state = reducer(state, { type: 'BACK_TO_PICKER' });
@@ -174,12 +228,14 @@ describe('AppStateContext reducer', () => {
 
   it('ending the routine clears routine progress but leaves the selected exercise alone', () => {
     let state = reducer(withPerson(1), { type: 'START_ROUTINE', routineId: 7, exerciseIds: [10, 20, 30] });
-    state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20, 30] });
+    state = reducer(state, { type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds: [10, 20, 30], nextIndex: 1 });
     expect(active(state).routineIndex).toBe(1);
 
+    state = reducer(state, { type: 'RECORD_ROUTINE_STEP_LOGGED', index: 1 });
     state = reducer(state, { type: 'END_ROUTINE' });
     expect(active(state).activeRoutineId).toBeNull();
     expect(active(state).routineIndex).toBe(0);
+    expect(active(state).routineLoggedSteps).toEqual([]);
     expect(active(state).selectedExerciseId).toBe(20);
   });
 
