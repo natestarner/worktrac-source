@@ -46,13 +46,22 @@ vi.mock('./ExercisePicker', () => ({
     </div>
   ),
 }));
-vi.mock('./ExerciseDetail', () => ({ default: () => <div>exercise-detail</div> }));
+// Exposes onSetLogged as a button, so the routine-step wiring can be driven without the real screen.
+vi.mock('./ExerciseDetail', () => ({
+  default: ({ onSetLogged }) => (
+    <div>
+      exercise-detail
+      <button onClick={onSetLogged}>mock-log-set</button>
+    </div>
+  ),
+}));
 // Renders the entries LogTab hands it (rather than a static placeholder) so a test can verify
 // LogTab's own wiring -- the merge/offline logic itself is useSessionEntries' own test's job.
 vi.mock('./SessionSummary', () => ({
-  default: ({ entries }) => (
+  default: ({ entries, onChanged }) => (
     <div>
       session-summary
+      <button onClick={() => onChanged(1)}>mock-remove-bench</button>
       {entries.map((entry) => (
         <div key={entry.exerciseId}>{entry.exerciseName}: {entry.sets.length} set(s)</div>
       ))}
@@ -75,6 +84,7 @@ function baseAppState(overrides = {}) {
     selectedExerciseId: null,
     activeRoutineId: routine.id,
     routineIndex: 0,
+    routineLoggedSteps: [],
     editingSession: null,
     selectExercise: vi.fn(),
     backToPicker: vi.fn(),
@@ -82,6 +92,8 @@ function baseAppState(overrides = {}) {
     jumpToRoutineIndex: vi.fn(),
     nextExerciseInRoutine: vi.fn(),
     endRoutine: vi.fn(),
+    recordRoutineStepLogged: vi.fn(),
+    forgetRoutineStepsLogged: vi.fn(),
     doneEditingSession: vi.fn(),
     updateEditingSession: vi.fn(),
     setExerciseSearch: vi.fn(),
@@ -121,7 +133,7 @@ describe('LogTab routine nav button placement', () => {
     expect(screen.getByText('exercise-picker')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Next exercise' }));
-    expect(appState.nextExerciseInRoutine).toHaveBeenCalledWith([1, 2]);
+    expect(appState.nextExerciseInRoutine).toHaveBeenCalledWith([1, 2], 1);
   });
 
   it('shows "Next exercise" in the routine card while mid-routine, and advances on click', () => {
@@ -133,7 +145,7 @@ describe('LogTab routine nav button placement', () => {
     expect(screen.getByText('Push Day')).toBeInTheDocument();
 
     fireEvent.click(button);
-    expect(useAppState.mock.results[0].value.nextExerciseInRoutine).toHaveBeenCalledWith([1, 2]);
+    expect(useAppState.mock.results[0].value.nextExerciseInRoutine).toHaveBeenCalledWith([1, 2], 1);
   });
 
   it('shows "Finish routine" in the routine card on the last exercise', () => {
@@ -142,6 +154,99 @@ describe('LogTab routine nav button placement', () => {
 
     expect(screen.getByText('Finish routine')).toBeInTheDocument();
     expect(screen.queryByText('Next exercise')).not.toBeInTheDocument();
+  });
+
+  // A pill used to turn green purely for being behind the current position, so skipping ahead
+  // painted every earlier exercise as complete. Green now means a set was logged at that step.
+  describe('routine step completion', () => {
+    const benchSet = { exerciseId: 1, exerciseName: 'Bench Press', sets: [{ id: 501, weight: 135, reps: 5, unit: 'lb' }] };
+    const pressSet = { exerciseId: 2, exerciseName: 'Overhead Press', sets: [{ id: 502, weight: 95, reps: 5, unit: 'lb' }] };
+
+    it('shows a step skipped ahead of, with nothing logged, as skipped rather than done', () => {
+      useAppState.mockReturnValue(baseAppState({ selectedExerciseId: 2, routineIndex: 1 }));
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      expect(screen.getByRole('button', { name: 'Bench Press, skipped' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Bench Press, done' })).not.toBeInTheDocument();
+    });
+
+    it('shows a step done once a set has been logged at it', () => {
+      useAppState.mockReturnValue(baseAppState({ selectedExerciseId: 2, routineIndex: 1, routineLoggedSteps: [0] }));
+      useSessionEntries.mockReturnValue([benchSet]);
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      expect(screen.getByRole('button', { name: 'Bench Press, done' })).toBeInTheDocument();
+    });
+
+    it('keeps a later step done after going back to an earlier one', () => {
+      useAppState.mockReturnValue(baseAppState({ selectedExerciseId: 1, routineIndex: 0, routineLoggedSteps: [1] }));
+      useSessionEntries.mockReturnValue([pressSet]);
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      expect(screen.getByRole('button', { name: 'Overhead Press, done' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Bench Press' })).toHaveAttribute('aria-current', 'step');
+    });
+
+    it('offers "Finish routine" when every step ahead is done, and says what was skipped', () => {
+      const appState = baseAppState({ selectedExerciseId: 1, routineIndex: 0, routineLoggedSteps: [1] });
+      useAppState.mockReturnValue(appState);
+      useSessionEntries.mockReturnValue([pressSet]);
+      const showToast = vi.fn();
+      useUI.mockReturnValue({ showToast });
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Finish routine' }));
+
+      expect(appState.nextExerciseInRoutine).toHaveBeenCalledWith([1, 2], null);
+      expect(showToast).toHaveBeenCalledWith('Routine finished — 1 skipped', 2400);
+    });
+
+    it('says "Routine complete!" only when every step was done', () => {
+      useAppState.mockReturnValue(baseAppState({ selectedExerciseId: 2, routineIndex: 1, routineLoggedSteps: [0, 1] }));
+      useSessionEntries.mockReturnValue([benchSet, pressSet]);
+      const showToast = vi.fn();
+      useUI.mockReturnValue({ showToast });
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Finish routine' }));
+
+      expect(showToast).toHaveBeenCalledWith('Routine complete!', 2400);
+    });
+
+    it("records the current step when a set is logged for the current step's exercise", () => {
+      const appState = baseAppState({ selectedExerciseId: 2, routineIndex: 1 });
+      useAppState.mockReturnValue(appState);
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      fireEvent.click(screen.getByRole('button', { name: 'mock-log-set' }));
+
+      expect(appState.recordRoutineStepLogged).toHaveBeenCalledWith(1);
+    });
+
+    // Removing an exercise from "Session exercises" says it wasn't done. Every position of that
+    // exercise is forgotten -- by index, since the routine could repeat it.
+    it('forgets the routine steps of an exercise removed from the session', () => {
+      const appState = baseAppState({ selectedExerciseId: null, routineIndex: 1, routineLoggedSteps: [0] });
+      useAppState.mockReturnValue(appState);
+      useLiveSession.mockReturnValue({ session: { id: 55, startedAt: '2026-07-15T12:00:00Z' }, refetch: vi.fn() });
+      useSessionEntries.mockReturnValue([benchSet]);
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      fireEvent.click(screen.getByRole('button', { name: 'mock-remove-bench' }));
+
+      expect(appState.forgetRoutineStepsLogged).toHaveBeenCalledWith([0]);
+    });
+
+    it('does not credit the current step with a set logged off-script for another exercise', () => {
+      // On step 1 (Bench Press), but Overhead Press was opened from the picker.
+      const appState = baseAppState({ selectedExerciseId: 2, routineIndex: 0 });
+      useAppState.mockReturnValue(appState);
+      render(<MemoryRouter><LogTab /></MemoryRouter>);
+
+      fireEvent.click(screen.getByRole('button', { name: 'mock-log-set' }));
+
+      expect(appState.recordRoutineStepLogged).not.toHaveBeenCalled();
+    });
   });
 
   // Ending a routine early. Before this button the only exit was "Finish routine", which shows

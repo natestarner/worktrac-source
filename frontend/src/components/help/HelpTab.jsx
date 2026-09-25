@@ -403,9 +403,12 @@ export default function HelpTab() {
         </p>
         <p>
           A card appears at the top of the Log tab with the routine&rsquo;s name, your position
-          (&ldquo;3 of 6&rdquo;), and a strip of pills, with the current exercise highlighted and
-          finished ones green. Tap <T>Next exercise</T> to advance; on the final step the button reads{' '}
-          <T>Finish routine</T>. Tap any pill to jump straight to that exercise.
+          (&ldquo;3 of 6&rdquo;), and a strip of pills, with the current exercise highlighted. A pill
+          turns green with a check once you&rsquo;ve logged a set for it; one you moved past without
+          logging anything gets a dashed outline, so a skip stays obvious. Tap{' '}
+          <T>Next exercise</T> to move to the next step you haven&rsquo;t done; once there are none
+          left ahead of you the button reads <T>Finish routine</T>. Tap any pill to jump straight to
+          that exercise.
         </p>
 
         <h3 className="help-h3">Going off-script</h3>
@@ -418,7 +421,10 @@ export default function HelpTab() {
             <strong>Cutting it short.</strong> Tap <T>End routine</T>. Nothing you logged is affected;
             the routine chrome just disappears and you stay exactly where you are.
           </li>
-          <li><strong>The machine was taken.</strong> Tap a later pill, do that one, then tap back.</li>
+          <li>
+            <strong>The machine was taken.</strong> Tap a later pill, do that one, then tap back.
+            The ones you&rsquo;ve done stay green while you fill in the gap.
+          </li>
         </ul>
         <p>
           A running routine survives closing the app or reloading the page. It resumes at the

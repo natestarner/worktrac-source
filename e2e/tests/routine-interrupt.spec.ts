@@ -37,8 +37,9 @@ test.describe('Routine interrupted by off-routine logging', () => {
     await page.getByRole('button', { name: 'Dumbbell Overhead Press' }).click();
     await expect(page.getByText('2 of 2')).toBeVisible();
 
+    // The off-routine squat is not credited to either step, so both count as skipped.
     await page.getByRole('button', { name: 'Finish routine' }).click();
-    await expect(page.getByText('Routine complete!')).toBeVisible();
+    await expect(page.getByText('Routine finished — 2 skipped', { exact: true })).toBeVisible();
   });
 
   // Both routine controls have to work from the PICKER, not just from an open exercise screen.

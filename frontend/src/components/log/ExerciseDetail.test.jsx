@@ -154,6 +154,17 @@ describe('ExerciseDetail rest-timer live-vs-retroactive gating', () => {
     );
     expect(startRestTimer).not.toHaveBeenCalled();
   });
+
+  // LogTab marks the routine step through this; see utils/routineProgress.js.
+  it('reports each logged set through onSetLogged', async () => {
+    const onSetLogged = vi.fn();
+    renderExerciseDetail({ onSetLogged });
+
+    fireEvent.click(await screen.findByText('Log set'));
+
+    await waitFor(() => expect(logLiveSet).toHaveBeenCalled());
+    expect(onSetLogged).toHaveBeenCalledTimes(1);
+  });
 });
 
 // Cheap and high-value: stops a refactor silently deleting an attribute nothing else in this file
