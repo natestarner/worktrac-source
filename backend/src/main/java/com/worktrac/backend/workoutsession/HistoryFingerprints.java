@@ -41,7 +41,22 @@ import java.util.Map;
 // with no sets (History does not show that session, so the month is simply empty).
 //
 // Everything is scoped to the person through workout_sessions.person_id, and sets additionally
-// through their own person_id so the covering index (V82) applies.
+// through their own person_id so the covering index applies.
+//
+// ⚠️ COST MUST FOLLOW THE PERSON, NEVER THE TABLE. V83's indexes cover every column read here and
+// in HistoryMonths, so each statement is a seek on one person's range. Before them the month load
+// scanned all of workout_sets, and the exercise lookup ran once per SET: on lower (Basic tier, tables
+// full of e2e households) one full sync ran ~10 minutes at 100% DTU while taking 0.3 s locally. The
+// exercise part therefore takes each month's DISTINCT exercises first and looks each up once (the
+// same sum over the same distinct exercises). Adding a column to either statement means adding it to
+// the matching index -- HistorySyncCostTest fails until you do.
+//
+// The JOIN HINTS are load-bearing, not tuning. Every table must be reached THROUGH this person's
+// rows: the person's sets in one pass of their index range (HASH), then notes and exercises by seek
+// from the person's own sessions and distinct exercises (LOOP). Left to itself the optimizer chose,
+// with equal confidence, a full pass of the notes index or of exercises -- free on a small database,
+// proportional to every household on a large one. A hint pins the shape so it cannot drift with the
+// statistics of whichever person compiled the plan first.
 //
 // ⚠️ If History ever reads a new column or table, it MUST be folded in here, or a change to it will
 // be answered with "unchanged" and the device keeps the old value until the daily full sync.
@@ -59,27 +74,34 @@ public class HistoryFingerprints {
                 SELECT month, COUNT_BIG(*) AS n, SUM(CAST(CAST(row_version AS BIGINT) AS DECIMAL(38,0))) AS rv
                 FROM vs GROUP BY month
             ),
+            person_sets AS (
+                SELECT session_id, exercise_id, row_version
+                FROM workout_sets
+                WHERE person_id = :personId
+            ),
+            sets_by_session AS (
+                SELECT session_id, COUNT_BIG(*) AS n, SUM(CAST(CAST(row_version AS BIGINT) AS DECIMAL(38,0))) AS rv
+                FROM person_sets GROUP BY session_id
+            ),
             set_agg AS (
-                SELECT vs.month, COUNT_BIG(*) AS n, SUM(CAST(CAST(s.row_version AS BIGINT) AS DECIMAL(38,0))) AS rv
-                FROM workout_sets s JOIN vs ON vs.id = s.session_id
-                WHERE s.person_id = :personId
+                SELECT vs.month, SUM(b.n) AS n, SUM(b.rv) AS rv
+                FROM sets_by_session b INNER HASH JOIN vs ON vs.id = b.session_id
                 GROUP BY vs.month
             ),
             note_agg AS (
                 SELECT vs.month, COUNT_BIG(*) AS n, SUM(CAST(CAST(sen.row_version AS BIGINT) AS DECIMAL(38,0))) AS rv
-                FROM session_exercise_notes sen JOIN vs ON vs.id = sen.session_id
+                FROM vs INNER LOOP JOIN session_exercise_notes sen ON sen.session_id = vs.id
                 GROUP BY vs.month
             ),
+            month_exercises AS (
+                SELECT DISTINCT vs.month, p.exercise_id
+                FROM (SELECT DISTINCT session_id, exercise_id FROM person_sets) p
+                INNER HASH JOIN vs ON vs.id = p.session_id
+            ),
             ex_agg AS (
-                SELECT month, SUM(CAST(CAST(rv AS BIGINT) AS DECIMAL(38,0))) AS rv
-                FROM (
-                    SELECT DISTINCT vs.month, e.id, e.row_version AS rv
-                    FROM workout_sets s
-                    JOIN vs ON vs.id = s.session_id
-                    JOIN exercises e ON e.id = s.exercise_id
-                    WHERE s.person_id = :personId
-                ) d
-                GROUP BY month
+                SELECT me.month, SUM(CAST(CAST(e.row_version AS BIGINT) AS DECIMAL(38,0))) AS rv
+                FROM month_exercises me INNER LOOP JOIN exercises e ON e.id = me.exercise_id
+                GROUP BY me.month
             )
             SELECT sa.month, sa.n AS sess_n, sa.rv AS sess_rv,
                    ISNULL(ta.n, 0) AS set_n, ISNULL(ta.rv, 0) AS set_rv,

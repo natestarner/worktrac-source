@@ -33,6 +33,12 @@ import java.util.TreeMap;
 //
 // Rows are only ever the person's own: workout_sessions.person_id scopes every branch, and sets are
 // additionally filtered by their own person_id.
+//
+// ⚠️ Cost must follow the person, never the table -- see HistoryFingerprints for the whole rule and
+// why the join hints are load-bearing. Here that means: the person's DISTINCT exercises are looked up
+// once each (person_exercises) rather than once per set, which against a lower-sized exercises table
+// was 57,302 page reads for one five-year History and is now 24; and notes are reached by seek from
+// the person's own sessions rather than by a pass over the notes index.
 @Repository
 public class HistoryMonths {
 
@@ -45,6 +51,11 @@ public class HistoryMonths {
                 SELECT id, started_at, ended_at, manual, row_version, CONVERT(CHAR(7), started_at, 126) AS month
                 FROM workout_sessions
                 WHERE person_id = :personId %s
+            ),
+            person_exercises AS (
+                SELECT e.id, e.name, e.row_version
+                FROM (SELECT DISTINCT exercise_id FROM workout_sets WHERE person_id = :personId) d
+                INNER LOOP JOIN exercises e ON e.id = d.exercise_id
             )
             SELECT CAST('S' AS CHAR(1)) AS kind, vs.month, vs.id AS session_id,
                    vs.started_at, vs.ended_at, vs.manual, CAST(vs.row_version AS BIGINT) AS rv,
@@ -59,17 +70,16 @@ public class HistoryMonths {
                    NULL, NULL, NULL, CAST(s.row_version AS BIGINT),
                    s.id, s.exercise_id, e.name, CAST(e.row_version AS BIGINT),
                    s.weight, s.reps, s.duration_seconds, s.unit, s.created_at, NULL
-            FROM workout_sets s
-            JOIN vs ON vs.id = s.session_id
-            JOIN exercises e ON e.id = s.exercise_id
+            FROM vs
+            INNER HASH JOIN workout_sets s ON s.session_id = vs.id
+            INNER HASH JOIN person_exercises e ON e.id = s.exercise_id
             WHERE s.person_id = :personId
             UNION ALL
             SELECT 'N', vs.month, sen.session_id,
                    NULL, NULL, NULL, CAST(sen.row_version AS BIGINT),
                    NULL, sen.exercise_id, NULL, NULL,
                    NULL, NULL, NULL, NULL, NULL, sen.note
-            FROM session_exercise_notes sen
-            JOIN vs ON vs.id = sen.session_id
+            FROM vs INNER LOOP JOIN session_exercise_notes sen ON sen.session_id = vs.id
             """;
 
     private final NamedParameterJdbcTemplate jdbc;

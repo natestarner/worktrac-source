@@ -252,6 +252,12 @@ narrative: `docs/architecture/history-sync.md`.
 - **Every month the client KEEPS is re-checked after the load; a mismatch is a 503**, which the
   client's ordinary query retry answers. It is not a backend retry loop, and must not become one
   (see Concurrency above).
+- **⚠️ Both statements must cost in proportion to the PERSON, never the table.** The indexes (V83)
+  cover every column they read, exercises are looked up by the person's distinct ids, and the join
+  hints are load-bearing. `HistorySyncCostTest` reads back the compiled plans and fails on any scan
+  or key lookup. **Add a column → add it to the index in a new migration.** Timing it locally
+  proves nothing: 0.3s here was 10 minutes at 100% DTU on lower
+  (`docs/incidents/2026-09-25-history-full-sync-pegged-lower-db.md`).
 - **`GET /history` is the same builder, flattened** — for API readers and installed clients that
   predate the sync. Not a second implementation; don't let it grow one.
 - **A month is the UTC calendar month of `started_at`**, computed by the database

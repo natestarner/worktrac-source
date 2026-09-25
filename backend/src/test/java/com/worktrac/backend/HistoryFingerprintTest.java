@@ -548,13 +548,19 @@ class HistoryFingerprintTest extends AbstractIntegrationTest {
         return (String) f.get(null);
     }
 
-    // Real tables named after FROM/JOIN -- not the CTEs (vs, *_agg) or derived tables built from them.
+    // Real tables named after FROM/JOIN (join hints included) -- not the statement's own CTEs, which
+    // are recognised by their definition (`name AS (`) rather than by a naming convention, so adding
+    // one can never make it look like a new table, nor hide a real one behind a familiar suffix.
     private static Set<String> tablesIn(String sql) {
+        Set<String> ctes = new TreeSet<>();
+        java.util.regex.Matcher c = java.util.regex.Pattern.compile("(?i)\\b([a-z_]+)\\s+AS\\s*\\(").matcher(sql);
+        while (c.find()) ctes.add(c.group(1).toLowerCase());
         Set<String> tables = new TreeSet<>();
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)\\b(?:FROM|JOIN)\\s+([a-z_]+)").matcher(sql);
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(?i)\\b(?:FROM|JOIN)\\s+([a-z_]+)").matcher(sql);
         while (m.find()) {
             String name = m.group(1).toLowerCase();
-            if (!name.equals("vs") && !name.endsWith("_agg")) tables.add(name);
+            if (!ctes.contains(name)) tables.add(name);
         }
         return tables;
     }
