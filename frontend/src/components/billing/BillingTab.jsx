@@ -14,6 +14,7 @@ import {
   reconcileCheckout,
 } from '../../api/billing';
 import { queryKeys } from '../../api/queryKeys';
+import { refreshHistoryForEveryone } from '../../lib/queryClient';
 import { formatDate } from '../../utils/datetime';
 import Button from '../shared/Button';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
@@ -143,6 +144,10 @@ export default function BillingTab() {
         // every other consumer update from the same source rather than a second copy of the truth.
         await refreshPeople();
         queryClient.invalidateQueries({ queryKey: queryKeys.subscription() });
+        // The plan decides the Free window, and the window clamps every person's History -- so an
+        // upgrade has older workouts to show everyone, now, not at the next background refresh.
+        refreshHistoryForEveryone(queryClient);
+        queryClient.invalidateQueries({ queryKey: queryKeys.historyWindowForEveryone() });
         setCelebratedPlan(reconciled?.plan ?? null);
         setShowCelebration(true);
       } catch {

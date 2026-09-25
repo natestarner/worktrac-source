@@ -2,29 +2,32 @@ package com.worktrac.backend.workoutsession;
 
 import com.worktrac.backend.billing.SubscriptionService;
 import com.worktrac.backend.common.NotFoundException;
+import com.worktrac.backend.common.ServiceUnavailableException;
 import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.person.Person;
 import com.worktrac.backend.person.PersonService;
-import com.worktrac.backend.sessionexercisenote.SessionExerciseNote;
-import com.worktrac.backend.sessionexercisenote.SessionExerciseNoteRepository;
-import com.worktrac.backend.stats.SetSummaryDto;
-import com.worktrac.backend.workoutset.WorkoutSet;
-import com.worktrac.backend.workoutset.WorkoutSetRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
+import java.time.YearMonth;
+import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeSet;
 
 @Service
 public class WorkoutSessionService {
+
+    private static final Logger log = LoggerFactory.getLogger(WorkoutSessionService.class);
 
     // A session is treated as over if its last logged set was more than 8 hours ago --
     // measured from last_activity_at, not started_at, so a long-running live session
@@ -32,18 +35,18 @@ public class WorkoutSessionService {
     static final Duration AUTOCLOSE = Duration.ofHours(8);
 
     private final WorkoutSessionRepository workoutSessionRepository;
-    private final WorkoutSetRepository workoutSetRepository;
-    private final SessionExerciseNoteRepository sessionExerciseNoteRepository;
+    private final HistoryMonths historyMonths;
+    private final HistoryFingerprints historyFingerprints;
     private final PersonService personService;
     private final SubscriptionService subscriptionService;
     private final Clock clock;
 
-    public WorkoutSessionService(WorkoutSessionRepository workoutSessionRepository, WorkoutSetRepository workoutSetRepository,
-                                  SessionExerciseNoteRepository sessionExerciseNoteRepository, PersonService personService,
+    public WorkoutSessionService(WorkoutSessionRepository workoutSessionRepository, HistoryMonths historyMonths,
+                                  HistoryFingerprints historyFingerprints, PersonService personService,
                                   SubscriptionService subscriptionService, Clock clock) {
         this.workoutSessionRepository = workoutSessionRepository;
-        this.workoutSetRepository = workoutSetRepository;
-        this.sessionExerciseNoteRepository = sessionExerciseNoteRepository;
+        this.historyMonths = historyMonths;
+        this.historyFingerprints = historyFingerprints;
         this.personService = personService;
         this.subscriptionService = subscriptionService;
         this.clock = clock;
@@ -148,38 +151,97 @@ public class WorkoutSessionService {
     // done in it (grouped in first-seen order within the session, not necessarily
     // chronological). Sessions with zero sets logged (e.g. an abandoned retroactive
     // session) are excluded, matching the design's History tab.
+    //
+    // The app itself reads History through syncHistory below; this is the same builder with every
+    // month flattened, kept for API readers and any installed client that predates the sync.
+    //
+    // The Free-tier window is a READ FILTER and nothing else -- every row stays in the database,
+    // which is what makes "nothing is deleted, ever" true and makes re-subscribing restore the full
+    // history in a single round trip.
     @Transactional(readOnly = true)
     public List<HistorySessionDto> getHistory(AccountAccess access, Long personId) {
         Person person = personService.requireVisiblePerson(personId, access);
-        List<WorkoutSet> allSets = workoutSetRepository.findByPerson_IdOrderByCreatedAtAscIdAsc(person.getId());
-
-        Map<Long, List<WorkoutSet>> setsBySession = new LinkedHashMap<>();
-        for (WorkoutSet s : allSets) {
-            setsBySession.computeIfAbsent(s.getSession().getId(), k -> new ArrayList<>()).add(s);
-        }
-
-        // One bulk query for every session note across this person's history, rather than
-        // one query per (session, exercise) entry -- grouped in memory the same way sets
-        // already are above. A note on a session with no sets is loaded too and simply never
-        // looked up, because only sessions in setsBySession become History rows.
-        Map<Long, Map<Long, String>> notesBySessionThenExercise = new LinkedHashMap<>();
-        for (SessionExerciseNote n : sessionExerciseNoteRepository.findBySession_Person_Id(person.getId())) {
-            notesBySessionThenExercise
-                    .computeIfAbsent(n.getSession().getId(), k -> new LinkedHashMap<>())
-                    .put(n.getExercise().getId(), n.getNote());
-        }
-
-        // The Free-tier window. A READ FILTER and nothing else -- every row above was loaded and
-        // every row stays in the database, which is what makes "nothing is deleted, ever" true and
-        // makes re-subscribing restore the full history in a single round trip.
         Instant floor = subscriptionService.historyFloor(access.accountId());
-
-        return workoutSessionRepository.findByPerson_IdOrderByStartedAtDesc(person.getId()).stream()
-                .filter(session -> SubscriptionService.isVisible(floor, session.getStartedAt()))
-                .filter(session -> setsBySession.containsKey(session.getId()))
-                .map(session -> toHistorySessionDto(session, setsBySession.get(session.getId()),
-                        notesBySessionThenExercise.getOrDefault(session.getId(), Map.of())))
+        return historyMonths.load(person.getId(), floor, null, null).values().stream()
+                .flatMap(month -> month.sessions().stream())
                 .toList();
+    }
+
+    // History, sent a month at a time and only for the months the client does not already hold.
+    //
+    // `have` is the client's month -> fingerprint map. The reply lists every month the client should
+    // end up with, and carries content only for those whose fingerprint differs; a month the client
+    // holds that is not listed is gone. Three steps, and the third is what makes the reply safe to
+    // trust even while writes land mid-request:
+    //
+    //   1. Which months differ -- one aggregate query, no month is built (HistoryFingerprints).
+    //   2. Load the months spanning those, in ONE statement, each month's fingerprint derived from the
+    //      very rows that built it (HistoryMonths), so content and fingerprint can never disagree.
+    //   3. Re-check every month the client will KEEP. A write that moved a workout out of a month we
+    //      loaded into one we did not would otherwise leave it in neither on the device (or in both).
+    //      If any kept month changed, answer 503 and let the client's ordinary query retry ask again
+    //      -- deliberately not a retry loop here (backend-core.md: no backend retries).
+    //
+    // Nothing is loaded at all when nothing differs, which is the common case: a reload, a warm, a
+    // refetch after a write on another person.
+    @Transactional(readOnly = true)
+    public HistorySyncDto syncHistory(AccountAccess access, Long personId, Map<String, String> have) {
+        Person person = personService.requireVisiblePerson(personId, access);
+        Instant floor = subscriptionService.historyFloor(access.accountId());
+        Map<String, String> held = have == null ? Map.of() : have;
+
+        Map<String, String> current = historyFingerprints.forPerson(person.getId(), floor);
+        List<String> differing = current.entrySet().stream()
+                .filter(e -> !e.getValue().equals(held.get(e.getKey())))
+                .map(Map.Entry::getKey)
+                .toList();
+        if (differing.isEmpty()) {
+            return new HistorySyncDto(List.copyOf(current.keySet()), Map.of());
+        }
+
+        // `current` is newest first, so the first differing month is the newest and the last the
+        // oldest. One contiguous range, filtered below: months in between that did not differ are
+        // loaded too but only sent if they changed since step 1, which keeps this one statement.
+        YearMonth newest = YearMonth.parse(differing.getFirst());
+        YearMonth oldest = YearMonth.parse(differing.getLast());
+        Map<String, HistoryMonths.Month> loaded = historyMonths.load(person.getId(), floor,
+                oldest.atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC),
+                newest.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC));
+
+        Map<String, HistoryMonthDto> changed = new LinkedHashMap<>();
+        loaded.forEach((month, m) -> {
+            if (!m.fingerprint().equals(held.get(month))) {
+                changed.put(month, new HistoryMonthDto(m.fingerprint(), m.sessions()));
+            }
+        });
+
+        Map<String, String> after = historyFingerprints.forPerson(person.getId(), floor);
+        TreeSet<String> months = new TreeSet<>(Comparator.reverseOrder());
+        for (Map.Entry<String, String> e : after.entrySet()) {
+            if (loaded.containsKey(e.getKey())) continue;
+            if (!Objects.equals(e.getValue(), held.get(e.getKey()))) {
+                throw new ServiceUnavailableException("History changed while it was being read. Try again.");
+            }
+            months.add(e.getKey());
+        }
+        months.addAll(loaded.keySet());
+        return new HistorySyncDto(List.copyOf(months), changed);
+    }
+
+    // The production canary for the one failure the History sync must never have: a device holding a
+    // month whose fingerprint matches the server's while its content does not. The sync would call that
+    // month unchanged forever -- only the daily full sync re-reads it, and that is where the device
+    // compares and reports. HistoryFingerprintTest, HistoryConvergenceTest and HistoryConcurrencyTest
+    // exist so this never fires; this line is how we would know if one of them missed something.
+    //
+    // Nothing to fix here -- the full sync has already replaced the month on the device. It is a WARN
+    // so it stands out in the logs (docs/architecture/history-sync.md has the query), and it carries
+    // month ids only, never workout content.
+    @Transactional(readOnly = true)
+    public void reportHistoryDrift(AccountAccess access, Long personId, List<String> months) {
+        Person person = personService.requireVisiblePerson(personId, access);
+        log.warn("History drift: person {} held month(s) {} whose fingerprint matched but whose content did not",
+                person.getId(), months);
     }
 
     // What the Free-tier window is currently hiding from this person, so the three clamped screens
@@ -205,23 +267,5 @@ public class WorkoutSessionService {
         // yet still needs the boundary date, so PastSessionModal can warn about an out-of-window
         // date BEFORE the workout is logged rather than after it vanishes.
         return new HistoryWindowDto(floor, (int) count, count == 0 ? null : hidden.earliestHiddenAt());
-    }
-
-    private HistorySessionDto toHistorySessionDto(WorkoutSession session, List<WorkoutSet> sessionSets,
-                                                   Map<Long, String> notesByExercise) {
-        Map<Long, List<WorkoutSet>> byExercise = new LinkedHashMap<>();
-        for (WorkoutSet s : sessionSets) {
-            byExercise.computeIfAbsent(s.getExercise().getId(), k -> new ArrayList<>()).add(s);
-        }
-        List<HistoryEntryDto> entries = byExercise.values().stream()
-                .map(sets -> new HistoryEntryDto(
-                        sets.get(0).getExercise().getId(),
-                        sets.get(0).getExercise().getName(),
-                        sets.stream()
-                                .map(s -> new SetSummaryDto(s.getWeight(), s.getReps(), s.getDurationSeconds(), s.getUnit()))
-                                .toList(),
-                        notesByExercise.get(sets.get(0).getExercise().getId())))
-                .toList();
-        return new HistorySessionDto(session.getId(), session.getStartedAt(), session.getEndedAt(), session.isManual(), entries);
     }
 }

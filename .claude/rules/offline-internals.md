@@ -293,10 +293,12 @@ and a clock correction between the tap and the next set would misfile a new work
 
 **That same branch must FETCH history, not just invalidate it.** A session marked ended there never
 becomes live on the device, and `LogTab` fetches history only while one is (`fetch:
-!!activeSessionId`), so the invalidation reaches nothing that acts on it. History then never learns
+!!activeSessionId`), so an invalidation reaches nothing that acts on it. History then never learns
 the workout existed, and degraded, the next workout's first set is celebrated as the first ever.
-The resurrection bug had been doing that refresh by accident. `prefetchQuery` with `staleTime: 0`
-(the entry looks fresh from moments earlier). Don't drop it as redundant with the invalidation.
+The resurrection bug had been doing that refresh by accident. It was a hand-written `prefetchQuery`
+here; it is now `refreshHistory` (`frontend-core.md`), which every History writer uses and which
+fetches whether or not anything observes the query — and also cancels a fetch still in flight from
+before the End, which the old prefetch did not. **Never reduce `refreshHistory` to an invalidation.**
 
 **Fixed (#326): a false record, online and in lie-fi, from a summary a workout out of date.** An
 exercise's cached summary (keyed on "no live session") is fetched before a workout and never

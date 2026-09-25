@@ -17,7 +17,7 @@ test.describe('Offline cache warming — unvisited person/tab', () => {
     // History -- so History's own useQuery has never mounted for them. Without proactive
     // warming, going offline before ever visiting History would leave that query paused with
     // no cached entry, and the tab would spin on its skeleton forever.
-    const historyWarmed = page.waitForResponse((response) => /\/api\/people\/\d+\/history$/.test(response.url()));
+    const historyWarmed = page.waitForResponse((response) => /\/api\/people\/\d+\/history\/sync$/.test(response.url()));
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Jamie');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();

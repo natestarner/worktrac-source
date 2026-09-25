@@ -17,6 +17,8 @@ import {
   isDeadWrite,
   isUnsyncedWrite,
   shouldRetryWrite,
+  refreshHistory,
+  refreshHistoryForEveryone,
 } from './queryClient';
 import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './exerciseIdMap';
 import { _getMappingForTest, clearSetIdMap, setSetIdMapping } from './setIdMap';
@@ -26,6 +28,7 @@ import { getHistory } from '../api/sessions';
 import { addExercise, favoriteExercise } from '../api/exercises';
 import { queryKeys } from '../api/queryKeys';
 import { setAuthToken } from '../api/client';
+import { HISTORY_FORMAT, fingerprintsOf, flattenHistory, heldForSync } from './historySync';
 
 vi.mock('../api/sessions', async (importOriginal) => ({ ...(await importOriginal()), getHistory: vi.fn() }));
 vi.mock('../api/sets', () => ({
@@ -1326,5 +1329,106 @@ describe('createExercise onSettled reconciles from the response, not just by inv
     // The optimistic row is left exactly as it was -- it is still the only thing the screen has.
     expect(client.getQueryData(queryKeys.exercises())[0].id).toBe(tempId);
     expect(client.getQueryData(queryKeys.personExercises(7))[0].id).toBe(tempId);
+  });
+});
+
+// refreshHistory -- how every write refreshes History. Found by the parity convergence check: after
+// an End landed while a History fetch from BEFORE it was still in flight, and nothing was observing
+// History (the Log tab's observer is disabled once no workout is live), TanStack let the old fetch
+// finish, stored its answer as fresh and cleared the invalidation -- so History showed the ended
+// workout as in progress for the whole staleTime.
+// The synced History shape through the app's REAL persistence path -- the persister serializes to a
+// JSON string -- so a reload restores months WITH their fingerprints, and the next sync can offer
+// them instead of downloading everything again.
+describe('synced History across a persist/restore round trip', () => {
+  it('restores every month with its fingerprint, readable and offerable to the next sync', () => {
+    const client = new QueryClient();
+    const key = queryKeys.history(7);
+    const synced = {
+      format: HISTORY_FORMAT,
+      months: {
+        '2026-06': { fp: 'a', sessions: [{ id: 2, startedAt: '2026-06-02T10:00:00Z', entries: [] }] },
+        '2026-05': { fp: 'b', sessions: [{ id: 1, startedAt: '2026-05-02T10:00:00Z', entries: [] }] },
+      },
+      fullSyncedAt: Date.now(),
+    };
+    client.setQueryData(key, synced);
+
+    const persisted = JSON.parse(JSON.stringify(dehydrate(client, persistOptions.dehydrateOptions)));
+    const afterReload = new QueryClient();
+    hydrate(afterReload, persisted);
+
+    const restored = afterReload.getQueryData(key);
+    expect(flattenHistory(restored).map((s) => s.id)).toEqual([2, 1]);
+    expect(fingerprintsOf(heldForSync(restored))).toEqual({ '2026-06': 'a', '2026-05': 'b' });
+    client.clear();
+    afterReload.clear();
+  });
+});
+
+describe('refreshHistory', () => {
+  let client;
+  const PERSON = 7;
+  const key = queryKeys.history(PERSON);
+
+  beforeEach(() => {
+    client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60 * 1000 } } });
+    getHistory.mockReset();
+  });
+
+  afterEach(() => client.clear());
+
+  it('fetches History with nothing observing it', async () => {
+    client.setQueryData(key, ['before']);
+    getHistory.mockResolvedValue(['after']);
+
+    refreshHistory(client, PERSON);
+
+    await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+    expect(getHistory).toHaveBeenCalledWith(PERSON, { readCached: expect.any(Function) });
+  });
+
+  it('replaces a fetch still in flight from before the write, even when that fetch finishes last', async () => {
+    client.setQueryData(key, ['before']);
+    let finishStale;
+    getHistory.mockImplementationOnce(() => new Promise((resolve) => { finishStale = () => resolve(['stale']); }));
+    getHistory.mockResolvedValueOnce(['after']);
+
+    // A fetch that began before the write reached the server -- the ended-workout prefetch, a warm.
+    const inFlight = client.prefetchQuery({ queryKey: key, queryFn: () => getHistory(PERSON, {}), staleTime: 0 });
+    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
+
+    refreshHistory(client, PERSON);
+    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(2));
+    finishStale();
+    await inFlight;
+
+    await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+    // Not a transient pass: nothing later puts the old answer back as fresh.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(client.getQueryData(key)).toEqual(['after']);
+  });
+
+  it('leaves History marked stale when the fetch cannot complete, so the next reader refetches', async () => {
+    client.setQueryData(key, ['before']);
+    getHistory.mockRejectedValue(new Error('offline'));
+
+    refreshHistory(client, PERSON);
+
+    await vi.waitFor(() => expect(getHistory).toHaveBeenCalled());
+    await vi.waitFor(() => expect(client.getQueryState(key).fetchStatus).toBe('idle'));
+    expect(client.getQueryData(key)).toEqual(['before']);
+    expect(client.getQueryState(key).isInvalidated).toBe(true);
+  });
+
+  it('refreshes every person whose History this device holds', async () => {
+    client.setQueryData(queryKeys.history(1), ['a']);
+    client.setQueryData(queryKeys.history(2), ['b']);
+    getHistory.mockImplementation((personId) => Promise.resolve([`fresh-${personId}`]));
+
+    refreshHistoryForEveryone(client);
+
+    await vi.waitFor(() => expect(client.getQueryData(queryKeys.history(1))).toEqual(['fresh-1']));
+    await vi.waitFor(() => expect(client.getQueryData(queryKeys.history(2))).toEqual(['fresh-2']));
   });
 });

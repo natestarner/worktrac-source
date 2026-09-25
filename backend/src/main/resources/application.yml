@@ -36,9 +36,10 @@ server:
   # itself and takes the LAST entry -- the one hop ACA appends and vouches for -- so
   # forward-headers-strategy stays "none" (the default) and Spring never touches getRemoteAddr().
   forward-headers-strategy: none
-  # gzip for any response a client says it can take (every browser does). `/history` is the reason:
-  # it is a person's whole history in one unpaginated response -- ~3.7 MB of JSON at five years of
-  # daily training, which compresses ~20x -- and the app refetches it after every logged set.
+  # gzip for any response a client says it can take (every browser does). History is the reason: a
+  # first sync on a new device (or the daily full one) is a person's whole history -- ~3.7 MB of
+  # JSON at five years of daily training, which compresses ~20x. Every other sync sends only the
+  # months that changed, usually one.
   #
   # Encoding only: the bytes a client decodes are identical, so no caller can tell. Boot's default
   # mime-types cover application/json and deliberately exclude the CSV/ZIP exports (a ZIP is already

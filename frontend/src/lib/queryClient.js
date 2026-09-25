@@ -6,7 +6,6 @@ import { logLiveSet, logSetIntoSession, editSet, deleteSet } from '../api/sets';
 import { addExercise, favoriteExercise, unfavoriteExercise } from '../api/exercises';
 import { saveLiveExerciseNote, saveSessionExerciseNote } from '../api/notes';
 import { endWorkout, getHistory } from '../api/sessions';
-import { carryHistoryEtag } from './historyEtags';
 import { getAuthToken } from '../api/client';
 import { OUTBOX_SCOPE_ID } from './outboxPersistence';
 import { resolveExerciseId, setExerciseIdMapping, isTempExerciseId } from './exerciseIdMap';
@@ -359,6 +358,50 @@ function invalidateTrends(client, personId) {
   }
 }
 
+// History after a write that changed it -- the ONE way every writer refreshes it. Three steps, and
+// each closes a way History could be left showing something the server no longer says:
+//
+//  1. CANCEL any History fetch already in flight. It began before this write reached the server, and
+//     when nothing is observing the query (the Log tab only fetches History during a live workout,
+//     so right after an End there is often only its disabled observer) TanStack does not cancel it
+//     on invalidation -- it lets it finish, stores its now-outdated answer as fresh, and clears the
+//     invalidation. Found by the parity convergence check (e2e/tests/support/historyConvergence.ts):
+//     ending a workout mid-save in any degraded mode left History showing it in progress for the
+//     whole staleTime. Safe on this key for the reason invalidateTrends gives: History has no
+//     optimistic writer, so a cancel's revert throws nothing away.
+//  2. INVALIDATE, so that if the fetch below cannot complete (paused offline, failing in lie-fi) the
+//     next screen to read History still refetches it rather than trusting the old copy.
+//  3. FETCH NOW, observed or not. An unobserved History is exactly what the next offline stretch
+//     reads -- "Last time", the prefill and the record fold all come from it -- so it must learn about
+//     this write while it can. This used to be too costly to do on every write; with the month sync
+//     an unchanged month costs a fingerprint, not a download.
+//
+// Fire-and-forget: a failed or paused fetch is simply retried by the next trigger, and the query keeps
+// the months it has. One code path in every mode.
+export function refreshHistory(client, personId) {
+  const queryKey = queryKeys.history(personId);
+  client
+    .cancelQueries({ queryKey })
+    .then(() => {
+      client.invalidateQueries({ queryKey, refetchType: 'none' });
+      return client.fetchQuery({
+        queryKey,
+        queryFn: () => getHistory(personId, { readCached: () => client.getQueryData(queryKey) }),
+        staleTime: 0,
+      });
+    })
+    .catch(() => {});
+}
+
+// For the writes that change EVERY person's History at once -- an exercise rename (History carries
+// names) and a plan change (the Free window clamps everyone): refreshHistory for each person whose
+// History this device holds.
+export function refreshHistoryForEveryone(client) {
+  for (const query of client.getQueryCache().findAll({ queryKey: queryKeys.historyForEveryone() })) {
+    if (query.queryKey.length === 2 && query.queryKey[1] != null) refreshHistory(client, query.queryKey[1]);
+  }
+}
+
 // A bulk import (or its undo) rewrites more of a person's history in one go than any other write
 // in the app -- new sets, new workouts, sometimes new exercises and tags -- so everything derived
 // from sets has to be marked stale, not just the keys a single log-set touches.
@@ -369,7 +412,7 @@ function invalidateTrends(client, personId) {
 // import can add to. If you add a read derived from logged sets, it belongs in both places -- ask
 // "if someone imports a file and opens this view five seconds later, is it right?"
 export function invalidateAfterImport(client, personId) {
-  client.invalidateQueries({ queryKey: queryKeys.history(personId) });
+  refreshHistory(client, personId);
   client.invalidateQueries({ queryKey: queryKeys.prs(personId) });
   client.invalidateQueries({ queryKey: queryKeys.historyWindow(personId) });
   // ⚠️ THE ROSTER DERIVES FROM SETS TOO, and it is account-shared rather than person-keyed -- so a
@@ -460,22 +503,15 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         // useLiveSession suppresses the same id when the invalidation below fetches it back.
         if (vars.mode !== 'session' && isCreateInEndedWorkout(vars.personId, vars.tempId)) {
           markSessionEnded(vars.personId, data.session.id);
-          // ...and FETCH history, not merely invalidate it. This is the one path where a set lands
-          // for a workout that never becomes live on this device, and the Log tab only fetches
-          // history while a workout is live (LogTab's `fetch: !!activeSessionId`) -- so the
-          // invalidation below would reach no observer that acts on it. History then never learned
-          // the workout existed, and every read derived from it -- "Last time" and the record fold
-          // -- judged the next workout's first set as the first ever ("New PR! · Most reps") until
-          // something else refetched. Before the marker above, the ended workout coming back as
-          // live was what fetched it, by accident. Same queryFn as useHistory and offlineCacheWarm;
-          // staleTime 0 because the entry can look fresh from moments before this set landed.
-          client.prefetchQuery({
-            queryKey: queryKeys.history(vars.personId),
-            queryFn: () => getHistory(vars.personId, {
-              readCached: () => client.getQueryData(queryKeys.history(vars.personId)),
-            }),
-            staleTime: 0,
-          });
+          // History must be FETCHED here, not merely invalidated: this is the one path where a set
+          // lands for a workout that never becomes live on this device, and the Log tab only
+          // fetches history while a workout is live (LogTab's `fetch: !!activeSessionId`) -- so an
+          // invalidation alone reached no observer that acts on it, History never learned the
+          // workout existed, and the next workout's first set was judged the first ever ("New PR! ·
+          // Most reps"). refreshHistory, at the end of this handler, fetches whether or not anything
+          // observes the query, which is what this branch used to prefetch by hand -- and it also
+          // cancels a fetch still in flight from before the End reached the server, which the old
+          // prefetch did not.
         }
         if (vars.mode !== 'session' && !isSessionEnded(vars.personId, data.session.id)) {
           client.setQueryData(queryKeys.liveSession(vars.personId), data.session);
@@ -533,7 +569,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         client.invalidateQueries({ queryKey: queryKeys.liveSession(vars.personId) });
       }
       client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
-      client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+      refreshHistory(client, vars.personId);
       // Derived from sets like the three above: logging into an out-of-window past session is how
       // the hidden count goes 0 -> 1, and that is the exact flow the notice exists for.
       client.invalidateQueries({ queryKey: queryKeys.historyWindow(vars.personId) });
@@ -642,7 +678,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     client.invalidateQueries({ queryKey: queryKeys.sessionSets(sessionId, vars.exerciseId) });
     client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
     client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
-    client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+    refreshHistory(client, vars.personId);
     client.invalidateQueries({ queryKey: queryKeys.historyWindow(vars.personId) });
     // The roster derives from sets as well -- editing or deleting one moves a person's "last
     // trained" and their adherence count. Prefix, because the key carries a weeks window.
@@ -736,7 +772,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       const sessionId = data?.sessionId ?? vars.sessionId ?? null;
       client.invalidateQueries({ queryKey: queryKeys.sessionExerciseNote(sessionId, vars.exerciseId) });
       client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
-      client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+      refreshHistory(client, vars.personId);
       if (vars.mode !== 'session') client.invalidateQueries({ queryKey: queryKeys.liveSession(vars.personId) });
     },
   }));
@@ -746,7 +782,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     mutationFn: (vars) => endWorkout(vars.personId),
     onSettled: (_d, _e, vars) => {
       client.invalidateQueries({ queryKey: queryKeys.liveSession(vars.personId) });
-      client.invalidateQueries({ queryKey: queryKeys.history(vars.personId) });
+      refreshHistory(client, vars.personId);
     },
   }));
 
@@ -764,16 +800,6 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
 }
 
 registerOfflineMutationDefaults(queryClient);
-
-// History's one query default: keep its ETag attached across TanStack's structural sharing (see
-// lib/historyEtags.js#carryHistoryEtag). By key PREFIX, so it covers every person's history and every
-// path that fetches it -- useHistory, offlineCacheWarm, the ended-workout prefetch above, Settings.
-// A client without it (some tests build their own) still fetches correctly, only never conditionally.
-export function registerHistoryQueryDefaults(client) {
-  client.setQueryDefaults(['history'], { structuralSharing: carryHistoryEtag });
-}
-
-registerHistoryQueryDefaults(queryClient);
 
 // Fire a durable write against an EXPLICIT client, without a React observer. Shared by
 // enqueueOutboxWrite below (the app singleton) and by any caller that already has its own

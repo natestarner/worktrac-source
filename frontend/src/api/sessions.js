@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { historyEtagFor, recordHistoryEtag } from '../lib/historyEtags';
+import { applyHistorySync, findDrift, fingerprintsOf, heldForSync, isSyncedHistory } from '../lib/historySync';
 
 export function getLiveSession(personId) {
   return apiClient.get(`/api/people/${personId}/sessions/live`);
@@ -17,28 +17,34 @@ export function editSession(sessionId, startedAt) {
   return apiClient.patch(`/api/sessions/${sessionId}`, { startedAt });
 }
 
-// A person's whole history, sent with the ETag of the copy already cached (if that copy came from a
-// tagged response -- see lib/historyEtags.js), so an unchanged history costs a 304 instead of
-// megabytes. HistoryEtagConfig.java is the server half; its tag is a hash of the response bytes, so
-// a 304 means "byte-for-byte what produced this copy".
+// A person's history, synced a month at a time (lib/historySync.js): the months already cached are
+// sent with their fingerprints, and only the ones that changed come back. After a reload, a warm, or
+// a write to another month, that is usually nothing at all.
 //
-// `readCached` returns what the history query currently holds. A 304 is acted on only if the cache
-// STILL holds the very object whose tag was sent -- if anything replaced it while the request was
-// out, the answer is about a copy that is no longer there, so this asks again without a tag rather
-// than resurrect it. Callers that pass no `readCached` get an ordinary full fetch.
+// `readCached` returns what the history query currently holds -- the months to send. Every caller
+// passes it (useHistory, offlineCacheWarm, the ended-workout prefetch, AppSettingsTab); one that
+// didn't would still be correct, just always a full download.
 //
-// Not a connectivity branch: a conditional request fails exactly like an unconditional one, through
-// api/client.js, in every mode.
+// Resolves to the synced shape, never the flat list: read it through flattenHistory.
+//
+// Not a connectivity branch: the sync fails exactly like any other read, through api/client.js, in
+// every mode, and a failed sync leaves the cached months in place.
 export async function getHistory(personId, { readCached } = {}) {
   const cached = readCached?.();
-  const etag = historyEtagFor(cached);
-  const result = await apiClient.getConditional(`/api/people/${personId}/history`, etag);
-  if (result.notModified) {
-    if (readCached() === cached) return cached;
-    return getHistory(personId);
+  const held = heldForSync(cached);
+  const reply = await apiClient.post(`/api/people/${personId}/history/sync`, { have: fingerprintsOf(held) });
+  // A synced cache that is not offered is the daily full sync -- the canary's one chance to look.
+  if (!held && isSyncedHistory(cached)) {
+    const drifted = findDrift(cached, reply);
+    if (drifted.length > 0) reportHistoryDrift(personId, drifted);
   }
-  recordHistoryEtag(result.data, result.etag);
-  return result.data;
+  return applyHistorySync(held, reply);
+}
+
+// Best-effort and never awaited: a diagnostic, not a person's write, so it has no outbox behind it
+// and a failure to send it must never fail -- or delay -- the sync that found it.
+function reportHistoryDrift(personId, months) {
+  apiClient.post(`/api/people/${personId}/history/drift`, { months }).catch(() => {});
 }
 
 // How much of this person's history the Free-tier window is hiding right now:

@@ -53,9 +53,13 @@ public class WorkoutRowProjection {
             setsBySession.computeIfAbsent(s.getSession().getId(), k -> new ArrayList<>()).add(s);
         }
 
+        // Oldest first, and workouts that started at the same instant in the order they were created.
+        // Without the id tie-break their order was whatever the database returned for the tie, which
+        // is a query-plan accident: adding IX_workout_sessions_person_id_started_at (V82) flipped it.
+        // Equal start times are real -- an import of two workouts with the same date and time.
         List<WorkoutSession> sessionsAscending = workoutSessionRepository.findByPerson_IdOrderByStartedAtDesc(person.getId())
                 .stream()
-                .sorted(Comparator.comparing(WorkoutSession::getStartedAt))
+                .sorted(Comparator.comparing(WorkoutSession::getStartedAt).thenComparing(WorkoutSession::getId))
                 .toList();
 
         // This person's personalization of each exercise -- tags, favorite, custom fields, the

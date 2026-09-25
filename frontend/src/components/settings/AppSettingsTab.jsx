@@ -18,6 +18,7 @@ import { useOfflinePin } from '../../hooks/useOfflinePin';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { DEFAULT_DURATION_INCREMENT_SECONDS, DEFAULT_WEIGHT_INCREMENT } from '../../hooks/useStepperIncrements';
 import { pinOffline, unpinOffline } from '../../lib/offlineMode';
+import { flattenHistory } from '../../lib/historySync';
 import Button from '../shared/Button';
 import Spinner from '../shared/Spinner';
 import Skeleton from '../shared/Skeleton';
@@ -81,6 +82,7 @@ export default function AppSettingsTab() {
     queries: (isMember ? [] : people).map((person) => ({
       queryKey: queryKeys.history(person.id),
       queryFn: () => getHistory(person.id, { readCached: () => queryClient.getQueryData(queryKeys.history(person.id)) }),
+      select: flattenHistory,
     })),
   });
   const historyWindowQueries = useQueries({

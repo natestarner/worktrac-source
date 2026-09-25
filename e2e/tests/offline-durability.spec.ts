@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { addOwnExercise, dismissPrCelebration, pickExercise } from './support/exercises';
 import { API_ONLY, failNetwork } from './support/faults';
-import { keepHardOfflineAcrossReload, offlineSavedLocallyBanner, outboxCountText } from './support/offline';
+import { keepHardOfflineAcrossReload, offlineSavedLocallyBanner, outboxCountText, waitForQueryCachePersist } from './support/offline';
+import { LEGACY_MARKER_WORKOUT, rewritePersistedHistoryAsOldFormat } from './support/historyConvergence';
 
 // Mode 3 durability: a cold app-shell load with no network at all, and a queued write surviving a
 // full page reload while still offline. Both depend on the production service worker precaching
@@ -34,6 +35,47 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
     await expect(page.locator('.person-pill-bar').getByRole('button', { name: /Jordan/ })).toBeVisible();
 
     await page.context().setOffline(false);
+  });
+
+  // The History sync's upgrade path (resilience.md axis D), in its hardest form: a device whose
+  // persisted History was written by a build from BEFORE the sync, cold-booting with no network at
+  // all. The old flat format must still render -- it is all the device has -- and the first sync
+  // once back online must replace it wholesale. history-sync.spec.ts covers the same path under
+  // lie-fi on the dev server; only this config has the service worker a no-network boot needs.
+  // Not vacuous: the old-format copy carries a workout the server has never heard of.
+  test('History cached before the month sync renders on a fully offline cold boot, then is replaced', async ({ page, request }) => {
+    await registerHousehold(page, request, 'Morgan');
+    await pickExercise(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await page.getByRole('link', { name: 'History' }).click();
+    await expect(page.getByText('Barbell Bench Press').first()).toBeVisible();
+    await waitForQueryCachePersist(page, '"fullSyncedAt"');
+
+    await page.reload();
+    await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, { timeout: 20000 });
+    await waitForQueryCachePersist(page, '"fullSyncedAt"');
+
+    // Offline first, so nothing can fetch and persist over the rewrite.
+    await page.context().setOffline(true);
+    await keepHardOfflineAcrossReload(page);
+    await rewritePersistedHistoryAsOldFormat(page, LEGACY_MARKER_WORKOUT);
+    await page.reload();
+
+    await expect(offlineSavedLocallyBanner(page)).toBeVisible();
+    await page.getByRole('link', { name: 'History' }).click();
+    await expect(page.getByText('Legacy Marker Press')).toBeVisible();
+    await expect(page.getByText('Barbell Bench Press').first()).toBeVisible();
+
+    // Back online, in a fresh page (this one reports navigator.onLine === false for good). It restores
+    // the same old-format copy, which has no fingerprints to offer, so its first sync gets everything.
+    const context = page.context();
+    await page.close();
+    await context.setOffline(false);
+    const fresh = await context.newPage();
+    await fresh.goto('/app/history');
+    await expect(fresh.getByText('Barbell Bench Press').first()).toBeVisible();
+    await expect(fresh.getByText('Legacy Marker Press')).toHaveCount(0);
   });
 
   test('the handbook cold-loads with no network, which is why it is a route and not a marketing link', async ({ page, request }) => {

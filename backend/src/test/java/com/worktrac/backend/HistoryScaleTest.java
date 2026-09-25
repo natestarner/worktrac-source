@@ -153,6 +153,39 @@ class HistoryScaleTest extends AbstractIntegrationTest {
         assertFalse(history.toString().contains("someone else's note"));
     }
 
+    // The sync at the same scale: a first sync carries every session (and both ends' notes), and
+    // sending back what it returned gets nothing -- the months are identified by fingerprint, not by
+    // binding a list of session ids, so no parameter cap can be reached as history grows.
+    @Test
+    void historySyncCarriesEverySessionAndThenNothingPastTheSqlServerParameterCap() throws Exception {
+        JsonNode first = sync("{\"have\":{}}");
+        int sessions = 0;
+        Map<String, String> have = new java.util.LinkedHashMap<>();
+        for (JsonNode month : first.get("months")) {
+            JsonNode content = first.get("changed").get(month.asText());
+            sessions += content.get("sessions").size();
+            have.put(month.asText(), content.get("fp").asText());
+        }
+        assertEquals(SESSION_COUNT, sessions);
+        assertTrue(first.toString().contains("oldest note"));
+        assertTrue(first.toString().contains("newest note"));
+        assertFalse(first.toString().contains("someone else's note"));
+
+        JsonNode second = sync(objectMapper.writeValueAsString(Map.of("have", have)));
+        assertTrue(second.get("changed").isEmpty());
+        assertEquals(first.get("months"), second.get("months"));
+    }
+
+    private JsonNode sync(String body) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/people/" + personId + "/history/sync")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andReturn();
+        assertEquals(200, result.getResponse().getStatus(), "sync -> " + result.getResolvedException());
+        return objectMapper.readTree(result.getResponse().getContentAsString());
+    }
+
     @Test
     void csvExportIncludesNotesPastTheSqlServerParameterCap() throws Exception {
         String csv = perform("/api/people/" + personId + "/export.csv").getResponse().getContentAsString();

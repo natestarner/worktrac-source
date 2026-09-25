@@ -95,10 +95,13 @@ async function endWorkoutMidSave(page: Page, request: APIRequestContext, exercis
   // (#326) and history had not caught up, so the next set was judged the first ever. A person
   // cannot end a workout mid-save and log that exercise again inside half a second; a spec can.
   // Registered before the release so the response cannot slip past between the two.
+  // History is synced a month at a time, and a reply carries only the months that changed -- so the
+  // first sync after the create lands is the one that sends its month, set and all.
   const historyHoldsTheWorkout = page.waitForResponse(async (r) => {
-    if (r.request().method() !== 'GET' || !/\/api\/people\/\d+\/history$/.test(r.url()) || !r.ok()) return false;
-    const sessions = await r.json().catch(() => []);
-    return Array.isArray(sessions) && sessions.some((s) => s.entries?.some((e: { sets?: unknown[] }) => e.sets?.length));
+    if (r.request().method() !== 'POST' || !/\/api\/people\/\d+\/history\/sync$/.test(r.url()) || !r.ok()) return false;
+    const reply = await r.json().catch(() => null);
+    const sessions = Object.values(reply?.changed ?? {}).flatMap((m) => (m as { sessions?: { entries?: { sets?: unknown[] }[] }[] }).sessions ?? []);
+    return sessions.some((s) => s.entries?.some((e) => e.sets?.length));
   });
   heldCreate.release();
   await createLanded;

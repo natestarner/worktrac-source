@@ -60,6 +60,24 @@ public class WorkoutSessionController {
         return workoutSessionService.getHistory(currentUser.access(), personId);
     }
 
+    // How the app reads History: only the months whose fingerprint differs from what the client
+    // holds. A POST only because the held-months map is unbounded; it changes nothing.
+    @PostMapping("/api/people/{personId}/history/sync")
+    @RequiresPermission(personScoped = true)
+    public HistorySyncDto syncHistory(@PathVariable Long personId, @Valid @RequestBody HistorySyncRequest request) {
+        return workoutSessionService.syncHistory(currentUser.access(), personId, request.have());
+    }
+
+    // A device reporting a month whose fingerprint matched but whose content did not -- logged, nothing
+    // else (WorkoutSessionService#reportHistoryDrift). Visibility, not write access: any device that
+    // may read this History may say it read something wrong.
+    @PostMapping("/api/people/{personId}/history/drift")
+    @RequiresPermission(personScoped = true)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reportHistoryDrift(@PathVariable Long personId, @Valid @RequestBody HistoryDriftReport report) {
+        workoutSessionService.reportHistoryDrift(currentUser.access(), personId, report.months());
+    }
+
     // How much of this person's history the Free-tier window is hiding. Its own endpoint rather than
     // an envelope around /history, because all three clamped screens ask the same question and only
     // one of them reads the history list -- and because widening /history's response from a bare
