@@ -572,6 +572,34 @@ Two consequences that are correct, not bugs: with *adjacent* duplicates "Next ex
 write into the same exercise's single set list for the session, which is the whole point of
 cycling back.
 
+### A green pill means a set was logged AT that step — never "it's behind you"
+
+`utils/routineProgress.js` is the one derivation behind the pills, the Next/Finish button and the
+finish toast. Pills used to go green for `idx < routineIndex`, so skipping ahead painted every
+earlier exercise as complete.
+
+- **Done = the step index is in `PERSON_DEFAULTS.routineLoggedSteps`**, recorded synchronously when
+  a set is logged for the current step's exercise (`ExerciseDetail`'s `onSetLogged` →
+  `LogTab.handleSetLogged`). By index, for the duplicate-exercise reason above. A set logged
+  off-script credits the exercise's first position only when no position of it is recorded.
+- **⚠️ A recorded step must NOT also require its exercise to appear in `useSessionEntries`.** That
+  looks like the way to un-green a step whose sets were deleted, and it was the first cut — but a
+  set leaves `useSessionEntries` the moment its LOG_SET succeeds and returns only when `history`'s
+  refetch lands (the window `SessionSummary#mayHaveServerRows` describes). Online, finishing inside
+  it counted the step just logged as skipped. `parity-routine-progress.spec.ts` caught it
+  intermittently; delaying `/history` reproduces it every time.
+- **Un-greening is explicit:** Remove on "Session exercises" forgets that exercise's steps
+  (`FORGET_ROUTINE_STEPS_LOGGED`). Deleting sets one by one on the exercise screen leaves the step
+  done — accepted, not an oversight.
+- **Skipped = not done and before the furthest point reached** (the later of the current step and
+  the last done one), so going back to fill a gap leaves the steps in between reading as skipped.
+- **"Next exercise" goes forward only**, to the next step that is not done; with none ahead it reads
+  "Finish routine". Wrapping back to earlier skipped steps would mean a deliberately skipped step
+  could never be finished past — the pills are how you go back.
+- A pill's status is carried by `aria-label` (`"Bench Press, done"` / `", skipped"`) and a check
+  icon, not colour alone. Use `aria-label` rather than an `sr-only` span: browsers differ on
+  whitespace around a visually hidden span, and e2e selects pills by exact name.
+
 ### Every routine control lives in the card, and none of them may be gated on `selectedExercise`
 
 `LogTab`'s routine card renders above **both** the picker and the exercise screen, which makes it
@@ -589,8 +617,9 @@ readout there with nothing but the pills to act on.
   alone — so leaving a routine early meant stepping through the remainder or scrubbing the pill
   strip to its end and tapping in. Reaching the end is not a precondition for stopping.
 - **The two exits are not redundant, and neither should be folded into the other.** `Finish
-  routine` steps *past* the last index: `NEXT_EXERCISE_IN_ROUTINE` clears `selectedExerciseId`, so
-  it ends with a "Routine complete!" toast back on the picker. `END_ROUTINE` deliberately leaves
+  routine` is `NEXT_EXERCISE_IN_ROUTINE` with a null `nextIndex`: it clears `selectedExerciseId`, so
+  it ends back on the picker with a toast — "Routine complete!" only when every step is done,
+  otherwise "Routine finished — N skipped". `END_ROUTINE` deliberately leaves
   `selectedExerciseId` **alone**, so bailing out drops the routine chrome and leaves the person on
   the exercise they were on, free to keep logging off-script.
 - **No confirm dialog on `End routine`.** It clears client-side navigation state only — nothing

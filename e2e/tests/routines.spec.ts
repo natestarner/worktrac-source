@@ -42,8 +42,10 @@ test.describe('Routines', () => {
     await page.getByRole('button', { name: 'Next exercise' }).click();
     await expect(page.getByText('2 of 2')).toBeVisible();
 
+    // Nothing was logged, so finishing owns up to both steps being skipped rather than calling
+    // the routine complete.
     await page.getByRole('button', { name: 'Finish routine' }).click();
-    await expect(page.getByText('Routine complete!')).toBeVisible();
+    await expect(page.getByText('Routine finished — 2 skipped', { exact: true })).toBeVisible();
   });
 
   // A routine is meant to walk you through a whole workout, and plenty of workouts cycle back to
@@ -89,12 +91,18 @@ test.describe('Routines', () => {
     await page.getByRole('button', { name: 'Next exercise' }).click();
     await expect(page.getByText('3 of 3')).toBeVisible();
 
+    // Each bench position is done on its own account (a set was logged AT it): the set logged at
+    // position 1 does not make position 3 done, and the press between them was passed over.
+    const pills = page.getByTestId('routine-pills');
+    await expect(pills.getByRole('button', { name: 'Barbell Bench Press, done', exact: true })).toHaveCount(1);
+    await expect(pills.getByRole('button', { name: 'Dumbbell Overhead Press, skipped', exact: true })).toBeVisible();
+
     await page.getByRole('button', { name: 'Log set' }).click();
     await dismissPrCelebration(page);
     await expect(page.getByText('Set 2', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Finish routine' }).click();
-    await expect(page.getByText('Routine complete!')).toBeVisible();
+    await expect(page.getByText('Routine finished — 1 skipped', { exact: true })).toBeVisible();
   });
 
   // The grip handle's arrow-key path is covered in RoutineFormModal.test.jsx -- jsdom never lays

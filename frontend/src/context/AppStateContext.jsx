@@ -16,6 +16,9 @@ const PERSON_DEFAULTS = {
   selectedExerciseId: null,
   activeRoutineId: null,
   routineIndex: 0,
+  // The routine step indexes a set has been logged AT. By position, not exercise id, for the same
+  // reason routineIndex is: a routine can repeat an exercise. Read through utils/routineProgress.js.
+  routineLoggedSteps: [],
   editingSession: null, // { id, startedAt, endedAt } -- the caller already has the full session
   // object in hand when entering edit mode (History's Edit button / the Past Session modal); kept
   // per person so switching away mid-edit and back resumes it.
@@ -313,6 +316,7 @@ export function reducer(state, action) {
       return updateActive(state, {
         activeRoutineId: action.routineId,
         routineIndex: 0,
+        routineLoggedSteps: [],
         selectedExerciseId: action.exerciseIds[0] ?? null,
       });
     case 'JUMP_TO_ROUTINE_INDEX':
@@ -320,16 +324,34 @@ export function reducer(state, action) {
         routineIndex: action.index,
         selectedExerciseId: action.exerciseIds[action.index] ?? null,
       });
-    case 'NEXT_EXERCISE_IN_ROUTINE': {
-      const active = state.byPerson[state.activePersonId] || PERSON_DEFAULTS;
-      const next = active.routineIndex + 1;
-      if (next < action.exerciseIds.length) {
-        return updateActive(state, { routineIndex: next, selectedExerciseId: action.exerciseIds[next] });
+    // The caller decides where "next" is (utils/routineProgress.js skips steps already done); a
+    // null nextIndex finishes the routine.
+    case 'NEXT_EXERCISE_IN_ROUTINE':
+      if (action.nextIndex != null) {
+        return updateActive(state, {
+          routineIndex: action.nextIndex,
+          selectedExerciseId: action.exerciseIds[action.nextIndex] ?? null,
+        });
       }
-      return updateActive(state, { activeRoutineId: null, routineIndex: 0, selectedExerciseId: null });
-    }
+      return updateActive(state, {
+        activeRoutineId: null,
+        routineIndex: 0,
+        routineLoggedSteps: [],
+        selectedExerciseId: null,
+      });
     case 'END_ROUTINE':
-      return updateActive(state, { activeRoutineId: null, routineIndex: 0 });
+      return updateActive(state, { activeRoutineId: null, routineIndex: 0, routineLoggedSteps: [] });
+    case 'RECORD_ROUTINE_STEP_LOGGED': {
+      const active = state.byPerson[state.activePersonId] || PERSON_DEFAULTS;
+      if (active.routineLoggedSteps.includes(action.index)) return state;
+      return updateActive(state, { routineLoggedSteps: [...active.routineLoggedSteps, action.index] });
+    }
+    case 'FORGET_ROUTINE_STEPS_LOGGED': {
+      const active = state.byPerson[state.activePersonId] || PERSON_DEFAULTS;
+      const kept = active.routineLoggedSteps.filter((index) => !action.indexes.includes(index));
+      if (kept.length === active.routineLoggedSteps.length) return state;
+      return updateActive(state, { routineLoggedSteps: kept });
+    }
     case 'START_EDITING_SESSION':
       return updateActive(state, { editingSession: action.session, selectedExerciseId: null });
     case 'UPDATE_EDITING_SESSION':
@@ -475,8 +497,11 @@ export function AppStateProvider({ children }) {
         }),
       startRoutine: (routineId, exerciseIds) => dispatch({ type: 'START_ROUTINE', routineId, exerciseIds }),
       jumpToRoutineIndex: (index, exerciseIds) => dispatch({ type: 'JUMP_TO_ROUTINE_INDEX', index, exerciseIds }),
-      nextExerciseInRoutine: (exerciseIds) => dispatch({ type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds }),
+      nextExerciseInRoutine: (exerciseIds, nextIndex) =>
+        dispatch({ type: 'NEXT_EXERCISE_IN_ROUTINE', exerciseIds, nextIndex }),
       endRoutine: () => dispatch({ type: 'END_ROUTINE' }),
+      recordRoutineStepLogged: (index) => dispatch({ type: 'RECORD_ROUTINE_STEP_LOGGED', index }),
+      forgetRoutineStepsLogged: (indexes) => dispatch({ type: 'FORGET_ROUTINE_STEPS_LOGGED', indexes }),
       startEditingSession: (session) => dispatch({ type: 'START_EDITING_SESSION', session }),
       updateEditingSession: (session) => dispatch({ type: 'UPDATE_EDITING_SESSION', session }),
       doneEditingSession: () => dispatch({ type: 'DONE_EDITING_SESSION' }),
