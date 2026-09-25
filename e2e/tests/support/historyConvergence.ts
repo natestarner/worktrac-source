@@ -1,5 +1,5 @@
 import { APIRequestContext, Page, expect } from '@playwright/test';
-import { waitForOutboxDrain } from './offline';
+import { waitForOutboxDrain, waitForQueryCachePersist } from './offline';
 
 // The History sync's promise, checked at the end of every parity spec: once connectivity is back and
 // the outbox has drained, the History the APP holds -- what every screen reads -- is exactly what the
@@ -151,4 +151,62 @@ async function persistedHistories(page: Page): Promise<Record<string, unknown[]>
         };
       }),
   );
+}
+
+export type SyncCall = { held: string[]; changed: string[]; fps: string[] };
+
+// Every History sync as the APP sees it, and how many are still out. "Settled" matters because a
+// set's own refetch is routinely cancelled and restarted by the next invalidation, so "the next sync
+// after X" is only meaningful once the earlier ones have finished.
+export async function watchSync(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __sync: { calls: { held: string[]; changed: string[]; fps: string[] }[]; started: number; inFlight: number } };
+    w.__sync = { calls: [], started: 0, inFlight: 0 };
+    const original = window.fetch;
+    window.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (!/\/api\/people\/\d+\/history\/sync$/.test(new URL(url, location.href).pathname)) return original(input, init);
+      const held = Object.keys(JSON.parse(String(init?.body ?? '{}')).have ?? {});
+      w.__sync.started += 1;
+      w.__sync.inFlight += 1;
+      try {
+        const response = await original(input, init);
+        const reply = await response.clone().json().catch(() => ({}));
+        const changed = (reply.changed ?? {}) as Record<string, { fp: string }>;
+        w.__sync.calls.push({ held, changed: Object.keys(changed), fps: Object.values(changed).map((m) => m.fp) });
+        return response;
+      } finally {
+        w.__sync.inFlight -= 1;
+      }
+    };
+  });
+  const read = () =>
+    page.evaluate(() => (window as unknown as { __sync: { calls: SyncCall[]; started: number; inFlight: number } }).__sync);
+  const settledSince = async (mark: { started: number }) => {
+    const state = await read();
+    return state.started > mark.started && state.inFlight === 0;
+  };
+  return {
+    // Counters live on the document, so a reload starts them at zero again.
+    mark: async () => {
+      const state = await read();
+      return { started: state.started, calls: state.calls.length };
+    },
+    callsSince: async (mark: { calls: number }) => (await read()).calls.slice(mark.calls),
+    settledSince,
+    // Every sync since `mark` has finished, and the newest month the server sent has reached
+    // IndexedDB -- so a reload now restores History as it stands after whatever was done since.
+    //
+    // Not just any synced shape: the sync at registration persists months and "fullSyncedAt" too,
+    // and waiting for those matched a copy from BEFORE the set on lower. A reload then restored a
+    // stale fingerprint (which the server rightly resent), or an old-format rewrite flattened a
+    // History without the set -- both failing for reasons that have nothing to do with the sync.
+    persistedSince: async (mark: { started: number }) => {
+      await expect.poll(() => settledSince(mark)).toBe(true);
+      const calls = (await read()).calls;
+      const latestFp = calls.filter((c) => c.fps.length > 0).at(-1)?.fps[0];
+      expect(latestFp, 'a sync that sent a month').toBeTruthy();
+      await waitForQueryCachePersist(page, `"${latestFp}"`);
+    },
+  };
 }

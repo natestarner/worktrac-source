@@ -3,7 +3,7 @@ import { registerHousehold } from './support/auth';
 import { addOwnExercise, dismissPrCelebration, pickExercise } from './support/exercises';
 import { API_ONLY, failNetwork } from './support/faults';
 import { keepHardOfflineAcrossReload, offlineSavedLocallyBanner, outboxCountText, waitForQueryCachePersist } from './support/offline';
-import { LEGACY_MARKER_WORKOUT, rewritePersistedHistoryAsOldFormat } from './support/historyConvergence';
+import { LEGACY_MARKER_WORKOUT, rewritePersistedHistoryAsOldFormat, watchSync } from './support/historyConvergence';
 
 // Mode 3 durability: a cold app-shell load with no network at all, and a queued write surviving a
 // full page reload while still offline. Both depend on the production service worker precaching
@@ -44,13 +44,17 @@ test.describe('Offline mode — durability across reload and cold boot (PWA/prev
   // lie-fi on the dev server; only this config has the service worker a no-network boot needs.
   // Not vacuous: the old-format copy carries a workout the server has never heard of.
   test('History cached before the month sync renders on a fully offline cold boot, then is replaced', async ({ page, request }) => {
+    const sync = await watchSync(page);
     await registerHousehold(page, request, 'Morgan');
     await pickExercise(page, 'Barbell Bench Press');
+    const mark = await sync.mark();
     await page.getByRole('button', { name: 'Log set' }).click();
     await dismissPrCelebration(page);
     await page.getByRole('link', { name: 'History' }).click();
     await expect(page.getByText('Barbell Bench Press').first()).toBeVisible();
-    await waitForQueryCachePersist(page, '"fullSyncedAt"');
+    // The History holding the set, not the registration sync's copy from before it -- the rewrite
+    // below flattens whatever is on disk (history-sync.spec.ts hit exactly this on lower).
+    await sync.persistedSince(mark);
 
     await page.reload();
     await page.waitForFunction(() => navigator.serviceWorker?.controller != null, null, { timeout: 20000 });
