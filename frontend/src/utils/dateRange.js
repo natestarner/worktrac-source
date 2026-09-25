@@ -102,9 +102,16 @@ export function clampDateStr(dateStr, min, max) {
 }
 
 // The month's days laid out as calendar weeks: an array of 7-slot rows, where a slot is either a
-// day of THIS month or null (the leading/trailing gap). Always whole weeks, never padded to a
-// fixed six -- the sheet's height varies by a row between months, which is the conventional
-// trade (iOS, Material) against a permanently empty sixth row on most months.
+// day of THIS month or null (the leading/trailing gap).
+//
+// ALWAYS SIX ROWS -- the most any month can need -- padded with empty weeks. A month spans four,
+// five or six calendar weeks, and a grid that tracked that changed height on every page. The
+// phone sheet is anchored to the BOTTOM of the screen (and the dialog to the centre), so a height
+// change moved its top edge: the month name and the chevrons jumped up or down a row's height
+// directly under the thumb paging with them. A constant height is what keeps the next tap where
+// the last one was, and it is what the iOS and Material calendars do for the same reason.
+export const CALENDAR_WEEKS = 6;
+
 export function monthGrid(monthStr, weekStartsOn = 0) {
   const first = startOfMonth(monthStr);
   const { year, monthIndex } = parts(first);
@@ -113,7 +120,7 @@ export function monthGrid(monthStr, weekStartsOn = 0) {
 
   const slots = Array.from({ length: lead }, () => null);
   for (let day = 1; day <= total; day += 1) slots.push(dateStrFromParts(year, monthIndex, day));
-  while (slots.length % 7 !== 0) slots.push(null);
+  while (slots.length < CALENDAR_WEEKS * 7) slots.push(null);
 
   const weeks = [];
   for (let i = 0; i < slots.length; i += 7) weeks.push(slots.slice(i, i + 7));

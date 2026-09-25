@@ -2711,13 +2711,17 @@ input[type='search']::-webkit-search-results-decoration {
 
 .date-cal-day {
   position: relative;
-  display: inline-flex;
+  /* Block-level (flex, centred by margin) rather than inline-flex: an inline box in a table cell
+     sits on a line box with descender space below it, so a row of days and a row of spacers could
+     differ by a pixel or two -- enough to reintroduce the header jump in miniature. */
+  display: flex;
   align-items: center;
   justify-content: center;
   /* 44px where the column allows it, and never wider than its column where it doesn't. */
   width: 100%;
   max-width: 44px;
   aspect-ratio: 1;
+  margin: 0 auto;
   padding: 0;
   border: none;
   border-radius: var(--radius-full);
@@ -2730,6 +2734,17 @@ input[type='search']::-webkit-search-results-decoration {
   transition:
     background-color var(--dur-base) var(--ease-out),
     color var(--dur-base) var(--ease-out);
+}
+
+/* Holds an empty cell open at exactly a day's size. Every row must be the same height whether or
+   not it has any days in it -- that constant height is what stops the header moving as you page
+   months (see dateRange.js#monthGrid). Shares .date-cal-day's width/max-width/aspect-ratio. */
+.date-cal-spacer {
+  display: block;
+  width: 100%;
+  max-width: 44px;
+  aspect-ratio: 1;
+  margin: 0 auto;
 }
 
 .date-cal-day[data-today] {
