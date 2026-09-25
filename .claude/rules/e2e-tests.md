@@ -391,6 +391,15 @@ the re-seed that write triggers has fired before the next call types anything. *
   break unrelated specs elsewhere on the same screen. Put the repeated name in an `aria-label`,
   not visible text.
 - `new RegExp(email)` breaks on the `+` in `huddle+e2e-...` addresses — escape it.
+- **Before measuring pixels inside a Modal, ask the browser whether its entrance animation is
+  done — two `boundingBox()` reads that agree prove nothing.** Until the first frame paints, a
+  CSS animation holds the element at its `from` keyframe (a sheet: a full sheet-height below where
+  it settles), and on a slow runner back-to-back reads both land there. The date-picker header
+  spec took that as "settled" and flaked on lower with a ~490px "jump" on its first page. Poll
+  `el.getAnimations().length === 0 && getComputedStyle(el).transform === 'none'` on the dialog
+  instead (the transform check also covers an animation that hasn't started yet). To reproduce a
+  suspected case, hold the clock with CDP `Animation.setPlaybackRate({ playbackRate: 0 })` across
+  the open and release it a few hundred ms later.
 - **An in-page frame sampler must read `textContent`, never `innerText`.** `innerText` applies CSS,
   and the Log screen's card labels are `text-transform: uppercase` — so it reads "LAST TIME", a
   match on "Last time" never fires, and the sampler reports "never saw it" against the unfixed

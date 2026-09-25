@@ -53,15 +53,16 @@ test('paging months in the date picker never moves its header', async ({ page, r
   const next = picker.getByRole('button', { name: 'Next month' });
   const heading = picker.getByRole('heading', { level: 3 });
 
-  // Let the sheet finish sliding in before taking the reference position.
-  const top = async () => (await prev.boundingBox())!.y;
-  let reference = await top();
-  await expect.poll(async () => {
-    const now = await top();
-    const settled = now === reference;
-    reference = now;
-    return settled;
-  }).toBe(true);
+  // Let the sheet finish sliding in before taking the reference position -- asked of the browser,
+  // not inferred from the position. Two position reads that agree prove nothing: until the first
+  // frame paints, the slide (Modal's modalSheetIn) holds the sheet at its from-keyframe, one full
+  // sheet-height below where it settles, and on a slow runner both reads land there. That is how
+  // this spec used to flake on lower, "moving" ~490px on the first page. The transform check
+  // covers a slide not yet started as well as one running.
+  await expect.poll(() => picker.evaluate(
+    (el) => el.getAnimations().length === 0 && getComputedStyle(el).transform === 'none',
+  )).toBe(true);
+  const reference = (await prev.boundingBox())!.y;
 
   const now = new Date();
   const seenWeeks = new Set<number>([weeksNeeded(now.getFullYear(), now.getMonth())]);
