@@ -11,14 +11,14 @@ import { LEGACY_MARKER_WORKOUT, rewritePersistedHistoryAsOldFormat } from './sup
 // persisted cache -- that a reload restores months the server then confirms without resending, and
 // that a cache written by a build from before the sync still renders and is then replaced.
 
-type SyncCall = { held: string[]; changed: string[] };
+type SyncCall = { held: string[]; changed: string[]; fps: string[] };
 
 // Every History sync as the APP sees it, and how many are still out. "Settled" matters because a
 // set's own refetch is routinely cancelled and restarted by the next invalidation, so "the next sync
 // after X" is only meaningful once the earlier ones have finished.
 async function watchSync(page: Page) {
   await page.addInitScript(() => {
-    const w = window as unknown as { __sync: { calls: { held: string[]; changed: string[] }[]; started: number; inFlight: number } };
+    const w = window as unknown as { __sync: { calls: { held: string[]; changed: string[]; fps: string[] }[]; started: number; inFlight: number } };
     w.__sync = { calls: [], started: 0, inFlight: 0 };
     const original = window.fetch;
     window.fetch = async (input, init) => {
@@ -30,7 +30,8 @@ async function watchSync(page: Page) {
       try {
         const response = await original(input, init);
         const reply = await response.clone().json().catch(() => ({}));
-        w.__sync.calls.push({ held, changed: Object.keys(reply.changed ?? {}) });
+        const changed = (reply.changed ?? {}) as Record<string, { fp: string }>;
+        w.__sync.calls.push({ held, changed: Object.keys(changed), fps: Object.values(changed).map((m) => m.fp) });
         return response;
       } finally {
         w.__sync.inFlight -= 1;
@@ -61,8 +62,13 @@ test('a reload re-downloads no month that did not change, and a new set re-sends
   let mark = await sync.mark();
   await logSetAt(page, 135, 5);
   await expect.poll(() => sync.settledSince(mark)).toBe(true);
-  // The synced shape -- months with fingerprints -- has reached IndexedDB, so the reload restores it.
-  await waitForQueryCachePersist(page, '"fullSyncedAt"');
+  // The month as it stands AFTER the set has reached IndexedDB, so the reload restores it. Not
+  // just any synced shape: the sync at registration persists months and "fullSyncedAt" too, and a
+  // reload that restores THAT holds a stale fingerprint for this month -- which the server rightly
+  // resends, failing the assertion below for a reason that has nothing to do with the sync.
+  const latestFp = (await sync.callsSince({ calls: 0 })).filter((c) => c.fps.length > 0).at(-1)?.fps[0];
+  expect(latestFp).toBeTruthy();
+  await waitForQueryCachePersist(page, `"${latestFp}"`);
 
   await page.reload();
   const fresh = { started: 0, calls: 0 };

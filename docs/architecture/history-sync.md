@@ -141,6 +141,7 @@ The property is **"however far behind a device is, one sync leaves it holding ex
 | `HistorySyncServiceTest` | The sync's decisions and its two mid-request races, deterministically |
 | `refreshHistory` unit tests | A fetch from before a write can never be kept over the write |
 | Every parity spec | After reconnecting, the app's **persisted** History equals the server's, in all four modes |
+| `HistorySyncCostTest` | Every shape of both statements seeks through the person's own rows: no scan, no key lookup, read back from the plans SQL Server actually compiled (see "Cost") |
 | `history-sync.spec.ts`, `offline-durability.spec.ts` | Reloads re-download nothing unchanged; another device's change arrives; an old-format cache renders offline (lie-fi and a true no-network cold boot) and is then replaced |
 
 ## The production canary
@@ -165,6 +166,36 @@ The sync fails exactly like any other read (`api/client.js`): offline and pinned
 lie-fi aborts it at 15s and reports to `reachabilityMonitor`; a 503 is a fulfilled response. In every
 case the query keeps the months it holds, and `shouldDehydrateQuery` persists them. The service
 worker caches no API calls, so the move from GET to POST changed nothing there.
+
+## Cost
+
+**Every statement must cost in proportion to this person's rows, never the table.** Local and test
+databases hold a few households, so the two are indistinguishable there. Lower holds every e2e
+household ever created, and there the difference was a ~0.3s full sync against a 10-minute one at
+100% DTU (`docs/incidents/2026-09-25-history-full-sync-pegged-lower-db.md`). Three things keep it
+proportional:
+
+- **Covering indexes (V83).** Each History-sync index carries every column the aggregate and the load
+  read. Without that, SQL Server chooses between a key lookup per row and a scan of the whole table,
+  and at lower's size it picks the scan.
+- **Exercises by the person's distinct ids.** Both statements look each exercise up once, never once
+  per set.
+- **Join hints.** `HASH` to take the person's sets in one pass of their index range; `LOOP` to reach
+  notes and exercises by seek from the person's own sessions and exercises. Left alone, the optimizer
+  chose a pass over the notes index at lower's proportions.
+
+Measured against lower-sized local tables (300k workouts, 1.2M sets, 100k notes, 40k exercises) for a
+person with 1,827 workouts:
+
+| Statement | Before | After |
+|---|---|---|
+| Month load (`HistoryMonths`) | ~62,000 page reads (scan of `workout_sets`), plus 57,302 for per-set exercise lookups | ~5,300 (sets 292, notes ~5,000 by seek, exercises 24) |
+| Fingerprint aggregate | ~44,000 | ~6,700 (sets 360, notes ~5,000 by seek, exercises ~1,300) |
+
+The notes figure is about three reads per workout: a seek per session. It grows with the person and
+nothing else. `HistorySyncCostTest` pins the shape rather than any number: it reads back the compiled
+plans and fails on any scan or key lookup of a History table. **If it fails after you add a column,
+add the column to the index in a new migration. Don't relax the test.**
 
 ## Not covered here
 
