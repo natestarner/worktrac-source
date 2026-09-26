@@ -48,6 +48,9 @@ public final class HistoryWorkload {
     private final List<Long> sessions = new ArrayList<>();
     private final List<Long> sets = new ArrayList<>();
     private final List<Long> importBatches = new ArrayList<>();
+    private final Map<Long, Long> setSession = new java.util.HashMap<>();
+    private Long touchedSession;
+    private String touchedStartedAt;
     private boolean fullHistory = true;
     private int serverErrors;
     // action -> { accepted, refused }: so a run can prove it exercised each write for real rather
@@ -79,8 +82,24 @@ public final class HistoryWorkload {
         return outcomes;
     }
 
+    // The workout the last step's write touched on the main person, for a scoped sync -- the way the
+    // app knows which workout its own write went to. Null when the step was not such a write (an
+    // import, a rename, a plan change, the clock, the sibling), or was one the app refreshes in full
+    // (ending a workout, moving one).
+    public Long touchedSession() {
+        return touchedSession;
+    }
+
+    // The touched workout's start time as the write's own response gave it, when it gave one (a
+    // logged set, a new past workout) -- otherwise null, and the app uses the time it holds.
+    public String touchedStartedAt() {
+        return touchedStartedAt;
+    }
+
     // One random write. Returns what it did, for failure messages.
     public String step() throws Exception {
+        touchedSession = null;
+        touchedStartedAt = null;
         int roll = random.nextInt(100);
         if (roll < 18) return liveSet();
         if (roll < 24) return pastSession();
@@ -104,9 +123,12 @@ public final class HistoryWorkload {
         JsonNode result = send("live set", post("/api/people/" + personId + "/live-sets"),
                 Map.of("exerciseId", exercise(), "weight", weight(), "reps", 1 + random.nextInt(12)));
         if (result != null) {
-            sets.add(result.get("set").get("id").asLong());
+            long set = result.get("set").get("id").asLong();
+            sets.add(set);
             long session = result.get("session").get("id").asLong();
             if (!sessions.contains(session)) sessions.add(session);
+            setSession.put(set, session);
+            touch(session, result.get("session").get("startedAt").asText());
         }
         return "live set";
     }
@@ -114,7 +136,10 @@ public final class HistoryWorkload {
     private String pastSession() throws Exception {
         String startedAt = pastInstant().toString();
         JsonNode result = send("past workout", post("/api/people/" + personId + "/sessions"), Map.of("startedAt", startedAt));
-        if (result != null) sessions.add(result.get("id").asLong());
+        if (result != null) {
+            sessions.add(result.get("id").asLong());
+            touch(result.get("id").asLong(), result.get("startedAt").asText());
+        }
         return "past workout at " + startedAt;
     }
 
@@ -123,21 +148,30 @@ public final class HistoryWorkload {
         long session = pick(sessions);
         JsonNode result = send("set into workout", post("/api/sessions/" + session + "/sets"),
                 Map.of("exerciseId", exercise(), "weight", weight(), "reps", 1 + random.nextInt(12)));
-        if (result != null) sets.add(result.get("set").get("id").asLong());
+        if (result != null) {
+            long set = result.get("set").get("id").asLong();
+            sets.add(set);
+            setSession.put(set, session);
+            touch(session, null);
+        }
         return "set into workout " + session;
     }
 
     private String editSet() throws Exception {
         if (sets.isEmpty()) return liveSet();
         long set = pick(sets);
-        send("edit set", patch("/api/sets/" + set), Map.of("weight", weight(), "reps", 1 + random.nextInt(12)));
+        if (send("edit set", patch("/api/sets/" + set), Map.of("weight", weight(), "reps", 1 + random.nextInt(12))) != null) {
+            touch(setSession.get(set), null);
+        }
         return "edit set " + set;
     }
 
     private String deleteSet() throws Exception {
         if (sets.isEmpty()) return liveSet();
         long set = sets.remove(random.nextInt(sets.size()));
-        send("delete set", delete("/api/sets/" + set), null);
+        if (send("delete set", delete("/api/sets/" + set), null) != null) {
+            touch(setSession.remove(set), null);
+        }
         return "delete set " + set;
     }
 
@@ -146,7 +180,9 @@ public final class HistoryWorkload {
         long session = pick(sessions);
         // A blank save deletes the note row -- a delete the fingerprint must see too.
         String text = random.nextInt(4) == 0 ? "   " : "note " + random.nextInt(1000);
-        send("note", put("/api/sessions/" + session + "/exercises/" + exercise() + "/note"), Map.of("note", text));
+        if (send("note", put("/api/sessions/" + session + "/exercises/" + exercise() + "/note"), Map.of("note", text)) != null) {
+            touch(session, null);
+        }
         return "note on workout " + session + (text.isBlank() ? " (cleared)" : "");
     }
 
@@ -212,6 +248,13 @@ public final class HistoryWorkload {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────────────────
+
+    // A set imported by a CSV has no known workout here, so an edit or delete of one scopes to nothing
+    // and the test treats it like any write the app refreshes in full.
+    private void touch(Long session, String startedAt) {
+        touchedSession = session;
+        touchedStartedAt = startedAt;
+    }
 
     // A 2xx body (or an empty node), null for a refused write.
     private JsonNode send(String action, org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request,

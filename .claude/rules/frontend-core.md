@@ -369,6 +369,14 @@ each held month's fingerprint and keeps every month the server does not resend
   and that fetch — begun before the End reached the server — finished, stored its stale answer as
   fresh and cleared the invalidation. Found by the parity convergence check below; pinned by
   `queryClient.test.js`'s `refreshHistory` block (verified red against the old invalidation).
+- **A write that touched a known workout passes `historyScopeFor(client, personId, sessionId, …)`**
+  as `refreshHistory`'s scope, and the sync then checks only that workout's months. Pass the start
+  time from the write's response when it has one. Anything whose workout can't be named (a temp id,
+  a set still waiting for its session) passes nothing and gets the ordinary sync. **A scoped reply
+  replaces only its `scope` months** (`applyHistorySync`); merging it as an ordinary reply would drop
+  every other month the device holds, and `sessions.test.js` fails if it does. A change made on
+  another device in another month then arrives at the next ordinary sync, which is the accepted cost
+  (`docs/architecture/history-sync.md`, "Scoped syncs").
 - **A write that changes EVERY person's History uses `refreshHistoryForEveryone`** — an exercise
   rename (History carries names; `LogTab.refreshPersonalization` is the live rename path) and a plan
   change (`BillingTab`, with `historyWindowForEveryone()`). Cheap: an unchanged month costs a

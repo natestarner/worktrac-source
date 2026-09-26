@@ -65,7 +65,8 @@ public class WorkoutSessionController {
     @PostMapping("/api/people/{personId}/history/sync")
     @RequiresPermission(personScoped = true)
     public HistorySyncDto syncHistory(@PathVariable Long personId, @Valid @RequestBody HistorySyncRequest request) {
-        return workoutSessionService.syncHistory(currentUser.access(), personId, request.have());
+        return workoutSessionService.syncHistory(currentUser.access(), personId, request.have(),
+                request.sessions(), request.at());
     }
 
     // A device reporting a month whose fingerprint matched but whose content did not -- logged, nothing

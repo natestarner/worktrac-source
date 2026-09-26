@@ -177,6 +177,52 @@ class HistorySyncServiceTest {
         assertEquals("a2", reply.changed().get("2026-06").fp());
     }
 
+    // A scoped sync (after a write on this device) loads only the scoped months -- the month the device
+    // holds the touched workout in, and the month it is in now -- and runs NO all-months fingerprint
+    // query and no re-check: the load is one snapshot and each month's fingerprint is its own rows'.
+    @Test
+    void aScopedSyncLoadsOnlyItsMonthsAndNeverRunsTheAllMonthsCheck() {
+        when(historyMonths.monthsOf(PERSON, List.of(9L))).thenReturn(List.of(java.time.YearMonth.of(2026, 3)));
+        when(historyMonths.loadMonths(PERSON, null, new java.util.TreeSet<>(List.of(
+                java.time.YearMonth.of(2026, 6), java.time.YearMonth.of(2026, 3)))))
+                .thenReturn(months("2026-06", "new", "2026-03", "c"));
+
+        HistorySyncDto reply = service.syncHistory(ACCESS, PERSON,
+                map("2026-06", "old", "2026-05", "b", "2026-03", "c"),
+                List.of(9L), List.of(Instant.parse("2026-06-10T10:00:00Z")));
+
+        assertEquals(List.of("2026-06", "2026-03"), reply.scope());
+        assertEquals(List.of("2026-06", "2026-03"), reply.months());
+        assertEquals(List.of("2026-06"), List.copyOf(reply.changed().keySet()), "March matched what was held");
+        verify(historyFingerprints, never()).forPerson(anyLong(), any());
+    }
+
+    // A scoped month with no visible workouts left is not listed, so the device drops it -- e.g. the
+    // month a workout was just moved out of.
+    @Test
+    void aScopedMonthLeftEmptyIsNotListed() {
+        when(historyMonths.monthsOf(PERSON, List.of(9L))).thenReturn(List.of(java.time.YearMonth.of(2026, 3)));
+        when(historyMonths.loadMonths(any(Long.class), any(), any())).thenReturn(months("2026-03", "moved-in"));
+
+        HistorySyncDto reply = service.syncHistory(ACCESS, PERSON, map("2026-05", "b"),
+                List.of(9L), List.of(Instant.parse("2026-05-10T10:00:00Z")));
+
+        assertEquals(List.of("2026-05", "2026-03"), reply.scope());
+        assertEquals(List.of("2026-03"), reply.months());
+    }
+
+    // Holding nothing is a full sync, whatever the scope says.
+    @Test
+    void aScopeIsIgnoredWhenNothingIsHeld() {
+        loads(null, null, months("2026-06", "a"));
+
+        HistorySyncDto reply = service.syncHistory(ACCESS, PERSON, Map.of(),
+                List.of(9L), List.of(Instant.parse("2026-06-10T10:00:00Z")));
+
+        assertEquals(null, reply.scope());
+        assertEquals(List.of("2026-06"), reply.months());
+    }
+
     @Test
     void theFreeTierFloorReachesBothTheFingerprintsAndTheLoad() {
         Instant floor = Instant.parse("2026-03-17T12:00:00Z");

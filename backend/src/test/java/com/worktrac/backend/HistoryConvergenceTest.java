@@ -58,6 +58,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 //   restored  -- sometimes rolls back to a snapshot from earlier in the run first, as a reload
 //                restoring an out-of-date persisted cache does
 //   fresh     -- sometimes forgets everything first: a new device, or a cache from before the sync
+//   scoped    -- the device the writes are made ON: after each of its own writes it runs the SCOPED
+//                sync the app runs (only the touched workout's months), and every 5-15 writes an
+//                ordinary one. A scoped sync must leave every month it covered exactly right; the
+//                ordinary sync that follows must then leave EVERYTHING right -- so nothing a scoped
+//                sync skipped can be stuck, however the writes elsewhere moved things around.
 //
 // Reproducible: a failure names its seed and step. Run longer or replay one seed with
 //   -Dhistory.convergence.steps=5000  -Dhistory.convergence.seed=<seed>
@@ -122,6 +127,10 @@ class HistoryConvergenceTest extends AbstractIntegrationTest {
         HistoryDevice rarely = new HistoryDevice(objectMapper);
         HistoryDevice restored = new HistoryDevice(objectMapper);
         HistoryDevice fresh = new HistoryDevice(objectMapper);
+        HistoryDevice scoped = new HistoryDevice(objectMapper);
+        Random scopedRandom = new Random(seed ^ 0x5C0BEDL);
+        int scopedFullNext = 1;
+        int scopedSyncs = 0;
         List<HistoryDevice> snapshots = new ArrayList<>();
         int laggingNext = 3;
         int rarelyNext = 40;
@@ -155,6 +164,16 @@ class HistoryConvergenceTest extends AbstractIntegrationTest {
                 syncAndCompare("fresh", fresh, truth, token, personId, seed, step, trail);
             }
             if (random.nextInt(5) == 0) snapshots.add(every.copy());
+
+            Long touched = workload.touchedSession();
+            if (touched != null && scoped.monthCount() > 0) {
+                scopedSyncAndCompare(scoped, touched, workload.touchedStartedAt(), truth, token, personId, seed, step, trail);
+                scopedSyncs++;
+            }
+            if (step >= scopedFullNext) {
+                syncAndCompare("scoped (ordinary sync)", scoped, truth, token, personId, seed, step, trail);
+                scopedFullNext = step + 5 + scopedRandom.nextInt(11);
+            }
         }
         // Not vacuous: a run that passed on a stream of refused writes would prove nothing. Every kind of
         // write must have been accepted at least once, and the device must end up holding something.
@@ -170,6 +189,62 @@ class HistoryConvergenceTest extends AbstractIntegrationTest {
             }
         }
         assertEquals(true, every.monthCount() > 0, "seed " + seed + ": the run ended holding no months at all");
+        if (steps >= 100 && scopedSyncs < 20) {
+            fail("seed " + seed + ": only " + scopedSyncs + " scoped syncs ran -- the scoped path went untested");
+        }
+    }
+
+    // The sync the app runs after its own write: scoped to the workout it touched, with the start time
+    // the device HOLDS for it plus the one the write's response gave (either may be absent). Every month
+    // the reply covers must then be exactly what GET /history shows for that month.
+    private void scopedSyncAndCompare(HistoryDevice device, long session, String startedAtFromWrite, JsonNode truth,
+                                      String token, long personId, long seed, int step, List<String> trail) throws Exception {
+        List<String> at = new ArrayList<>();
+        String held = device.startedAtOf(session);
+        if (held != null) at.add(held);
+        if (startedAtFromWrite != null) at.add(startedAtFromWrite);
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("have", device.have());
+        body.put("sessions", List.of(session));
+        body.put("at", at);
+        MvcResult result = mockMvc.perform(post("/api/people/" + personId + "/history/sync")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andReturn();
+        String where = "seed " + seed + ", step " + step + ", device 'scoped' (workout " + session + ", at " + at + ")";
+        if (result.getResponse().getStatus() != 200) {
+            fail(where + ": scoped sync answered " + result.getResponse().getStatus() + "\n" + tail(trail));
+        }
+        JsonNode reply = objectMapper.readTree(result.getResponse().getContentAsString());
+        if (reply.get("scope") == null || !reply.get("scope").isArray() || reply.get("scope").isEmpty()) {
+            fail(where + ": a scoped request got an unscoped reply: " + reply);
+        }
+        try {
+            device.apply(reply);
+        } catch (AssertionError e) {
+            fail(where + ": " + e.getMessage() + "\n" + tail(trail));
+        }
+        // The workout this device just wrote to must be ON the device afterwards, wherever it now is --
+        // the one thing a scoped sync may never get wrong, since it is what the person is looking at.
+        // (It covers the case the per-month check below cannot: a workout moved to another month
+        // elsewhere, which would leave its old month correctly empty and the workout nowhere.)
+        for (JsonNode sessionNode : truth) {
+            if (sessionNode.get("id").asLong() == session && device.startedAtOf(session) == null) {
+                fail(where + ": the workout just written to is missing from the device after its scoped sync\\n"
+                        + tail(trail));
+            }
+        }
+        for (JsonNode month : reply.get("scope")) {
+            com.fasterxml.jackson.databind.node.ArrayNode expected = objectMapper.createArrayNode();
+            truth.forEach(sessionNode -> {
+                if (sessionNode.get("startedAt").asText().startsWith(month.asText())) expected.add(sessionNode);
+            });
+            if (!expected.equals(device.sessionsIn(month.asText()))) {
+                fail(where + ": after a scoped sync the device's " + month.asText() + " is not GET /history's\n"
+                        + "  device: " + device.sessionsIn(month.asText()) + "\n  truth:  " + expected + "\n" + tail(trail));
+            }
+        }
     }
 
     private void syncAndCompare(String name, HistoryDevice device, JsonNode truth, String token, long personId,

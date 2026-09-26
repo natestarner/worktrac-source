@@ -168,7 +168,7 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
             planXmls.add((String) plan.get("query_plan"));
             if (compiledAt(plan).isBefore(afterTiny)) reused.add(plan.get("query_id"));
         }
-        assertEquals(5, statements.size(), "one statement per shape issued in runEveryShape");
+        assertEquals(6, statements.size(), "one statement per shape issued in runEveryShape");
         assertTrue(reused.isEmpty(), "the big person ran a plan compiled for the tiny one -- see HistoryPlanSize: "
                 + reused);
 
@@ -179,7 +179,7 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
         runEveryShape(personId);
         pause();
         List<Map<String, Object>> repeat = plansRunSince(afterBig);
-        assertEquals(10, repeat.stream().map(plan -> plan.get("query_id")).distinct().count(),
+        assertEquals(12, repeat.stream().map(plan -> plan.get("query_id")).distinct().count(),
                 "both people's repeat runs issued every shape, one statement per size class");
         List<Object> recompiled = new ArrayList<>();
         for (Map<String, Object> plan : repeat) {
@@ -210,7 +210,7 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
         // range. The whole-History pass returned one month's few hundred sets by reading five years'
         // twenty thousand, which made every per-set sync cost as much as the full History.
         List<String> rangePlans = planXmls.stream().filter(plan -> plan.contains("rs.session_id")).toList();
-        assertEquals(2, rangePlans.size(), "both range shapes issued in runEveryShape (see HistoryMonths#sql)");
+        assertEquals(3, rangePlans.size(), "every range shape issued in runEveryShape (see HistoryMonths#sql)");
         for (String plan : rangePlans) {
             List<Access> setReads = accesses(plan).stream()
                     .filter(access -> access.table().equals("workout_sets")).toList();
@@ -267,6 +267,8 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
         historyMonths.load(person, null, null, null);
         historyMonths.load(person, floor, from, to);
         historyMonths.load(person, null, from, null);
+        // A scoped sync: two separate, non-adjacent months (a workout moved between them elsewhere).
+        historyMonths.loadMonths(person, null, List.of(java.time.YearMonth.of(2026, 4), java.time.YearMonth.of(2026, 1)));
     }
 
     record Access(String table, String index, String physicalOp, boolean lookup, Set<String> seekColumns) {}

@@ -9,8 +9,10 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -137,12 +139,56 @@ public class HistoryMonths {
             where.append(" AND started_at < :to");
             params.addValue("to", utc(to));
         }
+        return query(personId, floor, where.toString(), params, from != null || to != null);
+    }
 
+    // Exactly these months ('yyyy-mm' as YearMonths, UTC), each as its own range -- a scoped sync's
+    // load (WorkoutSessionService#syncHistory). Separate ranges rather than one spanning them, so two
+    // far-apart months never drag in every month between. Same statement, so the same snapshot
+    // guarantee and the same fingerprint-from-its-own-rows pairing as every other load.
+    public Map<String, Month> loadMonths(long personId, Instant floor, Collection<YearMonth> months) {
+        if (months.isEmpty()) {
+            return Map.of();
+        }
+        StringBuilder where = new StringBuilder();
+        MapSqlParameterSource params = new MapSqlParameterSource("personId", personId);
+        if (floor != null) {
+            where.append(" AND started_at >= :floor");
+            params.addValue("floor", utc(floor));
+        }
+        List<String> ranges = new ArrayList<>();
+        int i = 0;
+        for (YearMonth month : months) {
+            ranges.add("(started_at >= :from" + i + " AND started_at < :to" + i + ")");
+            params.addValue("from" + i, month.atDay(1).atStartOfDay());
+            params.addValue("to" + i, month.plusMonths(1).atDay(1).atStartOfDay());
+            i++;
+        }
+        where.append(" AND (").append(String.join(" OR ", ranges)).append(")");
+        return query(personId, floor, where.toString(), params, true);
+    }
+
+    // The month each of these workouts is in NOW -- only the person's own; an id that is not theirs,
+    // or no longer exists, contributes nothing. By the same CONVERT the loads use, so the database,
+    // not Java, decides the month. A seek on the primary key per id; `ids` is bounded by the request.
+    public List<YearMonth> monthsOf(long personId, Collection<Long> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.queryForList("""
+                        SELECT DISTINCT CONVERT(CHAR(7), started_at, 126)
+                        FROM workout_sessions
+                        WHERE person_id = :personId AND id IN (:ids)""",
+                new MapSqlParameterSource("personId", personId).addValue("ids", ids), String.class)
+                .stream().map(YearMonth::parse).toList();
+    }
+
+    private Map<String, Month> query(long personId, Instant floor, String where, MapSqlParameterSource params,
+                                     boolean range) {
         Map<Long, SessionRow> sessions = new HashMap<>();
         List<SetRow> sets = new ArrayList<>();
         List<NoteRow> notes = new ArrayList<>();
-        boolean range = from != null || to != null;
-        jdbc.query(HistoryPlanSize.forPerson(jdbc, personId).around(sql(range, where.toString())), params, rs -> {
+        jdbc.query(HistoryPlanSize.forPerson(jdbc, personId).around(sql(range, where)), params, rs -> {
             String month = rs.getString("month");
             long sessionId = rs.getLong("session_id");
             BigInteger rv = BigInteger.valueOf(rs.getLong("rv"));

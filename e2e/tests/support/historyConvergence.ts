@@ -153,14 +153,17 @@ async function persistedHistories(page: Page): Promise<Record<string, unknown[]>
   );
 }
 
-export type SyncCall = { held: string[]; changed: string[]; fps: string[] };
+// `scope`: the months a SCOPED reply spoke for (the sync after a write on this device), or null.
+export type SyncCall = { held: string[]; changed: string[]; fps: string[]; scope: string[] | null };
 
 // Every History sync as the APP sees it, and how many are still out. "Settled" matters because a
 // set's own refetch is routinely cancelled and restarted by the next invalidation, so "the next sync
 // after X" is only meaningful once the earlier ones have finished.
 export async function watchSync(page: Page) {
   await page.addInitScript(() => {
-    const w = window as unknown as { __sync: { calls: { held: string[]; changed: string[]; fps: string[] }[]; started: number; inFlight: number } };
+    const w = window as unknown as {
+      __sync: { calls: { held: string[]; changed: string[]; fps: string[]; scope: string[] | null }[]; started: number; inFlight: number };
+    };
     w.__sync = { calls: [], started: 0, inFlight: 0 };
     const original = window.fetch;
     window.fetch = async (input, init) => {
@@ -173,7 +176,12 @@ export async function watchSync(page: Page) {
         const response = await original(input, init);
         const reply = await response.clone().json().catch(() => ({}));
         const changed = (reply.changed ?? {}) as Record<string, { fp: string }>;
-        w.__sync.calls.push({ held, changed: Object.keys(changed), fps: Object.values(changed).map((m) => m.fp) });
+        w.__sync.calls.push({
+          held,
+          changed: Object.keys(changed),
+          fps: Object.values(changed).map((m) => m.fp),
+          scope: Array.isArray(reply.scope) ? reply.scope : null,
+        });
         return response;
       } finally {
         w.__sync.inFlight -= 1;

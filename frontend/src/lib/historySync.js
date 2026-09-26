@@ -51,8 +51,24 @@ export function fingerprintsOf(held) {
 //
 // Kept months are the SAME objects as in `held`, so structural sharing keeps every unchanged month
 // -- and its sessions -- by identity.
+//
+// A SCOPED reply (`reply.scope` is a list -- the sync after a write on this device) speaks only for
+// the months in its scope: of those, the listed ones are sent or kept and the rest are gone, while
+// every month OUTSIDE the scope stays exactly as held, to be re-verified by the next ordinary sync.
+// A reply with no `scope` -- every ordinary sync, and any reply from a server that predates scoped
+// syncs -- is the complete list, as always.
 export function applyHistorySync(held, reply, now = Date.now()) {
+  const scoped = Array.isArray(reply.scope);
+  if (scoped && !held) {
+    throw new Error('History sync answered a scoped reply to a device holding nothing');
+  }
   const months = {};
+  if (scoped) {
+    const inScope = new Set(reply.scope);
+    for (const [month, content] of Object.entries(held.months)) {
+      if (!inScope.has(month)) months[month] = content;
+    }
+  }
   for (const month of reply.months) {
     const sent = reply.changed?.[month];
     if (sent) {

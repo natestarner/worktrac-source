@@ -18,6 +18,7 @@ import {
   isUnsyncedWrite,
   shouldRetryWrite,
   refreshHistory,
+  historyScopeFor,
   refreshHistoryForEveryone,
 } from './queryClient';
 import { clearExerciseIdMap, newTempExerciseId, setExerciseIdMapping } from './exerciseIdMap';
@@ -1137,7 +1138,11 @@ describe('logSet onSettled reconciles from the response (first-set flash)', () =
 
     await dispatch();
 
-    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledWith(PERSON, { readCached: expect.any(Function) }));
+    // Scoped to the workout the set landed in, with the start time the response gave.
+    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledWith(PERSON, {
+      readCached: expect.any(Function),
+      scope: { sessions: [SESSION.id], at: [SESSION.startedAt] },
+    }));
     await vi.waitFor(() => expect(client.getQueryData(queryKeys.history(PERSON))).toHaveLength(1));
   });
 
@@ -1392,6 +1397,54 @@ describe('synced History across a persist/restore round trip', () => {
   });
 });
 
+// The scope of a write's History refresh: the workout it touched, with every start time this device
+// knows for it. The server adds where the workout is NOW, so these are the months the device HOLDS it
+// in -- which is what lets a workout moved elsewhere be reloaded in both places.
+describe('historyScopeFor', () => {
+  const PERSON_ID = 7;
+  let scopeClient;
+
+  beforeEach(() => {
+    scopeClient = new QueryClient();
+  });
+
+  it('is null -- the ordinary sync -- for a workout it cannot name', () => {
+    expect(historyScopeFor(scopeClient, PERSON_ID, null)).toBeNull();
+    expect(historyScopeFor(scopeClient, PERSON_ID, undefined)).toBeNull();
+    expect(historyScopeFor(scopeClient, PERSON_ID, 'optimistic-123')).toBeNull();
+  });
+
+  it('carries the start time the write gave, and the one History holds when it differs', () => {
+    scopeClient.setQueryData(queryKeys.history(PERSON_ID), {
+      format: HISTORY_FORMAT,
+      fullSyncedAt: Date.now(),
+      months: { '2026-05': { fp: 'b', sessions: [{ id: 9, startedAt: '2026-05-10T10:00:00Z', entries: [] }] } },
+    });
+
+    // Moved to March elsewhere; the write's response knows the new time, the cache the old one.
+    expect(historyScopeFor(scopeClient, PERSON_ID, 9, '2026-03-20T10:00:00Z')).toEqual({
+      sessions: [9],
+      at: ['2026-03-20T10:00:00Z', '2026-05-10T10:00:00Z'],
+    });
+  });
+
+  it('finds the live workout, which History may not hold yet', () => {
+    scopeClient.setQueryData(queryKeys.liveSession(PERSON_ID), { id: 12, startedAt: '2026-06-15T09:00:00Z' });
+
+    expect(historyScopeFor(scopeClient, PERSON_ID, 12)).toEqual({ sessions: [12], at: ['2026-06-15T09:00:00Z'] });
+  });
+
+  it('still scopes a workout it has no time for -- the server finds where it is now', () => {
+    expect(historyScopeFor(scopeClient, PERSON_ID, 12)).toEqual({ sessions: [12], at: [] });
+  });
+
+  it('does not repeat a time it knows twice', () => {
+    scopeClient.setQueryData(queryKeys.liveSession(PERSON_ID), { id: 12, startedAt: '2026-06-15T09:00:00Z' });
+
+    expect(historyScopeFor(scopeClient, PERSON_ID, 12, '2026-06-15T09:00:00Z').at).toEqual(['2026-06-15T09:00:00Z']);
+  });
+});
+
 describe('refreshHistory', () => {
   let client;
   const PERSON = 7;
@@ -1411,7 +1464,8 @@ describe('refreshHistory', () => {
     refreshHistory(client, PERSON);
 
     await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
-    expect(getHistory).toHaveBeenCalledWith(PERSON, { readCached: expect.any(Function) });
+    // No scope given: the ordinary all-months sync.
+    expect(getHistory).toHaveBeenCalledWith(PERSON, { readCached: expect.any(Function), scope: null });
   });
 
   it('replaces a fetch still in flight from before the write, even when that fetch finishes last', async () => {

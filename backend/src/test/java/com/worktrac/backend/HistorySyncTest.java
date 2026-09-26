@@ -8,6 +8,7 @@ import com.worktrac.backend.billing.SubscriptionRepository;
 import com.worktrac.backend.billing.SubscriptionStatus;
 import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.support.AbstractIntegrationTest;
+import com.worktrac.backend.support.HistoryDevice;
 import com.worktrac.backend.support.MutableClock;
 import com.worktrac.backend.support.RegistrationTestSupport;
 import com.worktrac.backend.user.TestCodeCache;
@@ -102,6 +103,90 @@ class HistorySyncTest extends AbstractIntegrationTest {
         assertEquals(List.of("2026-06", "2026-05", "2026-03"), months(reply));
         assertEquals(List.of("2026-06", "2026-05", "2026-03"), fieldNames(reply.get("changed")));
         assertEquals(history(), flatten(reply), "the months, concatenated, are exactly GET /history");
+    }
+
+    // ── Scoped syncs: after a write on this device, only the touched workout's months ────────────
+
+    @Test
+    void aScopedSyncSendsOnlyTheTouchedMonthAndLeavesEveryOtherMonthAlone() throws Exception {
+        logSet(createPastSession("2026-03-10T10:00:00Z"), 100, 5);
+        long may = createPastSession("2026-05-10T10:00:00Z");
+        logSet(may, 110, 5);
+        HistoryDevice device = new HistoryDevice(objectMapper);
+        device.apply(sync(Map.of()));
+
+        logSet(may, 115, 5);
+        JsonNode reply = scopedSync(device.have(), List.of(may), List.of(device.startedAtOf(may)));
+
+        assertEquals(List.of("2026-05"), strings(reply.get("scope")));
+        assertEquals(List.of("2026-05"), months(reply));
+        assertEquals(List.of("2026-05"), fieldNames(reply.get("changed")));
+        device.apply(reply);
+        assertEquals(history(), device.flatten(), "March kept as held, May replaced: exactly GET /history");
+    }
+
+    // The case a scope built only from what the device holds gets wrong. Another device moves the
+    // workout from May to March; this device, still holding it in May, writes to it. Reloading May
+    // alone would leave May correctly empty and the workout NOWHERE on this device. The server adds
+    // the month the workout is in now, so both are reloaded.
+    @Test
+    void aWorkoutMovedElsewhereIsFoundInItsNewMonthAfterAScopedSync() throws Exception {
+        logSet(createPastSession("2026-03-10T10:00:00Z"), 100, 5);
+        long moved = createPastSession("2026-05-10T10:00:00Z");
+        logSet(moved, 110, 5);
+        HistoryDevice device = new HistoryDevice(objectMapper);
+        device.apply(sync(Map.of()));
+        String heldStart = device.startedAtOf(moved);
+
+        mockMvc.perform(patch("/api/sessions/" + moved)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"startedAt\":\"2026-03-20T10:00:00Z\"}"))
+                .andExpect(status().isOk());
+        logSet(moved, 115, 5);
+        JsonNode reply = scopedSync(device.have(), List.of(moved), List.of(heldStart));
+
+        assertEquals(List.of("2026-05", "2026-03"), strings(reply.get("scope")));
+        device.apply(reply);
+        assertTrue(device.startedAtOf(moved) != null && device.startedAtOf(moved).startsWith("2026-03"),
+                "the workout is on the device, in its new month");
+        assertEquals(history(), device.flatten(), "and the device holds exactly GET /history");
+    }
+
+    // Tenancy: `sessions` is client-supplied. An id that is not this person's contributes no month --
+    // it cannot be used to pull, or even probe, someone else's History.
+    @Test
+    void aScopedSyncIgnoresAWorkoutThatIsNotThePersons() throws Exception {
+        logSet(createPastSession("2026-05-10T10:00:00Z"), 110, 5);
+        long sibling = objectMapper.readTree(mockMvc.perform(post("/api/people")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Sam\"}"))
+                .andReturn().getResponse().getContentAsString()).get("id").asLong();
+        String siblingWorkout = mockMvc.perform(post("/api/people/" + sibling + "/sessions")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"startedAt\":\"2026-01-10T10:00:00Z\"}"))
+                .andReturn().getResponse().getContentAsString();
+        long siblingSession = objectMapper.readTree(siblingWorkout).get("id").asLong();
+        JsonNode held = sync(Map.of());
+
+        JsonNode reply = scopedSync(held(held), List.of(siblingSession), List.of());
+
+        assertTrue(strings(reply.get("scope")).isEmpty(), "another person's workout scopes nothing");
+        assertTrue(reply.get("changed").isEmpty());
+    }
+
+    // An app from before scoped syncs never sends a scope, so it keeps getting the ordinary reply --
+    // and a new app talking to an old server gets no `scope` back and applies it as ordinary too.
+    @Test
+    void anUnscopedRequestGetsAnUnscopedReply() throws Exception {
+        logSet(createPastSession("2026-05-10T10:00:00Z"), 110, 5);
+        JsonNode first = sync(Map.of());
+
+        JsonNode reply = sync(held(first));
+
+        assertTrue(reply.get("scope") == null || reply.get("scope").isNull());
     }
 
     @Test
@@ -253,6 +338,25 @@ class HistorySyncTest extends AbstractIntegrationTest {
                         .content(objectMapper.writeValueAsString(Map.of("have", have))))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response);
+    }
+
+    private JsonNode scopedSync(Map<String, String> have, List<Long> sessions, List<String> at) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("have", have);
+        body.put("sessions", sessions);
+        body.put("at", at);
+        String response = mockMvc.perform(post("/api/people/" + personId + "/history/sync")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(response);
+    }
+
+    private static List<String> strings(JsonNode array) {
+        List<String> values = new ArrayList<>();
+        if (array != null) array.forEach(value -> values.add(value.asText()));
+        return values;
     }
 
     // What a client holds after a reply: the fingerprint of every month it was sent.

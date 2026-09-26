@@ -64,6 +64,71 @@ describe('getHistory', () => {
     expect(result.fullSyncedAt).toBe(cached.fullSyncedAt);
   });
 
+  // ── Scoped syncs: after a write on this device, only the touched workout's months ────────────
+
+  const scopedReply = (scope, months, changed = {}) =>
+    new Response(JSON.stringify({ months, changed, scope }), { status: 200, headers: { 'content-type': 'application/json' } });
+  const sentBody = (call) => JSON.parse(global.fetch.mock.calls[call][1].body);
+
+  it('sends the scope beside everything it holds, and changes only the months the reply scopes', async () => {
+    const june = { fp: 'a', sessions: [session(2, '2026-06', 5)] };
+    const march = { fp: 'c', sessions: [session(1, '2026-03', 5)] };
+    const held = synced({ '2026-06': june, '2026-03': march });
+    global.fetch.mockResolvedValueOnce(scopedReply(['2026-06'], ['2026-06'], {
+      '2026-06': { fp: 'a2', sessions: [session(2, '2026-06', 8)] },
+    }));
+
+    const result = await getHistory(7, {
+      readCached: () => held,
+      scope: { sessions: [2], at: ['2026-06-12T12:00:00Z'] },
+    });
+
+    expect(sentBody(0)).toEqual({ have: { '2026-06': 'a', '2026-03': 'c' }, sessions: [2], at: ['2026-06-12T12:00:00Z'] });
+    expect(result.months['2026-06'].fp).toBe('a2');
+    // Outside the scope: exactly what was held -- the same object, not a copy.
+    expect(result.months['2026-03']).toBe(march);
+    expect(result.fullSyncedAt).toBe(held.fullSyncedAt);
+  });
+
+  it('drops a scoped month the reply no longer lists, and only that one', async () => {
+    const may = { fp: 'b', sessions: [session(1, '2026-05', 5)] };
+    const march = { fp: 'c', sessions: [session(3, '2026-03', 5)] };
+    global.fetch.mockResolvedValueOnce(scopedReply(['2026-05', '2026-03'], ['2026-03'], {
+      '2026-03': { fp: 'c2', sessions: [session(3, '2026-03', 5), session(1, '2026-03', 5)] },
+    }));
+
+    const result = await getHistory(7, {
+      readCached: () => synced({ '2026-05': may, '2026-03': march }),
+      scope: { sessions: [1], at: ['2026-05-11T12:00:00Z'] },
+    });
+
+    // A workout moved from May to March elsewhere: May is gone, March holds it.
+    expect(Object.keys(result.months)).toEqual(['2026-03']);
+    expect(result.months['2026-03'].fp).toBe('c2');
+  });
+
+  it('ignores the scope when it holds nothing, so a new device still gets everything', async () => {
+    global.fetch.mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [session(2, '2026-06', 5)] } }));
+
+    await getHistory(7, { readCached: () => undefined, scope: { sessions: [2], at: [] } });
+
+    expect(sentBody(0)).toEqual({ have: {} });
+  });
+
+  it('applies an unscoped reply as the complete list even when it asked for a scope', async () => {
+    // A server that predates scoped syncs answers without `scope`: that is an ordinary reply, and a
+    // held month it does not list is gone.
+    const june = { fp: 'a', sessions: [session(2, '2026-06', 5)] };
+    global.fetch.mockResolvedValueOnce(reply(['2026-06']));
+
+    const result = await getHistory(7, {
+      readCached: () => synced({ '2026-06': june, '2026-03': { fp: 'c', sessions: [] } }),
+      scope: { sessions: [2], at: [] },
+    });
+
+    expect(Object.keys(result.months)).toEqual(['2026-06']);
+  });
+
   it('drops a held month the server no longer lists', async () => {
     const cached = synced({
       '2026-06': { fp: 'a', sessions: [session(2, '2026-06', 5)] },

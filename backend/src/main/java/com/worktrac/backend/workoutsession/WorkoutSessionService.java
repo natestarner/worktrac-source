@@ -186,6 +186,12 @@ public class WorkoutSessionService {
     // refetch after a write on another person.
     @Transactional(readOnly = true)
     public HistorySyncDto syncHistory(AccountAccess access, Long personId, Map<String, String> have) {
+        return syncHistory(access, personId, have, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public HistorySyncDto syncHistory(AccountAccess access, Long personId, Map<String, String> have,
+                                      List<Long> sessions, List<Instant> at) {
         Map<String, String> held = have == null ? Map.of() : have;
         SyncTiming timing = new SyncTiming(personId, held.size());
         Person person = personService.requireVisiblePerson(personId, access);
@@ -206,6 +212,45 @@ public class WorkoutSessionService {
             all.forEach((month, m) -> changed.put(month, new HistoryMonthDto(m.fingerprint(), m.sessions())));
             timing.done();
             return new HistorySyncDto(List.copyOf(all.keySet()), changed);
+        }
+
+        // A SCOPED sync: after a write on this device, only the months of the workouts it touched. No
+        // all-months fingerprint query and no re-check: the scoped months are simply loaded -- one
+        // small statement, one snapshot -- and each is sent if its fingerprint (derived from its own
+        // rows) differs from the one held. A scoped month with no visible workouts left is not
+        // listed, so the device drops it. Every other month the device holds is left alone and is
+        // re-verified by the next ordinary sync (app open, refocus, the periodic warm, the daily
+        // full sync): a change made ELSEWHERE in another month reaches this device then rather than
+        // now. That delay is the accepted cost (docs/architecture/history-sync.md, "Scoped syncs").
+        //
+        // The scope is every month the device HOLDS a touched workout in (`at`) plus every month those
+        // workouts are in NOW (`sessions`, looked up here). They differ when a workout was moved to
+        // another date elsewhere: reloading only the held month would drop it from the device, only
+        // the current one would show it twice. The months are worked out HERE -- `at` in UTC, the same
+        // month CONVERT(CHAR(7), started_at, 126) gives since started_at is stored in UTC, and the
+        // current ones by that CONVERT itself. The client never computes one.
+        boolean scoped = (at != null && !at.isEmpty()) || (sessions != null && !sessions.isEmpty());
+        if (scoped) {
+            TreeSet<YearMonth> scope = new TreeSet<>(Comparator.reverseOrder());
+            if (at != null) {
+                for (Instant instant : at) {
+                    scope.add(YearMonth.from(instant.atOffset(ZoneOffset.UTC)));
+                }
+            }
+            if (sessions != null && !sessions.isEmpty()) {
+                scope.addAll(historyMonths.monthsOf(person.getId(), sessions));
+            }
+            Map<String, HistoryMonths.Month> loaded = historyMonths.loadMonths(person.getId(), floor, scope);
+            timing.loaded(loaded.size());
+            Map<String, HistoryMonthDto> changed = new LinkedHashMap<>();
+            loaded.forEach((month, m) -> {
+                if (!m.fingerprint().equals(held.get(month))) {
+                    changed.put(month, new HistoryMonthDto(m.fingerprint(), m.sessions()));
+                }
+            });
+            timing.done();
+            return new HistorySyncDto(List.copyOf(loaded.keySet()), changed,
+                    scope.stream().map(YearMonth::toString).toList());
         }
 
         Map<String, String> current = historyFingerprints.forPerson(person.getId(), floor);
