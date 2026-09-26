@@ -1547,29 +1547,27 @@ input[type='search']::-webkit-search-results-decoration {
   animation: refreshSweep 1.1s linear infinite;
 }
 
-/* The installed app's pull to refresh on History (PullToRefresh.jsx): a label just under the sticky
-   chrome while a finger pulls down from the top. Fixed, so it never moves the list it sits over, and
-   click-through, since the finger that summoned it is still on the screen. `data-ready` is the
-   point where letting go refreshes; the accent says so without the text having to be read. */
+/* The installed app's pull to refresh on History (PullToRefresh.jsx). A gap that opens at the top of
+   the tab as the finger pulls, with the label in it, so the list follows the finger the way a native
+   pull does; it closes again on release. In flow ON PURPOSE, unlike RefreshIndicator: that one
+   reports a background refresh nobody asked to watch, where moving the content would be the bug;
+   here the person is dragging the content and expects it to move. Not fixed under the chrome either:
+   at the top of the page the header is taller than --sticky-chrome-clearance (which is sized for the
+   scrolled, sticky state), so a fixed label sat on the tab bar. `data-ready` is the point where
+   letting go refreshes; the accent says so without the text having to be read. */
 .pull-to-refresh {
-  position: fixed;
-  top: calc(var(--sticky-chrome-clearance) + var(--space-2));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: var(--z-header-menu);
-  padding: var(--space-2) var(--space-4);
-  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   color: var(--color-muted);
   font-size: var(--text-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  box-shadow: var(--shadow-2), var(--elevation-hairline);
   white-space: nowrap;
   pointer-events: none;
 }
 .pull-to-refresh[data-ready] {
   color: var(--color-accent-text);
-  border-color: var(--color-accent);
+  font-weight: var(--weight-semibold);
 }
 
 /* Two-column layout for the exercise-logging screen: header/cards/input on the left,

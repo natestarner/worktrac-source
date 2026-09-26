@@ -3,6 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 // How far a finger must pull down from the top of History before letting go re-downloads it.
 export const PULL_THRESHOLD_PX = 80;
 
+// The gap the pull opens: half the finger's travel, as a native pull resists, up to a cap.
+const gapFor = (pull) => Math.min(Math.round(pull / 2), 64);
+
 // The pull to refresh the INSTALLED app lacks (lib/historyReload.js has the whole story). A browser
 // tab already has one -- a mobile browser's own pull down reloads the page, and a reload on History
 // re-downloads it -- so this listens only in the installed app, where two would fire at once.
@@ -82,7 +85,7 @@ export default function PullToRefresh({ targetRef, onRefresh, enabled = isInstal
   // aria-hidden: a gesture's progress, useless to anyone not making it. The refresh itself is
   // announced by RefreshIndicator, and HistoryTab offers the same refresh as a control.
   return (
-    <div className="pull-to-refresh" aria-hidden="true" data-ready={ready || undefined}>
+    <div className="pull-to-refresh" aria-hidden="true" data-ready={ready || undefined} style={{ height: gapFor(pull) }}>
       {ready ? 'Release to refresh History' : 'Pull to refresh History'}
     </div>
   );

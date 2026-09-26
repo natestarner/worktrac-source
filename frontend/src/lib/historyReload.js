@@ -15,20 +15,14 @@
 // document was LOADED at, so this is right whenever it is asked: History's chunk may load long after a
 // reload of another tab, by which time location.pathname is /app/history for an ordinary tab switch.
 export function isHistoryReload(entry) {
-  if (!entry || entry.type !== 'reload') return false;
-  try {
-    return /^\/app\/history\/?$/.test(new URL(entry.name).pathname);
-  } catch {
-    return false;
-  }
+  return entry?.type === 'reload' && HISTORY_URL.test(String(entry.name));
 }
 
+// scheme://host/app/history, optionally with a trailing slash, a query or a hash.
+const HISTORY_URL = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\/app\/history\/?(?:[?#]|$)/i;
+
 function navigationEntry() {
-  try {
-    return performance.getEntriesByType('navigation')[0];
-  } catch {
-    return undefined;
-  }
+  return globalThis.performance?.getEntriesByType?.('navigation')?.[0];
 }
 
 let taken = false;
