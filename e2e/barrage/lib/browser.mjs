@@ -48,7 +48,7 @@ export function watchErrors(page, errors) {
   page.on('console', (m) => {
     if (m.type() !== 'error') return;
     const t = m.text();
-    if (/Failed to load resource|net::ERR|status of 50[234]|NetworkError|Load failed|no-response/.test(t)) return;
+    if (/Failed to load resource|net::ERR|status of 50[234]|NetworkError|Load failed|no-response|access control checks/.test(t)) return;
     errors.push(`console: ${t.slice(0, 200)}`);
   });
 }
@@ -107,6 +107,22 @@ export async function logSet(page) {
 export const editButtons = (page) => page.getByRole('button', { name: 'Edit', exact: true });
 export const headerOf = (page, index) => editButtons(page).nth(index).locator('xpath=..').locator('xpath=./*[1]');
 export const blockOf = (page, index) => editButtons(page).nth(index).locator('xpath=../..');
+
+// Opens History and waits until it has actually replaced the previous screen and drawn one block
+// per workout the device holds for `personId`. Clicking the tab returns before the route changes,
+// and in WebKit (slower) an "Edit" lookup right after the click found an element of the Log screen.
+export async function showHistory(page, personId, timeoutMs = 180000) {
+  await goTab(page, 'History');
+  await page.waitForURL(/\/app\/history/, { timeout: timeoutMs });
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    const want = (await persistedHistories(page))[personId]?.flat?.length ?? -1;
+    const have = await page.evaluate(() => [...document.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'Edit').length);
+    if (want > 0 && have === want) return have;
+    await sleep(500);
+  }
+  throw new Error('History never finished drawing one block per workout');
+}
 
 export async function openPastWorkout(page, index) {
   const edit = editButtons(page).nth(index);

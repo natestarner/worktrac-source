@@ -4,7 +4,7 @@
 // equals GET /history.
 import path from 'node:path';
 import { ENGINE_TIMEOUTS, blockOf, converge, dismiss, editButtons, goTab, headerOf, logSet, login, openPastWorkout,
-  openProfile, persistedHistories, pinOfflineAcrossReload, queuedWrites, readQueryCache, toExercise, traceSyncs,
+  openProfile, persistedHistories, showHistory, pinOfflineAcrossReload, queuedWrites, readQueryCache, toExercise, traceSyncs,
   waitSynced, watchErrors, writeQueryCache } from '../lib/browser.mjs';
 import { log, sleep } from '../lib/config.mjs';
 
@@ -61,8 +61,8 @@ async function liveSet(page, api, cleanup, personId) {
   throw new Error('today\'s workout never reached the device\'s History');
 }
 
-async function addSetsToPast(page, index, n) {
-  await goTab(page, 'History');
+async function addSetsToPast(page, index, n, personId) {
+  await showHistory(page, personId);
   await openPastWorkout(page, index);
   await toExercise(page, 'Barbell Row');
   for (let i = 0; i < n; i += 1) await logSet(page);
@@ -96,7 +96,7 @@ export async function browserMatrix(ctx) {
       cleanup.touch(past.session.id);
       if (delay) await delaySyncs(c, delay);
       await c.setOffline(true);
-      await addSetsToPast(page, past.index, 1);
+      await addSetsToPast(page, past.index, 1, P);
       await addLiveSets(page, 1);
       await c.setOffline(false);
       return [['a set in last month\'s workout and one in today\'s, drained together, both reach History', await converge(page, api, await everyone(), T.converge)]];
@@ -108,7 +108,7 @@ export async function browserMatrix(ctx) {
     const targets = [];
     for (const n of [1, 2, 3]) { const t = await pickIn(page, P, monthsBack(n)); cleanup.touch(t.session.id); targets.push(t); }
     await c.setOffline(true);
-    for (const t of targets) await addSetsToPast(page, t.index, 2);
+    for (const t of targets) await addSetsToPast(page, t.index, 2, P);
     await addLiveSets(page, 4);
     await c.setOffline(false);
     return [['10 writes across 4 months, drained at once (past the scope bound of 8)', await converge(page, api, await everyone(), T.converge)]];
@@ -120,8 +120,8 @@ export async function browserMatrix(ctx) {
     const b = await pickIn(page, P, monthsBack(2));
     cleanup.touch(a.session.id); cleanup.touch(b.session.id);
     await c.setOffline(true);
-    await addSetsToPast(page, a.index, 2);
-    await addSetsToPast(page, b.index, 2);
+    await addSetsToPast(page, a.index, 2, P);
+    await addSetsToPast(page, b.index, 2, P);
     await addLiveSets(page, 1);
     await sleep(2500);
     const reopened = await c.newPage();
@@ -140,7 +140,7 @@ export async function browserMatrix(ctx) {
     const count = async () => (await api.setsOf(a.session.id, rowId)).length;
     const before = await count();
     await c.setOffline(true);
-    await addSetsToPast(page, a.index, 2);
+    await addSetsToPast(page, a.index, 2, P);
     await addLiveSets(page, 1);
     await sleep(1500);
     // The next two uploads REACH the server and commit; their responses never reach the app.
@@ -169,7 +169,8 @@ export async function browserMatrix(ctx) {
     ];
   });
 
-  await scenario(ctx, 'two-tabs', async ({ ctx: c, page }) => {
+  if (ctx.engine === 'webkit') report.record(`browser:${ctx.engine}`, 'two-tabs', 'skip', 'needs a navigation while offline, which Playwright\'s WebKit cannot do (see cold-boot-offline)');
+  else await scenario(ctx, 'two-tabs', async ({ ctx: c, page }) => {
     const a = await pickIn(page, P, monthsBack(1));
     cleanup.touch(a.session.id);
     const offlineTab = await c.newPage();
@@ -178,7 +179,7 @@ export async function browserMatrix(ctx) {
     await page.close();
     await offlineTab.goto(`${ctx.target.app}/app/history`);
     await offlineTab.getByText(/×/).first().waitFor();
-    await addSetsToPast(offlineTab, a.index, 2);
+    await addSetsToPast(offlineTab, a.index, 2, P);
     await sleep(2500);
     await c.setOffline(false);
     const online = await c.newPage();
@@ -319,8 +320,7 @@ export async function browserMatrix(ctx) {
   });
 
   await scenario(ctx, 'long-jump', async ({ page }) => {
-    await goTab(page, 'History');
-    await editButtons(page).first().waitFor();
+    await showHistory(page, P);
     const list = await held(page, P);
     const target = list.findIndex((s) => s.startedAt.slice(0, 7) === monthsBack(24) && s.endedAt !== null);
     if (target < 0) throw new Error(`no workout two years back (${monthsBack(24)}) to jump to`);

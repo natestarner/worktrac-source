@@ -4,7 +4,12 @@
 import { spawnSync } from 'node:child_process';
 import { LOWER, log, sleep } from './config.mjs';
 
+// On Windows gh/az are .cmd shims, so they run through cmd.exe, which would read the `&` in a URL or
+// the parentheses in `length(@)` as its own syntax. Quote any argument holding one.
+const quoteForCmd = (a) => (/[\s&|<>^()"%]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
+
 function run(cmd, args, { timeoutMs = 120000 } = {}) {
+  if (process.platform === 'win32') args = args.map(quoteForCmd);
   const r = spawnSync(cmd, args, { encoding: 'utf8', shell: process.platform === 'win32', timeout: timeoutMs, env: { ...process.env, MSYS_NO_PATHCONV: '1' } });
   if (r.status !== 0) return null;
   return r.stdout.trim();
@@ -15,8 +20,6 @@ function json(cmd, args, options) {
   if (out == null || out === '') return null;
   try { return JSON.parse(out); } catch { return null; }
 }
-
-const q = (s) => (process.platform === 'win32' ? `"${s.replace(/"/g, '\\"')}"` : s);
 
 let owner;
 export function repoOwner() {
@@ -91,7 +94,7 @@ export function replicaCount() {
 
 // Rows of a KQL query against the logs workspace, as arrays.
 export function kql(query) {
-  const data = json('az', ['monitor', 'log-analytics', 'query', '--workspace', LOWER.logWorkspace, '--analytics-query', q(query), '-o', 'json'], { timeoutMs: 180000 });
+  const data = json('az', ['monitor', 'log-analytics', 'query', '--workspace', LOWER.logWorkspace, '--analytics-query', query, '-o', 'json'], { timeoutMs: 180000 });
   return data ?? null;
 }
 

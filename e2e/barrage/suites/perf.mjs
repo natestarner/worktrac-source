@@ -18,6 +18,9 @@ async function oneRun(ctx) {
   const browser = await playwright.chromium.launch();
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const page = await context.newPage();
+  // At 4x CPU throttle, leaving a five-year History for another tab alone takes ~40s (it tears down
+  // ~200k elements) -- the default 30s would time the run out, not measure it.
+  page.setDefaultTimeout(240000);
   const cdp = await context.newCDPSession(page);
   await cdp.send('Performance.enable');
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
