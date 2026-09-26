@@ -108,6 +108,45 @@ export async function rewritePersistedHistoryAsOldFormat(page: Page, marker: obj
   expect(rewritten, 'a synced History entry to rewrite').toBeGreaterThan(0);
 }
 
+// Plants DRIFT: every persisted month keeps its fingerprint while every set in it gets `reps` -- the
+// state the History sync must never reach (a fingerprint that matches the server's over content that
+// doesn't), which nothing but the rolling check can ever notice. Clears `checked`, so each month is
+// due. Returns the months changed. Call it with nothing running that could persist over it, like
+// rewritePersistedHistoryAsOldFormat.
+export async function plantDriftInPersistedHistory(page: Page, reps: number): Promise<string[]> {
+  const months = await page.evaluate(
+    (newReps) =>
+      new Promise<string[]>((resolve, reject) => {
+        const open = indexedDB.open('keyval-store');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const store = open.result.transaction('keyval', 'readwrite').objectStore('keyval');
+          const get = store.get('worktrac-query-cache');
+          get.onerror = () => reject(get.error);
+          get.onsuccess = () => {
+            const persisted = JSON.parse(get.result);
+            const touched: string[] = [];
+            for (const query of persisted.clientState.queries) {
+              if (query.queryKey[0] !== 'history' || !query.state?.data?.months) continue;
+              const data = query.state.data;
+              for (const [month, held] of Object.entries(data.months as Record<string, { sessions: { entries: { sets: { reps: number }[] }[] }[] }>)) {
+                for (const s of held.sessions) for (const e of s.entries) for (const set of e.sets) set.reps = newReps;
+                touched.push(month);
+              }
+              data.checked = {};
+            }
+            const put = store.put(JSON.stringify(persisted), 'worktrac-query-cache');
+            put.onerror = () => reject(put.error);
+            put.onsuccess = () => resolve(touched);
+          };
+        };
+      }),
+    reps,
+  );
+  expect(months.length, 'a synced History month to plant drift in').toBeGreaterThan(0);
+  return months;
+}
+
 // A workout only an old-format cache could contain -- see rewritePersistedHistoryAsOldFormat.
 export const LEGACY_MARKER_WORKOUT = {
   id: 987654321,

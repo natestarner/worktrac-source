@@ -210,7 +210,7 @@ public class WorkoutSessionService {
         Instant floor = subscriptionService.historyFloor(access.accountId());
         timing.prepared();
 
-        // A device holding nothing -- a new device, a fresh sign-in, the daily full sync -- gets every
+        // A device holding nothing -- a new device, a fresh sign-in, an explicit refresh -- gets every
         // month straight from the load, with no fingerprint query before it and no re-check after.
         // Every month differs from "nothing", so the first query could not change what is loaded;
         // and the re-check exists only to protect months the device KEEPS, of which there are none.
@@ -231,8 +231,8 @@ public class WorkoutSessionService {
         // small statement, one snapshot -- and each is sent if its fingerprint (derived from its own
         // rows) differs from the one held. A scoped month with no visible workouts left is not
         // listed, so the device drops it. Every other month the device holds is left alone and is
-        // re-verified by the next ordinary sync (app open, refocus, the periodic warm, the daily
-        // full sync): a change made ELSEWHERE in another month reaches this device then rather than
+        // re-verified by the next ordinary sync (app open, refocus, the periodic warm, History opening
+        // stale): a change made ELSEWHERE in another month reaches this device then rather than
         // now. That delay is the accepted cost (docs/architecture/history-sync.md, "Scoped syncs").
         //
         // The scope is every month the device HOLDS a touched workout in (`at`) plus every month those
@@ -396,11 +396,11 @@ public class WorkoutSessionService {
 
     // The production canary for the one failure the History sync must never have: a device holding a
     // month whose fingerprint matches the server's while its content does not. The sync would call that
-    // month unchanged forever -- only the daily full sync re-reads it, and that is where the device
-    // compares and reports. HistoryFingerprintTest, HistoryConvergenceTest and HistoryConcurrencyTest
+    // month unchanged forever -- only the rolling check (`audit`) re-reads it, and that is where the
+    // device compares and reports. HistoryFingerprintTest, HistoryConvergenceTest and HistoryConcurrencyTest
     // exist so this never fires; this line is how we would know if one of them missed something.
     //
-    // Nothing to fix here -- the full sync has already replaced the month on the device. It is a WARN
+    // Nothing to fix here -- the audited month has already replaced the device's copy. It is a WARN
     // so it stands out in the logs (docs/architecture/history-sync.md has the query), and it carries
     // month ids only, never workout content.
     @Transactional(readOnly = true)

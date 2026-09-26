@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { loginAs, registerHousehold } from './support/auth';
 import { pickExercise, logSetAt } from './support/exercises';
 import { API_ONLY, failNetwork } from './support/faults';
-import { LEGACY_MARKER_WORKOUT, rewritePersistedHistoryAsOldFormat, watchSync } from './support/historyConvergence';
+import { LEGACY_MARKER_WORKOUT, plantDriftInPersistedHistory, rewritePersistedHistoryAsOldFormat, watchSync } from './support/historyConvergence';
 
 // History is synced a month at a time (lib/historySync.js, WorkoutSessionService#syncHistory): the
 // device sends the fingerprint of every month it holds and gets back only the months that changed.
@@ -118,6 +118,34 @@ test('History cached by a build from before the sync still shows while unreachab
   await page.reload();
   await expect(page.getByText(/135\s?lb\s?×\s?5/).first()).toBeVisible();
   await expect(page.getByText('Legacy Marker Press')).toHaveCount(0);
+});
+
+// THE ROLLING CHECK (lib/historySync.js#auditFor). There is no periodic full download: a month whose
+// fingerprint matches the server's is trusted, so if one ever matched over DIFFERENT content --
+// a fingerprint bug, a merge bug -- nothing but re-reading that month could notice. Each ordinary sync
+// re-reads the month checked longest ago in full, replaces the device's copy, and reports the drift
+// (month ids only) to the production canary.
+//
+// Not vacuous: the planted copy keeps the server's fingerprint, so an ordinary sync without the
+// check calls it unchanged and the wrong reps stay forever. Seeing them GONE is the check.
+test('a month whose fingerprint matches but whose content does not is re-read, replaced and reported', async ({ page, request }) => {
+  const sync = await watchSync(page);
+  await registerHousehold(page, request, 'Nate');
+  await pickExercise(page, 'Barbell Bench Press');
+  const mark = await sync.mark();
+  await logSetAt(page, 135, 5);
+  await page.getByRole('link', { name: 'History' }).click();
+  await expect(page.getByText(/135\s?lb\s?×\s?5/).first()).toBeVisible();
+  await sync.persistedSince(mark);
+
+  await page.goto('/boot-watchdog.js');
+  const planted = await plantDriftInPersistedHistory(page, 9);
+
+  const drift = page.waitForRequest((r) => /\/api\/people\/\d+\/history\/drift$/.test(new URL(r.url()).pathname));
+  await page.goto('/app/history');
+  await expect(page.getByText(/135\s?lb\s?×\s?5/).first()).toBeVisible();
+  await expect(page.getByText(/135\s?lb\s?×\s?9/)).toHaveCount(0);
+  expect((await drift).postDataJSON()).toEqual({ months: [planted[0]] });
 });
 
 // A sign-in holds no History, so its first sync is a FULL one -- the most expensive request the app

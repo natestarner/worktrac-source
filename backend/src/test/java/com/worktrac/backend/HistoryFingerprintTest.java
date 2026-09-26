@@ -56,7 +56,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 // The History sync trusts a month the client already holds for as long as its fingerprint is
 // unchanged. So the one failure that matters here is a change that does NOT move the fingerprint:
-// the device would keep showing the old month, with nothing to correct it until the daily full sync.
+// the device would keep showing the old month until the rolling check next re-read it.
 //
 // Every write a person can make is driven through the real API below, and each test asserts both
 // halves: the month it touched changed, and the months it did not touch did not (a fingerprint that
