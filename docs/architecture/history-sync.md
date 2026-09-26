@@ -202,6 +202,9 @@ refresh ordinary.
 - `queryClient.test.js` ("the scope a cancelled refresh was owed") pins the debt. It covers a cancelled
   refresh, a failed one, two refreshes in one tick, an owed ordinary refresh, and the bound. All five
   fail against the refresh that captured its own scope.
+- `history-refresh-owed-scope.spec.ts` drives the real trigger: a set added offline to a workout
+  40 days back and one to today's, drained together on reconnect with each sync answered 2s late.
+  The app's persisted History must then equal the server's. It fails without the debt.
 
 ## How the property is tested
 
