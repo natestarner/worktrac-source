@@ -119,3 +119,17 @@ test('History cached by a build from before the sync still shows while unreachab
   await expect(page.getByText(/135\s?lb\s?×\s?5/).first()).toBeVisible();
   await expect(page.getByText('Legacy Marker Press')).toHaveCount(0);
 });
+
+// A sign-in holds no History, so its first sync is a FULL one -- the most expensive request the app
+// makes. It must be sent once. The boot warm used to replace a sync already in flight with its own,
+// and the server finishes an abandoned request anyway, so a fresh sign-in paid for two.
+test('a fresh sign-in downloads History once', async ({ page, request }) => {
+  const sync = await watchSync(page);
+  await registerHousehold(page, request, 'Once');
+  await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+  const fresh = { started: 0, calls: 0 };
+  await expect.poll(() => sync.settledSince(fresh)).toBe(true);
+  await page.waitForTimeout(3000); // anything still to come from the boot warm or a mounting screen
+  const full = (await sync.callsSince(fresh)).filter((c) => c.held.length === 0);
+  expect(full).toHaveLength(1);
+});

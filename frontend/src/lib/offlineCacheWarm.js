@@ -3,8 +3,8 @@ import { queryKeys } from '../api/queryKeys';
 import { listExercises, listPersonExercises } from '../api/exercises';
 import { listTags } from '../api/tags';
 import { listRoutines } from '../api/routines';
-import { getLiveSession, getHistoryWindow } from '../api/sessions';
-import { refreshHistory } from './queryClient';
+import { getLiveSession, getHistory, getHistoryWindow } from '../api/sessions';
+import { refreshHistory, scopedHistoryRefreshInFlight } from './queryClient';
 import { getPrs } from '../api/stats';
 import { listRoster } from '../api/roster';
 
@@ -164,10 +164,23 @@ export async function warmOfflineCache(
       // one month back instead, and another device's change to any other month stayed hidden until
       // the next ordinary sync. refreshHistory cancels that fetch and sends an ordinary sync that
       // also carries its scope. Same freshness rule as the prefetch it replaces.
+      //
+      // The mirror case JOINS: an ordinary sync already in flight -- a screen's own fetch on mount, an
+      // earlier warm -- is exactly what the warm wants. Replacing it instead made a fresh sign-in
+      // download the whole History twice, since the server finishes an abandoned request anyway.
       if (historyOf != null) {
         const state = queryClient.getQueryState(target.queryKey);
         const fresh = state?.data !== undefined && !state.isInvalidated && Date.now() - state.dataUpdatedAt < staleTime;
-        return fresh ? undefined : refreshHistory(queryClient, historyOf);
+        if (fresh) return undefined;
+        const inFlight = (state?.fetchStatus ?? 'idle') !== 'idle';
+        if (inFlight && !scopedHistoryRefreshInFlight(queryClient, historyOf)) {
+          return queryClient.prefetchQuery({
+            queryKey: target.queryKey,
+            queryFn: () => getHistory(historyOf, { readCached: () => queryClient.getQueryData(target.queryKey) }),
+            staleTime,
+          });
+        }
+        return refreshHistory(queryClient, historyOf);
       }
       return queryClient.prefetchQuery({ ...target, staleTime });
     }),

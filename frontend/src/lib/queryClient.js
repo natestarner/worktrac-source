@@ -454,6 +454,14 @@ export function refreshHistory(client, personId, scope = null) {
     .catch(() => {});
 }
 
+// Whether the History fetch in flight is a SCOPED one refreshHistory started -- the only kind an
+// ordinary sync (offlineCacheWarm) must replace rather than join. Anything else in flight is already
+// an ordinary sync.
+export function scopedHistoryRefreshInFlight(client, personId) {
+  const paying = historyRefreshState(client).inFlight.get(personId);
+  return paying != null && paying.scope != null;
+}
+
 // HistorySyncRequest bounds `sessions` and `at` to 8 each; a union past that is an ordinary sync.
 const HISTORY_SCOPE_MAX = 8;
 

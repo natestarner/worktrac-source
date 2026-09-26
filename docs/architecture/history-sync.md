@@ -201,6 +201,21 @@ moment, in one of two orders:
 Either way that month stayed stale until the next ordinary sync. Now `refreshHistory` knows which
 fetch is its own (`inFlight`). Cancelling any other fetch, in flight or paused offline, makes the
 refresh ordinary, and the warm refreshes History through `refreshHistory` rather than a prefetch.
+The warm still **joins** an ordinary sync already in flight (a screen's own fetch, or an earlier
+warm). Only a scoped one is replaced, because the server finishes a request the app abandons: a
+fresh sign-in otherwise downloaded the whole History twice.
+
+**Requests per everyday flow**, measured with the same flows on each build (every request sent
+counts, including one the app later abandons):
+
+| Flow | Before the overhaul | Now |
+|---|---|---|
+| Sign in on a new device | 1 full download | 1 full sync |
+| Reopen the app | 1 full download | 1 fingerprint check |
+| Each logged set | 1 full download | 1 scoped sync (that month) |
+| Back to the session list | 1 full download | 1 fingerprint check |
+| Reopen with sets queued offline | 2 full downloads | 2 fingerprint checks |
+| End workout | none | 1 fingerprint check |
 
 **Tested:**
 - `HistoryConvergenceTest` has a sixth device that scoped-syncs after every write it makes and
