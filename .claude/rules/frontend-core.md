@@ -377,6 +377,13 @@ each held month's fingerprint and keeps every month the server does not resend
   every other month the device holds, and `sessions.test.js` fails if it does. A change made on
   another device in another month then arrives at the next ordinary sync, which is the accepted cost
   (`docs/architecture/history-sync.md`, "Scoped syncs").
+- **⚠️ A scope is owed until a refresh completes.** `refreshHistory` cancels the fetch before it, so
+  each refresh sends the union of every scope not yet paid, read when the request goes out. Without
+  that, an edit in an August workout followed a moment later by a set in September's (or both
+  draining from the outbox together) left August showing the old set, marked fresh, until the next
+  ordinary sync. An owed ordinary refresh, or a union past the server's bound of 8, makes the refresh
+  ordinary. Don't "simplify" the debt away or capture the scope when the refresh is asked for; the
+  `the scope a cancelled refresh was owed` tests fail if you do.
 - **A write that changes EVERY person's History uses `refreshHistoryForEveryone`** — an exercise
   rename (History carries names; `LogTab.refreshPersonalization` is the live rename path) and a plan
   change (`BillingTab`, with `historyWindowForEveryone()`). Cheap: an unchanged month costs a

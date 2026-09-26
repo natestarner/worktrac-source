@@ -179,6 +179,17 @@ or wrong in the meantime, only later. Real-time cross-device updates, if ever wa
 from a push that only says *"History changed, sync now"* (Server-Sent Events), never from a second
 data path.
 
+**A scope is owed until a refresh completes.** `refreshHistory` cancels the fetch before it, so as
+first shipped, a second write replaced the first write's scoped sync with its own. Edit a set in an
+August workout, log one in today's September workout a moment later (or let both drain from the
+outbox together), and August kept the old set, with the query marked fresh so nothing refetched it,
+until the next ordinary sync. That broke the promise above that *this* device's own writes are always
+current, and it was found in review before production. Now each refresh adds its scope to a per-person
+debt, and the request sends the whole debt, read when it goes out rather than when it was asked for
+(two refreshes in one tick share one request). The debt is cleared only when a request that carried it
+succeeds. An owed ordinary refresh, or a union past `HistorySyncRequest`'s bound of 8, makes the next
+refresh ordinary.
+
 **Tested:**
 - `HistoryConvergenceTest` has a sixth device that scoped-syncs after every write it makes and
   ordinary-syncs every 5–15 writes. After each scoped sync, every scoped month must equal
@@ -188,6 +199,9 @@ data path.
   lookup removed.
 - `sessions.test.js` pins that out-of-scope months survive by identity. It fails if a scoped reply
   is merged as an ordinary one.
+- `queryClient.test.js` ("the scope a cancelled refresh was owed") pins the debt. It covers a cancelled
+  refresh, a failed one, two refreshes in one tick, an owed ordinary refresh, and the bound. All five
+  fail against the refresh that captured its own scope.
 
 ## How the property is tested
 
