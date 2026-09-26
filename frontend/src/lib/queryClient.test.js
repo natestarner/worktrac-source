@@ -285,6 +285,7 @@ describe('registerOfflineMutationDefaults dispatches to the right endpoint', () 
     ['the overview', queryKeys.trendsOverview(7, 12)],
     ['an exercise trend', queryKeys.exerciseTrend(7, 3, 12)],
     ['the records table', queryKeys.exerciseRecords(7, 3)],
+    ['the PRs board', queryKeys.prs(7)],
   ])('refetches %s when a set lands during its first load, rather than keeping the pre-set answer', async (_, key) => {
     let answerFromBeforeTheSet;
     const queryFn = vi
@@ -301,6 +302,31 @@ describe('registerOfflineMutationDefaults dispatches to the right endpoint', () 
     await vi.waitFor(() => expect(client.getQueryData(key)).toEqual({ includesTheSet: true }));
     expect(queryFn).toHaveBeenCalledTimes(2);
     unsubscribe();
+  });
+
+  // The PRs board's usual first load has NO observer: it is offlineCacheWarm's prefetch, issued at
+  // boot. A set landing while that warm is in flight was marked stale, and then the warm's answer --
+  // from before the set -- arrived, cleared the stale flag and stamped itself fresh, so the PRs tab
+  // mounted onto it and showed "No PRs yet" (or a board without the set) for the full staleTime.
+  // Cancelling first drops the pre-set answer on the floor; the tab's mount then fetches for real.
+  it('never lets a PRs warm from before the set stand as fresh', async () => {
+    const key = queryKeys.prs(7);
+    let answerFromBeforeTheSet;
+    const warm = client
+      .prefetchQuery({
+        queryKey: key,
+        queryFn: () => new Promise((resolve) => { answerFromBeforeTheSet = resolve; }),
+      })
+      .catch(() => {});
+
+    await dispatch({ mode: 'live', personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k-warm', clientLoggedAt: 't' });
+    await vi.waitFor(() => expect(client.getQueryState(key).fetchStatus).toBe('idle'));
+    answerFromBeforeTheSet?.([]);
+    await warm;
+
+    // Whatever the cache holds now must not be the pre-set answer passing itself off as fresh.
+    const state = client.getQueryState(key);
+    expect(state.data === undefined || state.isInvalidated).toBe(true);
   });
 
   // The same rule, for the count of what the Free-tier window is hiding. It is derived from logged
