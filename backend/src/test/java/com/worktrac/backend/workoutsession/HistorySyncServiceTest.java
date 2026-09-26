@@ -63,17 +63,33 @@ class HistorySyncServiceTest {
         verify(historyMonths, never()).load(anyLong(), any(), any(), any());
     }
 
+    // A device holding nothing gets everything from ONE load -- no fingerprint query before it, no
+    // re-check after. Neither could change the answer: every month differs from nothing, and there is
+    // no kept month to protect. On lower those two queries were ~0.5s of a five-year full sync.
     @Test
-    void anEmptyHaveLoadsTheWholeRangeAndSendsEveryMonth() {
-        fingerprintsAre(map("2026-06", "a", "2026-03", "c"));
-        loads(Instant.parse("2026-03-01T00:00:00Z"), Instant.parse("2026-07-01T00:00:00Z"),
-                months("2026-06", "a", "2026-03", "c"));
+    void anEmptyHaveIsOneLoadOfEverythingAndNothingElse() {
+        loads(null, null, months("2026-06", "a", "2026-03", "c"));
 
-        HistorySyncDto reply = service.syncHistory(ACCESS, PERSON, null);
+        for (Map<String, String> nothing : java.util.Arrays.asList(null, Map.<String, String>of())) {
+            HistorySyncDto reply = service.syncHistory(ACCESS, PERSON, nothing);
 
-        assertEquals(List.of("2026-06", "2026-03"), reply.months());
-        assertEquals(List.of("2026-06", "2026-03"), List.copyOf(reply.changed().keySet()));
-        assertEquals("a", reply.changed().get("2026-06").fp());
+            assertEquals(List.of("2026-06", "2026-03"), reply.months());
+            assertEquals(List.of("2026-06", "2026-03"), List.copyOf(reply.changed().keySet()));
+            assertEquals("a", reply.changed().get("2026-06").fp());
+        }
+        verify(historyFingerprints, never()).forPerson(anyLong(), any());
+    }
+
+    // The re-check's refusal protects a month the device keeps. A full sync keeps none, so a month
+    // created mid-request cannot refuse it -- the load is one snapshot, and the month arrives next time.
+    @Test
+    void aFullSyncIsNeverRefused() {
+        loads(null, null, months("2026-06", "a"));
+        fingerprintsAre(map("2026-06", "a", "2026-02", "appeared-mid-request"));
+
+        HistorySyncDto reply = service.syncHistory(ACCESS, PERSON, Map.of());
+
+        assertEquals(List.of("2026-06"), reply.months());
     }
 
     @Test
@@ -168,6 +184,17 @@ class HistorySyncServiceTest {
         when(historyFingerprints.forPerson(PERSON, floor)).thenReturn(map("2026-06", "a"));
         when(historyMonths.load(PERSON, floor, Instant.parse("2026-06-01T00:00:00Z"),
                 Instant.parse("2026-07-01T00:00:00Z"))).thenReturn(months("2026-06", "a"));
+
+        HistorySyncDto reply = service.syncHistory(ACCESS, PERSON, map("2026-06", "old"));
+
+        assertEquals(List.of("2026-06"), reply.months());
+    }
+
+    @Test
+    void theFreeTierFloorReachesAFullSyncsLoad() {
+        Instant floor = Instant.parse("2026-03-17T12:00:00Z");
+        when(subscriptionService.historyFloor(100L)).thenReturn(floor);
+        when(historyMonths.load(PERSON, floor, null, null)).thenReturn(months("2026-06", "a"));
 
         HistorySyncDto reply = service.syncHistory(ACCESS, PERSON, Map.of());
 

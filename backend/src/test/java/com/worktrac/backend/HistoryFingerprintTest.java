@@ -118,6 +118,23 @@ class HistoryFingerprintTest extends AbstractIntegrationTest {
         exerciseId = objectMapper.readTree(exercises).get(0).get("id").asLong();
     }
 
+    // A workout with no sets (an abandoned "log a past workout") shows nothing in History, but its
+    // month still exists for the sync. The fingerprint query and a full sync -- which skips that query
+    // and builds every month from the load alone -- must list it identically, with the same
+    // fingerprint; snap() asserts that pairing, and this is the case where the two could disagree.
+    @Test
+    void aWorkoutWithNoSetsIsListedTheSameByTheFingerprintQueryAndAFullSync() throws Exception {
+        long may = createPastSession("2026-05-10T10:00:00Z");
+        logSet(may, 100, 5);
+        Snapshot before = snap();
+
+        createPastSession("2026-03-10T10:00:00Z");
+
+        Snapshot after = snap();
+        assertTrue(after.fp().containsKey(MARCH), "a month holding only a set-less workout is listed");
+        assertChangedExactly(before, after, MARCH);
+    }
+
     // ── Logging ──────────────────────────────────────────────────────────────────────────────
 
     @Test
@@ -530,9 +547,13 @@ class HistoryFingerprintTest extends AbstractIntegrationTest {
     // be a History input the fingerprint cannot see; this fails until both agree.
     @Test
     void everyTableHistoryReadsIsFingerprintedAndCarriesARowVersion() throws Exception {
-        Set<String> loaded = tablesIn(sqlConstant(com.worktrac.backend.workoutsession.HistoryMonths.class, "LOAD"));
+        // Both shapes of the load -- the whole History and a range of months -- must read the same
+        // tables the fingerprint does.
+        Set<String> loaded = tablesIn(loadSql(false));
+        Set<String> loadedRange = tablesIn(loadSql(true));
         Set<String> fingerprinted = tablesIn(sqlConstant(HistoryFingerprints.class, "AGGREGATE"));
         assertEquals(Set.of("workout_sessions", "workout_sets", "session_exercise_notes", "exercises"), loaded);
+        assertEquals(loaded, loadedRange, "a range load and a full load must read the same tables");
         assertEquals(loaded, fingerprinted, "the loader and the fingerprint must read the same tables");
         for (String table : loaded) {
             Integer columns = jdbcTemplate.queryForObject(
@@ -540,6 +561,13 @@ class HistoryFingerprintTest extends AbstractIntegrationTest {
                     Integer.class, table);
             assertEquals(1, columns, table + " has no ROWVERSION row_version column");
         }
+    }
+
+    private static String loadSql(boolean range) throws Exception {
+        java.lang.reflect.Method sql = com.worktrac.backend.workoutsession.HistoryMonths.class
+                .getDeclaredMethod("sql", boolean.class, String.class);
+        sql.setAccessible(true);
+        return (String) sql.invoke(null, range, "");
     }
 
     private static String sqlConstant(Class<?> owner, String field) throws Exception {

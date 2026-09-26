@@ -186,16 +186,36 @@ public class WorkoutSessionService {
     // refetch after a write on another person.
     @Transactional(readOnly = true)
     public HistorySyncDto syncHistory(AccountAccess access, Long personId, Map<String, String> have) {
+        Map<String, String> held = have == null ? Map.of() : have;
+        SyncTiming timing = new SyncTiming(personId, held.size());
         Person person = personService.requireVisiblePerson(personId, access);
         Instant floor = subscriptionService.historyFloor(access.accountId());
-        Map<String, String> held = have == null ? Map.of() : have;
+        timing.prepared();
+
+        // A device holding nothing -- a new device, a fresh sign-in, the daily full sync -- gets every
+        // month straight from the load, with no fingerprint query before it and no re-check after.
+        // Every month differs from "nothing", so the first query could not change what is loaded;
+        // and the re-check exists only to protect months the device KEEPS, of which there are none.
+        // What is left is one statement, one snapshot -- exactly GET /history -- and a month created
+        // mid-request simply arrives on the next sync instead of refusing this one. Each month's
+        // fingerprint comes from its own rows, as it always does for a loaded month.
+        if (held.isEmpty()) {
+            Map<String, HistoryMonths.Month> all = historyMonths.load(person.getId(), floor, null, null);
+            timing.loaded(all.size());
+            Map<String, HistoryMonthDto> changed = new LinkedHashMap<>();
+            all.forEach((month, m) -> changed.put(month, new HistoryMonthDto(m.fingerprint(), m.sessions())));
+            timing.done();
+            return new HistorySyncDto(List.copyOf(all.keySet()), changed);
+        }
 
         Map<String, String> current = historyFingerprints.forPerson(person.getId(), floor);
+        timing.fingerprinted();
         List<String> differing = current.entrySet().stream()
                 .filter(e -> !e.getValue().equals(held.get(e.getKey())))
                 .map(Map.Entry::getKey)
                 .toList();
         if (differing.isEmpty()) {
+            timing.done();
             return new HistorySyncDto(List.copyOf(current.keySet()), Map.of());
         }
 
@@ -207,6 +227,7 @@ public class WorkoutSessionService {
         Map<String, HistoryMonths.Month> loaded = historyMonths.load(person.getId(), floor,
                 oldest.atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC),
                 newest.plusMonths(1).atDay(1).atStartOfDay().toInstant(ZoneOffset.UTC));
+        timing.loaded(loaded.size());
 
         Map<String, HistoryMonthDto> changed = new LinkedHashMap<>();
         loaded.forEach((month, m) -> {
@@ -216,6 +237,7 @@ public class WorkoutSessionService {
         });
 
         Map<String, String> after = historyFingerprints.forPerson(person.getId(), floor);
+        timing.rechecked();
         TreeSet<String> months = new TreeSet<>(Comparator.reverseOrder());
         for (Map.Entry<String, String> e : after.entrySet()) {
             if (loaded.containsKey(e.getKey())) continue;
@@ -225,7 +247,65 @@ public class WorkoutSessionService {
             months.add(e.getKey());
         }
         months.addAll(loaded.keySet());
+        timing.done();
         return new HistorySyncDto(List.copyOf(months), changed);
+    }
+
+    // Where a slow History sync spent its time, one line per sync that took longer than SLOW_SYNC.
+    // Lower is a 5-DTU database whose per-statement costs cannot be read from here or reproduced
+    // locally (docs/incidents/2026-09-25-history-full-sync-pegged-lower-db.md), so the split between
+    // the fingerprint query, the load and the re-check is logged where it happens rather than guessed.
+    // Durations only -- no History content, and the person by id, as every other log line here.
+    // System.nanoTime, not the injected Clock: this measures elapsed time, not a moment.
+    private static final Duration SLOW_SYNC = Duration.ofMillis(500);
+
+    private static final class SyncTiming {
+        private final long personId;
+        private final int held;
+        private final long start = System.nanoTime();
+        private long mark = start;
+        private long prepareMs = -1;
+        private long fingerprintMs = -1;
+        private long loadMs = -1;
+        private long recheckMs = -1;
+        private int loadedMonths;
+
+        SyncTiming(long personId, int held) {
+            this.personId = personId;
+            this.held = held;
+        }
+
+        private long lap() {
+            long now = System.nanoTime();
+            long ms = (now - mark) / 1_000_000;
+            mark = now;
+            return ms;
+        }
+
+        void prepared() {
+            prepareMs = lap();
+        }
+
+        void fingerprinted() {
+            fingerprintMs = lap();
+        }
+
+        void loaded(int months) {
+            loadMs = lap();
+            loadedMonths = months;
+        }
+
+        void rechecked() {
+            recheckMs = lap();
+        }
+
+        void done() {
+            long totalMs = (System.nanoTime() - start) / 1_000_000;
+            if (totalMs < SLOW_SYNC.toMillis()) return;
+            log.info("Slow History sync: personId={} held={} loadedMonths={} prepareMs={} fingerprintMs={} loadMs={} "
+                            + "recheckMs={} totalMs={}",
+                    personId, held, loadedMonths, prepareMs, fingerprintMs, loadMs, recheckMs, totalMs);
+        }
     }
 
     // The production canary for the one failure the History sync must never have: a device holding a

@@ -47,15 +47,18 @@ public class HistoryMonths {
 
     // Typed NULLs in the first branch: UNION ALL takes each column's type from all branches, and an
     // untyped NULL there would be an INT that the later NVARCHAR values fail to convert into.
+    //
+    // ONE statement, two ways to reach the sets (%2$s, %3$s) -- see ALL_SETS and RANGE_SETS. %1$s is
+    // the sessions' date filter.
     private static final String LOAD = """
             WITH vs AS (
                 SELECT id, started_at, ended_at, manual, row_version, CONVERT(CHAR(7), started_at, 126) AS month
                 FROM workout_sessions
-                WHERE person_id = :personId %s
+                WHERE person_id = :personId %1$s
             ),
             person_exercises AS (
                 SELECT e.id, e.name, e.row_version
-                FROM (SELECT DISTINCT exercise_id FROM workout_sets WHERE person_id = :personId) d
+                FROM (%2$s) d
                 INNER LOOP JOIN exercises e ON e.id = d.exercise_id
             )
             SELECT CAST('S' AS CHAR(1)) AS kind, vs.month, vs.id AS session_id,
@@ -71,8 +74,7 @@ public class HistoryMonths {
                    NULL, NULL, NULL, CAST(s.row_version AS BIGINT),
                    s.id, s.exercise_id, e.name, CAST(e.row_version AS BIGINT),
                    s.weight, s.reps, s.duration_seconds, s.unit, s.created_at, NULL
-            FROM vs
-            INNER HASH JOIN workout_sets s ON s.session_id = vs.id
+            FROM %3$s
             INNER HASH JOIN person_exercises e ON e.id = s.exercise_id
             WHERE s.person_id = :personId
             UNION ALL
@@ -82,6 +84,33 @@ public class HistoryMonths {
                    NULL, NULL, NULL, NULL, NULL, sen.note
             FROM vs INNER LOOP JOIN session_exercise_notes sen ON sen.session_id = vs.id
             """;
+
+    // The WHOLE History (GET /history, a full sync): every one of the person's sets in one pass of
+    // their index range, matched to their workouts in memory. For five years that is one read of
+    // ~20k index entries -- far cheaper than ~1,800 separate per-workout lookups.
+    private static final String[] ALL_SETS = {
+            "SELECT DISTINCT exercise_id FROM workout_sets WHERE person_id = :personId",
+            "vs INNER HASH JOIN workout_sets s ON s.session_id = vs.id",
+    };
+
+    // A RANGE of months (a sync after a write): only the range's own workouts' sets, one index seek
+    // per workout on (person_id, session_id). The all-sets pass above, used here, read a five-year
+    // History's every set to return one month's few hundred -- which made every per-set sync cost
+    // as much as the whole History. The exercises come from the range's sets for the same reason.
+    // A wide range (an old month edited alongside this one) costs more seeks, but still only this
+    // person's rows, never the table's.
+    private static final String[] RANGE_SETS = {
+            "SELECT DISTINCT rs.exercise_id FROM vs INNER LOOP JOIN workout_sets rs"
+                    + " ON rs.person_id = :personId AND rs.session_id = vs.id",
+            "vs INNER LOOP JOIN workout_sets s ON s.person_id = :personId AND s.session_id = vs.id",
+    };
+
+    // The statement for a load, before its plan marker (HistoryPlanSize). Package-private so
+    // HistoryFingerprintTest can check both shapes read the tables the fingerprint covers.
+    static String sql(boolean range, String where) {
+        String[] sets = range ? RANGE_SETS : ALL_SETS;
+        return LOAD.formatted(where, sets[0], sets[1]);
+    }
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -112,7 +141,8 @@ public class HistoryMonths {
         Map<Long, SessionRow> sessions = new HashMap<>();
         List<SetRow> sets = new ArrayList<>();
         List<NoteRow> notes = new ArrayList<>();
-        jdbc.query(HistoryPlanSize.forPerson(jdbc, personId).around(LOAD.formatted(where)), params, rs -> {
+        boolean range = from != null || to != null;
+        jdbc.query(HistoryPlanSize.forPerson(jdbc, personId).around(sql(range, where.toString())), params, rs -> {
             String month = rs.getString("month");
             long sessionId = rs.getLong("session_id");
             BigInteger rv = BigInteger.valueOf(rs.getLong("rv"));

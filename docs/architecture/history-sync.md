@@ -89,6 +89,23 @@ asks again. That is deliberately not a backend retry loop (`backend-core.md`: th
 query retry are the recovery story). `HistorySyncServiceTest` stages both races; they fail with the
 re-check removed.
 
+**A device that holds nothing skips both fingerprint queries.** That covers a new device, a fresh
+sign-in, and the daily full sync. Every month differs from "nothing", so the first query cannot change
+what is loaded, and the re-check protects only months the device keeps, of which there are none. What
+remains is the one load, one snapshot, which is exactly `GET /history`. A month created mid-request
+arrives on the next sync instead of refusing this one. On lower the two queries had been ~0.5s of a
+five-year full sync.
+
+**A sync that loads a range of months reaches the sets through that range's own workouts** (a seek on
+`(person_id, session_id)` per workout). The whole-History load reads every set in one pass instead.
+Page reads barely differ at today's sizes; the index is compact, so one person's whole range is ~150
+pages. The difference is CPU (matching ~400 rows, not ~20,000) and, above all, **growth**: a one-month
+sync now costs the same in year ten as in year one. `HistorySyncCostTest` fails if a range load
+stops seeking each workout.
+
+Any sync slower than 500ms logs `Slow History sync:` with the time spent preparing, fingerprinting,
+loading and re-checking, so lower's split can be read rather than guessed.
+
 ## The client
 
 `lib/historySync.js` holds the pure pieces; `api/sessions.js#getHistory` wires them to the request.
