@@ -358,6 +358,21 @@ function invalidateTrends(client, personId) {
   }
 }
 
+// The PRs board, after a write that changed it -- the same first-load race as invalidateTrends, from
+// a different direction. `prs` IS warmed (offlineCacheWarm), so its first load is usually the boot
+// warm itself: on a new household, or whenever the warm runs before the cache holds `prs`, a set
+// that lands while that warm is in flight had its invalidation absorbed. The warm's answer, computed
+// before the set existed, was then fresh for the full staleTime: "No PRs yet", or a board missing
+// the set just logged. On lower that was parity-pr-record and both offline-reads PRs specs needing
+// retries (e2e/tests/prs-first-load.spec.ts pins the order).
+//
+// Safe for the same reason as trends: nothing writes optimistic data into a `prs` key, so a cancel
+// that reverts it to its pre-fetch state throws nothing away.
+function invalidatePrs(client, personId) {
+  const queryKey = queryKeys.prs(personId);
+  client.cancelQueries({ queryKey }).then(() => client.invalidateQueries({ queryKey }));
+}
+
 // History after a write that changed it -- the ONE way every writer refreshes it. Three steps, and
 // each closes a way History could be left showing something the server no longer says:
 //
@@ -413,7 +428,7 @@ export function refreshHistoryForEveryone(client) {
 // "if someone imports a file and opens this view five seconds later, is it right?"
 export function invalidateAfterImport(client, personId) {
   refreshHistory(client, personId);
-  client.invalidateQueries({ queryKey: queryKeys.prs(personId) });
+  invalidatePrs(client, personId);
   client.invalidateQueries({ queryKey: queryKeys.historyWindow(personId) });
   // ⚠️ THE ROSTER DERIVES FROM SETS TOO, and it is account-shared rather than person-keyed -- so a
   // set logged for ANY person changes it. Invalidated by PREFIX because the key carries a weeks
@@ -568,7 +583,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       if (vars.mode !== 'session') {
         client.invalidateQueries({ queryKey: queryKeys.liveSession(vars.personId) });
       }
-      client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
+      invalidatePrs(client, vars.personId);
       refreshHistory(client, vars.personId);
       // Derived from sets like the three above: logging into an out-of-window past session is how
       // the hidden count goes 0 -> 1, and that is the exact flow the notice exists for.
@@ -677,7 +692,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
   const reconcileSetChange = (vars, sessionId) => {
     client.invalidateQueries({ queryKey: queryKeys.sessionSets(sessionId, vars.exerciseId) });
     client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
-    client.invalidateQueries({ queryKey: queryKeys.prs(vars.personId) });
+    invalidatePrs(client, vars.personId);
     refreshHistory(client, vars.personId);
     client.invalidateQueries({ queryKey: queryKeys.historyWindow(vars.personId) });
     // The roster derives from sets as well -- editing or deleting one moves a person's "last
