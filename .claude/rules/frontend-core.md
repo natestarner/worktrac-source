@@ -307,12 +307,16 @@ load to "no data yet" so the invalidation starts a genuinely new request
 
 - **Only where nothing writes into the key mid-fetch.** A cancel reverts the query to its state from
   *before* the fetch began, so on a key seeded during a fetch — `LOG_SET`'s `sessionSets` /
-  `exerciseSummary` seeds — it throws that seed away. Trends keys have no optimistic writer, which is
-  why the pattern is confined to them.
+  `exerciseSummary` seeds — it throws that seed away. Trends keys and `prs` have no optimistic
+  writer, which is why the pattern is confined to them (`invalidateTrends`, `invalidatePrs`).
 - **The invalidation is one microtask later** (it runs when the cancel settles). Assert on it with
   `vi.waitFor`, not synchronously after the write.
-- **A tab that is warmed rarely hits this** (it has data, and a refetch cancels normally). If a new
-  read is added *without* warming, ask: can a write land during its first load?
+- **A warmed key hits it too — through the warm itself.** `prs` is warmed, and the warm's
+  `prefetchQuery` *is* its first load: a set landing while that boot warm is in flight was absorbed
+  the same way, and the PRs tab then mounted onto the warm's pre-set answer as fresh ("No PRs yet").
+  `invalidatePrs` cancels first for the same reason; `e2e/tests/prs-first-load.spec.ts` pins the
+  order. Ask of any key a write invalidates: can that write land during its first load, whether a
+  mount or a warm started it?
 
 ### Invalidate the key the screen READS — a session id captured at dispatch may be null
 

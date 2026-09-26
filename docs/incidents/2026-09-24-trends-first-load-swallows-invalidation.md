@@ -84,6 +84,23 @@ The invalidation now runs one microtask after the write settles (when the cancel
 existing "marks every cached trends range stale" unit test reads it with `vi.waitFor`. Its assertion
 is unchanged.
 
+## Follow-up (2026-09-26): the PRs board, through the warm
+
+The takeaway below said this was a risk for **unwarmed** reads. The PRs board is warmed and had it
+anyway: `offlineCacheWarm`'s `prefetchQuery` *is* `prs`' first load. A set landing while that boot
+warm was in flight had its invalidation absorbed, the warm's pre-set answer was stamped fresh, and
+the PRs tab mounted onto it: "No PRs yet", or a board missing the set just logged.
+
+On lower, `parity-pr-record.spec.ts` (lie-fi, hard-offline, pinned-offline) and both
+`offline-reads.spec.ts` PRs specs had been needing first-attempt retries since 2026-09-24. They got
+more frequent once the History sync added DB work to each logged set, which slows the set's own
+round trip and widens the window.
+
+`invalidatePrs` now cancels first too; `prs` has no optimistic writer either.
+`e2e/tests/prs-first-load.spec.ts` pins the order: the warm's response is held until the set lands.
+It failed 3/3 before the fix and passed 3/3 after. `queryClient.test.js` covers both the observed
+first load and the unobserved warm; both were red before the fix.
+
 ## Takeaways
 
 - **An invalidation is not a refetch guarantee.** During a first load it is silently absorbed by the
