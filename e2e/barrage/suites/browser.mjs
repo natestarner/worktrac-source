@@ -350,9 +350,25 @@ export async function browserMatrix(ctx) {
     const options = blockOf(page, target).getByRole('button', { name: /^View options for / }).first();
     await options.scrollIntoViewIfNeeded();
     await options.click();
+    // What the target does after the jump, every 100ms for 4s, in the page itself: where it is, whether
+    // it is still the element on screen, and whether the page scrolled or the layout moved under it.
+    // WebKit missed by 117px once on lower (2026-09-26) and not in 3/3 local WebKit runs; this is what
+    // tells a scroll that stopped short from a layout that moved after it, or a re-render.
+    await handle.evaluate((el) => {
+      const w = window;
+      w.__jump = [];
+      const t0 = performance.now();
+      const id = setInterval(() => {
+        const r = el.getBoundingClientRect();
+        w.__jump.push([Math.round(performance.now() - t0), Math.round(r.top), el.isConnected ? 1 : 0, Math.round(scrollY), document.documentElement.scrollHeight]);
+        if (performance.now() - t0 > 4000) clearInterval(id);
+      }, 100);
+    });
     await page.getByRole('button', { name: /View this exercise.s history/ }).click();
     let last = -1;
     for (let i = 0; i < 40; i += 1) { const y = await page.evaluate(() => window.scrollY); if (y === last) break; last = y; await sleep(300); }
+    await sleep(4200);
+    const trace = await page.evaluate(() => (window.__jump || []).filter((s, i, a) => i === 0 || i === a.length - 1 || s.slice(1).join() !== a[i - 1].slice(1).join()));
     const pos = await handle.evaluate((el) => {
       const r = el.getBoundingClientRect();
       const hit = document.elementFromPoint(r.left + Math.min(20, r.width / 2), r.top + r.height / 2);
@@ -360,7 +376,8 @@ export async function browserMatrix(ctx) {
     });
     return [
       ['History blocks skip off-screen rendering (content-visibility: auto)', { ok: cv === 'auto', detail: `computed: ${cv}` }],
-      ['"View this exercise\'s history" on a workout two years down lands it visible, clear of the tab bar', { ok: pos.inView && !pos.covered, detail: `${label} at top=${pos.top}px covered=${pos.covered}` }],
+      ['"View this exercise\'s history" on a workout two years down lands it visible, clear of the tab bar', { ok: pos.inView && !pos.covered,
+        detail: `${label} at top=${pos.top}px covered=${pos.covered}; changes [ms, top, attached, scrollY, pageHeight]: ${JSON.stringify(trace)}` }],
     ];
   });
 }
