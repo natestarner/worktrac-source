@@ -101,6 +101,21 @@ against:
 Query Store keeps compile times to about 10ms, rounded either way, so the test leaves a gap on both
 sides of each timestamp. Without the gap it flaked in both directions.
 
+## Round four: a reused plan was slow even when compiled for the right person
+
+#349's per-size plans kept the e2e run healthy: 69–80% CPU for 10 minutes, all specs green. But the
+five-year History was fast only on the **first** execution of its freshly compiled plan (6.4s). Every
+execution after that took **57–61s**, on an idle database at 100% CPU. So the problem was never only
+*who* the plan was compiled for; a **reused** plan was slow and a freshly compiled one was fast. The
+likeliest cause is memory grant feedback shrinking the grant of a reused plan on a memory-starved
+Basic tier. It does not reproduce locally, where feedback grows the grant and nothing spills.
+
+**Fix:** by size. 100 workouts or more are compiled per execution, the arrangement measured at 3.5–5s
+on lower. Smaller Histories, which includes every e2e household, keep one cached plan per class, so an
+e2e run compiles almost nothing. `HistorySyncCostTest` now requires the *tiny* household's repeat run
+to compile nothing, and the big person's plans to be compiled for them. Both were verified red:
+RECOMPILE for everyone fails the first, and no size class fails the second.
+
 ## Takeaways
 
 - **A test database's size hides cost, but its *proportions* decide the plan.** Timing a query

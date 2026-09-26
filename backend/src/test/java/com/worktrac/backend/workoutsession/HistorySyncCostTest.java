@@ -49,8 +49,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 //   - the big person's plans were compiled FOR the big person, after a five-set household ran the same
 //     statements first -- exactly the order lower sees after every e2e run. (#345 passed the first
 //     check and still ran ~50s per sync on lower, on a plan cached for five rows.)
-//   - those plans are CACHED: running again compiles nothing. (#348's OPTION (RECOMPILE) passed the
-//     second check and held lower's CPU at 100% for 35 minutes compiling.) See HistoryPlanSize.
+//   - a SMALL History's plans are cached: its repeat run compiles nothing. (#348's OPTION (RECOMPILE)
+//     for everyone passed the second check and held lower's CPU at 100% for 35 minutes compiling.)
+//     A large History is compiled per execution on purpose -- see HistoryPlanSize.
 //
 // ⚠️ If this fails after you add a column to HistoryFingerprints or HistoryMonths, add that column to
 // the matching index's INCLUDE list in a new migration (see V83). If it fails after a plan changed
@@ -169,16 +170,21 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
         assertTrue(reused.isEmpty(), "the big person ran a plan compiled for the tiny one -- see HistoryPlanSize: "
                 + reused);
 
-        // 2. ...and those plans must be CACHED. Running again compiles nothing. OPTION (RECOMPILE)
-        // passes the first check and fails this one, which is what it did to lower's CPU.
-        runEveryShape(personId);
+        // 2. A SMALL History's plans must be cached: its repeat run compiles nothing. Every e2e household
+        // is small, so this is what keeps an e2e run from compiling hundreds of times -- OPTION
+        // (RECOMPILE) for everyone passes the first check and fails this one, which is what it did to
+        // lower's CPU. (The big person recompiling on every run is deliberate; see HistoryPlanSize.)
+        runEveryShape(tinyPersonId);
         pause();
+        List<Map<String, Object>> tinyRepeat = plansRunSince(afterBig);
+        assertEquals(5, tinyRepeat.stream().map(plan -> plan.get("query_id")).distinct().count(),
+                "the tiny household's repeat run issued every shape");
         List<Object> recompiled = new ArrayList<>();
-        for (Map<String, Object> plan : plansRunSince(afterBig)) {
+        for (Map<String, Object> plan : tinyRepeat) {
             if (!compiledAt(plan).isBefore(afterBig)) recompiled.add(plan.get("query_id"));
         }
-        assertTrue(recompiled.isEmpty(), "a History statement compiled again on a repeat run -- plans must be "
-                + "cached per size class, never compiled per call (see HistoryPlanSize): " + recompiled);
+        assertTrue(recompiled.isEmpty(), "a small History's statement compiled again on a repeat run -- small "
+                + "Histories must reuse one cached plan per size class (see HistoryPlanSize): " + recompiled);
 
         List<String> violations = new ArrayList<>();
         Set<String> tablesRead = new TreeSet<>();
