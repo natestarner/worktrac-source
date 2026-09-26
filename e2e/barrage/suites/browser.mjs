@@ -54,9 +54,16 @@ async function liveSet(page, api, cleanup, personId, timeoutMs) {
   await goTab(page, 'Log');
   await toExercise(page, 'Barbell Bench Press');
   await logSet(page);
-  const live = await api.ok('GET', `/api/people/${personId}/sessions/live`);
-  cleanup.touch(live?.id);
   const deadline = Date.now() + timeoutMs;
+  // The set may still be in the outbox, so the server may not have the workout yet: asking once
+  // read "no live workout" on WebKit and then waited three minutes for an id of undefined.
+  let live;
+  while (!live?.id && Date.now() < deadline) {
+    live = await api.ok('GET', `/api/people/${personId}/sessions/live`);
+    if (!live?.id) await sleep(500);
+  }
+  if (!live?.id) throw new Error(`the set logged on the device never started a workout on the server in ${timeoutMs / 1000}s`);
+  cleanup.touch(live.id);
   let newest;
   while (Date.now() < deadline) {
     newest = (await held(page, personId))[0];
