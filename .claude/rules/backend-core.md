@@ -254,14 +254,16 @@ narrative: `docs/architecture/history-sync.md`.
   (see Concurrency above).
 - **⚠️ Both statements must cost in proportion to the PERSON, never the table.** The indexes (V83)
   cover every column they read, exercises are looked up by the person's distinct ids, and the join
-  hints **and `HistoryPlanSize`** are load-bearing:
-  - **100 workouts or more are compiled per execution.** On lower, a reused plan ran a five-year
-    History in ~57s, even one compiled for that person; a fresh compile ran it in 3.5–5s.
-  - **Smaller Histories get one cached plan per size class.** RECOMPILE for everyone held lower's CPU
-    at 100% for 35 minutes through an e2e run.
+  hints **and `HistoryPlanSize`** are load-bearing. Each size class of History gets one cached plan,
+  and all three of these came from lower:
+  - **The class marker sits inside the statement, after `WITH`.** Query Store ignores a leading
+    comment, so a marker there made every class one Query Store query.
+  - **Runtime feedback is off** (`NO_RUNTIME_FEEDBACK`). With it on, a reused plan ran a five-year
+    History in ~57s; with it off, about 3s.
+  - **Never `OPTION (RECOMPILE)`.** It held lower's CPU at 100% for 35 minutes compiling.
 
-  `HistorySyncCostTest` fails if the big person reuses someone else's plan, if a small household's
-  repeat run compiles anything, and on any scan or key lookup. **Add a column → add it to the index in a new migration.** Timing it locally
+  `HistorySyncCostTest` fails if a person reuses another size class's plan, if a repeat run
+  compiles anything, and on any scan or key lookup. **Add a column → add it to the index in a new migration.** Timing it locally
   proves nothing: 0.3s here was 10 minutes at 100% DTU on lower
   (`docs/incidents/2026-09-25-history-full-sync-pegged-lower-db.md`).
 - **`GET /history` is the same builder, flattened** — for API readers and installed clients that
