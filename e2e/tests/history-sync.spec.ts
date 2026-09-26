@@ -69,7 +69,9 @@ test('a set logged on another device reaches this one, resending only its month'
   await logSetAt(other, 155, 3);
   await otherContext.close();
 
-  await page.reload();
+  // Opened again, not reloaded: a reload on History is the person asking for everything
+  // (lib/historyReload.js), which would prove nothing about the fingerprint noticing the change.
+  await page.goto('/app/history');
   await expect(page.getByText(/155\s?lb\s?×\s?3/).first()).toBeVisible();
   await expect(page.getByText(/135\s?lb\s?×\s?5/).first()).toBeVisible();
   const fresh = { started: 0, calls: 0 };

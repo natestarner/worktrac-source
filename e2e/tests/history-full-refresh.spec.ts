@@ -35,8 +35,9 @@ test('reloading on History downloads it in full, once; reloading another tab and
   expect(await fullSyncsAfterSettling(sync, page)).toHaveLength(1);
 
   await page.getByRole('link', { name: 'Log', exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/log/);
   await page.reload();
-  await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'History' })).toBeVisible();
   await page.getByRole('link', { name: 'History' }).click();
   await expect(page.getByText(/135\s?lb\s?×\s?5/).first()).toBeVisible();
   expect(await fullSyncsAfterSettling(sync, page)).toHaveLength(0);
@@ -85,8 +86,12 @@ test.describe('in the installed app', () => {
     const sync = await historyWithOneSet(page, request);
     const before = await sync.mark();
 
+    // Tabbed to, as a keyboard user reaches it: it is off-screen until focused by keyboard.
     const control = page.getByRole('button', { name: 'Refresh History' });
-    await control.focus();
+    for (let i = 0; i < 40 && !(await control.evaluate((el) => el === document.activeElement)); i += 1) {
+      await page.keyboard.press('Tab');
+    }
+    await expect(control).toBeFocused();
     await expect(control).toBeInViewport();
     await page.keyboard.press('Enter');
 
