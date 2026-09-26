@@ -170,21 +170,21 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
         assertTrue(reused.isEmpty(), "the big person ran a plan compiled for the tiny one -- see HistoryPlanSize: "
                 + reused);
 
-        // 2. A SMALL History's plans must be cached: its repeat run compiles nothing. Every e2e household
-        // is small, so this is what keeps an e2e run from compiling hundreds of times -- OPTION
-        // (RECOMPILE) for everyone passes the first check and fails this one, which is what it did to
-        // lower's CPU. (The big person recompiling on every run is deliberate; see HistoryPlanSize.)
+        // 2. Every plan must be CACHED: a repeat run, by either person, compiles nothing. An e2e run is
+        // hundreds of syncs, and OPTION (RECOMPILE) -- which passes the first check -- turned one into
+        // 35 minutes at 100% CPU on lower. See HistoryPlanSize.
         runEveryShape(tinyPersonId);
+        runEveryShape(personId);
         pause();
-        List<Map<String, Object>> tinyRepeat = plansRunSince(afterBig);
-        assertEquals(5, tinyRepeat.stream().map(plan -> plan.get("query_id")).distinct().count(),
-                "the tiny household's repeat run issued every shape");
+        List<Map<String, Object>> repeat = plansRunSince(afterBig);
+        assertEquals(10, repeat.stream().map(plan -> plan.get("query_id")).distinct().count(),
+                "both people's repeat runs issued every shape, one statement per size class");
         List<Object> recompiled = new ArrayList<>();
-        for (Map<String, Object> plan : tinyRepeat) {
+        for (Map<String, Object> plan : repeat) {
             if (!compiledAt(plan).isBefore(afterBig)) recompiled.add(plan.get("query_id"));
         }
-        assertTrue(recompiled.isEmpty(), "a small History's statement compiled again on a repeat run -- small "
-                + "Histories must reuse one cached plan per size class (see HistoryPlanSize): " + recompiled);
+        assertTrue(recompiled.isEmpty(), "a History statement compiled again on a repeat run -- every size "
+                + "class must reuse one cached plan (see HistoryPlanSize): " + recompiled);
 
         List<String> violations = new ArrayList<>();
         Set<String> tablesRead = new TreeSet<>();

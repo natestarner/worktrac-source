@@ -17,23 +17,30 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 //   - OPTION (RECOMPILE) for EVERYONE (#348): lower's e2e run -- hundreds of syncs by tiny households
 //     -- held the database at 100% CPU for 35 minutes compiling.
 //
-// So: a History of RECOMPILE_FROM_DIGITS digits or more is compiled per execution (few people, and
-// each sync is worth a compile); anything smaller gets one cached plan per size class, compiled once.
-// The size-class comment is part of the statement's TEXT, which is what keeps a small class's cached
-// plan from being shared with any other class. HistorySyncCostTest pins all three: the big person's
-// plans are compiled for them, a small person's plans are reused rather than recompiled, and every
-// read is a seek.
+//   - #350 compiled 100+ workouts per execution: fast, but a compile on every sync.
+//
+// So every size class gets ONE cached plan, compiled once for someone within a factor of ten of whoever
+// uses it -- the size-class comment is part of the statement's TEXT, which is what keeps classes from
+// sharing -- and every mechanism that changes how a cached plan runs from one execution to the next is
+// switched off (NO_RUNTIME_FEEDBACK), so the plan runs every time the way its fast first run did.
+// HistorySyncCostTest pins the plan side: each person runs a plan compiled for their class, repeat
+// runs compile nothing, and every read is a seek. The feedback side only shows on a memory-starved
+// database, so it is pinned by lower's measurements (see the incident), not by a local test.
 final class HistoryPlanSize {
-
-    // 100 workouts and up -- two orders of magnitude above an e2e household, below any real lifter's
-    // first year.
-    static final int RECOMPILE_FROM_DIGITS = 3;
 
     private static final String COUNT = "SELECT COUNT_BIG(*) FROM workout_sessions WHERE person_id = :personId";
 
-    record Plan(String prefix, String suffix) {
+    // The marker goes INSIDE the statement, after its leading WITH. Before the statement it separates
+    // plan-cache entries (keyed on the batch text) but NOT Query Store queries, which drop a leading
+    // comment -- so every size class was one Query Store query, and everything Query Store keys on a
+    // query (persisted grant feedback, Azure's automatic plan correction) was shared between a
+    // five-set household and a five-year History.
+    record Plan(String marker, String suffix) {
         String around(String sql) {
-            return prefix + sql + suffix;
+            if (!sql.startsWith("WITH ")) {
+                throw new IllegalArgumentException("History statements begin with a CTE: " + sql);
+            }
+            return "WITH " + marker + sql.substring("WITH ".length()) + suffix;
         }
     }
 
@@ -47,9 +54,14 @@ final class HistoryPlanSize {
         return forDigits(digits(workouts == null ? 0 : workouts));
     }
 
+    // Every mechanism by which SQL Server changes how a CACHED plan runs from one execution to the
+    // next. With all of them off, a cached plan runs every time exactly as it was compiled.
+    static final String NO_RUNTIME_FEEDBACK = "\nOPTION (USE HINT('DISABLE_ROW_MODE_MEMORY_GRANT_FEEDBACK', "
+            + "'DISABLE_BATCH_MODE_MEMORY_GRANT_FEEDBACK', 'DISABLE_MEMORY_GRANT_FEEDBACK_PERSISTENCE', "
+            + "'DISABLE_CE_FEEDBACK', 'DISABLE_DOP_FEEDBACK', 'DISABLE_BATCH_MODE_ADAPTIVE_JOINS'))";
+
     static Plan forDigits(int digits) {
-        return new Plan("/* history-plan:size-" + digits + " */ ",
-                digits >= RECOMPILE_FROM_DIGITS ? "\nOPTION (RECOMPILE)" : "");
+        return new Plan("/* history-plan:size-" + digits + " */ ", NO_RUNTIME_FEEDBACK);
     }
 
     static int digits(long n) {
