@@ -398,6 +398,18 @@ each held month's fingerprint and keeps every month the server does not resend
   ordinary sync pays for two. That is what #357's first cut did: a fresh sign-in downloaded the whole
   History twice. Pinned by `history-sync.spec.ts`'s "a fresh sign-in downloads History once" and the
   two `joins ...` warm tests.
+- **⚠️ History's workout blocks carry `content-visibility: auto`** (`HistoryTab.jsx`,
+  `sessionBlockStyle`). History renders every workout, and without it the browser styled and laid
+  out all of them: five years took 13.7s to first paint on a throttled phone profile. With it,
+  5.4s. Two rules come with it:
+  - **Jump to a workout instantly, never smoothly.** An off-screen block that was never drawn has
+    only its estimated size (`estimatedSessionBlockHeight`). A smooth scroll draws the blocks it
+    passes at their real size and misses a target far down. An instant `scrollIntoView` plus one
+    correction a frame later is exact, even with a bad estimate.
+  - **Blocks keep `scrollMarginTop: var(--sticky-chrome-clearance)`** so a jump doesn't park the
+    workout behind the tab bar.
+
+  `history-long-list.spec.ts` pins all three against a year of History.
 - **A write that changes EVERY person's History uses `refreshHistoryForEveryone`** — an exercise
   rename (History carries names; `LogTab.refreshPersonalization` is the live rename path) and a plan
   change (`BillingTab`, with `historyWindowForEveryone()`). Cheap: an unchanged month costs a
