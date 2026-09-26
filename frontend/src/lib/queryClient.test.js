@@ -1142,6 +1142,7 @@ describe('logSet onSettled reconciles from the response (first-set flash)', () =
     await vi.waitFor(() => expect(getHistory).toHaveBeenCalledWith(PERSON, {
       readCached: expect.any(Function),
       scope: { sessions: [SESSION.id], at: [SESSION.startedAt] },
+      full: false,
     }));
     await vi.waitFor(() => expect(client.getQueryData(queryKeys.history(PERSON))).toHaveLength(1));
   });
@@ -1465,7 +1466,7 @@ describe('refreshHistory', () => {
 
     await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
     // No scope given: the ordinary all-months sync.
-    expect(getHistory).toHaveBeenCalledWith(PERSON, { readCached: expect.any(Function), scope: null });
+    expect(getHistory).toHaveBeenCalledWith(PERSON, { readCached: expect.any(Function), scope: null, full: false });
   });
 
   it('replaces a fetch still in flight from before the write, even when that fetch finishes last', async () => {
@@ -1627,6 +1628,73 @@ describe('refreshHistory', () => {
 
       await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
       expect(scopes().at(-1)).toBeNull();
+    });
+  });
+
+  // The re-download the person asked for (a reload of History, a pull down on it): lib/historyReload.js.
+  describe('a full re-download', () => {
+    const SEPTEMBER = { sessions: [2], at: ['2026-09-20T10:00:00Z'] };
+    const fulls = () => getHistory.mock.calls.map(([, options]) => options.full);
+
+    it('asks for every month, with no scope', async () => {
+      client.setQueryData(key, ['before']);
+      getHistory.mockResolvedValue(['after']);
+
+      refreshHistory(client, PERSON, SEPTEMBER, { full: true });
+
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+      expect(getHistory).toHaveBeenCalledWith(PERSON, { readCached: expect.any(Function), scope: null, full: true });
+    });
+
+    // A set logged while the re-download is still coming must not quietly turn it back into a sync
+    // that trusts what the device holds -- the person asked not to.
+    it('is carried by a write refresh that cancels it, and paid only by a request that carried it', async () => {
+      client.setQueryData(key, ['before']);
+      getHistory.mockImplementationOnce(() => new Promise(() => {}));
+      getHistory.mockResolvedValueOnce(['after']);
+      getHistory.mockResolvedValueOnce(['later']);
+
+      refreshHistory(client, PERSON, null, { full: true });
+      await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
+      refreshHistory(client, PERSON, SEPTEMBER);
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+      refreshHistory(client, PERSON, SEPTEMBER);
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['later']));
+
+      expect(fulls()).toEqual([true, true, false]);
+      expect(getHistory.mock.calls[1][1].scope).toBeNull();
+      expect(getHistory.mock.calls[2][1].scope).toEqual(SEPTEMBER);
+    });
+
+    // Pulling twice, or a reload's re-download still running when the person pulls: the server
+    // finishes an abandoned request anyway, so a second would only pay for the same thing twice.
+    it('is not restarted by asking again while one is in flight', async () => {
+      client.setQueryData(key, ['before']);
+      let finish;
+      getHistory.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve(['after']); }));
+
+      refreshHistory(client, PERSON, null, { full: true });
+      await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
+      refreshHistory(client, PERSON, null, { full: true });
+      finish();
+
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+      expect(getHistory).toHaveBeenCalledTimes(1);
+    });
+
+    // An ordinary sync in flight (the boot warm on the reload that asked for this) is replaced, not
+    // joined: joining it would answer "re-download everything" with a sync that trusts the device.
+    it('replaces an ordinary sync in flight', async () => {
+      client.setQueryData(key, ['before']);
+      getHistory.mockImplementationOnce(() => new Promise(() => {}));
+      getHistory.mockResolvedValueOnce(['after']);
+
+      client.prefetchQuery({ queryKey: key, queryFn: () => getHistory(PERSON, {}), staleTime: 0 });
+      await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
+      refreshHistory(client, PERSON, null, { full: true });
+
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+      expect(fulls()).toEqual([undefined, true]);
     });
   });
 

@@ -451,9 +451,11 @@ export function refreshHistory(client, personId, scope = null, { full = false } 
           const paying = owed.get(personId) ?? { scope: null, full: false };
           inFlight.set(personId, paying);
           try {
-            // Holding nothing is what makes a sync a full one: the server sends every month.
-            const readCached = paying.full ? () => undefined : () => client.getQueryData(queryKey);
-            const data = await getHistory(personId, { readCached, scope: paying.scope });
+            const data = await getHistory(personId, {
+              readCached: () => client.getQueryData(queryKey),
+              scope: paying.scope,
+              full: paying.full,
+            });
             // Paid -- unless a later refresh took the debt over meanwhile (and cancelled this request).
             if (owed.get(personId) === paying) owed.delete(personId);
             return data;

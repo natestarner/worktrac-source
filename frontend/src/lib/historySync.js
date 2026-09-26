@@ -75,7 +75,7 @@ const sameContent = (a, b) => JSON.stringify(a.sessions) === JSON.stringify(b.se
 // syncs -- is the complete list, as always.
 //
 // `reply.audited` (the rolling check) re-sends months in full: each replaces the held copy -- kept by
-// identity when it is the same -- and is stamped as checked now. findAuditDrift reports the one case
+// identity when it is the same -- and is stamped as checked now. findDrift reports the one case
 // that should never happen: the same fingerprint with different content.
 export function applyHistorySync(held, reply, now = Date.now()) {
   const scoped = Array.isArray(reply.scope);
@@ -112,18 +112,19 @@ export function applyHistorySync(held, reply, now = Date.now()) {
   return { format: HISTORY_FORMAT, months, checked, fullSyncedAt: held ? held.fullSyncedAt : now };
 }
 
-// The production canary. The rolling check re-reads months the device would otherwise have trusted;
-// one whose fingerprint is the SAME as the one held but whose content differs means the fingerprint
-// missed a change -- the exact failure the month sync must never have, and one the regular syncs
-// could never notice. applyHistorySync has already replaced it; this only makes it visible
-// (api/sessions.js reports it, the server logs it -- docs/architecture/history-sync.md). Month ids
-// only, never content.
-export function findAuditDrift(held, reply) {
+// The production canary. `reread` is months the server sent whatever their fingerprint said -- the
+// rolling check's `audited`, or every month of a full re-download the person asked for -- so each is
+// a month the device would otherwise have trusted. One whose fingerprint is the SAME as the one held
+// but whose content differs means the fingerprint missed a change -- the exact failure the month sync
+// must never have, and one the regular syncs could never notice. The sync has already replaced it;
+// this only makes it visible (api/sessions.js reports it, the server logs it --
+// docs/architecture/history-sync.md). Month ids only, never content.
+export function findDrift(held, reread) {
   if (!held) return [];
   const drifted = [];
-  for (const [month, audited] of Object.entries(reply.audited ?? {})) {
+  for (const [month, sent] of Object.entries(reread ?? {})) {
     const mine = held.months[month];
-    if (mine && mine.fp === audited.fp && !sameContent(mine, audited)) drifted.push(month);
+    if (mine && mine.fp === sent.fp && !sameContent(mine, sent)) drifted.push(month);
   }
   return drifted;
 }
