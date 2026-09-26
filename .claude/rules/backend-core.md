@@ -254,10 +254,14 @@ narrative: `docs/architecture/history-sync.md`.
   (see Concurrency above).
 - **⚠️ Both statements must cost in proportion to the PERSON, never the table.** The indexes (V83)
   cover every column they read, exercises are looked up by the person's distinct ids, and the join
-  hints **and `OPTION (RECOMPILE)`** are load-bearing. Without RECOMPILE, the plan is compiled for
-  whichever person ran first; on lower that is a five-set e2e household, and it cost 50s per sync.
-  `HistorySyncCostTest` runs a tiny person first, reads the plans from Query Store, and fails on a
-  reused plan, a scan or a key lookup. **Add a column → add it to the index in a new migration.** Timing it locally
+  hints **and the per-size-class plan (`HistoryPlanSize`)** are load-bearing:
+  - Without the size class, the plan is compiled for whichever person ran first. On lower that is a
+    five-set e2e household, and it cost 50s per sync.
+  - **Never `OPTION (RECOMPILE)`.** It fixed the plan and held lower's CPU at 100% for 35 minutes
+    compiling.
+
+  `HistorySyncCostTest` runs a tiny person first and the big one twice, reads the plans from Query
+  Store, and fails on a reused plan, a repeat compile, a scan or a key lookup. **Add a column → add it to the index in a new migration.** Timing it locally
   proves nothing: 0.3s here was 10 minutes at 100% DTU on lower
   (`docs/incidents/2026-09-25-history-full-sync-pegged-lower-db.md`).
 - **`GET /history` is the same builder, flattened** — for API readers and installed clients that

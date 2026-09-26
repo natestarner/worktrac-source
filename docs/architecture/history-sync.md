@@ -183,13 +183,19 @@ proportional:
 - **Join hints.** `HASH` to take the person's sets in one pass of their index range; `LOOP` to reach
   notes and exercises by seek from the person's own sessions and exercises. Left alone, the optimizer
   chose a pass over the notes index at lower's proportions.
-- **`OPTION (RECOMPILE)`, so every execution is compiled for its own person.** People differ by four
-  orders of magnitude, from a new household's five sets to a daily lifter's twenty thousand. Without
-  it, the cached plan belongs to whoever ran first, and on lower that is always an e2e household.
-  After the three fixes above, a five-year full sync still ran **~50s at 100% CPU** on lower, on a
-  plan built for five rows. That plan's memory grants spilled to tempdb, and its month joins were
-  nested loops that re-ran each aggregate once per month. Recompiling costs ~10ms per statement, on a
-  request that runs once per write.
+- **One cached plan per size class (`HistoryPlanSize`).** People differ by four orders of magnitude,
+  from a new household's five sets to a daily lifter's twenty thousand. A cached plan belongs to
+  whoever ran first, and on lower that is always an e2e household. After the three fixes above, a
+  five-year full sync still ran **~50s at 100% CPU** on lower, on a plan built for five rows. That
+  plan's memory grants spilled to tempdb, and its month joins were nested loops that re-ran each
+  aggregate once per month. A cheap count of the person's workouts now picks an order-of-magnitude
+  class, and a comment naming it goes into the statement text. Each class gets its own cached plan,
+  compiled for someone within a factor of ten of whoever uses it.
+
+  **Not `OPTION (RECOMPILE)`.** That was tried (#348), and it does give every execution the right
+  plan: 3.5s instead of 52s for the five-year sync. But compiling these statements is so expensive on
+  Basic tier that lower's e2e run, with its hundreds of syncs, held the database at **100% CPU for 35
+  minutes**. Query Store showed almost no *execution* CPU, so the load was compile.
 
 Measured against lower-sized local tables (300k workouts, 1.2M sets, 100k notes, 40k exercises) for a
 person with 1,827 workouts:
@@ -201,14 +207,18 @@ person with 1,827 workouts:
 
 The notes figure is about three reads per workout: a seek per session. It grows with the person and
 nothing else. `HistorySyncCostTest` pins the shape rather than any number. It runs every statement for
-a one-workout household first, then for a big one, and reads the plans back from Query Store. It fails
-if the big person reused a plan compiled for someone else, and on any scan or key lookup of a History
-table. **If it fails after you add a column, add the column to the index in a new migration. Don't
-relax the test.**
+a one-workout household first, then twice for a big one, and reads the plans back from Query Store. It
+fails in three cases, one for each way lower broke:
+- the big person reused a plan compiled for someone else;
+- the repeat run compiled anything;
+- any scan or key lookup of a History table.
+
+**If it fails after you add a column, add the column to the index in a new migration. Don't relax the
+test.**
 
 **Lower's Query Store is readable** through the ARM `topQueries` API with the read-only principal
-(per-query executions, CPU and duration by hour; the query text is not readable). That is how the
-recompile problem was found:
+(per-query executions, CPU and duration by hour; the query text is not readable). That is how both
+plan problems were found:
 
 ```bash
 MSYS_NO_PATHCONV=1 az rest --method get --output-file C:/tmp/topq.xml --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/worktrac-rg/providers/Microsoft.Sql/servers/worktrac-sql-server/databases/worktrac-db-lower/topQueries?api-version=2014-04-01&resourceType=duration&numberOfQueries=10&aggregationFunction=sum&interval=PT1H"
