@@ -70,12 +70,36 @@ locally by running a tiny person first and then the big one:
 Locally that costs 40ms instead of 28ms. On Basic tier, under lower's statistics, it was the
 difference between ~1s and 50s.
 
-**Fix:** `OPTION (RECOMPILE)` on both statements, so every execution is compiled for its own person.
-It costs ~10ms of compile per statement. `HistorySyncCostTest` now runs a one-workout household
-first and reads plans from **Query Store**, because RECOMPILE plans are never cached. It requires the
-big person's plans to have been compiled during the big person's run. Verified red with RECOMPILE
-removed. Query Store keeps compile times to ~10ms, so the test leaves a gap on both sides of its
-timestamp; without one it flaked in both directions.
+## Round three: RECOMPILE fixed the plan and pegged the CPU
+
+The first fix for round two was `OPTION (RECOMPILE)` on both statements (#348), so every execution
+got a plan compiled for its own person. It worked for the big person: **5.0s, then 3.5s** for the
+five-year sync, against 52s before, and 2.6s for the legacy `GET`, close to the pre-#343 2.0s.
+
+But lower's e2e run after that deploy failed across the board: registration timeouts, outbox
+drains, unrelated specs everywhere. The database sat at **96–100% CPU for 35 minutes**. #347's
+deploy, the same code without RECOMPILE, had peaked at 64%. Query Store showed almost no
+*execution* CPU for any statement, so the load was compilation. These CTE-heavy statements cost ~10ms
+to compile locally and far more on Basic tier, and e2e issues hundreds of syncs. Nothing was
+promoted to production.
+
+**Fix:** one cached plan per size class (`HistoryPlanSize`). A count of the person's workouts, a seek
+on their range, gives the number of digits in it. A comment naming that class is prepended to the
+statement text, so SQL Server caches one plan per class. Each is compiled for someone within a
+factor of ten of whoever uses it, and compiled once.
+
+`HistorySyncCostTest` runs a one-workout household first, then the big person twice, and reads
+plans from **Query Store**. Each of its three checks was verified red by the mistake it guards
+against:
+
+| Mistake | Check that fails |
+|---|---|
+| no size class | the big person ran a plan compiled for the tiny one |
+| `OPTION (RECOMPILE)` | a statement compiled again on the repeat run |
+| an uncovered column | a scan of `workout_sets` |
+
+Query Store keeps compile times to about 10ms, rounded either way, so the test leaves a gap on both
+sides of each timestamp. Without the gap it flaked in both directions.
 
 ## Takeaways
 
@@ -86,7 +110,11 @@ timestamp; without one it flaked in both directions.
   while watching DTU. The bench that caught this was a single request.
 - Covering indexes are part of the query. Adding a column to either statement means adding it to
   the index; `HistorySyncCostTest` says so when you forget.
-- **A per-person statement over wildly different people needs a per-person plan.** A test that
-  compiles fresh for the person it measures can never see parameter sniffing. Run a tiny tenant
-  first, the way production's traffic does, then assert on the big one.
+- **A per-person statement over wildly different people needs a plan per size of person, not per
+  call.** A test that compiles fresh for the person it measures can never see parameter sniffing.
+  Run a tiny tenant first, the way production's traffic does, then assert on the big one. And
+  `RECOMPILE` is not free: on a 5-DTU database the compile *is* the cost.
+- **A fix that works for one request can still fail under load.** The single-request probe said
+  RECOMPILE was fixed; the e2e run, a few hundred requests, said otherwise. Check CPU across a whole
+  e2e run, not just one probe.
 - **Read lower's Query Store before guessing.** It turned a day of theories into one query id.

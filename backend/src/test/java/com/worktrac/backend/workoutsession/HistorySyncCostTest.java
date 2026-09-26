@@ -40,15 +40,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // ~10 minutes at 100% DTU on lower, whose tables hold every e2e household ever created.
 //
 // So this does not time anything. It runs the real statements, reads back the plans SQL Server
-// actually compiled for them (from Query Store), and requires two things:
+// actually compiled for them (from Query Store), and requires three things -- each one a way lower
+// actually broke:
 //   - every read of a History table is a SEEK (reached through the person, their sessions or their
 //     exercises) and never a LOOKUP (a covering index that stopped covering). Both are properties of
 //     the plan's shape, so they hold at any data size, and a scan that would be harmless here fails
-//     exactly as it would have hurt on lower.
+//     exactly as it would have hurt on lower. (#343: 10 minutes at 100% DTU.)
 //   - the big person's plans were compiled FOR the big person, after a five-set household ran the same
-//     statements first -- exactly the order lower sees after every e2e run. The fix in #345 passed the
-//     first check and still ran ~50s per sync on lower, on a plan cached for five rows (see
-//     OPTION (RECOMPILE) in HistoryFingerprints).
+//     statements first -- exactly the order lower sees after every e2e run. (#345 passed the first
+//     check and still ran ~50s per sync on lower, on a plan cached for five rows.)
+//   - those plans are CACHED: running again compiles nothing. (#348's OPTION (RECOMPILE) passed the
+//     second check and held lower's CPU at 100% for 35 minutes compiling.) See HistoryPlanSize.
 //
 // ⚠️ If this fails after you add a column to HistoryFingerprints or HistoryMonths, add that column to
 // the matching index's INCLUDE list in a new migration (see V83). If it fails after a plan changed
@@ -139,51 +141,44 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void everyHistorySyncStatementIsCompiledForItsPersonAndSeeksThroughTheirRows() throws Exception {
-        // Query Store rather than the plan cache: OPTION (RECOMPILE) plans are never cached, and Query
-        // Store records every plan with the time it was compiled. ALL, because the default capture
-        // mode skips statements it has only seen once.
+    void everyHistorySyncStatementRunsAPlanBuiltForItsPersonCachedAndSeekingThroughTheirRows() throws Exception {
+        // Query Store rather than the plan cache: it records every plan with when it was compiled and
+        // when it last ran, whatever the caching. ALL, because the default capture mode skips
+        // statements it has only seen once.
         jdbcTemplate.execute("ALTER DATABASE CURRENT SET QUERY_STORE = ON "
                 + "(OPERATION_MODE = READ_WRITE, QUERY_CAPTURE_MODE = ALL)");
 
         // What lower's e2e run does before anyone with real History syncs: a five-set household runs
         // every statement first. A plan cached from here is built for five rows.
         runEveryShape(tinyPersonId);
-        // Query Store keeps compile times to ~10ms, rounded either way: a compile in the same tick as
-        // `afterTiny` could read as after it (the tiny plan passing for the big one's -- a vacuous green)
-        // or before it (a false red). A clear gap on both sides makes the order unambiguous.
-        Thread.sleep(200);
-        LocalDateTime afterTiny = jdbcTemplate.queryForObject("SELECT SYSUTCDATETIME()", LocalDateTime.class);
-        Thread.sleep(200);
+        LocalDateTime afterTiny = pause();
 
+        // 1. The big person must run plans COMPILED during their own run -- never the tiny one's.
         runEveryShape(personId);
-
-        List<Map<String, Object>> plans = jdbcTemplate.queryForList("""
-                SELECT q.query_id,
-                       CAST(SWITCHOFFSET(p.last_compile_start_time, '+00:00') AS DATETIME2) AS compiled_utc,
-                       CAST(p.query_plan AS NVARCHAR(MAX)) AS query_plan
-                FROM sys.query_store_plan p
-                JOIN sys.query_store_query q ON q.query_id = p.query_id
-                JOIN sys.query_store_query_text t ON t.query_text_id = q.query_text_id
-                WHERE (t.query_sql_text LIKE '%note_agg%' OR t.query_sql_text LIKE '%person_exercises%')
-                  AND t.query_sql_text NOT LIKE '%query_store%'""");
+        LocalDateTime afterBig = pause();
+        List<Map<String, Object>> firstRun = plansRunSince(afterTiny);
         Set<Object> statements = new TreeSet<>();
-        Set<Object> compiledForThisPerson = new TreeSet<>();
         List<String> planXmls = new ArrayList<>();
-        for (Map<String, Object> plan : plans) {
+        List<Object> reused = new ArrayList<>();
+        for (Map<String, Object> plan : firstRun) {
             statements.add(plan.get("query_id"));
-            LocalDateTime compiled = ((java.sql.Timestamp) plan.get("compiled_utc")).toLocalDateTime();
-            if (!compiled.isBefore(afterTiny)) {
-                compiledForThisPerson.add(plan.get("query_id"));
-                planXmls.add((String) plan.get("query_plan"));
-            }
+            planXmls.add((String) plan.get("query_plan"));
+            if (compiledAt(plan).isBefore(afterTiny)) reused.add(plan.get("query_id"));
         }
         assertEquals(5, statements.size(), "one statement per shape issued in runEveryShape");
-        // The big person's run must have COMPILED each statement, not reused the tiny person's plan.
-        // Without OPTION (RECOMPILE) nothing compiles here and this fails -- verified by removing it.
-        assertEquals(statements, compiledForThisPerson,
-                "a History statement reused a plan compiled for another person -- see OPTION (RECOMPILE) "
-                        + "in HistoryFingerprints");
+        assertTrue(reused.isEmpty(), "the big person ran a plan compiled for the tiny one -- see HistoryPlanSize: "
+                + reused);
+
+        // 2. ...and those plans must be CACHED. Running again compiles nothing. OPTION (RECOMPILE)
+        // passes the first check and fails this one, which is what it did to lower's CPU.
+        runEveryShape(personId);
+        pause();
+        List<Object> recompiled = new ArrayList<>();
+        for (Map<String, Object> plan : plansRunSince(afterBig)) {
+            if (!compiledAt(plan).isBefore(afterBig)) recompiled.add(plan.get("query_id"));
+        }
+        assertTrue(recompiled.isEmpty(), "a History statement compiled again on a repeat run -- plans must be "
+                + "cached per size class, never compiled per call (see HistoryPlanSize): " + recompiled);
 
         List<String> violations = new ArrayList<>();
         Set<String> tablesRead = new TreeSet<>();
@@ -204,6 +199,37 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
         assertTrue(violations.isEmpty(),
                 "History sync reads a table other than by seeking through the person's rows "
                         + "(cost would follow the table, not the person): " + violations);
+    }
+
+    // Query Store keeps times to ~10ms, rounded either way, so a boundary taken in the same tick as a
+    // compile could order them wrongly -- a vacuous green or a false red. A clear gap on both sides of
+    // the timestamp makes "before" and "after" unambiguous.
+    private LocalDateTime pause() throws InterruptedException {
+        Thread.sleep(200);
+        LocalDateTime now = jdbcTemplate.queryForObject("SELECT SYSUTCDATETIME()", LocalDateTime.class);
+        Thread.sleep(200);
+        return now;
+    }
+
+    // Every plan of the two History statements that executed after `since`, with when it was compiled.
+    private List<Map<String, Object>> plansRunSince(LocalDateTime since) {
+        return jdbcTemplate.queryForList("""
+                SELECT q.query_id,
+                       CAST(SWITCHOFFSET(p.last_compile_start_time, '+00:00') AS DATETIME2) AS compiled_utc,
+                       CAST(p.query_plan AS NVARCHAR(MAX)) AS query_plan
+                FROM sys.query_store_plan p
+                JOIN sys.query_store_query q ON q.query_id = p.query_id
+                JOIN sys.query_store_query_text t ON t.query_text_id = q.query_text_id
+                WHERE (t.query_sql_text LIKE '%note_agg%' OR t.query_sql_text LIKE '%person_exercises%')
+                  AND t.query_sql_text NOT LIKE '%query_store%'
+                  AND EXISTS (SELECT 1 FROM sys.query_store_runtime_stats rs
+                              WHERE rs.plan_id = p.plan_id
+                                AND CAST(SWITCHOFFSET(rs.last_execution_time, '+00:00') AS DATETIME2) >= ?)""",
+                since);
+    }
+
+    private static LocalDateTime compiledAt(Map<String, Object> plan) {
+        return ((java.sql.Timestamp) plan.get("compiled_utc")).toLocalDateTime();
     }
 
     // Every shape each statement is issued in: full History and the Free window for the aggregate;

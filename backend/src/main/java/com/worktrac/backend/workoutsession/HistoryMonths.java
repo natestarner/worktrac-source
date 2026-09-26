@@ -38,8 +38,8 @@ import java.util.TreeMap;
 // why the join hints are load-bearing. Here that means: the person's DISTINCT exercises are looked up
 // once each (person_exercises) rather than once per set, which against a lower-sized exercises table
 // was 57,302 page reads for one five-year History and is now 24; and notes are reached by seek from
-// the person's own sessions rather than by a pass over the notes index. OPTION (RECOMPILE) compiles it
-// for each person rather than reusing a plan compiled for a five-set household -- see HistoryFingerprints.
+// the person's own sessions rather than by a pass over the notes index. HistoryPlanSize gives it one
+// cached plan per size class, so a big History never runs a plan compiled for a five-set household.
 @Repository
 public class HistoryMonths {
 
@@ -81,7 +81,6 @@ public class HistoryMonths {
                    NULL, sen.exercise_id, NULL, NULL,
                    NULL, NULL, NULL, NULL, NULL, sen.note
             FROM vs INNER LOOP JOIN session_exercise_notes sen ON sen.session_id = vs.id
-            OPTION (RECOMPILE)
             """;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -113,7 +112,7 @@ public class HistoryMonths {
         Map<Long, SessionRow> sessions = new HashMap<>();
         List<SetRow> sets = new ArrayList<>();
         List<NoteRow> notes = new ArrayList<>();
-        jdbc.query(LOAD.formatted(where), params, rs -> {
+        jdbc.query(HistoryPlanSize.comment(jdbc, personId) + LOAD.formatted(where), params, rs -> {
             String month = rs.getString("month");
             long sessionId = rs.getLong("session_id");
             BigInteger rv = BigInteger.valueOf(rs.getLong("rv"));

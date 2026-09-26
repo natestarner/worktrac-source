@@ -58,15 +58,12 @@ import java.util.Map;
 // proportional to every household on a large one. A hint pins the shape so it cannot drift with the
 // statistics of whichever person compiled the plan first.
 //
-// ⚠️ OPTION (RECOMPILE) is load-bearing too: every execution gets a plan compiled for ITS person.
-// People differ by four orders of magnitude -- a new household has five sets, a daily lifter twenty
-// thousand -- and a cached plan is compiled for whoever ran first. On lower that is always an e2e
-// household, so after #345 the five-year History ran a plan built for five rows: memory grants that
-// spilled to tempdb, the month joins as nested loops re-running each aggregate once per month, and
-// lower's Basic tier at 100% CPU for ~50s per sync (Query Store, query 1819). The hints fix the join
-// algorithms; only a per-person compile fixes the grants, the index choice and the unhinted joins.
-// It costs ~10ms of compile per statement, on a request that runs once per write. HistorySyncCostTest
-// runs a tiny person first and requires the big one's plan to have been compiled for the big one.
+// ⚠️ ONE CACHED PLAN PER SIZE CLASS (HistoryPlanSize) is load-bearing too. A plan is compiled for
+// whoever runs the statement first, and on lower that is always a five-set e2e household: after #345
+// the five-year History ran a plan built for five rows and took ~50s per sync. The hints fix the join
+// algorithms; only a plan compiled for someone of this person's size fixes the memory grants, the
+// index choice and the unhinted joins. Never OPTION (RECOMPILE) -- see HistoryPlanSize for what that
+// did to lower's CPU.
 //
 // ⚠️ If History ever reads a new column or table, it MUST be folded in here, or a change to it will
 // be answered with "unchanged" and the device keeps the old value until the daily full sync.
@@ -122,7 +119,6 @@ public class HistoryFingerprints {
             LEFT JOIN note_agg na ON na.month = sa.month
             LEFT JOIN ex_agg ea ON ea.month = sa.month
             ORDER BY sa.month DESC
-            OPTION (RECOMPILE)
             """;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -145,7 +141,7 @@ public class HistoryFingerprints {
             params.addValue("floor", LocalDateTime.ofInstant(floor, ZoneOffset.UTC));
         }
         Map<String, String> fingerprints = new LinkedHashMap<>();
-        jdbc.query(sql, params, rs -> {
+        jdbc.query(HistoryPlanSize.comment(jdbc, personId) + sql, params, rs -> {
             fingerprints.put(rs.getString("month"), of(floor == null,
                     rs.getLong("sess_n"), rs.getBigDecimal("sess_rv").toBigIntegerExact(),
                     rs.getLong("set_n"), rs.getBigDecimal("set_rv").toBigIntegerExact(),
