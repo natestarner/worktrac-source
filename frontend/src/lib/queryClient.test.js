@@ -1578,6 +1578,58 @@ describe('refreshHistory', () => {
     });
   });
 
+  // An ORDINARY sync begun elsewhere -- the boot warm on app open, a refocus, the periodic warm --
+  // is re-verifying every month, including ones another device changed. A write's refresh that
+  // cancels it must not narrow it to the write's month: on lower, an app opened with a set queued
+  // offline cancelled its own boot sync this way and threw away another device's change to August,
+  // whose answer had already arrived, until the next ordinary sync.
+  describe('an ordinary sync a refresh cancels', () => {
+    const SEPTEMBER = { sessions: [2], at: ['2026-09-20T10:00:00Z'] };
+    const scopes = () => getHistory.mock.calls.map(([, options]) => options?.scope ?? null);
+
+    it('makes the refresh that cancelled it ordinary', async () => {
+      client.setQueryData(key, ['before']);
+      getHistory.mockImplementationOnce(() => new Promise(() => {})); // the boot warm, in flight
+      getHistory.mockResolvedValueOnce(['after']);
+
+      client.prefetchQuery({ queryKey: key, queryFn: () => getHistory(PERSON, {}), staleTime: 0 });
+      await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
+      refreshHistory(client, PERSON, SEPTEMBER);
+
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+      expect(scopes()[1]).toBeNull();
+    });
+
+    it('does not make a refresh ordinary when the fetch it cancels is a refresh of its own', async () => {
+      client.setQueryData(key, ['before']);
+      getHistory.mockImplementationOnce(() => new Promise(() => {}));
+      getHistory.mockResolvedValueOnce(['after']);
+
+      refreshHistory(client, PERSON, SEPTEMBER);
+      await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
+      refreshHistory(client, PERSON, SEPTEMBER);
+
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+      expect(scopes()[1]).toEqual(SEPTEMBER);
+    });
+
+    it('makes the refresh ordinary when the sync it cancels is paused offline', async () => {
+      client.setQueryData(key, ['before']);
+      onlineManager.setOnline(false);
+      try {
+        client.prefetchQuery({ queryKey: key, queryFn: () => getHistory(PERSON, {}), staleTime: 0 });
+        await vi.waitFor(() => expect(client.getQueryState(key).fetchStatus).toBe('paused'));
+        getHistory.mockResolvedValue(['after']);
+        refreshHistory(client, PERSON, SEPTEMBER);
+      } finally {
+        onlineManager.setOnline(true);
+      }
+
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+      expect(scopes().at(-1)).toBeNull();
+    });
+  });
+
   it('refreshes every person whose History this device holds', async () => {
     client.setQueryData(queryKeys.history(1), ['a']);
     client.setQueryData(queryKeys.history(2), ['b']);

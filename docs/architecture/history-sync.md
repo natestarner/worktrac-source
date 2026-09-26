@@ -190,6 +190,18 @@ debt, and the request sends the whole debt, read when it goes out rather than wh
 succeeds. An owed ordinary refresh, or a union past `HistorySyncRequest`'s bound of 8, makes the next
 refresh ordinary.
 
+**An ordinary sync is owed too.** A second gap was found on lower, after the fix above: an app
+opened with a set still queued offline, after another device had changed a workout in another month.
+The boot warm's ordinary sync is what re-verifies that month, and the queued set drained at the same
+moment, in one of two orders:
+- the drained set's scoped refresh cancelled the boot sync, whose answer carrying the other device's
+  change arrived and was thrown away;
+- or the warm's `prefetchQuery` joined the scoped fetch already in flight and never sent its own.
+
+Either way that month stayed stale until the next ordinary sync. Now `refreshHistory` knows which
+fetch is its own (`inFlight`). Cancelling any other fetch, in flight or paused offline, makes the
+refresh ordinary, and the warm refreshes History through `refreshHistory` rather than a prefetch.
+
 **Tested:**
 - `HistoryConvergenceTest` has a sixth device that scoped-syncs after every write it makes and
   ordinary-syncs every 5–15 writes. After each scoped sync, every scoped month must equal
@@ -205,6 +217,9 @@ refresh ordinary.
 - `history-refresh-owed-scope.spec.ts` drives the real trigger: a set added offline to a workout
   40 days back and one to today's, drained together on reconnect with each sync answered 2s late.
   The app's persisted History must then equal the server's. It fails without the debt.
+- The same spec's app-open case: a set queued offline, the app closed, another device adds a set to
+  an older month, then the app reopens with syncs answered 2s late. It fails without the ordinary
+  debt, because the app threw away the answer that carried the change.
 
 ## How the property is tested
 

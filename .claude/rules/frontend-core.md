@@ -384,6 +384,15 @@ each held month's fingerprint and keeps every month the server does not resend
   ordinary sync. An owed ordinary refresh, or a union past the server's bound of 8, makes the refresh
   ordinary. Don't "simplify" the debt away or capture the scope when the refresh is asked for; the
   `the scope a cancelled refresh was owed` tests fail if you do.
+- **⚠️ An ordinary sync a refresh cancels makes that refresh ordinary**, and the warm refreshes
+  History through `refreshHistory`, never `prefetchQuery`. The boot warm's sync is what brings in
+  another device's change on app open. Two ways lost it on lower, both when the app opened with a
+  set still queued offline. Either the drained set's scoped refresh cancelled the boot sync (whose
+  answer arrived and was thrown away), or the warm's prefetch *joined* the scoped fetch in flight and
+  never sent its own. `refreshHistory` tracks the fetch it started (`inFlight`); cancelling any other
+  fetch, including one paused offline, owes an ordinary sync. Pinned by `an ordinary sync a refresh
+  cancels`, `warmOfflineCache while a scoped History refresh is in flight`, and
+  `history-refresh-owed-scope.spec.ts`'s app-open case.
 - **A write that changes EVERY person's History uses `refreshHistoryForEveryone`** — an exercise
   rename (History carries names; `LogTab.refreshPersonalization` is the live rename path) and a plan
   change (`BillingTab`, with `historyWindowForEveryone()`). Cheap: an unchanged month costs a

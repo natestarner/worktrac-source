@@ -3,7 +3,8 @@ import { queryKeys } from '../api/queryKeys';
 import { listExercises, listPersonExercises } from '../api/exercises';
 import { listTags } from '../api/tags';
 import { listRoutines } from '../api/routines';
-import { getLiveSession, getHistory, getHistoryWindow } from '../api/sessions';
+import { getLiveSession, getHistoryWindow } from '../api/sessions';
+import { refreshHistory } from './queryClient';
 import { getPrs } from '../api/stats';
 import { listRoster } from '../api/roster';
 
@@ -49,16 +50,14 @@ const WARM_STALE_TIME = 30 * 1000;
 //   - exercises, personExercises -- insertOptimisticExercise (AddEditExerciseModal) puts a temp
 //                       exercise in both while its create is still queued in the outbox.
 //   - liveSession    -- EndWorkoutConfirmModal optimistically nulls it on end-workout.
-function personWarmTargets(queryClient, personId) {
+function personWarmTargets(personId) {
   return [
     { queryKey: queryKeys.liveSession(personId), queryFn: () => getLiveSession(personId) },
     { queryKey: queryKeys.personExercises(personId), queryFn: () => listPersonExercises(personId) },
     { queryKey: queryKeys.routines(personId), queryFn: () => listRoutines(personId), refreshAfterRestore: true },
-    {
-      queryKey: queryKeys.history(personId),
-      queryFn: () => getHistory(personId, { readCached: () => queryClient.getQueryData(queryKeys.history(personId)) }),
-      refreshAfterRestore: true,
-    },
+    // Refreshed through refreshHistory, like every other History refresh, never a bare prefetch --
+    // see warmOfflineCache below.
+    { queryKey: queryKeys.history(personId), historyOf: personId, refreshAfterRestore: true },
     { queryKey: queryKeys.prs(personId), queryFn: () => getPrs(personId), refreshAfterRestore: true },
     { queryKey: queryKeys.historyWindow(personId), queryFn: () => getHistoryWindow(personId), refreshAfterRestore: true },
   ];
@@ -152,15 +151,25 @@ export async function warmOfflineCache(
     // reads rather than a sibling key nothing observes.
     { queryKey: queryKeys.roster(undefined), queryFn: () => listRoster() },
     ...peopleToWarm(people, { selfPersonId, activePersonId })
-      .flatMap((person) => personWarmTargets(queryClient, person.id)),
+      .flatMap((person) => personWarmTargets(person.id)),
   ];
 
   await Promise.allSettled(
-    targets.map(({ refreshAfterRestore, ...target }) =>
-      queryClient.prefetchQuery({
-        ...target,
-        staleTime: afterRestore && refreshAfterRestore ? 0 : WARM_STALE_TIME,
-      }),
-    ),
+    targets.map(({ refreshAfterRestore, historyOf, ...target }) => {
+      const staleTime = afterRestore && refreshAfterRestore ? 0 : WARM_STALE_TIME;
+      // ⚠️ History goes through refreshHistory, never prefetchQuery. The warm's History fetch is an
+      // ORDINARY sync: it re-verifies every month, which is how a change made on another device
+      // arrives on app open. A prefetch JOINS whatever History fetch is already in flight, and at
+      // boot that is often the scoped sync of a set the outbox just drained -- so the warm got that
+      // one month back instead, and another device's change to any other month stayed hidden until
+      // the next ordinary sync. refreshHistory cancels that fetch and sends an ordinary sync that
+      // also carries its scope. Same freshness rule as the prefetch it replaces.
+      if (historyOf != null) {
+        const state = queryClient.getQueryState(target.queryKey);
+        const fresh = state?.data !== undefined && !state.isInvalidated && Date.now() - state.dataUpdatedAt < staleTime;
+        return fresh ? undefined : refreshHistory(queryClient, historyOf);
+      }
+      return queryClient.prefetchQuery({ ...target, staleTime });
+    }),
   );
 }
