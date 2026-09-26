@@ -32,6 +32,7 @@ import java.util.TreeSet;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // The History sync's statements must cost in proportion to THIS PERSON's rows, never to the table.
@@ -203,6 +204,22 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
 
         // Non-vacuous: every History table was actually read, and so actually checked.
         assertEquals(new TreeSet<>(HISTORY_TABLES), tablesRead);
+
+        // A RANGE load (a sync after a write) must reach its sets through the range's own workouts --
+        // a seek on (person_id, session_id) per workout -- never a pass over the person's whole set
+        // range. The whole-History pass returned one month's few hundred sets by reading five years'
+        // twenty thousand, which made every per-set sync cost as much as the full History.
+        List<String> rangePlans = planXmls.stream().filter(plan -> plan.contains("rs.session_id")).toList();
+        assertEquals(2, rangePlans.size(), "both range shapes issued in runEveryShape (see HistoryMonths#sql)");
+        for (String plan : rangePlans) {
+            List<Access> setReads = accesses(plan).stream()
+                    .filter(access -> access.table().equals("workout_sets")).toList();
+            assertFalse(setReads.isEmpty());
+            for (Access read : setReads) {
+                assertTrue(read.seekColumns().contains("session_id"),
+                        "a range load read workout_sets without seeking each workout: " + read);
+            }
+        }
         assertTrue(violations.isEmpty(),
                 "History sync reads a table other than by seeking through the person's rows "
                         + "(cost would follow the table, not the person): " + violations);
@@ -252,7 +269,7 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
         historyMonths.load(person, null, from, null);
     }
 
-    record Access(String table, String index, String physicalOp, boolean lookup) {}
+    record Access(String table, String index, String physicalOp, boolean lookup, Set<String> seekColumns) {}
 
     // Each operator that reads a table directly: the <RelOp> whose child is an <IndexScan> or
     // <TableScan>. A key lookup is a Clustered Index Seek whose IndexScan carries Lookup="true".
@@ -272,9 +289,19 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
                 }
                 Element object = (Element) reader.getElementsByTagName("Object").item(0);
                 String lookup = reader.getAttribute("Lookup");
+                // The key columns a seek actually narrows on: every ColumnReference under a RangeColumns
+                // of its SeekPredicates. (person_id alone is a pass over the person's whole range.)
+                Set<String> seekColumns = new TreeSet<>();
+                NodeList ranges = reader.getElementsByTagName("RangeColumns");
+                for (int r = 0; r < ranges.getLength(); r++) {
+                    NodeList columns = ((Element) ranges.item(r)).getElementsByTagName("ColumnReference");
+                    for (int c = 0; c < columns.getLength(); c++) {
+                        seekColumns.add(strip(((Element) columns.item(c)).getAttribute("Column")));
+                    }
+                }
                 accesses.add(new Access(
                         strip(object.getAttribute("Table")), strip(object.getAttribute("Index")),
-                        relOp.getAttribute("PhysicalOp"), "true".equals(lookup) || "1".equals(lookup)));
+                        relOp.getAttribute("PhysicalOp"), "true".equals(lookup) || "1".equals(lookup), seekColumns));
             }
         }
         return accesses;

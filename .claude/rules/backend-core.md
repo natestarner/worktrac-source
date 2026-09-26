@@ -252,6 +252,9 @@ narrative: `docs/architecture/history-sync.md`.
 - **Every month the client KEEPS is re-checked after the load; a mismatch is a 503**, which the
   client's ordinary query retry answers. It is not a backend retry loop, and must not become one
   (see Concurrency above).
+- **A device holding nothing gets one load and no fingerprint queries**: nothing it holds could be
+  affected by either. **A range load seeks each of the range's workouts**, never the person's whole
+  set range, so a one-month sync does not grow with the History. `HistorySyncCostTest` pins that.
 - **⚠️ Both statements must cost in proportion to the PERSON, never the table.** The indexes (V83)
   cover every column they read, exercises are looked up by the person's distinct ids, and the join
   hints **and `HistoryPlanSize`** are load-bearing. Each size class of History gets one cached plan,
