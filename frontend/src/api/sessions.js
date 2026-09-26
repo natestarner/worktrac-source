@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { applyHistorySync, findDrift, fingerprintsOf, heldForSync, isSyncedHistory } from '../lib/historySync';
+import { applyHistorySync, auditFor, findAuditDrift, fingerprintsOf, heldForSync } from '../lib/historySync';
 
 export function getLiveSession(personId) {
   return apiClient.get(`/api/people/${personId}/sessions/live`);
@@ -31,7 +31,11 @@ export function editSession(sessionId, startedAt) {
 // every mode, and a failed sync leaves the cached months in place.
 // `scope` ({ sessions, at }) narrows the sync to the workouts a write on this device just touched --
 // see historyScopeFor in lib/queryClient.js. Sent only when something is held: a device that holds
-// nothing, or is due its daily full sync, always gets everything.
+// nothing always gets everything.
+//
+// Every ORDINARY sync also carries the rolling check (`audit`, lib/historySync.js#auditFor): the
+// month re-read longest ago comes back in full, and a month whose fingerprint matched while its
+// content did not is reported (the production canary). A server that predates the check ignores it.
 export async function getHistory(personId, { readCached, scope } = {}) {
   const cached = readCached?.();
   const held = heldForSync(cached);
@@ -39,13 +43,13 @@ export async function getHistory(personId, { readCached, scope } = {}) {
   if (held && scope?.sessions?.length) {
     body.sessions = scope.sessions;
     body.at = scope.at ?? [];
+  } else if (held) {
+    const audit = auditFor(held);
+    if (audit.length) body.audit = audit;
   }
   const reply = await apiClient.post(`/api/people/${personId}/history/sync`, body);
-  // A synced cache that is not offered is the daily full sync -- the canary's one chance to look.
-  if (!held && isSyncedHistory(cached)) {
-    const drifted = findDrift(cached, reply);
-    if (drifted.length > 0) reportHistoryDrift(personId, drifted);
-  }
+  const drifted = findAuditDrift(held, reply);
+  if (drifted.length > 0) reportHistoryDrift(personId, drifted);
   return applyHistorySync(held, reply);
 }
 

@@ -29,11 +29,15 @@ import java.util.Map;
 //     would never notice and SUM does.
 //   - the exercises the month's sets name: SUM of their DISTINCT row_version. History carries each
 //     entry's exercise name, so a rename changes every month that logged it, for every person.
-//   - the FULL-HISTORY FLAG, not the Free-tier floor. The floor is `now - 90 days` and moves every
-//     instant; hashing it would change every Free month on every request. Instead only rows the
-//     floor admits are aggregated, so a session aging out of the window lowers its month's count.
-//     The one way rows can ENTER the visible set without a write is an upgrade -- which flips the
-//     flag and so changes every month.
+//   - NOT the Free-tier floor, and NOT the plan. The floor is `now - 90 days` and moves every instant;
+//     hashing it would change every Free month on every request. Only rows the floor admits are
+//     aggregated, so a session aging out of the window lowers its month's count, an upgrade (rows
+//     ENTERING the visible set) raises the counts of exactly the months that gain rows, and a
+//     downgrade lowers them. A plan flag used to be hashed too, which re-sent every month on every
+//     plan change although the months inside the window had not changed at all.
+//   - the EPOCH (HistoryEpoch): History's format version and the database's identity. They change
+//     what History says without a row changing -- a new field, a restored database -- so they are
+//     in every fingerprint.
 //
 // A month is the UTC calendar month of a session's started_at (hibernate.jdbc.time_zone is UTC, so
 // the stored value is UTC; CONVERT style 126 is ISO 8601 and CHAR(7) keeps 'yyyy-mm'). The client
@@ -64,7 +68,9 @@ import java.util.Map;
 // everyone held the database at 100% CPU through an e2e run. See HistoryPlanSize before changing it.
 //
 // ⚠️ If History ever reads a new column or table, it MUST be folded in here, or a change to it will
-// be answered with "unchanged" and the device keeps the old value until the daily full sync.
+// be answered with "unchanged" and the device keeps the old value until the rolling check reaches
+// that month. A change to what History contains WITHOUT a new column or table -- a field derived
+// differently, a new ordering -- bumps HistoryEpoch.FORMAT_VERSION instead.
 // HistoryFingerprintTest enumerates History's fields and fails until a new one is declared covered.
 @Repository
 public class HistoryFingerprints {
@@ -120,13 +126,15 @@ public class HistoryFingerprints {
             """;
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final HistoryEpoch epoch;
 
-    public HistoryFingerprints(NamedParameterJdbcTemplate jdbc) {
+    public HistoryFingerprints(NamedParameterJdbcTemplate jdbc, HistoryEpoch epoch) {
         this.jdbc = jdbc;
+        this.epoch = epoch;
     }
 
     // Month ('yyyy-mm') -> fingerprint, newest month first. `floor` is SubscriptionService#historyFloor
-    // for the person's account: null admits everything (and marks the full-history flag).
+    // for the person's account: null admits everything.
     public Map<String, String> forPerson(long personId, Instant floor) {
         MapSqlParameterSource params = new MapSqlParameterSource("personId", personId);
         String sql;
@@ -139,8 +147,9 @@ public class HistoryFingerprints {
             params.addValue("floor", LocalDateTime.ofInstant(floor, ZoneOffset.UTC));
         }
         Map<String, String> fingerprints = new LinkedHashMap<>();
+        String salt = epoch.current();
         jdbc.query(HistoryPlanSize.forPerson(jdbc, personId).around(sql), params, rs -> {
-            fingerprints.put(rs.getString("month"), of(floor == null,
+            fingerprints.put(rs.getString("month"), of(salt,
                     rs.getLong("sess_n"), rs.getBigDecimal("sess_rv").toBigIntegerExact(),
                     rs.getLong("set_n"), rs.getBigDecimal("set_rv").toBigIntegerExact(),
                     rs.getLong("note_n"), rs.getBigDecimal("note_rv").toBigIntegerExact(),
@@ -152,9 +161,9 @@ public class HistoryFingerprints {
     // The one definition of a month's fingerprint from its totals. HistoryMonths computes the same
     // totals from the rows it loads, so the fingerprint it hands the client describes exactly the
     // content beside it; HistoryFingerprintTest pins that the two always agree.
-    static String of(boolean fullHistory, long sessions, BigInteger sessionVersions, long sets,
+    public static String of(String epoch, long sessions, BigInteger sessionVersions, long sets,
                      BigInteger setVersions, long notes, BigInteger noteVersions, BigInteger exerciseVersions) {
-        return hash(String.join("|", fullHistory ? "full" : "window",
+        return hash(String.join("|", epoch,
                 Long.toString(sessions), sessionVersions.toString(),
                 Long.toString(sets), setVersions.toString(),
                 Long.toString(notes), noteVersions.toString(),

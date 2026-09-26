@@ -115,9 +115,11 @@ public class HistoryMonths {
     }
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final HistoryEpoch epoch;
 
-    public HistoryMonths(NamedParameterJdbcTemplate jdbc) {
+    public HistoryMonths(NamedParameterJdbcTemplate jdbc, HistoryEpoch epoch) {
         this.jdbc = jdbc;
+        this.epoch = epoch;
     }
 
     // Every month the person has a visible workout in, within [from, to) when given (either may be
@@ -208,10 +210,10 @@ public class HistoryMonths {
                 default -> throw new IllegalStateException("Unknown History row kind");
             }
         });
-        return build(floor == null, sessions, sets, notes);
+        return build(epoch.current(), sessions, sets, notes);
     }
 
-    private static Map<String, Month> build(boolean fullHistory, Map<Long, SessionRow> sessions,
+    private static Map<String, Month> build(String epoch, Map<Long, SessionRow> sessions,
                                             List<SetRow> sets, List<NoteRow> notes) {
         // Created-at order within a session, id breaking ties -- the order sets were logged in.
         sets.sort(Comparator.comparing(SetRow::createdAt).thenComparingLong(SetRow::id));
@@ -250,7 +252,7 @@ public class HistoryMonths {
 
         Map<String, Month> months = new LinkedHashMap<>();
         totals.forEach((month, t) -> months.put(month,
-                new Month(t.fingerprint(fullHistory), byMonth.getOrDefault(month, List.of()))));
+                new Month(t.fingerprint(epoch), byMonth.getOrDefault(month, List.of()))));
         return months;
     }
 
@@ -307,9 +309,9 @@ public class HistoryMonths {
             noteVersions = noteVersions.add(rv);
         }
 
-        String fingerprint(boolean fullHistory) {
+        String fingerprint(String epoch) {
             BigInteger exercises = exerciseVersions.values().stream().reduce(BigInteger.ZERO, BigInteger::add);
-            return HistoryFingerprints.of(fullHistory, sessions, sessionVersions, sets, setVersions,
+            return HistoryFingerprints.of(epoch, sessions, sessionVersions, sets, setVersions,
                     notes, noteVersions, exercises);
         }
     }

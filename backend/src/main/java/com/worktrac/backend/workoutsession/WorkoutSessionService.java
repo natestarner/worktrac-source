@@ -16,6 +16,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -186,12 +188,22 @@ public class WorkoutSessionService {
     // refetch after a write on another person.
     @Transactional(readOnly = true)
     public HistorySyncDto syncHistory(AccountAccess access, Long personId, Map<String, String> have) {
-        return syncHistory(access, personId, have, null, null);
+        return syncHistory(access, personId, have, null, null, null);
     }
 
     @Transactional(readOnly = true)
     public HistorySyncDto syncHistory(AccountAccess access, Long personId, Map<String, String> have,
                                       List<Long> sessions, List<Instant> at) {
+        return syncHistory(access, personId, have, sessions, at, null);
+    }
+
+    // `audit` is the rolling check (HistorySyncRequest#audit): on an ORDINARY sync, the requested
+    // months that still exist come back in full in `audited`, whatever their fingerprint, so the
+    // client can compare them with its own copy -- the one way it can ever notice a month whose
+    // fingerprint matches while its content does not. It costs one month's load, not a full History.
+    @Transactional(readOnly = true)
+    public HistorySyncDto syncHistory(AccountAccess access, Long personId, Map<String, String> have,
+                                      List<Long> sessions, List<Instant> at, List<String> audit) {
         Map<String, String> held = have == null ? Map.of() : have;
         SyncTiming timing = new SyncTiming(personId, held.size());
         Person person = personService.requireVisiblePerson(personId, access);
@@ -260,8 +272,9 @@ public class WorkoutSessionService {
                 .map(Map.Entry::getKey)
                 .toList();
         if (differing.isEmpty()) {
+            Map<String, HistoryMonthDto> audited = audited(person, floor, audit, current.keySet(), Map.of());
             timing.done();
-            return new HistorySyncDto(List.copyOf(current.keySet()), Map.of());
+            return new HistorySyncDto(List.copyOf(current.keySet()), Map.of(), null, audited);
         }
 
         // `current` is newest first, so the first differing month is the newest and the last the
@@ -292,8 +305,36 @@ public class WorkoutSessionService {
             months.add(e.getKey());
         }
         months.addAll(loaded.keySet());
+        Map<String, HistoryMonthDto> audited = audited(person, floor, audit, months, loaded);
         timing.done();
-        return new HistorySyncDto(List.copyOf(months), changed);
+        return new HistorySyncDto(List.copyOf(months), changed, null, audited);
+    }
+
+    // The rolling check's months, in full: from this request's own load when it already built one,
+    // otherwise ONE more statement for just these months -- each month's fingerprint derived from its
+    // own rows, as for every month the server sends. Only months the reply lists (a month the client
+    // asked about that no longer exists is simply dropped by the list). Null when none were asked for.
+    private Map<String, HistoryMonthDto> audited(Person person, Instant floor, List<String> audit,
+                                                 Collection<String> listed, Map<String, HistoryMonths.Month> loaded) {
+        if (audit == null || audit.isEmpty()) {
+            return null;
+        }
+        Map<String, HistoryMonthDto> out = new LinkedHashMap<>();
+        List<YearMonth> toLoad = new ArrayList<>();
+        for (String month : audit) {
+            if (!listed.contains(month) || out.containsKey(month)) continue;
+            HistoryMonths.Month m = loaded.get(month);
+            if (m != null) {
+                out.put(month, new HistoryMonthDto(m.fingerprint(), m.sessions()));
+            } else {
+                toLoad.add(YearMonth.parse(month)); // listed, so it is a month the database produced
+            }
+        }
+        if (!toLoad.isEmpty()) {
+            historyMonths.loadMonths(person.getId(), floor, toLoad)
+                    .forEach((month, m) -> out.put(month, new HistoryMonthDto(m.fingerprint(), m.sessions())));
+        }
+        return out;
     }
 
     // Where a slow History sync spent its time, one line per sync that took longer than SLOW_SYNC.
