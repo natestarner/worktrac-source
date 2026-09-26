@@ -346,4 +346,38 @@ describe('warmOfflineCache while a scoped History refresh is in flight', () => {
     expect(getHistory).toHaveBeenCalledTimes(2);
     expect(getHistory.mock.calls[1][1].scope).toBeNull();
   });
+
+  // The other side of the same rule. An ORDINARY sync already in flight -- a screen's own fetch on
+  // mount, or an earlier warm -- is exactly what the warm wants, so it joins it. Cancelling it and
+  // sending a second made a fresh sign-in download the whole History twice (a full sync is the most
+  // expensive request there is), since the server finishes a request the app has abandoned anyway.
+  it('joins an ordinary sync already in flight instead of sending a second', async () => {
+    let finish;
+    getHistory.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve(['synced']); }));
+    const screen = client.prefetchQuery({ queryKey: queryKeys.history(PERSON.id), queryFn: () => getHistory(PERSON.id, {}) });
+    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
+
+    const warm = warmOfflineCache(client, [PERSON], { afterRestore: true });
+    await Promise.resolve();
+    finish();
+    await Promise.all([screen, warm]);
+
+    expect(getHistory).toHaveBeenCalledTimes(1);
+    expect(client.getQueryData(queryKeys.history(PERSON.id))).toEqual(['synced']);
+  });
+
+  it('joins an ordinary sync refreshHistory itself has in flight', async () => {
+    let finish;
+    getHistory.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve(['synced']); }));
+    refreshHistory(client, PERSON.id); // e.g. a first warm, or the Log tab returning to its list
+    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
+
+    const warm = warmOfflineCache(client, [PERSON], { afterRestore: true });
+    await Promise.resolve();
+    finish();
+    await warm;
+
+    await vi.waitFor(() => expect(client.getQueryData(queryKeys.history(PERSON.id))).toEqual(['synced']));
+    expect(getHistory).toHaveBeenCalledTimes(1);
+  });
 });

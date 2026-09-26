@@ -393,6 +393,11 @@ each held month's fingerprint and keeps every month the server does not resend
   fetch, including one paused offline, owes an ordinary sync. Pinned by `an ordinary sync a refresh
   cancels`, `warmOfflineCache while a scoped History refresh is in flight`, and
   `history-refresh-owed-scope.spec.ts`'s app-open case.
+- **The warm JOINS an ordinary sync already in flight; it replaces only a scoped one**
+  (`scopedHistoryRefreshInFlight`). The server finishes a request the app abandons, so replacing an
+  ordinary sync pays for two. That is what #357's first cut did: a fresh sign-in downloaded the whole
+  History twice. Pinned by `history-sync.spec.ts`'s "a fresh sign-in downloads History once" and the
+  two `joins ...` warm tests.
 - **A write that changes EVERY person's History uses `refreshHistoryForEveryone`** — an exercise
   rename (History carries names; `LogTab.refreshPersonalization` is the live rename path) and a plan
   change (`BillingTab`, with `historyWindowForEveryone()`). Cheap: an unchanged month costs a
