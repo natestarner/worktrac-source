@@ -172,7 +172,7 @@ worker caches no API calls, so the move from GET to POST changed nothing there.
 **Every statement must cost in proportion to this person's rows, never the table.** Local and test
 databases hold a few households, so the two are indistinguishable there. Lower holds every e2e
 household ever created, and there the difference was a ~0.3s full sync against a 10-minute one at
-100% DTU (`docs/incidents/2026-09-25-history-full-sync-pegged-lower-db.md`). Three things keep it
+100% DTU (`docs/incidents/2026-09-25-history-full-sync-pegged-lower-db.md`). Four things keep it
 proportional:
 
 - **Covering indexes (V83).** Each History-sync index carries every column the aggregate and the load
@@ -183,6 +183,13 @@ proportional:
 - **Join hints.** `HASH` to take the person's sets in one pass of their index range; `LOOP` to reach
   notes and exercises by seek from the person's own sessions and exercises. Left alone, the optimizer
   chose a pass over the notes index at lower's proportions.
+- **`OPTION (RECOMPILE)`, so every execution is compiled for its own person.** People differ by four
+  orders of magnitude, from a new household's five sets to a daily lifter's twenty thousand. Without
+  it, the cached plan belongs to whoever ran first, and on lower that is always an e2e household.
+  After the three fixes above, a five-year full sync still ran **~50s at 100% CPU** on lower, on a
+  plan built for five rows. That plan's memory grants spilled to tempdb, and its month joins were
+  nested loops that re-ran each aggregate once per month. Recompiling costs ~10ms per statement, on a
+  request that runs once per write.
 
 Measured against lower-sized local tables (300k workouts, 1.2M sets, 100k notes, 40k exercises) for a
 person with 1,827 workouts:
@@ -193,9 +200,19 @@ person with 1,827 workouts:
 | Fingerprint aggregate | ~44,000 | ~6,700 (sets 360, notes ~5,000 by seek, exercises ~1,300) |
 
 The notes figure is about three reads per workout: a seek per session. It grows with the person and
-nothing else. `HistorySyncCostTest` pins the shape rather than any number: it reads back the compiled
-plans and fails on any scan or key lookup of a History table. **If it fails after you add a column,
-add the column to the index in a new migration. Don't relax the test.**
+nothing else. `HistorySyncCostTest` pins the shape rather than any number. It runs every statement for
+a one-workout household first, then for a big one, and reads the plans back from Query Store. It fails
+if the big person reused a plan compiled for someone else, and on any scan or key lookup of a History
+table. **If it fails after you add a column, add the column to the index in a new migration. Don't
+relax the test.**
+
+**Lower's Query Store is readable** through the ARM `topQueries` API with the read-only principal
+(per-query executions, CPU and duration by hour; the query text is not readable). That is how the
+recompile problem was found:
+
+```bash
+MSYS_NO_PATHCONV=1 az rest --method get --output-file C:/tmp/topq.xml --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/worktrac-rg/providers/Microsoft.Sql/servers/worktrac-sql-server/databases/worktrac-db-lower/topQueries?api-version=2014-04-01&resourceType=duration&numberOfQueries=10&aggregationFunction=sum&interval=PT1H"
+```
 
 ## Not covered here
 

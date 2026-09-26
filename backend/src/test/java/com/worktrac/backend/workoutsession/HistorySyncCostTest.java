@@ -23,8 +23,10 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -38,10 +40,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // ~10 minutes at 100% DTU on lower, whose tables hold every e2e household ever created.
 //
 // So this does not time anything. It runs the real statements, reads back the plans SQL Server
-// actually compiled for them, and requires every read of a History table to be a SEEK (reached
-// through the person, their sessions or their exercises) and never a LOOKUP (a covering index that
-// stopped covering). Both are properties of the plan's shape, so they hold at any data size, and a
-// scan that would be harmless here fails exactly as it would have hurt on lower.
+// actually compiled for them (from Query Store), and requires two things:
+//   - every read of a History table is a SEEK (reached through the person, their sessions or their
+//     exercises) and never a LOOKUP (a covering index that stopped covering). Both are properties of
+//     the plan's shape, so they hold at any data size, and a scan that would be harmless here fails
+//     exactly as it would have hurt on lower.
+//   - the big person's plans were compiled FOR the big person, after a five-set household ran the same
+//     statements first -- exactly the order lower sees after every e2e run. The fix in #345 passed the
+//     first check and still ran ~50s per sync on lower, on a plan cached for five rows (see
+//     OPTION (RECOMPILE) in HistoryFingerprints).
 //
 // ⚠️ If this fails after you add a column to HistoryFingerprints or HistoryMonths, add that column to
 // the matching index's INCLUDE list in a new migration (see V83). If it fails after a plan changed
@@ -66,6 +73,7 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
     @MockitoBean private EmailService emailService;
 
     private long personId;
+    private long tinyPersonId;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -94,6 +102,13 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
                 other.get("account").get("id").asLong());
 
         seedDailyHistory(personId, 1500, exerciseIds, 4);
+
+        // And a brand-new household with one workout -- the shape of every e2e household on lower.
+        JsonNode tiny = RegistrationTestSupport.registerAndConfirm(mockMvc, new ObjectMapper(), testCodeCache,
+                "sync-cost-tiny-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com", "Tiny");
+        tinyPersonId = tiny.get("person").get("id").asLong();
+        seedDailyHistory(tinyPersonId, 1, exerciseIds, 1);
+
         jdbcTemplate.execute("UPDATE STATISTICS workout_sessions");
         jdbcTemplate.execute("UPDATE STATISTICS workout_sets");
         jdbcTemplate.execute("UPDATE STATISTICS session_exercise_notes");
@@ -124,37 +139,55 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void everyHistorySyncStatementSeeksThroughThePersonsOwnRows() throws Exception {
-        // Only this database's plans, and only the ones compiled from here on.
-        jdbcTemplate.execute("ALTER DATABASE SCOPED CONFIGURATION CLEAR PROCEDURE_CACHE");
+    void everyHistorySyncStatementIsCompiledForItsPersonAndSeeksThroughTheirRows() throws Exception {
+        // Query Store rather than the plan cache: OPTION (RECOMPILE) plans are never cached, and Query
+        // Store records every plan with the time it was compiled. ALL, because the default capture
+        // mode skips statements it has only seen once.
+        jdbcTemplate.execute("ALTER DATABASE CURRENT SET QUERY_STORE = ON "
+                + "(OPERATION_MODE = READ_WRITE, QUERY_CAPTURE_MODE = ALL)");
 
-        Instant floor = Instant.parse("2026-03-01T00:00:00Z");
-        Instant from = Instant.parse("2026-04-01T00:00:00Z");
-        Instant to = Instant.parse("2026-05-01T00:00:00Z");
-        // Every shape each statement is issued in: full History and the Free window for the
-        // aggregate; the whole History (GET /history, a full sync) and changed-month ranges for the load.
-        assertTrue(historyFingerprints.forPerson(personId, null).size() > 1);
-        assertTrue(historyFingerprints.forPerson(personId, floor).size() > 1);
-        assertTrue(historyMonths.load(personId, null, null, null).size() > 1);
-        assertTrue(historyMonths.load(personId, floor, from, to).size() == 1);
-        assertTrue(historyMonths.load(personId, null, from, null).size() > 1);
+        // What lower's e2e run does before anyone with real History syncs: a five-set household runs
+        // every statement first. A plan cached from here is built for five rows.
+        runEveryShape(tinyPersonId);
+        // Query Store keeps compile times to ~10ms, rounded either way: a compile in the same tick as
+        // `afterTiny` could read as after it (the tiny plan passing for the big one's -- a vacuous green)
+        // or before it (a false red). A clear gap on both sides makes the order unambiguous.
+        Thread.sleep(200);
+        LocalDateTime afterTiny = jdbcTemplate.queryForObject("SELECT SYSUTCDATETIME()", LocalDateTime.class);
+        Thread.sleep(200);
 
-        List<String> plans = jdbcTemplate.queryForList("""
-                SELECT p.query_plan
-                FROM sys.dm_exec_query_stats qs
-                CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
-                CROSS APPLY sys.dm_exec_text_query_plan(qs.plan_handle, qs.statement_start_offset,
-                                                        qs.statement_end_offset) p
-                CROSS APPLY (SELECT CAST(value AS INT) AS dbid FROM sys.dm_exec_plan_attributes(qs.plan_handle)
-                             WHERE attribute = 'dbid') a
-                WHERE a.dbid = DB_ID()
-                  AND (st.text LIKE '%note_agg%' OR st.text LIKE '%person_exercises%')
-                  AND st.text NOT LIKE '%dm_exec_query_stats%'""", String.class);
-        assertEquals(5, plans.size(), "one compiled plan per statement shape issued above");
+        runEveryShape(personId);
+
+        List<Map<String, Object>> plans = jdbcTemplate.queryForList("""
+                SELECT q.query_id,
+                       CAST(SWITCHOFFSET(p.last_compile_start_time, '+00:00') AS DATETIME2) AS compiled_utc,
+                       CAST(p.query_plan AS NVARCHAR(MAX)) AS query_plan
+                FROM sys.query_store_plan p
+                JOIN sys.query_store_query q ON q.query_id = p.query_id
+                JOIN sys.query_store_query_text t ON t.query_text_id = q.query_text_id
+                WHERE (t.query_sql_text LIKE '%note_agg%' OR t.query_sql_text LIKE '%person_exercises%')
+                  AND t.query_sql_text NOT LIKE '%query_store%'""");
+        Set<Object> statements = new TreeSet<>();
+        Set<Object> compiledForThisPerson = new TreeSet<>();
+        List<String> planXmls = new ArrayList<>();
+        for (Map<String, Object> plan : plans) {
+            statements.add(plan.get("query_id"));
+            LocalDateTime compiled = ((java.sql.Timestamp) plan.get("compiled_utc")).toLocalDateTime();
+            if (!compiled.isBefore(afterTiny)) {
+                compiledForThisPerson.add(plan.get("query_id"));
+                planXmls.add((String) plan.get("query_plan"));
+            }
+        }
+        assertEquals(5, statements.size(), "one statement per shape issued in runEveryShape");
+        // The big person's run must have COMPILED each statement, not reused the tiny person's plan.
+        // Without OPTION (RECOMPILE) nothing compiles here and this fails -- verified by removing it.
+        assertEquals(statements, compiledForThisPerson,
+                "a History statement reused a plan compiled for another person -- see OPTION (RECOMPILE) "
+                        + "in HistoryFingerprints");
 
         List<String> violations = new ArrayList<>();
         Set<String> tablesRead = new TreeSet<>();
-        for (String plan : plans) {
+        for (String plan : planXmls) {
             for (Access access : accesses(plan)) {
                 if (!HISTORY_TABLES.contains(access.table())) {
                     continue;
@@ -171,6 +204,19 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
         assertTrue(violations.isEmpty(),
                 "History sync reads a table other than by seeking through the person's rows "
                         + "(cost would follow the table, not the person): " + violations);
+    }
+
+    // Every shape each statement is issued in: full History and the Free window for the aggregate;
+    // the whole History (GET /history, a full sync) and changed-month ranges for the load.
+    private void runEveryShape(long person) {
+        Instant floor = Instant.parse("2026-03-01T00:00:00Z");
+        Instant from = Instant.parse("2026-04-01T00:00:00Z");
+        Instant to = Instant.parse("2026-05-01T00:00:00Z");
+        historyFingerprints.forPerson(person, null);
+        historyFingerprints.forPerson(person, floor);
+        historyMonths.load(person, null, null, null);
+        historyMonths.load(person, floor, from, to);
+        historyMonths.load(person, null, from, null);
     }
 
     record Access(String table, String index, String physicalOp, boolean lookup) {}

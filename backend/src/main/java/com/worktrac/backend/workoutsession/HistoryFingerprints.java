@@ -58,6 +58,16 @@ import java.util.Map;
 // proportional to every household on a large one. A hint pins the shape so it cannot drift with the
 // statistics of whichever person compiled the plan first.
 //
+// ⚠️ OPTION (RECOMPILE) is load-bearing too: every execution gets a plan compiled for ITS person.
+// People differ by four orders of magnitude -- a new household has five sets, a daily lifter twenty
+// thousand -- and a cached plan is compiled for whoever ran first. On lower that is always an e2e
+// household, so after #345 the five-year History ran a plan built for five rows: memory grants that
+// spilled to tempdb, the month joins as nested loops re-running each aggregate once per month, and
+// lower's Basic tier at 100% CPU for ~50s per sync (Query Store, query 1819). The hints fix the join
+// algorithms; only a per-person compile fixes the grants, the index choice and the unhinted joins.
+// It costs ~10ms of compile per statement, on a request that runs once per write. HistorySyncCostTest
+// runs a tiny person first and requires the big one's plan to have been compiled for the big one.
+//
 // ⚠️ If History ever reads a new column or table, it MUST be folded in here, or a change to it will
 // be answered with "unchanged" and the device keeps the old value until the daily full sync.
 // HistoryFingerprintTest enumerates History's fields and fails until a new one is declared covered.
@@ -112,6 +122,7 @@ public class HistoryFingerprints {
             LEFT JOIN note_agg na ON na.month = sa.month
             LEFT JOIN ex_agg ea ON ea.month = sa.month
             ORDER BY sa.month DESC
+            OPTION (RECOMPILE)
             """;
 
     private final NamedParameterJdbcTemplate jdbc;

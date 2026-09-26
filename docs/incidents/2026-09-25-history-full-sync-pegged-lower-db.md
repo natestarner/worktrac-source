@@ -48,6 +48,35 @@ retrying device, plus the daily full sync, queued another one.
     scan of `workout_sets`;
   - removing the join hints fails with the notes-index pass.
 
+## Round two: the fix passed every test and still ran ~50s on lower
+
+After #345 deployed, one full sync took **81s cold and 52s warm**. Lower's DB was at **100% CPU** with
+no data reads for the warm one. Locally the same request took 0.2s, and the old `GET /history` had
+taken ~2s on lower. So the statements were right and the plan lower actually ran was not.
+
+**Lower's Query Store is readable over ARM** (`topQueries`; see `docs/architecture/history-sync.md`,
+"Cost"). One query that appeared only after the deploy accounted for 127s over 261 executions,
+almost all of it the two probes.
+
+The cause was **the plan cache**. Lower's e2e run syncs hundreds of five-set households minutes
+before anyone with real History does, so the cached plan was compiled for five rows. Reproduced
+locally by running a tiny person first and then the big one:
+
+- the memory grants were sized for five rows and spilled to tempdb (sort and hash spills in both
+  statements);
+- the aggregate's final month joins became nested loops, re-running the notes aggregate once per
+  month (52 executions, with spools replaying 2,704 rows each time).
+
+Locally that costs 40ms instead of 28ms. On Basic tier, under lower's statistics, it was the
+difference between ~1s and 50s.
+
+**Fix:** `OPTION (RECOMPILE)` on both statements, so every execution is compiled for its own person.
+It costs ~10ms of compile per statement. `HistorySyncCostTest` now runs a one-workout household
+first and reads plans from **Query Store**, because RECOMPILE plans are never cached. It requires the
+big person's plans to have been compiled during the big person's run. Verified red with RECOMPILE
+removed. Query Store keeps compile times to ~10ms, so the test leaves a gap on both sides of its
+timestamp; without one it flaked in both directions.
+
 ## Takeaways
 
 - **A test database's size hides cost, but its *proportions* decide the plan.** Timing a query
@@ -57,3 +86,7 @@ retrying device, plus the daily full sync, queued another one.
   while watching DTU. The bench that caught this was a single request.
 - Covering indexes are part of the query. Adding a column to either statement means adding it to
   the index; `HistorySyncCostTest` says so when you forget.
+- **A per-person statement over wildly different people needs a per-person plan.** A test that
+  compiles fresh for the person it measures can never see parameter sniffing. Run a tiny tenant
+  first, the way production's traffic does, then assert on the big one.
+- **Read lower's Query Store before guessing.** It turned a day of theories into one query id.
