@@ -116,6 +116,37 @@ e2e run compiles almost nothing. `HistorySyncCostTest` now requires the *tiny* h
 to compile nothing, and the big person's plans to be compiled for them. Both were verified red:
 RECOMPILE for everyone fails the first, and no size class fails the second.
 
+That was #350, and it worked: 3.2–4.1s for the five-year sync, e2e healthy. But each sync of a large
+History now paid three compiles, and a logged set's sync took **3.3s, slower than before #343
+(2.0s)**.
+
+## Round five: cached plans, with the marker where Query Store can see it and feedback off
+
+Two findings made cached plans viable for large Histories too:
+
+- **Query Store drops a leading comment when it identifies a statement.** Found when
+  `HistorySyncCostTest` counted 5 Query Store queries for two size classes' runs where it expected
+  10. Every size class had been **one Query Store query** all along, even though the plan cache kept
+  them apart. That explains why lower's query ids 1818/1819 survived every change. Anything Query
+  Store keys on a query was shared between a five-set household and the five-year History:
+  persisted memory grant feedback, and Azure's automatic plan correction (on for lower). The marker
+  now sits inside the statement, after `WITH`.
+- **Every per-execution feedback mechanism is switched off** with `USE HINT`: memory grant feedback
+  (row, batch, persistence), CE feedback, DOP feedback and batch-mode adaptive joins.
+
+#351 on lower: the first sync compiled (6.6s), then **3.1, 3.1, 3.4, 3.1s** on the cached plan. The
+e2e run peaked at 42–81% CPU, the lowest of any round. Final numbers for the five-year History,
+against the baseline from before #343:
+
+| Scenario | Before #343 | Final |
+|---|---|---|
+| Reload / warm refetch | 2,130 ms (p95 6,071) | **637 ms** (p95 906), 0.6 KB |
+| Sync after logging a set | 1,985 ms, 95 KB | **1,674 ms, 2 KB** |
+| New device / daily full sync | 2,048 ms | 3,056 ms |
+
+Which of the two changes did the work is not separated. Both are cheap and both stay; the class
+marker's Query Store identity is also what lets `HistorySyncCostTest` see the classes at all.
+
 ## Takeaways
 
 - **A test database's size hides cost, but its *proportions* decide the plan.** Timing a query

@@ -183,18 +183,27 @@ proportional:
 - **Join hints.** `HASH` to take the person's sets in one pass of their index range; `LOOP` to reach
   notes and exercises by seek from the person's own sessions and exercises. Left alone, the optimizer
   chose a pass over the notes index at lower's proportions.
-- **The plan is chosen by the size of the History (`HistoryPlanSize`).** People differ by four orders
-  of magnitude, from a new household's five sets to a daily lifter's twenty thousand. A cheap count
-  of the person's workouts picks an order-of-magnitude class:
-  - **100 workouts or more: compiled per execution** (`OPTION (RECOMPILE)`). On lower a five-year
-    History ran any *reused* plan in 52–61s at 100% CPU, whether that plan was compiled for a
-    five-set e2e household (#345) or for this very person (#349, fast on its first run and ~57s on
-    every run after). A plan compiled for the execution ran in 3.5–5s. The likeliest cause is memory
-    grant feedback shrinking a reused plan's grant; it never shows on a machine with memory to spare.
-  - **Under 100: one cached plan per class**, compiled once, with a comment naming the class in the
-    statement text. RECOMPILE for everyone (#348) held lower's database at **100% CPU for 35
-    minutes** through an e2e run, whose hundreds of syncs come from tiny households. Query Store showed
-    almost no *execution* CPU there, so the load was compile.
+- **One cached plan per size of History, with runtime feedback off (`HistoryPlanSize`).** People
+  differ by four orders of magnitude, from a new household's five sets to a daily lifter's twenty
+  thousand. A cheap count of the person's workouts picks an order-of-magnitude class, and each class
+  gets one cached plan, compiled once for someone within a factor of ten of whoever uses it. Three
+  details are load-bearing, and each was found on lower:
+  - **The class marker goes INSIDE the statement, after its `WITH`.** Query Store drops a *leading*
+    comment when it identifies a statement, so a marker in front separated the plan cache but left
+    every class as **one Query Store query**. Everything Query Store keys on a query, persisted
+    memory grant feedback and Azure's automatic plan correction among them, was then shared between
+    a five-set household and a five-year History.
+  - **Every per-execution feedback mechanism is off** (`NO_RUNTIME_FEEDBACK`): memory grant feedback
+    (row mode, batch mode, persistence), CE feedback, DOP feedback and batch-mode adaptive joins. On
+    lower a *reused* plan ran the five-year History in 52–61s at 100% CPU, even one compiled for that
+    very person (#349: 6.4s on its first run, ~57s on every run after). With feedback off the same
+    cached plan runs in about 3s, every time (#351). It never reproduced locally, where there is
+    memory to spare.
+  - **Never `OPTION (RECOMPILE)`.** It gives every execution the right plan (#348, #350: 3.2–5s), but
+    compiling these statements is so expensive on Basic tier that recompiling for everyone held
+    lower's database at **100% CPU for 35 minutes** through an e2e run. Recompiling only for large
+    Histories kept e2e healthy, but made each large-History sync pay three compiles: 3.3s per logged
+    set against 1.7s cached.
 
 Measured against lower-sized local tables (300k workouts, 1.2M sets, 100k notes, 40k exercises) for a
 person with 1,827 workouts:

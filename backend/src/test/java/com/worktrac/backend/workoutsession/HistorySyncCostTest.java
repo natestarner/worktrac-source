@@ -49,9 +49,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 //   - the big person's plans were compiled FOR the big person, after a five-set household ran the same
 //     statements first -- exactly the order lower sees after every e2e run. (#345 passed the first
 //     check and still ran ~50s per sync on lower, on a plan cached for five rows.)
-//   - a SMALL History's plans are cached: its repeat run compiles nothing. (#348's OPTION (RECOMPILE)
-//     for everyone passed the second check and held lower's CPU at 100% for 35 minutes compiling.)
-//     A large History is compiled per execution on purpose -- see HistoryPlanSize.
+//   - every plan is cached: a repeat run, by either person, compiles nothing. (#348's OPTION
+//     (RECOMPILE) passed the second check and held lower's CPU at 100% for 35 minutes compiling.)
+//     See HistoryPlanSize for why the cached plans also run with runtime feedback off -- that half
+//     only shows on a memory-starved database, so lower's measurements pin it, not this test.
 //
 // ⚠️ If this fails after you add a column to HistoryFingerprints or HistoryMonths, add that column to
 // the matching index's INCLUDE list in a new migration (see V83). If it fails after a plan changed
