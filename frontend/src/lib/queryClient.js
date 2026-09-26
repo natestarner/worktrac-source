@@ -414,11 +414,23 @@ function invalidatePrs(client, personId) {
 // The request reads the debt when it GOES OUT, not when the refresh was asked for: two refreshes in
 // one tick both cancel before either fetches, and the second fetchQuery then joins the first's
 // request rather than starting its own -- so that request must already carry both scopes.
+//
+// ⚠️ A fetch begun ELSEWHERE that step 1 cancels was an ORDINARY sync -- the boot warm on app open,
+// a refocus, the periodic warm -- re-verifying every month, including ones changed on another
+// device. Cancelling it owes an ordinary sync, not this write's months. On lower, an app opened with
+// a set queued offline cancelled its own boot sync this way and threw away another device's change to
+// August, whose answer had already arrived, until the next ordinary sync. Only a fetch this helper
+// started (tracked by `inFlight`) carries the debt; any other in flight, or paused offline, makes the
+// debt ordinary.
 export function refreshHistory(client, personId, scope = null) {
   const queryKey = queryKeys.history(personId);
-  const owed = owedHistoryRefreshes(client);
-  owed.set(personId, { scope: owed.has(personId) ? mergeHistoryScopes(owed.get(personId).scope, scope) : scope });
-  client
+  const { owed, inFlight } = historyRefreshState(client);
+  const cancellingOrdinarySync =
+    (client.getQueryState(queryKey)?.fetchStatus ?? 'idle') !== 'idle' && !inFlight.has(personId);
+  const adding = cancellingOrdinarySync ? null : scope;
+  owed.set(personId, { scope: owed.has(personId) ? mergeHistoryScopes(owed.get(personId).scope, adding) : adding });
+  // Returned for a caller that awaits a batch of fetches (offlineCacheWarm); it never rejects.
+  return client
     .cancelQueries({ queryKey })
     .then(() => {
       client.invalidateQueries({ queryKey, refetchType: 'none' });
@@ -426,10 +438,15 @@ export function refreshHistory(client, personId, scope = null) {
         queryKey,
         queryFn: async () => {
           const paying = owed.get(personId) ?? { scope: null };
-          const data = await getHistory(personId, { readCached: () => client.getQueryData(queryKey), scope: paying.scope });
-          // Paid -- unless a later refresh took the debt over meanwhile (and cancelled this request).
-          if (owed.get(personId) === paying) owed.delete(personId);
-          return data;
+          inFlight.set(personId, paying);
+          try {
+            const data = await getHistory(personId, { readCached: () => client.getQueryData(queryKey), scope: paying.scope });
+            // Paid -- unless a later refresh took the debt over meanwhile (and cancelled this request).
+            if (owed.get(personId) === paying) owed.delete(personId);
+            return data;
+          } finally {
+            if (inFlight.get(personId) === paying) inFlight.delete(personId);
+          }
         },
         staleTime: 0,
       });
@@ -440,16 +457,17 @@ export function refreshHistory(client, personId, scope = null) {
 // HistorySyncRequest bounds `sessions` and `at` to 8 each; a union past that is an ordinary sync.
 const HISTORY_SCOPE_MAX = 8;
 
-// Per QueryClient, so a test's client (or a signed-out one) never inherits another's debt.
-const owedHistoryRefreshesByClient = new WeakMap();
+// Per person: `owed`, the debt; `inFlight`, the debt a request of refreshHistory's own is carrying
+// right now. Per QueryClient, so a test's client (or a signed-out one) never inherits another's.
+const historyRefreshStateByClient = new WeakMap();
 
-function owedHistoryRefreshes(client) {
-  let owed = owedHistoryRefreshesByClient.get(client);
-  if (!owed) {
-    owed = new Map();
-    owedHistoryRefreshesByClient.set(client, owed);
+function historyRefreshState(client) {
+  let state = historyRefreshStateByClient.get(client);
+  if (!state) {
+    state = { owed: new Map(), inFlight: new Map() };
+    historyRefreshStateByClient.set(client, state);
   }
-  return owed;
+  return state;
 }
 
 // null is the ordinary all-months sync, which already covers any scope.

@@ -98,3 +98,61 @@ test('two writes to different months, drained together, both reach History', asy
   await expectHistoryMatchesServer(page, request);
   await expect(page.getByText('315lb×3')).toHaveCount(2);
 });
+
+// App opened with a set still queued from offline, after ANOTHER device changed a workout in another
+// month. The boot's ordinary sync is what re-verifies that month -- and the queued set drains at the
+// same moment. Its scoped refresh used to cancel the boot sync (whose answer, carrying the other
+// device's change, then arrived and was thrown away), or the boot warm joined the scoped sync instead
+// of sending its own. Either way the other month stayed stale until the next ordinary sync. Syncs are
+// answered 2s late so the drain and the boot sync always overlap, as they did on lower.
+test('app opened with a queued set still picks up another device\'s change in another month', async ({ page, request, context }) => {
+  await registerHousehold(page, request, 'Boot');
+
+  await page.getByRole('link', { name: 'History' }).click();
+  await page.getByRole('button', { name: 'Log a past workout' }).click();
+  const modal = page.getByRole('dialog');
+  await modal.locator('input[type="date"]').fill(pastDay());
+  await modal.locator('input[type="time"]').fill('12:00');
+  await modal.getByRole('button', { name: 'Start adding sets' }).click();
+  await expect(page.getByText('Adding/editing past session')).toBeVisible();
+  await toExercise(page, PAST_EXERCISE);
+  await logSetAt(page, 315, 3);
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page).toHaveURL(/\/app\/history/);
+  await page.getByRole('link', { name: 'Log' }).click();
+  await toExercise(page, TODAY_EXERCISE);
+  await logSetAt(page, 225, 5);
+  await page.getByRole('link', { name: 'History' }).click();
+  await expect(rowFor(page, PAST_EXERCISE)).toBeVisible();
+
+  const { apiUrl } = await (await request.get('/config.json')).json();
+  const token = await page.evaluate(() => localStorage.getItem('workout-tracker-token'));
+  const headers = { Authorization: `Bearer ${token}` };
+
+  // A set queued offline, then the app closed while still offline.
+  await goHardOffline(page);
+  await page.getByRole('link', { name: 'Log' }).click();
+  await toExercise(page, TODAY_EXERCISE);
+  await logAnotherSet(page, 2);
+  await page.waitForTimeout(1500); // the outbox and query cache persist on a 1s throttle
+  const reopened = await context.newPage();
+  await page.close();
+
+  // Meanwhile another device adds a set to the past workout.
+  const personId = (await (await request.get(`${apiUrl}/api/people`, { headers })).json())[0].id;
+  const history = await (await request.get(`${apiUrl}/api/people/${personId}/history`, { headers })).json();
+  const past = history.find((s: { manual: boolean }) => s.manual);
+  const exerciseId = past.entries[0].exerciseId;
+  const added = await request.post(`${apiUrl}/api/sessions/${past.id}/sets`, { headers, data: { exerciseId, weight: 405, reps: 1 } });
+  expect(added.ok()).toBe(true);
+
+  await context.route('**/history/sync', async (route) => {
+    const response = await route.fetch();
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await route.fulfill({ response });
+  });
+  await goOnline(reopened);
+  await reopened.goto('/app/history');
+  await expectHistoryMatchesServer(reopened, request);
+  await expect(reopened.getByText('405lb×1')).toBeVisible();
+});

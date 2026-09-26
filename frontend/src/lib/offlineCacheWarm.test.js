@@ -2,6 +2,7 @@ import { QueryClient, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { warmOfflineCache, peopleToWarm, MAX_WARMED_PEOPLE } from './offlineCacheWarm';
 import { queryKeys } from '../api/queryKeys';
+import { refreshHistory } from './queryClient';
 
 vi.mock('../api/exercises', () => ({
   listExercises: vi.fn().mockResolvedValue([{ id: 1, name: 'Squat' }]),
@@ -60,7 +61,8 @@ describe('warmOfflineCache', () => {
       expect(listPersonExercises).toHaveBeenCalledWith(person.id);
       expect(listRoutines).toHaveBeenCalledWith(person.id);
       expect(getLiveSession).toHaveBeenCalledWith(person.id);
-      expect(getHistory).toHaveBeenCalledWith(person.id, { readCached: expect.any(Function) });
+      // An ORDINARY sync, through refreshHistory: scope null re-verifies every month.
+      expect(getHistory).toHaveBeenCalledWith(person.id, { readCached: expect.any(Function), scope: null });
       expect(getPrs).toHaveBeenCalledWith(person.id);
       expect(client.getQueryData(queryKeys.history(person.id))).toEqual([]);
       expect(client.getQueryData(queryKeys.prs(person.id))).toEqual([]);
@@ -313,4 +315,35 @@ describe('warmOfflineCache afterRestore', () => {
     expect(warmed[0].id).toBe(3);
   });
 
+});
+
+// App open with a set still queued: the outbox drains at boot, and that set's scoped History sync can
+// already be in flight when the boot warm runs. A prefetch would JOIN it -- the warm then got one
+// month back instead of re-verifying every month, and another device's change to any other month
+// stayed hidden until the next ordinary sync (reproduced on lower). The warm must replace it with an
+// ordinary sync instead.
+describe('warmOfflineCache while a scoped History refresh is in flight', () => {
+  let client;
+  const PERSON = { id: 1, name: 'Nate' };
+
+  beforeEach(() => {
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => client.clear());
+
+  it('sends an ordinary sync rather than joining the scoped one', async () => {
+    client.setQueryData(queryKeys.history(PERSON.id), ['restored']);
+    getHistory.mockImplementationOnce(() => new Promise(() => {})); // the drained set's scoped sync
+    refreshHistory(client, PERSON.id, { sessions: [7], at: ['2026-09-20T10:00:00Z'] });
+    await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
+    getHistory.mockResolvedValue(['synced']);
+
+    await warmOfflineCache(client, [PERSON], { afterRestore: true });
+
+    await vi.waitFor(() => expect(client.getQueryData(queryKeys.history(PERSON.id))).toEqual(['synced']));
+    expect(getHistory).toHaveBeenCalledTimes(2);
+    expect(getHistory.mock.calls[1][1].scope).toBeNull();
+  });
 });
