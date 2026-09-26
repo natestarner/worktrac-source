@@ -276,20 +276,33 @@ export async function browserMatrix(ctx) {
     ];
   });
 
-  await scenario(ctx, 'daily-full-sync', async ({ ctx: c, page }) => {
+  // The rolling check replaced the daily full sync: a device whose months are all due for a re-read
+  // (`checked` cleared) re-reads one per ordinary sync and never downloads everything. It plants no
+  // drift -- a valid drift report writes the one log line `ops` fails on -- so it checks the check
+  // RAN and stayed quiet; history-sync.spec.ts plants drift locally.
+  await scenario(ctx, 'rolling-check', async ({ ctx: c, page }) => {
     await sleep(2500);
     await page.goto(`${ctx.target.app}/boot-watchdog.js`);
     const cache = await readQueryCache(page);
-    for (const q of cache.clientState.queries) if (q.queryKey[0] === 'history' && q.state?.data?.months) q.state.data.fullSyncedAt = Date.now() - 25 * 3600 * 1000;
+    for (const q of cache.clientState.queries) if (q.queryKey[0] === 'history' && q.state?.data?.months) q.state.data.checked = {};
     await writeQueryCache(page, cache);
-    const syncs = traceSyncs(page, 'daily');
+    const syncs = traceSyncs(page, 'rolling');
     let drift = 0;
+    let audited = 0;
     page.on('request', (r) => { if (/\/history\/drift$/.test(r.url())) drift += 1; });
+    page.on('response', async (r) => {
+      if (!/\/history\/sync$/.test(new URL(r.url()).pathname)) return;
+      const body = await r.json().catch(() => ({}));
+      audited += Object.keys(body.audited ?? {}).length;
+    });
     await page.goto(`${ctx.target.app}/app/history`);
     const result = await converge(page, api, await everyone(), T.converge);
+    const kinds = syncs.map((s) => `${s.kind}${s.audit ? '+audit' : ''}`);
     return [
-      ['a device due its daily full sync: History == server', result],
-      ['it sent a full sync and reported no drift (the canary)', { ok: syncs.some((s) => s.kind === 'full') && drift === 0, detail: `syncs ${JSON.stringify(syncs.map((s) => s.kind))}, drift reports ${drift}` }],
+      ['a device with every month due a re-read: History == server', result],
+      ['ordinary syncs carried the check, the server answered it, nothing re-downloaded everything, no drift',
+        { ok: syncs.some((s) => s.kind === 'ordinary' && s.audit === 1) && audited > 0 && !syncs.some((s) => s.kind === 'full') && drift === 0,
+          detail: `syncs ${JSON.stringify(kinds)}, audited months ${audited}, drift reports ${drift}` }],
     ];
   });
 

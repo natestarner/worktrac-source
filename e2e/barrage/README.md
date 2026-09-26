@@ -59,7 +59,7 @@ equals `GET /history` for every person, once the outbox is empty"):
 | `cold-boot-offline` | Opened with no network at all from the service worker (Chromium only) |
 | `lie-fi` | Every API call hanging to the app's 15s abort |
 | `old-format-upgrade` | A cache in the pre-sync array format renders unreachable, then is replaced |
-| `daily-full-sync` | A device due its daily full sync; the drift canary stays quiet |
+| `rolling-check` | Every month due a re-read: ordinary syncs carry the rolling check, the server answers it, nothing re-downloads everything, the drift canary stays quiet |
 | `multi-person` | A second person's History, and per-person isolation |
 | `long-jump` | `content-visibility` on History blocks; a jump two years down lands visible, clear of the tab bar |
 

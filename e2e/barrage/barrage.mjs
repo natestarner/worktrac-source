@@ -18,7 +18,7 @@ import { ops } from './suites/ops.mjs';
 import { coldStart, perf } from './suites/perf.mjs';
 
 const CORE_SCENARIOS = ['two-months-drain-slow-sync', 'drain-on-reopen', 'other-device-on-open', 'lie-fi', 'long-jump'];
-const WEBKIT_STANDARD = [...CORE_SCENARIOS, 'old-format-upgrade', 'daily-full-sync'];
+const WEBKIT_STANDARD = [...CORE_SCENARIOS, 'old-format-upgrade', 'rolling-check'];
 
 // Which suites each tier runs. Order matters: correctness first, load last, ops after cleanup.
 const TIERS = {

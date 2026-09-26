@@ -249,7 +249,7 @@ export function traceSyncs(page, label, sink = []) {
   page.on('request', (r) => {
     if (!/\/history\/sync$/.test(new URL(r.url()).pathname)) return;
     const b = JSON.parse(r.postData() || '{}');
-    sink.push({ t: Date.now(), kind: b.sessions ? 'scoped' : Object.keys(b.have || {}).length ? 'ordinary' : 'full', person: new URL(r.url()).pathname.split('/')[3] });
+    sink.push({ t: Date.now(), kind: b.sessions ? 'scoped' : Object.keys(b.have || {}).length ? 'ordinary' : 'full', audit: b.audit?.length ?? 0, person: new URL(r.url()).pathname.split('/')[3] });
   });
   page.on('requestfinished', async (r) => {
     if (!/\/history\/sync$/.test(new URL(r.url()).pathname)) return;

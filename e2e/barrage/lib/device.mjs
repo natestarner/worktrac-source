@@ -11,6 +11,8 @@ export class Device {
     this.name = name;
     this.personId = personId;
     this.months = null;
+    this.checked = {};
+    this.audited = 0;
     this.syncs = 0;
     this.retried503 = 0;
   }
@@ -20,6 +22,12 @@ export class Device {
     const held = full || !this.months ? null : this.months;
     const body = { have: Object.fromEntries(Object.entries(held ?? {}).map(([m, v]) => [m, v.fp])) };
     if (held && scope) Object.assign(body, scope);
+    // The rolling check, as lib/historySync.js#auditFor picks it: on an ordinary sync, the held month
+    // re-read longest ago (never first; newest among ties). A server that predates it ignores it.
+    if (held && !scope) {
+      const due = Object.keys(held).sort((a, b) => (this.checked[a] ?? -Infinity) - (this.checked[b] ?? -Infinity) || (a < b ? 1 : a > b ? -1 : 0));
+      if (due.length) body.audit = [due[0]];
+    }
     let reply;
     let ms = 0;
     for (let attempt = 0; attempt <= retries; attempt += 1) {
@@ -42,12 +50,17 @@ export class Device {
       else if (held?.[m]) next[m] = held[m];
       else throw new Mismatch(`${this.name}: listed ${m} without sending it`);
     }
-    // The drift canary, as the app runs it on a full sync: same fingerprint, different content.
-    if (!held && this.months) {
-      for (const [m, sent] of Object.entries(reply.changed ?? {})) {
-        const old = this.months[m];
-        if (old && old.fp === sent.fp && canon(old.sessions) !== canon(sent.sessions)) throw new Mismatch(`${this.name}: DRIFT in ${m}`);
-      }
+    // The drift canary, as the app runs it: a month re-read whatever its fingerprint said (the rolling
+    // check's `audited`, or a full sync) that has the same fingerprint over different content.
+    const reread = { ...(!held && this.months ? reply.changed : {}), ...(reply.audited ?? {}) };
+    for (const [m, sent] of Object.entries(reread)) {
+      const old = this.months?.[m];
+      if (old && old.fp === sent.fp && canon(old.sessions) !== canon(sent.sessions)) throw new Mismatch(`${this.name}: DRIFT in ${m}`);
+    }
+    const now = Date.now();
+    for (const m of Object.keys(reply.changed ?? {})) this.checked[m] = now;
+    for (const [m, sent] of Object.entries(reply.audited ?? {})) {
+      if (m in next) { next[m] = sent; this.checked[m] = now; this.audited += 1; }
     }
     this.months = next;
     return { reply, ms };
