@@ -196,10 +196,20 @@ function HistoryTabContent({ initialExerciseFilter }) {
   // Scroll the tapped session back into view once the filtered list has re-rendered, so "see what
   // I did before/after this date" (requirement 4) doesn't strand it off-screen. Guarded for jsdom
   // exactly like LogTab.jsx's routine-pill scroll effect.
+  //
+  // ⚠️ An INSTANT jump, then one correction a frame later, never a smooth scroll. The blocks skip
+  // rendering while off screen (sessionBlockStyle), so a block that was never drawn has only its
+  // estimated height. A smooth scroll fixes its destination from those estimates up front, then
+  // draws every block it passes at its real height, which moves the target mid-flight: a workout
+  // ten months down landed a whole workout off screen (history-long-list.spec.ts). An instant jump
+  // draws nothing on the way, and the correction absorbs the target's own neighbours resizing.
   useEffect(() => {
     if (!scrollToSessionId) return;
     const el = sessionRefs.current[scrollToSessionId];
-    if (el?.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (el?.scrollIntoView) {
+      el.scrollIntoView({ block: 'start' });
+      requestAnimationFrame(() => el.scrollIntoView({ block: 'start' }));
+    }
     setScrollToSessionId(null);
   }, [scrollToSessionId, filteredSessions]);
 
@@ -388,7 +398,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
             ref={(el) => {
               sessionRefs.current[session.id] = el;
             }}
-            style={sessionBlockStyle}
+            style={{ ...sessionBlockStyle, containIntrinsicSize: `auto ${estimatedSessionBlockHeight(entries.length)}px` }}
           >
             <div style={sessionHeaderStyle}>
               <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-muted)' }}>
@@ -641,7 +651,33 @@ const controlsBlockStyle = {
   marginBottom: 'var(--space-6)',
 };
 
-const sessionBlockStyle = { marginBottom: 'var(--space-5)' };
+// ⚠️ `content-visibility: auto` is what keeps a long History usable. History renders every workout
+// at once, and the browser used to style and lay out all of them on every render: five years is
+// ~1,800 workouts and ~200,000 elements, which took 13.7s to show the first workout on a
+// throttled phone profile (style 3.8s, layout 1.7s). With it, the browser skips the off-screen ones
+// until they scroll near: 5.4s, style 65ms, layout 22ms, and 1.6s -> 0.8s at normal speed. The DOM
+// is unchanged, so find-in-page, the accessibility tree and every reader of it still see all of it.
+// Browsers without it (iOS before 18) ignore it and render as before.
+//
+// An off-screen block takes its size from `containIntrinsicSize` until it is drawn. The `auto`
+// keyword keeps its real size once it has been drawn. The estimate matters for a long jump, such as
+// "View this exercise's history" scrolling to a workout years down: blocks above the target that
+// were never drawn are only estimates, and a bad estimate lands the scroll off target.
+// estimatedSessionBlockHeight is fitted to lower's measurements at 390px: one exercise ~153px, four
+// ~370px.
+//
+// scrollMarginTop: the jump uses `block: 'start'`, which parks a block exactly where the sticky
+// .app-chrome paints, so the workout landed BEHIND the tab bar. Same fix and token as the Help
+// page, the exercise search and BillingTab's Pro anchor (see --sticky-chrome-clearance).
+const sessionBlockStyle = {
+  marginBottom: 'var(--space-5)',
+  contentVisibility: 'auto',
+  scrollMarginTop: 'var(--sticky-chrome-clearance)',
+};
+
+function estimatedSessionBlockHeight(exerciseCount) {
+  return 80 + 72 * exerciseCount;
+}
 
 const sessionHeaderStyle = {
   display: 'flex',
