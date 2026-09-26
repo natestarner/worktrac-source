@@ -406,8 +406,11 @@ each held month's fingerprint and keeps every month the server does not resend
     only its estimated size (`estimatedSessionBlockHeight`). A smooth scroll draws the blocks it
     passes at their real size and missed a target far down by a whole workout. The scroll margin
     below now absorbs most of that miss, so the spec can't tell smooth from instant. An instant
-    `scrollIntoView` plus one correction a frame later is exact, even with a deliberately bad 20px
-    estimate. Keep it.
+    `scrollIntoView`, re-aimed every frame until the target holds still (`jumpAndSettle`), is exact
+    even with a deliberately bad 20px estimate. **Not one correction: Safari has no scroll
+    anchoring**, so each block that draws for the first time after the jump moves the target, and a
+    single correction frame left it 117px under the tab bar in WebKit (Chrome's anchoring hid
+    this). The loop stops on any scroll, tap or key, so it never fights the person. Keep it.
   - **Blocks keep `scrollMarginTop: var(--sticky-chrome-clearance)`** so a jump doesn't park the
     workout behind the tab bar.
 

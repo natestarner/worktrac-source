@@ -203,14 +203,27 @@ function HistoryTabContent({ initialExerciseFilter }) {
   // draws every block it passes at its real height, which moves the target mid-flight: a workout
   // ten months down landed a whole workout off screen (history-long-list.spec.ts, before the scroll
   // margin below, whose slack now hides most of that miss). An instant jump draws nothing on the
-  // way and the correction absorbs the target's own neighbours resizing -- it landed exactly even
-  // with a deliberately wrong 20px estimate.
+  // way and the corrections absorb the target's neighbours resizing -- it landed exactly even with a
+  // deliberately wrong 20px estimate.
+  //
+  // ⚠️ Correct UNTIL THE TARGET HOLDS STILL, not once. Chrome keeps it in place while the blocks
+  // around it draw at their real size (scroll anchoring); Safari has no scroll anchoring, so each
+  // block that draws for the first time after the jump moves everything below it. One correction a
+  // frame later left the target 117px under the tab bar in WebKit, two years down a five-year History
+  // (the barrage's long-jump). So: re-aim every frame until the target's position is unchanged for a
+  // few frames running (`auto` in containIntrinsicSize then remembers each drawn size, so it does
+  // settle), for at most ~half a second, and stop the moment the person scrolls themselves.
+  //
+  // The loop's cancel lives in a ref, not this effect's cleanup: clearing scrollToSessionId below
+  // re-runs the effect, and a cleanup would cancel the loop on the very next render.
+  const cancelJump = useRef(null);
+  useEffect(() => () => cancelJump.current?.(), []);
   useEffect(() => {
     if (!scrollToSessionId) return;
     const el = sessionRefs.current[scrollToSessionId];
     if (el?.scrollIntoView) {
-      el.scrollIntoView({ block: 'start' });
-      requestAnimationFrame(() => el.scrollIntoView({ block: 'start' }));
+      cancelJump.current?.();
+      cancelJump.current = jumpAndSettle(el);
     }
     setScrollToSessionId(null);
   }, [scrollToSessionId, filteredSessions]);
@@ -676,6 +689,39 @@ const sessionBlockStyle = {
   contentVisibility: 'auto',
   scrollMarginTop: 'var(--sticky-chrome-clearance)',
 };
+
+// The jump to a workout (see the effect that calls it): instantly, then re-aimed every frame until the
+// target has held still for a few frames, for at most ~half a second. Stops at once if the person
+// scrolls, taps or types -- a jump must never fight them for the page. Returns the cancel.
+const JUMP_STILL_FRAMES = 3;
+const JUMP_MAX_FRAMES = 30;
+const JUMP_INTERRUPTS = ['wheel', 'touchstart', 'keydown', 'mousedown'];
+
+function jumpAndSettle(el) {
+  el.scrollIntoView({ block: 'start' });
+  let lastTop = el.getBoundingClientRect().top;
+  let still = 0;
+  let frames = 0;
+  let raf;
+  const stop = () => {
+    cancelAnimationFrame(raf);
+    for (const type of JUMP_INTERRUPTS) window.removeEventListener(type, stop);
+  };
+  raf = requestAnimationFrame(function settle() {
+    const top = el.getBoundingClientRect().top;
+    still = Math.abs(top - lastTop) < 1 ? still + 1 : 0;
+    frames += 1;
+    if (still >= JUMP_STILL_FRAMES || frames >= JUMP_MAX_FRAMES) {
+      stop();
+      return;
+    }
+    el.scrollIntoView({ block: 'start' });
+    lastTop = el.getBoundingClientRect().top;
+    raf = requestAnimationFrame(settle);
+  });
+  for (const type of JUMP_INTERRUPTS) window.addEventListener(type, stop, { passive: true });
+  return stop;
+}
 
 function estimatedSessionBlockHeight(exerciseCount) {
   return 80 + 72 * exerciseCount;
