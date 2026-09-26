@@ -1,58 +1,14 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { loginAs, registerHousehold } from './support/auth';
 import { pickExercise, logSetAt } from './support/exercises';
-import { waitForQueryCachePersist } from './support/offline';
 import { API_ONLY, failNetwork } from './support/faults';
-import { LEGACY_MARKER_WORKOUT, rewritePersistedHistoryAsOldFormat } from './support/historyConvergence';
+import { LEGACY_MARKER_WORKOUT, rewritePersistedHistoryAsOldFormat, watchSync } from './support/historyConvergence';
 
 // History is synced a month at a time (lib/historySync.js, WorkoutSessionService#syncHistory): the
 // device sends the fingerprint of every month it holds and gets back only the months that changed.
 // Unit tests prove the merge; what only a real browser shows is the round trip through a REAL
 // persisted cache -- that a reload restores months the server then confirms without resending, and
 // that a cache written by a build from before the sync still renders and is then replaced.
-
-type SyncCall = { held: string[]; changed: string[]; fps: string[] };
-
-// Every History sync as the APP sees it, and how many are still out. "Settled" matters because a
-// set's own refetch is routinely cancelled and restarted by the next invalidation, so "the next sync
-// after X" is only meaningful once the earlier ones have finished.
-async function watchSync(page: Page) {
-  await page.addInitScript(() => {
-    const w = window as unknown as { __sync: { calls: { held: string[]; changed: string[]; fps: string[] }[]; started: number; inFlight: number } };
-    w.__sync = { calls: [], started: 0, inFlight: 0 };
-    const original = window.fetch;
-    window.fetch = async (input, init) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if (!/\/api\/people\/\d+\/history\/sync$/.test(new URL(url, location.href).pathname)) return original(input, init);
-      const held = Object.keys(JSON.parse(String(init?.body ?? '{}')).have ?? {});
-      w.__sync.started += 1;
-      w.__sync.inFlight += 1;
-      try {
-        const response = await original(input, init);
-        const reply = await response.clone().json().catch(() => ({}));
-        const changed = (reply.changed ?? {}) as Record<string, { fp: string }>;
-        w.__sync.calls.push({ held, changed: Object.keys(changed), fps: Object.values(changed).map((m) => m.fp) });
-        return response;
-      } finally {
-        w.__sync.inFlight -= 1;
-      }
-    };
-  });
-  const read = () =>
-    page.evaluate(() => (window as unknown as { __sync: { calls: SyncCall[]; started: number; inFlight: number } }).__sync);
-  return {
-    // Counters live on the document, so a reload starts them at zero again.
-    mark: async () => {
-      const state = await read();
-      return { started: state.started, calls: state.calls.length };
-    },
-    callsSince: async (mark: { calls: number }) => (await read()).calls.slice(mark.calls),
-    settledSince: async (mark: { started: number }) => {
-      const state = await read();
-      return state.started > mark.started && state.inFlight === 0;
-    },
-  };
-}
 
 test('a reload re-downloads no month that did not change, and a new set re-sends only its own month', async ({ page, request }) => {
   const sync = await watchSync(page);
@@ -61,14 +17,7 @@ test('a reload re-downloads no month that did not change, and a new set re-sends
   await pickExercise(page, 'Barbell Bench Press');
   let mark = await sync.mark();
   await logSetAt(page, 135, 5);
-  await expect.poll(() => sync.settledSince(mark)).toBe(true);
-  // The month as it stands AFTER the set has reached IndexedDB, so the reload restores it. Not
-  // just any synced shape: the sync at registration persists months and "fullSyncedAt" too, and a
-  // reload that restores THAT holds a stale fingerprint for this month -- which the server rightly
-  // resends, failing the assertion below for a reason that has nothing to do with the sync.
-  const latestFp = (await sync.callsSince({ calls: 0 })).filter((c) => c.fps.length > 0).at(-1)?.fps[0];
-  expect(latestFp).toBeTruthy();
-  await waitForQueryCachePersist(page, `"${latestFp}"`);
+  await sync.persistedSince(mark);
 
   await page.reload();
   const fresh = { started: 0, calls: 0 };
@@ -101,10 +50,11 @@ test('a set logged on another device reaches this one, resending only its month'
   const sync = await watchSync(page);
   const email = await registerHousehold(page, request, 'Nate');
   await pickExercise(page, 'Barbell Bench Press');
+  const mark = await sync.mark();
   await logSetAt(page, 135, 5);
   await page.getByRole('link', { name: 'History' }).click();
   await expect(page.getByText(/135\s?lb\s?×\s?5/).first()).toBeVisible();
-  await waitForQueryCachePersist(page, '"fullSyncedAt"');
+  await sync.persistedSince(mark);
 
   const otherContext = await browser.newContext();
   const other = await otherContext.newPage();
@@ -139,12 +89,15 @@ test('a set logged on another device reaches this one, resending only its month'
 // server has no service worker to serve a reload with no network at all -- that half of the contract
 // is offline-durability.spec.ts's, under the PWA config. The app's boot path is the same one.
 test('History cached by a build from before the sync still shows while unreachable, and the first sync replaces it', async ({ page, request }) => {
+  const sync = await watchSync(page);
   await registerHousehold(page, request, 'Nate');
   await pickExercise(page, 'Barbell Bench Press');
+  const mark = await sync.mark();
   await logSetAt(page, 135, 5);
   await page.getByRole('link', { name: 'History' }).click();
   await expect(page.getByText(/135\s?lb\s?×\s?5/).first()).toBeVisible();
-  await waitForQueryCachePersist(page, '"fullSyncedAt"');
+  // The rewrite below flattens whatever is on disk, so it must be the History that holds the set.
+  await sync.persistedSince(mark);
 
   // Step out of the app to a same-origin static file: with no app running, nothing can persist the
   // live cache back over the rewrite, and IndexedDB is per-origin so it is still reachable.
