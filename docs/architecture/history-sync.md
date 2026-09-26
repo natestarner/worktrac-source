@@ -183,19 +183,18 @@ proportional:
 - **Join hints.** `HASH` to take the person's sets in one pass of their index range; `LOOP` to reach
   notes and exercises by seek from the person's own sessions and exercises. Left alone, the optimizer
   chose a pass over the notes index at lower's proportions.
-- **One cached plan per size class (`HistoryPlanSize`).** People differ by four orders of magnitude,
-  from a new household's five sets to a daily lifter's twenty thousand. A cached plan belongs to
-  whoever ran first, and on lower that is always an e2e household. After the three fixes above, a
-  five-year full sync still ran **~50s at 100% CPU** on lower, on a plan built for five rows. That
-  plan's memory grants spilled to tempdb, and its month joins were nested loops that re-ran each
-  aggregate once per month. A cheap count of the person's workouts now picks an order-of-magnitude
-  class, and a comment naming it goes into the statement text. Each class gets its own cached plan,
-  compiled for someone within a factor of ten of whoever uses it.
-
-  **Not `OPTION (RECOMPILE)`.** That was tried (#348), and it does give every execution the right
-  plan: 3.5s instead of 52s for the five-year sync. But compiling these statements is so expensive on
-  Basic tier that lower's e2e run, with its hundreds of syncs, held the database at **100% CPU for 35
-  minutes**. Query Store showed almost no *execution* CPU, so the load was compile.
+- **The plan is chosen by the size of the History (`HistoryPlanSize`).** People differ by four orders
+  of magnitude, from a new household's five sets to a daily lifter's twenty thousand. A cheap count
+  of the person's workouts picks an order-of-magnitude class:
+  - **100 workouts or more: compiled per execution** (`OPTION (RECOMPILE)`). On lower a five-year
+    History ran any *reused* plan in 52–61s at 100% CPU, whether that plan was compiled for a
+    five-set e2e household (#345) or for this very person (#349, fast on its first run and ~57s on
+    every run after). A plan compiled for the execution ran in 3.5–5s. The likeliest cause is memory
+    grant feedback shrinking a reused plan's grant; it never shows on a machine with memory to spare.
+  - **Under 100: one cached plan per class**, compiled once, with a comment naming the class in the
+    statement text. RECOMPILE for everyone (#348) held lower's database at **100% CPU for 35
+    minutes** through an e2e run, whose hundreds of syncs come from tiny households. Query Store showed
+    almost no *execution* CPU there, so the load was compile.
 
 Measured against lower-sized local tables (300k workouts, 1.2M sets, 100k notes, 40k exercises) for a
 person with 1,827 workouts:
@@ -210,7 +209,7 @@ nothing else. `HistorySyncCostTest` pins the shape rather than any number. It ru
 a one-workout household first, then twice for a big one, and reads the plans back from Query Store. It
 fails in three cases, one for each way lower broke:
 - the big person reused a plan compiled for someone else;
-- the repeat run compiled anything;
+- a small household's repeat run compiled anything;
 - any scan or key lookup of a History table.
 
 **If it fails after you add a column, add the column to the index in a new migration. Don't relax the

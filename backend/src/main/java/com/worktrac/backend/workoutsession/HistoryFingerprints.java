@@ -58,12 +58,10 @@ import java.util.Map;
 // proportional to every household on a large one. A hint pins the shape so it cannot drift with the
 // statistics of whichever person compiled the plan first.
 //
-// ⚠️ ONE CACHED PLAN PER SIZE CLASS (HistoryPlanSize) is load-bearing too. A plan is compiled for
-// whoever runs the statement first, and on lower that is always a five-set e2e household: after #345
-// the five-year History ran a plan built for five rows and took ~50s per sync. The hints fix the join
-// algorithms; only a plan compiled for someone of this person's size fixes the memory grants, the
-// index choice and the unhinted joins. Never OPTION (RECOMPILE) -- see HistoryPlanSize for what that
-// did to lower's CPU.
+// ⚠️ HOW THE PLAN IS CHOSEN (HistoryPlanSize) is load-bearing too: a large History is compiled per
+// execution, a small one gets one cached plan per size class. Every other arrangement was measured
+// on lower and failed -- a plan reused by a five-year History ran ~57s per sync, and recompiling for
+// everyone held the database at 100% CPU through an e2e run. See HistoryPlanSize before changing it.
 //
 // ⚠️ If History ever reads a new column or table, it MUST be folded in here, or a change to it will
 // be answered with "unchanged" and the device keeps the old value until the daily full sync.
@@ -141,7 +139,7 @@ public class HistoryFingerprints {
             params.addValue("floor", LocalDateTime.ofInstant(floor, ZoneOffset.UTC));
         }
         Map<String, String> fingerprints = new LinkedHashMap<>();
-        jdbc.query(HistoryPlanSize.comment(jdbc, personId) + sql, params, rs -> {
+        jdbc.query(HistoryPlanSize.forPerson(jdbc, personId).around(sql), params, rs -> {
             fingerprints.put(rs.getString("month"), of(floor == null,
                     rs.getLong("sess_n"), rs.getBigDecimal("sess_rv").toBigIntegerExact(),
                     rs.getLong("set_n"), rs.getBigDecimal("set_rv").toBigIntegerExact(),
