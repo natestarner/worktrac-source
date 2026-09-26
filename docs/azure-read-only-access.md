@@ -189,6 +189,29 @@ wrong.** Every quota is deliberately set one to two orders of magnitude above re
 genuine refusal is a signal to raise the limit -- each one is an env var
 (`APP_QUOTA_*`, see `application.yml`) so that is a config change, not a deploy of new code.
 
+## Reading which SQL statements are expensive (Query Store over ARM)
+
+The SQL *data* is out of reach, but the database's **Query Store statistics are not**. The ARM
+`topQueries` endpoint returns the top statements by CPU, duration, IO or log IO, broken into
+intervals, with executions, CPU, duration and memory for each. This is how the History sync's
+per-person plan problem was found on lower
+(`docs/incidents/2026-09-25-history-full-sync-pegged-lower-db.md`, "Round two").
+
+```bash
+MSYS_NO_PATHCONV=1 az rest --method get --output-file C:/tmp/topq.xml \
+  --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/worktrac-rg/providers/Microsoft.Sql/servers/worktrac-sql-server/databases/worktrac-db-lower/topQueries?api-version=2014-04-01&resourceType=duration&numberOfQueries=10&aggregationFunction=sum&interval=PT1H"
+```
+
+- The reply is **Atom XML**, not JSON. Save it with `--output-file` and parse the `d:` elements
+  (`queryId`, then per interval `executionCount` and `metrics`, e.g. `duration` in microseconds).
+- `resourceType` is `cpu`, `duration`, `io` or `logIo`. It covers the last 24h by default.
+- **The query text is not readable** (`topQueries/{id}/queryText` answers BadGateway under this
+  principal). Identify a statement by *when* its query id first appears (after a deploy) and by its
+  execution count relative to the requests you made.
+- Pair it with `az monitor metrics list --metrics cpu_percent physical_data_read_percent
+  dtu_consumption_percent`. Those say *whether* the DB was CPU-bound or IO-bound; Query Store says
+  *which* statement did it.
+
 ## Scope note
 
 `Reader` is assigned at **subscription** scope, so it also sees the unrelated
