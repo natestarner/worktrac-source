@@ -10,7 +10,12 @@ import { registerHousehold, setBillingPlan } from './support/auth';
 //   - a long JUMP still lands where it should. An off-screen block that was never drawn has only its
 //     estimated height, so "View this exercise's history" on a workout far down the list scrolls
 //     past hundreds of estimates. That workout must end up on screen, clear of the sticky tab bar.
-//     A smooth scroll missed by a whole workout here (HistoryTab.jsx's scroll effect).
+//
+// What this guards is the OUTCOME, not how it's achieved. Before History's scroll-margin, a smooth
+// scroll missed the target here by a whole workout (3/3). With the margin's slack it usually lands
+// even when smooth, so this spec cannot tell the two apart; the instant jump is kept because it is
+// exact even with a deliberately wrong 20px estimate (checked by hand, see HistoryTab.jsx). The
+// "covered" check is proven: it fails with the scroll-margin removed.
 
 const DAYS = 360;
 
@@ -34,10 +39,12 @@ async function seedYear(page: Page, request: Parameters<typeof setBillingPlan>[0
   const personId = (await (await request.get(`${apiUrl}/api/people`, { headers })).json())[0].id;
   const rows: string[] = [];
   // Every other day for a year; one to three exercises a workout, so block heights vary the way a
-  // real History's do.
+  // real History's do. One set each, to keep the import cheap: on lower, under eight parallel
+  // workers on a 5-DTU database, three sets each (~1,080 rows) took 62s to import alone. test.slow()
+  // below covers what is left of that.
   for (let day = DAYS; day >= 2; day -= 2) {
     const names = ['Barbell Row', 'Barbell Bench Press', 'Barbell Back Squat'].slice(0, 1 + (day % 3));
-    for (const name of names) for (let s = 0; s < 3; s += 1) rows.push(`${name},${isoDay(day)},12:00:00,${100 + (day % 40)},lb,${5 + s}`);
+    for (const name of names) rows.push(`${name},${isoDay(day)},12:00:00,${100 + (day % 40)},lb,5`);
   }
   const imported = await request.post(`${apiUrl}/api/people/${personId}/import`, {
     headers,
@@ -47,6 +54,7 @@ async function seedYear(page: Page, request: Parameters<typeof setBillingPlan>[0
 }
 
 test('a long History skips off-screen workouts and still lands a long jump on target', async ({ page, request }) => {
+  test.slow(); // a year of History imported through lower's shared database
   const email = await registerHousehold(page, request, 'Long');
   await setBillingPlan(request, email, 'PLUS'); // a year back is outside Free's 90-day window
   await seedYear(page, request);

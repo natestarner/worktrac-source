@@ -404,12 +404,15 @@ each held month's fingerprint and keeps every month the server does not resend
   5.4s. Two rules come with it:
   - **Jump to a workout instantly, never smoothly.** An off-screen block that was never drawn has
     only its estimated size (`estimatedSessionBlockHeight`). A smooth scroll draws the blocks it
-    passes at their real size and misses a target far down. An instant `scrollIntoView` plus one
-    correction a frame later is exact, even with a bad estimate.
+    passes at their real size and missed a target far down by a whole workout. The scroll margin
+    below now absorbs most of that miss, so the spec can't tell smooth from instant. An instant
+    `scrollIntoView` plus one correction a frame later is exact, even with a deliberately bad 20px
+    estimate. Keep it.
   - **Blocks keep `scrollMarginTop: var(--sticky-chrome-clearance)`** so a jump doesn't park the
     workout behind the tab bar.
 
-  `history-long-list.spec.ts` pins all three against a year of History.
+  `history-long-list.spec.ts` pins the outcome against a year of History: the style is present, and
+  the jump lands visible and uncovered. The uncovered check fails without the margin.
 - **A write that changes EVERY person's History uses `refreshHistoryForEveryone`** — an exercise
   rename (History carries names; `LogTab.refreshPersonalization` is the live rename path) and a plan
   change (`BillingTab`, with `historyWindowForEveryone()`). Cheap: an unchanged month costs a

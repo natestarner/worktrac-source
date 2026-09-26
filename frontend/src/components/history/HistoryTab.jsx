@@ -201,8 +201,10 @@ function HistoryTabContent({ initialExerciseFilter }) {
   // rendering while off screen (sessionBlockStyle), so a block that was never drawn has only its
   // estimated height. A smooth scroll fixes its destination from those estimates up front, then
   // draws every block it passes at its real height, which moves the target mid-flight: a workout
-  // ten months down landed a whole workout off screen (history-long-list.spec.ts). An instant jump
-  // draws nothing on the way, and the correction absorbs the target's own neighbours resizing.
+  // ten months down landed a whole workout off screen (history-long-list.spec.ts, before the scroll
+  // margin below, whose slack now hides most of that miss). An instant jump draws nothing on the
+  // way and the correction absorbs the target's own neighbours resizing -- it landed exactly even
+  // with a deliberately wrong 20px estimate.
   useEffect(() => {
     if (!scrollToSessionId) return;
     const el = sessionRefs.current[scrollToSessionId];
