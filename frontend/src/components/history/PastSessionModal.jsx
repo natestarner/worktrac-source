@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { createPastSession } from '../../api/sessions';
 import { queryKeys } from '../../api/queryKeys';
-import { refreshHistory } from '../../lib/queryClient';
+import { historyScopeFor, refreshHistory } from '../../lib/queryClient';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
@@ -51,8 +51,9 @@ export default function PastSessionModal({ onClose }) {
   const handleStart = run(async () => {
     const iso = localDateTimeToIso(date, time);
     const session = await createPastSession(activePersonId, iso);
-    // The new (empty) session belongs in this person's History immediately.
-    refreshHistory(queryClient, activePersonId);
+    // The new (empty) session belongs in this person's History immediately -- its month only.
+    refreshHistory(queryClient, activePersonId,
+      historyScopeFor(queryClient, activePersonId, session?.id, session?.startedAt ?? null));
     queryClient.invalidateQueries({ queryKey: queryKeys.historyWindow(activePersonId) });
     startEditingSession(session);
     onClose();

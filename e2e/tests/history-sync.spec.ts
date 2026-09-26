@@ -35,7 +35,9 @@ test('a reload re-downloads no month that did not change, and a new set re-sends
   await logSetAt(page, 155, 3);
   await expect.poll(() => sync.settledSince(mark)).toBe(true);
   const afterSet = await sync.callsSince(mark);
-  expect(afterSet.some((c) => c.changed.length === 1)).toBe(true);
+  // SCOPED: the sync after the device's own write speaks only for that workout's month (and sends
+  // it) -- it neither re-checks nor re-sends any other month the device holds.
+  expect(afterSet.some((c) => c.scope?.length === 1 && c.changed.length === 1 && c.changed[0] === c.scope[0])).toBe(true);
   expect(afterSet.every((c) => c.changed.length <= 1)).toBe(true);
 
   await page.getByRole('link', { name: 'History' }).click();

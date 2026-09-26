@@ -12,6 +12,7 @@ import { resolveExerciseId, setExerciseIdMapping, isTempExerciseId } from './exe
 import { resolveSetId, setSetIdMapping, isTempSetId } from './setIdMap';
 import { isCreateInEndedWorkout, isSessionEnded, markSessionEnded } from './endedSessions';
 import { byEnqueueOrder, withEnqueueSeq } from './outboxSequence';
+import { flattenHistory } from './historySync';
 
 // Bump when the shape of anything we cache changes incompatibly -- the persister discards a
 // restored cache whose buster doesn't match instead of hydrating stale/incompatible data.
@@ -393,7 +394,15 @@ function invalidatePrs(client, personId) {
 //
 // Fire-and-forget: a failed or paused fetch is simply retried by the next trigger, and the query keeps
 // the months it has. One code path in every mode.
-export function refreshHistory(client, personId) {
+//
+// `scope` (historyScopeFor) makes step 3 a SCOPED sync: after a write on this device, only the months
+// of the workout it touched are checked and reloaded -- a few hundred milliseconds on lower instead of
+// an all-months fingerprint check twice over. Every other month is left as held and re-verified by
+// the next ordinary sync: app open, refocus, the periodic warm, the History tab mounting stale, the
+// daily full sync. A change made on ANOTHER device in another month therefore reaches this one then,
+// not now -- the accepted cost (docs/architecture/history-sync.md, "Scoped syncs"). No scope, or a
+// device due its full sync, is the ordinary all-months sync.
+export function refreshHistory(client, personId, scope = null) {
   const queryKey = queryKeys.history(personId);
   client
     .cancelQueries({ queryKey })
@@ -401,11 +410,29 @@ export function refreshHistory(client, personId) {
       client.invalidateQueries({ queryKey, refetchType: 'none' });
       return client.fetchQuery({
         queryKey,
-        queryFn: () => getHistory(personId, { readCached: () => client.getQueryData(queryKey) }),
+        queryFn: () => getHistory(personId, { readCached: () => client.getQueryData(queryKey), scope }),
         staleTime: 0,
       });
     })
     .catch(() => {});
+}
+
+// The scope of a write on this device: the workout it touched, with every start time this device
+// knows for it -- the one the write's own response gave (`startedAtFromWrite`, when it gave one) and
+// the one the cached History or live session holds. The server adds the month the workout is in NOW,
+// so a workout moved elsewhere is reloaded in both places. Null -- the ordinary all-months sync --
+// when the workout is not known yet (a set still waiting for its session) or is a client-side temp id.
+export function historyScopeFor(client, personId, sessionId, startedAtFromWrite = null) {
+  if (sessionId == null || !Number.isFinite(Number(sessionId))) return null;
+  const at = new Set();
+  if (startedAtFromWrite) at.add(startedAtFromWrite);
+  const held = client.getQueryData(queryKeys.history(personId));
+  for (const session of flattenHistory(held)) {
+    if (String(session.id) === String(sessionId) && session.startedAt) at.add(session.startedAt);
+  }
+  const live = client.getQueryData(queryKeys.liveSession(personId));
+  if (live?.id != null && String(live.id) === String(sessionId) && live.startedAt) at.add(live.startedAt);
+  return { sessions: [Number(sessionId)], at: [...at] };
 }
 
 // For the writes that change EVERY person's History at once -- an exercise rename (History carries
@@ -584,7 +611,10 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
         client.invalidateQueries({ queryKey: queryKeys.liveSession(vars.personId) });
       }
       invalidatePrs(client, vars.personId);
-      refreshHistory(client, vars.personId);
+      // Scoped to the workout this set went to (its month, and wherever it is now) -- see
+      // refreshHistory. The response carries the session, so its start time is exact.
+      refreshHistory(client, vars.personId,
+        historyScopeFor(client, vars.personId, sessionId, data?.session?.startedAt ?? null));
       // Derived from sets like the three above: logging into an out-of-window past session is how
       // the hidden count goes 0 -> 1, and that is the exact flow the notice exists for.
       client.invalidateQueries({ queryKey: queryKeys.historyWindow(vars.personId) });
@@ -693,7 +723,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
     client.invalidateQueries({ queryKey: queryKeys.sessionSets(sessionId, vars.exerciseId) });
     client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
     invalidatePrs(client, vars.personId);
-    refreshHistory(client, vars.personId);
+    refreshHistory(client, vars.personId, historyScopeFor(client, vars.personId, sessionId));
     client.invalidateQueries({ queryKey: queryKeys.historyWindow(vars.personId) });
     // The roster derives from sets as well -- editing or deleting one moves a person's "last
     // trained" and their adherence count. Prefix, because the key carries a weeks window.
@@ -787,7 +817,7 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       const sessionId = data?.sessionId ?? vars.sessionId ?? null;
       client.invalidateQueries({ queryKey: queryKeys.sessionExerciseNote(sessionId, vars.exerciseId) });
       client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
-      refreshHistory(client, vars.personId);
+      refreshHistory(client, vars.personId, historyScopeFor(client, vars.personId, sessionId));
       if (vars.mode !== 'session') client.invalidateQueries({ queryKey: queryKeys.liveSession(vars.personId) });
     },
   }));

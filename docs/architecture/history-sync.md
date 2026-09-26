@@ -145,6 +145,50 @@ stored its answer as fresh, and cleared the invalidation, so nothing refetched f
 Fetching unobserved History on every write used to be too costly — it was a full download. With the
 month sync it is a fingerprint query plus, at most, the month that changed.
 
+## Scoped syncs: after a write on this device, only that workout's months
+
+An ordinary sync fingerprints **every** month, since any month could have changed elsewhere. On
+lower that check costs ~0.5s for a five-year History and ran twice per logged set, so it was ~85% of
+the sync after every set. After a write on *this* device, the device knows which workout it touched,
+so it asks about only that:
+
+- **The request** adds `sessions` (the workout ids the write touched) and `at` (the start times the
+  device **holds** for them, plus any the write's response gave). `historyScopeFor` builds both.
+- **The server** scopes to the months those times fall in **plus the month each workout is in now**,
+  which it looks up itself, only among the person's own workouts. The two differ when the workout
+  was moved to another date elsewhere. Reloading only the held month would leave that month
+  correctly empty and the workout **nowhere** on the device; reloading only the current month would
+  show it twice. The server computes every month; the client never computes one.
+- **Only the scoped months are loaded**, in one statement: one snapshot, each month's fingerprint
+  from its own rows. There's no all-months fingerprint query and no re-check, so nothing is left for
+  a mid-request write to break.
+- **The reply carries `scope`.** The client replaces or drops only those months and keeps every other
+  month exactly as held (`applyHistorySync`). A reply without `scope` is an ordinary reply. That
+  covers every sync from an older app, and every reply from a server that predates scoped syncs, so
+  either side can deploy first.
+
+**Which writes are scoped:** logging, editing or deleting a set; saving a note; creating a past
+workout. **Which stay ordinary:** ending a workout, moving a workout's date, imports, exercise renames,
+plan changes, History's own refresh, and anything whose workout the device can't name (a set still
+waiting for its session). A device holding nothing, or due its daily full sync, ignores the scope.
+
+**The accepted cost:** a change made on **another** device, in a month this write didn't touch, reaches
+this device at the next ordinary sync rather than on its next set. Ordinary syncs run on app open,
+on refocus, on the 5-minute warm, when History is opened stale, and daily in full. Nothing is lost
+or wrong in the meantime, only later. Real-time cross-device updates, if ever wanted, would come
+from a push that only says *"History changed, sync now"* (Server-Sent Events), never from a second
+data path.
+
+**Tested:**
+- `HistoryConvergenceTest` has a sixth device that scoped-syncs after every write it makes and
+  ordinary-syncs every 5–15 writes. After each scoped sync, every scoped month must equal
+  `GET /history`'s, and **the workout just written to must be on the device**. After each ordinary
+  sync, *everything* must match, so nothing a scoped sync skipped can stay wrong.
+- `HistorySyncTest` pins the moved-workout case deterministically. It fails with the current-month
+  lookup removed.
+- `sessions.test.js` pins that out-of-scope months survive by identity. It fails if a scoped reply
+  is merged as an ordinary one.
+
 ## How the property is tested
 
 The property is **"however far behind a device is, one sync leaves it holding exactly `GET /history`"**

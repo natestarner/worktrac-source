@@ -252,6 +252,12 @@ narrative: `docs/architecture/history-sync.md`.
 - **Every month the client KEEPS is re-checked after the load; a mismatch is a 503**, which the
   client's ordinary query retry answers. It is not a backend retry loop, and must not become one
   (see Concurrency above).
+- **A SCOPED sync (`sessions` + `at`, after a write on the device) loads only the scoped months and
+  replies with `scope`.** The scope must include the month each touched workout is in **now**, looked
+  up server-side among the person's own workouts, as well as the held months the client sent.
+  Without the current month, a workout moved elsewhere vanishes from the device. `HistorySyncTest`
+  and `HistoryConvergenceTest` both pin this. Months outside the scope are the client's to keep
+  (docs/architecture/history-sync.md, "Scoped syncs").
 - **A device holding nothing gets one load and no fingerprint queries**: nothing it holds could be
   affected by either. **A range load seeks each of the range's workouts**, never the person's whole
   set range, so a one-month sync does not grow with the History. `HistorySyncCostTest` pins that.

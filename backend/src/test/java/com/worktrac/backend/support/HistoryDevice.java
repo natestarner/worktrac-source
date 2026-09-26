@@ -33,7 +33,16 @@ public final class HistoryDevice {
     }
 
     public void apply(JsonNode reply) {
+        // A SCOPED reply speaks only for the months in `scope`: of those, the listed ones are sent or
+        // kept and the unlisted ones are gone; every month outside the scope stays exactly as held.
+        JsonNode scope = reply.get("scope");
         Map<String, JsonNode> next = new TreeMap<>(Comparator.reverseOrder());
+        if (scope != null && scope.isArray()) {
+            next.putAll(months);
+            for (JsonNode scoped : scope) {
+                next.remove(scoped.asText());
+            }
+        }
         for (JsonNode listed : reply.get("months")) {
             String month = listed.asText();
             JsonNode sent = reply.get("changed").get(month);
@@ -46,6 +55,25 @@ public final class HistoryDevice {
             }
         }
         months = next;
+    }
+
+    // What the device shows for one month: its sessions, or an empty list if it holds no such month.
+    public ArrayNode sessionsIn(String month) {
+        ArrayNode sessions = objectMapper.createArrayNode();
+        JsonNode held = months.get(month);
+        if (held != null) held.get("sessions").forEach(sessions::add);
+        return sessions;
+    }
+
+    // The start time of a held session, or null -- lets a test scope a sync to the workout
+    // its write touched, the way the app looks the start time up in its own cache.
+    public String startedAtOf(long sessionId) {
+        for (JsonNode month : months.values()) {
+            for (JsonNode session : month.get("sessions")) {
+                if (session.get("id").asLong() == sessionId) return session.get("startedAt").asText();
+            }
+        }
+        return null;
     }
 
     // Every session, newest month first -- what every screen reads (flattenHistory).

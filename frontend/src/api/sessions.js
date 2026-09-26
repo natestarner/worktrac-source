@@ -29,10 +29,18 @@ export function editSession(sessionId, startedAt) {
 //
 // Not a connectivity branch: the sync fails exactly like any other read, through api/client.js, in
 // every mode, and a failed sync leaves the cached months in place.
-export async function getHistory(personId, { readCached } = {}) {
+// `scope` ({ sessions, at }) narrows the sync to the workouts a write on this device just touched --
+// see historyScopeFor in lib/queryClient.js. Sent only when something is held: a device that holds
+// nothing, or is due its daily full sync, always gets everything.
+export async function getHistory(personId, { readCached, scope } = {}) {
   const cached = readCached?.();
   const held = heldForSync(cached);
-  const reply = await apiClient.post(`/api/people/${personId}/history/sync`, { have: fingerprintsOf(held) });
+  const body = { have: fingerprintsOf(held) };
+  if (held && scope?.sessions?.length) {
+    body.sessions = scope.sessions;
+    body.at = scope.at ?? [];
+  }
+  const reply = await apiClient.post(`/api/people/${personId}/history/sync`, body);
   // A synced cache that is not offered is the daily full sync -- the canary's one chance to look.
   if (!held && isSyncedHistory(cached)) {
     const drifted = findDrift(cached, reply);
