@@ -1501,6 +1501,83 @@ describe('refreshHistory', () => {
     expect(client.getQueryState(key).isInvalidated).toBe(true);
   });
 
+  // The fetch a refresh cancels was asking about ITS write's months. A later write's refresh must ask
+  // about them too, or an edit to an August workout followed a moment later by a set in September's
+  // left August showing the old set, marked fresh, until the next ordinary sync.
+  describe('the scope a cancelled refresh was owed', () => {
+    const AUGUST = { sessions: [1], at: ['2026-08-10T10:00:00Z'] };
+    const SEPTEMBER = { sessions: [2], at: ['2026-09-20T10:00:00Z'] };
+    const scopes = () => getHistory.mock.calls.map(([, options]) => options.scope);
+
+    it('is carried by the refresh that cancelled it', async () => {
+      client.setQueryData(key, ['before']);
+      getHistory.mockImplementationOnce(() => new Promise(() => {})); // still in flight when cancelled
+      getHistory.mockResolvedValueOnce(['after']);
+
+      refreshHistory(client, PERSON, AUGUST);
+      await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
+      refreshHistory(client, PERSON, SEPTEMBER);
+
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+      expect(scopes()[1]).toEqual({ sessions: [1, 2], at: ['2026-08-10T10:00:00Z', '2026-09-20T10:00:00Z'] });
+    });
+
+    it('survives a refresh that failed, until one succeeds', async () => {
+      client.setQueryData(key, ['before']);
+      getHistory.mockRejectedValueOnce(new Error('offline'));
+      getHistory.mockResolvedValue(['after']);
+
+      refreshHistory(client, PERSON, AUGUST);
+      await vi.waitFor(() => expect(client.getQueryState(key).status).toBe('error'));
+      refreshHistory(client, PERSON, SEPTEMBER);
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+      refreshHistory(client, PERSON, SEPTEMBER);
+      await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(3));
+
+      expect(scopes()[1].sessions).toEqual([1, 2]);
+      // Paid by the second refresh's success: the third owes only its own.
+      expect(scopes()[2]).toEqual(SEPTEMBER);
+    });
+
+    it('is carried by a request two refreshes in one tick share', async () => {
+      client.setQueryData(key, ['before']);
+      getHistory.mockResolvedValue(['after']);
+
+      refreshHistory(client, PERSON, AUGUST);
+      refreshHistory(client, PERSON, SEPTEMBER);
+
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+      expect(getHistory).toHaveBeenCalledTimes(1);
+      expect(scopes()[0].sessions).toEqual([1, 2]);
+    });
+
+    it('is an ordinary sync when an ordinary one was owed', async () => {
+      client.setQueryData(key, ['before']);
+      getHistory.mockImplementationOnce(() => new Promise(() => {}));
+      getHistory.mockResolvedValueOnce(['after']);
+
+      refreshHistory(client, PERSON); // the End of a workout
+      await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(1));
+      refreshHistory(client, PERSON, SEPTEMBER);
+
+      await vi.waitFor(() => expect(client.getQueryData(key)).toEqual(['after']));
+      expect(scopes()[1]).toBeNull();
+    });
+
+    it('is an ordinary sync once the union passes what the server accepts', async () => {
+      client.setQueryData(key, ['before']);
+      getHistory.mockImplementation(() => new Promise(() => {}));
+
+      for (let id = 1; id <= 9; id += 1) {
+        refreshHistory(client, PERSON, { sessions: [id], at: [] });
+        await vi.waitFor(() => expect(getHistory).toHaveBeenCalledTimes(id));
+      }
+
+      expect(scopes()[7].sessions).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(scopes()[8]).toBeNull();
+    });
+  });
+
   it('refreshes every person whose History this device holds', async () => {
     client.setQueryData(queryKeys.history(1), ['a']);
     client.setQueryData(queryKeys.history(2), ['b']);

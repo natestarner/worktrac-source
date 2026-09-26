@@ -402,19 +402,63 @@ function invalidatePrs(client, personId) {
 // daily full sync. A change made on ANOTHER device in another month therefore reaches this one then,
 // not now -- the accepted cost (docs/architecture/history-sync.md, "Scoped syncs"). No scope, or a
 // device due its full sync, is the ordinary all-months sync.
+//
+// ⚠️ A refresh's scope is OWED until a refresh completes. Step 1 cancels the fetch before it, so
+// without this a quick second write took the first write's months down with it: edit a set in an
+// August workout, log one in today's September workout a moment later (or have both drain from the
+// outbox together), and the September sync replaced the August one. August then showed the old set
+// -- and the query was marked fresh, so nothing refetched it -- until the next ordinary sync. So each
+// refresh adds its scope to what is still owed; an ordinary refresh owed, or a union past the
+// server's bound, makes the debt ordinary. A failed or paused refresh stays owed for the next one.
+//
+// The request reads the debt when it GOES OUT, not when the refresh was asked for: two refreshes in
+// one tick both cancel before either fetches, and the second fetchQuery then joins the first's
+// request rather than starting its own -- so that request must already carry both scopes.
 export function refreshHistory(client, personId, scope = null) {
   const queryKey = queryKeys.history(personId);
+  const owed = owedHistoryRefreshes(client);
+  owed.set(personId, { scope: owed.has(personId) ? mergeHistoryScopes(owed.get(personId).scope, scope) : scope });
   client
     .cancelQueries({ queryKey })
     .then(() => {
       client.invalidateQueries({ queryKey, refetchType: 'none' });
       return client.fetchQuery({
         queryKey,
-        queryFn: () => getHistory(personId, { readCached: () => client.getQueryData(queryKey), scope }),
+        queryFn: async () => {
+          const paying = owed.get(personId) ?? { scope: null };
+          const data = await getHistory(personId, { readCached: () => client.getQueryData(queryKey), scope: paying.scope });
+          // Paid -- unless a later refresh took the debt over meanwhile (and cancelled this request).
+          if (owed.get(personId) === paying) owed.delete(personId);
+          return data;
+        },
         staleTime: 0,
       });
     })
     .catch(() => {});
+}
+
+// HistorySyncRequest bounds `sessions` and `at` to 8 each; a union past that is an ordinary sync.
+const HISTORY_SCOPE_MAX = 8;
+
+// Per QueryClient, so a test's client (or a signed-out one) never inherits another's debt.
+const owedHistoryRefreshesByClient = new WeakMap();
+
+function owedHistoryRefreshes(client) {
+  let owed = owedHistoryRefreshesByClient.get(client);
+  if (!owed) {
+    owed = new Map();
+    owedHistoryRefreshesByClient.set(client, owed);
+  }
+  return owed;
+}
+
+// null is the ordinary all-months sync, which already covers any scope.
+function mergeHistoryScopes(a, b) {
+  if (a == null || b == null) return null;
+  const sessions = [...new Set([...a.sessions, ...b.sessions])];
+  const at = [...new Set([...a.at, ...b.at])];
+  if (sessions.length > HISTORY_SCOPE_MAX || at.length > HISTORY_SCOPE_MAX) return null;
+  return { sessions, at };
 }
 
 // The scope of a write on this device: the workout it touched, with every start time this device
