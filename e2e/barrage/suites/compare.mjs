@@ -148,8 +148,11 @@ async function capture(target, creds, { offline }) {
     await page.getByRole('button', { name: 'Log set' }).click();
     const pr = page.getByText('New PR!');
     await pr.waitFor({ timeout: 10000 }).catch(() => {});
-    const text = await main();
-    out.celebration = (text.match(/New PR!.{0,120}/) || ['NO CELEBRATION'])[0];
+    // The celebration is a dialog portalled outside <main>, so main() can never see it.
+    const dialog = page.getByRole('dialog').filter({ hasText: 'New PR!' }).first();
+    out.celebration = (await dialog.isVisible().catch(() => false))
+      ? (await dialog.innerText()).replace(/\s+/g, ' ').trim().slice(0, 160)
+      : 'NO CELEBRATION';
     if (await pr.isVisible().catch(() => false)) await pr.click({ force: true });
     await sleep(3000);
     out.afterRecordCard = await cards();

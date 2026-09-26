@@ -47,18 +47,24 @@ async function pickIn(page, personId, month) {
 }
 
 // Log a set in today's workout, then wait until the device's History holds that workout -- so block
-// positions computed afterwards count it.
-async function liveSet(page, api, cleanup, personId) {
+// positions computed afterwards count it. Within the engine's convergence budget, not a fixed 30s: the
+// first scenario on a fresh WebKit profile is still persisting its five-year sign-in download, and
+// failed at 30s there while the same wait passed in the very next scenario.
+async function liveSet(page, api, cleanup, personId, timeoutMs) {
   await goTab(page, 'Log');
   await toExercise(page, 'Barbell Bench Press');
   await logSet(page);
   const live = await api.ok('GET', `/api/people/${personId}/sessions/live`);
   cleanup.touch(live?.id);
-  for (let i = 0; i < 60; i += 1) {
-    if ((await held(page, personId))[0]?.id === live?.id) return live;
+  const deadline = Date.now() + timeoutMs;
+  let newest;
+  while (Date.now() < deadline) {
+    newest = (await held(page, personId))[0];
+    if (newest?.id === live?.id) return live;
     await sleep(500);
   }
-  throw new Error('today\'s workout never reached the device\'s History');
+  throw new Error(`today's workout (${live?.id}) never reached the device's History in ${timeoutMs / 1000}s; `
+    + `its newest was ${newest ? `${newest.id} at ${newest.startedAt}` : 'nothing at all'}`);
 }
 
 async function addSetsToPast(page, index, n, personId) {
@@ -91,7 +97,7 @@ export async function browserMatrix(ctx) {
   // answered late the two refreshes always overlap; at natural speed they usually don't.
   for (const delay of [0, 2000]) {
     await scenario(ctx, delay ? 'two-months-drain-slow-sync' : 'two-months-drain', async ({ ctx: c, page }) => {
-      await liveSet(page, api, cleanup, P);
+      await liveSet(page, api, cleanup, P, T.converge);
       const past = await pickIn(page, P, monthsBack(1));
       cleanup.touch(past.session.id);
       if (delay) await delaySyncs(c, delay);
@@ -104,7 +110,7 @@ export async function browserMatrix(ctx) {
   }
 
   await scenario(ctx, 'big-drain', async ({ ctx: c, page }) => {
-    await liveSet(page, api, cleanup, P);
+    await liveSet(page, api, cleanup, P, T.converge);
     const targets = [];
     for (const n of [1, 2, 3]) { const t = await pickIn(page, P, monthsBack(n)); cleanup.touch(t.session.id); targets.push(t); }
     await c.setOffline(true);
@@ -115,7 +121,7 @@ export async function browserMatrix(ctx) {
   });
 
   await scenario(ctx, 'drain-on-reopen', async ({ ctx: c, page }) => {
-    await liveSet(page, api, cleanup, P);
+    await liveSet(page, api, cleanup, P, T.converge);
     const a = await pickIn(page, P, monthsBack(1));
     const b = await pickIn(page, P, monthsBack(2));
     cleanup.touch(a.session.id); cleanup.touch(b.session.id);
@@ -133,7 +139,7 @@ export async function browserMatrix(ctx) {
   });
 
   await scenario(ctx, 'lost-responses', async ({ ctx: c, page }) => {
-    await liveSet(page, api, cleanup, P);
+    await liveSet(page, api, cleanup, P, T.converge);
     const a = await pickIn(page, P, monthsBack(1));
     cleanup.touch(a.session.id);
     const rowId = await api.exerciseId('Barbell Row');

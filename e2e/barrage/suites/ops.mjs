@@ -27,7 +27,9 @@ export async function ops(ctx) {
   // Unhandled exceptions, minus what the harness itself causes: a tab closed mid-response, and the
   // DATETIME2 overflow api:abuse's year-9999 input provokes. Idempotency-key duplicates are the
   // outbox's safety net working (a replayed write racing its original) and happen daily on lower.
-  const causes = rows(kql(`ContainerAppConsoleLogs_CL | where ${window} | where Log_s has 'Caused by' | extend c=substring(extract(@'Caused by: [^:]+(: [^\\n]{0,120})?', 0, Log_s), 0, 200) | where not(c has_any ('Broken pipe','ClientAbortException','AsyncRequestNotUsable','ServletOutputStream failed','duplicate key','out of range of values for the datetime2')) | summarize n=count() by c | order by n desc | take 15`));
+  // `has_any` matches WHOLE terms: 'AsyncRequestNotUsable' never matched the logged
+  // 'AsyncRequestNotUsableException', so a tab closed mid-response read as an unexpected exception.
+  const causes = rows(kql(`ContainerAppConsoleLogs_CL | where ${window} | where Log_s has 'Caused by' | extend c=substring(extract(@'Caused by: [^:]+(: [^\\n]{0,120})?', 0, Log_s), 0, 200) | where not(c has_any ('Broken pipe','ClientAbortException','AsyncRequestNotUsableException','ServletOutputStream failed','duplicate key','out of range of values for the datetime2')) | summarize n=count() by c | order by n desc | take 15`));
   ctx.report.record(S, 'no unexpected exceptions (client aborts and idempotency-key duplicates excluded)', causes.length ? 'warn' : 'pass',
     causes.length ? causes.map((r) => `${r.n ?? r[1]}x ${r.c ?? r[0]}`).join('\n') : 'none');
 
