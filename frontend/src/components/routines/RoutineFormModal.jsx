@@ -411,44 +411,53 @@ function SortableRoutineRow({ row, index, total, exerciseName, targetUnit, onTar
         label={`Reorder: ${position}`}
         style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
       />
-      <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 110 }}>{exerciseName}</span>
-      {/* Optional, and blank by default: most routines prescribe nothing, and a routine somebody
-          builds for themselves usually never will. Both fields are independent -- "135 lb, as many
-          as you get" and "5 reps at whatever you can manage" are real prescriptions, which is why
-          formatTarget renders each half on its own.
+      {/* Only the name and the targets wrap, inside this body -- the grip and the remove button sit
+          outside it, so they hold the row's two ends at any width. When the whole row wrapped, a
+          390px phone dropped the X alone onto a line of its own. */}
+      <div style={rowBodyStyle}>
+        <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 110 }}>{exerciseName}</span>
+        {/* Optional, and blank by default: most routines prescribe nothing, and a routine somebody
+            builds for themselves usually never will. Both fields are independent -- "135 lb, as many
+            as you get" and "5 reps at whatever you can manage" are real prescriptions, which is why
+            formatTarget renders each half on its own.
 
-          ⚠️ NOT gated on Pro. A target is useful to anyone who writes a routine, and gating it
-          would mean a family member's own plan could not carry the numbers they meant to hit. What
-          Pro sells is ASSIGNING a routine to somebody else, not the existence of a number. */}
-      <input
-        type="number"
-        inputMode="decimal"
-        value={row.targetWeight ?? ''}
-        onChange={(event) => onTargetChange(row.key, 'targetWeight', event.target.value)}
-        placeholder={targetUnit}
-        aria-label={`Target weight: ${position}`}
-        style={targetInputStyle}
-      />
-      <input
-        type="number"
-        inputMode="numeric"
-        value={row.targetReps ?? ''}
-        onChange={(event) => onTargetChange(row.key, 'targetReps', event.target.value)}
-        placeholder="reps"
-        aria-label={`Target reps: ${position}`}
-        style={targetInputStyle}
-      />
+            ⚠️ NOT gated on Pro. A target is useful to anyone who writes a routine, and gating it
+            would mean a family member's own plan could not carry the numbers they meant to hit. What
+            Pro sells is ASSIGNING a routine to somebody else, not the existence of a number.
+
+            Grouped so the pair wraps together: weight and reps are one prescription, and splitting
+            them across two lines reads as two unrelated fields. */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={row.targetWeight ?? ''}
+            onChange={(event) => onTargetChange(row.key, 'targetWeight', event.target.value)}
+            placeholder={targetUnit}
+            aria-label={`Target weight: ${position}`}
+            style={targetInputStyle}
+          />
+          <input
+            type="number"
+            inputMode="numeric"
+            value={row.targetReps ?? ''}
+            onChange={(event) => onTargetChange(row.key, 'targetReps', event.target.value)}
+            placeholder="reps"
+            aria-label={`Target reps: ${position}`}
+            style={targetInputStyle}
+          />
+        </div>
+      </div>
       <IconButton icon={IconClose} label={`Remove: ${position}`} tone="danger" onClick={() => onRemove(row.key)} />
     </div>
   );
 }
 
+// Never wraps: the grip and the remove button are the row's fixed ends. The wrapping happens one
+// level in, in rowBodyStyle.
 const rowStyle = {
   display: 'flex',
   alignItems: 'center',
-  // Wraps so the two target fields drop under the exercise name at phone width rather than
-  // squeezing it to nothing -- this modal is used on a 390px screen.
-  flexWrap: 'wrap',
   gap: 4,
   padding: '6px 6px 6px 10px',
   borderRadius: 'var(--radius-md)',
@@ -456,8 +465,21 @@ const rowStyle = {
   background: 'var(--color-highlight-bg)',
 };
 
+// Wraps so the target pair drops under the exercise name at phone width rather than squeezing it
+// to nothing -- this modal is used on a 390px screen. minWidth 0 lets it shrink below its content,
+// which is what makes the wrap happen instead of pushing the remove button off the row.
+const rowBodyStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: 4,
+  flex: 1,
+  minWidth: 0,
+};
+
 // 16px font, or iOS Safari zooms the viewport on focus -- the rule every input in this app follows
-// (frontend-core.md). The width is what keeps two of them plus a name on one line at 390px.
+// (frontend-core.md). Narrow enough that the pair fits beside a short name on a tablet; on a phone
+// it wraps under the name instead (rowBodyStyle).
 const targetInputStyle = {
   width: 62,
   minHeight: 40,
