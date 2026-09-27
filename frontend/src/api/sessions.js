@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { applyHistorySync, auditFor, findAuditDrift, fingerprintsOf, heldForSync } from '../lib/historySync';
+import { applyHistorySync, auditFor, findDrift, fingerprintsOf, heldForSync } from '../lib/historySync';
 
 export function getLiveSession(personId) {
   return apiClient.get(`/api/people/${personId}/sessions/live`);
@@ -36,9 +36,13 @@ export function editSession(sessionId, startedAt) {
 // Every ORDINARY sync also carries the rolling check (`audit`, lib/historySync.js#auditFor): the
 // month re-read longest ago comes back in full, and a month whose fingerprint matched while its
 // content did not is reported (the production canary). A server that predates the check ignores it.
-export async function getHistory(personId, { readCached, scope } = {}) {
+//
+// `full` is the re-download the person asked for (lib/historyReload.js): nothing is offered, so every
+// month comes back and replaces what the device held -- and every one of them goes past the canary.
+export async function getHistory(personId, { readCached, scope, full = false } = {}) {
   const cached = readCached?.();
-  const held = heldForSync(cached);
+  const trusted = heldForSync(cached);
+  const held = full ? null : trusted;
   const body = { have: fingerprintsOf(held) };
   if (held && scope?.sessions?.length) {
     body.sessions = scope.sessions;
@@ -48,7 +52,7 @@ export async function getHistory(personId, { readCached, scope } = {}) {
     if (audit.length) body.audit = audit;
   }
   const reply = await apiClient.post(`/api/people/${personId}/history/sync`, body);
-  const drifted = findAuditDrift(held, reply);
+  const drifted = full ? findDrift(trusted, reply.changed) : findDrift(held, reply.audited);
   if (drifted.length > 0) reportHistoryDrift(personId, drifted);
   return applyHistorySync(held, reply);
 }

@@ -422,13 +422,24 @@ function invalidatePrs(client, personId) {
 // August, whose answer had already arrived, until the next ordinary sync. Only a fetch this helper
 // started (tracked by `inFlight`) carries the debt; any other in flight, or paused offline, makes the
 // debt ordinary.
-export function refreshHistory(client, personId, scope = null) {
+//
+// `full` (the person asked for it: a reload on History, or a pull down on it -- lib/historyReload.js)
+// re-downloads the whole History, trusting nothing the device holds. It is owed like a scope, so a
+// write's refresh that cancels it carries it on rather than dropping it; and a full re-download
+// already in flight is left to finish rather than paid for twice (the server finishes an abandoned
+// request anyway).
+export function refreshHistory(client, personId, scope = null, { full = false } = {}) {
   const queryKey = queryKeys.history(personId);
   const { owed, inFlight } = historyRefreshState(client);
+  if (full && inFlight.get(personId)?.full) return Promise.resolve();
   const cancellingOrdinarySync =
     (client.getQueryState(queryKey)?.fetchStatus ?? 'idle') !== 'idle' && !inFlight.has(personId);
-  const adding = cancellingOrdinarySync ? null : scope;
-  owed.set(personId, { scope: owed.has(personId) ? mergeHistoryScopes(owed.get(personId).scope, adding) : adding });
+  const adding = cancellingOrdinarySync || full ? null : scope;
+  const before = owed.get(personId);
+  owed.set(personId, {
+    scope: before ? mergeHistoryScopes(before.scope, adding) : adding,
+    full: full || (before?.full ?? false),
+  });
   // Returned for a caller that awaits a batch of fetches (offlineCacheWarm); it never rejects.
   return client
     .cancelQueries({ queryKey })
@@ -437,10 +448,14 @@ export function refreshHistory(client, personId, scope = null) {
       return client.fetchQuery({
         queryKey,
         queryFn: async () => {
-          const paying = owed.get(personId) ?? { scope: null };
+          const paying = owed.get(personId) ?? { scope: null, full: false };
           inFlight.set(personId, paying);
           try {
-            const data = await getHistory(personId, { readCached: () => client.getQueryData(queryKey), scope: paying.scope });
+            const data = await getHistory(personId, {
+              readCached: () => client.getQueryData(queryKey),
+              scope: paying.scope,
+              full: paying.full,
+            });
             // Paid -- unless a later refresh took the debt over meanwhile (and cancelled this request).
             if (owed.get(personId) === paying) owed.delete(personId);
             return data;

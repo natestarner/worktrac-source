@@ -240,6 +240,40 @@ describe('getHistory', () => {
     expect(result.months['2026-06']).toBe(june);
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
+
+  // The re-download the person asked for (lib/historyReload.js): nothing held is trusted.
+  describe('full', () => {
+    it('offers nothing and asks for no check, whatever is held, and keeps only what the server sent', async () => {
+      const cached = synced({ '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] }, '2026-04': { fp: 'z', sessions: [] } });
+      global.fetch.mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] } }));
+
+      const result = await getHistory(7, { readCached: () => cached, scope: { sessions: [1], at: [] }, full: true });
+
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({ have: {} });
+      expect(Object.keys(result.months)).toEqual(['2026-06']);
+    });
+
+    // Every month of a full re-download is a month re-read whatever its fingerprint said: the
+    // canary's widest look.
+    it('reports every re-sent month whose fingerprint matched what was held but whose content did not', async () => {
+      const cached = synced({
+        '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] },
+        '2026-05': { fp: 'b', sessions: [session(2, '2026-05', 5)] },
+      });
+      global.fetch
+        .mockResolvedValueOnce(reply(['2026-06', '2026-05'], {
+          '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 6)] },
+          '2026-05': { fp: 'b2', sessions: [session(2, '2026-05', 7)] },
+        }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const result = await getHistory(7, { readCached: () => cached, full: true });
+
+      await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+      expect(JSON.parse(global.fetch.mock.calls[1][1].body)).toEqual({ months: ['2026-06'] });
+      expect(flattenHistory(result).map((s) => s.entries[0].sets[0].reps)).toEqual([6, 7]);
+    });
+  });
 });
 
 // The same, as the app actually runs it: a query whose cached value is what the NEXT sync sends.

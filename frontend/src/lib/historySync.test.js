@@ -3,7 +3,7 @@ import {
   HISTORY_FORMAT,
   applyHistorySync,
   auditFor,
-  findAuditDrift,
+  findDrift,
   fingerprintsOf,
   flattenHistory,
   heldForSync,
@@ -112,29 +112,25 @@ describe('auditFor (the rolling check)', () => {
   });
 });
 
-describe('findAuditDrift (the canary)', () => {
+describe('findDrift (the canary)', () => {
   const month = (fp, ids) => ({ fp, sessions: ids.map((id) => s(id, '2026-06-02')) });
 
   it('names a re-read month whose fingerprint matched but whose content did not', () => {
     const held = synced({ '2026-06': month('a', [1]), '2026-05': month('b', [2]) });
 
-    expect(findAuditDrift(held, { months: ['2026-06', '2026-05'], changed: {}, audited: { '2026-06': month('a', [1, 9]) } }))
+    expect(findDrift(held, { '2026-06': month('a', [1, 9]) }))
       .toEqual(['2026-06']);
   });
 
   it('is silent for a month that changed honestly (a new fingerprint), and for one that did not change at all', () => {
     const held = synced({ '2026-06': month('a', [1]), '2026-05': month('b', [2]) });
 
-    expect(findAuditDrift(held, {
-      months: ['2026-06', '2026-05'],
-      changed: {},
-      audited: { '2026-06': month('a2', [1, 9]), '2026-05': month('b', [2]) },
-    })).toEqual([]);
+    expect(findDrift(held, { '2026-06': month('a2', [1, 9]), '2026-05': month('b', [2]) })).toEqual([]);
   });
 
   it('has nothing to compare against when nothing is held, or no month was re-read', () => {
-    expect(findAuditDrift(null, { months: ['2026-06'], changed: {}, audited: { '2026-06': month('a', [1]) } })).toEqual([]);
-    expect(findAuditDrift(synced({ '2026-06': month('a', [1]) }), { months: ['2026-06'], changed: {} })).toEqual([]);
+    expect(findDrift(null, { '2026-06': month('a', [1]) })).toEqual([]);
+    expect(findDrift(synced({ '2026-06': month('a', [1]) }), undefined)).toEqual([]);
   });
 });
 

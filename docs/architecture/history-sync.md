@@ -148,6 +148,13 @@ loading and re-checking, so lower's split can be read rather than guessed.
   of one month per sync instead of the whole History once a day. It replaced the daily full download
   (`FULL_SYNC_INTERVAL_MS`), which on a five-year History was ~3.7 MB and seconds of DB time per
   person per day. A scoped sync never audits, and the server ignores `audit` when nothing is held.
+- **A full re-download only when the person asks.** A reload while on History, or a pull down on
+  History in the installed app (which has no browser reload and no native pull to refresh), sends
+  `have: {}` for the person on screen (`lib/historyReload.js`, `PullToRefresh.jsx`,
+  `refreshHistory`'s `full`). Every month it re-sends also goes past the drift canary. A reload the
+  app starts itself (a service-worker update) counts when it lands on History, which is an
+  occasional extra download and never a wrong one. Offline it waits like any other fetch, and
+  History keeps what it holds.
 - A reply listing a month that was neither sent nor held throws — the query keeps its data and
   retries — rather than silently dropping the month.
 
