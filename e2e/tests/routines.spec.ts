@@ -149,6 +149,38 @@ test.describe('Routines', () => {
     await expect(page.getByText('Dumbbell Overhead Press, Barbell Back Squat, Barbell Bench Press')).toBeVisible();
   });
 
+  // The builder row used to wrap as one flex line, so at iPhone portrait width the remove button
+  // dropped onto a line of its own under the target fields. The grip and the X are the row's two
+  // ends and must stay on one line; only the name and the targets may wrap between them. Asserted
+  // as structure (same line, X at the right edge), never as "this text fits" -- text fit depends on
+  // the runner's fonts.
+  test('at phone width, each routine row keeps its remove button on the same line as its grip', async ({ page, request }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await registerHousehold(page, request, 'Casey');
+
+    await page.getByRole('link', { name: 'Routines' }).click();
+    await page.getByRole('button', { name: 'New routine' }).click();
+    await addExerciseToRoutine(page, 'Dumbbell Overhead Press');
+
+    const dialog = page.getByRole('dialog');
+    const grip = dialog.getByRole('button', { name: 'Reorder: Dumbbell Overhead Press (1 of 1)' });
+    const remove = dialog.getByRole('button', { name: 'Remove: Dumbbell Overhead Press (1 of 1)' });
+    const reps = dialog.getByLabel('Target reps: Dumbbell Overhead Press (1 of 1)');
+    await expect(remove).toBeVisible();
+
+    const gripBox = await grip.boundingBox();
+    const removeBox = await remove.boundingBox();
+    const repsBox = await reps.boundingBox();
+    if (!gripBox || !removeBox || !repsBox) throw new Error('Routine row controls have no layout box');
+
+    // Same line: the X's vertical centre falls inside the grip's own height.
+    const removeCentreY = removeBox.y + removeBox.height / 2;
+    expect(removeCentreY).toBeGreaterThan(gripBox.y);
+    expect(removeCentreY).toBeLessThan(gripBox.y + gripBox.height);
+    // And it is the row's right end, past the target fields rather than tucked under them.
+    expect(removeBox.x).toBeGreaterThanOrEqual(repsBox.x + repsBox.width);
+  });
+
   // Bailing out of a routine partway through. The only exit used to be "Finish routine", which
   // appears on the LAST step alone -- so leaving a 3-exercise routine at step 1 meant stepping
   // through the other two, or scrubbing the pill strip to its end and tapping in. This asserts
