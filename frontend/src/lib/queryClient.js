@@ -398,10 +398,10 @@ function invalidatePrs(client, personId) {
 // `scope` (historyScopeFor) makes step 3 a SCOPED sync: after a write on this device, only the months
 // of the workout it touched are checked and reloaded -- a few hundred milliseconds on lower instead of
 // an all-months fingerprint check twice over. Every other month is left as held and re-verified by
-// the next ordinary sync: app open, refocus, the periodic warm, the History tab mounting stale, the
-// daily full sync. A change made on ANOTHER device in another month therefore reaches this one then,
-// not now -- the accepted cost (docs/architecture/history-sync.md, "Scoped syncs"). No scope, or a
-// device due its full sync, is the ordinary all-months sync.
+// the next ordinary sync: app open, refocus, the periodic warm, the History tab mounting stale. A
+// change made on ANOTHER device in another month therefore reaches this one then, not now -- the
+// accepted cost (docs/architecture/history-sync.md, "Scoped syncs"). No scope, or a device holding
+// nothing, is the ordinary all-months sync.
 //
 // ⚠️ A refresh's scope is OWED until a refresh completes. Step 1 cancels the fetch before it, so
 // without this a quick second write took the first write's months down with it: edit a set in an

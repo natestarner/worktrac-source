@@ -224,20 +224,31 @@ small test and break at that scale. `HistoryScaleTest` seeds 2,150 sessions to g
 The app reads History through `POST /api/people/{id}/history/sync`: the client sends the
 fingerprint of each month it holds, and gets back only the months whose fingerprint changed.
 A month the client holds is trusted **for as long as its fingerprint matches**, so a change that
-does not move the fingerprint is a device showing stale History until the daily full sync. Full
-narrative: `docs/architecture/history-sync.md`.
+does not move the fingerprint is a device showing stale History until the rolling check (below)
+next re-reads that month. Full narrative: `docs/architecture/history-sync.md`.
 
 - **The fingerprint is `COUNT` + `SUM(row_version)` per month** over the visible sessions, sets and
-  notes, plus the `row_version` of every exercise the month's sets name, plus a full-history flag
-  (`HistoryFingerprints`). `row_version` is a SQL Server `ROWVERSION` (V81): the **database** stamps
+  notes, plus the `row_version` of every exercise the month's sets name, salted with the epoch
+  (`HistoryFingerprints`, `HistoryEpoch`). `row_version` is a SQL Server `ROWVERSION` (V81): the **database** stamps
   it on every insert and update, so there is no write path — JPA, native SQL, import, a cascade —
   that can forget to bump it. That is what made this safe where #337 rejected a "version-stamp ETag".
   **Never replace it with an app-maintained `updated_at`.**
 - **`SUM`, not `MAX`.** A transaction that commits late holds a row_version lower than rows already
   visible; MAX misses it, SUM does not. Every added value is greater than every removed one, so any
   change — including "delete one, add one" at the same count — moves the sum.
-- **Hash the full-history flag, never the Free floor.** The floor is `now - 90 days` and moves every
-  instant. Only rows it admits are aggregated, so a workout aging out lowers its month's count.
+- **Hash neither the plan nor the Free floor.** The floor is `now - 90 days` and moves every instant.
+  Only rows it admits are aggregated, so a workout aging out lowers its month's count, and an upgrade
+  raises the counts of exactly the months that gain rows. A month wholly inside the window is the
+  same content on either plan and keeps its fingerprint. (A plan flag used to be hashed; it re-sent
+  every month on every plan change.)
+- **⚠️ The epoch is in every fingerprint: bump `HistoryEpoch.FORMAT_VERSION` in the same change
+  whenever History's content or shape changes without its rows changing** — a new DTO field, a
+  backfilled column (a metadata-only `ADD` doesn't touch `row_version`), a change to ordering or
+  rounding. Every device then re-downloads once. The epoch's other half is the database's
+  `create_date`: a restore or copy is a new database whose `row_version` counter restarts from the
+  backup's value, so it could reproduce a count and sum a device already holds with different rows.
+  Devices never do a periodic full download any more, so without the epoch nothing would ever
+  correct them.
 - **⚠️ If History ever reads a new column or table, fold it into BOTH fingerprint computations** —
   the aggregate (`HistoryFingerprints`) and the per-row totals (`HistoryMonths`). History carries
   exercise *names*, which is why `exercises` has a row_version at all.
@@ -291,9 +302,16 @@ narrative: `docs/architecture/history-sync.md`.
   SQL and local dev. `HistoryConcurrencyTest` turns it on for its own database because the
   one-statement load's consistency is exactly what RCSI provides; any test whose claim depends on
   RCSI must do the same, or it is testing a database production doesn't run.
-- **`POST /history/drift` is the production canary** — a device's daily full sync found a month whose
+- **The rolling check (`audit` in the request, `audited` in the reply) replaced the daily full
+  sync.** An ordinary sync names up to 2 held months to re-send in full whatever their fingerprint
+  says; the client picks the one it re-read longest ago. The server answers only for months it also
+  lists, reusing a month the sync already loaded, and ignores `audit` on a scoped sync and when
+  nothing is held. Don't drop it as redundant: it is the only thing that can ever notice a month
+  whose fingerprint matched wrongly.
+- **`POST /history/drift` is the production canary** — the rolling check found a month whose
   fingerprint matched while its content did not. It only logs (`History drift:` at WARN, month ids
-  only). If it ever appears in the logs, a History input is missing from the fingerprint.
+  only). If it ever appears in the logs, a History input is missing from the fingerprint, or
+  `FORMAT_VERSION` wasn't bumped.
 - **Auto-close is not a write until something writes.** `GET /sessions/live` computes it read-only,
   so History (and the fingerprint) change only when the next set's write saves it —
   `HistoryFingerprintTest` pins both halves.
