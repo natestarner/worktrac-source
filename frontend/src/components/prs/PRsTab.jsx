@@ -83,7 +83,7 @@ function PRsTabContent() {
   // Both destinations are plain client-side navigations over caches these tabs already read --
   // deliberately NOT gated on connectivity, and neither is a write.
   //
-  // History reuses the same deep-link machinery as ExerciseDetail's "View full exercise history"
+  // History reuses the same deep-link machinery as ExerciseDetail's "View exercise history"
   // link (see HistoryTab.jsx), just without fromLog, since there's no exercise-logging screen to
   // offer a "Back to" link for on this path. Trends mirrors it with its own seed key -- see
   // TrendsTab.jsx, which consumes and scrubs it the same way.

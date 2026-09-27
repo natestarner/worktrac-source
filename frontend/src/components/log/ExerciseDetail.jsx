@@ -75,7 +75,7 @@ export default function ExerciseDetail({
   liveSession,
   refetchLiveSession,
   onBack,
-  // Optional: when provided, renders a "View full exercise history" link that hands off to History
+  // Optional: when provided, renders a "View exercise history" link that hands off to History
   // filtered to this exercise (see LogTab.jsx / HistoryTab.jsx's deep-link seed). Deliberately a
   // prop, not a direct useNavigate() call here -- ExerciseDetail takes onBack as a prop rather
   // than navigating itself, and its test file renders with no MemoryRouter at all.
@@ -1111,8 +1111,10 @@ export default function ExerciseDetail({
               The history link shares this row, right-aligned, rather than sitting on its own row
               between the summary cards and the input card -- that row pushed "Log set" down by a
               whole link's height on the app's most-used screen. The row owns the gap below it (the
-              buttons carry no padding of their own), and it wraps: in the past-session frame on a
-              narrow phone the two can outgrow one line, and `marginLeft: auto` keeps the history
+              buttons carry no padding of their own).
+              The label is "View exercise history", not "View full exercise history", so the two
+              fit one line down to a 320px phone -- the longer label wrapped there. The row still
+              wraps, as a safety net for enlarged text, and `marginLeft: auto` keeps the history
               link right-aligned on the line it wraps onto. */}
           <div style={navRowStyle}>
             <button onClick={onBack} className="pressable" style={backButtonStyle}>
@@ -1121,11 +1123,11 @@ export default function ExerciseDetail({
             {onViewAllHistory && (
               <button
                 onClick={() => onViewAllHistory(exercise.id, exercise.name)}
-                aria-label={`View full exercise history for ${exercise.name}`}
+                aria-label={`View exercise history for ${exercise.name}`}
                 className="pressable"
                 style={viewHistoryLinkStyle}
               >
-                View full exercise history &rarr;
+                View exercise history &rarr;
               </button>
             )}
           </div>
@@ -1670,7 +1672,7 @@ export default function ExerciseDetail({
 // --color-accent-text, not --color-accent, on every one of these: they are all small
 // text, where the brand orange is 3.44:1 and fails AA. See the accent token comments
 // in index.css.
-// "All exercises" left, "View full exercise history" right. The --space-3 below it used to be
+// "All exercises" left, "View exercise history" right. The --space-3 below it used to be
 // the back button's own bottom padding; it moved here so both links sit on one centre line.
 const navRowStyle = {
   display: 'flex',

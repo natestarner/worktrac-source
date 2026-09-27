@@ -62,7 +62,7 @@ function sessionHeaderLabel(session) {
   return `${formatDateLabel(startDay)} · ${timeLabelFor(session)}`;
 }
 
-// Thin wrapper: owns the deep-link filter seed (from ExerciseDetail's "View full exercise history" link,
+// Thin wrapper: owns the deep-link filter seed (from ExerciseDetail's "View exercise history" link,
 // or a PR row tap -- see LogTab.jsx / PRsTab.jsx) and the key={activePersonId} remount that
 // isolates HistoryTabContent's local filter/modal state per person, mirroring the identical
 // pattern at LogTab.jsx's <ExerciseDetail key={activePersonId} />.
@@ -281,7 +281,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
       <button type="button" className="skip-link" onClick={refreshAllHistory}>
         Refresh History
       </button>
-      {/* The way back from the Log screen's "View full exercise history" link. First on the page,
+      {/* The way back from the Log screen's "View exercise history" link. First on the page,
           where a back link is looked for, and outside the controls block below: that block renders
           only once History has loaded and holds something, and the way back should not wait on
           either. Same 40px row as the Log screen's "All exercises" link it mirrors. */}
