@@ -47,7 +47,7 @@ Per month, over the rows the Free window admits:
 
 - sessions, sets, notes: `COUNT(*)` and `SUM(row_version)`
 - the exercises the month's sets name: `SUM(DISTINCT row_version)` (History carries exercise names)
-- a `full` / `window` flag for the plan
+- the **epoch** (`HistoryEpoch`): History's format version and the database's creation time
 
 `row_version` is a SQL Server `ROWVERSION` column (V81) on all four tables. The database stamps a new
 value on every insert and update — whatever path made the write — and **every new value is greater
@@ -66,7 +66,27 @@ than every value already in the database**. So:
 
 The Free floor itself is `now − 90 days` and moves every instant, so it is **not** hashed; a workout
 aging out lowers its month's count. The only way rows *enter* the visible set without a write is an
-upgrade, which flips the flag and so changes every month.
+upgrade, and the rows entering raise the counts of exactly the months that gain them. A month wholly
+inside the window is the same content on either plan, so it keeps its fingerprint and is not re-sent.
+(A plan flag used to be hashed, which re-sent every month on every plan change.)
+
+### The epoch: what changes History without changing a row
+
+Two things change what History says, or what a `row_version` means, with no row changing. Both are
+hashed into every month, so when either changes every device re-downloads once:
+
+- **`HistoryEpoch.FORMAT_VERSION`**, bumped in the same change as anything that alters History's
+  content or shape without touching rows: a new field in the DTOs, a column a migration backfills (a
+  metadata-only `ADD` leaves `row_version` alone), a change to ordering or rounding in the builder.
+  `HistoryFingerprintTest`'s DTO-shape guard says so when it fails.
+- **The database's `create_date`.** A point-in-time restore or a copy is a new database whose
+  `row_version` counter carries on from the backup's value, so it hands out numbers devices have
+  already seen, and a month could reach a count and sum a device already holds with different rows
+  in it. It is read from `sys.databases` and cached for five minutes; a restore means a new
+  connection string and a restart anyway.
+
+This is what let the daily full download go: nothing else in the system can make an old fingerprint
+mean something new.
 
 #337 rejected a "version-stamp" ETag because an app-maintained stamp goes stale the first time a
 write path forgets it. `ROWVERSION` has no write path to forget. The remaining risk is a **new input
@@ -90,7 +110,7 @@ query retry are the recovery story). `HistorySyncServiceTest` stages both races;
 re-check removed.
 
 **A device that holds nothing skips both fingerprint queries.** That covers a new device, a fresh
-sign-in, and the daily full sync. Every month differs from "nothing", so the first query cannot change
+sign-in, and an explicit refresh. Every month differs from "nothing", so the first query cannot change
 what is loaded, and the re-check protects only months the device keeps, of which there are none. What
 remains is the one load, one snapshot, which is exactly `GET /history`. A month created mid-request
 arrives on the next sync instead of refusing this one. On lower the two queries had been ~0.5s of a
@@ -110,7 +130,10 @@ loading and re-checking, so lower's split can be read rather than guessed.
 
 `lib/historySync.js` holds the pure pieces; `api/sessions.js#getHistory` wires them to the request.
 
-- Cached value: `{ format: 2, months: { 'yyyy-mm': { fp, sessions } }, fullSyncedAt }`.
+- Cached value: `{ format: 2, months: { 'yyyy-mm': { fp, sessions } }, checked: { 'yyyy-mm': ms },
+  fullSyncedAt }`. `checked` is when each month was last re-read from the server; it sits beside
+  `months` so a sync that only moves a check time leaves `months`, and `flattenHistory`'s memo keyed
+  by it, untouched.
 - Readers never see that shape: `useHistory` (and `AppSettingsTab`) use `select: flattenHistory`,
   which returns the same flat, newest-first array every screen always had. Unchanged months keep
   their objects, so structural sharing keeps their sessions by identity.
@@ -118,9 +141,20 @@ loading and re-checking, so lower's split can be read rather than guessed.
   it through, so it renders — including while the server is unreachable right after the upgrade —
   and `heldForSync` treats it as holding nothing, so the first sync replaces it wholesale.
   `history-sync.spec.ts` plants a marker workout in such a cache to prove both halves.
-- **Backstop:** once every 24 hours (`FULL_SYNC_INTERVAL_MS`) the client offers nothing and gets
-  everything. Any undiscovered fingerprint or merge bug is bounded to a day. A missing, NaN or future
-  stamp counts as due, so a device clock that was wrong cannot postpone it.
+- **Backstop: the rolling check.** Each ordinary sync also sends `audit: ['yyyy-mm']`, the held month
+  re-read longest ago (never-checked first, newest first among ties), and the server re-sends it in
+  full as `audited` whatever its fingerprint says. Ordinary syncs run several times an hour while the
+  app is in use, so a five-year History (61 months) is fully re-read within hours of use, at the cost
+  of one month per sync instead of the whole History once a day. It replaced the daily full download
+  (`FULL_SYNC_INTERVAL_MS`), which on a five-year History was ~3.7 MB and seconds of DB time per
+  person per day. A scoped sync never audits, and the server ignores `audit` when nothing is held.
+- **A full re-download only when the person asks.** A reload while on History, or a pull down on
+  History in the installed app (which has no browser reload and no native pull to refresh), sends
+  `have: {}` for the person on screen (`lib/historyReload.js`, `PullToRefresh.jsx`,
+  `refreshHistory`'s `full`). Every month it re-sends also goes past the drift canary. A reload the
+  app starts itself (a service-worker update) counts when it lands on History, which is an
+  occasional extra download and never a wrong one. Offline it waits like any other fetch, and
+  History keeps what it holds.
 - A reply listing a month that was neither sent nor held throws — the query keeps its data and
   retries — rather than silently dropping the month.
 
@@ -170,11 +204,11 @@ so it asks about only that:
 **Which writes are scoped:** logging, editing or deleting a set; saving a note; creating a past
 workout. **Which stay ordinary:** ending a workout, moving a workout's date, imports, exercise renames,
 plan changes, History's own refresh, and anything whose workout the device can't name (a set still
-waiting for its session). A device holding nothing, or due its daily full sync, ignores the scope.
+waiting for its session). A device holding nothing ignores the scope.
 
 **The accepted cost:** a change made on **another** device, in a month this write didn't touch, reaches
 this device at the next ordinary sync rather than on its next set. Ordinary syncs run on app open,
-on refocus, on the 5-minute warm, when History is opened stale, and daily in full. Nothing is lost
+on refocus, on the 5-minute warm, and when History is opened stale. Nothing is lost
 or wrong in the meantime, only later. Real-time cross-device updates, if ever wanted, would come
 from a push that only says *"History changed, sync now"* (Server-Sent Events), never from a second
 data path.
@@ -254,10 +288,11 @@ The property is **"however far behind a device is, one sync leaves it holding ex
 
 ## The production canary
 
-The daily full sync re-reads months the device had been trusting. If one comes back with the
+The rolling check re-reads months the device had been trusting. If one comes back with the
 **same** fingerprint but **different** content, the fingerprint missed a change — the one failure the
 tests above exist to prevent. The device reports the month ids (`POST /api/people/{id}/history/drift`)
-and the server logs a WARN; the full sync has already corrected the device. Look for it with:
+and the server logs a WARN; the audited month has already replaced the device's copy. Look for it
+with:
 
 ```kql
 ContainerAppConsoleLogs_CL
@@ -266,7 +301,8 @@ ContainerAppConsoleLogs_CL
 ```
 
 It should never return a row. If it does, some input to History is missing from both fingerprint
-computations (`HistoryFingerprints`, `HistoryMonths`).
+computations (`HistoryFingerprints`, `HistoryMonths`), or a change to History's format shipped
+without bumping `HistoryEpoch.FORMAT_VERSION`.
 
 ## Degraded conditions
 

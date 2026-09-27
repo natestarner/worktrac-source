@@ -16,6 +16,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -186,19 +188,29 @@ public class WorkoutSessionService {
     // refetch after a write on another person.
     @Transactional(readOnly = true)
     public HistorySyncDto syncHistory(AccountAccess access, Long personId, Map<String, String> have) {
-        return syncHistory(access, personId, have, null, null);
+        return syncHistory(access, personId, have, null, null, null);
     }
 
     @Transactional(readOnly = true)
     public HistorySyncDto syncHistory(AccountAccess access, Long personId, Map<String, String> have,
                                       List<Long> sessions, List<Instant> at) {
+        return syncHistory(access, personId, have, sessions, at, null);
+    }
+
+    // `audit` is the rolling check (HistorySyncRequest#audit): on an ORDINARY sync, the requested
+    // months that still exist come back in full in `audited`, whatever their fingerprint, so the
+    // client can compare them with its own copy -- the one way it can ever notice a month whose
+    // fingerprint matches while its content does not. It costs one month's load, not a full History.
+    @Transactional(readOnly = true)
+    public HistorySyncDto syncHistory(AccountAccess access, Long personId, Map<String, String> have,
+                                      List<Long> sessions, List<Instant> at, List<String> audit) {
         Map<String, String> held = have == null ? Map.of() : have;
         SyncTiming timing = new SyncTiming(personId, held.size());
         Person person = personService.requireVisiblePerson(personId, access);
         Instant floor = subscriptionService.historyFloor(access.accountId());
         timing.prepared();
 
-        // A device holding nothing -- a new device, a fresh sign-in, the daily full sync -- gets every
+        // A device holding nothing -- a new device, a fresh sign-in, an explicit refresh -- gets every
         // month straight from the load, with no fingerprint query before it and no re-check after.
         // Every month differs from "nothing", so the first query could not change what is loaded;
         // and the re-check exists only to protect months the device KEEPS, of which there are none.
@@ -219,8 +231,8 @@ public class WorkoutSessionService {
         // small statement, one snapshot -- and each is sent if its fingerprint (derived from its own
         // rows) differs from the one held. A scoped month with no visible workouts left is not
         // listed, so the device drops it. Every other month the device holds is left alone and is
-        // re-verified by the next ordinary sync (app open, refocus, the periodic warm, the daily
-        // full sync): a change made ELSEWHERE in another month reaches this device then rather than
+        // re-verified by the next ordinary sync (app open, refocus, the periodic warm, History opening
+        // stale): a change made ELSEWHERE in another month reaches this device then rather than
         // now. That delay is the accepted cost (docs/architecture/history-sync.md, "Scoped syncs").
         //
         // The scope is every month the device HOLDS a touched workout in (`at`) plus every month those
@@ -260,8 +272,9 @@ public class WorkoutSessionService {
                 .map(Map.Entry::getKey)
                 .toList();
         if (differing.isEmpty()) {
+            Map<String, HistoryMonthDto> audited = audited(person, floor, audit, current.keySet(), Map.of());
             timing.done();
-            return new HistorySyncDto(List.copyOf(current.keySet()), Map.of());
+            return new HistorySyncDto(List.copyOf(current.keySet()), Map.of(), null, audited);
         }
 
         // `current` is newest first, so the first differing month is the newest and the last the
@@ -292,8 +305,36 @@ public class WorkoutSessionService {
             months.add(e.getKey());
         }
         months.addAll(loaded.keySet());
+        Map<String, HistoryMonthDto> audited = audited(person, floor, audit, months, loaded);
         timing.done();
-        return new HistorySyncDto(List.copyOf(months), changed);
+        return new HistorySyncDto(List.copyOf(months), changed, null, audited);
+    }
+
+    // The rolling check's months, in full: from this request's own load when it already built one,
+    // otherwise ONE more statement for just these months -- each month's fingerprint derived from its
+    // own rows, as for every month the server sends. Only months the reply lists (a month the client
+    // asked about that no longer exists is simply dropped by the list). Null when none were asked for.
+    private Map<String, HistoryMonthDto> audited(Person person, Instant floor, List<String> audit,
+                                                 Collection<String> listed, Map<String, HistoryMonths.Month> loaded) {
+        if (audit == null || audit.isEmpty()) {
+            return null;
+        }
+        Map<String, HistoryMonthDto> out = new LinkedHashMap<>();
+        List<YearMonth> toLoad = new ArrayList<>();
+        for (String month : audit) {
+            if (!listed.contains(month) || out.containsKey(month)) continue;
+            HistoryMonths.Month m = loaded.get(month);
+            if (m != null) {
+                out.put(month, new HistoryMonthDto(m.fingerprint(), m.sessions()));
+            } else {
+                toLoad.add(YearMonth.parse(month)); // listed, so it is a month the database produced
+            }
+        }
+        if (!toLoad.isEmpty()) {
+            historyMonths.loadMonths(person.getId(), floor, toLoad)
+                    .forEach((month, m) -> out.put(month, new HistoryMonthDto(m.fingerprint(), m.sessions())));
+        }
+        return out;
     }
 
     // Where a slow History sync spent its time, one line per sync that took longer than SLOW_SYNC.
@@ -355,11 +396,11 @@ public class WorkoutSessionService {
 
     // The production canary for the one failure the History sync must never have: a device holding a
     // month whose fingerprint matches the server's while its content does not. The sync would call that
-    // month unchanged forever -- only the daily full sync re-reads it, and that is where the device
-    // compares and reports. HistoryFingerprintTest, HistoryConvergenceTest and HistoryConcurrencyTest
+    // month unchanged forever -- only the rolling check (`audit`) re-reads it, and that is where the
+    // device compares and reports. HistoryFingerprintTest, HistoryConvergenceTest and HistoryConcurrencyTest
     // exist so this never fires; this line is how we would know if one of them missed something.
     //
-    // Nothing to fix here -- the full sync has already replaced the month on the device. It is a WARN
+    // Nothing to fix here -- the audited month has already replaced the device's copy. It is a WARN
     // so it stands out in the logs (docs/architecture/history-sync.md has the query), and it carries
     // month ids only, never workout content.
     @Transactional(readOnly = true)

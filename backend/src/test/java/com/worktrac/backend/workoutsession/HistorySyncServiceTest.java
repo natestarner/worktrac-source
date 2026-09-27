@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -245,6 +246,64 @@ class HistorySyncServiceTest {
         HistorySyncDto reply = service.syncHistory(ACCESS, PERSON, Map.of());
 
         assertEquals(List.of("2026-06"), reply.months());
+    }
+
+    // ── The rolling check (HistorySyncRequest#audit) ─────────────────────────────────────────
+
+    // The common case: nothing differs, and the month asked about is re-read on its own -- one small
+    // load of just that month, sent in full whatever its fingerprint says.
+    @Test
+    void anAuditedMonthIsLoadedOnItsOwnAndSentInFullEvenWhenNothingDiffers() {
+        fingerprintsAre(map("2026-06", "a", "2026-05", "b"));
+        when(historyMonths.loadMonths(PERSON, null, List.of(java.time.YearMonth.of(2026, 5))))
+                .thenReturn(months("2026-05", "b"));
+
+        HistorySyncDto reply = service.syncHistory(ACCESS, PERSON, map("2026-06", "a", "2026-05", "b"),
+                null, null, List.of("2026-05"));
+
+        assertTrue(reply.changed().isEmpty());
+        assertEquals(List.of("2026-05"), List.copyOf(reply.audited().keySet()));
+        assertEquals("b", reply.audited().get("2026-05").fp());
+        verify(historyMonths, never()).load(anyLong(), any(), any(), any());
+    }
+
+    // A month this sync already loaded (it differed) is re-sent from that same load -- no second one.
+    @Test
+    void anAuditedMonthThisSyncAlreadyLoadedIsReusedNotLoadedAgain() {
+        fingerprintsAre(map("2026-06", "new", "2026-05", "b"));
+        loads(Instant.parse("2026-06-01T00:00:00Z"), Instant.parse("2026-07-01T00:00:00Z"), months("2026-06", "new"));
+
+        HistorySyncDto reply = service.syncHistory(ACCESS, PERSON, map("2026-06", "old", "2026-05", "b"),
+                null, null, List.of("2026-06"));
+
+        assertEquals("new", reply.audited().get("2026-06").fp());
+        verify(historyMonths, never()).loadMonths(anyLong(), any(), any());
+    }
+
+    // A month the device asks about that no longer exists is not sent: the month list drops it.
+    @Test
+    void anAuditedMonthThatNoLongerExistsIsNotSent() {
+        fingerprintsAre(map("2026-06", "a"));
+
+        HistorySyncDto reply = service.syncHistory(ACCESS, PERSON, map("2026-06", "a", "2026-01", "gone"),
+                null, null, List.of("2026-01"));
+
+        assertEquals(List.of("2026-06"), reply.months());
+        assertTrue(reply.audited().isEmpty());
+        verify(historyMonths, never()).loadMonths(anyLong(), any(), any());
+    }
+
+    // Older apps don't ask; a scoped sync (after a write) isn't where the check runs.
+    @Test
+    void noAuditAskedForMeansNoAuditedAndAScopedSyncIgnoresIt() {
+        fingerprintsAre(map("2026-06", "a"));
+        assertNull(service.syncHistory(ACCESS, PERSON, map("2026-06", "a")).audited());
+
+        when(historyMonths.monthsOf(PERSON, List.of(9L))).thenReturn(List.of(java.time.YearMonth.of(2026, 6)));
+        when(historyMonths.loadMonths(any(Long.class), any(), any())).thenReturn(months("2026-06", "a"));
+        HistorySyncDto scoped = service.syncHistory(ACCESS, PERSON, map("2026-06", "a"),
+                List.of(9L), List.of(Instant.parse("2026-06-10T10:00:00Z")), List.of("2026-06"));
+        assertNull(scoped.audited());
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────────────────

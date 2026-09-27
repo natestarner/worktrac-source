@@ -269,8 +269,40 @@ class HistorySyncTest extends AbstractIntegrationTest {
         setFullHistory(true);
         JsonNode plus = sync(held(free));
         assertEquals(List.of("2026-05", "2026-01"), months(plus));
-        assertEquals(List.of("2026-05", "2026-01"), fieldNames(plus.get("changed")),
-                "the plan flag is in every fingerprint, so every month is re-sent on upgrade");
+        assertEquals(List.of("2026-01"), fieldNames(plus.get("changed")),
+                "only the month the upgrade brings back is sent -- May, inside the window, is the same on either plan");
+    }
+
+    // The rolling check end to end: a month asked for in `audit` comes back in full even though the
+    // device holds it with the current fingerprint, and it is exactly the month GET /history builds.
+    @Test
+    void anAuditedMonthComesBackInFullAndMatchesGetHistory() throws Exception {
+        logSet(createPastSession("2026-01-10T10:00:00Z"), 100, 5);
+        logSet(createPastSession("2026-05-10T10:00:00Z"), 110, 5);
+        JsonNode first = sync(Map.of());
+
+        String response = mockMvc.perform(post("/api/people/" + personId + "/history/sync")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("have", held(first), "audit", List.of("2026-01")))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        JsonNode reply = objectMapper.readTree(response);
+
+        assertEquals(List.of(), fieldNames(reply.get("changed")), "nothing changed");
+        assertEquals(List.of("2026-01"), fieldNames(reply.get("audited")));
+        assertEquals(first.get("changed").get("2026-01"), reply.get("audited").get("2026-01"),
+                "the re-read month is exactly what the device was sent");
+    }
+
+    @Test
+    void anAuditAskingForTooManyOrMalformedMonthsIsRefused() throws Exception {
+        for (Object audit : List.of(List.of("2026-01", "2026-02", "2026-03"), List.of("January"))) {
+            mockMvc.perform(post("/api/people/" + personId + "/history/sync")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(Map.of("have", Map.of("2026-01", "x"), "audit", audit))))
+                    .andExpect(status().isBadRequest());
+        }
     }
 
     @Test

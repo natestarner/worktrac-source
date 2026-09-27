@@ -3,7 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { getHistory } from './sessions';
 import { setAuthToken } from './client';
 import { queryKeys } from './queryKeys';
-import { FULL_SYNC_INTERVAL_MS, HISTORY_FORMAT, flattenHistory } from '../lib/historySync';
+import { HISTORY_FORMAT, flattenHistory } from '../lib/historySync';
 
 // History's month-by-month sync, through the real transport and a real QueryClient. The property
 // every test here protects: what the cache ends up holding is exactly the server's month list, each
@@ -159,49 +159,70 @@ describe('getHistory', () => {
     expect(result.format).toBe(HISTORY_FORMAT);
   });
 
-  it('asks for everything once a day, whatever it holds, and restarts the clock', async () => {
-    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00Z') });
-    const cached = synced({ '2026-06': { fp: 'a', sessions: [] } }, Date.now() - FULL_SYNC_INTERVAL_MS - 1);
-    global.fetch.mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [] } }));
-
-    const result = await getHistory(7, { readCached: () => cached });
-
-    expect(sentHave(0)).toEqual({});
-    expect(result.fullSyncedAt).toBe(Date.now());
-  });
-
-  // The production canary: the daily full sync re-reads months the device had been trusting, and one
-  // whose fingerprint matched while its content did not is reported -- month ids only.
-  it('reports a month whose fingerprint matched but whose content did not, on the daily full sync', async () => {
-    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00Z') });
-    const cached = synced({ '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] } }, Date.now() - FULL_SYNC_INTERVAL_MS - 1);
+  // The rolling check (lib/historySync.js#auditFor) replaced the daily full download: an ordinary
+  // sync asks for the month re-read longest ago in full; a scoped one, or a device holding nothing,
+  // doesn't.
+  it('sends the rolling check on an ordinary sync, never on a scoped one or when nothing is held', async () => {
+    const cached = { ...synced({ '2026-06': { fp: 'a', sessions: [] }, '2026-05': { fp: 'b', sessions: [] } }), checked: { '2026-06': 20, '2026-05': 10 } };
     global.fetch
-      .mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 6)] } }))
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      .mockResolvedValueOnce(reply(['2026-06', '2026-05']))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ months: ['2026-06'], changed: {}, scope: ['2026-06'] }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [] } }));
 
     await getHistory(7, { readCached: () => cached });
+    await getHistory(7, { readCached: () => cached, scope: { sessions: [1], at: ['2026-06-01T00:00:00Z'] } });
+    await getHistory(7, { readCached: () => undefined });
+
+    const body = (call) => JSON.parse(global.fetch.mock.calls[call][1].body);
+    expect(body(0).audit).toEqual(['2026-05']);
+    expect(body(1).audit).toBeUndefined();
+    expect(body(2).audit).toBeUndefined();
+  });
+
+  it('never asks for everything just because time has passed', async () => {
+    const cached = synced({ '2026-06': { fp: 'a', sessions: [] } }, Date.now() - 30 * 24 * 60 * 60 * 1000);
+    global.fetch.mockResolvedValueOnce(reply(['2026-06']));
+
+    await getHistory(7, { readCached: () => cached });
+
+    expect(sentHave(0)).toEqual({ '2026-06': 'a' });
+  });
+
+  // The production canary: the rolling check re-reads a month the device had been trusting, and one
+  // whose fingerprint matched while its content did not is reported -- month ids only -- and fixed.
+  it('reports and replaces a re-read month whose fingerprint matched but whose content did not', async () => {
+    const cached = synced({ '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] } });
+    global.fetch
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        months: ['2026-06'], changed: {}, audited: { '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 6)] } },
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const result = await getHistory(7, { readCached: () => cached });
 
     await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
     expect(sentUrl(1)).toMatch(/\/api\/people\/7\/history\/drift$/);
     expect(JSON.parse(global.fetch.mock.calls[1][1].body)).toEqual({ months: ['2026-06'] });
+    expect(flattenHistory(result)[0].entries[0].sets[0].reps).toBe(6);
   });
 
-  it('reports nothing when the full sync finds every trusted month exactly as held', async () => {
-    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00Z') });
+  it('reports nothing when the re-read month is exactly as held', async () => {
     const june = { fp: 'a', sessions: [session(1, '2026-06', 5)] };
-    const cached = synced({ '2026-06': june }, Date.now() - FULL_SYNC_INTERVAL_MS - 1);
-    global.fetch.mockResolvedValueOnce(reply(['2026-06'], { '2026-06': june }));
+    const cached = synced({ '2026-06': june });
+    global.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ months: ['2026-06'], changed: {}, audited: { '2026-06': june } }), { status: 200, headers: { 'content-type': 'application/json' } }));
 
-    await getHistory(7, { readCached: () => cached });
+    const result = await getHistory(7, { readCached: () => cached });
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result.months['2026-06']).toBe(june);
   });
 
   it('never lets a failed drift report fail the sync that found it', async () => {
-    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00Z') });
-    const cached = synced({ '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] } }, Date.now() - FULL_SYNC_INTERVAL_MS - 1);
+    const cached = synced({ '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] } });
     global.fetch
-      .mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 6)] } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        months: ['2026-06'], changed: {}, audited: { '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 6)] } },
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'));
 
     const result = await getHistory(7, { readCached: () => cached });
@@ -209,14 +230,49 @@ describe('getHistory', () => {
     expect(flattenHistory(result)[0].entries[0].sets[0].reps).toBe(6);
   });
 
-  it('does not force a full sync before the day is up', async () => {
-    vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00Z') });
-    const cached = synced({ '2026-06': { fp: 'a', sessions: [] } }, Date.now() - FULL_SYNC_INTERVAL_MS + 60_000);
+  // A server that predates the rolling check ignores `audit` and sends no `audited`: nothing breaks.
+  it('works against a server that does not answer the rolling check', async () => {
+    const june = { fp: 'a', sessions: [session(1, '2026-06', 5)] };
     global.fetch.mockResolvedValueOnce(reply(['2026-06']));
 
-    await getHistory(7, { readCached: () => cached });
+    const result = await getHistory(7, { readCached: () => synced({ '2026-06': june }) });
 
-    expect(sentHave(0)).toEqual({ '2026-06': 'a' });
+    expect(result.months['2026-06']).toBe(june);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  // The re-download the person asked for (lib/historyReload.js): nothing held is trusted.
+  describe('full', () => {
+    it('offers nothing and asks for no check, whatever is held, and keeps only what the server sent', async () => {
+      const cached = synced({ '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] }, '2026-04': { fp: 'z', sessions: [] } });
+      global.fetch.mockResolvedValueOnce(reply(['2026-06'], { '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] } }));
+
+      const result = await getHistory(7, { readCached: () => cached, scope: { sessions: [1], at: [] }, full: true });
+
+      expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({ have: {} });
+      expect(Object.keys(result.months)).toEqual(['2026-06']);
+    });
+
+    // Every month of a full re-download is a month re-read whatever its fingerprint said: the
+    // canary's widest look.
+    it('reports every re-sent month whose fingerprint matched what was held but whose content did not', async () => {
+      const cached = synced({
+        '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 5)] },
+        '2026-05': { fp: 'b', sessions: [session(2, '2026-05', 5)] },
+      });
+      global.fetch
+        .mockResolvedValueOnce(reply(['2026-06', '2026-05'], {
+          '2026-06': { fp: 'a', sessions: [session(1, '2026-06', 6)] },
+          '2026-05': { fp: 'b2', sessions: [session(2, '2026-05', 7)] },
+        }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+      const result = await getHistory(7, { readCached: () => cached, full: true });
+
+      await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+      expect(JSON.parse(global.fetch.mock.calls[1][1].body)).toEqual({ months: ['2026-06'] });
+      expect(flattenHistory(result).map((s) => s.entries[0].sets[0].reps)).toEqual([6, 7]);
+    });
   });
 });
 

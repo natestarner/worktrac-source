@@ -1,5 +1,6 @@
 package com.worktrac.backend.workoutsession;
 
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
@@ -18,9 +19,16 @@ import java.util.Map;
 // client never computes one. Absent or empty means the ordinary all-months check, and both are
 // ignored when nothing is held: a full sync is a full sync.
 //
-// Bounded, since all three are client-supplied: 2,400 months is two hundred years of History, and no
-// write touches more than a couple of workouts.
+// `audit` is the ROLLING CHECK: months ('yyyy-mm') the client holds and wants re-sent in full
+// whatever their fingerprint says, so it can compare them with what it has
+// (WorkoutSessionService#syncHistory). It replaced the daily full download: the client asks for the
+// month it checked longest ago on each ordinary sync, so every month is re-read in turn at the cost of
+// one month, not the whole History. Ignored on a scoped sync and when nothing is held.
+//
+// Bounded, since all are client-supplied: 2,400 months is two hundred years of History, no write
+// touches more than a couple of workouts, and the rolling check asks for one or two months.
 public record HistorySyncRequest(@Size(max = 2400) Map<String, String> have,
                                  @Size(max = 8) List<Long> sessions,
-                                 @Size(max = 8) List<Instant> at) {
+                                 @Size(max = 8) List<Instant> at,
+                                 @Size(max = 2) List<@Pattern(regexp = "\\d{4}-\\d{2}") String> audit) {
 }
