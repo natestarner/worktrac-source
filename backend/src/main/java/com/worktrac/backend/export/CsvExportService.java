@@ -45,7 +45,24 @@ public class CsvExportService {
         this.epleyCalculator = epleyCalculator;
     }
 
+    // UTF-8 with a byte-order mark. A CSV carries no declaration of its own encoding, and Excel
+    // (Windows and Mac alike) reads a BOM-less file as the system's legacy code page -- so every
+    // non-ASCII character a person typed comes out mangled: a curly apostrophe (UTF-8 E2 80 99)
+    // shows as "â€™". The BOM is the only signal Excel honours. Numbers and Sheets accept it, and
+    // CsvParser strips it on the way back in, so the import round trip is unaffected.
+    //
+    // Encoded here, once, for both the single-person download and every entry in the zip, so
+    // the two can never disagree about it.
     public record CsvExport(String filename, String content) {
+        private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
+
+        public byte[] bytes() {
+            byte[] body = content.getBytes(StandardCharsets.UTF_8);
+            byte[] withBom = new byte[UTF8_BOM.length + body.length];
+            System.arraycopy(UTF8_BOM, 0, withBom, 0, UTF8_BOM.length);
+            System.arraycopy(body, 0, withBom, UTF8_BOM.length, body.length);
+            return withBom;
+        }
     }
 
     public record ZipExport(String filename, byte[] content) {
@@ -124,7 +141,7 @@ public class CsvExportService {
                     usedEntryNames.add(entryName);
                 }
                 zip.putNextEntry(new ZipEntry(entryName));
-                zip.write(csvExport.content().getBytes(StandardCharsets.UTF_8));
+                zip.write(csvExport.bytes());
                 zip.closeEntry();
             }
         } catch (IOException e) {
