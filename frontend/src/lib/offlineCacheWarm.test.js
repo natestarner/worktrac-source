@@ -62,7 +62,7 @@ describe('warmOfflineCache', () => {
       expect(listRoutines).toHaveBeenCalledWith(person.id);
       expect(getLiveSession).toHaveBeenCalledWith(person.id);
       // An ORDINARY sync, through refreshHistory: scope null re-verifies every month.
-      expect(getHistory).toHaveBeenCalledWith(person.id, { readCached: expect.any(Function), scope: null });
+      expect(getHistory).toHaveBeenCalledWith(person.id, { readCached: expect.any(Function), scope: null, full: false });
       expect(getPrs).toHaveBeenCalledWith(person.id);
       expect(client.getQueryData(queryKeys.history(person.id))).toEqual([]);
       expect(client.getQueryData(queryKeys.prs(person.id))).toEqual([]);

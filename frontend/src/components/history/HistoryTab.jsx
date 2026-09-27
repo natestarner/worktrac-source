@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useIsRestoring, useQueryClient } from '@tanstack/react-query';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { useHistory } from '../../hooks/useHistory';
@@ -7,12 +8,16 @@ import { useHistoryWindow } from '../../hooks/useHistoryWindow';
 import { useExerciseTagMap } from '../../hooks/useExerciseTagMap';
 import { useExerciseFilter } from '../../hooks/useExerciseFilter';
 import { downloadPersonCsv } from '../../api/export';
+import { refreshHistory } from '../../lib/queryClient';
+import { takeHistoryReload } from '../../lib/historyReload';
 import { formatDateLabel, formatTime, toLocalDateStr } from '../../utils/datetime';
 import { buildHistoryPrFlags, historyPrFlagKey } from '../../utils/historyPrFlags';
 import { collectTagVocabulary, filterHistorySessions, sessionDaySpan, sessionMatchesDateRange } from '../../utils/exerciseFilter';
 import { eachDay, formatDateRangeLabel, normalizeRange, startOfMonth, todayStr } from '../../utils/dateRange';
 import { prSpec, SET_PR_TYPES, SESSION_PR_TYPES } from '../trends/exerciseMetrics';
 import PastSessionModal from './PastSessionModal';
+import PullToRefresh from './PullToRefresh';
+import { jumpAndSettle } from './jumpAndSettle';
 import Button from '../shared/Button';
 import Modal from '../shared/Modal';
 import Skeleton from '../shared/Skeleton';
@@ -102,6 +107,21 @@ function HistoryTabContent({ initialExerciseFilter }) {
   const [navTarget, setNavTarget] = useState(null);
   const [scrollToSessionId, setScrollToSessionId] = useState(null);
   const sessionRefs = useRef({});
+
+  // The whole History again, for the person on screen, when they ask for it: a reload of this tab,
+  // or a pull down on it in the installed app (lib/historyReload.js). Nothing else re-downloads
+  // everything -- the month sync trusts what it holds. After the persisted cache is restored, so the
+  // re-download lands on top of it rather than racing it.
+  const queryClient = useQueryClient();
+  const isRestoring = useIsRestoring();
+  const tabRef = useRef(null);
+  const refreshAllHistory = useCallback(
+    () => refreshHistory(queryClient, activePersonId, null, { full: true }),
+    [queryClient, activePersonId],
+  );
+  useEffect(() => {
+    if (!isRestoring && takeHistoryReload()) refreshAllHistory();
+  }, [isRestoring, refreshAllHistory]);
 
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
 
@@ -203,14 +223,27 @@ function HistoryTabContent({ initialExerciseFilter }) {
   // draws every block it passes at its real height, which moves the target mid-flight: a workout
   // ten months down landed a whole workout off screen (history-long-list.spec.ts, before the scroll
   // margin below, whose slack now hides most of that miss). An instant jump draws nothing on the
-  // way and the correction absorbs the target's own neighbours resizing -- it landed exactly even
-  // with a deliberately wrong 20px estimate.
+  // way and the corrections absorb the target's neighbours resizing -- it landed exactly even with a
+  // deliberately wrong 20px estimate.
+  //
+  // ⚠️ Correct UNTIL THE TARGET HOLDS STILL, not once (jumpAndSettle). Blocks keep resizing after
+  // the jump as they draw: one never drawn has only its estimate, and one drawn before a filter
+  // remembers its UNFILTERED height (`auto` in containIntrinsicSize) until it draws again. Chrome
+  // keeps the target in place through that (scroll anchoring); Safari has no scroll anchoring, so
+  // everything below a resizing block moves. With one correction, "View this exercise's history" two
+  // years down a five-year History landed 301px off in WebKit (3/3 locally; 117px under the tab bar
+  // on lower, the barrage's long-jump). Re-aiming until it held still landed it exactly (4/4).
+  //
+  // The loop's cancel lives in a ref, not this effect's cleanup: clearing scrollToSessionId below
+  // re-runs the effect, and a cleanup would cancel the loop on the very next render.
+  const cancelJump = useRef(null);
+  useEffect(() => () => cancelJump.current?.(), []);
   useEffect(() => {
     if (!scrollToSessionId) return;
     const el = sessionRefs.current[scrollToSessionId];
     if (el?.scrollIntoView) {
-      el.scrollIntoView({ block: 'start' });
-      requestAnimationFrame(() => el.scrollIntoView({ block: 'start' }));
+      cancelJump.current?.();
+      cancelJump.current = jumpAndSettle(el);
     }
     setScrollToSessionId(null);
   }, [scrollToSessionId, filteredSessions]);
@@ -241,7 +274,13 @@ function HistoryTabContent({ initialExerciseFilter }) {
   }
 
   return (
-    <div>
+    <div ref={tabRef}>
+      <PullToRefresh targetRef={tabRef} onRefresh={refreshAllHistory} />
+      {/* The same refresh for anyone who can't pull: off-screen until focused, like the skip link.
+          A browser's own reload does it too, but the installed app has none. */}
+      <button type="button" className="skip-link" onClick={refreshAllHistory}>
+        Refresh History
+      </button>
       <div style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
         {/* ReadOnlyWrap nests INSIDE OfflineDisabledWrap so the read-only message wins when both
             apply -- see ReadOnlyWrap's header. Telling a member this "needs a connection" would

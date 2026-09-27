@@ -361,6 +361,14 @@ each held month's fingerprint and keeps every month the server does not resend
   the only thing that can catch a fingerprint or merge bug. `checked` lives beside `months`, not in
   them, so a sync that only moves a check time leaves `months` (and `flattenHistory`'s memo, keyed
   by that object) untouched. A scoped sync never audits.
+- **The whole History is re-downloaded only when the person asks** (`lib/historyReload.js`): a
+  reload whose document URL was `/app/history` (the navigation entry's `name`, never
+  `location.pathname`, which a later tab switch changes), or a pull down on History in the installed
+  app (`PullToRefresh.jsx`). The pull listens only in standalone display mode, because a browser's
+  own pull down already reloads the page. Both call `refreshHistory(..., { full: true })` for the
+  active person, after the persisted cache is restored. `full` is owed like a scope: a write refresh
+  that cancels it carries it on. A second full request while one is in flight is dropped. Never add
+  a timer-driven full download back; the rolling check is the backstop.
 - **History still has no optimistic writer.** It holds only what the server sent, which is what keeps
   it on `offlineCacheWarm`'s `refreshAfterRestore` list — now nearly free, since a restored month
   whose fingerprint still matches comes back as nothing.
@@ -409,8 +417,11 @@ each held month's fingerprint and keeps every month the server does not resend
     only its estimated size (`estimatedSessionBlockHeight`). A smooth scroll draws the blocks it
     passes at their real size and missed a target far down by a whole workout. The scroll margin
     below now absorbs most of that miss, so the spec can't tell smooth from instant. An instant
-    `scrollIntoView` plus one correction a frame later is exact, even with a deliberately bad 20px
-    estimate. Keep it.
+    `scrollIntoView`, re-aimed every frame until the target holds still (`jumpAndSettle`), is exact
+    even with a deliberately bad 20px estimate. **Not one correction: Safari has no scroll
+    anchoring**, so each block that draws for the first time after the jump moves the target, and a
+    single correction frame left it 117px under the tab bar in WebKit (Chrome's anchoring hid
+    this). The loop stops on any scroll, tap or key, so it never fights the person. Keep it.
   - **Blocks keep `scrollMarginTop: var(--sticky-chrome-clearance)`** so a jump doesn't park the
     workout behind the tab bar.
 

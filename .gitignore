@@ -48,3 +48,6 @@ marketing/design/huddle-landing-page.html
 
 # === Docker ===
 docker-compose.override.yml
+
+# === Barrage reports (e2e/barrage) ===
+e2e/barrage-reports/
