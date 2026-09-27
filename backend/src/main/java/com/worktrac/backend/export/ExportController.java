@@ -28,13 +28,11 @@ public class ExportController {
     @RequiresPermission(personScoped = true)
     public ResponseEntity<byte[]> export(@PathVariable Long personId) {
         CsvExportService.CsvExport export = csvExportService.export(currentUser.access(), personId);
-        byte[] body = export.content().getBytes(StandardCharsets.UTF_8);
-
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("text/csv"))
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename(export.filename()).build().toString())
-                .body(body);
+                .body(export.bytes());
     }
 
     @GetMapping("/api/export/all.zip")

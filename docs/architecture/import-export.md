@@ -16,6 +16,15 @@ guarantee tying them together, and the anchor test in `CsvImportControllerTest`:
 
 Everything else is downstream of making that true.
 
+### The file opens with a UTF-8 BOM, on purpose
+
+Every exported CSV (the single download and each zip entry, both via `CsvExport.bytes()`) starts
+with `EF BB BF` and is served as `text/csv;charset=UTF-8`. A CSV has no way to declare its own
+encoding, and Excel reads a BOM-less one as the system's legacy code page, so a curly apostrophe
+in a note came out as `donâ€™t`. The BOM is the only signal Excel honours. Don't drop it as noise:
+`CsvParser` strips it on the way back in, so the round trip above is unaffected, and
+`CsvExportControllerTest` pins it.
+
 ### One derivation, two consumers
 
 `export/WorkoutRowProjection` turns a person's stored data into a flat `List<ExportRow>` — sessions

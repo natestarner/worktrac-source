@@ -116,6 +116,9 @@ class ExportAllControllerTest extends AbstractIntegrationTest {
         boolean sawNate = false;
         boolean sawJax = false;
         for (Map.Entry<String, String> entry : entries.entrySet()) {
+            // Same UTF-8 BOM as the single-person download -- without it Excel mangles any
+            // non-ASCII text (a curly apostrophe reads "â€™").
+            assertTrue(entry.getValue().startsWith("﻿Date,"), entry.getKey() + " must open with a UTF-8 BOM");
             if (entry.getKey().startsWith("Nate-workout-data-")) {
                 sawNate = true;
                 assertTrue(entry.getValue().contains("Bench Press"), "Nate's CSV should contain his logged set");

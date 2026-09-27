@@ -15,16 +15,20 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,6 +45,8 @@ class CsvExportControllerTest extends AbstractIntegrationTest {
     private static final String HEADER = "Date,Time,Session Start,Session Type,Exercise,Tags,Favorite,"
             + "Custom Fields,Exercise Note,Session Note,Set #,Weight,Unit,Reps,"
             + "Duration (sec),Rest (sec),Est. 1RM";
+
+    private static final byte[] UTF8_BOM = {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
@@ -130,7 +136,7 @@ class CsvExportControllerTest extends AbstractIntegrationTest {
                 .andReturn().getResponse().getContentAsString();
         String[] lines = csvResponse.split("\n");
 
-        assertEquals(HEADER, lines[0]);
+        assertEquals("﻿" + HEADER, lines[0], "the header, behind the UTF-8 BOM Excel needs");
         assertEquals(5, lines.length, "header + 4 set rows (2 for A in session 1, 1 for B in session 1, 1 for A in session 2)");
 
         // Sessions ordered oldest-first: session 1's three rows, then session 2's row.
@@ -309,6 +315,40 @@ class CsvExportControllerTest extends AbstractIntegrationTest {
         assertEquals("", row[7], "no custom fields added");
         assertEquals("", row[8], "no standing note added");
         assertEquals("", row[9], "no session note added");
+    }
+
+    // A note reading "Hands don't touch" (curly apostrophe) opened in Excel as "Hands donâ€™t
+    // touch". The bytes were valid UTF-8 all along -- nothing in the file SAID so, and Excel reads
+    // a BOM-less CSV as the legacy code page. The BOM and the charset are the fix, so they are what
+    // this asserts: decoding the body as UTF-8 here would pass with or without them.
+    @Test
+    void exportDeclaresUtf8SoSpreadsheetsDoNotMangleNonAsciiText() throws Exception {
+        long exercise = createExercise("Café Curl");
+        mockMvc.perform(put("/api/people/" + personId + "/exercises/" + exercise + "/note")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("note", "Hands don’t touch"))))
+                .andExpect(status().isOk());
+        logLiveSet(exercise, 30, 10);
+
+        MockHttpServletResponse response = mockMvc.perform(get("/api/people/" + personId + "/export.csv")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse();
+
+        MediaType contentType = MediaType.parseMediaType(response.getContentType());
+        assertEquals("csv", contentType.getSubtype());
+        assertEquals(StandardCharsets.UTF_8, contentType.getCharset(), "the response must name its charset");
+
+        byte[] body = response.getContentAsByteArray();
+        assertArrayEquals(UTF8_BOM, Arrays.copyOf(body, UTF8_BOM.length),
+                "the file must open with a UTF-8 BOM -- the only encoding signal Excel honours for a CSV");
+
+        String csv = new String(body, UTF8_BOM.length, body.length - UTF8_BOM.length, StandardCharsets.UTF_8);
+        assertEquals(HEADER, csv.split("\n")[0], "exactly one BOM, and nothing else ahead of the header");
+        String[] row = splitCsvLine(csv.split("\n")[1]);
+        assertEquals("Café Curl", row[4]);
+        assertEquals("Hands don’t touch", row[8]);
     }
 
     // Minimal quote-aware CSV field splitter matching CsvExportService's own escaping
