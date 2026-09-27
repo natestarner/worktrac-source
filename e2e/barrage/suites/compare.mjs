@@ -244,7 +244,8 @@ async function countFlows(target, creds) {
       await page.waitForURL(/\/app\//); await sleep(2500); await dismiss(page);
     }, 6000);
     await count('open History', () => goTab(page, 'History'));
-    await count('reopen the app', async () => { await page.reload(); await page.getByText(/×/).first().waitFor(); });
+    // Opened again, not reloaded: a reload ON History is the person asking for all of it (#362).
+    await count('reopen the app', async () => { await page.goto(page.url()); await page.getByText(/×/).first().waitFor(); });
     await count('first set (starts a workout)', async () => { await goTab(page, 'Log'); await toExercise('Barbell Bench Press'); await logSet(); });
     await count('each further set', () => logSet());
     await count('back to the session list, next exercise', async () => { await page.getByRole('button', { name: /All exercises/ }).first().click(); await sleep(800); await toExercise('Barbell Row'); });

@@ -41,7 +41,8 @@ async function oneRun(ctx) {
     const before = responses.length;
     const m0 = await metrics(cdp);
     t0 = Date.now();
-    await page.reload();
+    // Opened again, not reloaded: a reload ON History is the person asking for all of it (#362).
+    await page.goto(page.url());
     await page.getByText(/lb\s?×/).first().waitFor({ timeout: 180000 });
     const reloadPaint = Date.now() - t0;
     const m1 = await metrics(cdp);
