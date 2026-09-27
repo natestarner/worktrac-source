@@ -339,7 +339,7 @@ happily on a key nothing observes, which is exactly the failure mode.
 ### History is cached a month at a time — read it through `flattenHistory`
 
 `queryKeys.history(personId)` holds `{ format: 2, months: { 'yyyy-mm': { fp, sessions } },
-fullSyncedAt }`, refreshed by `api/sessions.js#getHistory` through `POST /history/sync`: it sends
+checked: { 'yyyy-mm': ms }, fullSyncedAt }`, refreshed by `api/sessions.js#getHistory` through `POST /history/sync`: it sends
 each held month's fingerprint and keeps every month the server does not resend
 (`lib/historySync.js`; the server half and its invariants are in `backend-core.md`).
 
@@ -355,9 +355,20 @@ each held month's fingerprint and keeps every month the server does not resend
   just always a full download.
 - **A reply that lists a month it neither sent nor that is held THROWS** (`applyHistorySync`), so the
   query keeps what it had and retries. Never "tolerate" it by dropping the month.
-- **The daily full sync is the backstop** (`FULL_SYNC_INTERVAL_MS`): once a day the client offers
-  nothing and gets everything, bounding any fingerprint or merge bug to a day. A missing, NaN or
-  future `fullSyncedAt` counts as due. Don't remove it as redundant.
+- **The rolling check is the backstop** (`auditFor`, `AUDIT_MONTHS_PER_SYNC`). There is no periodic
+  full download: each ordinary sync asks for the held month re-read longest ago (`checked`) in full,
+  so every month is re-read in turn at the cost of one month. Don't remove it as redundant; it is
+  the only thing that can catch a fingerprint or merge bug. `checked` lives beside `months`, not in
+  them, so a sync that only moves a check time leaves `months` (and `flattenHistory`'s memo, keyed
+  by that object) untouched. A scoped sync never audits.
+- **The whole History is re-downloaded only when the person asks** (`lib/historyReload.js`): a
+  reload whose document URL was `/app/history` (the navigation entry's `name`, never
+  `location.pathname`, which a later tab switch changes), or a pull down on History in the installed
+  app (`PullToRefresh.jsx`). The pull listens only in standalone display mode, because a browser's
+  own pull down already reloads the page. Both call `refreshHistory(..., { full: true })` for the
+  active person, after the persisted cache is restored. `full` is owed like a scope: a write refresh
+  that cancels it carries it on. A second full request while one is in flight is dropped. Never add
+  a timer-driven full download back; the rolling check is the backstop.
 - **History still has no optimistic writer.** It holds only what the server sent, which is what keeps
   it on `offlineCacheWarm`'s `refreshAfterRestore` list — now nearly free, since a restored month
   whose fingerprint still matches comes back as nothing.
@@ -424,7 +435,7 @@ each held month's fingerprint and keeps every month the server does not resend
   (`e2e/tests/support/historyConvergence.ts`, called from `parity.ts`). Don't opt a spec out of it —
   if it fails, History is behind after reconnecting, and its message says whether the app never
   asked or asked and was answered wrongly.
-- **The daily full sync is also a production canary** (`findDrift`): a month whose fingerprint
+- **The rolling check is also a production canary** (`findAuditDrift`): a month whose fingerprint
   matched but whose content did not is reported to `POST /history/drift` and logged as
   `History drift:`. Best-effort, never awaited, month ids only.
 

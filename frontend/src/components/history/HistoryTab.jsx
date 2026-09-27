@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useIsRestoring, useQueryClient } from '@tanstack/react-query';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
 import { useHistory } from '../../hooks/useHistory';
@@ -7,12 +8,15 @@ import { useHistoryWindow } from '../../hooks/useHistoryWindow';
 import { useExerciseTagMap } from '../../hooks/useExerciseTagMap';
 import { useExerciseFilter } from '../../hooks/useExerciseFilter';
 import { downloadPersonCsv } from '../../api/export';
+import { refreshHistory } from '../../lib/queryClient';
+import { takeHistoryReload } from '../../lib/historyReload';
 import { formatDateLabel, formatTime, toLocalDateStr } from '../../utils/datetime';
 import { buildHistoryPrFlags, historyPrFlagKey } from '../../utils/historyPrFlags';
 import { collectTagVocabulary, filterHistorySessions, sessionDaySpan, sessionMatchesDateRange } from '../../utils/exerciseFilter';
 import { eachDay, formatDateRangeLabel, normalizeRange, startOfMonth, todayStr } from '../../utils/dateRange';
 import { prSpec, SET_PR_TYPES, SESSION_PR_TYPES } from '../trends/exerciseMetrics';
 import PastSessionModal from './PastSessionModal';
+import PullToRefresh from './PullToRefresh';
 import { jumpAndSettle } from './jumpAndSettle';
 import Button from '../shared/Button';
 import Modal from '../shared/Modal';
@@ -103,6 +107,21 @@ function HistoryTabContent({ initialExerciseFilter }) {
   const [navTarget, setNavTarget] = useState(null);
   const [scrollToSessionId, setScrollToSessionId] = useState(null);
   const sessionRefs = useRef({});
+
+  // The whole History again, for the person on screen, when they ask for it: a reload of this tab,
+  // or a pull down on it in the installed app (lib/historyReload.js). Nothing else re-downloads
+  // everything -- the month sync trusts what it holds. After the persisted cache is restored, so the
+  // re-download lands on top of it rather than racing it.
+  const queryClient = useQueryClient();
+  const isRestoring = useIsRestoring();
+  const tabRef = useRef(null);
+  const refreshAllHistory = useCallback(
+    () => refreshHistory(queryClient, activePersonId, null, { full: true }),
+    [queryClient, activePersonId],
+  );
+  useEffect(() => {
+    if (!isRestoring && takeHistoryReload()) refreshAllHistory();
+  }, [isRestoring, refreshAllHistory]);
 
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
 
@@ -255,7 +274,13 @@ function HistoryTabContent({ initialExerciseFilter }) {
   }
 
   return (
-    <div>
+    <div ref={tabRef}>
+      <PullToRefresh targetRef={tabRef} onRefresh={refreshAllHistory} />
+      {/* The same refresh for anyone who can't pull: off-screen until focused, like the skip link.
+          A browser's own reload does it too, but the installed app has none. */}
+      <button type="button" className="skip-link" onClick={refreshAllHistory}>
+        Refresh History
+      </button>
       <div style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
         {/* ReadOnlyWrap nests INSIDE OfflineDisabledWrap so the read-only message wins when both
             apply -- see ReadOnlyWrap's header. Telling a member this "needs a connection" would

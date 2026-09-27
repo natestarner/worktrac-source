@@ -13,6 +13,7 @@ import com.worktrac.backend.support.MutableClock;
 import com.worktrac.backend.support.RegistrationTestSupport;
 import com.worktrac.backend.user.TestCodeCache;
 import com.worktrac.backend.workoutsession.HistoryEntryDto;
+import com.worktrac.backend.workoutsession.HistoryEpoch;
 import com.worktrac.backend.workoutsession.HistoryFingerprints;
 import com.worktrac.backend.workoutsession.HistorySessionDto;
 import com.worktrac.backend.stats.SetSummaryDto;
@@ -55,7 +56,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 // The History sync trusts a month the client already holds for as long as its fingerprint is
 // unchanged. So the one failure that matters here is a change that does NOT move the fingerprint:
-// the device would keep showing the old month, with nothing to correct it until the daily full sync.
+// the device would keep showing the old month until the rolling check next re-read it.
 //
 // Every write a person can make is driven through the real API below, and each test asserts both
 // halves: the month it touched changed, and the months it did not touch did not (a fingerprint that
@@ -86,6 +87,7 @@ class HistoryFingerprintTest extends AbstractIntegrationTest {
     @Autowired private SubscriptionRepository subscriptionRepository;
     @Autowired private SubscriptionService subscriptionService;
     @Autowired private HistoryFingerprints historyFingerprints;
+    @Autowired private HistoryEpoch historyEpoch;
     @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @MockitoBean private EmailService emailService;
@@ -438,12 +440,19 @@ class HistoryFingerprintTest extends AbstractIntegrationTest {
         assertEquals(before, snap());
     }
 
-    // An upgrade is the one way rows ENTER the visible set with no write behind them. The flag is
-    // what catches it: every month changes, and the months the window hid come back.
+    // An upgrade is the one way rows ENTER the visible set with no write behind them. No plan flag is
+    // needed to catch it: the rows entering raise exactly their own months' counts -- a month the
+    // window hid comes back, a month it cut in half changes -- while a month wholly inside the window
+    // is exactly the same content on either plan, and keeps its fingerprint (no re-download). A plan
+    // flag used to change EVERY month on every plan change.
     @Test
-    void upgradingAndDowngradingChangeEveryMonth() throws Exception {
+    void upgradingChangesOnlyTheMonthsThatGainRowsAndDowngradingRestoresThem() throws Exception {
         long january = createPastSession("2026-01-10T10:00:00Z");
         logSet(january, 100, 5);
+        long marchOutside = createPastSession("2026-03-10T10:00:00Z");   // floor on Free: 2026-03-17T12:00Z
+        logSet(marchOutside, 100, 5);
+        long marchInside = createPastSession("2026-03-20T10:00:00Z");
+        logSet(marchInside, 100, 5);
         long may = createPastSession("2026-05-10T10:00:00Z");
         logSet(may, 100, 5);
 
@@ -454,10 +463,31 @@ class HistoryFingerprintTest extends AbstractIntegrationTest {
         setFullHistory(true);
         Snapshot plus = snap();
         assertTrue(plus.fp().containsKey("2026-01"), "January is back on Plus");
-        assertNotEquals(free.fp().get(MAY), plus.fp().get(MAY), "every month changes on upgrade");
+        assertNotEquals(free.fp().get(MARCH), plus.fp().get(MARCH), "March, cut in half by the window, changes");
+        assertEquals(free.fp().get(MAY), plus.fp().get(MAY), "May, wholly inside the window, does not");
+        assertEquals(free.content().get(MAY), plus.content().get(MAY), "...and its content is the same on either plan");
 
         setFullHistory(false);
         assertEquals(free, snap(), "and back again on downgrade");
+    }
+
+    // The epoch (HistoryEpoch: History's format version and the database's identity) is in every
+    // fingerprint, so bumping FORMAT_VERSION, or restoring or copying the database, changes every
+    // month even though no row changed.
+    @Test
+    void theEpochIsInEveryFingerprint() throws Exception {
+        java.math.BigInteger rv = java.math.BigInteger.TEN;
+        assertNotEquals(HistoryFingerprints.of("v1@2026-01-01", 1, rv, 1, rv, 0, java.math.BigInteger.ZERO, rv),
+                HistoryFingerprints.of("v2@2026-01-01", 1, rv, 1, rv, 0, java.math.BigInteger.ZERO, rv),
+                "a format version bump changes the fingerprint");
+        assertNotEquals(HistoryFingerprints.of("v1@2026-01-01", 1, rv, 1, rv, 0, java.math.BigInteger.ZERO, rv),
+                HistoryFingerprints.of("v1@2026-02-02", 1, rv, 1, rv, 0, java.math.BigInteger.ZERO, rv),
+                "a different database changes the fingerprint");
+
+        String created = jdbcTemplate.queryForObject(
+                "SELECT CONVERT(VARCHAR(30), create_date, 126) FROM sys.databases WHERE database_id = DB_ID()", String.class);
+        assertEquals("v" + HistoryEpoch.FORMAT_VERSION + "@" + created, historyEpoch.current(),
+                "the epoch is this build's format version and this database's creation time");
     }
 
     // ── The guard on the guard ───────────────────────────────────────────────────────────────
@@ -482,7 +512,9 @@ class HistoryFingerprintTest extends AbstractIntegrationTest {
                     .map(RecordComponent::getName)
                     .collect(Collectors.toSet());
             assertEquals(entry.getValue(), actual, entry.getKey().getSimpleName()
-                    + " changed shape: fold any new field into HistoryFingerprints, then list it here");
+                    + " changed shape: fold any new field into HistoryFingerprints, then list it here -- and"
+                    + " bump HistoryEpoch.FORMAT_VERSION, since rows that already exist will not change their"
+                    + " row_version to tell devices about the new field");
         }
     }
 

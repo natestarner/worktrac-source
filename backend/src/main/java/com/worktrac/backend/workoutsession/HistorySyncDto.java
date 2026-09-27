@@ -14,9 +14,19 @@ import java.util.Map;
 //
 // Either way, `changed` carries content only for listed months whose fingerprint differs from the
 // one the client sent; every other listed month is exactly what the client already has.
-public record HistorySyncDto(List<String> months, Map<String, HistoryMonthDto> changed, List<String> scope) {
+//
+// `audited` (the rolling check, HistorySyncRequest#audit): the requested months' full content and
+// fingerprint, sent whatever their fingerprint -- the client compares them with its own copy. Only
+// months that are listed; null when none were asked for. A month may appear in both `changed` and
+// `audited`; the two carry the same content.
+public record HistorySyncDto(List<String> months, Map<String, HistoryMonthDto> changed, List<String> scope,
+                             Map<String, HistoryMonthDto> audited) {
 
     public HistorySyncDto(List<String> months, Map<String, HistoryMonthDto> changed) {
-        this(months, changed, null);
+        this(months, changed, null, null);
+    }
+
+    public HistorySyncDto(List<String> months, Map<String, HistoryMonthDto> changed, List<String> scope) {
+        this(months, changed, scope, null);
     }
 }

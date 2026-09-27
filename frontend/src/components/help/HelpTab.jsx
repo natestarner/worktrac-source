@@ -463,6 +463,17 @@ export default function HelpTab() {
           full history. See <a href="#plan">Free and Plus</a>.
         </p>
 
+        <h3 className="help-h3">Getting it all again</h3>
+        <p>
+          History keeps itself up to date. Each time you open the app it checks with Huddle and
+          fetches only what changed, including anything logged on another phone or tablet. If it
+          ever looks wrong, <strong>reload the page while you&rsquo;re on History</strong>, or, in
+          the app on your Home Screen, <strong>pull down from the top of History</strong>. That
+          downloads the whole History again for the person you&rsquo;re viewing. Without a
+          connection you keep seeing what&rsquo;s already on this device, and the download happens
+          once you&rsquo;re back online.
+        </p>
+
         <h3 className="help-h3">Finding something</h3>
         <ul>
           <li><strong>Search</strong> by exercise name.</li>
