@@ -1,6 +1,7 @@
 // What lower itself says about the run window: errors and warnings in the backend's logs, the
 // History drift canary, slow syncs, and database CPU. Read-only (az, the Reader principal).
 import { dbCpu, kql } from '../lib/ops.mjs';
+import { mdCell } from '../lib/report.mjs';
 
 const rows = (data) => (Array.isArray(data) ? data : data?.tables?.[0]?.rows ?? []);
 
@@ -22,7 +23,7 @@ export async function ops(ctx) {
 
   const errors = rows(kql(`ContainerAppConsoleLogs_CL | where ${window} | where Log_s has_any ('ERROR','WARN') | extend msg=replace_regex(substring(extract(@'(WARN|ERROR).*', 0, Log_s), 0, 200), @'\\[cid=[^\\]]*\\] \\[uid=[^\\]]*\\] 1 --- \\[backend\\] \\[[^\\]]*\\]\\s*', '') | extend msg=replace_regex(msg, @'[0-9]{3,}', 'N') | summarize n=count() by msg | order by n desc | take 25`));
   ctx.report.table('Backend warnings and errors in the window (ids folded to N)', ['Count', 'Message'],
-    errors.map((r) => [String(r.n ?? r[1]), String(r.msg ?? r[0]).replace(/\|/g, '\\|').slice(0, 160)]));
+    errors.map((r) => [String(r.n ?? r[1]), mdCell(r.msg ?? r[0], 160)]));
 
   // Unhandled exceptions, minus what the harness itself causes: a tab closed mid-response, and the
   // DATETIME2 overflow api:abuse's year-9999 input provokes. Idempotency-key duplicates are the

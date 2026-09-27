@@ -6,6 +6,12 @@ import { log } from './config.mjs';
 
 const ICON = { pass: 'PASS', fail: 'FAIL', skip: 'SKIP', warn: 'WARN', info: 'INFO' };
 
+// Text made safe for one markdown table cell: backslashes first, so a `\` already in the text (a log
+// line, a Windows path) can't swallow the escape added to a `|` after it and split the row.
+export function mdCell(value, max = 200) {
+  return String(value).split('\n')[0].replace(/\\/g, '\\\\').replace(/\|/g, '\\|').slice(0, max);
+}
+
 export class Report {
   constructor(dir, meta) {
     this.dir = dir;
@@ -84,7 +90,7 @@ export class Report {
     lines.push('| Suite | Check | Result | Detail |');
     lines.push('|---|---|---|---|');
     for (const r of this.results) {
-      lines.push(`| ${r.suite} | ${r.check} | ${ICON[r.status]} | ${String(r.detail).split('\n')[0].replace(/\|/g, '\\|').slice(0, 200)} |`);
+      lines.push(`| ${r.suite} | ${r.check} | ${ICON[r.status]} | ${mdCell(r.detail)} |`);
     }
     lines.push('');
     if (this.notes.length) {

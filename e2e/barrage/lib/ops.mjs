@@ -5,8 +5,14 @@ import { spawnSync } from 'node:child_process';
 import { LOWER, log, sleep } from './config.mjs';
 
 // On Windows gh/az are .cmd shims, so they run through cmd.exe, which would read the `&` in a URL or
-// the parentheses in `length(@)` as its own syntax. Quote any argument holding one.
-const quoteForCmd = (a) => (/[\s&|<>^()"%]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
+// the parentheses in `length(@)` as its own syntax. Quote any argument holding one, by the Windows
+// argv rules: backslashes are literal EXCEPT before a quote, so a run of them before a `"` (or before
+// the closing quote we add) is doubled, then the `"` itself escaped.
+const quoteForCmd = (a) => {
+  if (!/[\s&|<>^()"%]/.test(a)) return a;
+  const body = a.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1');
+  return `"${body}"`;
+};
 
 function run(cmd, args, { timeoutMs = 120000 } = {}) {
   if (process.platform === 'win32') args = args.map(quoteForCmd);
