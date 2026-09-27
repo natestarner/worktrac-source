@@ -281,6 +281,15 @@ function HistoryTabContent({ initialExerciseFilter }) {
       <button type="button" className="skip-link" onClick={refreshAllHistory}>
         Refresh History
       </button>
+      {/* The way back from the Log screen's "View full exercise history" link. First on the page,
+          where a back link is looked for, and outside the controls block below: that block renders
+          only once History has loaded and holds something, and the way back should not wait on
+          either. Same 40px row as the Log screen's "All exercises" link it mirrors. */}
+      {filter.exerciseFilter?.fromLog && (
+        <button onClick={() => navigate('/app/log')} className="pressable" style={backLinkStyle}>
+          &larr; Back to {filter.exerciseFilter.exerciseName}
+        </button>
+      )}
       <div style={{ display: 'flex', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
         {/* ReadOnlyWrap nests INSIDE OfflineDisabledWrap so the read-only message wins when both
             apply -- see ReadOnlyWrap's header. Telling a member this "needs a connection" would
@@ -344,7 +353,6 @@ function HistoryTabContent({ initialExerciseFilter }) {
             isActive={filter.isActive}
             matchCount={matchedEntryCount}
             totalCount={totalEntryCount}
-            onBackToLog={() => navigate('/app/log')}
             dateRange={filter.dateRange}
             onDateRangeChange={filter.setDateRange}
             workoutCounts={workoutCounts}
@@ -681,6 +689,26 @@ function RecordLegend() {
 // outlined on --color-surface -- with no rule saying what the difference meant. Both are
 // secondary; they now look it. Neither is this screen's primary action.
 const secondaryButtonStyle = { flex: 1 };
+
+// Matches ExerciseDetail's "All exercises" link (same size, weight and 40px row), so leaving the
+// Log screen and coming back read as the same control. --space-3 below it: control to control.
+// Block-level `flex` + `fit-content`, not `inline-flex`: an inline box in the page's flow sits in a
+// line box that adds descender space under it, so the gap would be --space-3 plus a few px, and the
+// tap area would still be only as wide as the text.
+const backLinkStyle = {
+  display: 'flex',
+  width: 'fit-content',
+  alignItems: 'center',
+  minHeight: 40,
+  marginBottom: 'var(--space-3)',
+  background: 'none',
+  border: 'none',
+  color: 'var(--color-accent-text)',
+  fontSize: 'var(--text-base)',
+  fontWeight: 'var(--weight-semibold)',
+  cursor: 'pointer',
+  padding: 0,
+};
 
 // The vertical rhythm (design-system.md's "Vertical rhythm"): controls --space-3 apart, the
 // controls block --space-6 above the list, a heading --space-2 above what it heads, and one session

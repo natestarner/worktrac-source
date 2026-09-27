@@ -323,6 +323,17 @@ describe('HistoryTab PR markers, search/tag filtering, and click-to-filter', () 
     expect(mockNavigate).toHaveBeenCalledWith('/app/log');
   });
 
+  it('puts the "Back to" link above "Log a past workout", first on the page', async () => {
+    renderHistoryTab({
+      initialEntries: [
+        { pathname: '/app/history', state: { historyExerciseFilter: { exerciseId: 1, exerciseName: 'Bench Press', fromLog: true } } },
+      ],
+    });
+    const backLink = await screen.findByRole('button', { name: '← Back to Bench Press' });
+    const logPast = screen.getByRole('button', { name: 'Log a past workout' });
+    expect(backLink.compareDocumentPosition(logPast) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('does not show a "Back to" link for a plain (non-deep-linked) filter', async () => {
     renderHistoryTab();
     await screen.findByRole('button', { name: 'Push' });
