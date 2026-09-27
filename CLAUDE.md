@@ -30,6 +30,7 @@ bash scripts/up.sh      # or the /run-local skill
 bash scripts/down.sh    # or the /stop-local skill
 
 cd e2e && bash ../scripts/e2e.sh   # e2e against THIS worktree's own running stack
+node e2e/barrage/barrage.mjs --tier quick   # or /barrage: pressure test lower with years of data
 
 bash scripts/test-backend.sh unit  # fast: non-container unit tests only
 bash scripts/test-backend.sh       # everything (or: cd backend && mvn verify)

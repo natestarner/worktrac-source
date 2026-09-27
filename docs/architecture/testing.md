@@ -72,3 +72,25 @@
   for real against a deployed target). Never fails the run itself — any error is logged and
   swallowed, since cleanup is a hygiene nicety, not a correctness gate.
 
+
+## The barrage (lower, multi-year data)
+
+Unit tests, backend integration tests and the e2e suite all start from small, fresh households.
+Nothing in them sees **years** of History or a slow, shared 5-DTU database, and those are where
+the 2026-09-26 History-sync review found its bugs (#356-#358): two writes' refreshes racing, the
+app-open sync being swallowed, a double download on sign-in.
+
+`e2e/barrage/` (`/barrage`, reference in its `README.md`) runs against a dedicated lower account
+seeded with five years of daily History. It covers:
+
+- every History-changing write, checked against simulated devices;
+- hostile input;
+- a real-browser matrix in Chromium and WebKit: offline drains, lost responses, cold boot, lie-fi,
+  two tabs, the old-cache upgrade, multi-person, and a long jump through History;
+- realistic load and a storm;
+- phone-throttled timings;
+- a side-by-side comparison with production's build on identical data;
+- lower's own logs (including the History drift canary) and database CPU.
+
+Run `quick` routinely, and `full` before promoting anything that touches sync, caching or History
+to production.
