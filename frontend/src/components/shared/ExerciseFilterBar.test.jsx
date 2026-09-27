@@ -18,7 +18,6 @@ function baseProps(overrides = {}) {
     isActive: false,
     matchCount: 0,
     totalCount: 0,
-    onBackToLog: vi.fn(),
     ...overrides,
   };
 }
@@ -77,30 +76,5 @@ describe('ExerciseFilterBar', () => {
     rerender(<ExerciseFilterBar {...baseProps({ isActive: true, text: 'bench', matchCount: 2, totalCount: 10 })} />);
     expect(screen.getByText('Clear all')).toBeInTheDocument();
     expect(screen.getByText('2 of 10')).toBeInTheDocument();
-  });
-
-  it('shows the back-to-log link only when the exercise filter came from the Log tab', () => {
-    const { rerender } = render(
-      <ExerciseFilterBar {...baseProps({ exerciseFilter: { exerciseId: 1, exerciseName: 'Bench Press' } })} />,
-    );
-    expect(screen.queryByText(/Back to Bench Press/)).not.toBeInTheDocument();
-
-    rerender(
-      <ExerciseFilterBar
-        {...baseProps({ exerciseFilter: { exerciseId: 1, exerciseName: 'Bench Press', fromLog: true } })}
-      />,
-    );
-    expect(screen.getByText(/Back to Bench Press/)).toBeInTheDocument();
-  });
-
-  it('calls onBackToLog when the back link is clicked', () => {
-    const onBackToLog = vi.fn();
-    render(
-      <ExerciseFilterBar
-        {...baseProps({ exerciseFilter: { exerciseId: 1, exerciseName: 'Bench Press', fromLog: true }, onBackToLog })}
-      />,
-    );
-    fireEvent.click(screen.getByText(/Back to Bench Press/));
-    expect(onBackToLog).toHaveBeenCalled();
   });
 });

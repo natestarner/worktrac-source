@@ -27,7 +27,6 @@ export default function ExerciseFilterBar({
   isActive,
   matchCount,
   totalCount,
-  onBackToLog,
   dateRange = null,
   onDateRangeChange,
   workoutCounts,
@@ -43,12 +42,6 @@ export default function ExerciseFilterBar({
     // design-system.md's "Vertical rhythm"). The rows inside used to carry their own 12/10/10px
     // margins, which is how the two tabs ended up with different gaps around the same component.
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      {exerciseFilter?.fromLog && onBackToLog && (
-        <button onClick={onBackToLog} style={backLinkStyle}>
-          &larr; Back to {exerciseFilter.exerciseName}
-        </button>
-      )}
-
       {/* The search field and, on History, the calendar trigger to its right: one row, one
           height. The field flexes; the trigger is a fixed 48px square stretched to match it. */}
       <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
@@ -184,18 +177,6 @@ export default function ExerciseFilterBar({
     </div>
   );
 }
-
-const backLinkStyle = {
-  display: 'block',
-  alignSelf: 'flex-start',
-  background: 'none',
-  border: 'none',
-  color: 'var(--color-accent-text)',
-  fontSize: 14,
-  fontWeight: 600,
-  cursor: 'pointer',
-  padding: 0,
-};
 
 // 16px avoids iOS Safari's input-zoom -- see ExercisePicker.jsx's fontSize comment.
 const searchInputStyle = {
