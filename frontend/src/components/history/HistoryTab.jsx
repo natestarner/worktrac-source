@@ -17,6 +17,7 @@ import { eachDay, formatDateRangeLabel, normalizeRange, startOfMonth, todayStr }
 import { prSpec, SET_PR_TYPES, SESSION_PR_TYPES } from '../trends/exerciseMetrics';
 import PastSessionModal from './PastSessionModal';
 import PullToRefresh from './PullToRefresh';
+import { jumpAndSettle } from './jumpAndSettle';
 import Button from '../shared/Button';
 import Modal from '../shared/Modal';
 import Skeleton from '../shared/Skeleton';
@@ -222,14 +223,27 @@ function HistoryTabContent({ initialExerciseFilter }) {
   // draws every block it passes at its real height, which moves the target mid-flight: a workout
   // ten months down landed a whole workout off screen (history-long-list.spec.ts, before the scroll
   // margin below, whose slack now hides most of that miss). An instant jump draws nothing on the
-  // way and the correction absorbs the target's own neighbours resizing -- it landed exactly even
-  // with a deliberately wrong 20px estimate.
+  // way and the corrections absorb the target's neighbours resizing -- it landed exactly even with a
+  // deliberately wrong 20px estimate.
+  //
+  // ⚠️ Correct UNTIL THE TARGET HOLDS STILL, not once (jumpAndSettle). Blocks keep resizing after
+  // the jump as they draw: one never drawn has only its estimate, and one drawn before a filter
+  // remembers its UNFILTERED height (`auto` in containIntrinsicSize) until it draws again. Chrome
+  // keeps the target in place through that (scroll anchoring); Safari has no scroll anchoring, so
+  // everything below a resizing block moves. With one correction, "View this exercise's history" two
+  // years down a five-year History landed 301px off in WebKit (3/3 locally; 117px under the tab bar
+  // on lower, the barrage's long-jump). Re-aiming until it held still landed it exactly (4/4).
+  //
+  // The loop's cancel lives in a ref, not this effect's cleanup: clearing scrollToSessionId below
+  // re-runs the effect, and a cleanup would cancel the loop on the very next render.
+  const cancelJump = useRef(null);
+  useEffect(() => () => cancelJump.current?.(), []);
   useEffect(() => {
     if (!scrollToSessionId) return;
     const el = sessionRefs.current[scrollToSessionId];
     if (el?.scrollIntoView) {
-      el.scrollIntoView({ block: 'start' });
-      requestAnimationFrame(() => el.scrollIntoView({ block: 'start' }));
+      cancelJump.current?.();
+      cancelJump.current = jumpAndSettle(el);
     }
     setScrollToSessionId(null);
   }, [scrollToSessionId, filteredSessions]);
