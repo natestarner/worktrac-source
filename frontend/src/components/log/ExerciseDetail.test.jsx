@@ -198,6 +198,10 @@ describe('ExerciseDetail tour anchors', () => {
     const back = screen.getByRole('button', { name: '← All exercises' });
     const history = screen.getByRole('button', { name: 'View exercise history for Bench Press' });
     expect(history.parentElement).toBe(back.parentElement);
+    // Same size: two sizes side by side read as a mistake. The visible label is short so both fit
+    // one line at that size; the accessible name above still contains it.
+    expect(history.style.fontSize).toBe(back.style.fontSize);
+    expect(history).toHaveTextContent(/^Exercise history →$/);
     // Before the name: the row sits at the very top of the screen.
     expect(history.compareDocumentPosition(screen.getByText('Bench Press')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 

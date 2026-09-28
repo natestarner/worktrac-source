@@ -1112,10 +1112,14 @@ export default function ExerciseDetail({
               between the summary cards and the input card -- that row pushed "Log set" down by a
               whole link's height on the app's most-used screen. The row owns the gap below it (the
               buttons carry no padding of their own).
-              The label is "View exercise history", not "View full exercise history", so the two
-              fit one line down to a 320px phone -- the longer label wrapped there. The row still
-              wraps, as a safety net for enlarged text, and `marginLeft: auto` keeps the history
-              link right-aligned on the line it wraps onto. */}
+              Both links are --text-base: side by side, two sizes read as a mistake. At that size
+              the label has to be short -- "Exercise history", not "View exercise history" -- to
+              keep the pair on one line down to a 320px phone (at 15px the longer one left ~1px
+              spare there, so any wider font wrapped it). The aria-label keeps "View exercise
+              history for <name>": it still contains the visible words, which voice control
+              needs, and e2e selects by it. The row still wraps, as a safety net for enlarged
+              text, and `marginLeft: auto` keeps the history link right-aligned on the line it
+              wraps onto. */}
           <div style={navRowStyle}>
             <button onClick={onBack} className="pressable" style={backButtonStyle}>
               &larr; All exercises
@@ -1127,7 +1131,7 @@ export default function ExerciseDetail({
                 className="pressable"
                 style={viewHistoryLinkStyle}
               >
-                View exercise history &rarr;
+                Exercise history &rarr;
               </button>
             )}
           </div>
@@ -1713,7 +1717,8 @@ const viewHistoryLinkStyle = {
   background: 'none',
   border: 'none',
   color: 'var(--color-accent-text)',
-  fontSize: 'var(--text-sm)',
+  // --text-base, matching backButtonStyle: the two share a row.
+  fontSize: 'var(--text-base)',
   fontWeight: 'var(--weight-semibold)',
   cursor: 'pointer',
   padding: 0,
