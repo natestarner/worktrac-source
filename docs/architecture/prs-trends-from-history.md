@@ -26,6 +26,22 @@ A five-year History: 1,827 workouts, ~21,900 sets, the barrage account's shape.
 Opening PRs costs more than downloading the person's entire History, and every Trends range
 change pays the same again. The database peaked at 89% CPU over the three-minute bench.
 
+**Where the 3.6s goes (lower's Query Store).** The ARM `topQueries` API returns only the top five
+statements by CPU per hour, and only once the hour has closed, so the statement was identified by a
+burst of distinctive counts: 37 whole-person loads (15 from the bench, 22 more `/prs`) and 53
+per-exercise loads in the 18:00 UTC hour. Query 1786 ran **42 times at 2,881 ms of database time
+each** (the five extra are most likely an app session on the account) — about 2.9s of the 3.6s is
+the database; the rest is hydrating ~22k entities. The per-exercise statement never reached the top
+five: cheap on the database, so its ~350ms is mostly round trip and application time.
+
+The same statement runs ~1,000 times an hour during lower's e2e runs at under a millisecond each:
+for a tiny household it is cheap on lower, unlike the probe's local plan below (3,000 reads). The
+cost follows a person's years of History.
+
+**Production today is not where it hurts.** Its busiest statements over the same day ran at 1–3 ms
+each; real households' Histories are still young. Like History before it, this is a growth problem:
+the cost reaches ~2.9s of database time per call at five years, paid on every app open by the warm.
+
 ### Plan shape at lower's proportions (`StatsCostProbe`)
 
 `mvn test -Dtest=StatsCostProbe -Dstats.probe=true` seeds lower's proportions (302k workouts,
@@ -42,8 +58,11 @@ first, then reads each request's statements back from Query Store. Page reads ar
 
 The whole-person load (`findByPerson_IdOrderByCreatedAtAscIdAsc`, an entity load) reads
 `rest_seconds`, `client_key` and `import_batch_id`, which no index covers, so SQL Server scans both
-tables: the cost follows the **table**, not the person — the shape of round one of
-`docs/incidents/2026-09-25-history-full-sync-pegged-lower-db.md`. `/prs` also looks each exercise
+tables — the shape of round one of `docs/incidents/2026-09-25-history-full-sync-pegged-lower-db.md`.
+Locally the one-workout household scanned too; lower's cached plan for tiny households does not
+(above), so the plan chosen differs between the two, and lower's plan for the five-year person
+cannot be read from here. What both agree on is that the load reads the person's whole History
+every call. `/prs` also looks each exercise
 up separately (one query per exercise). Locally, where the tables are small, `/prs` still took
 775 ms against 443 ms for a full History sync, so hydrating ~22k entities is a cost of its own.
 
