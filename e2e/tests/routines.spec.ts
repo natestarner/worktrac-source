@@ -151,35 +151,46 @@ test.describe('Routines', () => {
 
   // The builder row used to wrap as one flex line, so at iPhone portrait width the remove button
   // dropped onto a line of its own under the target fields. The grip and the X are the row's two
-  // ends and must stay on one line; only the name and the targets may wrap between them. Asserted
-  // as structure (same line, X at the right edge), never as "this text fits" -- text fit depends on
-  // the runner's fonts.
-  test('at phone width, each routine row keeps its remove button on the same line as its grip', async ({ page, request }) => {
-    await page.setViewportSize({ width: 375, height: 812 });
-    await registerHousehold(page, request, 'Casey');
+  // ends and must stay on one line; only the body between them may wrap. Asserted as structure
+  // (same line, X at the right edge), never as "this text fits" -- text fit depends on the runner's
+  // fonts.
+  //
+  // The target weight/reps fields are hidden for now (RoutineFormModal's `showTargetInputs`), which
+  // leaves the whole body to the exercise name. That is asserted as structure too: the name's box
+  // runs out to the X, where the target fields used to sit between them. Run at phone and tablet
+  // width -- at phone width the old fields wrapped under the name, so only the wider run would
+  // notice them coming back beside it.
+  for (const viewport of [{ width: 375, height: 812 }, { width: 820, height: 1180 }]) {
+    test(`at ${viewport.width}px, a routine row is grip, name, remove -- the name running out to the X`, async ({ page, request }) => {
+      await page.setViewportSize(viewport);
+      await registerHousehold(page, request, 'Casey');
 
-    await page.getByRole('link', { name: 'Routines' }).click();
-    await page.getByRole('button', { name: 'New routine' }).click();
-    await addExerciseToRoutine(page, 'Dumbbell Overhead Press');
+      await page.getByRole('link', { name: 'Routines' }).click();
+      await page.getByRole('button', { name: 'New routine' }).click();
+      await addExerciseToRoutine(page, 'Dumbbell Overhead Press');
 
-    const dialog = page.getByRole('dialog');
-    const grip = dialog.getByRole('button', { name: 'Reorder: Dumbbell Overhead Press (1 of 1)' });
-    const remove = dialog.getByRole('button', { name: 'Remove: Dumbbell Overhead Press (1 of 1)' });
-    const reps = dialog.getByLabel('Target reps: Dumbbell Overhead Press (1 of 1)');
-    await expect(remove).toBeVisible();
+      const dialog = page.getByRole('dialog');
+      const grip = dialog.getByRole('button', { name: 'Reorder: Dumbbell Overhead Press (1 of 1)' });
+      const remove = dialog.getByRole('button', { name: 'Remove: Dumbbell Overhead Press (1 of 1)' });
+      const name = dialog.getByText('Dumbbell Overhead Press', { exact: true });
+      await expect(remove).toBeVisible();
+      await expect(dialog.getByLabel(/Target weight|Target reps/)).toHaveCount(0);
 
-    const gripBox = await grip.boundingBox();
-    const removeBox = await remove.boundingBox();
-    const repsBox = await reps.boundingBox();
-    if (!gripBox || !removeBox || !repsBox) throw new Error('Routine row controls have no layout box');
+      const gripBox = await grip.boundingBox();
+      const removeBox = await remove.boundingBox();
+      const nameBox = await name.boundingBox();
+      if (!gripBox || !removeBox || !nameBox) throw new Error('Routine row controls have no layout box');
 
-    // Same line: the X's vertical centre falls inside the grip's own height.
-    const removeCentreY = removeBox.y + removeBox.height / 2;
-    expect(removeCentreY).toBeGreaterThan(gripBox.y);
-    expect(removeCentreY).toBeLessThan(gripBox.y + gripBox.height);
-    // And it is the row's right end, past the target fields rather than tucked under them.
-    expect(removeBox.x).toBeGreaterThanOrEqual(repsBox.x + repsBox.width);
-  });
+      // Same line: the X's vertical centre falls inside the grip's own height.
+      const removeCentreY = removeBox.y + removeBox.height / 2;
+      expect(removeCentreY).toBeGreaterThan(gripBox.y);
+      expect(removeCentreY).toBeLessThan(gripBox.y + gripBox.height);
+      // The X is the row's right end, past the name rather than tucked under it...
+      expect(removeBox.x).toBeGreaterThanOrEqual(nameBox.x + nameBox.width);
+      // ...and the name fills the space up to it: nothing wider than the row's 4px gap between them.
+      expect(removeBox.x - (nameBox.x + nameBox.width)).toBeLessThanOrEqual(8);
+    });
+  }
 
   // Bailing out of a routine partway through. The only exit used to be "Finish routine", which
   // appears on the LAST step alone -- so leaving a 3-exercise routine at step 1 meant stepping

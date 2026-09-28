@@ -36,7 +36,12 @@ import { FIELD_LIMITS } from '../../utils/fieldLimits';
 // buttons used keeps this path both real and testable). Only ONE sensor (Pointer) is registered
 // on DndContext, so dnd-kit's own listeners never attach a keydown handler to the handle and
 // there is nothing for our onKeyDown to collide with.
-export default function RoutineFormModal({ personId, routine, personExercises, catalog, defaultUnit, onClose, onSaved, onExerciseCreated }) {
+//
+// `showTargetInputs` is OFF by default: the per-row weight/reps target fields are hidden until the
+// feature is finished, and no caller turns them on yet. Hiding them hides the INPUTS only -- a
+// target already on a routine (written before they were hidden, or through the API) still rides
+// along on its row and goes back unchanged on save, so editing a routine can't wipe one.
+export default function RoutineFormModal({ personId, routine, personExercises, catalog, defaultUnit, showTargetInputs = false, onClose, onSaved, onExerciseCreated }) {
   const isEditing = !!routine;
   const [name, setName] = useState(routine?.name || '');
   // Always mounted (unlike either error message, which renders only once its own error state is
@@ -267,6 +272,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
                     total={rows.length}
                     exerciseName={exerciseById.get(row.exerciseId)?.name}
                     targetUnit={targetUnit}
+                    showTargetInputs={showTargetInputs}
                     onTargetChange={setRowTarget}
                     onRemove={removeExercise}
                     onMoveByKey={moveExercise}
@@ -374,7 +380,7 @@ const dndAccessibility = { screenReaderInstructions };
 // whole row as dnd-kit reorders the list; `attributes`/`listeners` (the drag activators) go on
 // the handle ALONE, not the row -- otherwise the exercise name and the remove button would start
 // a drag too, instead of just being read or tapped.
-function SortableRoutineRow({ row, index, total, exerciseName, targetUnit, onTargetChange, onRemove, onMoveByKey }) {
+function SortableRoutineRow({ row, index, total, exerciseName, targetUnit, showTargetInputs, onTargetChange, onRemove, onMoveByKey }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: row.key });
   // The x component is dropped -- this list only ever reorders vertically, and a slightly
   // diagonal drag shouldn't nudge the row sideways too.
@@ -415,7 +421,11 @@ function SortableRoutineRow({ row, index, total, exerciseName, targetUnit, onTar
           outside it, so they hold the row's two ends at any width. When the whole row wrapped, a
           390px phone dropped the X alone onto a line of its own. */}
       <div style={rowBodyStyle}>
-        <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 110 }}>{exerciseName}</span>
+        {/* With the target fields hidden the name owns the whole body, out to the remove button, and
+            wraps inside it -- minWidth 0 plus overflowWrap so even one long unbroken word wraps
+            rather than pushing the X off the row. The 110px floor only exists to force the targets
+            onto their own line before they squeeze the name to nothing. */}
+        <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: showTargetInputs ? 110 : 0, overflowWrap: 'anywhere' }}>{exerciseName}</span>
         {/* Optional, and blank by default: most routines prescribe nothing, and a routine somebody
             builds for themselves usually never will. Both fields are independent -- "135 lb, as many
             as you get" and "5 reps at whatever you can manage" are real prescriptions, which is why
@@ -427,26 +437,28 @@ function SortableRoutineRow({ row, index, total, exerciseName, targetUnit, onTar
 
             Grouped so the pair wraps together: weight and reps are one prescription, and splitting
             them across two lines reads as two unrelated fields. */}
-        <div style={{ display: 'flex', gap: 4 }}>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={row.targetWeight ?? ''}
-            onChange={(event) => onTargetChange(row.key, 'targetWeight', event.target.value)}
-            placeholder={targetUnit}
-            aria-label={`Target weight: ${position}`}
-            style={targetInputStyle}
-          />
-          <input
-            type="number"
-            inputMode="numeric"
-            value={row.targetReps ?? ''}
-            onChange={(event) => onTargetChange(row.key, 'targetReps', event.target.value)}
-            placeholder="reps"
-            aria-label={`Target reps: ${position}`}
-            style={targetInputStyle}
-          />
-        </div>
+        {showTargetInputs && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={row.targetWeight ?? ''}
+              onChange={(event) => onTargetChange(row.key, 'targetWeight', event.target.value)}
+              placeholder={targetUnit}
+              aria-label={`Target weight: ${position}`}
+              style={targetInputStyle}
+            />
+            <input
+              type="number"
+              inputMode="numeric"
+              value={row.targetReps ?? ''}
+              onChange={(event) => onTargetChange(row.key, 'targetReps', event.target.value)}
+              placeholder="reps"
+              aria-label={`Target reps: ${position}`}
+              style={targetInputStyle}
+            />
+          </div>
+        )}
       </div>
       <IconButton icon={IconClose} label={`Remove: ${position}`} tone="danger" onClick={() => onRemove(row.key)} />
     </div>
