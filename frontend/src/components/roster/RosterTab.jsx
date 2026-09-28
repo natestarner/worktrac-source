@@ -8,6 +8,7 @@ import SectionLabel from '../shared/SectionLabel';
 import Card from '../shared/Card';
 import Skeleton from '../shared/Skeleton';
 import EmptyState from '../shared/EmptyState';
+import BackLink from '../shared/BackLink';
 
 /**
  * The roster — everyone on the account, quietest first.
@@ -46,9 +47,7 @@ export default function RosterTab() {
 
   return (
     <div>
-      <button onClick={() => navigate(-1)} style={backButtonStyle}>
-        &larr; Back
-      </button>
+      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
 
       <SectionLabel>{capitalize(vocab.member)}s</SectionLabel>
 
@@ -146,14 +145,3 @@ function describeActivity(entry, vocab) {
   }
   return when;
 }
-
-const backButtonStyle = {
-  background: 'none',
-  border: 'none',
-  padding: 0,
-  marginBottom: 'var(--space-3)',
-  color: 'var(--color-accent-text)',
-  fontSize: 'var(--text-sm)',
-  fontWeight: 'var(--weight-semibold)',
-  cursor: 'pointer',
-};

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LogTab from './LogTab';
 import { renderWithQuery } from '../../test/queryWrapper';
@@ -403,6 +403,90 @@ describe('LogTab routine nav button placement', () => {
 
     expect(screen.getByText('session-summary')).toBeInTheDocument();
     expect(screen.getByText('Bench Press: 1 set(s)')).toBeInTheDocument();
+  });
+});
+
+// "← All exercises" and "Exercise history →" are how you leave the exercise screen, so they lead it
+// -- above the routine card when a routine is running, not inside ExerciseDetail below it.
+describe('LogTab exercise-screen links', () => {
+  const precedes = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  // Renders what History would receive, so the hand-off can be asserted without a real History tab.
+  function HistoryProbe() {
+    const { state } = useLocation();
+    return <div>history-probe {JSON.stringify(state)}</div>;
+  }
+  function renderAt(appState) {
+    useAppState.mockReturnValue(appState);
+    render(
+      <MemoryRouter initialEntries={['/app/log']}>
+        <Routes>
+          <Route path="/app/log" element={<LogTab />} />
+          <Route path="/app/history" element={<HistoryProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useUI.mockReturnValue({ showToast: vi.fn() });
+    useExercises.mockReturnValue({ exercises: [{ id: 1, name: 'Bench Press' }, { id: 2, name: 'Overhead Press' }], loading: false });
+    usePersonExercises.mockReturnValue({ exercises: [], loading: false, refetch: vi.fn().mockResolvedValue() });
+    useTags.mockReturnValue({ tags: [], loading: false, refetch: vi.fn().mockResolvedValue() });
+    useRoutines.mockReturnValue({ routines: [routine], loading: false, isFetching: false, fetchedAfterMount: true });
+    useLiveSession.mockReturnValue({ session: null, refetch: vi.fn() });
+    useHistory.mockReturnValue({ history: [], loading: false, refetch: vi.fn() });
+    useSessionEntries.mockReturnValue([]);
+  });
+
+  it('puts both links above the routine card while a routine is running', () => {
+    renderAt(baseAppState({ selectedExerciseId: 1, routineIndex: 0 }));
+
+    const back = screen.getByRole('button', { name: '← All exercises' });
+    expect(precedes(back, screen.getByText('Push Day'))).toBe(true);
+    expect(precedes(back, screen.getByText('exercise-detail'))).toBe(true);
+  });
+
+  it('puts them directly above the exercise screen with no routine running', () => {
+    renderAt(baseAppState({ selectedExerciseId: 1, activeRoutineId: null }));
+
+    expect(screen.queryByText('Push Day')).not.toBeInTheDocument();
+    expect(precedes(screen.getByRole('button', { name: '← All exercises' }), screen.getByText('exercise-detail'))).toBe(true);
+  });
+
+  it('shares one row, one recipe and one size between the two links', () => {
+    renderAt(baseAppState({ selectedExerciseId: 1, activeRoutineId: null }));
+
+    const back = screen.getByRole('button', { name: '← All exercises' });
+    const history = screen.getByRole('button', { name: 'View exercise history for Bench Press' });
+    expect(history.parentElement).toBe(back.parentElement);
+    expect(back).toHaveClass('nav-link');
+    expect(history).toHaveClass('nav-link');
+    // The short visible label is what keeps both on one line at 320px; the accessible name above
+    // still contains it.
+    expect(history).toHaveTextContent(/^Exercise history →$/);
+  });
+
+  it('goes back to the picker, and hands the exercise to History with a way back', () => {
+    const appState = baseAppState({ selectedExerciseId: 1, activeRoutineId: null });
+    renderAt(appState);
+
+    fireEvent.click(screen.getByRole('button', { name: '← All exercises' }));
+    expect(appState.backToPicker).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'View exercise history for Bench Press' }));
+    expect(screen.getByText(/history-probe/)).toHaveTextContent(
+      JSON.stringify({ historyExerciseFilter: { exerciseId: 1, exerciseName: 'Bench Press', fromLog: true } }),
+    );
+  });
+
+  it('shows neither link on the picker', () => {
+    renderAt(baseAppState({ selectedExerciseId: null }));
+
+    expect(screen.getByText('exercise-picker')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '← All exercises' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /View exercise history/ })).not.toBeInTheDocument();
   });
 });
 

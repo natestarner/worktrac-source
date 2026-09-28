@@ -5,6 +5,7 @@ import { WEEKLY_METRICS } from '../trends/weeklyMetrics';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
 import { useUI } from '../../context/UIContext';
 import Button from '../shared/Button';
+import BackLink from '../shared/BackLink';
 
 // The end-user handbook. Invariants + what invalidates them: `.claude/rules/user-facing-help.md`.
 //
@@ -83,9 +84,7 @@ export default function HelpTab() {
 
   return (
     <div className="help">
-      <button onClick={() => navigate(-1)} className="pressable" style={backButtonStyle}>
-        &larr; Back
-      </button>
+      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
 
       <h1 className="help-title">Huddle Handbook</h1>
       <p className="help-standfirst">
@@ -1462,14 +1461,3 @@ function HelpTable({ head, rows }) {
     </div>
   );
 }
-
-const backButtonStyle = {
-  background: 'none',
-  border: 'none',
-  color: 'var(--color-accent-text)',
-  fontSize: 'var(--text-sm)',
-  fontWeight: 'var(--weight-semibold)',
-  cursor: 'pointer',
-  padding: 0,
-  marginBottom: 'var(--space-4)',
-};

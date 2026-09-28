@@ -631,6 +631,12 @@ readout there with nothing but the pills to act on.
 None of this is a connectivity branch — routine position is pure client state — so it does not
 belong on `resilience.md`'s register.
 
+**The exercise screen's two links sit ABOVE the routine card, and are `LogTab`'s, not
+`ExerciseDetail`'s.** "← All exercises" and "Exercise history →" are how you leave the screen, so
+they lead it, and the routine card is part of what they leave. Rendered inside `ExerciseDetail` they
+could only ever sit below the card. `ExerciseDetail` still takes `onBack`, for the one place it
+navigates by itself: after deleting the exercise.
+
 ## Creating an exercise selects it SYNCHRONOUSLY -- never behind an awaited refetch
 
 `handleExerciseCreated` receives an **optimistic temp row** (`AddEditExerciseModal` always takes the

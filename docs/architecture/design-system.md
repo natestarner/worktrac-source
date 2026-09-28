@@ -29,7 +29,7 @@ every string was bold, so the eye had no path through a screen.
 | Tokens | `frontend/src/index.css` `:root` | Every value the UI draws with |
 | Interaction states | `index.css`, `.pressable` + `:focus-visible` | Hover, press, focus, reduced motion |
 | Component classes | `index.css` component layer | `.btn-*`, `.card`, `.input`, `.select-*`, `.seg`, `.chip`, `.icon-btn` |
-| React primitives | `components/shared/` | `Button`, `Card`, `Input`, `Select`, `IconButton`, `SectionLabel`, `EmptyState` |
+| React primitives | `components/shared/` | `Button`, `Card`, `Input`, `Select`, `IconButton`, `SectionLabel`, `EmptyState`, `BackLink` |
 | Icons | `components/shared/icons.jsx` | Vendored Lucide paths |
 
 ## The brand mark
@@ -187,6 +187,7 @@ content they controlled and the History legend read as the first line of the lis
 | Relationship | Gap | Where |
 |---|---|---|
 | A heading to what it heads | `--space-2` | `SectionLabel` → its cards/chips/field; a History date → its card |
+| A screen's back link to what follows it | `--space-3` | `BackLink` → a page's first section; the Log screen's link row → the routine card or exercise name |
 | One control to the next, inside a controls block | `--space-3` | Search → tag chips → legend; the History/Routines button row → search |
 | A controls block (or top action row) to the content it acts on | `--space-6` | History, PRs and Routines |
 | One card to the next, inside a list | `--space-3` | Log quick-start routines, PRs rows, Routines cards, Trends tiles and charts |
