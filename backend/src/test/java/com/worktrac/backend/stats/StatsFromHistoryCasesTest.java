@@ -116,7 +116,21 @@ class StatsFromHistoryCasesTest extends AbstractIntegrationTest {
             for (int step = 1; step <= STEPS; step++) {
                 h.workload.step();
                 if (step % SNAPSHOT_EVERY == 0) {
-                    cases.add(snapshot("seed " + seed + ", step " + step, h, ZONES.get(zone++ % ZONES.size())));
+                    String viewer = ZONES.get(zone++ % ZONES.size());
+                    cases.add(snapshot("seed " + seed + ", step " + step, h, viewer));
+                    // Every other snapshot again, read one minute after the viewer's next midnight:
+                    // "today", the current week, the 30-day volume windows and the heatmap all move
+                    // with it. Read-only, so the clock goes back afterwards and the run continues
+                    // exactly as it would have.
+                    if ((step / SNAPSHOT_EVERY) % 2 == 0) {
+                        ZoneId z = ZoneId.of(viewer);
+                        Instant midnight = LocalDate.ofInstant(clock.instant(), z).plusDays(1).atStartOfDay(z)
+                                .plusMinutes(1).toInstant();
+                        Duration ahead = Duration.between(clock.instant(), midnight);
+                        clock.advance(ahead);
+                        cases.add(snapshot("seed " + seed + ", step " + step + ", 00:01 local", h, viewer));
+                        clock.advance(ahead.negated());
+                    }
                 }
             }
         }
@@ -127,7 +141,8 @@ class StatsFromHistoryCasesTest extends AbstractIntegrationTest {
             Files.writeString(CASES, generated, StandardCharsets.UTF_8);
             return;
         }
-        String checkedIn = Files.exists(CASES) ? Files.readString(CASES, StandardCharsets.UTF_8) : "";
+        // Line endings normalized: a checkout that converts to CRLF holds the same cases.
+        String checkedIn = Files.exists(CASES) ? Files.readString(CASES, StandardCharsets.UTF_8).replace("\r\n", "\n") : "";
         if (!generated.equals(checkedIn)) {
             fail(firstDifference(generated, checkedIn) + "\n\nStatsService's answers no longer match "
                     + CASES.normalize() + ". If the change is intended, regenerate with\n"
@@ -259,9 +274,14 @@ class StatsFromHistoryCasesTest extends AbstractIntegrationTest {
             if (c.get("plan").asText().equals("FREE") && c.get("historyWindow").get("hiddenSessions").asInt() > 0) seen.add("a Free snapshot with History behind the window");
             ZoneId zone = ZoneId.of(c.get("zone").asText());
             Map<String, Integer> repeats = new HashMap<>();
+            if (c.get("name").asText().endsWith("00:01 local")) seen.add("a snapshot read just after the viewer's midnight");
             for (JsonNode session : c.get("history")) {
                 Instant startedAt = Instant.parse(session.get("startedAt").asText());
                 if (!LocalDate.ofInstant(startedAt, zone).equals(LocalDate.ofInstant(startedAt, ZoneOffset.UTC))) seen.add("a workout on a different day in the viewer's zone than in UTC");
+                var transition = zone.getRules().nextTransition(startedAt.minus(Duration.ofHours(1)));
+                if (transition != null && !transition.getInstant().isAfter(startedAt.plus(Duration.ofHours(1)))) {
+                    seen.add("a workout within an hour of a daylight-saving change in the viewer's zone");
+                }
                 for (JsonNode entry : session.get("entries")) {
                     for (JsonNode set : entry.get("sets")) {
                         if ("kg".equals(set.get("unit").asText())) seen.add("a kg set");
@@ -292,7 +312,8 @@ class StatsFromHistoryCasesTest extends AbstractIntegrationTest {
         }
         List<String> required = List.of("a Free snapshot with History behind the window",
                 "a workout on a different day in the viewer's zone than in UTC",
-                "a server answer dated in the viewer's zone, not UTC", "a kg set", "the same set twice (a tie)",
+                "a server answer dated in the viewer's zone, not UTC", "a snapshot read just after the viewer's midnight",
+                "a workout within an hour of a daylight-saving change in the viewer's zone", "a kg set", "the same set twice (a tie)",
                 "a bodyweight-only exercise", "a hold", "a hold with added load");
         List<String> missing = required.stream().filter(r -> !seen.contains(r)).toList();
         assertEquals(List.of(), missing, "the generated cases never contain these, so they would prove nothing about them");

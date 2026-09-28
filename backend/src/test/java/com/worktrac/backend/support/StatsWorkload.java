@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 
@@ -62,8 +63,30 @@ public final class StatsWorkload {
                 "reps", 0, "durationSeconds", 15 + random.nextInt(106)));
         if (roll < 84) return repeatLastSet();
         if (roll < 91) return importKg();
-        if (roll < 96) return importAtWeekEdge();
+        if (roll < 94) return importAtWeekEdge();
+        if (roll < 97) return importAtDstEdge();
         return importHolds();
+    }
+
+    // A workout within half an hour of a daylight-saving change in one of the zones the cases view
+    // History from: the local date and week of an instant near a transition is where a fold that
+    // assumed a fixed offset would go wrong. Taken from the zone rules, never hardcoded dates.
+    private static final List<java.time.ZoneId> DST_ZONES = List.of(
+            java.time.ZoneId.of("America/New_York"), java.time.ZoneId.of("America/Los_Angeles"),
+            java.time.ZoneId.of("Pacific/Auckland"));
+
+    private String importAtDstEdge() throws Exception {
+        java.time.ZoneId zone = pick(DST_ZONES);
+        java.time.Instant before = clock.instant().minus(java.time.Duration.ofDays(1 + random.nextInt(400)));
+        java.time.zone.ZoneOffsetTransition transition = zone.getRules().previousTransition(before);
+        if (transition == null) return importAtWeekEdge();
+        java.time.LocalDateTime at = java.time.LocalDateTime.ofInstant(
+                transition.getInstant().plus(java.time.Duration.ofMinutes(random.nextBoolean() ? -30 : 30)), ZoneOffset.UTC);
+        String csv = "Exercise,Date,Time,Weight,Unit,Reps\n" + pick(strengthExerciseNames) + ',' + at.toLocalDate() + ','
+                + String.format(Locale.ROOT, "%02d:%02d", at.getHour(), at.getMinute()) + ','
+                + 5 * (4 + random.nextInt(40)) + ",lb," + (1 + random.nextInt(10)) + '\n';
+        importCsv(new StringBuilder(csv));
+        return "import at a DST edge in " + zone + ": " + at;
     }
 
     private String liveSet(String what, Map<String, Object> body) throws Exception {
@@ -83,9 +106,11 @@ public final class StatsWorkload {
         int rows = 1 + random.nextInt(4);
         for (int i = 0; i < rows; i++) {
             csv.append(pick(strengthExerciseNames)).append(',').append(pastDate()).append(',')
-                    .append(String.format("%02d:%02d", random.nextInt(24), random.nextInt(60))).append(',')
+                    .append(String.format(Locale.ROOT, "%02d:%02d", random.nextInt(24), random.nextInt(60))).append(',')
                     // Quarter-kilos included: kg to lb is where rounding has disagreed before.
-                    .append(String.format("%.2f", 2.5 * (4 + random.nextInt(50)) + (random.nextInt(4) == 0 ? 0.25 : 0)))
+                    // Locale.ROOT: in a comma-decimal locale "%.2f" writes 12,50 and breaks the CSV,
+                    // which would make the generated cases depend on the machine that made them.
+                    .append(String.format(Locale.ROOT, "%.2f", 2.5 * (4 + random.nextInt(50)) + (random.nextInt(4) == 0 ? 0.25 : 0)))
                     .append(",kg,").append(1 + random.nextInt(12)).append('\n');
         }
         importCsv(csv);
