@@ -71,6 +71,11 @@ class StatsCostProbe extends AbstractIntegrationTest {
     // there; History's cost work measured against 300k workouts / 1.2M sets / 40k exercises).
     private static final int OTHER_WORKOUTS = Integer.getInteger("stats.probe.otherWorkouts", 300_000);
     private static final int OTHER_EXERCISES = 40_000;
+    // Every household logs against the PRELOADED exercises, as lower's e2e households and most real
+    // ones do, instead of each against its own. It changes plans, not just numbers: an exercise id
+    // shared by everybody makes (person, exercise) look unselective, and a plan compiled for a
+    // one-workout household then walks the big person's every workout (StatsCostTest).
+    private static final boolean SHARED_EXERCISES = Boolean.getBoolean("stats.probe.sharedExercises");
 
     @Autowired private MockMvc mockMvc;
     @Autowired private TestCodeCache testCodeCache;
@@ -106,17 +111,19 @@ class StatsCostProbe extends AbstractIntegrationTest {
     @Test
     void measure() throws Exception {
         long seedStart = System.nanoTime();
+        List<Long> preloaded = jdbcTemplate.queryForList(
+                "SELECT id FROM exercises WHERE account_id IS NULL ORDER BY id", Long.class);
         Household other = register("other");
-        seedExercises(other.accountId(), OTHER_EXERCISES);
-        seedOther(other.personId(), other.accountId());
+        if (!SHARED_EXERCISES) seedExercises(other.accountId(), OTHER_EXERCISES);
+        seedOther(other.personId(), catalog(other.accountId()), SHARED_EXERCISES ? Math.min(500, preloaded.size()) : 500);
 
         Household big = register("big");
-        List<Long> bigExercises = seedExercises(big.accountId(), EXERCISE_POOL);
-        seedBig(big.personId(), big.accountId());
+        List<Long> bigExercises = SHARED_EXERCISES ? preloaded : seedExercises(big.accountId(), EXERCISE_POOL);
+        seedBig(big.personId(), catalog(big.accountId()));
         big = new Household(big.token(), big.personId(), big.accountId(), bigExercises.get(0));
 
         Household tiny = register("tiny");
-        List<Long> tinyExercises = seedExercises(tiny.accountId(), 3);
+        List<Long> tinyExercises = SHARED_EXERCISES ? preloaded.subList(0, 3) : seedExercises(tiny.accountId(), 3);
         seedTiny(tiny.personId(), tinyExercises);
         tiny = new Household(tiny.token(), tiny.personId(), tiny.accountId(), tinyExercises.get(0));
 
@@ -213,9 +220,10 @@ class StatsCostProbe extends AbstractIntegrationTest {
         StringBuilder md = new StringBuilder();
         md.append("# Stats cost probe\n\n");
         md.append(String.format("Tables: %,d workouts, %,d sets, %,d exercises. The 5-year person: %,d workouts, "
-                        + "%d-exercise pool, %d exercises x %d sets per workout. Seeded in %.0fs.%n%n",
+                        + "%d-exercise pool, %d exercises x %d sets per workout. Exercises: %s. Seeded in %.0fs.%n%n",
                 sessions, otherSets, exercises, BIG_WORKOUTS, EXERCISE_POOL, EXERCISES_PER_WORKOUT,
-                SETS_PER_EXERCISE, seedSeconds));
+                SETS_PER_EXERCISE, SHARED_EXERCISES ? "every household shares the preloaded catalog"
+                        : "each household its own", seedSeconds));
         md.append("Per request, from Query Store. Reads are 8 KB logical page reads. Timings are local and "
                 + "only comparable to each other, never to lower. Bytes are the uncompressed JSON body.\n\n");
         md.append("| Request | Who | Run | Statements (execs) | Page reads | CPU ms | DB ms | Bytes | Plan shape |\n");
@@ -259,6 +267,11 @@ class StatsCostProbe extends AbstractIntegrationTest {
         subscriptionRepository.save(subscription);
     }
 
+    // Whose exercises a household's sets name: its own, or (0) the preloaded catalog everybody shares.
+    private static long catalog(long accountId) {
+        return SHARED_EXERCISES ? 0 : accountId;
+    }
+
     private List<Long> seedExercises(long accountId, int count) {
         jdbcTemplate.update("""
                 WITH n AS (SELECT TOP (?) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
@@ -292,7 +305,7 @@ class StatsCostProbe extends AbstractIntegrationTest {
                         FROM (SELECT id, person_id, started_at, ROW_NUMBER() OVER (ORDER BY started_at, id) AS i
                               FROM workout_sessions WHERE person_id = ?) ws
                         JOIN (SELECT id, ROW_NUMBER() OVER (ORDER BY id) - 1 AS j
-                              FROM exercises WHERE account_id = ?) ex
+                              FROM exercises WHERE ISNULL(account_id, 0) = ?) ex
                           ON ex.j = (ws.i * ? + ?) % ?""",
                         EXERCISE_POOL, set, set, slot, SETS_PER_EXERCISE, set, personId, accountId,
                         EXERCISES_PER_WORKOUT, slot, EXERCISE_POOL);
@@ -307,7 +320,7 @@ class StatsCostProbe extends AbstractIntegrationTest {
     }
 
     // Everybody else's rows: one enormous household spread over years, four sets a workout.
-    private void seedOther(long personId, long accountId) {
+    private void seedOther(long personId, long accountId, int pool) {
         jdbcTemplate.update("""
                 WITH n AS (SELECT TOP (?) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i
                            FROM sys.all_objects a CROSS JOIN sys.all_objects b)
@@ -321,9 +334,10 @@ class StatsCostProbe extends AbstractIntegrationTest {
                     INSERT INTO workout_sets (session_id, person_id, exercise_id, weight, reps, unit)
                     SELECT s.id, s.person_id, ex.id, 100, 5, 'lb'
                     FROM workout_sessions s
-                    JOIN (SELECT id, ROW_NUMBER() OVER (ORDER BY id) - 1 AS j FROM exercises WHERE account_id = ?) ex
-                      ON ex.j = (s.id * 4 + ?) % 500
-                    WHERE s.person_id = ?""", accountId, k, personId);
+                    JOIN (SELECT id, ROW_NUMBER() OVER (ORDER BY id) - 1 AS j
+                          FROM exercises WHERE ISNULL(account_id, 0) = ?) ex
+                      ON ex.j = (s.id * 4 + ?) % ?
+                    WHERE s.person_id = ?""", accountId, k, pool, personId);
         }
         jdbcTemplate.update("""
                 INSERT INTO session_exercise_notes (session_id, exercise_id, note)

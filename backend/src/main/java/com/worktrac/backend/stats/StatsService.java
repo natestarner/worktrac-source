@@ -78,7 +78,7 @@ public class StatsService {
         // means this endpoint now makes FEWER queries than before, not more. See
         // .claude/rules/trends.md: "a new metric folds into one of those passes -- it does not add
         // a fifth findByPerson_Id... call."
-        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdAndExercise_IdOrderBySession_StartedAtAscSession_IdAscCreatedAtAscIdAsc(person.getId(), exerciseId);
+        List<WorkoutSet> all = workoutSetRepository.loadExerciseChronologically(person.getId(), exerciseId);
 
         LastSessionDto lastSession = buildLastSession(all, exerciseId, excludeSessionId).orElse(null);
         BestDto best = bestSet(all).map(this::toBestDto).orElse(null);
@@ -128,14 +128,14 @@ public class StatsService {
     // regardless of session, compared across units when mixed but displayed in the
     // set's own original unit.
     public Optional<BestDto> getBest(Long personId, Long exerciseId) {
-        return bestSet(workoutSetRepository.findByPerson_IdAndExercise_IdOrderBySession_StartedAtAscSession_IdAscCreatedAtAscIdAsc(personId, exerciseId))
+        return bestSet(workoutSetRepository.loadExerciseChronologically(personId, exerciseId))
                 .map(this::toBestDto);
     }
 
     // The sets from the most recent *other* session (excluding excludeSessionId) for
     // this person + exercise.
     public Optional<LastSessionDto> getLastSession(Long personId, Long exerciseId, Long excludeSessionId) {
-        return buildLastSession(workoutSetRepository.findByPerson_IdAndExercise_IdOrderBySession_StartedAtAscSession_IdAscCreatedAtAscIdAsc(personId, exerciseId),
+        return buildLastSession(workoutSetRepository.loadExerciseChronologically(personId, exerciseId),
                 exerciseId, excludeSessionId);
     }
 
@@ -174,7 +174,7 @@ public class StatsService {
         Person person = personService.requireVisiblePerson(personId, access);
         // Chronological, so a tie between two sets is decided the same way here, on the records
         // table and on the device (bestSet).
-        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdOrderBySession_StartedAtAscSession_IdAscCreatedAtAscIdAsc(person.getId());
+        List<WorkoutSet> all = workoutSetRepository.loadPersonChronologically(person.getId());
 
         // The Free-tier window, applied to what is DISPLAYED. Note this is deliberately NOT applied
         // to getBestComparableValue below, which is what WorkoutSetService asks when deciding
@@ -368,7 +368,7 @@ public class StatsService {
     // Used by WorkoutSetService to determine isPR when logging a new set: the previous
     // best must be read BEFORE the new set is inserted, and compared in a common unit.
     public Optional<BigDecimal> getBestComparableValue(Long personId, Long exerciseId) {
-        return bestSet(workoutSetRepository.findByPerson_IdAndExercise_IdOrderBySession_StartedAtAscSession_IdAscCreatedAtAscIdAsc(personId, exerciseId))
+        return bestSet(workoutSetRepository.loadExerciseChronologically(personId, exerciseId))
                 .map(setMeasures::comparableValue);
     }
 
@@ -552,7 +552,7 @@ public class StatsService {
             if (floorDate.isAfter(rangeStart)) rangeStart = floorDate;
         }
 
-        List<WorkoutSet> all = workoutSetRepository.findByPerson_IdAndExercise_IdOrderBySession_StartedAtAscSession_IdAscCreatedAtAscIdAsc(person.getId(), exerciseId);
+        List<WorkoutSet> all = workoutSetRepository.loadExerciseChronologically(person.getId(), exerciseId);
         // Decided over the VISIBLE sets, like getExerciseRecords' and getPrList's, so the chart's
         // "Volume" line is in the same unit as the records table under it and the board's row.
         // (Falls back to every set only in the sliver where the window's DATE admits a session its
@@ -645,7 +645,7 @@ public class StatsService {
         Person person = personService.requireVisiblePerson(personId, access);
         ZoneId zoneId = resolveZone(zone);
         List<WorkoutSet> all = visibleTo(access.accountId(),
-                workoutSetRepository.findByPerson_IdAndExercise_IdOrderBySession_StartedAtAscSession_IdAscCreatedAtAscIdAsc(person.getId(), exerciseId));
+                workoutSetRepository.loadExerciseChronologically(person.getId(), exerciseId));
         if (all.isEmpty()) {
             return new ExerciseRecordsDto(null, null, null, null, null, null, null, 0, 0, 0,
                     BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP), false, false, null);
