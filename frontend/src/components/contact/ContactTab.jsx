@@ -16,6 +16,7 @@ import { useOutboxCount } from '../../hooks/useOutboxCount';
 import { clearClientError, formatClientError, readClientError } from '../../lib/lastClientError';
 import { clearBootFailure, formatBootFailure, readBootFailure } from '../../lib/bootFailure';
 import { APP_BUILD } from '../../lib/appBuild';
+import BackLink from '../shared/BackLink';
 
 const CATEGORIES = [
   { label: 'Suggestion', value: 'SUGGESTION' },
@@ -122,7 +123,7 @@ export default function ContactTab() {
   if (sent) {
     return (
       <div>
-        <BackLink onClick={() => navigate(-1)} />
+        <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
         <SectionLabel style={sectionLabelSpacing}>Contact us</SectionLabel>
         <Card>
           <div role="status" style={sentPanelStyle}>
@@ -141,7 +142,7 @@ export default function ContactTab() {
 
   return (
     <div>
-      <BackLink onClick={() => navigate(-1)} />
+      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
       <SectionLabel style={sectionLabelSpacing}>Contact us</SectionLabel>
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
@@ -277,27 +278,6 @@ function CharacterCount({ length, max }) {
     </div>
   );
 }
-
-function BackLink({ onClick }) {
-  return (
-    <button onClick={onClick} className="pressable" style={backButtonStyle}>
-      &larr; Back
-    </button>
-  );
-}
-
-const backButtonStyle = {
-  background: 'none',
-  border: 'none',
-  color: 'var(--color-accent-text)',
-  fontSize: 'var(--text-base)',
-  fontWeight: 'var(--weight-semibold)',
-  cursor: 'pointer',
-  minHeight: 40,
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '0 0 var(--space-3) 0',
-};
 
 const introStyle = {
   margin: 0,

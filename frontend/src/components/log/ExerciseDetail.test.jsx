@@ -188,28 +188,6 @@ describe('ExerciseDetail tour anchors', () => {
     expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.LOG_SET}"]`)).not.toBeNull();
     expect(container.querySelector(`[data-tour-anchor="${TOUR_ANCHORS.CUSTOMIZE_EXERCISE}"]`)).not.toBeNull();
   });
-
-  // Both links share the top row, above the exercise name, rather than the history link getting a
-  // row of its own between the summary cards and the input card.
-  it('puts "View exercise history" on the same row as "All exercises", and it hands off the exercise', () => {
-    const onViewAllHistory = vi.fn();
-    renderExerciseDetail({ onViewAllHistory });
-
-    const back = screen.getByRole('button', { name: '← All exercises' });
-    const history = screen.getByRole('button', { name: 'View exercise history for Bench Press' });
-    expect(history.parentElement).toBe(back.parentElement);
-    // Before the name: the row sits at the very top of the screen.
-    expect(history.compareDocumentPosition(screen.getByText('Bench Press')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    fireEvent.click(history);
-    expect(onViewAllHistory).toHaveBeenCalledWith(1, 'Bench Press');
-  });
-
-  it('shows no history link without an onViewAllHistory handler', () => {
-    renderExerciseDetail();
-    expect(screen.getByRole('button', { name: '← All exercises' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /View exercise history/ })).not.toBeInTheDocument();
-  });
 });
 
 // The celebration payload is now decided AT DISPATCH, from bests the client already holds -- not

@@ -17,8 +17,13 @@ component is the bug** — that's how 17 font sizes, 13 radii and 8 one-off shad
 Full reasoning: `docs/architecture/design-system.md`.
 
 - **Reach for a primitive before writing a style object.** `Button` (with `variant`/`size`), `Card`,
-  `Input`, `IconButton`, `SectionLabel`, `EmptyState` in `components/shared/`. At most **one**
-  `variant="primary"` visible per screen.
+  `Input`, `IconButton`, `SectionLabel`, `EmptyState`, `BackLink` in `components/shared/`. At most
+  **one** `variant="primary"` visible per screen.
+- **Every "← Back" link is a `BackLink`** (a second link on its row is its `aside`, a
+  `ForwardLink`). There were four hand-rolled recipes — 13px and 15px, 12/16/22px below, three of
+  them 17px tap targets. Its 40px target overhangs the text with a negative block margin so the row
+  is only as tall as the words; don't "fix" that back into a plain 40px box, which reads as ~10px of
+  extra margin above and below.
 - **Anything interactive should carry `className="pressable"`** for the hover treatment and the
   colour/shadow transitions, and it must reach the 44px touch target (`sm` variants and `.icon-btn`
   at 40px for dense rows). This app is used on an iPad mid-workout.

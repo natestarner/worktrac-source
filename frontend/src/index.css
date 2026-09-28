@@ -905,6 +905,51 @@ button:not(.pressable):active:not(:disabled) {
   opacity: 0.5;
 }
 
+/* The text links that open a screen: "← Back", "← All exercises", "← Back to Bench Press", and
+   "Exercise history →" beside it. One recipe, rendered by <BackLink> (components/shared/BackLink.jsx).
+   There were four -- 13px and 15px, 12/16/22px below, and three pages whose link was a 17px-tall
+   tap target.
+
+   The target is 40px, but the ROW is only as tall as the text. A plain 40px box centres a ~19px line
+   in it, which paints ~10px of empty space above and below the words. On its own row that read as
+   extra margin on every screen that has one. The negative block margin cancels exactly that
+   overhang: the target still reaches 40px, but the box only occupies its text line in flow. Same
+   trade as "End routine" in LogTab.jsx and Modal.jsx's close button. The row then owns the one real
+   gap below it, --space-3, the rhythm table's control-to-control gap (design-system.md).
+
+   The overhang lands in the --space-3 below and in the tab panel's padding above, both wider than
+   it, so it never overlaps a neighbouring control. */
+.nav-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: var(--space-3);
+  /* Only used if a second link wraps: enlarged text, or a very long exercise name in "Back to …". */
+  row-gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  margin-block: calc((var(--text-base) * var(--leading-tight) - 40px) / 2);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* A second link on the row sits at the far end, and stays there if it wraps onto its own line. */
+.nav-link--end {
+  margin-left: auto;
+}
+
 /* --- Inputs ---------------------------------------------------------- */
 
 .input {

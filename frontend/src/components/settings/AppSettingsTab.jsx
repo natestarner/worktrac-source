@@ -31,6 +31,7 @@ import { APP_BUILD } from '../../lib/appBuild';
 import { invalidateAfterImport } from '../../lib/queryClient';
 import Card from '../shared/Card';
 import { planIncludes } from '../../utils/planFeatures';
+import BackLink from '../shared/BackLink';
 
 // Every setting here is household-wide -- nothing is scoped to whichever person happens to be
 // active. Units and the shared tag vocabulary are account-level; the rest timer is a per-person
@@ -221,9 +222,7 @@ export default function AppSettingsTab() {
 
   return (
     <div>
-      <button onClick={() => navigate(-1)} style={backButtonStyle}>
-        &larr; Back
-      </button>
+      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
 
       <SectionLabel>Units</SectionLabel>
       <Card size="dense" style={{ marginBottom: 24 }}>
@@ -726,19 +725,6 @@ const importRowStyle = {
   justifyContent: 'space-between',
   gap: 12,
   padding: '8px 0',
-};
-
-const backButtonStyle = {
-  background: 'none',
-  border: 'none',
-  color: 'var(--color-accent-text)',
-  fontSize: 'var(--text-base)',
-  fontWeight: 'var(--weight-semibold)',
-  cursor: 'pointer',
-  minHeight: 40,
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '0 0 var(--space-3) 0',
 };
 
 const categoryChipStyle = {

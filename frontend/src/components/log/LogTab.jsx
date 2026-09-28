@@ -20,6 +20,7 @@ import ExercisePicker from './ExercisePicker';
 import ExerciseDetail from './ExerciseDetail';
 import SessionSummary from './SessionSummary';
 import AddEditExerciseModal from '../settings/AddEditExerciseModal';
+import BackLink, { ForwardLink } from '../shared/BackLink';
 import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
 import { IconCheck, IconClose } from '../shared/icons';
@@ -399,6 +400,42 @@ export default function LogTab() {
               reserves its own space rather than displacing anything. The past-session header
               above stays in flow deliberately: that one is a form, not a status. */}
 
+          {/* Above the routine card, not inside ExerciseDetail below it: these two links are how you
+              leave this screen, so they lead it, and a routine's card is part of the screen they
+              leave. With no routine running, this lands in the same place it always did.
+              The arrow stays a text entity, like the stepper's +/-, and is part of "All exercises"'s
+              accessible name, which e2e specs select by. The history link's visible label is short
+              so the pair fits one line down to a 320px phone at --text-base; its aria-label keeps
+              "View exercise history for <name>", which still contains the visible words (voice
+              control needs that) and is what e2e selects by. It deep-links into History filtered to
+              this exercise; fromLog:true is what makes History show its "Back to {exercise}" link,
+              and selectedExerciseId is untouched, so coming back lands on this exact screen. */}
+          {selectedExercise && (
+            <BackLink
+              onClick={backToPicker}
+              aside={
+                <ForwardLink
+                  aria-label={`View exercise history for ${selectedExercise.name}`}
+                  onClick={() =>
+                    navigate('/app/history', {
+                      state: {
+                        historyExerciseFilter: {
+                          exerciseId: selectedExercise.id,
+                          exerciseName: selectedExercise.name,
+                          fromLog: true,
+                        },
+                      },
+                    })
+                  }
+                >
+                  Exercise history &rarr;
+                </ForwardLink>
+              }
+            >
+              &larr; All exercises
+            </BackLink>
+          )}
+
           {activeRoutine && (
             <Card size="dense" style={{ marginBottom: 16 }}>
               {/* "End routine" lives up here, in the one piece of chrome that's on screen for the
@@ -575,13 +612,6 @@ export default function LogTab() {
               // Null whenever no routine is running, which is most of the time.
               prescribed={activeRoutine?.exercises?.[routineIndex] ?? null}
               onSetLogged={handleSetLogged}
-              // Deep-links into History pre-filtered to this exercise. fromLog:true is what tells
-              // HistoryTab's filter bar to show a "Back to {exercise}" link -- selectedExerciseId is
-              // untouched by this navigation, so returning via that link (or the Log tab itself)
-              // lands back on this exact exercise screen.
-              onViewAllHistory={(exerciseId, exerciseName) =>
-                navigate('/app/history', { state: { historyExerciseFilter: { exerciseId, exerciseName, fromLog: true } } })
-              }
             />
           )}
         </div>

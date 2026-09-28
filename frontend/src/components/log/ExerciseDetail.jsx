@@ -74,12 +74,9 @@ export default function ExerciseDetail({
   editingSessionId,
   liveSession,
   refetchLiveSession,
+  // Where to go once this exercise is deleted. The "← All exercises" link itself is LogTab's, so it
+  // can sit above the routine card (see LogTab.jsx).
   onBack,
-  // Optional: when provided, renders a "View exercise history" link that hands off to History
-  // filtered to this exercise (see LogTab.jsx / HistoryTab.jsx's deep-link seed). Deliberately a
-  // prop, not a direct useNavigate() call here -- ExerciseDetail takes onBack as a prop rather
-  // than navigating itself, and its test file renders with no MemoryRouter at all.
-  onViewAllHistory,
   // The routine exercise being followed at this position, when a routine is running -- carrying
   // whatever the trainer prescribed. Null the rest of the time.
   prescribed = null,
@@ -1104,34 +1101,6 @@ export default function ExerciseDetail({
     <div>
       <div className="exercise-detail-grid">
         <div>
-          {/* The arrow stays a text entity, like the stepper's +/-. It renders identically
-              everywhere and inherits colour and weight, so it was never the emoji problem
-              -- and it is part of this button's accessible name, which three e2e specs
-              select by.
-              The history link shares this row, right-aligned, rather than sitting on its own row
-              between the summary cards and the input card -- that row pushed "Log set" down by a
-              whole link's height on the app's most-used screen. The row owns the gap below it (the
-              buttons carry no padding of their own).
-              The label is "View exercise history", not "View full exercise history", so the two
-              fit one line down to a 320px phone -- the longer label wrapped there. The row still
-              wraps, as a safety net for enlarged text, and `marginLeft: auto` keeps the history
-              link right-aligned on the line it wraps onto. */}
-          <div style={navRowStyle}>
-            <button onClick={onBack} className="pressable" style={backButtonStyle}>
-              &larr; All exercises
-            </button>
-            {onViewAllHistory && (
-              <button
-                onClick={() => onViewAllHistory(exercise.id, exercise.name)}
-                aria-label={`View exercise history for ${exercise.name}`}
-                className="pressable"
-                style={viewHistoryLinkStyle}
-              >
-                View exercise history &rarr;
-              </button>
-            )}
-          </div>
-
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginBottom: exercise.tags?.length ? 'var(--space-2)' : 'var(--space-5)' }}>
             <div
               style={{
@@ -1672,30 +1641,6 @@ export default function ExerciseDetail({
 // --color-accent-text, not --color-accent, on every one of these: they are all small
 // text, where the brand orange is 3.44:1 and fails AA. See the accent token comments
 // in index.css.
-// "All exercises" left, "View exercise history" right. The --space-3 below it used to be
-// the back button's own bottom padding; it moved here so both links sit on one centre line.
-const navRowStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  flexWrap: 'wrap',
-  columnGap: 'var(--space-3)',
-  marginBottom: 'var(--space-3)',
-};
-
-const backButtonStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 'var(--space-2)',
-  minHeight: 40,
-  background: 'none',
-  border: 'none',
-  color: 'var(--color-accent-text)',
-  fontSize: 'var(--text-base)',
-  fontWeight: 'var(--weight-semibold)',
-  cursor: 'pointer',
-  padding: 0,
-};
-
 const cardLabelStyle = {
   fontSize: 'var(--text-2xs)',
   fontWeight: 'var(--weight-semibold)',
@@ -1703,21 +1648,6 @@ const cardLabelStyle = {
   textTransform: 'uppercase',
   letterSpacing: 'var(--tracking-label)',
   marginBottom: 'var(--space-1)',
-};
-
-const viewHistoryLinkStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 'var(--space-1)',
-  minHeight: 40,
-  background: 'none',
-  border: 'none',
-  color: 'var(--color-accent-text)',
-  fontSize: 'var(--text-sm)',
-  fontWeight: 'var(--weight-semibold)',
-  cursor: 'pointer',
-  padding: 0,
-  marginLeft: 'auto',
 };
 
 // A standing per-person note (persists across every session for this exercise) -- neutral
