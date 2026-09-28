@@ -12,6 +12,7 @@ import { useAccountAccess } from '../../hooks/useAccountAccess';
 import ChangePasswordSection from './ChangePasswordSection';
 import LoginsSection from './LoginsSection';
 import { accountVocab, capitalize } from '../../utils/accountVocab';
+import BackLink from '../shared/BackLink';
 
 export default function ProfileTab() {
   const { user, account, people, refreshPeople } = useAuth();
@@ -43,9 +44,7 @@ export default function ProfileTab() {
 
   return (
     <div>
-      <button onClick={() => navigate(-1)} style={backButtonStyle}>
-        &larr; Back
-      </button>
+      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
 
       {/* "Account holder" is the owner's framing and is actively wrong for a member: user.email
           is the MEMBER's own address, so that heading would sit above their email describing
@@ -193,19 +192,6 @@ function Field({ label, value, last }) {
     </div>
   );
 }
-
-const backButtonStyle = {
-  background: 'none',
-  border: 'none',
-  color: 'var(--color-accent-text)',
-  fontSize: 'var(--text-base)',
-  fontWeight: 'var(--weight-semibold)',
-  cursor: 'pointer',
-  minHeight: 40,
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '0 0 var(--space-3) 0',
-};
 
 const cardStyle = {
   background: 'var(--color-surface)',

@@ -26,6 +26,7 @@ import PlusCelebration from './PlusCelebration';
 import { PLUS_BENEFITS, PRO_ADDITIONS, PRO_BANDS, planCopy } from './planCopy';
 import { accountVocab } from '../../utils/accountVocab';
 import { isPaidPlan, planIncludes } from '../../utils/planFeatures';
+import BackLink from '../shared/BackLink';
 
 // The household's plan, and where an upgrade happens.
 //
@@ -243,9 +244,7 @@ export default function BillingTab() {
 
   return (
     <div>
-      <button onClick={() => navigate(-1)} style={backButtonStyle}>
-        &larr; Back
-      </button>
+      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
 
       {checkout ? (
         <>
@@ -657,19 +656,6 @@ function BenefitList({ benefits = PLUS_BENEFITS }) {
     </ul>
   );
 }
-
-const backButtonStyle = {
-  background: 'none',
-  border: 'none',
-  color: 'var(--color-accent-text)',
-  fontSize: 'var(--text-base)',
-  fontWeight: 'var(--weight-semibold)',
-  cursor: 'pointer',
-  minHeight: 40,
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '0 0 var(--space-3) 0',
-};
 
 const cardStyle = {
   background: 'var(--color-surface)',

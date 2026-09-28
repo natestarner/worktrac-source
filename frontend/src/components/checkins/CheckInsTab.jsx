@@ -16,6 +16,7 @@ import EmptyState from '../shared/EmptyState';
 import IconButton from '../shared/IconButton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { IconClose } from '../shared/icons';
+import BackLink from '../shared/BackLink';
 
 /**
  * Check-ins for the ACTIVE person: a weigh-in, a note, or both.
@@ -100,9 +101,7 @@ export default function CheckInsTab() {
 
   return (
     <div>
-      <button onClick={() => navigate(-1)} style={backButtonStyle}>
-        &larr; Back
-      </button>
+      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
 
       <SectionLabel>Check-ins{person ? ` — ${person.name}` : ''}</SectionLabel>
 
@@ -244,15 +243,4 @@ const inputStyle = {
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-md)',
-};
-
-const backButtonStyle = {
-  background: 'none',
-  border: 'none',
-  padding: 0,
-  marginBottom: 'var(--space-3)',
-  color: 'var(--color-accent-text)',
-  fontSize: 'var(--text-sm)',
-  fontWeight: 'var(--weight-semibold)',
-  cursor: 'pointer',
 };
