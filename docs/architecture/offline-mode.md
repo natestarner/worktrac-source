@@ -90,14 +90,14 @@
   `ExerciseDetail.jsx`'s `editableTempIds`). The banner's outbox count ("N changes waiting to
   sync") is what signals "not yet synced", not the row itself.
 - **Offline cache warming** (`frontend/src/lib/offlineCacheWarm.js` /
-  `useOfflineCacheWarming.js`): proactively prefetches every household member's
-  logging-essentials (live session, person exercises, routines, history, PRs) in the background
-  — not just whichever person/tab is on screen — so a device hand-off mid-outage (a sibling
-  grabs the iPad) still renders instead of spinning forever. Deliberately still excludes
-  `trendsOverview`/`exerciseTrend` (the analytics fan-out — high cost keyed by exercise × range,
-  low value mid-workout) and `ExerciseDetail`'s session-scoped queries (`sessionSets`,
-  `customFields`, `sessionExerciseNote` — can't be enumerated without knowing the live/edit
-  session id).
+  `useOfflineCacheWarming.js`): proactively prefetches the logging essentials (live session,
+  person exercises, routines, history, the History window) for up to six household members in the
+  background (`MAX_WARMED_PEOPLE`) — not just whichever person/tab is on screen — so a device
+  hand-off mid-outage (a sibling grabs the iPad) still renders instead of spinning forever. The PRs
+  board and Trends have no warm of their own: both are derived on the device from `history`
+  (`prs-trends-from-history.md`), so warming History warms them, and both work offline. Still
+  excludes `ExerciseDetail`'s session-scoped queries (`sessionSets`, `customFields`,
+  `sessionExerciseNote` — can't be enumerated without knowing the live/edit session id).
   - `exerciseSummary` (Exercise Detail's "Last time"/"Best est. 1RM" card) is likewise not
     prefetched, but for a different reason: `frontend/src/utils/exerciseSummaryFromHistory.js`
     derives it client-side from the already-warmed `history` cache whenever the live query has

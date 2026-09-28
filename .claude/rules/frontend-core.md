@@ -285,43 +285,59 @@ response still relevant" guard. See `docs/incidents/2026-07-31-stale-me-clobbers
 
 ## A set write invalidates every view derived from sets
 
-`queryClient.js`'s `LOG_SET` `onSettled` and `reconcileSetChange` must invalidate **all** of
-`sessionSets`, `exerciseSummary`, `prs`, `history`, and — via `invalidateTrends` — the three
-trends prefixes. Trends was missing from that list for a long time, and with `staleTime` at 60s
-that meant logging your first-ever set and opening Trends still said *"No workouts logged yet"*.
+`queryClient.js`'s `LOG_SET` `onSettled` and `reconcileSetChange` must refresh **all** of
+`sessionSets`, `exerciseSummary` and `history` (through `refreshHistory`). **The PRs board and
+Trends have no keys of their own**: they are derived on the device from `history`
+(`hooks/useStatsFromHistory.js`, below), so refreshing History IS refreshing them.
 
-**When adding any new read that derives from logged sets, add it to those two handlers.** Ask:
-"if someone logs a set and opens this view five seconds later, is it right?" A prefix key
-(`trendsForPerson`, not `trendsOverview(personId, weeks)`) is needed whenever the full key carries
-something the writer can't know — the trends keys carry a `weeks` and an `exerciseId`.
+**When adding any new read that derives from logged sets, prefer deriving it from `history` too.**
+If it must be its own server read, add it to those two handlers, and ask: "if someone logs a set
+and opens this view five seconds later, is it right?" A prefix key is needed whenever the full key
+carries something the writer can't know.
 
-Note this is the opposite call from `offlineCacheWarm.js`, which deliberately *excludes* trends:
-warming them is a costly prefetch fan-out across every person, whereas invalidating them is free
-(nothing refetches until the tab is actually mounted).
+### The PRs board and Trends are derived from History — one fold, no requests
+
+`hooks/useStatsFromHistory.js` + `utils/statsFromHistory.js`, proven equal to `StatsService` by
+`shared/record-rules/stats-from-history-cases.json` (`.claude/rules/trends.md` has the rules of the
+fold itself). What the hook owes the screens:
+
+- **The workout in progress is folded in, queued sets included** (`useSessionEntries` with
+  `liveOnly`), so a record logged with no signal is on the board at once. **Not gated on a live
+  session existing**: online, the first set of a workout creates its session when its save lands, so
+  for that whole round trip there is none — gating on it showed "No PRs yet" mid-save.
+- **A saved set stays until History has caught up** (`confirmedAfter` + `lib/confirmedSets.js`): it
+  leaves the queue the moment its save succeeds, but History holds it only once the refresh that save
+  triggers lands. `LOG_SET`'s `onSettled` stamps the time before the mutation reports success, then
+  `refreshHistory` cancels every older fetch — so the first History to land afterwards holds the set.
+- **`status` is ready / loading / unavailable from History's own query**, and `unavailable` (never
+  held, and paused or failing) must never render as "no workouts" — both tabs say they need a
+  connection instead (`resilience.md`'s register).
+- **Not folded, by design** (they show once synced, as on History): a queued edit or delete of an
+  already-synced set, and sets queued into a PAST workout being edited. `OfflineDataNotice` shows.
+- `stats-while-saving.spec.ts` samples every frame through a held save and a held History refresh;
+  `parity-stats-from-history.spec.ts` covers all four modes. Each was verified red against its gap.
 
 ### An invalidation during a FIRST load is swallowed — cancel first, where that is safe
 
 TanStack v5's `Query#fetch` cancels an in-flight fetch on refetch **only when the query already has
 data**. During a first load it joins the request already running. So a write's invalidation that
 lands mid-first-load is absorbed: the load's answer — computed before the write existed — arrives,
-marks the query fresh, and stands for the whole 60s `staleTime`. Trends, the one unwarmed tab, hit
-it whenever a set landed just after Trends was opened ("No workouts logged yet" mid-workout; four
-lower specs retrying). `invalidateTrends` now **cancels, then invalidates**, which reverts a first
-load to "no data yet" so the invalidation starts a genuinely new request
-(`docs/incidents/2026-09-24-trends-first-load-swallows-invalidation.md`).
+marks the query fresh, and stands for the whole 60s `staleTime`. Trends hit it whenever a set
+landed just after Trends was opened, while it was still its own server read ("No workouts logged
+yet" mid-workout; `docs/incidents/2026-09-24-trends-first-load-swallows-invalidation.md`). The fix
+was to **cancel, then invalidate**; the Trends and PRs keys that needed it are gone (both derive from
+History now), and `refreshHistory` does the same for History.
 
 - **Only where nothing writes into the key mid-fetch.** A cancel reverts the query to its state from
   *before* the fetch began, so on a key seeded during a fetch — `LOG_SET`'s `sessionSets` /
-  `exerciseSummary` seeds — it throws that seed away. Trends keys and `prs` have no optimistic
-  writer, which is why the pattern is confined to them (`invalidateTrends`, `invalidatePrs`).
+  `exerciseSummary` seeds — it throws that seed away. History has no optimistic writer, which is
+  why `refreshHistory` may cancel first.
 - **The invalidation is one microtask later** (it runs when the cancel settles). Assert on it with
   `vi.waitFor`, not synchronously after the write.
-- **A warmed key hits it too — through the warm itself.** `prs` is warmed, and the warm's
-  `prefetchQuery` *is* its first load: a set landing while that boot warm is in flight was absorbed
-  the same way, and the PRs tab then mounted onto the warm's pre-set answer as fresh ("No PRs yet").
-  `invalidatePrs` cancels first for the same reason; `e2e/tests/prs-first-load.spec.ts` pins the
-  order. Ask of any key a write invalidates: can that write land during its first load, whether a
-  mount or a warm started it?
+- **A warmed key hits it too — through the warm itself.** A warm's `prefetchQuery` *is* its first
+  load: a set landing while a boot warm is in flight is absorbed the same way (it was, for the old
+  `prs` key: "No PRs yet"). Ask of any key a write invalidates: can that write land during its first
+  load, whether a mount or a warm started it?
 
 ### Invalidate the key the screen READS — a session id captured at dispatch may be null
 

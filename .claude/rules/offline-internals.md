@@ -346,9 +346,10 @@ reconciles it.
 
 ## Cache warming
 
-`offlineCacheWarm.js` prefetches **every** household member's logging essentials, not just the
-active person — a device hand-off mid-outage must still render. Deliberately excludes
-`trendsOverview`/`exerciseTrend` (high-cost analytics fan-out) and `ExerciseDetail`'s
+`offlineCacheWarm.js` prefetches the logging essentials for up to `MAX_WARMED_PEOPLE` (6) household
+members, not just the active person — a device hand-off mid-outage must still render. The PRs board
+and Trends need nothing of their own: they are derived on the device from `history`
+(`hooks/useStatsFromHistory.js`), so warming History warms them. Excludes `ExerciseDetail`'s
 session-scoped queries (can't be enumerated without a session id). `exerciseSummary` is instead
 derived client-side from the warmed `history` cache (`utils/exerciseSummaryFromHistory.js`), and
 once stuck is preferred **over** `summaryQuery.data`, not just used when data is absent.
@@ -373,7 +374,7 @@ collections the server wholly owns:
 | Key | Forced? | Why |
 |---|---|---|
 | `routines` | ✅ | routine CRUD is online-gated, so the cache can't hold an unsent routine |
-| `history`, `prs` | ✅ | no optimistic writer; invalidation-driven only |
+| `history` | ✅ | no optimistic writer; invalidation-driven only. (The PRs board and Trends are derived from it on the device, so warming History warms them; there is no `prs` key any more.) |
 | `exercises`, `personExercises` | ❌ | `insertOptimisticExercise` holds a **temp exercise** here while its create is still queued — refetching deletes it from the picker mid-flight |
 | `liveSession` | ❌ | `EndWorkoutConfirmModal` optimistically nulls it on end-workout |
 

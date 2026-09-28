@@ -144,9 +144,10 @@ it is the set `comparableValue` picks, substitutions and all. Two copies of one 
 answer — but "One session" as the whole caption was unreadable: nothing distinguished a genuine
 heavy day from ten junk sets of an empty bar, which is exactly how a volume record gets gamed.
 
-- **Capped at `MAX_PR_BREAKDOWN_RUNS` (10) server-side, and nowhere else.** This rides on `/prs` —
-  a row per exercise — which `offlineCacheWarm` persists to IndexedDB, so an uncapped breakdown
-  grows that blob without bound. The **client's** second cap of 3 runs was removed (2026-09-20):
+- **Capped at `MAX_PR_BREAKDOWN_RUNS` (10), on the server and, identically, in the device's fold**
+  (`utils/statsFromHistory.js` — the oracle requires the two to agree). The cap was sized for when
+  the board rode on `/prs` and was persisted to IndexedDB; it stays because the board must equal the
+  server's. The **client's** second cap of 3 runs was removed (2026-09-20):
   its `+N more` tail was honest about the count but pointed at sets there was no way to see, since
   the row is one button that opens a destination chooser and the tail was not tappable. Showing the
   work *is* the feature, so a caption you cannot finish reading defeats it. The server cap went
@@ -158,8 +159,9 @@ heavy day from ten junk sets of an empty bar, which is exactly how a volume reco
   otherwise claim far less work than it holds.
 - **It folds into `buildPrMeasures`'s existing pass**; `getPrList` has already loaded and grouped
   those rows, so it adds no query.
-- **`'One session'` survives as the fallback** for a `prs` entry restored from a cache written
-  before this shipped (axis D) — same optional-chaining contract as the rest of `measureEntry`.
+- **`'One session'` survives as the fallback** for a row with no breakdown — once a `prs` entry
+  restored from an older cache (axis D); the derived board always carries one now. Same
+  optional-chaining contract as the rest of `measureEntry`.
 
 ## A hold is the same call as bodyweight, one measure over
 
@@ -173,6 +175,30 @@ carry the signal, and stay two records rather than one fused load-adjusted score
 without it a week of plank and wall-sit work reads as no work at all on every chart but set count.
 Both fold into the **existing** `getOverview` / `getExerciseTrend` / `getExerciseRecords` passes;
 neither adds a query.
+
+## The board and Trends are derived on the device — and must equal the server's answers
+
+`utils/statsFromHistory.js` folds History into exactly the DTOs `StatsService` returns (PrRowDto[],
+TrendsOverviewDto, ExerciseTrendPointDto[], ExerciseRecordsDto), a month at a time.
+
+- **The oracle is the contract.** `StatsFromHistoryCasesTest` (backend) snapshots random real
+  Histories beside every answer the server gives, into
+  `shared/record-rules/stats-from-history-cases.json`; `statsFromHistory.test.js` must reproduce each
+  one field for field — run as one digest, one per calendar month, and random splits. **Change a rule
+  in `StatsService` → regenerate (`-Dstats.cases.write=true`) and make the fold agree in the same
+  change.** The backend test fails if the file is stale.
+- **Exact arithmetic**: pounds as integers ×1e7 (`lbE7`, `setVolumeScaled`), rounded half-up to 0.1
+  once (`tenths`, BigInt). Never sum already-divided doubles.
+- **Digests hold only what does not depend on the viewer**; zone, today and range are applied when
+  they are combined. Memoized per month object (`historyDigests`), so a sync that leaves a month alone
+  never refolds it. **Combine oldest first, and replace a candidate only with a strictly better one** —
+  that ordering is what makes a full tie go to the earlier workout.
+- **The viewer's zone is `VIEWER_ZONE`** — what the endpoints were sent as `zone`. Local dates come
+  from `Intl`, never a fixed offset (the cases include DST edges and 00:01 local).
+- **The one accepted Free divergence**: the device holds 90 days, so a trend dot's record flag is
+  judged against the window, and a workout on the floor's date but before its instant is not plotted.
+  Spelled out in `statsFromHistory.test.js`, not tolerated silently.
+- The server endpoints stay, for installed apps from before this; they must keep matching the cases.
 
 ## A tie goes to the heavier load, then the earlier workout — on both sides
 
