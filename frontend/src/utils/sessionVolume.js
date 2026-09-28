@@ -59,7 +59,9 @@ export function mergeVolumeKinds(a, b) {
 
 // One set's contribution in the kind's unit, scaled so pounds stay an exact integer (x 1e7 --
 // see formulas.js#lbE7). The load half is the same weight formulas.js#weightLb ranks top weight on.
-function setVolumeScaled(set, kind) {
+// Exported for folds that SUM volumes across sets and round once (statsFromHistory.js): divide the
+// integer total by volumeScale(kind), never add already-divided doubles.
+export function setVolumeScaled(set, kind) {
   if (!set) return 0;
   if (kind === 'seconds') {
     const seconds = Number(set.durationSeconds);
@@ -74,6 +76,11 @@ function setVolumeScaled(set, kind) {
 }
 
 const LOAD_SCALE = 1e7;
+
+// What setVolumeScaled's integers are scaled by for a kind: 1e7 for pounds, 1 for reps and seconds.
+export function volumeScale(kind) {
+  return volumeIsWeight(kind) ? LOAD_SCALE : 1;
+}
 
 // One set's contribution to a session's volume, in the kind's unit.
 export function setVolume(set, kind) {
