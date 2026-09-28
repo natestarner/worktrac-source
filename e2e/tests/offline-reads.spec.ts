@@ -165,8 +165,8 @@ test.describe('Offline mode — reads over the warmed cache', () => {
   });
 });
 
-// PRs is now part of the warmed bundle (offlineCacheWarm.js), not purely interaction-scoped, so
-// it must survive a connectivity drop the same way History already does above -- both hard
+// The PRs board is derived on the device from the warmed History (hooks/useStatsFromHistory.js),
+// so it must survive a connectivity drop the same way History already does above -- both hard
 // offline and "lie-fi" (online per navigator.onLine, but the request itself fails).
 test.describe('Offline mode — PRs reads over the warmed cache', () => {
   test('PRs with a real logged set resolves hard offline', async ({ page, request }) => {
@@ -181,12 +181,8 @@ test.describe('Offline mode — PRs reads over the warmed cache', () => {
     // the name alone passes while this click is still in flight.
     await expect(page).toHaveURL(/\/app\/prs/);
     await expect(page.getByText('Barbell Bench Press')).toBeVisible();
-    // ...and then wait for the network to go quiet before cutting it. The boot-time cache warm
-    // (offlineCacheWarm.js) prefetches this same `prs` key; a warm request issued before the set
-    // existed can still be in flight here, and writes its EMPTY result over the row we just
-    // asserted. Offline there is then nothing left to refetch and the board reads "No PRs yet".
-    // That race is the app's documented warm-vs-fresh behaviour, not this screen misbehaving --
-    // it just needs the test to stop measuring it.
+    // ...and then wait for the network to go quiet before cutting it, so the set is in History
+    // (the board's source) rather than only in the queue when the connection drops.
     await page.waitForLoadState('networkidle');
 
     await goHardOffline(page);
@@ -215,9 +211,9 @@ test.describe('Offline mode — PRs reads over the warmed cache', () => {
     await page.waitForLoadState('networkidle');
 
     // Stays online per navigator.onLine, but the request itself fails -- TanStack keeps the
-    // last-good warmed data on screen instead of clearing it just because a background
-    // refetch (triggered by this remount) fails.
-    await failNetwork(page, /\/api\/people\/\d+\/prs$/);
+    // last-good History on screen instead of clearing it just because a background refetch
+    // (triggered by this remount) fails, and the board is built from it.
+    await failNetwork(page, /\/api\/people\/\d+\/history\/sync$/);
     await page.getByRole('link', { name: 'History' }).click();
     await expect(page).toHaveURL(/\/app\/history/);
     await page.getByRole('link', { name: 'PRs' }).click();

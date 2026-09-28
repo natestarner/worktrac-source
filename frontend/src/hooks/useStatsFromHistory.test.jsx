@@ -89,6 +89,21 @@ describe('the PRs board from History', () => {
     await vi.waitFor(() => expect(result.current.prs[0].best).toMatchObject({ weight: 225, reps: 3 }));
   });
 
+  // Online, the first set of a workout creates its session when the save lands -- so while that save
+  // is in flight there is NO live session at all (no offline placeholder either). The set is the
+  // workout being started and must be on the board; gating the fold on a live session left it
+  // reading "No PRs yet" for the whole first save (found by stats-while-saving.spec.ts).
+  it('puts the first set of a new workout on the board while its save -- which creates the session -- is in flight', async () => {
+    const client = newClient();
+    const { logLiveSet } = await import('../api/sets');
+    logLiveSet.mockReturnValue(new Promise(() => {}));
+    seed(client, { live: null });
+    queueSet(client, { mode: 'live', weight: 225, reps: 3, tempId: 'temp-first' });
+
+    const { result } = render(client, () => usePrs(PERSON));
+    await vi.waitFor(() => expect(result.current.prs[0].best).toMatchObject({ weight: 225, reps: 3 }));
+  });
+
   it('replaces the synced copy of the live workout rather than counting it twice', async () => {
     const client = newClient();
     onlineManager.setOnline(false);

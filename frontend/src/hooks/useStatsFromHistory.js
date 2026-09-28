@@ -53,7 +53,14 @@ export function useStatsFromHistory(personId) {
   // still queued. Otherwise History's copy IS the workout, and every month keeps its memoized
   // digest. Keyed on the queued sets themselves, because useSessionEntries hands back a new array
   // on every render.
-  const pending = live ? entries.flatMap((e) => e.sets.filter((s) => s.optimistic).map((s) => [e.exerciseId, s.id])) : [];
+  //
+  // NOT gated on there being a live session. The first set of a workout creates the session when
+  // its save lands, so while that save is in flight there is none -- online as well as off (offline
+  // there is at least the { id: null } placeholder) -- and gating on it left the board reading
+  // "No PRs yet" for the whole first save. Queued live sets with no session ARE the workout being
+  // started; a finished workout's queued sets are already excluded (liveOnly: isCreateInEndedWorkout).
+  // Found by stats-while-saving.spec.ts's frame sampler.
+  const pending = entries.flatMap((e) => e.sets.filter((s) => s.optimistic).map((s) => [e.exerciseId, s.id]));
   const pendingKey = pending.length ? JSON.stringify([live?.id ?? null, live?.startedAt ?? null, pending]) : '';
 
   const digests = useMemo(
@@ -62,7 +69,8 @@ export function useStatsFromHistory(personId) {
         live: pendingKey
           ? {
               id: live?.id ?? LIVE_WORKOUT_ID,
-              // An offline workout has no start yet; it is happening now, so it is dated now.
+              // A workout whose session does not exist yet has no start; it is happening now, so it
+              // is dated now. Once it syncs, the server's own start replaces this.
               startedAt: live?.startedAt ?? new Date().toISOString(),
               entries,
             }
