@@ -100,6 +100,88 @@ export async function perf(ctx, runs = 3) {
     `${s(m('reloadStyle'))} + ${s(m('reloadLayout'))}`);
 }
 
+// PRs and Trends on the same phone: what opening each costs today, while both are answered by
+// StatsService loading every set the person has logged. The baseline for moving them onto the
+// History the device already holds (docs/architecture/history-sync.md, "Not covered here").
+const STATS_RE = /\/api\/people\/\d+\/(prs|trends\/overview|trends\/exercises\/\d+|exercises\/\d+\/records)$/;
+
+async function oneStatsRun(ctx) {
+  const browser = await playwright.chromium.launch();
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  page.setDefaultTimeout(240000);
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Performance.enable');
+  const responses = [];
+  page.on('response', async (r) => {
+    const u = new URL(r.url());
+    const m = u.pathname.match(STATS_RE);
+    if (!m) return;
+    const sizes = await r.request().sizes().catch(() => null);
+    responses.push({ kind: m[1].replace(/\d+/g, '{id}') + (u.searchParams.get('weeks') ? `?weeks=${u.searchParams.get('weeks')}` : ''), ms: r.request().timing().responseEnd, wire: sizes?.responseBodySize ?? null });
+  });
+  try {
+    await login(page, ctx.target.app, ctx.creds);
+    // History fully held first, so the numbers below are what a returning person sees, and so the
+    // same measurement can later be repeated against a History-derived board without changing it.
+    await waitSynced(page, String(ctx.api.personId), Math.min(ctx.seededWorkouts, 1000));
+    await page.waitForLoadState('networkidle');
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+    const step = async (fn) => {
+      const m0 = await metrics(cdp);
+      const t0 = Date.now();
+      await fn();
+      return { ms: Date.now() - t0, script: (await metrics(cdp)).script - m0.script };
+    };
+    const prs = await step(async () => { await goTab(page, 'PRs'); await page.getByTestId('pr-row').first().waitFor(); });
+    const trends = await step(async () => {
+      await goTab(page, 'Trends');
+      await page.getByTestId('consistency-grid').waitFor();
+      await page.getByText(/^Exercise progress ·/).first().waitFor();
+    });
+    await page.waitForLoadState('networkidle');
+    const range = page.getByRole('group', { name: 'Time range' });
+    const all = await step(async () => {
+      const done = page.waitForResponse((r) => /\/trends\/overview$/.test(new URL(r.url()).pathname) && new URL(r.url()).searchParams.get('weeks') === '260');
+      await range.getByRole('button', { name: 'All', exact: true }).click();
+      await done;
+      await page.waitForLoadState('networkidle');
+    });
+    const back = await step(async () => {
+      await range.getByRole('button', { name: '12wk', exact: true }).click();
+      await page.waitForLoadState('networkidle');
+    });
+    return { prs, trends, all, back, responses };
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function statsPerf(ctx, runs = 3) {
+  const S = 'perf:stats';
+  const results = [];
+  for (let i = 0; i < runs; i += 1) {
+    try { results.push(await oneStatsRun(ctx)); log(`[perf:stats] run ${i + 1}/${runs} done`); } catch (e) { ctx.report.record(S, `run ${i + 1}`, 'warn', String(e.message).slice(0, 300)); }
+  }
+  if (!results.length) return ctx.report.record(S, 'PRs / Trends timings', 'fail', 'no run completed');
+  const s = (x) => (x == null ? '?' : `${(x / 1000).toFixed(2)} s`);
+  const m = (f) => median(results.map(f));
+  ctx.report.table(`PRs and Trends, phone-sized Chromium, CPU throttled 4x, History already held (median of ${results.length})`,
+    ['Step', 'tap -> shown', 'main-thread script'], [
+      ['open PRs', s(m((r) => r.prs.ms)), s(m((r) => r.prs.script))],
+      ['open Trends (grid + exercise chart)', s(m((r) => r.trends.ms)), s(m((r) => r.trends.script))],
+      ['Trends range -> All', s(m((r) => r.all.ms)), s(m((r) => r.all.script))],
+      ['Trends range -> back to 12wk (cached)', s(m((r) => r.back.ms)), s(m((r) => r.back.script))],
+    ]);
+  const kinds = [...new Set(results.flatMap((r) => r.responses.map((x) => x.kind)))];
+  ctx.report.table('PRs / Trends responses during those steps (median per request)', ['Request', 'count per run', 'round trip', 'over the wire'],
+    kinds.map((k) => {
+      const all = results.flatMap((r) => r.responses.filter((x) => x.kind === k));
+      return [k, (all.length / results.length).toFixed(1), `${Math.round(median(all.map((x) => x.ms)) ?? 0)} ms`, `${((median(all.map((x) => x.wire)) ?? 0) / 1024).toFixed(1)} KB`];
+    }));
+  ctx.report.record(S, 'PRs / Trends timings recorded', 'info', `${results.length} runs`);
+}
+
 // The app opened on a device holding its cache while the backend is scaled to zero (lower's
 // min-replicas=0; production stays warm). Waits for zero replicas, which needs lower idle.
 export async function coldStart(ctx, { maxWaitMin = 25 } = {}) {

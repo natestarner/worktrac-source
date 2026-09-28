@@ -30,7 +30,7 @@ export class Api {
       if (text && (text[0] === '{' || text[0] === '[')) {
         try { parsed = JSON.parse(text); } catch { /* keep text */ }
       }
-      return { status: res.status, body: parsed, ms: performance.now() - started };
+      return { status: res.status, body: parsed, ms: performance.now() - started, bytes: text.length };
     } catch (error) {
       // A timeout or a dropped connection: what a client sees mid-deploy or on a saturated server.
       return { status: 0, body: String(error?.name || error), ms: performance.now() - started, error };

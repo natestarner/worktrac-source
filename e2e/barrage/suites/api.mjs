@@ -184,6 +184,38 @@ export async function bench({ api, report, cleanup, runs = 10 }) {
   await api.req('POST', `/api/people/${api.personId}/sessions/live/end`);
   report.table('API timings (this History)', ['Request', 'median', 'p95', 'n'], rows);
   report.record(S, 'timings recorded', 'info', rows.map((r) => `${r[0]} ${r[1]}`).join('; '));
+  await statsBench({ api, report, runs, bench });
+}
+
+// The reads behind the PRs board, Trends and the Log screen's summary, timed on the same History as
+// the sync above so the two can be compared directly. Each of these loads every set the person has
+// logged (StatsService), so this is the baseline for moving them onto History
+// (docs/architecture/history-sync.md, "Not covered here").
+async function statsBench({ api, report, runs, bench }) {
+  const P = api.personId;
+  const zone = 'zone=America%2FNew_York';
+  const rows = [];
+  const requests = [
+    ['GET /prs', `/api/people/${P}/prs`],
+    ['GET /trends/overview (12wk)', `/api/people/${P}/trends/overview?weeks=12&${zone}`],
+    ['GET /trends/overview (All)', `/api/people/${P}/trends/overview?weeks=260&${zone}`],
+    ['GET /trends/exercises/{bench} (12wk)', `/api/people/${P}/trends/exercises/${bench}?weeks=12&${zone}`],
+    ['GET /trends/exercises/{bench} (All)', `/api/people/${P}/trends/exercises/${bench}?weeks=260&${zone}`],
+    ['GET /exercises/{bench}/records', `/api/people/${P}/exercises/${bench}/records?${zone}`],
+    ['GET /exercises/{bench}/summary', `/api/people/${P}/exercises/${bench}/summary`],
+  ];
+  for (const [label, path] of requests) {
+    const out = [];
+    let bytes = null;
+    for (let i = 0; i < runs; i += 1) {
+      const r = await api.req('GET', path);
+      if (r.status !== 200) { rows.push([label, `status ${r.status}`, '', '', '']); out.length = 0; break; }
+      out.push(r.ms); bytes = r.bytes;
+    }
+    if (out.length) rows.push([label, ms(median(out)), ms(p95(out)), String(out.length), bytes == null ? '?' : `${(bytes / 1024).toFixed(1)} KB`]);
+  }
+  report.table('API timings: PRs, Trends and the Log summary (this History)', ['Request', 'median', 'p95', 'n', 'body (uncompressed)'], rows);
+  report.record('api:bench', 'stats timings recorded', 'info', rows.map((r) => `${r[0]} ${r[1]}`).join('; '));
 }
 
 // ── load ──────────────────────────────────────────────────────────────────────────────────────

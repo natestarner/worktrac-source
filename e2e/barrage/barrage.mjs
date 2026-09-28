@@ -15,7 +15,7 @@ import * as apiSuites from './suites/api.mjs';
 import { browserMatrix, signInOnce } from './suites/browser.mjs';
 import { buildBaseline, buildCurrent, outcome, requests } from './suites/compare.mjs';
 import { ops } from './suites/ops.mjs';
-import { coldStart, perf } from './suites/perf.mjs';
+import { coldStart, perf, statsPerf } from './suites/perf.mjs';
 
 const CORE_SCENARIOS = ['two-months-drain-slow-sync', 'drain-on-reopen', 'other-device-on-open', 'lie-fi', 'long-jump'];
 const WEBKIT_STANDARD = [...CORE_SCENARIOS, 'old-format-upgrade', 'rolling-check'];
@@ -23,8 +23,8 @@ const WEBKIT_STANDARD = [...CORE_SCENARIOS, 'old-format-upgrade', 'rolling-check
 // Which suites each tier runs. Order matters: correctness first, load last, ops after cleanup.
 const TIERS = {
   quick: ['api:abuse', 'api:correctness', 'api:bench', 'browser:chromium:core', 'signin'],
-  standard: ['api:abuse', 'api:correctness', 'api:bench', 'api:load', 'browser:chromium', 'browser:webkit:standard', 'signin', 'perf'],
-  full: ['api:abuse', 'api:correctness', 'api:bench', 'api:load', 'api:storm', 'browser:chromium', 'browser:webkit', 'signin', 'perf', 'compare', 'cold-start'],
+  standard: ['api:abuse', 'api:correctness', 'api:bench', 'api:load', 'browser:chromium', 'browser:webkit:standard', 'signin', 'perf', 'perf:stats'],
+  full: ['api:abuse', 'api:correctness', 'api:bench', 'api:load', 'api:storm', 'browser:chromium', 'browser:webkit', 'signin', 'perf', 'perf:stats', 'compare', 'cold-start'],
 };
 
 function parseArgs(argv) {
@@ -107,7 +107,7 @@ async function main() {
     creds = lowerCredentials();
     api = await Api.login(target.api, creds.email, creds.password);
   } else {
-    const needsBrowser = suites.some((s) => s.startsWith('browser') || s === 'signin' || s === 'perf' || s === 'compare');
+    const needsBrowser = suites.some((s) => s.startsWith('browser') || s === 'signin' || s.startsWith('perf') || s === 'compare');
     if (needsBrowser && portListening(target.frontendPort)) {
       throw new Error(`port ${target.frontendPort} is in use (the dev server?). The local barrage serves production builds itself -- stop the frontend first (see the /barrage command).`);
     }
@@ -117,7 +117,7 @@ async function main() {
       creds = { email: local.email, password: local.password };
       api = local.api;
     }
-    usesPreview = needsBrowser && suites.some((s) => s.startsWith('browser') || s === 'signin' || s === 'perf');
+    usesPreview = needsBrowser && suites.some((s) => s.startsWith('browser') || s === 'signin' || s.startsWith('perf'));
   }
 
   let seeded = 0;
@@ -185,6 +185,7 @@ async function main() {
           await browserMatrix({ ...ctx, engine, only });
         } else if (suite === 'signin') await signInOnce({ ...ctx, engine: 'chromium' });
         else if (suite === 'perf') await perf(ctx, args.tier === 'full' ? 4 : 3);
+        else if (suite === 'perf:stats') await statsPerf(ctx, args.tier === 'full' ? 4 : 3);
         else if (suite === 'cold-start') {
           if (args.target !== 'lower') report.record('cold-start', 'app opened on a cold backend', 'skip', 'lower only (min-replicas=0)');
           else await coldStart(ctx);
