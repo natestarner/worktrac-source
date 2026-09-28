@@ -61,6 +61,7 @@ that isn't one.
 | History badges name WHICH record fell, and a session total badges the entry rather than a set | `utils/historyPrFlags.js`, `components/shared/PrBadge.jsx`, `SetPillRow.jsx` |
 | **every record is marked the same way everywhere** — same glyph, same single colour, same rule — on History, on the Log screen's set rows and in "Session exercises" | `utils/historyPrFlags.js`, `PrBadge.jsx`, `index.css`'s `--color-record-*` |
 | **a record marks the set that BEAT your previous best**, so repeating your best does not mark it again | `historyPrFlags.js` (the retired `formulas.js#isPrSet` tie rule — see `log-screen.md`) |
+| **when two sets tie, the heavier one holds the record; an exact repeat leaves it with the earlier workout** (and a vest only decides which of two equal holds is named) | `StatsService#bestSet` / `isBetter` and the chronological set loads, `utils/statsFromHistory.js` |
 | History's date search: **a workout that ran past midnight counts on both days, and its heading shows both dates** | `utils/exerciseFilter.js#sessionDaySpan`, `HistoryTab.jsx#sessionHeaderLabel` |
 | **reloading on History, or pulling down on it in the Home Screen app, re-downloads the whole History of the person on screen**, and offline it waits for the connection | `lib/historyReload.js`, `components/history/PullToRefresh.jsx`, `refreshHistory`'s `full` in `lib/queryClient.js` |
 

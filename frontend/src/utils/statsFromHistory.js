@@ -15,9 +15,11 @@ import { setVolumeScaled, volumeKindOf, volumeScale } from './sessionVolume';
 //    rounded half-up to 0.1 ONCE, the way the server's BigDecimal does. Comparisons can use the
 //    measure functions' doubles: each is the nearest double to an exact decimal, so they order and
 //    tie exactly as the decimals do.
-//  - CHRONOLOGICAL ties. When two sets (or sessions) tie for a record, the earlier workout holds it:
-//    History's order reversed -- workout start, then id, then each set in the order it was logged.
-//    ".claude/rules/trends.md: PR chronology follows session startedAt, never set created_at."
+//  - ONE TIE RULE, the server's too. When two sets tie for a record, the heavier load holds it (or
+//    the record's own second measure -- more reps for top weight, a longer hold for heaviest load
+//    held); a full tie goes to the earlier workout. Sets are walked in History's order reversed --
+//    workout start, then id, then each set as logged -- so "the first one wins" IS "the earlier
+//    workout". A session total has no one load, so it goes straight to the earlier workout.
 //
 // The measures themselves (est. 1RM, top weight, what a set ranks by, volume) are formulas.js's and
 // sessionVolume.js's; nothing here re-derives them.
@@ -89,12 +91,14 @@ const mondayOf = (day) => day - ((new Date(day * DAY_MS).getUTCDay() + 6) % 7);
 
 // ── the PRs board: GET /prs ───────────────────────────────────────────────────────────────────
 
+// THE tie rule for a record that names one set (StatsService#bestSet): the higher value, then the
+// heavier load, then the earlier set -- items arrive chronologically, so the first wins a full tie.
 function bestSet(items) {
   let best = null;
   let bestValue = null;
   for (const item of items) {
     const value = comparableValue(item.set);
-    if (bestValue == null || value > bestValue) {
+    if (bestValue == null || isBetter(value, weightLbE7(item.set), bestValue, weightLbE7(best.set))) {
       bestValue = value;
       best = item;
     }
@@ -163,7 +167,9 @@ function prRow(exerciseId, exerciseName, items) {
   for (const item of items) {
     const { set, session } = item;
     if (heaviest == null || isBetter(weightLbE7(set), set.reps, weightLbE7(heaviest.set), heaviest.set.reps)) heaviest = item;
-    if (bestSetVolume == null || loadVolumeE7(set) > loadVolumeE7(bestSetVolume.set)) bestSetVolume = item;
+    if (bestSetVolume == null || isBetter(loadVolumeE7(set), weightLbE7(set), loadVolumeE7(bestSetVolume.set), weightLbE7(bestSetVolume.set))) {
+      bestSetVolume = item;
+    }
     for (const [totals, add] of [[volume, setVolumeScaled(set, kind)], [reps, set.reps]]) {
       if (!totals.has(session.id)) totals.set(session.id, { session, total: 0, items: [] });
       const s = totals.get(session.id);
@@ -403,7 +409,9 @@ export function exerciseRecords(history, exerciseId, { zone }) {
         bestEst1rmLb = est;
       }
     }
-    if (bestSetVolume == null || loadVolumeE7(set) > loadVolumeE7(bestSetVolume.set)) bestSetVolume = item;
+    if (bestSetVolume == null || isBetter(loadVolumeE7(set), lb, loadVolumeE7(bestSetVolume.set), weightLbE7(bestSetVolume.set))) {
+      bestSetVolume = item;
+    }
     if (mostReps == null || isBetter(set.reps, lb, mostReps.set.reps, weightLbE7(mostReps.set))) mostReps = item;
     if (isHold(set)) {
       totalHold += set.durationSeconds;

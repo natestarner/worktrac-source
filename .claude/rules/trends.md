@@ -174,6 +174,26 @@ without it a week of plank and wall-sit work reads as no work at all on every ch
 Both fold into the **existing** `getOverview` / `getExerciseTrend` / `getExerciseRecords` passes;
 neither adds a query.
 
+## A tie goes to the heavier load, then the earlier workout — on both sides
+
+When two sets tie for a record that names one set, the **heavier load** holds it (or the record's
+own second measure: more reps for top weight, a longer hold for heaviest load held). A **full**
+tie, such as repeating your best, stays with the **earlier workout**. A session total has no one
+load, so it goes straight to the earlier workout. Decided 2026-09-28: 185×9 and 195×7 both
+estimate 240.5, and the 195 holds it.
+
+- **Server:** `StatsService#bestSet` and every best-set-volume pick go through `isBetter(value,
+  weightLb, …)`. Both set loads are **ordered chronologically** (workout start, workout id, then
+  each set as logged) so that "first wins" means "earlier workout". Before this they were unordered
+  or in creation order, so the index or a past workout logged later decided the tie.
+- **Device:** `utils/statsFromHistory.js` applies the same rule, walking History reversed.
+- **Pinned by the equivalence oracle** (`shared/record-rules/stats-from-history-cases.json`, generated
+  by `StatsFromHistoryCasesTest`, checked by `statsFromHistory.test.js`). Reverting the device's
+  tie-break fails the Air Squat row. Change the rule on both sides together, regenerate, and update
+  the handbook (`user-facing-help.md` lists the sentence).
+- Detection is unaffected: a tie is still not a record (strict `>`). This only decides which set a
+  tied record *names*.
+
 ## `bestEst1rm` and `heaviestWeight` are different records — keep both
 
 Epley rewards reps, so `185 x 8` (~234 lb) outranks a `225 x 1` single. `heaviestWeight` ranks on

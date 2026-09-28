@@ -27,8 +27,20 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     // Guarded by HistoryScaleTest. Don't drop the graph to "simplify" these into plain derived
     // queries; don't reach for a global hibernate.default_batch_fetch_size instead either -- that
     // changes every lazy load in the app, not just these two.
+    //
+    // CHRONOLOGICAL, and totally ordered: workout start, workout id, then each set as it was logged
+    // -- History's own order. A record tie is decided by that order once weight has had its say
+    // (StatsService#bestSet), so an unordered load let the index hand whichever set it liked the
+    // record; and the device derives the same records from History (statsFromHistory.js), which
+    // only agrees if both sides walk the sets the same way.
     @EntityGraph(attributePaths = "session")
-    List<WorkoutSet> findByPerson_IdAndExercise_Id(Long personId, Long exerciseId);
+    List<WorkoutSet> findByPerson_IdAndExercise_IdOrderBySession_StartedAtAscSession_IdAscCreatedAtAscIdAsc(
+            Long personId, Long exerciseId);
+
+    // The whole person, in the same chronological order -- for the PRs board. (Export keeps
+    // insertion order: findByPerson_IdOrderByCreatedAtAscIdAsc below.)
+    @EntityGraph(attributePaths = "session")
+    List<WorkoutSet> findByPerson_IdOrderBySession_StartedAtAscSession_IdAscCreatedAtAscIdAsc(Long personId);
 
     // The "has a logged set" half of a person's Log picker: every exercise they've ever
     // logged shows up automatically, alongside their favorites.
@@ -50,7 +62,7 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     // tiebreaker SQL Server is free to return those two in either order. That made an export
     // non-deterministic for exactly the data an import produces.
     //
-    // Loads each set's session in the same query -- see findByPerson_IdAndExercise_Id above.
+    // Loads each set's session in the same query -- see the per-exercise load above.
     @EntityGraph(attributePaths = "session")
     List<WorkoutSet> findByPerson_IdOrderByCreatedAtAscIdAsc(Long personId);
 
