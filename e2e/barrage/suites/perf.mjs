@@ -141,11 +141,13 @@ async function oneStatsRun(ctx) {
     });
     await page.waitForLoadState('networkidle');
     const range = page.getByRole('group', { name: 'Time range' });
+    // Waits on what is RENDERED, not on a request: since Trends is derived from History on the
+    // device (prs-trends-from-history.md) there is no overview request to wait for, and a build from
+    // before that still makes one -- networkidle covers both, so either build can be measured.
     const all = await step(async () => {
-      const done = page.waitForResponse((r) => /\/trends\/overview$/.test(new URL(r.url()).pathname) && new URL(r.url()).searchParams.get('weeks') === '260');
       await range.getByRole('button', { name: 'All', exact: true }).click();
-      await done;
       await page.waitForLoadState('networkidle');
+      await page.getByText(/^Exercise progress ·/).first().waitFor();
     });
     const back = await step(async () => {
       await range.getByRole('button', { name: '12wk', exact: true }).click();
