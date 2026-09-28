@@ -35,6 +35,7 @@ beside it.
 | `api:abuse` | Hostile or odd input: bounds (400), other households (404), foreign workout ids leak nothing | x | x | x |
 | `api:correctness` | Every History-changing write (live set, edit, notes, delete, a past workout in a new month, moving it across months, a rename). After each one, five simulated devices must equal `GET /history`: scoped, ordinary, restored-from-snapshot, restored-then-scoped, fresh | x | x | x |
 | `api:bench` | Sync timings on this History, after waiting for the database to be idle; then every PRs / Trends / Log-summary endpoint on the same History, with body sizes | x | x | x |
+| `api:stats-match` | The PRs board and Trends the **device** derives from History equal what the **server** answers, on the target's real data: every person, the board, the overview and every logged exercise's records and trend at every range, in two zones. Runs the app's own `statsFromHistory.js` | | x | x |
 | `browser:chromium` | The browser matrix below; quick runs its core five | core | all | all |
 | `browser:webkit` | The same in Safari's engine (see limits) | | 7 | all |
 | `signin` | A fresh device downloads History once per person | x | x | x |
