@@ -381,3 +381,5 @@ MSYS_NO_PATHCONV=1 az rest --method get --output-file C:/tmp/topq.xml --url "htt
 `/prs` still loads every set a person has logged on each call, and is refreshed after every set
 (`StatsService#getPrList`). Its reply is small, but its server work grows with history exactly the
 way History's did. It is the next thing to look at if the server is where the cost shows up.
+Measured on 2026-09-28 (3.6s on lower, a scan of both tables), with the plan to derive PRs and
+Trends from the History the device holds: `prs-trends-from-history.md`.

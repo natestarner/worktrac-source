@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.support.AbstractIntegrationTest;
+import com.worktrac.backend.support.QueryPlans;
+import com.worktrac.backend.support.QueryPlans.Access;
 import com.worktrac.backend.support.RegistrationTestSupport;
 import com.worktrac.backend.user.TestCodeCache;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,13 +17,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
-import javax.xml.parsers.DocumentBuilderFactory;
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -191,7 +187,7 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
         List<String> violations = new ArrayList<>();
         Set<String> tablesRead = new TreeSet<>();
         for (String plan : planXmls) {
-            for (Access access : accesses(plan)) {
+            for (Access access : QueryPlans.accesses(plan)) {
                 if (!HISTORY_TABLES.contains(access.table())) {
                     continue;
                 }
@@ -212,7 +208,7 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
         List<String> rangePlans = planXmls.stream().filter(plan -> plan.contains("rs.session_id")).toList();
         assertEquals(3, rangePlans.size(), "every range shape issued in runEveryShape (see HistoryMonths#sql)");
         for (String plan : rangePlans) {
-            List<Access> setReads = accesses(plan).stream()
+            List<Access> setReads = QueryPlans.accesses(plan).stream()
                     .filter(access -> access.table().equals("workout_sets")).toList();
             assertFalse(setReads.isEmpty());
             for (Access read : setReads) {
@@ -269,47 +265,5 @@ class HistorySyncCostTest extends AbstractIntegrationTest {
         historyMonths.load(person, null, from, null);
         // A scoped sync: two separate, non-adjacent months (a workout moved between them elsewhere).
         historyMonths.loadMonths(person, null, List.of(java.time.YearMonth.of(2026, 4), java.time.YearMonth.of(2026, 1)));
-    }
-
-    record Access(String table, String index, String physicalOp, boolean lookup, Set<String> seekColumns) {}
-
-    // Each operator that reads a table directly: the <RelOp> whose child is an <IndexScan> or
-    // <TableScan>. A key lookup is a Clustered Index Seek whose IndexScan carries Lookup="true".
-    private static List<Access> accesses(String planXml) throws Exception {
-        var factory = DocumentBuilderFactory.newInstance();
-        factory.setNamespaceAware(false);
-        var document = factory.newDocumentBuilder()
-                .parse(new ByteArrayInputStream(planXml.getBytes(StandardCharsets.UTF_8)));
-        List<Access> accesses = new ArrayList<>();
-        NodeList relOps = document.getElementsByTagName("RelOp");
-        for (int i = 0; i < relOps.getLength(); i++) {
-            Element relOp = (Element) relOps.item(i);
-            for (Node child = relOp.getFirstChild(); child != null; child = child.getNextSibling()) {
-                if (!(child instanceof Element reader)
-                        || !(reader.getTagName().equals("IndexScan") || reader.getTagName().equals("TableScan"))) {
-                    continue;
-                }
-                Element object = (Element) reader.getElementsByTagName("Object").item(0);
-                String lookup = reader.getAttribute("Lookup");
-                // The key columns a seek actually narrows on: every ColumnReference under a RangeColumns
-                // of its SeekPredicates. (person_id alone is a pass over the person's whole range.)
-                Set<String> seekColumns = new TreeSet<>();
-                NodeList ranges = reader.getElementsByTagName("RangeColumns");
-                for (int r = 0; r < ranges.getLength(); r++) {
-                    NodeList columns = ((Element) ranges.item(r)).getElementsByTagName("ColumnReference");
-                    for (int c = 0; c < columns.getLength(); c++) {
-                        seekColumns.add(strip(((Element) columns.item(c)).getAttribute("Column")));
-                    }
-                }
-                accesses.add(new Access(
-                        strip(object.getAttribute("Table")), strip(object.getAttribute("Index")),
-                        relOp.getAttribute("PhysicalOp"), "true".equals(lookup) || "1".equals(lookup), seekColumns));
-            }
-        }
-        return accesses;
-    }
-
-    private static String strip(String bracketed) {
-        return bracketed.replace("[", "").replace("]", "");
     }
 }

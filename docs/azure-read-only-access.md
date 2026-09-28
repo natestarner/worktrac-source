@@ -204,7 +204,14 @@ MSYS_NO_PATHCONV=1 az rest --method get --output-file C:/tmp/topq.xml \
 
 - The reply is **Atom XML**, not JSON. Save it with `--output-file` and parse the `d:` elements
   (`queryId`, then per interval `executionCount` and `metrics`, e.g. `duration` in microseconds).
-- `resourceType` is `cpu`, `duration`, `io` or `logIo`. It covers the last 24h by default.
+- It covers the last 24h in hourly intervals. **It always returns the top 5 statements by CPU**:
+  `resourceType`, `observationMetric` and every count parameter tried (`numberOfQueries`,
+  `numberOfTopQueries`) are ignored (checked 2026-09-28). A cheap statement never appears, however
+  often it runs.
+- **The current hour appears only after it closes.** To identify a statement, send it a burst with
+  a count nothing else produces (37, 53…) in a quiet hour, then read that hour back after the top of
+  the next one (`docs/architecture/prs-trends-from-history.md` did this for `/prs`).
+- Production is `worktrac-db-prod`.
 - **The query text is not readable** (`topQueries/{id}/queryText` answers BadGateway under this
   principal). Identify a statement by *when* its query id first appears (after a deploy) and by its
   execution count relative to the requests you made.

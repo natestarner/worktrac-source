@@ -212,20 +212,35 @@ async function countFlows(target, creds) {
   const ctxt = await browser.newContext({ viewport: { width: 390, height: 844 } });
   let page = await ctxt.newPage();
   const sent = [];
+  // The reads StatsService answers by loading every set the person has logged -- counted beside
+  // History's so a move of PRs/Trends onto History can be judged flow by flow.
+  const statSent = [];
+  const STATS = [
+    ['prs', /\/api\/people\/\d+\/prs$/],
+    ['overview', /\/api\/people\/\d+\/trends\/overview$/],
+    ['exercise-trend', /\/api\/people\/\d+\/trends\/exercises\/\d+$/],
+    ['records', /\/api\/people\/\d+\/exercises\/\d+\/records$/],
+    ['summary', /\/api\/people\/\d+\/exercises\/\d+\/summary$/],
+  ];
   const hook = (p) => p.on('request', (r) => {
     const u = new URL(r.url());
+    const stat = STATS.find(([, re]) => re.test(u.pathname));
+    if (stat) statSent.push(stat[0]);
     if (!/\/api\/people\/\d+\/history(\/sync)?$/.test(u.pathname)) return;
     const b = r.postData() ? JSON.parse(r.postData()) : null;
     sent.push(b ? (b.sessions ? 'scoped' : Object.keys(b.have || {}).length ? 'ordinary' : 'full') : 'full-GET');
   });
   hook(page);
   const flows = [];
+  const tally = (xs) => xs.reduce((m, k) => ((m[k] = (m[k] || 0) + 1), m), {});
   const count = async (name, fn, settle = 4000) => {
     const from = sent.length;
+    const statFrom = statSent.length;
     await fn();
     await sleep(settle);
     const got = sent.slice(from);
-    flows.push([name, got.length, got.reduce((m, k) => ((m[k] = (m[k] || 0) + 1), m), {})]);
+    const stats = statSent.slice(statFrom);
+    flows.push([name, got.length, tally(got), stats.length, tally(stats)]);
   };
   const toExercise = async (name) => {
     const picker = page.getByPlaceholder('Search all exercises');
@@ -260,6 +275,24 @@ async function countFlows(target, creds) {
       await page.getByRole('button', { name: 'End workout' }).first().click();
       await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
     });
+    await count('open PRs', async () => { await goTab(page, 'PRs'); await page.getByTestId('pr-row').first().waitFor(); });
+    await count('open Trends', async () => { await goTab(page, 'Trends'); await page.getByTestId('consistency-grid').waitFor(); });
+    await count('Trends: range to All', async () => {
+      await page.getByRole('group', { name: 'Time range' }).getByRole('button', { name: 'All', exact: true }).click();
+    });
+    await count('Trends: range back to 12wk', async () => {
+      await page.getByRole('group', { name: 'Time range' }).getByRole('button', { name: '12wk', exact: true }).click();
+    });
+    await count('a set logged, then PRs opened', async () => {
+      await goTab(page, 'Log'); await toExercise('Barbell Bench Press'); await logSet();
+      await goTab(page, 'PRs'); await page.getByTestId('pr-row').first().waitFor();
+    });
+    await count('then Trends opened', async () => { await goTab(page, 'Trends'); await page.getByTestId('consistency-grid').waitFor(); });
+    await count('end the second workout', async () => {
+      await goTab(page, 'Log');
+      await page.getByRole('button', { name: 'End workout' }).first().click();
+      await page.getByRole('dialog').getByRole('button', { name: 'End workout' }).click();
+    });
     return flows;
   } finally { await browser.close(); }
 }
@@ -273,8 +306,11 @@ export async function requests(ctx, baseline, current) {
     try { results[label] = await countFlows(ctx.target, household); } finally { server.kill(); await sleep(1500); }
   }
   const fmt = (f) => `${f[1]} ${JSON.stringify(f[2])}`;
+  const fmtStats = (f) => `${f[3]} ${JSON.stringify(f[4])}`;
   ctx.report.table('History requests per everyday flow (every request sent counts, even an abandoned one)', ['Flow', 'baseline', 'under test'],
     results['under test'].map((f, i) => [f[0], results.baseline[i] ? fmt(results.baseline[i]) : '?', fmt(f)]));
+  ctx.report.table('PRs / Trends / summary requests per everyday flow (each one loads every set the person has logged)', ['Flow', 'baseline', 'under test'],
+    results['under test'].map((f, i) => [f[0], results.baseline[i] ? fmtStats(results.baseline[i]) : '?', fmtStats(f)]));
   // What the History work promises (docs/architecture/history-sync.md): one light request per
   // everyday flow, one full sync on sign-in, and never more requests than the baseline + 1.
   const byName = Object.fromEntries(results['under test'].map((f) => [f[0], f]));
