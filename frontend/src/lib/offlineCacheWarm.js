@@ -5,7 +5,6 @@ import { listTags } from '../api/tags';
 import { listRoutines } from '../api/routines';
 import { getLiveSession, getHistory, getHistoryWindow } from '../api/sessions';
 import { refreshHistory, scopedHistoryRefreshInFlight } from './queryClient';
-import { getPrs } from '../api/stats';
 import { listRoster } from '../api/roster';
 
 // How fresh a warmed entry needs to be before prefetchQuery bothers refetching it -- kept short
@@ -14,9 +13,11 @@ import { listRoster } from '../api/roster';
 const WARM_STALE_TIME = 30 * 1000;
 
 // The "logging essentials" bundle per person -- just enough to log a workout, see recent
-// history, and check PRs offline. Deliberately excludes trendsOverview/exerciseTrend (the
-// analytics fan-out -- high cost keyed by exercise x range, low value mid-workout) and
-// ExerciseDetail's session-scoped queries (sessionSets/customFields/sessionExerciseNote --
+// history, and check PRs and Trends offline. The PRs board and Trends have no keys of their own
+// here: both are derived on this device from `history` (hooks/useStatsFromHistory.js), so warming
+// History IS warming them -- and the warm no longer asks the server for /prs, which loaded every
+// set the person had ever logged on every tick (docs/architecture/prs-trends-from-history.md).
+// Deliberately excludes ExerciseDetail's session-scoped queries (sessionSets/customFields/sessionExerciseNote --
 // can't be enumerated without first knowing the live/edit session id). exerciseSummary
 // (Exercise Detail's "Last time"/"Best est. 1RM" card) is likewise not prefetched here, but for
 // a different reason: it's derived client-side from the already-warmed history cache when the
@@ -30,18 +31,17 @@ const WARM_STALE_TIME = 30 * 1000;
 // That is issue #146: a routine created seconds before a reload vanished from the Routines tab.
 //
 // It is opt-IN per key rather than blanket, because forcing is only safe for collections the
-// server wholly owns. These three qualify:
+// server wholly owns. These qualify:
 //   - routines       -- routine CRUD is online-gated (OfflineDisabledWrap), so the cache can
 //                       never hold a routine that hasn't reached the server.
-//   - history, prs   -- no optimistic writer anywhere; they are invalidation-driven only, so an
+//   - history        -- no optimistic writer anywhere; it is invalidation-driven only, so an
 //                       unsynced set is simply absent from them (see "a durable write is not the
 //                       same as a visible value" in .claude/rules/frontend-core.md).
 //   - historyWindow  -- same reason, one step further: it is a pure server-side derivation of the
 //                       billing state and the clock, so the client could not hold an unsent
 //                       version of it even in principle.
 //
-// historyWindow is warmed at all -- unlike trends, which is deliberately excluded -- because it is
-// one small row per person, and because without it the three clamped tabs would silently lose the
+// historyWindow is warmed because it is one small row per person, and because without it the three clamped tabs would silently lose the
 // "there is more here than you can see" notice for a whole outage. A screen that goes back to
 // looking complete while offline is exactly the second code path resilience.md exists to prevent.
 //
@@ -58,7 +58,6 @@ function personWarmTargets(personId) {
     // Refreshed through refreshHistory, like every other History refresh, never a bare prefetch --
     // see warmOfflineCache below.
     { queryKey: queryKeys.history(personId), historyOf: personId, refreshAfterRestore: true },
-    { queryKey: queryKeys.prs(personId), queryFn: () => getPrs(personId), refreshAfterRestore: true },
     { queryKey: queryKeys.historyWindow(personId), queryFn: () => getHistoryWindow(personId), refreshAfterRestore: true },
   ];
 }

@@ -19,6 +19,8 @@ vi.mock('../api/sessions', () => ({
   getHistory: vi.fn().mockResolvedValue([]),
   getHistoryWindow: vi.fn().mockResolvedValue({ windowStart: null, hiddenSessions: 0, earliestHiddenAt: null }),
 }));
+// Kept as a tripwire: the PRs board is derived from History on the device now
+// (hooks/useStatsFromHistory.js), and the warm must never go back to asking for /prs.
 vi.mock('../api/stats', () => ({
   getPrs: vi.fn().mockResolvedValue([]),
 }));
@@ -54,7 +56,9 @@ describe('warmOfflineCache', () => {
     expect(listRoutines).toHaveBeenCalledTimes(2);
     expect(getLiveSession).toHaveBeenCalledTimes(2);
     expect(getHistory).toHaveBeenCalledTimes(2);
-    expect(getPrs).toHaveBeenCalledTimes(2);
+    // PRs and Trends are warmed BY warming History: both are derived from it on the device. /prs
+    // loaded every set the person had ever logged, on every boot, refocus and five-minute tick.
+    expect(getPrs).not.toHaveBeenCalled();
     expect(getHistoryWindow).toHaveBeenCalledTimes(2);
 
     for (const person of PEOPLE) {
@@ -63,13 +67,10 @@ describe('warmOfflineCache', () => {
       expect(getLiveSession).toHaveBeenCalledWith(person.id);
       // An ORDINARY sync, through refreshHistory: scope null re-verifies every month.
       expect(getHistory).toHaveBeenCalledWith(person.id, { readCached: expect.any(Function), scope: null, full: false });
-      expect(getPrs).toHaveBeenCalledWith(person.id);
       expect(client.getQueryData(queryKeys.history(person.id))).toEqual([]);
-      expect(client.getQueryData(queryKeys.prs(person.id))).toEqual([]);
       // Without this key warmed, the three clamped tabs go back to looking COMPLETE while offline
       // -- the same screen saying two different things depending on the network, which is the one
-      // thing resilience.md forbids outright. It is one small row per person, unlike the trends
-      // fan-out deliberately excluded below.
+      // thing resilience.md forbids outright. It is one small row per person.
       expect(getHistoryWindow).toHaveBeenCalledWith(person.id);
       expect(client.getQueryData(queryKeys.historyWindow(person.id))).toEqual({
         windowStart: null,
@@ -80,11 +81,9 @@ describe('warmOfflineCache', () => {
     expect(client.getQueryData(queryKeys.exercises())).toEqual([{ id: 1, name: 'Squat' }]);
   });
 
-  it('does NOT warm the analytics fan-out (trends) or session-scoped exercise-detail keys', async () => {
+  it('does NOT warm session-scoped exercise-detail keys', async () => {
     await warmOfflineCache(client, PEOPLE);
 
-    expect(client.getQueryData(queryKeys.trendsOverview(1, 12))).toBeUndefined();
-    expect(client.getQueryData(queryKeys.exerciseTrend(1, 5, 12))).toBeUndefined();
     // exerciseSummary is deliberately still not prefetched here -- ExerciseDetail derives it
     // client-side from the (now-warmed) history cache instead. See exerciseSummaryFromHistory.js.
     expect(client.getQueryData(queryKeys.exerciseSummary(1, 5, null))).toBeUndefined();
@@ -155,7 +154,6 @@ describe('warmOfflineCache afterRestore', () => {
     for (const person of PEOPLE) {
       client.setQueryData(queryKeys.routines(person.id), []);
       client.setQueryData(queryKeys.history(person.id), []);
-      client.setQueryData(queryKeys.prs(person.id), []);
       client.setQueryData(queryKeys.personExercises(person.id), [UNSYNCED_EXERCISE]);
       client.setQueryData(queryKeys.liveSession(person.id), null);
       client.setQueryData(queryKeys.historyWindow(person.id), {
@@ -176,7 +174,6 @@ describe('warmOfflineCache afterRestore', () => {
     // reload stays invisible.
     expect(listRoutines).not.toHaveBeenCalled();
     expect(getHistory).not.toHaveBeenCalled();
-    expect(getPrs).not.toHaveBeenCalled();
     expect(getHistoryWindow).not.toHaveBeenCalled();
   });
 
@@ -188,8 +185,8 @@ describe('warmOfflineCache afterRestore', () => {
 
     expect(listRoutines).toHaveBeenCalledTimes(2);
     expect(getHistory).toHaveBeenCalledTimes(2);
-    expect(getPrs).toHaveBeenCalledTimes(2);
-    // Forced for the same reason as history and prs, one step stronger: it is a pure server-side
+    expect(getPrs).not.toHaveBeenCalled();
+    // Forced for the same reason as history, one step stronger: it is a pure server-side
     // derivation of the billing state and the clock, so the client could not be holding an unsent
     // version of it even in principle. It also goes stale on its own as the window slides.
     expect(getHistoryWindow).toHaveBeenCalledTimes(2);

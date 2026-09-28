@@ -164,22 +164,20 @@ export default function TrendsTab() {
     <HistoryWindowNotice plan={account?.plan} historyWindow={historyWindow} lead={trendsLead} />
   );
 
-  // Nothing cached AND nothing coming. Trends is the one tab deliberately left out of
-  // offlineCacheWarm (warming three keys per person across every person is a costly fan-out, and
-  // unlike Log/History/PRs these charts are not what you reach for mid-workout), so a device that
-  // has never opened Trends online has no fallback data at all.
-  //
-  // Both branches present identically to the old code: while PAUSED, isLoading is false and data is
-  // undefined; on a hard ERROR with no cache, likewise. `loading || !overview` therefore latched
-  // TrendsSkeleton forever -- a spinner over a request that will never succeed, which is precisely
-  // what resilience.md forbids. Saying so is the only honest option left; there is nothing to show
-  // and nothing to queue. Registered in .claude/rules/resilience.md.
+  // Nothing held AND nothing coming. Trends is built on this device from the person's History
+  // (useStatsFromHistory), so it works offline whenever History is here -- which it is for anyone
+  // this device has shown before (offlineCacheWarm). What is left is a device that has NEVER held
+  // this person's History: a new device, or a trainer opening a client for the first time, with no
+  // connection. While PAUSED, isLoading is false and there is no data; on a hard ERROR, likewise --
+  // so a skeleton here would be a spinner over a request that will never succeed. Saying so is the
+  // honest option; there is nothing to show and nothing to queue. Registered in
+  // .claude/rules/resilience.md.
   if (!overview && (isPaused || isError)) {
     return (
       <EmptyState
         icon={IconTrendingUp}
         title="Trends need a connection"
-        body="These charts are built on the server and aren’t saved for offline use. Your Log, History and PRs tabs still work from here."
+        body="This person’s workouts haven’t downloaded to this device yet. You can still log sets; once they download, Trends works offline too."
       />
     );
   }

@@ -2,6 +2,8 @@ import { useRef, useSyncExternalStore } from 'react';
 import { notifyManager, useQueryClient } from '@tanstack/react-query';
 import { isTempExerciseId } from '../lib/exerciseIdMap';
 import { isDeleteQueuedFor, isUnsyncedWrite } from '../lib/queryClient';
+import { isCreateInEndedWorkout } from '../lib/endedSessions';
+import { setConfirmedAt } from '../lib/confirmedSets';
 
 // Every not-yet-synced logSet/createExercise mutation, for ANY person -- the only place an
 // offline-logged set exists before it syncs (see offlineSetEdits.js). Covers the brief online
@@ -17,6 +19,11 @@ import { isDeleteQueuedFor, isUnsyncedWrite } from '../lib/queryClient';
 // event happened to fire and force a recompute) -- exactly the "bleeds across people until you log a
 // new set" bug this fixes. The person filter instead lives in the render body below, which re-runs
 // on every render including a personId change.
+// isUnsyncedWrite, not `status === 'pending'` -- under lie-fi a write's retries settle into 'error'
+// while it stays queued and durable, and this list used to silently drop it there even though
+// ExerciseDetail still showed the row and the outbox badge still counted it.
+const isUnsynced = (m) => isUnsyncedWrite({ status: m.state.status, errorStatus: m.state.error?.status });
+
 function readPendingMutations(queryClient) {
   return queryClient
     .getMutationCache()
@@ -24,10 +31,9 @@ function readPendingMutations(queryClient) {
     .filter((m) => {
       const kind = m.options.mutationKey?.[0];
       if (kind !== 'logSet' && kind !== 'createExercise') return false;
-      // isUnsyncedWrite, not `status === 'pending'` -- under lie-fi a write's retries settle into
-      // 'error' while it stays queued and durable, and this list used to silently drop it there
-      // even though ExerciseDetail still showed the row and the outbox badge still counted it.
-      if (!isUnsyncedWrite({ status: m.state.status, errorStatus: m.state.error?.status })) return false;
+      // Saved sets are kept in the snapshot too, for `confirmedAfter` callers; every other caller
+      // filters them straight back out in the render body below.
+      if (!isUnsynced(m) && !(kind === 'logSet' && m.state.status === 'success')) return false;
       // A create deleted mid-save stays pending until it lands and the DELETE_SET queued behind it
       // runs. The person already watched it go, so it is not listed -- see isDeleteQueuedFor.
       return kind !== 'logSet' || !isDeleteQueuedFor(queryClient, m.state.variables?.tempId);
@@ -49,7 +55,18 @@ function resolveExerciseName(exerciseId, exercisesById, tempExerciseNames, carri
 // mutations. This merges those in by exerciseId so the list is never empty just because nothing
 // has synced yet. Online steady-state (no pending mutations) this is a no-op: it returns
 // `serverEntries` unchanged.
-export function useSessionEntries({ personId, serverEntries, exercises }) {
+//
+// `liveOnly` narrows the pending sets to the workout in progress: not a past workout being edited
+// (`mode: 'session'`), and not a workout already ended whose creates are still queued
+// (endedSessions.js#isCreateInEndedWorkout). The Log tab's own list shows whichever session it is
+// in and leaves this off; the PRs board and Trends fold the live workout only (useStatsFromHistory).
+//
+// `confirmedAfter` (a time, ms) also keeps sets the server has ALREADY SAVED, if it confirmed them
+// after that time -- pass History's dataUpdatedAt, and a saved set stays in the list until a History
+// fetched after its save is in hand (lib/confirmedSets.js). Without it a saved set is in neither the
+// queue nor History for the round trip in between. Off by default: the Log tab's list is fed by
+// History's own refresh and has always accepted that window (SessionSummary#mayHaveServerRows).
+export function useSessionEntries({ personId, serverEntries, exercises, liveOnly = false, confirmedAfter = null }) {
   const queryClient = useQueryClient();
 
   // getSnapshot must return a referentially-stable value between calls unless the mutation cache
@@ -81,7 +98,15 @@ export function useSessionEntries({ personId, serverEntries, exercises }) {
 
   // Scoped to the active person on every render (not memoized) -- this is what makes a person
   // switch take effect immediately instead of showing the previous person's pending sets.
-  const mutations = allMutations.filter((m) => m.state.variables?.personId === personId);
+  const mutations = allMutations.filter(
+    (m) =>
+      m.state.variables?.personId === personId &&
+      (isUnsynced(m) ||
+        (confirmedAfter != null && (setConfirmedAt(m.state.variables?.tempId) ?? -Infinity) > confirmedAfter)) &&
+      (!liveOnly ||
+        m.options.mutationKey?.[0] !== 'logSet' ||
+        (m.state.variables?.mode !== 'session' && !isCreateInEndedWorkout(personId, m.state.variables?.tempId))),
+  );
 
   const exercisesById = Object.fromEntries(exercises.map((e) => [e.id, e]));
   const tempExerciseNames = Object.fromEntries(

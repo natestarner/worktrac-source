@@ -50,7 +50,7 @@ export default function ExerciseTrendSection({
   defaultUnit,
 }) {
   const navigate = useNavigate();
-  // Same cached PR list the PR board reads (queryKeys.prs), so the dropdown can't diverge from it.
+  // The same board the PRs tab reads (derived from History), so the dropdown can't diverge from it.
   const { prs: loggedExercises } = usePrs(personId);
 
   // Default the dropdown to the first exercise once the list has loaded and none is selected yet.

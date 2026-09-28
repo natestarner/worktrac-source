@@ -6,13 +6,15 @@ import { renderWithQuery } from '../../test/queryWrapper';
 import PRsTab from './PRsTab';
 import { useAppState } from '../../context/AppStateContext';
 import { useAuth } from '../../context/AuthContext';
-import { getPrs } from '../../api/stats';
+import { usePrs } from '../../hooks/usePrs';
 import { useHistoryWindow } from '../../hooks/useHistoryWindow';
 import { listPersonExercises } from '../../api/exercises';
 
 vi.mock('../../context/AppStateContext', () => ({ useAppState: vi.fn() }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
-vi.mock('../../api/stats', () => ({ getPrs: vi.fn() }));
+// The board's ROWS are derived from History (hooks/usePrs, utils/statsFromHistory.js) and proven
+// equal to GET /prs by the shared oracle; this file is about how the board RENDERS them.
+vi.mock('../../hooks/usePrs', () => ({ usePrs: vi.fn() }));
 vi.mock('../../hooks/useHistoryWindow', () => ({ useHistoryWindow: vi.fn() }));
 vi.mock('../../api/exercises', () => ({ listPersonExercises: vi.fn() }));
 
@@ -21,6 +23,17 @@ vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, useNavigate: () => mockNavigate };
 });
+
+function givenBoard(prs, { status = 'ready' } = {}) {
+  usePrs.mockReturnValue({
+    prs: status === 'ready' ? prs : [],
+    status,
+    loading: status === 'loading',
+    isFetching: false,
+    updatedAt: Date.now(),
+    refetch: vi.fn(),
+  });
+}
 
 function renderPRsTab() {
   return renderWithQuery(
@@ -42,7 +55,7 @@ describe('PRsTab', () => {
   afterEach(() => onlineManager.setOnline(true));
 
   it('shows the weight/1RM calc for a weighted PR', async () => {
-    getPrs.mockResolvedValue([
+    givenBoard([
       {
         exerciseId: 1,
         exerciseName: 'Bench Press',
@@ -56,7 +69,7 @@ describe('PRsTab', () => {
   });
 
   it('shows reps instead of the weight/1RM calc for a bodyweight PR', async () => {
-    getPrs.mockResolvedValue([
+    givenBoard([
       {
         exerciseId: 2,
         exerciseName: 'Pull-Up',
@@ -71,7 +84,7 @@ describe('PRsTab', () => {
   });
 
   it('shows the offline data notice for the cached list only once offline', async () => {
-    getPrs.mockResolvedValue([
+    givenBoard([
       { exerciseId: 1, exerciseName: 'Bench Press', best: { weight: 185, reps: 5, unit: 'lb', est1rm: 215.8, sessionStartedAt: '2026-07-01T00:00:00Z' } },
     ]);
     renderPRsTab();
@@ -85,6 +98,36 @@ describe('PRsTab', () => {
   });
 });
 
+describe('PRsTab before History is on this device', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn(), prsMeasure: 'est1rm', setPrsMeasure: vi.fn() });
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
+    listPersonExercises.mockResolvedValue([]);
+    useHistoryWindow.mockReturnValue({ historyWindow: null });
+  });
+
+  // A new device, or a trainer opening a client for the first time, with no connection: nothing to
+  // build the board from. "No PRs yet" would tell someone with years of records they have none.
+  it('says it needs a connection, never "No PRs yet", when History has not reached this device', () => {
+    givenBoard([], { status: 'unavailable' });
+    renderPRsTab();
+
+    expect(screen.getByText('PRs need a connection')).toBeInTheDocument();
+    expect(screen.getByText(/Nate’s workouts haven’t downloaded to this device yet/)).toBeInTheDocument();
+    expect(screen.getByText(/You can still log sets/)).toBeInTheDocument();
+    expect(screen.queryByText(/No PRs yet/)).not.toBeInTheDocument();
+  });
+
+  it('shows the skeleton, not an empty board, while History is on its way', () => {
+    givenBoard([], { status: 'loading' });
+    renderPRsTab();
+
+    expect(screen.queryByText(/No PRs yet/)).not.toBeInTheDocument();
+    expect(screen.queryByText('PRs need a connection')).not.toBeInTheDocument();
+  });
+});
+
 describe('PRsTab tags, filtering, and row navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,7 +138,7 @@ describe('PRsTab tags, filtering, and row navigation', () => {
       { id: 1, name: 'Bench Press', tags: [{ id: 10, name: 'Push' }] },
       { id: 2, name: 'Squat', tags: [{ id: 11, name: 'Legs' }] },
     ]);
-    getPrs.mockResolvedValue([
+    givenBoard([
       { exerciseId: 1, exerciseName: 'Bench Press', best: { weight: 185, reps: 5, unit: 'lb', est1rm: 215.8, sessionStartedAt: '2026-07-01T00:00:00Z' } },
       { exerciseId: 2, exerciseName: 'Squat', best: { weight: 275, reps: 5, unit: 'lb', est1rm: 320.8, sessionStartedAt: '2026-07-02T00:00:00Z' } },
     ]);
@@ -200,7 +243,7 @@ describe('PRsTab sorting', () => {
     onlineManager.setOnline(true);
     useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
     listPersonExercises.mockResolvedValue([]);
-    getPrs.mockResolvedValue(rows);
+    givenBoard(rows);
   });
   afterEach(() => onlineManager.setOnline(true));
 
@@ -256,7 +299,7 @@ describe('PRsTab sorting', () => {
 
   it('hides the sort control when there is nothing to sort', async () => {
     useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'recent', setPrsSort: vi.fn(), prsMeasure: 'est1rm', setPrsMeasure: vi.fn() });
-    getPrs.mockResolvedValue([]);
+    givenBoard([]);
     renderPRsTab();
 
     await waitFor(() => expect(screen.getByText(/board starts filling in/)).toBeInTheDocument());
@@ -303,7 +346,7 @@ describe('PRsTab record picker', () => {
   }
 
   it('re-measures every row when the record changes', async () => {
-    getPrs.mockResolvedValue([loaded]);
+    givenBoard([loaded]);
     mockState('heaviest');
     renderPRsTab();
 
@@ -316,7 +359,7 @@ describe('PRsTab record picker', () => {
   // between a session total and one set beyond this caption. Asserted as two renders rather than a
   // rerender, because renderWithQuery owns the QueryClientProvider.
   it('labels Volume as a session total', async () => {
-    getPrs.mockResolvedValue([loaded]);
+    givenBoard([loaded]);
     mockState('sessionVolume');
     renderPRsTab();
 
@@ -325,7 +368,7 @@ describe('PRsTab record picker', () => {
   });
 
   it('labels Best set with the single set behind it', async () => {
-    getPrs.mockResolvedValue([loaded]);
+    givenBoard([loaded]);
     mockState('bestSetVolume');
     renderPRsTab();
 
@@ -340,7 +383,7 @@ describe('PRsTab record picker', () => {
   // only the second was true. The fallback is that exercise's est.-1RM record, which for a
   // bodyweight lift is its rep count.
   it('falls back to the record it does have, never a zero, for an exercise this measure cannot rank', async () => {
-    getPrs.mockResolvedValue([pullUp]);
+    givenBoard([pullUp]);
     mockState('heaviest');
     renderPRsTab();
 
@@ -355,7 +398,7 @@ describe('PRsTab record picker', () => {
   // still groups them last and never coerces them to a number -- showing a rep count must not let
   // a pull-up outrank a genuinely light lift on a weight-based sort.
   it('still sorts an unmeasurable row last despite now showing a number', async () => {
-    getPrs.mockResolvedValue([pullUp, loaded]);
+    givenBoard([pullUp, loaded]);
     mockState('heaviest');
     renderPRsTab();
 
@@ -367,7 +410,7 @@ describe('PRsTab record picker', () => {
   // An em dash survives for the genuinely empty case -- a row with no record at all to fall back
   // on. That is the only thing a dash should ever have meant.
   it('still shows a dash when there is no record to fall back on', async () => {
-    getPrs.mockResolvedValue([{ exerciseId: 12, exerciseName: 'Sled Push', best: null }]);
+    givenBoard([{ exerciseId: 12, exerciseName: 'Sled Push', best: null }]);
     mockState('heaviest');
     renderPRsTab();
 
@@ -375,7 +418,7 @@ describe('PRsTab record picker', () => {
   });
 
   it('still measures a bodyweight exercise by reps, which is its honest record', async () => {
-    getPrs.mockResolvedValue([pullUp]);
+    givenBoard([pullUp]);
     mockState('totalReps');
     renderPRsTab();
 
@@ -384,7 +427,7 @@ describe('PRsTab record picker', () => {
   });
 
   it('sorts rows the record cannot measure to the bottom rather than tying them at zero', async () => {
-    getPrs.mockResolvedValue([pullUp, loaded]);
+    givenBoard([pullUp, loaded]);
     useAppState.mockReturnValue({ activePersonId: 7, prsSort: 'record', setPrsSort: vi.fn(), prsMeasure: 'heaviest', setPrsMeasure: vi.fn() });
     renderPRsTab();
 
@@ -404,7 +447,7 @@ describe('PRsTab record picker', () => {
   };
 
   it('keeps the default record correct for a row cached before measures existed', async () => {
-    getPrs.mockResolvedValue([legacyRow]);
+    givenBoard([legacyRow]);
     mockState('est1rm');
     renderPRsTab();
 
@@ -415,7 +458,7 @@ describe('PRsTab record picker', () => {
   // the est.-1RM record it does carry -- which is strictly more useful than the dash it used to
   // show, and reads identically to any other row this measure cannot rank.
   it('degrades a legacy cached row to the record it does have, rather than throwing', async () => {
-    getPrs.mockResolvedValue([legacyRow]);
+    givenBoard([legacyRow]);
     mockState('sessionVolume');
     renderPRsTab();
 
@@ -424,7 +467,7 @@ describe('PRsTab record picker', () => {
   });
 
   it('explains what the selected record counts, from the same spec the chart reads', async () => {
-    getPrs.mockResolvedValue([loaded]);
+    givenBoard([loaded]);
     mockState('sessionVolume');
     renderPRsTab();
 
@@ -451,7 +494,7 @@ describe('PRsTab and the Free-tier window', () => {
   // "Log a set and the board starts filling in" is advice someone whose sets are all behind the
   // already taken. Repeating it tells them their training never happened.
   it('does not tell a clipped household to go and log its first set', async () => {
-    getPrs.mockResolvedValue([]);
+    givenBoard([]);
     useHistoryWindow.mockReturnValue({
       historyWindow: { windowStart: ninetyDaysAgo, hiddenSessions: 8, earliestHiddenAt: '2025-02-02T10:00:00Z' },
     });
@@ -463,7 +506,7 @@ describe('PRsTab and the Free-tier window', () => {
   });
 
   it('keeps the original copy when nothing is hidden', async () => {
-    getPrs.mockResolvedValue([]);
+    givenBoard([]);
     useHistoryWindow.mockReturnValue({
       historyWindow: { windowStart: ninetyDaysAgo, hiddenSessions: 0, earliestHiddenAt: null },
     });
@@ -476,7 +519,7 @@ describe('PRsTab and the Free-tier window', () => {
   // The board itself is the misleading part: every row is a real record, just not necessarily the
   // person's real record, so the notice names what the bests actually cover.
   it('says what the bests on a populated board actually cover', async () => {
-    getPrs.mockResolvedValue([
+    givenBoard([
       {
         exerciseId: 1,
         exerciseName: 'Bench Press',

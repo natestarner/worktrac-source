@@ -238,100 +238,16 @@ describe('registerOfflineMutationDefaults dispatches to the right endpoint', () 
     expect(logLiveSet).not.toHaveBeenCalled();
   });
 
-  // Trends is derived entirely from logged sets, but was left out of this handler's invalidations
-  // (which covered only prs/history). With staleTime at 60s that meant logging your first-ever set
-  // and opening Trends still showed "No workouts logged yet" for a minute. Asserted against the
-  // real cache rather than by spying on invalidateQueries, so it also proves the PREFIX keys match
-  // the full ones -- a trends key carries a `weeks` the writer can't know.
-  it('marks every cached trends range and exercise stale after a set is logged', async () => {
-    const overview4 = queryKeys.trendsOverview(7, 4);
-    const overview12 = queryKeys.trendsOverview(7, 12);
-    const trendFor3 = queryKeys.exerciseTrend(7, 3, 12);
-    const recordsFor3 = queryKeys.exerciseRecords(7, 3);
-    const otherPerson = queryKeys.trendsOverview(99, 12);
-
-    for (const key of [overview4, overview12, trendFor3, recordsFor3, otherPerson]) {
-      client.setQueryData(key, { stub: true });
-    }
-    const isStale = (key) => client.getQueryState(key).isInvalidated;
-
-    await dispatch({ mode: 'live', personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k3', clientLoggedAt: 't' });
-
-    // Waited for, not read at once: invalidateTrends cancels any in-flight trends load FIRST and
-    // invalidates when that cancel settles (see the first-load test below for why), so the stale
-    // flag lands a microtask after the write settles rather than in the same tick.
-    await vi.waitFor(() => {
-      expect(isStale(overview4)).toBe(true);
-      expect(isStale(overview12)).toBe(true);
-      expect(isStale(trendFor3)).toBe(true);
-      expect(isStale(recordsFor3)).toBe(true);
-    });
-    // Person scoping still holds -- one person's set must not invalidate another's trends.
-    expect(isStale(otherPerson)).toBe(false);
-  });
-
-  // ⚠️ THE ONE THE TEST ABOVE CANNOT SEE: an invalidation that arrives while a trends view's FIRST
-  // load is still in flight. TanStack v5's Query#fetch cancels an in-flight fetch only when the
-  // query already HAS data; during a first load it joins the in-flight request instead
-  // (`return this.#retryer.promise`). So the set's invalidation was silently absorbed, the first
-  // load's answer -- fetched before the set existed -- landed, marked the query fresh, and stood
-  // for the full 60s staleTime. Trends is the one tab not warmed by offlineCacheWarm, so opening it
-  // is always a first load: log a set, open Trends before the save lands, and it said "No workouts
-  // logged yet" for a minute. Lower's four records-table retries were this.
-  // docs/incidents/2026-09-24-trends-first-load-swallows-invalidation.md
-  //
-  // A real QueryObserver keeps the query ACTIVE, as the mounted Trends tab does -- an inactive one
-  // is only marked stale and refetched on its next mount, which the test above already covers.
-  it.each([
-    ['the overview', queryKeys.trendsOverview(7, 12)],
-    ['an exercise trend', queryKeys.exerciseTrend(7, 3, 12)],
-    ['the records table', queryKeys.exerciseRecords(7, 3)],
-    ['the PRs board', queryKeys.prs(7)],
-  ])('refetches %s when a set lands during its first load, rather than keeping the pre-set answer', async (_, key) => {
-    let answerFromBeforeTheSet;
-    const queryFn = vi
-      .fn()
-      .mockImplementationOnce(() => new Promise((resolve) => { answerFromBeforeTheSet = resolve; }))
-      .mockResolvedValue({ includesTheSet: true });
-    const observer = new QueryObserver(client, { queryKey: key, queryFn, retry: false });
-    const unsubscribe = observer.subscribe(() => {});
-    await vi.waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
-
-    await dispatch({ mode: 'live', personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k-first-load', clientLoggedAt: 't' });
-    answerFromBeforeTheSet({ includesTheSet: false });
-
-    await vi.waitFor(() => expect(client.getQueryData(key)).toEqual({ includesTheSet: true }));
-    expect(queryFn).toHaveBeenCalledTimes(2);
-    unsubscribe();
-  });
-
-  // The PRs board's usual first load has NO observer: it is offlineCacheWarm's prefetch, issued at
-  // boot. A set landing while that warm is in flight was marked stale, and then the warm's answer --
-  // from before the set -- arrived, cleared the stale flag and stamped itself fresh, so the PRs tab
-  // mounted onto it and showed "No PRs yet" (or a board without the set) for the full staleTime.
-  // Cancelling first drops the pre-set answer on the floor; the tab's mount then fetches for real.
-  it('never lets a PRs warm from before the set stand as fresh', async () => {
-    const key = queryKeys.prs(7);
-    let answerFromBeforeTheSet;
-    const warm = client
-      .prefetchQuery({
-        queryKey: key,
-        queryFn: () => new Promise((resolve) => { answerFromBeforeTheSet = resolve; }),
-      })
-      .catch(() => {});
-
-    await dispatch({ mode: 'live', personId: 7, exerciseId: 3, weight: 100, reps: 5, idempotencyKey: 'k-warm', clientLoggedAt: 't' });
-    await vi.waitFor(() => expect(client.getQueryState(key).fetchStatus).toBe('idle'));
-    answerFromBeforeTheSet?.([]);
-    await warm;
-
-    // Whatever the cache holds now must not be the pre-set answer passing itself off as fresh.
-    const state = client.getQueryState(key);
-    expect(state.data === undefined || state.isInvalidated).toBe(true);
-  });
+  // The PRs board and Trends used to have their own server keys here, each invalidated (cancel first,
+  // against a first-load race) after every set write. Both are derived on the device from `history`
+  // now (hooks/useStatsFromHistory.js), so a set write reaching them IS refreshHistory -- whose
+  // first-load race is pinned in the refreshHistory block below ("replaces a fetch still in flight
+  // from before the write, even when that fetch finishes last"). Their derivation is proven equal to
+  // the server's by
+  // utils/statsFromHistory.test.js.
 
   // The same rule, for the count of what the Free-tier window is hiding. It is derived from logged
-  // sets like prs/history/trends, and the flow that makes it load-bearing rather than tidy is the
+  // sets like history, and the flow that makes it load-bearing rather than tidy is the
   // exact one the notice exists for: logging a set into an out-of-window past session is how the
   // count goes 0 -> 1. Left out of this handler, History would keep rendering a stale "nothing is
   // hidden" for a minute after the person watched their workout disappear.

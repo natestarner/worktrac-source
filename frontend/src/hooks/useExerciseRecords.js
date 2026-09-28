@@ -1,23 +1,14 @@
-import { useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getExerciseRecords } from '../api/trends';
-import { queryKeys } from '../api/queryKeys';
+import { useMemo } from 'react';
+import { VIEWER_ZONE, useStatsFromHistory } from './useStatsFromHistory';
+import { exerciseRecords } from '../utils/statsFromHistory';
 
-// All-time records for one exercise. Keyed without the range so switching 4wk/12wk/All reuses the
-// cached response instead of refetching -- see queryKeys.exerciseRecords.
+// All-time records for one exercise, derived from the History this device holds -- the same answer
+// GET /exercises/{id}/records gives. Range-free: flipping 4wk/12wk/All leaves it untouched.
 export function useExerciseRecords(personId, exerciseId) {
-  const queryClient = useQueryClient();
-
-  const query = useQuery({
-    queryKey: queryKeys.exerciseRecords(personId, exerciseId),
-    queryFn: () => getExerciseRecords(personId, exerciseId),
-    enabled: !!personId && !!exerciseId,
-  });
-
-  const refetch = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: queryKeys.exerciseRecords(personId, exerciseId) }),
-    [queryClient, personId, exerciseId],
+  const stats = useStatsFromHistory(personId);
+  const records = useMemo(
+    () => (stats.status === 'ready' && exerciseId ? exerciseRecords(stats.digests, exerciseId, { zone: VIEWER_ZONE }) : null),
+    [stats.status, stats.digests, exerciseId],
   );
-
-  return { records: query.data ?? null, loading: query.isLoading, isFetching: query.isFetching, refetch };
+  return { records, loading: stats.status === 'loading', isFetching: stats.isFetching, refetch: stats.refetch };
 }

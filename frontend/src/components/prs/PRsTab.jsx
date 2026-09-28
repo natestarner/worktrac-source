@@ -44,7 +44,7 @@ function PRsTabContent() {
   const navigate = useNavigate();
   const { activePersonId, prsSort, setPrsSort, prsMeasure, setPrsMeasure } = useAppState();
   const { people, account } = useAuth();
-  const { prs, loading, isFetching, updatedAt } = usePrs(activePersonId);
+  const { prs, status, loading, isFetching, updatedAt } = usePrs(activePersonId);
   const { historyWindow } = useHistoryWindow(activePersonId);
   const { tagsByExerciseId } = useExerciseTagMap(activePersonId);
   const filter = useExerciseFilter();
@@ -95,6 +95,20 @@ function PRsTabContent() {
 
   function goProgress(pr) {
     navigate('/app/trends', { state: { trendsExerciseFocus: { exerciseId: pr.exerciseId } } });
+  }
+
+  // The board is built on this device from the person's History (usePrs), so it works offline
+  // whenever History is here. A device that has never held it, with no connection, has nothing to
+  // build from -- and "No PRs yet" would tell someone with years of records they have none. Same
+  // registered divergence as TrendsTab's (.claude/rules/resilience.md).
+  if (status === 'unavailable') {
+    return (
+      <EmptyState
+        icon={IconStar}
+        title="PRs need a connection"
+        body={`${activePersonName ? `${activePersonName}’s` : 'These'} workouts haven’t downloaded to this device yet. You can still log sets; once they download, the board works offline too.`}
+      />
+    );
   }
 
   return (

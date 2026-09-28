@@ -184,28 +184,47 @@ function monthDigest(month, without) {
 
 const arrayDigests = new WeakMap();
 
-// The digests for a History cache value, oldest first. `replacing` is a workout the caller holds a
-// newer copy of (the workout in progress, with sets that have not synced): it is left out here and
-// the caller appends its own copy -- never both, or the workout would be measured against itself.
+// History's order: newest first by start, then id. The live workout's copy may have no id yet (the
+// whole of an offline stretch); it sorts as the newest of any workouts sharing its start.
+const startMs = (s) => (s.startedAt ? Date.parse(s.startedAt) : Number.POSITIVE_INFINITY);
+const newestFirst = (a, b) =>
+  startMs(b) - startMs(a) || (b.id == null ? 1 : a.id == null ? -1 : b.id > a.id ? 1 : b.id < a.id ? -1 : 0);
+
+// The UTC 'yyyy-mm' a workout's month is keyed on -- the server's CONVERT(CHAR(7), started_at, 126).
+const monthOf = (session) => new Date(startMs(session) === Number.POSITIVE_INFINITY ? Date.now() : startMs(session))
+  .toISOString()
+  .slice(0, 7);
+
+// The digests for a History cache value, oldest first.
+//
+// `live` is the workout in progress as the caller holds it -- `{ id, startedAt, entries }`, with
+// sets that have not synced folded in (useSessionEntries). It REPLACES History's copy of that
+// workout, never joins it, or the workout would be measured against itself; and it is placed in its
+// own month in order, not appended, so a tie is still decided by which workout came first. Only
+// the month it lands in is refolded; every other month keeps its memoized digest.
 //
 // A plain array is a cache persisted by a build from before the month sync (axis D): it is one run
 // of workouts, digested whole, so PRs and Trends still render until the first sync replaces it.
-export function historyDigests(data, { replacing = null } = {}) {
-  if (data == null) return [];
+export function historyDigests(data, { live = null } = {}) {
+  const liveId = live?.id ?? null;
+  const withLive = (sessions) => [...sessions.filter((s) => liveId == null || s.id !== liveId), live].sort(newestFirst);
+  if (data == null) return live ? [digestSessions([live])] : [];
   if (Array.isArray(data)) {
-    const sessions = replacing == null ? data : data.filter((s) => s.id !== replacing);
-    if (replacing != null) return [digestSessions(sessions)];
+    if (live) return [digestSessions(withLive(data))];
     if (!arrayDigests.has(data)) arrayDigests.set(data, digestSessions(data));
     return [arrayDigests.get(data)];
   }
-  if (data.months == null) return [];
-  return Object.keys(data.months)
-    .sort()
-    .map((key) => {
-      const month = data.months[key];
-      const holdsIt = replacing != null && month.sessions.some((s) => s.id === replacing);
-      return monthDigest(month, holdsIt ? replacing : null);
-    });
+  if (data.months == null) return live ? [digestSessions([live])] : [];
+  const liveMonth = live ? monthOf(live) : null;
+  const keys = Object.keys(data.months);
+  if (liveMonth && !keys.includes(liveMonth)) keys.push(liveMonth);
+  return keys.sort().map((key) => {
+    const month = data.months[key];
+    if (key === liveMonth) return digestSessions(withLive(month?.sessions ?? []));
+    // History may still hold the live workout in another month (it was moved); leave it out there.
+    const holdsIt = liveId != null && month.sessions.some((s) => s.id === liveId);
+    return monthDigest(month, holdsIt ? liveId : null);
+  });
 }
 
 // ── dates in the viewer's zone ────────────────────────────────────────────────────────────────

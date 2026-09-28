@@ -109,10 +109,33 @@ describe('historyDigests', () => {
     after.slice(0, -1).forEach((digest, i) => expect(digest).toBe(before[i]));
   });
 
-  it('leaves out the workout being replaced, and only it', () => {
-    const newest = c.history[0];
-    const without = historyDigests(cache, { replacing: newest.id });
-    expect(prBoard(without)).toEqual(prBoard([digestSessions(c.history.slice(1))]));
+  // The workout in progress, with a set that has not synced: its copy replaces History's (never
+  // joins it), lands in its own month in order, and only that month is refolded.
+  const newest = c.history[0];
+  const extra = { weight: 999, reps: 3, durationSeconds: null, unit: 'lb' };
+  const liveCopy = {
+    ...newest,
+    entries: newest.entries.map((e, i) => (i === 0 ? { ...e, sets: [...e.sets, extra] } : e)),
+  };
+
+  it('folds the live workout in place of its synced copy, exactly as if History held it', () => {
+    const expected = prBoard([digestSessions([liveCopy, ...c.history.slice(1)])]);
+    expect(prBoard(historyDigests(cache, { live: liveCopy }))).toEqual(expected);
+    expect(prBoard(historyDigests(c.history, { live: liveCopy }))).toEqual(expected);
+  });
+
+  it('folds a live workout with no id yet (offline) as the newest workout', () => {
+    const offline = { id: null, startedAt: null, entries: [{ exerciseId: 99999, exerciseName: 'New Lift', sets: [extra] }] };
+    const rows = prBoard(historyDigests(cache, { live: offline }));
+    expect(rows.find((r) => r.exerciseId === 99999)?.best).toMatchObject({ weight: 999, reps: 3, sessionStartedAt: null });
+    expect(rows.filter((r) => r.exerciseId !== 99999)).toEqual(c.expected.prs);
+  });
+
+  it('refolds only the live workout\'s month', () => {
+    const before = historyDigests(cache);
+    const after = historyDigests(cache, { live: liveCopy });
+    const liveMonth = Object.keys(cache.months).sort().indexOf(newest.startedAt.slice(0, 7));
+    after.forEach((digest, i) => (i === liveMonth ? expect(digest).not.toBe(before[i]) : expect(digest).toBe(before[i])));
   });
 
   it('reads a History cached by a build from before the month sync (a plain array)', () => {
