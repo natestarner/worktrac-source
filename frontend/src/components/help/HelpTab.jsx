@@ -948,7 +948,7 @@ export default function HelpTab() {
       <Section id="coaching" title="Training clients">
         <p className="help-lede">
           On <strong>Huddle Pro</strong> an account is a practice rather than a household. Your
-          clients each get their own login, they cannot see each other, and three screens exist
+          clients each get their own login, they cannot see each other, and two screens exist
           that a family account never shows.
         </p>
 
@@ -957,7 +957,6 @@ export default function HelpTab() {
           rows={[
             ['Clients', 'Everyone you train, sorted so whoever has gone quietest is at the top'],
             ['Check-ins', 'A weigh-in or a note about one client, on the day it happened'],
-            ['Targets on a routine', 'The weight and reps you want hit, carried to the client'],
           ]}
         />
 
@@ -974,20 +973,12 @@ export default function HelpTab() {
             moment it is <strong>their</strong> copy &mdash; changing yours afterwards does not
             change theirs, so a tweak you make for one client&rsquo;s knee stays made.
           </p>
-          <p>
-            Each exercise row takes an optional weight and reps. Those travel with the copy and
-            show on the client&rsquo;s log screen as <em>Target 185 lb &times; 5</em>, above the
-            card telling them what they did last time. Either half can be left blank &mdash;
-            &ldquo;135 lb, as many as you get&rdquo; is a real prescription.
-          </p>
         </Note>
 
-        <Note title="A target is a prescription, not a limit">
-          <p>
-            It never fills in the boxes your client logs from, and nothing stops them going over or
-            under it. Beating a target is a good day, and Huddle treats it as one.
-          </p>
-        </Note>
+        {/* Targets on a routine (a weight and reps per exercise, shown on the client's log screen)
+            are hidden in the routine builder until the feature is finished -- RoutineFormModal's
+            `showTargetInputs`. Their table row and two paragraphs came out with them; restore them
+            from git history when the fields come back. */}
 
         <Note title="Notes your client cannot see">
           <p>

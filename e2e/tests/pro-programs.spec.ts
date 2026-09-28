@@ -6,29 +6,50 @@ import { addPerson } from './support/people';
 // client's Log screen shows what they are meant to hit.
 //
 // RoutineControllerTest covers the copy and the provenance stamp at the API. What only a browser
-// proves is the bit that makes the feature real -- that a target typed into the builder survives the
-// round trip and renders on the screen somebody logs from.
+// proves is the bit that makes the feature real -- that a routine's target survives the round trip
+// and renders on the screen somebody logs from.
+//
+// The builder's target fields are hidden for now (RoutineFormModal's `showTargetInputs`), so the
+// targets are written through the API. When the fields come back, drive these through the builder
+// again -- that is the path a trainer actually uses.
 test.describe('Pro — programs', () => {
 
   async function openRoutines(page) {
     await page.getByRole('link', { name: 'Routines' }).click();
   }
 
+  async function apiAs(request, email) {
+    const { apiUrl } = await (await request.get('/config.json')).json();
+    const token = (await (await request.post(`${apiUrl}/api/auth/login`, {
+      data: { email, password: 'password123' },
+    })).json()).token;
+    return { apiUrl, auth: { Authorization: `Bearer ${token}` } };
+  }
+
+  // A one-exercise routine on the household's own person, carrying the given target. Written behind
+  // the app's back, so the caller reloads before looking (routines are refreshAfterRestore).
+  async function seedRoutineWithTarget(request, email, name, target) {
+    const { apiUrl, auth } = await apiAs(request, email);
+    const people = await (await request.get(`${apiUrl}/api/people`, { headers: auth })).json();
+    const nate = people.find((p) => p.name === 'Nate');
+    const exercises = await (await request.get(`${apiUrl}/api/exercises`, { headers: auth })).json();
+    const bench = exercises.find((e) => e.name === 'Barbell Bench Press');
+    const response = await request.post(`${apiUrl}/api/people/${nate.id}/routines`, {
+      headers: auth,
+      data: { name, exercises: [{ exerciseId: bench.id, ...target }] },
+    });
+    expect(response.ok()).toBeTruthy();
+  }
+
   // ⚠️ THE ASSERTION THE FEATURE EXISTS FOR. A template whose numbers do not travel arrives as a
   // bare list of exercise names, which is a checklist rather than a program.
-  test('a target typed in the builder reaches the Log screen', async ({ page, request }) => {
+  test("a routine's target reaches the Log screen", async ({ page, request }) => {
     const ownerEmail = await registerHousehold(page, request, 'Nate');
     await setBillingPlan(request, ownerEmail, 'PRO');
+    await seedRoutineWithTarget(request, ownerEmail, 'Squat Day', { targetWeight: 185, targetReps: 5, targetUnit: 'lb' });
     await page.reload();
 
     await openRoutines(page);
-    await page.getByRole('button', { name: 'New routine' }).click();
-    await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Squat Day');
-    await page.getByPlaceholder('Search all exercises').fill('Barbell Bench Press');
-    await page.getByRole('button', { name: 'Barbell Bench Press', exact: true }).click();
-    await page.getByLabel(/Target weight/).fill('185');
-    await page.getByLabel(/Target reps/).fill('5');
-    await page.getByRole('button', { name: 'Save routine' }).click();
 
     // Start the routine, which is how a person reaches the exercise with the program's context.
     await expect(page.getByText('Squat Day')).toBeVisible();
@@ -44,21 +65,16 @@ test.describe('Pro — programs', () => {
   test('does not prefill the steppers with the target', async ({ page, request }) => {
     const ownerEmail = await registerHousehold(page, request, 'Nate');
     await setBillingPlan(request, ownerEmail, 'PRO');
+    await seedRoutineWithTarget(request, ownerEmail, 'Heavy', { targetWeight: 225, targetUnit: 'lb' });
     await page.reload();
 
     await openRoutines(page);
-    await page.getByRole('button', { name: 'New routine' }).click();
-    await page.getByPlaceholder('Routine name (e.g. Push Day)').fill('Heavy');
-    await page.getByPlaceholder('Search all exercises').fill('Barbell Bench Press');
-    await page.getByRole('button', { name: 'Barbell Bench Press', exact: true }).click();
-    await page.getByLabel(/Target weight/).fill('225');
-    await page.getByRole('button', { name: 'Save routine' }).click();
+    await expect(page.getByText('Heavy', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: /Start/ }).first().click();
 
     await expect(page.getByText('225 lb')).toBeVisible();
-    // The Weight STEPPER specifically -- the same locator setStepper uses. A bare
-    // getByRole('spinbutton').first() also matches the target field itself while the builder is
-    // still closing, which is an assertion about the wrong element.
+    // The Weight STEPPER specifically -- the same locator setStepper uses, rather than a bare
+    // getByRole('spinbutton').first(), which would match whatever number field happens to be first.
     const weight = page.locator('.stepper-row').filter({ hasText: 'Weight' }).locator('.stepper-value');
     await expect(weight).not.toHaveValue('225');
   });
@@ -75,11 +91,7 @@ test.describe('Pro — programs', () => {
     await setBillingPlan(request, ownerEmail, 'PRO');
     await addPerson(page, 'Dana');
 
-    const { apiUrl } = await (await request.get('/config.json')).json();
-    const token = (await (await request.post(`${apiUrl}/api/auth/login`, {
-      data: { email: ownerEmail, password: 'password123' },
-    })).json()).token;
-    const auth = { Authorization: `Bearer ${token}` };
+    const { apiUrl, auth } = await apiAs(request, ownerEmail);
 
     const people = await (await request.get(`${apiUrl}/api/people`, { headers: auth })).json();
     const nate = people.find((p) => p.name === 'Nate');

@@ -269,8 +269,9 @@ describe('RoutineFormModal targets', () => {
     updateRoutine.mockResolvedValue({});
   });
 
+  // The fields are hidden by default (see the next block); these tests exercise them switched on.
   function buildRoutineNamed(name) {
-    renderModal({ defaultUnit: 'lb' });
+    renderModal({ defaultUnit: 'lb', showTargetInputs: true });
     fireEvent.change(screen.getByPlaceholderText('Routine name (e.g. Push Day)'), { target: { value: name } });
     fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
   }
@@ -334,6 +335,43 @@ describe('RoutineFormModal targets', () => {
     await waitFor(() => expect(updateRoutine).toHaveBeenCalledWith(1, 7, {
       name: 'Imported',
       exercises: [{ exerciseId: 1, targetWeight: 100, targetReps: 5, targetUnit: 'kg' }],
+    }));
+  });
+});
+
+// The target fields are hidden until the feature is finished. Hiding them must not turn every edit
+// into a silent wipe of a target the routine already carries.
+describe('RoutineFormModal with target fields hidden (the default)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    updateRoutine.mockResolvedValue({});
+  });
+
+  it('renders no target weight or reps field', () => {
+    renderModal({ defaultUnit: 'lb' });
+    fireEvent.click(screen.getByRole('button', { name: '+ Bench Press' }));
+
+    expect(screen.getByRole('button', { name: 'Remove: Bench Press (1 of 1)' })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Target weight/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Target reps/)).not.toBeInTheDocument();
+  });
+
+  it('still sends back a target the routine already had', async () => {
+    renderModal({
+      defaultUnit: 'lb',
+      routine: {
+        id: 7,
+        name: 'Prescribed',
+        exercises: [{ exerciseId: 1, targetWeight: 185, targetReps: 5, targetUnit: 'lb' }],
+      },
+    });
+
+    fireEvent.change(screen.getByDisplayValue('Prescribed'), { target: { value: 'Renamed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+
+    await waitFor(() => expect(updateRoutine).toHaveBeenCalledWith(1, 7, {
+      name: 'Renamed',
+      exercises: [{ exerciseId: 1, targetWeight: 185, targetReps: 5, targetUnit: 'lb' }],
     }));
   });
 });
