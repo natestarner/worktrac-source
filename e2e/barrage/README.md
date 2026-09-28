@@ -34,14 +34,15 @@ beside it.
 |---|---|:-:|:-:|:-:|
 | `api:abuse` | Hostile or odd input: bounds (400), other households (404), foreign workout ids leak nothing | x | x | x |
 | `api:correctness` | Every History-changing write (live set, edit, notes, delete, a past workout in a new month, moving it across months, a rename). After each one, five simulated devices must equal `GET /history`: scoped, ordinary, restored-from-snapshot, restored-then-scoped, fresh | x | x | x |
-| `api:bench` | Sync timings on this History, after waiting for the database to be idle | x | x | x |
+| `api:bench` | Sync timings on this History, after waiting for the database to be idle; then every PRs / Trends / Log-summary endpoint on the same History, with body sizes | x | x | x |
 | `browser:chromium` | The browser matrix below; quick runs its core five | core | all | all |
 | `browser:webkit` | The same in Safari's engine (see limits) | | 7 | all |
 | `signin` | A fresh device downloads History once per person | x | x | x |
 | `api:load` | A household mid-workout for 2 min: every device converges | | x | x |
 | `perf` | Phone-sized Chromium at 4x CPU throttle: first load, reload, logging a set, style/layout | | x | x |
+| `perf:stats` | The same phone, History already held: opening PRs, opening Trends, switching the range; main-thread script and every stats response | | x | x |
 | `api:storm` | Two writers plus back-to-back syncs for 60s: correctness under contention | | | x |
-| `compare` | **Local:** production's build vs this one on identical data. Two parts: identical History, badges, celebration, Last time, PRs, Trends; and History requests per everyday flow | | | x |
+| `compare` | **Local:** production's build vs this one on identical data. Two parts: identical History, badges, celebration, Last time, PRs, Trends; and History requests, and PRs / Trends / summary requests, per everyday flow | | | x |
 | `cold-start` | The app opened while lower is scaled to zero | | | x |
 | `ops` | Lower's logs for the run window: the drift canary, unexpected exceptions, slow syncs, database CPU | x | x | x |
 

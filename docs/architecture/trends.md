@@ -257,6 +257,10 @@ multi-tenant analytics product, and the rules file's "no new full-history loads"
 stop the pattern spreading further rather than to bless it. The natural next step, if a load ever
 justifies it, is projection queries for the weekly buckets rather than incremental tuning.
 
+That load now justifies it: measured 2026-09-28, the overview and `/prs` take ~3.6s on lower for a
+five-year History, scanning both tables. The plan is to derive them from the History the device
+already holds rather than tune the server alone: `prs-trends-from-history.md`.
+
 ## The est.-1RM rep cap
 
 Epley (`weight x (1 + reps/30)`) is unbounded in reps, and that made the est.-1RM record gameable
