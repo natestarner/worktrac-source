@@ -2938,3 +2938,140 @@ input[type='search']::-webkit-search-results-decoration {
   background: var(--color-highlight-bg);
   color: var(--color-highlight-text);
 }
+
+/* --- History's workout list (HistoryTab.jsx) and set pills (SetPillRow.jsx) -------------------
+
+   Classes rather than style objects because History draws a LOT of them -- a page is 40-80
+   workouts, each with its entries and one pill per set -- and React applies an inline style one
+   property at a time: that was ~40% of the script time drawing a page on a phone-speed CPU. */
+
+/* ⚠️ `content-visibility: auto` keeps a long History usable once it is drawn. History draws the
+   newest page of workouts and grows as the list scrolls (useGrowingList.js), so after a long
+   scroll hundreds of blocks are in the DOM, and the browser would style and lay out all of them on
+   every render. Five years drawn at once is ~1,800 workouts and ~200,000 elements, which took 13.7s
+   to show the first workout on a throttled phone profile (style 3.8s, layout 1.7s); with this, the
+   off-screen ones are skipped until they scroll near: 5.4s, style 65ms, layout 22ms. Browsers
+   without it (iOS before 18) ignore it and render as before. An off-screen block takes its size
+   from the inline `contain-intrinsic-size` (HistoryTab's estimatedSessionBlockHeight).
+
+   scroll-margin-top: the jump uses `block: 'start'`, which parks a block exactly where the sticky
+   .app-chrome paints, so the workout landed BEHIND the tab bar. Same fix and token as the Help
+   page, the exercise search and BillingTab's Pro anchor (see --sticky-chrome-clearance). */
+.history-block {
+  margin-bottom: var(--space-5);
+  content-visibility: auto;
+  scroll-margin-top: var(--sticky-chrome-clearance);
+}
+
+.history-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.history-block-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.history-edit {
+  background: none;
+  border: none;
+  color: var(--color-accent-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.history-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 4px 20px;
+}
+
+/* padding-right reserves room for the floating chevron, across every line in the entry (header,
+   note, tags, sets) -- not just the header's own button -- so nothing wraps underneath it. */
+.history-entry {
+  position: relative;
+  padding: 14px 48px 14px 0;
+}
+
+.history-entry:not(:last-child) {
+  border-bottom: 1px solid var(--color-subtle-bg);
+}
+
+/* The header LINE (name + record badge) is the tap target for "view options for this exercise" --
+   not the whole entry, which still excludes the note/tags/sets below it. A scroll gesture that
+   ends on a large row would otherwise fire a tap, and the row can also hold a title-bearing note
+   the person may want to read or select; neither lives in this line. The chevron is NOT in here
+   (HistoryTab's exerciseChevronHitZoneStyle): it centers on the whole entry, sets included, to
+   match how it centers on a PRsTab row.
+
+   margin-bottom: the same 6px the note and tag lines below each leave, so every line in an entry
+   sits the same distance from the next. */
+.history-entry-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0 0 6px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* So a long exercise name wraps around the session-record badge instead of squeezing it. */
+.history-entry-badge {
+  flex-shrink: 0;
+}
+
+/* Text colour, not accent: an exercise name is the same thing here as on the Log screen, and
+   colouring it only on this tab made the app look like it disagreed with itself -- most visibly
+   in dark mode, where these turned orange while Log's stayed white. Discoverability comes from the
+   chevron and the aria-label rather than from hue.
+
+   min-width: 0 (overriding a flex item's default minimum of its own unwrapped content width) plus
+   the badge's flex-shrink: 0 is what makes a long name WRAP inside the row instead of running past
+   the card's right edge. */
+.history-entry-name {
+  color: var(--color-text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.history-entry-tags {
+  margin-bottom: 6px;
+}
+
+.set-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.set-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--color-subtle-bg);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.set-pill--record {
+  background: var(--color-record-bg);
+  color: var(--color-record-text);
+  font-weight: 700;
+}

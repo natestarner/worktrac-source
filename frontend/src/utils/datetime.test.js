@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { formatDateLabel, formatRestTime, localDateTimeToIso, parseDuration, toLocalDateStr, toLocalTimeStr } from './datetime';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  formatDateLabel,
+  formatRestTime,
+  formatTime,
+  localDateTimeToIso,
+  localeFormat,
+  parseDuration,
+  toLocalDateStr,
+  toLocalTimeStr,
+} from './datetime';
 
 describe('local date/time round trip', () => {
   it('round-trips a local date+time through ISO and back', () => {
@@ -74,5 +83,54 @@ describe('parseDuration', () => {
   it('never returns a negative', () => {
     expect(parseDuration('-30')).toBe(0);
     expect(parseDuration('-1:30')).toBe(0);
+  });
+});
+
+// localeFormat replaced toLocale*String on History's and Trends' hottest paths purely for speed, so
+// it must print exactly what they printed, and it must actually reuse its formatters.
+describe('localeFormat', () => {
+  const shapes = [
+    { month: 'short', day: 'numeric' },
+    { hour: 'numeric', minute: '2-digit' },
+    { month: 'short' },
+    { weekday: 'short', month: 'short', day: 'numeric' },
+    { month: 'short', day: 'numeric', year: 'numeric' },
+  ];
+  const dates = [new Date(2021, 0, 1, 0, 5), new Date(2024, 1, 29, 12, 0), new Date(2026, 8, 29, 23, 59)];
+
+  it('prints what toLocaleString printed, for every shape the app uses', () => {
+    for (const options of shapes) {
+      for (const d of dates) expect(localeFormat(d, options)).toBe(d.toLocaleString('en-US', options));
+    }
+    expect(formatTime('2026-09-29T17:05:00.000Z')).toBe(
+      new Date('2026-09-29T17:05:00.000Z').toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+    );
+  });
+
+  it('prints an invalid date the way toLocaleString did, instead of throwing', () => {
+    const bad = new Date(undefined);
+    for (const options of shapes) expect(localeFormat(bad, options)).toBe(bad.toLocaleString('en-US', options));
+    expect(formatTime(undefined)).toBe('Invalid Date');
+  });
+
+  it('builds one formatter per shape, not one per call', () => {
+    const Real = Intl.DateTimeFormat;
+    let built = 0;
+    vi.stubGlobal('Intl', {
+      ...Intl,
+      DateTimeFormat: class extends Real {
+        constructor(...args) {
+          super(...args);
+          built += 1;
+        }
+      },
+    });
+    try {
+      const options = { month: 'long', day: '2-digit' }; // a shape nothing else has used yet
+      for (let i = 0; i < 50; i += 1) localeFormat(new Date(2025, 0, 1 + i), options);
+      expect(built).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

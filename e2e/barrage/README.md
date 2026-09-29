@@ -40,8 +40,8 @@ beside it.
 | `browser:webkit` | The same in Safari's engine (see limits) | | 7 | all |
 | `signin` | A fresh device downloads History once per person | x | x | x |
 | `api:load` | A household mid-workout for 2 min: every device converges | | x | x |
-| `perf` | Phone-sized Chromium at 4x CPU throttle: first load, reload, logging a set, style/layout | | x | x |
-| `perf:stats` | The same phone, History already held: opening PRs, opening Trends, switching the range; main-thread script and every stats response | | x | x |
+| `perf` | Phone-sized Chromium at 4x CPU throttle: first load, reload, logging a set, style/layout; History paints its first page fast and holds a page of DOM, not the whole History | | x | x |
+| `perf:stats` | The same phone, History already held: opening PRs, opening Trends, switching the range, and a reload straight onto each; main-thread script and every stats response | | x | x |
 | `api:storm` | Two writers plus back-to-back syncs for 60s: correctness under contention | | | x |
 | `compare` | **Local:** production's build vs this one on identical data. Two parts: identical History, badges, celebration, Last time, PRs, Trends; and History requests, and PRs / Trends / summary requests, per everyday flow | | | x |
 | `cold-start` | The app opened while lower is scaled to zero | | | x |
@@ -115,7 +115,8 @@ Every one of these cost real time on 2026-09-26.
   left selected, broke the next for reasons unrelated to the app.
 - **Workouts are found by position, never by date label.** History's labels omit the year, so
   "Aug 30" matches one workout per year of History. A workout's index in `GET /history` is its
-  block's position on screen (one Edit button per block).
+  block's position on screen (one Edit button per block). History draws a page at a time, so a
+  workout further down is drawn first by scrolling (`revealBlock`), never assumed to be there.
 - **WebKit gets 120s actions and 180s convergence.** Playwright's WebKit on Windows is far slower
   than Safari on a phone: leaving a five-year History took ~57s there against ~9s in Chromium, on
   production's build as well. Slow must not read as broken.
@@ -160,8 +161,9 @@ then every check.
 - `compare` needs the local stack; `cold-start` needs lower otherwise idle so it can scale to zero,
   and it waits up to 25 min for that.
 - Absolute timings depend on the day's load on lower. The pass/fail guards in `perf` are about
-  what the History work promises (bytes per reload and per set, style/layout staying small), not
-  about speed.
+  what the History work promises (bytes per reload and per set, style/layout staying small, a page
+  of DOM rather than all of History). The one speed bound, History's reload paint under 3s, is ~3x
+  what it measures, so it catches drawing everything again, not a slow day.
 
 ## Extending it
 

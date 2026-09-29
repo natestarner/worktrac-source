@@ -108,23 +108,40 @@ export const editButtons = (page) => page.getByRole('button', { name: 'Edit', ex
 export const headerOf = (page, index) => editButtons(page).nth(index).locator('xpath=..').locator('xpath=./*[1]');
 export const blockOf = (page, index) => editButtons(page).nth(index).locator('xpath=../..');
 
-// Opens History and waits until it has actually replaced the previous screen and drawn one block
-// per workout the device holds for `personId`. Clicking the tab returns before the route changes,
-// and in WebKit (slower) an "Edit" lookup right after the click found an element of the Log screen.
+// Opens History and waits until it has actually replaced the previous screen and drawn its first
+// page: one block per workout the device holds for `personId`, up to the first page (History draws
+// its newest workouts first and more as the list scrolls -- frontend useGrowingList.js). Clicking
+// the tab returns before the route changes, and in WebKit (slower) an "Edit" lookup right after the
+// click found an element of the Log screen.
+export const HISTORY_FIRST_PAGE = 40;
+const drawnBlocks = (page) => page.evaluate(() => [...document.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'Edit').length);
+
 export async function showHistory(page, personId, timeoutMs = 180000) {
   await goTab(page, 'History');
   await page.waitForURL(/\/app\/history/, { timeout: timeoutMs });
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) {
     const want = (await persistedHistories(page))[personId]?.flat?.length ?? -1;
-    const have = await page.evaluate(() => [...document.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'Edit').length);
-    if (want > 0 && have === want) return have;
+    const have = await drawnBlocks(page);
+    if (want > 0 && have === Math.min(want, HISTORY_FIRST_PAGE)) return have;
     await sleep(500);
   }
-  throw new Error('History never finished drawing one block per workout');
+  throw new Error('History never finished drawing its first page of workouts');
+}
+
+// Scrolls History until the workout at `index` (its position in GET /history) is drawn.
+export async function revealBlock(page, index, timeoutMs = 180000) {
+  const t0 = Date.now();
+  while ((await drawnBlocks(page)) <= index) {
+    if (Date.now() - t0 > timeoutMs) throw new Error(`History never drew workout #${index}`);
+    const more = page.getByTestId('history-more');
+    if (await more.count()) await more.scrollIntoViewIfNeeded().catch(() => {});
+    await sleep(300);
+  }
 }
 
 export async function openPastWorkout(page, index) {
+  await revealBlock(page, index);
   const edit = editButtons(page).nth(index);
   await edit.scrollIntoViewIfNeeded();
   await edit.click();

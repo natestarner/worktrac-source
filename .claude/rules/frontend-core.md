@@ -430,10 +430,28 @@ each held month's fingerprint and keeps every month the server does not resend
   ordinary sync pays for two. That is what #357's first cut did: a fresh sign-in downloaded the whole
   History twice. Pinned by `history-sync.spec.ts`'s "a fresh sign-in downloads History once" and the
   two `joins ...` warm tests.
-- **⚠️ History's workout blocks carry `content-visibility: auto`** (`HistoryTab.jsx`,
-  `sessionBlockStyle`). History renders every workout, and without it the browser styled and laid
-  out all of them: five years took 13.7s to first paint on a throttled phone profile. With it,
-  5.4s. Two rules come with it:
+- **⚠️ History DRAWS a page at a time; it still HOLDS everything** (`useGrowingList.js`). The newest
+  40 workouts are drawn, then 80 more each time the end of the list scrolls within 1,500px. Drawing
+  all ~1,800 of a five-year History cost ~7s of script on a reload at phone speed (4x throttle) and
+  ~232,000 elements; the first page paints in under 1s. Only the DOM is paged. Everything else reads
+  the whole History: search, the date picker, counts, record badges, PRs and Trends.
+  - **Anything that needs a workout on screen draws through it first.** A jump calls `showThrough`;
+    e2e and the barrage scroll the `history-more` sentinel (`revealBlock`) instead of expecting every
+    block to exist. Never go back to counting one Edit button per held workout.
+  - **Find-in-page sees only what is drawn.** That is accepted; History's own search covers it all.
+  - **`SessionBlock` is memoized and every prop it takes must stay stable** (`useCallback`, memoized
+    maps, `usePersonExercises`'s shared empty list). One unstable prop re-renders every drawn block
+    on each page, and a page's cost grows with how far down the list it is.
+  - **Per-block styles are CSS classes** (index.css, "History's workout list"; `.set-pill` too).
+    React applies an inline style one property at a time, which was ~40% of a page's script. Keep
+    only per-workout values inline. The chevron's transform stays inline on purpose: as a class it
+    loses to `.pressable:active`'s scale.
+  - **Date labels go through `localeFormat`** (`utils/datetime.js`), never `toLocale*String` with
+    options. The latter builds an Intl formatter per call, which was ~2.2s of that 7s.
+- **⚠️ History's workout blocks carry `content-visibility: auto`** (`.history-block` in
+  `index.css`). After a long scroll hundreds of blocks are drawn, and without it the browser styles
+  and lays out all of them. Five years drawn at once took 13.7s to first paint on a throttled phone
+  profile; with it, 5.4s. Two rules come with it:
   - **Jump to a workout instantly, never smoothly.** An off-screen block that was never drawn has
     only its estimated size (`estimatedSessionBlockHeight`). A smooth scroll draws the blocks it
     passes at their real size and missed a target far down by a whole workout. The scroll margin
@@ -443,10 +461,11 @@ each held month's fingerprint and keeps every month the server does not resend
     anchoring**, so each block that draws for the first time after the jump moves the target, and a
     single correction frame left it 117px under the tab bar in WebKit (Chrome's anchoring hid
     this). The loop stops on any scroll, tap or key, so it never fights the person. Keep it.
-  - **Blocks keep `scrollMarginTop: var(--sticky-chrome-clearance)`** so a jump doesn't park the
+  - **Blocks keep `scroll-margin-top: var(--sticky-chrome-clearance)`** so a jump doesn't park the
     workout behind the tab bar.
 
-  `history-long-list.spec.ts` pins the outcome against a year of History: the style is present, and
+  `history-long-list.spec.ts` pins the outcome against a year of History: only the first page is
+  drawn until the list is scrolled, the style is present, and
   the jump lands visible and uncovered. The uncovered check fails without the margin.
 - **A write that changes EVERY person's History uses `refreshHistoryForEveryone`** — an exercise
   rename (History carries names; `LogTab.refreshPersonalization` is the live rename path) and a plan

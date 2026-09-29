@@ -16,7 +16,7 @@
 // which is what keeps a future range picker a change to the picker alone (see selectDate's
 // 'range' mode, already implemented and tested, just not yet offered in the UI).
 
-import { toLocalDateStr } from './datetime';
+import { localeFormat, toLocalDateStr } from './datetime';
 
 function pad2(n) {
   return String(n).padStart(2, '0');
@@ -195,7 +195,7 @@ const MONTH_DAY = { month: 'short', day: 'numeric' };
 const MONTH_DAY_YEAR = { month: 'short', day: 'numeric', year: 'numeric' };
 
 function label(dateStr, opts) {
-  return noonDate(dateStr).toLocaleDateString('en-US', opts);
+  return localeFormat(noonDate(dateStr), opts);
 }
 
 // The chip's text. The year appears only when it isn't this year, because nearly every search is

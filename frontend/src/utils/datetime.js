@@ -2,6 +2,38 @@
 // input, display label, and edit round-trip must convert to/from the viewer's local
 // time here -- never slice a UTC ISO string directly for an <input> value.
 
+// ⚠️ Every label below formats through `localeFormat`, never `toLocaleDateString(locale, options)`.
+// The two print the same text, but the `toLocale*String` form builds a fresh Intl formatter on
+// every call, and a formatter is expensive to build: on a five-year History (~1,800 workout
+// headers, two or three labels each) it was ~2.2s of a 7s reload on a phone-speed CPU (4x
+// throttled), and ~200ms of Trends' consistency grid. A formatter is built once per options shape
+// and reused.
+//
+// Keyed on the viewer's current UTC offset as well: a formatter fixes the time zone when it is
+// built, while `toLocale*String` reads it on each call. A device that changes zone with the app
+// open (a flight) gets new formatters rather than labels in the zone it left. A daylight-saving
+// change also builds new ones, which is harmless.
+const formatters = new Map();
+
+//
+// ⚠️ An invalid date prints "Invalid Date", as `toLocale*String` does, instead of throwing: a
+// formatter's `format` throws a RangeError on one, and a label rendered from a missing timestamp
+// would otherwise take its whole screen down (a "Last time" summary with no date did, in
+// ExerciseDetail's tests).
+export function localeFormat(date, options) {
+  if (Number.isNaN(date.getTime())) return 'Invalid Date';
+  const key = `${new Date().getTimezoneOffset()}|${JSON.stringify(options)}`;
+  let formatter = formatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', options);
+    formatters.set(key, formatter);
+  }
+  return formatter.format(date);
+}
+
+const MONTH_DAY = { month: 'short', day: 'numeric' };
+const HOUR_MINUTE = { hour: 'numeric', minute: '2-digit' };
+
 export function toLocalDateStr(iso) {
   const d = new Date(iso);
   const y = d.getFullYear();
@@ -44,11 +76,11 @@ export function formatDateLabel(localDateStr) {
   if (localDateStr === yesterday) return 'Yesterday';
   const [yy, mm, dd] = localDateStr.split('-').map(Number);
   const d = new Date(yy, mm - 1, dd);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return localeFormat(d, MONTH_DAY);
 }
 
 export function formatTime(iso) {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return localeFormat(new Date(iso), HOUR_MINUTE);
 }
 
 export function formatRestTime(sec) {
@@ -97,7 +129,7 @@ export function parseDuration(raw) {
 // every date the app renders keeps going through this module.
 export function formatDate(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-US', {
+  return localeFormat(new Date(iso), {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -106,7 +138,7 @@ export function formatDate(iso) {
 
 export function formatDateTime(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-US', {
+  return localeFormat(new Date(iso), {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

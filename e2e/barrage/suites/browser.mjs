@@ -4,7 +4,7 @@
 // equals GET /history.
 import path from 'node:path';
 import { ENGINE_TIMEOUTS, blockOf, converge, dismiss, editButtons, goTab, headerOf, logSet, login, openPastWorkout,
-  openProfile, persistedHistories, showHistory, pinOfflineAcrossReload, queuedWrites, readQueryCache, toExercise, traceSyncs,
+  openProfile, persistedHistories, revealBlock, showHistory, pinOfflineAcrossReload, queuedWrites, readQueryCache, toExercise, traceSyncs,
   waitSynced, watchErrors, writeQueryCache } from '../lib/browser.mjs';
 import { log, sleep } from '../lib/config.mjs';
 
@@ -351,6 +351,7 @@ export async function browserMatrix(ctx) {
     const target = list.findIndex((s) => s.startedAt.slice(0, 7) === monthsBack(24) && s.endedAt !== null);
     if (target < 0) throw new Error(`no workout two years back (${monthsBack(24)}) to jump to`);
     const cv = await blockOf(page, 0).evaluate((el) => getComputedStyle(el).contentVisibility);
+    await revealBlock(page, target);
     const header = headerOf(page, target);
     const label = (await header.textContent()).trim();
     const handle = await header.elementHandle();

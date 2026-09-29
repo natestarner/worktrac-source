@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildGrid, monthLabels, DAYS_PER_WEEK, HEATMAP_WEEKS } from './consistencyGrid';
+import { localeFormat } from '../../utils/datetime';
 import ChartHelp from '../shared/ChartHelp';
 import { CONSISTENCY_HELP } from './chartHelp';
 import Card from '../shared/Card';
@@ -23,7 +24,7 @@ function levelColor(level) {
 }
 
 function describe(cell) {
-  const date = cell.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const date = localeFormat(cell.date, { weekday: 'short', month: 'short', day: 'numeric' });
   if (cell.future) return `${date}, upcoming`;
   if (!cell.setCount) return `${date}, rest day`;
   const sets = `${cell.setCount} set${cell.setCount === 1 ? '' : 's'}`;
