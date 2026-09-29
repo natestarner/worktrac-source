@@ -258,8 +258,20 @@ the query text.
 **Fix: no `ORDER BY` in these loads at all.** `WorkoutSetRepository` sorts in Java (`CHRONOLOGICAL`,
 `AS_LOGGED`), so there is no sort, and no grant to size wrong, whoever compiles first.
 `StatsCostTest` now fails on any `Sort` in their plans; it was verified red in CI against the ORDER
-BYs (one failure among 826 tests, naming all three loads) before the fix went in. Whether it removes
-the 1.3 s on lower is measured after the deploy, not assumed.
+BYs (one failure among 826 tests, naming all three loads) before the fix went in.
+
+**Measured on lower after #377 deployed (7b02aec), with the same tagged bursts:**
+
+| Request | before (b42a2f8) | after #374 | after #377 |
+|---|---:|---:|---:|
+| `GET /trends/overview` (37 calls) | 2,129–2,355 ms | 3,624 ms median | **654 ms median** (484–896) |
+| `GET /prs` (53 calls) | 2,313 ms | 1,004 ms | **999 ms** |
+| per-exercise (records, trend, summary) | 252–360 ms | 257–375 ms | 251–336 ms |
+
+`api:stats-match` stayed 71/71 equal. So the overview is now ~3.5× faster than before any of this
+work, rather than 1.6× slower, and export shares the fix. On the phone (4× throttle, History held),
+the app itself makes no PRs/Trends requests at all. Opening PRs takes 0.24 s, opening Trends
+0.90 s (it was 2.59 s), and Trends → All 0.93 s (it was 3.16 s).
 
 ## The plan, and where it stands
 
