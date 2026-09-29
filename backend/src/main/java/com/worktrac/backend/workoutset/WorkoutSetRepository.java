@@ -7,7 +7,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.Modifying;
@@ -51,18 +53,55 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     // for a one-workout household, and whichever household compiles the statement first leaves its
     // plan cached for everybody: after lower's e2e run, that is always a one-workout household.
     // StatsCostTest reproduces exactly that and fails without the hint.
+    //
+    // ⚠️ NO `ORDER BY` in these queries -- the order is imposed in Java (the default methods below),
+    // and that is load-bearing too. A SQL sort needs a memory grant sized from the row estimate of
+    // whoever compiled the plan first, and after lower's e2e run that is a one-workout household:
+    // the grant fits three sets, and a five-year person's 22,000 spill to tempdb. On lower
+    // (2026-09-29) the export-order load (Trends overview, CSV export) ran ~3.6s per call against
+    // /prs's ~1.0s over the same rows and joins, with physical IO in Query Store
+    // (docs/architecture/prs-trends-from-history.md). Whether a plan gets lucky depends on who
+    // calls it first. Sorting ~22,000 entities in the JVM costs milliseconds and has no grant to get wrong.
+    // StatsCostTest fails if a Sort appears in these plans.
     @QueryHints(@QueryHint(name = HibernateHints.HINT_QUERY_DATABASE, value = "HASH JOIN"))
     @Query("SELECT ws FROM WorkoutSet ws JOIN FETCH ws.session s "
-            + "WHERE ws.person.id = :personId AND ws.exercise.id = :exerciseId AND s.person.id = :personId "
-            + "ORDER BY s.startedAt, s.id, ws.createdAt, ws.id")
-    List<WorkoutSet> loadExerciseChronologically(@Param("personId") Long personId, @Param("exerciseId") Long exerciseId);
+            + "WHERE ws.person.id = :personId AND ws.exercise.id = :exerciseId AND s.person.id = :personId")
+    List<WorkoutSet> loadExerciseUnordered(@Param("personId") Long personId, @Param("exerciseId") Long exerciseId);
 
-    // The whole person, in the same chronological order and by the same route -- for the PRs board.
-    // (Export keeps insertion order: findByPerson_IdOrderByCreatedAtAscIdAsc below.)
+    // The whole person, by the same route -- for the PRs board, the Trends overview and export, each
+    // of which puts it in its own order below.
     @Query("SELECT ws FROM WorkoutSet ws JOIN FETCH ws.session s "
-            + "WHERE ws.person.id = :personId AND s.person.id = :personId "
-            + "ORDER BY s.startedAt, s.id, ws.createdAt, ws.id")
-    List<WorkoutSet> loadPersonChronologically(@Param("personId") Long personId);
+            + "WHERE ws.person.id = :personId AND s.person.id = :personId")
+    List<WorkoutSet> loadPersonUnordered(@Param("personId") Long personId);
+
+    // History's own order: workout start, workout id, then each set as it was logged. Every field is
+    // NOT NULL, and Instant/Long compare exactly as SQL Server orders datetime2/bigint.
+    Comparator<WorkoutSet> CHRONOLOGICAL = Comparator
+            .comparing((WorkoutSet ws) -> ws.getSession().getStartedAt())
+            .thenComparing(ws -> ws.getSession().getId())
+            .thenComparing(WorkoutSet::getCreatedAt)
+            .thenComparing(WorkoutSet::getId);
+
+    // The order each set was logged in, totally ordered by id (see findByPerson_IdOrderByCreatedAtAscIdAsc).
+    Comparator<WorkoutSet> AS_LOGGED = Comparator
+            .comparing(WorkoutSet::getCreatedAt)
+            .thenComparing(WorkoutSet::getId);
+
+    default List<WorkoutSet> loadExerciseChronologically(Long personId, Long exerciseId) {
+        return sorted(loadExerciseUnordered(personId, exerciseId), CHRONOLOGICAL);
+    }
+
+    // The whole person, chronologically -- for the PRs board. (Export keeps insertion order:
+    // findByPerson_IdOrderByCreatedAtAscIdAsc below.)
+    default List<WorkoutSet> loadPersonChronologically(Long personId) {
+        return sorted(loadPersonUnordered(personId), CHRONOLOGICAL);
+    }
+
+    private static List<WorkoutSet> sorted(List<WorkoutSet> sets, Comparator<WorkoutSet> order) {
+        List<WorkoutSet> copy = new ArrayList<>(sets);
+        copy.sort(order);
+        return copy;
+    }
 
     // The "has a logged set" half of a person's Log picker: every exercise they've ever
     // logged shows up automatically, alongside their favorites.
@@ -84,13 +123,13 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     // tiebreaker SQL Server is free to return those two in either order. That made an export
     // non-deterministic for exactly the data an import produces.
     //
-    // Loads each set's session in the same query, by the same route as the loads above (the session's
-    // person said, so its workouts are sought, never scanned). Keeps its derived-looking name because
-    // export and several tests call it; the query is explicit for the predicate.
-    @Query("SELECT ws FROM WorkoutSet ws JOIN FETCH ws.session s "
-            + "WHERE ws.person.id = :personId AND s.person.id = :personId "
-            + "ORDER BY ws.createdAt, ws.id")
-    List<WorkoutSet> findByPerson_IdOrderByCreatedAtAscIdAsc(@Param("personId") Long personId);
+    // Loads each set's session in the same query, by the same route as the loads above -- and, like
+    // them, sorted in Java rather than by the database (see the ⚠️ above: this is the load that
+    // spilled on lower). Keeps its derived-looking name because export, the Trends overview and
+    // several tests call it; it is a default method, so Spring Data derives nothing from the name.
+    default List<WorkoutSet> findByPerson_IdOrderByCreatedAtAscIdAsc(Long personId) {
+        return sorted(loadPersonUnordered(personId), AS_LOGGED);
+    }
 
     Optional<WorkoutSet> findByIdAndPerson_Id(Long id, Long personId);
 

@@ -229,6 +229,12 @@ small test and break at that scale. `HistoryScaleTest` seeds 2,150 sessions to g
     each" cost the same, and whichever compiles first is cached for everybody — after lower's e2e
     run, a one-workout household. The walk is ~one read per workout for a five-year person; the
     hash join is ~45 reads.
+  - **No `ORDER BY` in those queries — `WorkoutSetRepository` sorts in Java** (`CHRONOLOGICAL`,
+    `AS_LOGGED`). A SQL sort's memory grant is sized for whoever compiled the plan first, a
+    one-workout household on lower, and a five-year person's 22k rows then spill to tempdb. On
+    lower (2026-09-29), the Trends overview / CSV export load ran ~3.6s per call against `/prs`'s
+    ~1.0s over the same rows, with physical IO in Query Store
+    (`docs/architecture/prs-trends-from-history.md`).
   `StatsCostTest` checks every read of `workout_sets`/`workout_sessions` **seeks on `person_id`** —
   not merely "is a seek", which a per-set seek by id also is — and that the per-exercise load seeks
   on the exercise. Measure with `StatsCostProbe` (`-Dstats.probe=true`, optionally
