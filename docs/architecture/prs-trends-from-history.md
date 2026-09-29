@@ -116,18 +116,88 @@ makes the everyday case (a set logged this month) 3.4x cheaper again.
   Free, and #326 taught never to replace it with History. It is a candidate only once the
   equivalence oracle below proves the two agree.
 
-## The plan
+## How it works now
 
-1. **Baseline** — this page.
-2. **An equivalence oracle before any screen switches.** The server generates reference cases from
-   random write sequences (`HistoryConvergenceTest`'s generator) — History in, `StatsService`'s
-   answers out — checked in under `shared/record-rules/` and run by both suites, the way Epley and
-   session volume are pinned today. Bodyweight, holds, kg/lb, the Free window, past workouts, week
-   and time-zone boundaries. The device's fold must equal the server on every case.
-3. **One per-month result on the device**, memoized on each month's object (unchanged months keep
-   their identity through a sync), that the PRs board, Trends, and History's existing badge fold
-   all read.
-4. **Switch the screens**, with parity specs in every connectivity mode. Trends then works offline
-   and leaves `resilience.md`'s register.
-5. **Fix the server's scans anyway** — installed apps keep calling these endpoints — turning the
-   probe into a `StatsCostTest` guard; retire the endpoints after a deploy window.
+The PRs board and Trends make **no requests of their own**. Both are derived on the device from
+the History it holds (`hooks/useStatsFromHistory.js`, `utils/statsFromHistory.js`), so they are as
+fresh as History, work offline, and show a set the moment it is logged.
+
+### The fold: digests per month, combined per screen
+
+- `digestSessions` holds everything about a run of workouts that does **not** depend on the viewer:
+  each exercise's record candidates (best set, top weight, best set volume, most reps, longest hold,
+  heaviest load held), its totals, and each workout's totals and per-exercise trend point.
+- `historyDigests` makes one per month and memoizes it **on the month object**. A sync that leaves a
+  month alone keeps its object (`lib/historySync.js`), so logging a set refolds only its own month.
+- `prBoard`, `exerciseRecords`, `exerciseTrend` and `trendsOverview` combine the digests oldest first
+  and apply what does depend on the viewer: time zone (`VIEWER_ZONE`), today, the range.
+- Every output is exactly its endpoint's DTO, so the screens read it unchanged.
+
+### Proven equal to the server
+
+`StatsFromHistoryCasesTest` drives random, reproducible real writes through the API — everything
+`HistoryConvergenceTest` drives, plus bodyweight, holds with and without load, kg (via import), exact
+repeats (ties), week-edge and daylight-saving-edge workouts — and snapshots History beside every
+answer `StatsService` gives: `/prs`, the overview at 4/12/260 weeks, each exercise's records and trend
+at 12/260 weeks. 18 snapshots across four viewer zones, Free with History behind the window, and six
+read at 00:01 local. Checked in as `shared/record-rules/stats-from-history-cases.json`.
+
+- The backend test **fails when the server's answers change** and the file was not regenerated
+  (`mvn test -Dtest=StatsFromHistoryCasesTest -Dstats.cases.write=true`).
+- Generation **refuses to pass without every hard case present**, including a server answer
+  actually dated in the viewer's zone. That check exists because the first generation
+  double-encoded `zone` in the URL and the server silently answered every "zoned" snapshot in UTC.
+- It regenerates byte-identically in a UTC JVM with a German (comma-decimal) locale, and in CI.
+- `statsFromHistory.test.js` reproduces every answer field for field, **three ways**: one digest for
+  the whole History, one per calendar month, and random splits. Making the combine prefer the later
+  digest on a tie fails exactly the per-month and random-split runs (40 checks).
+
+### The workout in progress
+
+The live workout is folded in on top of History, with its **queued** sets (`useSessionEntries`,
+`liveOnly`), so a record logged with no signal is on the board at once, by the same code path as
+online. It replaces History's copy of that workout (never joins it) and is placed in its own month in
+order. Two gaps found and closed on the way, each with a test verified red first:
+
+- **No session yet.** Online, the first set of a workout creates its session when its save lands, so
+  for that round trip there is no live session at all. The fold was gated on one, and the board read
+  "No PRs yet" mid-save. Found by `stats-while-saving.spec.ts`'s per-frame sampler.
+- **Saved but not yet in History.** A set leaves the queue the moment its save succeeds, but History
+  holds it only once the refresh that save triggers lands (~340 ms on lower). It was in neither.
+  `LOG_SET`'s `onSettled` now stamps when each set was confirmed (`lib/confirmedSets.js`), before the
+  mutation reports success; the fold keeps a confirmed set until History has been fetched after that
+  moment. `refreshHistory` cancels every older fetch, so that History holds it.
+
+**Not folded, by design**, the same as History itself: a queued edit or delete of an already-synced
+set, and sets queued into a past workout being edited. They show once synced; `OfflineDataNotice`
+says something is waiting.
+
+### States
+
+`useStatsFromHistory` reports `ready` (History is here, however old), `loading`, or `unavailable`
+(never held here, and the fetch is paused or failing). `unavailable` renders "PRs need a connection" /
+"Trends need a connection" — never "No PRs yet", which is what the old board said offline on a device
+with nothing cached. It is on `resilience.md`'s register, keyed on History's status.
+
+### What changed around it
+
+- The warm no longer fetches `/prs`: warming History warms both screens.
+- `invalidatePrs` / `invalidateTrends` and the stats query keys are gone; `refreshHistory` is their
+  refresh, and it already closes the first-load race they existed for.
+- `prs-first-load.spec.ts` and `trends-first-load.spec.ts` were replaced by `stats-while-saving.spec.ts`
+  (the same promise, against the screens' real source); `parity-stats-from-history.spec.ts` covers all
+  four connectivity modes (with the queued-set fold disabled, the three degraded modes fail).
+- The server endpoints stay for installed apps from before this, and must keep matching the cases.
+
+## The plan, and where it stands
+
+1. ✅ **Baseline** — above.
+2. ✅ **Equivalence oracle**, and the record **tie rule** it surfaced (heavier set, then earlier
+   workout — `.claude/rules/trends.md`).
+3. ✅ **Per-month digests on the device.**
+4. ✅ **The screens switched**, with parity specs; Trends works offline.
+5. **Fix the server's scans anyway** — installed apps keep calling these endpoints — turning
+   `StatsCostProbe` into a `StatsCostTest` guard; retire the endpoints after a deploy window.
+6. Later, once 4 has held on lower: History's badge fold (`historyPrFlags.js`) and the offline Log
+   summary (`exerciseSummaryFromHistory.js`) could read the same digests. Deliberately not done with
+   the switch, to limit what changes at once. The Log screen's summary itself stays a server read (#326).

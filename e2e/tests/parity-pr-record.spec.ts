@@ -3,9 +3,8 @@ import { registerHousehold } from './support/auth';
 import { logSetAt, pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
-// Switching the PRs board's record is a pure client-side re-read of an already-warmed query --
-// every measure rides on the single `prs` response, the same way the Trends metric switcher rides
-// on one trend response. So it must behave identically in every connectivity mode, and there is no
+// Switching the PRs board's record is a pure client-side re-read -- every measure is on each row of
+// the board, which is itself derived on the device from History (hooks/useStatsFromHistory.js). So it must behave identically in every connectivity mode, and there is no
 // branch on connectivity anywhere in it.
 //
 // This is worth a parity spec rather than a comment precisely because it LOOKS like it should need
@@ -13,8 +12,8 @@ import { forEachConnectivityMode } from './support/parity';
 // refetch. If somebody ever "optimizes" the measures onto their own request, or gates the picker
 // behind useOnlineStatus, this is what fails -- in the three degraded modes only, naming the mode.
 //
-// `prs` is in offlineCacheWarm's bundle with refreshAfterRestore, so the cache is genuinely warm
-// in every mode here; that is what makes the claim true rather than lucky.
+// History is in offlineCacheWarm's bundle with refreshAfterRestore, so the board's source is
+// genuinely on the device in every mode here; that is what makes the claim true rather than lucky.
 
 const EXERCISE = 'Barbell Bench Press';
 
@@ -37,16 +36,13 @@ forEachConnectivityMode<void>('the PRs record picker re-measures the board from 
     await page.getByRole('link', { name: 'PRs' }).click();
     await expect(page).toHaveURL(/\/app\/prs/);
 
-    // Wait for the network to go quiet BEFORE asserting, not after. offlineCacheWarm prefetches
-    // this same `prs` key at boot -- i.e. before any of these sets existed -- and that warm
-    // request resolves with an EMPTY list that lands on top of the fresh one. Asserting first and
-    // waiting second measures the race instead of settling it: the row is visible for a moment,
-    // the empty warm overwrites the cache, and the degraded modes then read a board warmed empty
-    // and show "No PRs yet". Same race offline-reads.spec.ts pays for, one ordering stricter.
+    // Quiet before a mode cuts the network, so both sets are in History (the board's source) rather
+    // than only in the queue. (This used to settle a race with the boot warm's /prs request, which
+    // could land an empty board over the fresh one; the board no longer has a request of its own.)
     await page.waitForLoadState('networkidle');
     await expect(page.getByTestId('pr-row')).toHaveCount(1);
     // The picker only renders once the board has rows, so this is also the gate that proves the
-    // cache is genuinely warm before a mode cuts the network.
+    // board's source is on the device before a mode cuts the network.
     await expect(page.getByLabel('Record', { exact: true })).toBeVisible();
   },
 

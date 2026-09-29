@@ -13,6 +13,7 @@ import { resolveSetId, setSetIdMapping, isTempSetId } from './setIdMap';
 import { isCreateInEndedWorkout, isSessionEnded, markSessionEnded } from './endedSessions';
 import { byEnqueueOrder, withEnqueueSeq } from './outboxSequence';
 import { flattenHistory } from './historySync';
+import { markSetConfirmed } from './confirmedSets';
 
 // Bump when the shape of anything we cache changes incompatibly -- the persister discards a
 // restored cache whose buster doesn't match instead of hydrating stale/incompatible data.
@@ -320,59 +321,12 @@ function requireResolvedSetId(client, id) {
   return resolved;
 }
 
-// Trends is derived entirely from logged sets, so any set write makes every cached range and every
-// cached per-exercise curve wrong. It was previously left out of these handlers alongside `prs` and
-// `history`, and with staleTime at 60s that meant logging your very first set and opening Trends
-// still showed "No workouts logged yet" for a minute.
-//
-// This is invalidation, not prefetching -- deliberately unlike offlineCacheWarm.js, which skips
-// trends because *warming* them is a high-cost fan-out across every household member. Marking them
-// stale costs nothing: Trends isn't mounted while you're logging, so no refetch fires until the tab
-// is actually opened.
-// ⚠️ CANCEL, THEN INVALIDATE -- a bare invalidation is swallowed during a first load.
-//
-// TanStack v5's Query#fetch cancels an in-flight fetch only when the query already HAS data. During
-// a FIRST load it joins the request already running instead (query-core's `fetch`: `if (data !==
-// undefined && cancelRefetch) cancel(); else return this.#retryer.promise`). Trends is the one tab
-// offlineCacheWarm deliberately does not warm, so opening it is always a first load -- and a set
-// whose save lands during that load had its invalidation absorbed: the load's answer, fetched before
-// the set existed, arrived, marked the query fresh, and stood for the full 60s staleTime. Trends
-// said "No workouts logged yet" mid-workout (lower's records-table retries, four specs,
-// docs/incidents/2026-09-24-trends-first-load-swallows-invalidation.md).
-//
-// Cancelling first reverts an in-flight first load to "no data yet", so the invalidation then
-// starts a genuinely new request. With data already cached it changes nothing (invalidation
-// cancels and refetches there anyway), with nothing in flight the cancel is a no-op, and a paused
-// fetch is cancelled and simply paused again -- one code path in every mode.
-//
-// Safe HERE because nothing ever writes optimistic data into a trends key: a cancel reverts the
-// query to its state from before the fetch began, so on a key that is seeded mid-fetch (LOG_SET's
-// sessionSets / exerciseSummary seeds, below) the same pattern would throw that seed away. Do not
-// generalize it to those keys. See frontend-core.md.
-function invalidateTrends(client, personId) {
-  for (const queryKey of [
-    queryKeys.trendsForPerson(personId),
-    queryKeys.exerciseTrendsForPerson(personId),
-    queryKeys.exerciseRecordsForPerson(personId),
-  ]) {
-    client.cancelQueries({ queryKey }).then(() => client.invalidateQueries({ queryKey }));
-  }
-}
-
-// The PRs board, after a write that changed it -- the same first-load race as invalidateTrends, from
-// a different direction. `prs` IS warmed (offlineCacheWarm), so its first load is usually the boot
-// warm itself: on a new household, or whenever the warm runs before the cache holds `prs`, a set
-// that lands while that warm is in flight had its invalidation absorbed. The warm's answer, computed
-// before the set existed, was then fresh for the full staleTime: "No PRs yet", or a board missing
-// the set just logged. On lower that was parity-pr-record and both offline-reads PRs specs needing
-// retries (e2e/tests/prs-first-load.spec.ts pins the order).
-//
-// Safe for the same reason as trends: nothing writes optimistic data into a `prs` key, so a cancel
-// that reverts it to its pre-fetch state throws nothing away.
-function invalidatePrs(client, personId) {
-  const queryKey = queryKeys.prs(personId);
-  client.cancelQueries({ queryKey }).then(() => client.invalidateQueries({ queryKey }));
-}
+// The PRs board and Trends have no refresh of their own any more: both are derived on the device from
+// `history` (hooks/useStatsFromHistory.js), so refreshHistory below IS their refresh. The two
+// cancel-then-invalidate helpers that used to live here (invalidatePrs, invalidateTrends) existed to
+// close a first-load race on their own server keys
+// (docs/incidents/2026-09-24-trends-first-load-swallows-invalidation.md); refreshHistory closes the
+// same race for History, which is now the only key those screens read.
 
 // History after a write that changed it -- the ONE way every writer refreshes it. Three steps, and
 // each closes a way History could be left showing something the server no longer says:
@@ -383,7 +337,7 @@ function invalidatePrs(client, personId) {
 //     on invalidation -- it lets it finish, stores its now-outdated answer as fresh, and clears the
 //     invalidation. Found by the parity convergence check (e2e/tests/support/historyConvergence.ts):
 //     ending a workout mid-save in any degraded mode left History showing it in progress for the
-//     whole staleTime. Safe on this key for the reason invalidateTrends gives: History has no
+//     whole staleTime. Safe on this key because History has no
 //     optimistic writer, so a cancel's revert throws nothing away.
 //  2. INVALIDATE, so that if the fetch below cannot complete (paused offline, failing in lie-fi) the
 //     next screen to read History still refetches it rather than trusting the old copy.
@@ -540,7 +494,6 @@ export function refreshHistoryForEveryone(client) {
 // "if someone imports a file and opens this view five seconds later, is it right?"
 export function invalidateAfterImport(client, personId) {
   refreshHistory(client, personId);
-  invalidatePrs(client, personId);
   client.invalidateQueries({ queryKey: queryKeys.historyWindow(personId) });
   // ⚠️ THE ROSTER DERIVES FROM SETS TOO, and it is account-shared rather than person-keyed -- so a
   // set logged for ANY person changes it. Invalidated by PREFIX because the key carries a weeks
@@ -558,7 +511,6 @@ export function invalidateAfterImport(client, personId) {
   // they're invalidated by prefix rather than by exact key.
   client.invalidateQueries({ queryKey: ['session-sets'] });
   client.invalidateQueries({ queryKey: ['exercise-summary', personId] });
-  invalidateTrends(client, personId);
 }
 
 export function registerOfflineMutationDefaults(client, { retry } = {}) {
@@ -598,6 +550,12 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       // CREATE_EXERCISE's onSettled below recording the temp->real EXERCISE id mapping.
       if (data?.set?.id && vars.tempId) {
         setSetIdMapping(vars.tempId, data.set.id);
+        // When the server confirmed it -- before this mutation reports success (TanStack awaits
+        // onSettled first), so no reader ever sees the success without the time. The PRs board and
+        // Trends keep folding the set in until History has been fetched after this moment
+        // (useSessionEntries' `confirmedAfter`): refreshHistory below cancels every older fetch, so
+        // the first History to land after it is one that holds the set.
+        markSetConfirmed(vars.tempId);
       }
       const sessionId = data?.session?.id ?? vars.sessionId ?? null;
       // Reconcile FROM THE RESPONSE, before invalidating -- rather than refetching to discover what
@@ -695,7 +653,6 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
       if (vars.mode !== 'session') {
         client.invalidateQueries({ queryKey: queryKeys.liveSession(vars.personId) });
       }
-      invalidatePrs(client, vars.personId);
       // Scoped to the workout this set went to (its month, and wherever it is now) -- see
       // refreshHistory. The response carries the session, so its start time is exact.
       refreshHistory(client, vars.personId,
@@ -712,7 +669,6 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
   // never trained -- for up to a minute, because offlineCacheWarm had already cached the old
   // answer. An e2e caught it; nothing about the screen looked wrong.
   client.invalidateQueries({ queryKey: ['roster'] });
-      invalidateTrends(client, vars.personId);
     },
   });
 
@@ -807,13 +763,11 @@ export function registerOfflineMutationDefaults(client, { retry } = {}) {
   const reconcileSetChange = (vars, sessionId) => {
     client.invalidateQueries({ queryKey: queryKeys.sessionSets(sessionId, vars.exerciseId) });
     client.invalidateQueries({ queryKey: queryKeys.exerciseSummary(vars.personId, vars.exerciseId, sessionId) });
-    invalidatePrs(client, vars.personId);
     refreshHistory(client, vars.personId, historyScopeFor(client, vars.personId, sessionId));
     client.invalidateQueries({ queryKey: queryKeys.historyWindow(vars.personId) });
     // The roster derives from sets as well -- editing or deleting one moves a person's "last
     // trained" and their adherence count. Prefix, because the key carries a weeks window.
     client.invalidateQueries({ queryKey: ['roster'] });
-    invalidateTrends(client, vars.personId);
   };
 
   // Edit a set's weight/reps. Also reachable against a set that hasn't synced yet -- correcting a

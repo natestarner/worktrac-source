@@ -222,8 +222,10 @@ describe('TrendsTab with nothing cached and nothing coming', () => {
 
     expect(screen.getByText('Trends need a connection')).toBeInTheDocument();
     expect(screen.queryByTestId('trends-skeleton')).not.toBeInTheDocument();
-    // It must point at what DOES still work, or it reads as the whole app being broken.
-    expect(screen.getByText(/Log, History and PRs tabs still work/)).toBeInTheDocument();
+    // It must point at what DOES still work, or it reads as the whole app being broken. Trends is
+    // built from this person's History now, so it is exactly the device with no History that lands
+    // here -- where History and PRs have nothing either, but logging still works.
+    expect(screen.getByText(/You can still log sets/)).toBeInTheDocument();
   });
 
   it('says the same thing when the request failed and there is no cache to fall back on', () => {

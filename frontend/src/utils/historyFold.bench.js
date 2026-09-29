@@ -2,6 +2,7 @@ import { bench, describe } from 'vitest';
 import { buildHistoryPrFlags } from './historyPrFlags';
 import { comparableValue, weightLb } from './formulas';
 import { sessionVolume, volumeKindOf } from './sessionVolume';
+import { exerciseRecords, exerciseTrend, historyDigests, prBoard, trendsOverview } from './statsFromHistory';
 
 // What folding a five-year History costs on the device. A MEASUREMENT, run with
 // `npx vitest bench src/utils/historyFold.bench.js` (never part of `npm test`): the budget for
@@ -144,5 +145,32 @@ describe(`five-year History (${history.length} workouts, ${history.length * 12} 
       }
     }
     finishBoard(board);
+  });
+});
+
+// The real fold (utils/statsFromHistory.js), over the same History held the way the cache holds it.
+const synced = { format: 2, months: {}, checked: {} };
+for (const [m, sessions] of byMonth) synced.months[m] = { fp: m, sessions };
+const digests = historyDigests(synced);
+const opts = { zone: 'America/New_York', now: Date.UTC(2026, 8, 28, 20) };
+
+describe('the real fold (statsFromHistory.js), five-year History', () => {
+  bench('digest every month (a cold cache)', () => {
+    historyDigests({ ...synced, months: Object.fromEntries(Object.entries(synced.months).map(([k, v]) => [k, { ...v }])) });
+  });
+  bench('prBoard', () => {
+    prBoard(digests);
+  });
+  bench('trendsOverview, 12 weeks', () => {
+    trendsOverview(digests, { ...opts, weeks: 12 });
+  });
+  bench('trendsOverview, All (260 weeks)', () => {
+    trendsOverview(digests, { ...opts, weeks: 260 });
+  });
+  bench('exerciseTrend, All', () => {
+    exerciseTrend(digests, 1, { ...opts, weeks: 260 });
+  });
+  bench('exerciseRecords', () => {
+    exerciseRecords(digests, 1, opts);
   });
 });

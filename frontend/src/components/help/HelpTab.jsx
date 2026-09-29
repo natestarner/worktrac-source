@@ -527,8 +527,9 @@ export default function HelpTab() {
         </p>
         <p>
           On <T>Free</T> the board covers the last 90 days; <T>Plus</T> makes it all-time. Either
-          way, a set is only badged as a PR if it beats <strong>everything</strong> you have logged.
-          See <a href="#plan">Free and Plus</a>.
+          way, a set is only <strong>celebrated</strong> as a new PR if it beats{' '}
+          <strong>everything</strong> you have logged. On Free, the record marks on History and on
+          the Trends chart compare within the 90 days you can see. See <a href="#plan">Free and Plus</a>.
         </p>
         <p>
           <T>Record</T> chooses which best the board is showing &mdash; the same five measures the
@@ -1188,7 +1189,7 @@ export default function HelpTab() {
               <li>Favoriting</li>
               <li>Creating your own exercise</li>
               <li>Running a routine</li>
-              <li>Reading History, PRs and routines</li>
+              <li>Reading History, PRs, Trends and routines</li>
               <li>Searching the exercise library</li>
             </ul>
           </div>

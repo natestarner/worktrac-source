@@ -40,19 +40,10 @@ export const queryKeys = {
   // this key depends on who they are -- a trainer's private notes are filtered out server-side
   // for the client they are about -- so it must be reset on an auth change like everything else.
   checkIns: (personId) => ['check-ins', personId],
-  prs: (personId) => ['prs', personId],
-  trendsOverview: (personId, weeks) => ['trends-overview', personId, weeks],
-  exerciseTrend: (personId, exerciseId, weeks) => ['exercise-trend', personId, exerciseId, weeks],
-  // No `weeks` on purpose -- records are all-time, so the range toggle must not invalidate them.
-  exerciseRecords: (personId, exerciseId) => ['exercise-records', personId, exerciseId],
-
-  // Prefix forms of the three above: every cached range and every cached exercise for one person.
-  // Logging or editing a set changes all of them at once, and the writer doing the invalidating
-  // knows neither which `weeks` the person last viewed nor which exercise they drilled into --
-  // so it can't name the full keys. TanStack matches these by prefix.
-  trendsForPerson: (personId) => ['trends-overview', personId],
-  exerciseTrendsForPerson: (personId) => ['exercise-trend', personId],
-  exerciseRecordsForPerson: (personId) => ['exercise-records', personId],
+  // No keys for the PRs board or Trends: both are derived on the device from `history`
+  // (hooks/useStatsFromHistory.js). A persisted cache written before that still holds entries under
+  // the old 'prs' / 'trends-overview' / 'exercise-trend' / 'exercise-records' keys; nothing reads
+  // them, and TanStack's gcTime drops them.
 
   // Per-person exercise detail. sessionId is normalized to null so "no live session yet" is a
   // single stable key rather than one keyed on undefined.
