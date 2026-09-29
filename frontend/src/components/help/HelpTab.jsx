@@ -319,8 +319,8 @@ export default function HelpTab() {
 
         <Note title="Holds are ranked on seconds alone">
           <p>
-            A 60-second plank ties another 60-second plank whether or not you wore a weight vest.
-            Added load is kept as a <strong>separate</strong> record, called &ldquo;heaviest load
+            A 60-second plank ties another 60-second plank whether or not you wore a weight vest; the
+            vest only decides which of the two the board names. Added load is kept as a <strong>separate</strong> record, called &ldquo;heaviest load
             held,&rdquo; because combining the two would need your bodyweight, which Huddle
             doesn&rsquo;t store. Put vest weight in the ordinary Weight field; there&rsquo;s no extra
             box for it.
@@ -561,6 +561,10 @@ export default function HelpTab() {
             </li>
             <li><strong>A hold</strong> is ranked by seconds.</li>
           </ul>
+          <p>
+            When two sets tie, the one with more weight on it holds the record. If they match exactly,
+            it stays with the workout that set it first.
+          </p>
         </Note>
 
         <h3 className="help-h3">What gets celebrated, and when</h3>
