@@ -15,11 +15,22 @@ export async function ops(ctx) {
     ctx.report.record(S, 'lower logs', 'skip', 'az could not query the logs workspace (not signed in, or no Log Analytics Reader)');
     return;
   }
-  // The barrage never sends a valid drift report itself, so ANY drift line in the window is a real
-  // device finding a month whose fingerprint matched while its content did not.
-  const driftRows = rows(drift);
-  ctx.report.record(S, 'History drift canary: no "History drift:" in the window', driftRows.length ? 'fail' : 'pass',
-    driftRows.length ? driftRows.map((r) => `${r.TimeGenerated ?? r[0]} ${r.l ?? r[1]}`).join('\n') : 'none');
+  // The barrage never sends a valid drift report itself, so a drift line naming one of ITS people is
+  // a real device finding a month whose fingerprint matched while its content did not. Lines naming
+  // anyone else come from another client on lower -- and lower's own e2e run sends exactly one per
+  // deploy ON PURPOSE (history-sync.spec.ts plants drift to prove the app reports it), which is what
+  // a deploy overlapping the barrage window looks like. Those are listed, never failed.
+  const lines = rows(drift).map((r) => `${r.TimeGenerated ?? r[0]} ${r.l ?? r[1]}`);
+  const ours = new Set((ctx.api ? await ctx.api.ok('GET', '/api/people').catch(() => []) : []).map((p) => String(p.id)));
+  const isOurs = (line) => ours.has(line.match(/person (\d+)/)?.[1]);
+  const mine = lines.filter(isOurs);
+  const others = lines.filter((l) => !isOurs(l));
+  ctx.report.record(S, 'History drift canary: no "History drift:" for the barrage\'s people', mine.length ? 'fail' : 'pass',
+    mine.length ? mine.join('\n') : `none${ours.size ? '' : ' (could not list the barrage account\'s people)'}`);
+  if (others.length) {
+    ctx.report.record(S, 'History drift reported by other clients on lower', 'info',
+      `${others.length} -- lower's e2e run plants one per deploy (history-sync.spec.ts); more than one per deploy is worth a look.\n${others.join('\n')}`);
+  }
 
   const errors = rows(kql(`ContainerAppConsoleLogs_CL | where ${window} | where Log_s has_any ('ERROR','WARN') | extend msg=replace_regex(substring(extract(@'(WARN|ERROR).*', 0, Log_s), 0, 200), @'\\[cid=[^\\]]*\\] \\[uid=[^\\]]*\\] 1 --- \\[backend\\] \\[[^\\]]*\\]\\s*', '') | extend msg=replace_regex(msg, @'[0-9]{3,}', 'N') | summarize n=count() by msg | order by n desc | take 25`));
   ctx.report.table('Backend warnings and errors in the window (ids folded to N)', ['Count', 'Message'],
