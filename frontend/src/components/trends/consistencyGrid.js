@@ -1,6 +1,8 @@
 // Grid maths for ConsistencyHeatmap, kept out of the component so the day alignment and the
 // intensity thresholds can be unit tested without rendering.
 
+import { localeFormat } from '../../utils/datetime';
+
 export const HEATMAP_WEEKS = 26;
 export const DAYS_PER_WEEK = 7;
 
@@ -90,7 +92,7 @@ export function monthLabels(cells) {
     const month = firstOfColumn.date.getMonth();
     if (month !== lastMonth) {
       if (lastLabelled !== null && week - lastLabelled < MIN_LABEL_COLUMNS) labels[lastLabelled] = '';
-      labels[week] = firstOfColumn.date.toLocaleDateString('en-US', { month: 'short' });
+      labels[week] = localeFormat(firstOfColumn.date, { month: 'short' });
       lastMonth = month;
       lastLabelled = week;
     }

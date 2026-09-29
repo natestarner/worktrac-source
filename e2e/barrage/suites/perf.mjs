@@ -39,12 +39,13 @@ async function oneRun(ctx) {
     await page.waitForLoadState('networkidle');
     await sleep(2500);
     const before = responses.length;
-    const m0 = await metrics(cdp);
     t0 = Date.now();
     // Opened again, not reloaded: a reload ON History is the person asking for all of it (#362).
     await page.goto(page.url());
     await page.getByText(/lb\s?×/).first().waitFor({ timeout: 180000 });
     const reloadPaint = Date.now() - t0;
+    // Read after the navigation, not as a difference: Chromium starts these counters again with each
+    // new document, so "after minus before" across a reload came out negative.
     const m1 = await metrics(cdp);
     for (let i = 0; i < 900 && responses.length === before; i += 1) await sleep(100);
     const reloadResp = responses.at(-1);
@@ -61,7 +62,7 @@ async function oneRun(ctx) {
     for (let i = 0; i < 900 && responses.length === beforeSet; i += 1) await sleep(100);
     const setResp = responses.at(-1);
     return {
-      firstLoad, reloadPaint, reloadScript: m1.script - m0.script, reloadStyle: m1.style - m0.style, reloadLayout: m1.layout - m0.layout,
+      firstLoad, reloadPaint, reloadScript: m1.script, reloadStyle: m1.style, reloadLayout: m1.layout,
       nodes: m1.nodes, reloadWire: reloadResp?.wire, setWire: setResp?.wire, setRtt: setResp?.ms,
     };
   } finally {
@@ -96,6 +97,12 @@ export async function perf(ctx, runs = 3) {
   // (content-visibility skips the off-screen workouts).
   ctx.report.record(S, 'a reload downloads almost nothing (< 5 KB)', (m('reloadWire') ?? 1e9) < 5 * 1024 ? 'pass' : 'fail', kb(m('reloadWire')));
   ctx.report.record(S, 'a logged set\'s History refresh is small (< 20 KB)', (m('setWire') ?? 1e9) < 20 * 1024 ? 'pass' : 'fail', kb(m('setWire')));
+  // History draws its first page, not the whole History (frontend useGrowingList.js). Before that,
+  // a reload onto a five-year History painted at 5.6-7.5s here and held ~232,000 elements; the first
+  // page paints under 1s with ~3,000-9,000. The bounds leave room for a slow day, not for a
+  // regression back to drawing everything.
+  ctx.report.record(S, 'History reload paints its first page fast (< 3 s throttled)', (m('reloadPaint') ?? 1e9) < 3000 ? 'pass' : 'fail', s(m('reloadPaint')));
+  ctx.report.record(S, 'History draws a page, not the whole History (< 30,000 DOM nodes)', (m('nodes') ?? 1e9) < 30000 ? 'pass' : 'fail', String(m('nodes')));
   ctx.report.record(S, 'History reload style + layout stays small (< 1.5 s throttled)', (m('reloadStyle') + m('reloadLayout')) < 1500 ? 'pass' : 'fail',
     `${s(m('reloadStyle'))} + ${s(m('reloadLayout'))}`);
 }
@@ -153,7 +160,23 @@ async function oneStatsRun(ctx) {
       await range.getByRole('button', { name: '12wk', exact: true }).click();
       await page.waitForLoadState('networkidle');
     });
-    return { prs, trends, all, back, responses };
+    // The app opened straight onto each screen (a reload, or the installed app restored there):
+    // History comes back from the device's own store and both are derived from it before anything
+    // shows. Script is read after the navigation -- Chromium restarts the counters per document.
+    const reloadOnto = async (route, ready) => {
+      await page.goto(`${ctx.target.app}/app/settings`);
+      await page.waitForLoadState('networkidle');
+      const t0 = Date.now();
+      await page.goto(`${ctx.target.app}/app/${route}`);
+      await ready();
+      return { ms: Date.now() - t0, script: (await metrics(cdp)).script };
+    };
+    const reloadPrs = await reloadOnto('prs', () => page.getByTestId('pr-row').first().waitFor());
+    const reloadTrends = await reloadOnto('trends', async () => {
+      await page.getByTestId('consistency-grid').waitFor();
+      await page.getByText(/^Exercise progress ·/).first().waitFor();
+    });
+    return { prs, trends, all, back, reloadPrs, reloadTrends, responses };
   } finally {
     await browser.close();
   }
@@ -174,6 +197,8 @@ export async function statsPerf(ctx, runs = 3) {
       ['open Trends (grid + exercise chart)', s(m((r) => r.trends.ms)), s(m((r) => r.trends.script))],
       ['Trends range -> All', s(m((r) => r.all.ms)), s(m((r) => r.all.script))],
       ['Trends range -> back to 12wk (cached)', s(m((r) => r.back.ms)), s(m((r) => r.back.script))],
+      ['reload straight onto PRs', s(m((r) => r.reloadPrs.ms)), s(m((r) => r.reloadPrs.script))],
+      ['reload straight onto Trends', s(m((r) => r.reloadTrends.ms)), s(m((r) => r.reloadTrends.script))],
     ]);
   const kinds = [...new Set(results.flatMap((r) => r.responses.map((x) => x.kind)))];
   ctx.report.table('PRs / Trends responses during those steps (median per request)', ['Request', 'count per run', 'round trip', 'over the wire'],

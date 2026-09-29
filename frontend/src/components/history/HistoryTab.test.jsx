@@ -726,3 +726,79 @@ describe('HistoryTab record legend', () => {
     expect(screen.getAllByTitle(/^Personal record/)).toHaveLength(1);
   });
 });
+
+// History draws its newest workouts first and more as the end of the list scrolls near
+// (useGrowingList.js). The DATA is the whole History either way: search, counts and jumps must
+// reach workouts that are not drawn yet.
+describe('HistoryTab draws a long History a page at a time', () => {
+  const observers = [];
+  class FakeIntersectionObserver {
+    constructor(callback) {
+      this.callback = callback;
+      observers.push(this);
+    }
+    observe(el) {
+      this.el = el;
+    }
+    disconnect() {
+      this.disconnected = true;
+    }
+  }
+  // What the browser does when the sentinel comes within reach of the viewport.
+  const reachEnd = () =>
+    act(() => {
+      observers.filter((o) => !o.disconnected && o.el).at(-1).callback([{ isIntersecting: true }]);
+    });
+
+  // 100 workouts, newest first, one a day. Only the oldest holds a Deadlift.
+  const history = Array.from({ length: 100 }, (_, i) => {
+    const day = new Date(Date.UTC(2026, 5, 30, 12) - i * 86400000).toISOString();
+    return {
+      id: 1000 - i,
+      startedAt: day,
+      endedAt: day,
+      entries: [
+        i === 99
+          ? { exerciseId: 3, exerciseName: 'Deadlift', sets: [{ weight: 315, reps: 3, unit: 'lb' }], note: null }
+          : { exerciseId: 1, exerciseName: 'Bench Press', sets: [{ weight: 135, reps: 8, unit: 'lb' }], note: null },
+      ],
+    };
+  });
+  const editButtons = () => screen.getAllByRole('button', { name: 'Edit' });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    observers.length = 0;
+    vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+    useAppState.mockReturnValue({ activePersonId: 7, startEditingSession: vi.fn() });
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
+    listPersonExercises.mockResolvedValue([]);
+    useHistory.mockReturnValue({ loading: false, history });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('draws the newest page first, then the rest as the end of the list comes near', () => {
+    renderHistoryTab();
+    expect(editButtons()).toHaveLength(40);
+    expect(screen.getByTestId('history-more')).toBeInTheDocument();
+
+    reachEnd();
+    expect(editButtons()).toHaveLength(100);
+    expect(screen.queryByTestId('history-more')).not.toBeInTheDocument();
+  });
+
+  it('searches the whole History, not just what is drawn', () => {
+    renderHistoryTab();
+    expect(screen.queryByText('Deadlift')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'Deadlift' } });
+    expect(screen.getByText('Deadlift')).toBeInTheDocument();
+    expect(editButtons()).toHaveLength(1);
+  });
+
+  it('draws everything where the browser cannot say when the end is near', () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    renderHistoryTab();
+    expect(editButtons()).toHaveLength(100);
+    expect(screen.queryByTestId('history-more')).not.toBeInTheDocument();
+  });
+});

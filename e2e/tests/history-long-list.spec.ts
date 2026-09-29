@@ -1,12 +1,15 @@
 import { test, expect, type Page } from '@playwright/test';
 import { registerHousehold, setBillingPlan } from './support/auth';
 
-// A long History. It renders every workout, so each workout block carries `content-visibility:
-// auto` (HistoryTab.jsx): the browser skips styling and laying out the off-screen ones, which took
-// five years of History from 13.7s to 5.4s on a throttled phone profile.
+// A long History. It draws its newest workouts first and more as the list scrolls
+// (useGrowingList.js), and each workout block carries `content-visibility: auto` (HistoryTab.jsx) so
+// the browser skips styling and laying out the drawn blocks that are off screen.
 //
 // What only a real browser can show:
-//   - the blocks really do carry it, so a refactor that drops the style fails here, not on a phone;
+//   - the first page is all that is drawn, and scrolling really does draw the rest -- the unit test
+//     fakes the IntersectionObserver, so only this proves the real one fires;
+//   - the blocks really do carry `content-visibility`, so a refactor that drops the style fails
+//     here, not on a phone;
 //   - a long JUMP still lands where it should. An off-screen block that was never drawn has only its
 //     estimated height, so "View this exercise's history" on a workout far down the list scrolls
 //     past hundreds of estimates. That workout must end up on screen, clear of the sticky tab bar.
@@ -67,10 +70,24 @@ test('a long History skips off-screen workouts and still lands a long jump on ta
   const firstBlock = blockOf(new RegExp(`^${headerDay(2)} ·`));
   await expect(firstBlock).toHaveCSS('content-visibility', 'auto');
 
+  // Only the first page is drawn: 180 workouts are held, 40 are on the page.
+  const edits = page.getByRole('button', { name: 'Edit', exact: true });
+  await expect(edits).toHaveCount(40);
+
   // A workout ~10 months down: open its exercise chooser and ask for that exercise's history.
   const target = 300;
   const targetHeader = page.getByText(new RegExp(`^${headerDay(target)} ·`)).first();
   const targetBlock = targetHeader.locator('xpath=../..');
+  // Scrolled to, the way a person gets there: each time the end of the list comes near, more is
+  // drawn, until the target exists.
+  await expect(async () => {
+    await page.getByTestId('history-more').scrollIntoViewIfNeeded({ timeout: 2000 });
+    await expect(targetHeader).toBeAttached({ timeout: 1000 });
+  }).toPass({ timeout: 30000 });
+  // The target is in the last page, so by now every workout held is drawn, and nothing is left to
+  // draw from.
+  await expect(edits).toHaveCount(180);
+  await expect(page.getByTestId('history-more')).toHaveCount(0);
   await targetBlock.getByRole('button', { name: 'View options for Barbell Row' }).scrollIntoViewIfNeeded();
   await targetBlock.getByRole('button', { name: 'View options for Barbell Row' }).click();
   await page.getByRole('button', { name: /View this exercise.s history/ }).click();

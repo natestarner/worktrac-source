@@ -7,6 +7,10 @@ import { queryKeys } from '../api/queryKeys';
 // with their personalization (isFavorite, applied tags, note). Everything else in the catalog is
 // reached via search (useExercises). Keyed on personId so switching people reads that person's
 // own list, never the previous person's.
+// One empty list for every render with no data yet, so what is built from it (useExerciseTagMap)
+// stays the same object and memoized consumers (History's SessionBlock) do not all re-render.
+const NO_EXERCISES = [];
+
 export function usePersonExercises(personId) {
   const queryClient = useQueryClient();
 
@@ -21,5 +25,5 @@ export function usePersonExercises(personId) {
     [queryClient, personId],
   );
 
-  return { exercises: query.data ?? [], loading: query.isLoading, isFetching: query.isFetching, refetch };
+  return { exercises: query.data ?? NO_EXERCISES, loading: query.isLoading, isFetching: query.isFetching, refetch };
 }
