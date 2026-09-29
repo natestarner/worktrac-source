@@ -1,8 +1,10 @@
 package com.worktrac.backend.workoutset;
 
-import org.springframework.data.jpa.repository.EntityGraph;
+import jakarta.persistence.QueryHint;
+import org.hibernate.jpa.HibernateHints;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
@@ -19,28 +21,48 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     long countByAccountId(@Param("accountId") Long accountId);
 
 
-    // Whole-history reads. Both load the set's session in the SAME query (@EntityGraph), because
+    // Whole-history reads. Each loads the set's session in the SAME query (JOIN FETCH), because
     // every caller reads session.startedAt for every row -- chronology, the Free-tier window, the
     // weekly buckets. Loaded lazily, that was one SELECT per session: ~2,000 statements for one
     // /prs or trends request at 2,000 sessions. The join is on a NOT NULL foreign key, so it adds a
     // column set to each row and never changes which rows come back or their order.
-    // Guarded by HistoryScaleTest. Don't drop the graph to "simplify" these into plain derived
+    // Guarded by HistoryScaleTest. Don't drop the fetch to "simplify" these into plain derived
     // queries; don't reach for a global hibernate.default_batch_fetch_size instead either -- that
-    // changes every lazy load in the app, not just these two.
+    // changes every lazy load in the app, not just these.
     //
     // CHRONOLOGICAL, and totally ordered: workout start, workout id, then each set as it was logged
     // -- History's own order. A record tie is decided by that order once weight has had its say
     // (StatsService#bestSet), so an unordered load let the index hand whichever set it liked the
     // record; and the device derives the same records from History (statsFromHistory.js), which
     // only agrees if both sides walk the sets the same way.
-    @EntityGraph(attributePaths = "session")
-    List<WorkoutSet> findByPerson_IdAndExercise_IdOrderBySession_StartedAtAscSession_IdAscCreatedAtAscIdAsc(
-            Long personId, Long exerciseId);
+    //
+    // `s.person.id = :personId` is not redundant, and must stay. A set's workout is always the same
+    // person's (History reads sets by person AND workout on exactly that assumption), but the
+    // database cannot know it -- and without it being SAID, SQL Server has no way to reach this
+    // person's workouts except by scanning workout_sessions whole: a cost that follows the table,
+    // not the person. Said, it seeks this person's workouts on an index V84 made cover the session.
+    // StatsCostTest fails without it.
+    //
+    // The per-exercise load is also HASH-joined, and that hint is load-bearing too. It runs twice
+    // inside every set's save (the PR check, WorkoutSetService#insertSetAndDetectPr) and again for
+    // the Log screen's summary. Two plans answer it: seek this exercise's sets and
+    // hash them against this person's workouts (~45 page reads at five years), or walk every one of
+    // the person's workouts seeking sets in each (~one per workout -- thousands). They cost the same
+    // for a one-workout household, and whichever household compiles the statement first leaves its
+    // plan cached for everybody: after lower's e2e run, that is always a one-workout household.
+    // StatsCostTest reproduces exactly that and fails without the hint.
+    @QueryHints(@QueryHint(name = HibernateHints.HINT_QUERY_DATABASE, value = "HASH JOIN"))
+    @Query("SELECT ws FROM WorkoutSet ws JOIN FETCH ws.session s "
+            + "WHERE ws.person.id = :personId AND ws.exercise.id = :exerciseId AND s.person.id = :personId "
+            + "ORDER BY s.startedAt, s.id, ws.createdAt, ws.id")
+    List<WorkoutSet> loadExerciseChronologically(@Param("personId") Long personId, @Param("exerciseId") Long exerciseId);
 
-    // The whole person, in the same chronological order -- for the PRs board. (Export keeps
-    // insertion order: findByPerson_IdOrderByCreatedAtAscIdAsc below.)
-    @EntityGraph(attributePaths = "session")
-    List<WorkoutSet> findByPerson_IdOrderBySession_StartedAtAscSession_IdAscCreatedAtAscIdAsc(Long personId);
+    // The whole person, in the same chronological order and by the same route -- for the PRs board.
+    // (Export keeps insertion order: findByPerson_IdOrderByCreatedAtAscIdAsc below.)
+    @Query("SELECT ws FROM WorkoutSet ws JOIN FETCH ws.session s "
+            + "WHERE ws.person.id = :personId AND s.person.id = :personId "
+            + "ORDER BY s.startedAt, s.id, ws.createdAt, ws.id")
+    List<WorkoutSet> loadPersonChronologically(@Param("personId") Long personId);
 
     // The "has a logged set" half of a person's Log picker: every exercise they've ever
     // logged shows up automatically, alongside their favorites.
@@ -62,9 +84,13 @@ public interface WorkoutSetRepository extends JpaRepository<WorkoutSet, Long> {
     // tiebreaker SQL Server is free to return those two in either order. That made an export
     // non-deterministic for exactly the data an import produces.
     //
-    // Loads each set's session in the same query -- see the per-exercise load above.
-    @EntityGraph(attributePaths = "session")
-    List<WorkoutSet> findByPerson_IdOrderByCreatedAtAscIdAsc(Long personId);
+    // Loads each set's session in the same query, by the same route as the loads above (the session's
+    // person said, so its workouts are sought, never scanned). Keeps its derived-looking name because
+    // export and several tests call it; the query is explicit for the predicate.
+    @Query("SELECT ws FROM WorkoutSet ws JOIN FETCH ws.session s "
+            + "WHERE ws.person.id = :personId AND s.person.id = :personId "
+            + "ORDER BY ws.createdAt, ws.id")
+    List<WorkoutSet> findByPerson_IdOrderByCreatedAtAscIdAsc(@Param("personId") Long personId);
 
     Optional<WorkoutSet> findByIdAndPerson_Id(Long id, Long personId);
 

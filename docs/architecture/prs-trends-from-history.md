@@ -189,6 +189,48 @@ with nothing cached. It is on `resilience.md`'s register, keyed on History's sta
   four connectivity modes (with the queued-set fold disabled, the three degraded modes fail).
 - The server endpoints stay for installed apps from before this, and must keep matching the cases.
 
+## Step 5: the server's loads cost the person, not the table
+
+Same probe, same proportions, one-workout household first:
+
+| Request | 5-year person, before → after | 1-workout household, before → after |
+|---|---:|---:|
+| `/prs` | 17,266 → ~1,100 | 3,021 → 20 |
+| `/trends/overview` | ~17,200 → ~1,050 | ~3,000 → 14 |
+| `/trends/exercises/{id}`, `/records`, `/summary` | 5,888 → 41–45 | ~3,000 → 15–20 |
+
+History's three syncs are unchanged. The numbers hold with every household on the preloaded
+catalog (`-Dstats.probe.sharedExercises=true`), which is lower's real shape.
+
+Three changes, each load-bearing, each with `StatsCostTest` verified red without it:
+
+- **V84 covers the entity loads.** `IX_workout_sets_person_id_exercise_id` and
+  `..._person_id_session_id` now carry every column `WorkoutSet` maps, and both
+  `workout_sessions` person indexes every column `WorkoutSession` maps. The narrow
+  `IX_workout_sessions_person_id` had to be covered too: with only the `started_at` one covered, the
+  optimizer still picked the narrow one for the per-exercise load and looked every session up —
+  5,499 reads, worse than before.
+- **The queries say the session's person** (`s.person.id = :personId`, `WorkoutSetRepository`).
+  Without it SQL Server can only reach a set's workout by its id: a clustered seek per set at 30k
+  workouts, a scan of `workout_sessions` at 300k.
+- **The per-exercise load is `OPTION (HASH JOIN)`.** Two plans answer it, and for a one-workout
+  household they cost the same: hash this exercise's sets against the person's workouts (~45
+  reads at five years), or walk every workout and seek its sets (~one read per workout). Compiled
+  first for a one-workout household, as lower's e2e run always does, the guard's 30k-workout
+  tables got the walk; the probe's 300k got the hash. A plan that flips with table size is one
+  lower would eventually flip too, so the hint pins it.
+
+**What the guard asserts, and why "is a seek" was not enough.** The first version required every
+access to `workout_sets`/`workout_sessions` to be a seek with no key lookup — and passed with the
+session predicate removed, because the per-set seek by id *is* a seek. It now requires each seek to
+be **on `person_id`**, and the per-exercise load's set seek to be on `exercise_id` as well. Its seed
+spreads each household over a pool of preloaded exercises; with every set on the same three
+exercises, (person, exercise) genuinely is unselective, and the guard failed on a plan no real
+household would get.
+
+The whole-person loads (`/prs`, the overview, export) are left to the optimizer: every plan it
+picks for them seeks on the person, which is what the guard holds.
+
 ## The plan, and where it stands
 
 1. ✅ **Baseline** — above.
@@ -196,8 +238,9 @@ with nothing cached. It is on `resilience.md`'s register, keyed on History's sta
    workout — `.claude/rules/trends.md`).
 3. ✅ **Per-month digests on the device.**
 4. ✅ **The screens switched**, with parity specs; Trends works offline.
-5. **Fix the server's scans anyway** — installed apps keep calling these endpoints — turning
-   `StatsCostProbe` into a `StatsCostTest` guard; retire the endpoints after a deploy window.
+5. ✅ **The server's scans fixed anyway** — installed apps keep calling these endpoints, and the
+   Log screen's summary stays a server read. `StatsCostTest` guards it (below). Retiring `/prs` and
+   the Trends endpoints waits for a deploy window; `/summary` stays.
 6. Later, once 4 has held on lower: History's badge fold (`historyPrFlags.js`) and the offline Log
    summary (`exerciseSummaryFromHistory.js`) could read the same digests. Deliberately not done with
    the switch, to limit what changes at once. The Log screen's summary itself stays a server read (#326).

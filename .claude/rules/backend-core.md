@@ -209,10 +209,30 @@ small test and break at that scale. `HistoryScaleTest` seeds 2,150 sessions to g
   on the person (`SessionExerciseNoteRepository#findBySession_Person_Id`). Key on the owner and
   group in memory, or join.
 - **A whole-history load must fetch the associations its callers read per row.**
-  `WorkoutSetRepository`'s two whole-history methods carry `@EntityGraph(attributePaths =
-  "session")` because every caller reads `session.startedAt`; without it that was one lazy SELECT
-  per session (~2,000 statements per `/prs` or trends request). Use a per-method graph, not a global
+  `WorkoutSetRepository`'s whole-history loads `JOIN FETCH` the session because every caller reads
+  `session.startedAt`; without it that was one lazy SELECT per session (~2,000 statements per
+  `/prs` or trends request). Fetch per query, not with a global
   `hibernate.default_batch_fetch_size`, which changes every lazy load in the app.
+- **⚠️ StatsService's set loads must cost in proportion to the PERSON, like History's.** Three
+  things hold that, and `StatsCostTest` fails without any one of them (each verified red):
+  - **The query says the session's person too** (`s.person.id = :personId`). It looks redundant and
+    is not: unsaid, SQL Server reaches each set's workout by id — a clustered seek per set at test
+    size, a **scan of `workout_sessions`** at lower's (GET `/prs` spent 2.9s in the database at five
+    years before V84).
+  - **V84's indexes cover every column `WorkoutSet` and `WorkoutSession` map.** Add a mapped column
+    to either entity → add it to those INCLUDE lists in a new migration, or the loads go back to key
+    lookups.
+  - **The per-exercise load is `OPTION (HASH JOIN)`** (`@QueryHints` with
+    `HibernateHints.HINT_QUERY_DATABASE`). It runs twice inside every set's save (the PR check in
+    `insertSetAndDetectPr`) and again for the Log screen's summary. For
+    a one-workout household, "seek this exercise's sets" and "walk every workout, seeking sets in
+    each" cost the same, and whichever compiles first is cached for everybody — after lower's e2e
+    run, a one-workout household. The walk is ~one read per workout for a five-year person; the
+    hash join is ~45 reads.
+  `StatsCostTest` checks every read of `workout_sets`/`workout_sessions` **seeks on `person_id`** —
+  not merely "is a seek", which a per-set seek by id also is — and that the per-exercise load seeks
+  on the exercise. Measure with `StatsCostProbe` (`-Dstats.probe=true`, optionally
+  `-Dstats.probe.sharedExercises=true`), never with a local timing.
 - **Ordering by a timestamp needs an id tie-break.** Two workouts can start at the same instant (an
   import with equal date and time; a frozen test clock), and without one their order is whatever the
   query plan returns — adding an index (V82) once flipped CSV export's. `WorkoutRowProjection` and
