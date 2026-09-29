@@ -16,6 +16,7 @@ import { browserMatrix, signInOnce } from './suites/browser.mjs';
 import { buildBaseline, buildCurrent, outcome, requests } from './suites/compare.mjs';
 import { ops } from './suites/ops.mjs';
 import { coldStart, perf, statsPerf } from './suites/perf.mjs';
+import { statsMatch } from './suites/stats.mjs';
 
 const CORE_SCENARIOS = ['two-months-drain-slow-sync', 'drain-on-reopen', 'other-device-on-open', 'lie-fi', 'long-jump'];
 const WEBKIT_STANDARD = [...CORE_SCENARIOS, 'old-format-upgrade', 'rolling-check'];
@@ -23,8 +24,8 @@ const WEBKIT_STANDARD = [...CORE_SCENARIOS, 'old-format-upgrade', 'rolling-check
 // Which suites each tier runs. Order matters: correctness first, load last, ops after cleanup.
 const TIERS = {
   quick: ['api:abuse', 'api:correctness', 'api:bench', 'browser:chromium:core', 'signin'],
-  standard: ['api:abuse', 'api:correctness', 'api:bench', 'api:load', 'browser:chromium', 'browser:webkit:standard', 'signin', 'perf', 'perf:stats'],
-  full: ['api:abuse', 'api:correctness', 'api:bench', 'api:load', 'api:storm', 'browser:chromium', 'browser:webkit', 'signin', 'perf', 'perf:stats', 'compare', 'cold-start'],
+  standard: ['api:abuse', 'api:correctness', 'api:bench', 'api:stats-match', 'api:load', 'browser:chromium', 'browser:webkit:standard', 'signin', 'perf', 'perf:stats'],
+  full: ['api:abuse', 'api:correctness', 'api:bench', 'api:stats-match', 'api:load', 'api:storm', 'browser:chromium', 'browser:webkit', 'signin', 'perf', 'perf:stats', 'compare', 'cold-start'],
 };
 
 function parseArgs(argv) {
@@ -162,7 +163,8 @@ async function main() {
             if (idle.checked && !idle.idle) report.note(`Database still at ${idle.avg.toFixed(0)}% CPU after waiting -- the API timings below are inflated.`);
           }
           await apiSuites.bench({ ...ctx, runs: args.tier === 'quick' ? 5 : 10 });
-        } else if (suite === 'api:load') await apiSuites.realistic(ctx);
+        } else if (suite === 'api:stats-match') await statsMatch(ctx);
+        else if (suite === 'api:load') await apiSuites.realistic(ctx);
         else if (suite === 'api:storm') await apiSuites.storm(ctx);
         else if (suite === 'deploy-watch') {
           const start = latestLowerDeploy();
