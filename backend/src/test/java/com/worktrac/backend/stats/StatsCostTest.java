@@ -134,6 +134,14 @@ class StatsCostTest extends AbstractIntegrationTest {
             boolean oneExercise = where.contains("ws1_0.exercise_id=");
             plans++;
             if (oneExercise) exercisePlans++;
+            // No SQL sort, in any of them. A sort's memory grant is sized from whoever compiled the
+            // plan first -- a one-workout household, on lower -- and a five-year person's rows then
+            // spill to tempdb: ~4s of database time per overview/export call on lower (2026-09-29).
+            // WorkoutSetRepository sorts in Java instead.
+            if (((String) plan.get("query_plan")).contains("PhysicalOp=\"Sort\"")) {
+                violations.add("a Sort (its memory grant is sized for whoever compiled first) in: "
+                        + text.substring(0, 60) + " ..." + where);
+            }
             for (Access access : QueryPlans.accesses((String) plan.get("query_plan"))) {
                 if (!SET_TABLES.contains(access.table())) continue;
                 tablesRead.add(access.table());
@@ -148,12 +156,13 @@ class StatsCostTest extends AbstractIntegrationTest {
         }
 
         // Non-vacuous: the stats loads were captured and both tables were actually read.
-        assertTrue(plans >= 3, "expected the per-exercise, whole-person and export-order loads; saw " + plans);
+        assertTrue(plans >= 2, "expected the per-exercise and whole-person loads; saw " + plans);
         assertTrue(exercisePlans >= 1, "the per-exercise load was not captured");
         assertEquals(new TreeSet<>(SET_TABLES), tablesRead);
         assertTrue(violations.isEmpty(),
                 "a stats load reads workout_sets/workout_sessions other than by seeking on the person "
-                        + "(cost would follow the table, not the person -- see V84 and WorkoutSetRepository): "
+                        + "(cost would follow the table, not the person -- see V84 and WorkoutSetRepository), "
+                        + "or sorts in SQL: "
                         + violations);
     }
 

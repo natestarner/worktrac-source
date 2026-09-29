@@ -231,6 +231,36 @@ household would get.
 The whole-person loads (`/prs`, the overview, export) are left to the optimizer: every plan it
 picks for them seeks on the person, which is what the guard holds.
 
+### On lower, after the deploy: one more thing the plan cache decided
+
+With #371–#374 deployed on lower (2026-09-29, barrage `api:bench` against quiet lower, 1,828-workout
+History):
+
+| Request | before (b42a2f8) | after |
+|---|---:|---:|
+| `GET /prs` | 2,313 ms | 1,050 ms |
+| `GET /trends/overview` | 2,129–2,355 ms | **3,612–3,625 ms** |
+| per-exercise (records, trend, summary) | 252–360 ms | 267–375 ms |
+
+The overview (and CSV export, the same load in `created_at` order) got **slower**, steadily: 37
+tagged calls ran 2.95–3.68 s, against 0.70–1.36 s for 53 `/prs` calls straight after. The two load
+the same rows through the same joins and seeks. They differ only in their `ORDER BY` columns, and in
+which household happened to compile each plan first. Query Store's only new statement doing
+physical IO in that hour matched the overview/export load in count and per-call time: ~4 s of
+database time per execution, with about 2.6 MB of memory each.
+
+That fits a **sort spill**. After lower's e2e run, the first caller is a one-workout household, so
+the sort is granted memory for three sets and spills a five-year person's 22,000 to tempdb. Whether
+a given statement gets lucky depends on who calls it first, and production would roll the same dice.
+The sort-spill reading is inferred, not observed: Query Store over ARM shows neither the plans nor
+the query text.
+
+**Fix: no `ORDER BY` in these loads at all.** `WorkoutSetRepository` sorts in Java (`CHRONOLOGICAL`,
+`AS_LOGGED`), so there is no sort, and no grant to size wrong, whoever compiles first.
+`StatsCostTest` now fails on any `Sort` in their plans; it was verified red in CI against the ORDER
+BYs (one failure among 826 tests, naming all three loads) before the fix went in. Whether it removes
+the 1.3 s on lower is measured after the deploy, not assumed.
+
 ## The plan, and where it stands
 
 1. ✅ **Baseline** — above.
