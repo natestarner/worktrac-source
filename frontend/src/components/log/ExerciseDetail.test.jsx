@@ -1519,6 +1519,53 @@ describe('ExerciseDetail in-flight visual feedback', () => {
     }
   });
 
+  // A queued set is NOT always earlier than every synced one. The case lower kept hitting: the
+  // workout's first set is still on the wire when the connection drops, the second is logged with
+  // no session id yet (so onMutate writes no sessionSets row and it can only show as a pending
+  // row), and THEN the first set's response lands and seeds sessionSets. Prepending the pending
+  // row put the second set above the first -- "Set 1" on the wrong row, and the record badges,
+  // which fold in display order, moved onto it too (parity-record-badges.spec.ts, lie-fi and
+  // hard-offline on lower).
+  it('places a queued set AFTER a synced set that was logged before it', async () => {
+    const baselineAt = new Date(Date.now() - 60_000).toISOString();
+    listSessionSets.mockResolvedValue([
+      { id: 301, sessionId: 101, weight: 135, reps: 5, unit: 'lb', createdAt: baselineAt },
+    ]);
+    logLiveSet.mockImplementation(() => new Promise(() => {}));
+    const { queryClient } = renderExerciseDetail({ liveSession: { id: 101 } });
+    expect(await screen.findByText('135 lb × 5')).toBeInTheDocument();
+
+    onlineManager.setOnline(false);
+    try {
+      // Dispatched straight against the mutation cache, like the test above: this is the set whose
+      // onMutate ran before a session id existed, so it has no optimistic sessionSets row.
+      const mutationKey = ['logSet', 7, exercise.id];
+      await act(async () => {
+        new MutationObserver(queryClient, { ...queryClient.getMutationDefaults(mutationKey), mutationKey })
+          .mutate({
+            mode: 'live',
+            personId: 7,
+            sessionId: null,
+            exerciseId: exercise.id,
+            unit: 'lb',
+            weight: 185,
+            reps: 8,
+            tempId: 'test-temp-later',
+            idempotencyKey: 'test-idem-later',
+            clientLoggedAt: new Date().toISOString(),
+          })
+          .catch(() => {});
+      });
+
+      const laterRow = (await screen.findByText('185 lb × 8')).parentElement;
+      expect(within(laterRow).getByText('Set 2')).toBeInTheDocument();
+      const baselineRow = screen.getByText('135 lb × 5').parentElement;
+      expect(within(baselineRow).getByText('Set 1')).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   // Nothing exists server-side to key a "session in progress" banner/dot on until this
   // queued write actually replays, so onMutate optimistically seeds a provisional session
   // (id: null, so it can never leak into contextSessionId/activeSessionId or any id-keyed

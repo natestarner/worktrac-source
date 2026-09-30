@@ -95,11 +95,17 @@ unreachable while paused offline (never settles), under lie-fi or a definitive 4
 `e2e/tests/parity-first-set.spec.ts` samples the row count **per animation frame** across all four
 modes — a retrying matcher cannot express "this was never absent", it just waits the bug out.
 
-Known and pre-existing, NOT introduced by the above: mid-drain, `displaySets` prepends
-`pendingBeforeSession` on the assumption those rows are "chronologically the earliest", which is
-untrue once one queued set has confirmed and later ones have not. The order churns transiently while
-an outbox of several sets drains. Before the reconciliation above, that window also **dropped rows
-entirely** (3 -> 2 -> 1 on a three-set drain); it now keeps every row and only reorders.
+**`displaySets` MERGES `pendingBeforeSession` into `sessionSets` by time — it does not prepend**
+(`mergeSetsByTime`, bottom of `ExerciseDetail.jsx`). Prepending assumed the queued rows are the
+session's earliest, which is untrue once one set has confirmed and a later one has not: mid-drain,
+or — the case lower kept hitting — a first set still on the wire as the connection drops, a second
+logged with no session id, then the first's response landing. The second set was drawn above the
+first ("Set 1" on the wrong row), and since record badges fold in display order it took the first
+set's records too (`parity-record-badges.spec.ts` in lie-fi/hard-offline, ~1 run in 3). Pending rows
+are timed by `clientLoggedAt` and synced rows by `createdAt`, which the server takes from that same
+`clientLoggedAt` for a live set, so both are one device clock. A synced row with no time (onMutate's
+optimistic row) is never taken ahead of a pending one, so the old order is what you get wherever a
+time is missing. Pinned by `ExerciseDetail.test.jsx`'s "places a queued set AFTER a synced set".
 
 ## Anything derived from `history` must also fold in the unsynced sets on screen
 
