@@ -542,9 +542,12 @@ export default function ExerciseDetail({
     .map((m) => ({ id: m.tempId, optimistic: true, weight: m.weight, reps: m.reps, durationSeconds: m.durationSeconds ?? null, unit: m.unit, clientLoggedAt: m.clientLoggedAt }))
     .sort((a, b) => new Date(a.clientLoggedAt ?? 0) - new Date(b.clientLoggedAt ?? 0));
 
-  // Prepended, not appended -- these are chronologically the earliest set(s) of the session
-  // whenever they're non-empty, and [...displaySets].reverse() below shows most-recent-first.
-  const displaySets = [...pendingBeforeSession, ...sessionSets];
+  // Merged by time, not simply prepended. Usually these ARE the earliest set(s) of the session, but
+  // not when the first set's save was still on the wire as the connection dropped: the next set is
+  // logged with no session id (so it can only show here), and then the first set's response lands
+  // and seeds sessionSets. Prepending put the second set above the first -- "Set 1" on the wrong
+  // row, with the record badges (folded in display order) following it. See mergeSetsByTime.
+  const displaySets = mergeSetsByTime(pendingBeforeSession, sessionSets);
 
   // The best that the rows below are actually measured against. `summary.best` -- server or
   // derived-from-history -- cannot see a set that hasn't synced, so on its own it freezes for a
@@ -1693,4 +1696,28 @@ function setupPillStyle(value) {
     cursor: 'pointer',
     whiteSpace: 'nowrap',
   };
+}
+
+// displaySets' order: the queued rows merged into the synced ones by when each was logged. A
+// queued row carries its `clientLoggedAt`, a synced row its `createdAt` -- which the server takes
+// from that same `clientLoggedAt` for a live set (WorkoutSetService), so both sides read one
+// clock. A synced row with no usable time (onMutate's optimistic row) is never taken ahead of a
+// queued one, so wherever times are missing this is exactly the old "queued rows first".
+// Both inputs are already in order: pending sorted by clientLoggedAt, sessionSets as served.
+function mergeSetsByTime(pending, synced) {
+  if (pending.length === 0) return synced;
+  const timeOf = (value) => {
+    const ms = value ? Date.parse(value) : NaN;
+    return Number.isNaN(ms) ? null : ms;
+  };
+  const merged = [];
+  let p = 0;
+  for (const row of synced) {
+    const rowAt = timeOf(row.createdAt);
+    while (p < pending.length && (rowAt === null || (timeOf(pending[p].clientLoggedAt) ?? -Infinity) < rowAt)) {
+      merged.push(pending[p++]);
+    }
+    merged.push(row);
+  }
+  return merged.concat(pending.slice(p));
 }
