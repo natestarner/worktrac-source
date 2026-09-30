@@ -144,10 +144,15 @@ test.describe('Offline mode — reads over the warmed cache', () => {
     await dismissPrCelebration(page);
     await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(1);
 
+    // Kit's History must have reached this device before the connection goes: "Kit has no workouts"
+    // is only true once it has. Offline before then, History says it needs a connection instead
+    // (history-first-load-unavailable.spec.ts) -- same wait as offline-cache-warming.spec.ts.
+    const kitHistoryWarmed = page.waitForResponse((response) => /\/api\/people\/\d+\/history\/sync$/.test(response.url()));
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Kit');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeHidden();
+    await kitHistoryWarmed;
 
     await goHardOffline(page);
     await expect(offlineSavedLocallyBanner(page)).toBeVisible();
