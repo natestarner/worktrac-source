@@ -42,6 +42,14 @@
              These landed in Trivy's DB on 2026-09-03 and failed `docker-build` on every
              push from that moment; nothing in this repo changed to cause them. -->
         <tomcat.version>11.0.25</tomcat.version>
+        <!-- CVE-2026-68497 (tools.jackson.core:jackson-databind, HIGH, fixed in 3.1.6): a JSON
+             string bound to an XML Duration/XMLGregorianCalendar is parsed with no length guard, so
+             one multi-megabyte request can burn minutes of CPU. Override Spring Boot 4.1.1's managed
+             3.1.5 (Jackson 3, the tools.jackson BOM; not the com.fasterxml 2.x override below)
+             with the latest 3.1.x patch until the parent BOM picks it up. Landed in Trivy's DB on
+             2026-09-30 and failed `docker-build` on a test-only merge (#379); nothing in this repo
+             changed to cause it. -->
+        <jackson-bom.version>3.1.7</jackson-bom.version>
         <!-- NOTE: verify these are still the latest stable versions on Maven Central
              before your first build. bucket4j_jdk17-core targets JDK 17+ (this project
              is on Java 25); do not use the bucket4j_jdk8-core artifact. -->
