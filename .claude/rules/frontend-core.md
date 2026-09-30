@@ -311,7 +311,8 @@ fold itself). What the hook owes the screens:
   `refreshHistory` cancels every older fetch — so the first History to land afterwards holds the set.
 - **`status` is ready / loading / unavailable from History's own query**, and `unavailable` (never
   held, and paused or failing) must never render as "no workouts" — both tabs say they need a
-  connection instead (`resilience.md`'s register).
+  connection instead (`resilience.md`'s register). History itself does the same
+  (`HistoryTab`'s `unavailable`, `history-first-load-unavailable.spec.ts`).
 - **Not folded, by design** (they show once synced, as on History): a queued edit or delete of an
   already-synced set, and sets queued into a PAST workout being edited. `OfflineDataNotice` shows.
 - `stats-while-saving.spec.ts` samples every frame through a held save and a held History refresh;

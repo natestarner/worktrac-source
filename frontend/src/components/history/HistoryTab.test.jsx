@@ -802,3 +802,42 @@ describe('HistoryTab draws a long History a page at a time', () => {
     expect(screen.queryByTestId('history-more')).not.toBeInTheDocument();
   });
 });
+
+// A device that has never held this person's History, whose first load is paused (offline) or
+// failing (lie-fi): `history` is an empty list and `loading` is false. "No workouts logged yet" would
+// tell someone with years of training they have none -- it did, on lower, to a 1,828-workout
+// account. PRs and Trends already say "need a connection" here.
+describe('HistoryTab when History has never reached this device', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppState.mockReturnValue({ activePersonId: 7, startEditingSession: vi.fn() });
+    useAuth.mockReturnValue({ people: [{ id: 7, name: 'Nate' }] });
+    listPersonExercises.mockResolvedValue([]);
+  });
+
+  it.each([
+    ['paused (offline)', { isPaused: true, isError: false }],
+    ['failing (lie-fi, a struggling backend)', { isPaused: false, isError: true }],
+  ])('says it needs a connection when the first load is %s, never "no workouts"', (_, state) => {
+    useHistory.mockReturnValue({ loading: false, history: [], held: false, ...state });
+    renderHistoryTab();
+    expect(screen.getByText('History needs a connection')).toBeInTheDocument();
+    expect(screen.queryByText(/No workouts logged yet/)).not.toBeInTheDocument();
+    // Export reads the server, not this device, so it is not "nothing to export".
+    expect(screen.getByRole('button', { name: /Export data/ })).not.toBeDisabled();
+  });
+
+  it('still says "no workouts" when History IS held and empty', () => {
+    useHistory.mockReturnValue({ loading: false, history: [], held: true, isPaused: true, isError: false });
+    renderHistoryTab();
+    expect(screen.getByText('No workouts logged yet for Nate.')).toBeInTheDocument();
+    expect(screen.queryByText('History needs a connection')).not.toBeInTheDocument();
+  });
+
+  it('shows the skeleton, not either message, while the first load is still running', () => {
+    useHistory.mockReturnValue({ loading: true, history: [], held: false, isPaused: false, isError: false });
+    renderHistoryTab();
+    expect(screen.queryByText('History needs a connection')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No workouts logged yet/)).not.toBeInTheDocument();
+  });
+});

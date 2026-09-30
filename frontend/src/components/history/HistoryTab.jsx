@@ -98,7 +98,14 @@ function HistoryTabContent({ initialExerciseFilter }) {
   const navigate = useNavigate();
   const { activePersonId, startEditingSession } = useAppState();
   const { people, account } = useAuth();
-  const { history, loading, isFetching, updatedAt } = useHistory(activePersonId);
+  const { history, loading, isFetching, updatedAt, held, isPaused, isError } = useHistory(activePersonId);
+  // History has never reached this device and is not coming right now: its first load is paused
+  // (offline) or failing (lie-fi, a struggling backend). `history` is then an empty list, and every
+  // empty state below would tell someone with years of workouts they have none -- reproduced on
+  // lower with a 1,828-workout account: "No workouts logged yet for Nate." Same registered
+  // divergence as PRsTab's and TrendsTab's (.claude/rules/resilience.md), keyed on History's own
+  // query, not on connectivity. `held === false` rather than `!held`: only the real hook says.
+  const unavailable = held === false && (isPaused || isError);
   const { historyWindow } = useHistoryWindow(activePersonId);
   const { tagsByExerciseId } = useExerciseTagMap(activePersonId);
   const filter = useExerciseFilter(initialExerciseFilter);
@@ -334,8 +341,8 @@ function HistoryTabContent({ initialExerciseFilter }) {
             // hiddenFromView > 0 covers a Free household whose only sessions are past the window --
             // still nothing on screen, but the export is full-history and unclamped, so there IS
             // something to download. Mirrors the empty-state split below, not just history.length.
-            disabled={history.length === 0 && hiddenFromView === 0}
-            title={history.length === 0 && hiddenFromView === 0 ? 'Nothing to export yet.' : undefined}
+            disabled={!unavailable && history.length === 0 && hiddenFromView === 0}
+            title={!unavailable && history.length === 0 && hiddenFromView === 0 ? 'Nothing to export yet.' : undefined}
           >
             <IconDownload size={16} />
             Export data
@@ -400,11 +407,20 @@ function HistoryTabContent({ initialExerciseFilter }) {
           </div>
         ))}
 
+      {/* Not "no workouts": nothing is known here yet. It clears by itself when History arrives. */}
+      {unavailable && (
+        <EmptyState
+          icon={IconScroll}
+          title="History needs a connection"
+          body={`${activePersonName ? `${activePersonName}’s` : 'These'} workouts haven’t downloaded to this device yet. You can still log sets; once they download, History works offline too.`}
+        />
+      )}
+
       {/* Two different empty screens, and telling them apart is the whole point. "No workouts
           logged yet" is simply FALSE for a Free household whose training all predates the window --
           including, acutely, someone who has just logged a past workout at an out-of-window date
           and tapped Done. That flow used to land here and be told the workout did not exist. */}
-      {!loading && history.length === 0 && hiddenFromView > 0 && (
+      {!loading && !unavailable && history.length === 0 && hiddenFromView > 0 && (
         <EmptyState
           icon={IconScroll}
           title={`Nothing in ${windowLabel(historyWindow?.windowStart)}`}
@@ -417,7 +433,7 @@ function HistoryTabContent({ initialExerciseFilter }) {
           `No workouts logged yet for {Name}.` as a single text node, and several of them guard past
           incidents (free-window-notice, offline-reads, offline-cache-warming, import). Splitting
           the sentence across title and body would break every one of them for a cosmetic gain. */}
-      {!loading && history.length === 0 && hiddenFromView === 0 && (
+      {!loading && !unavailable && history.length === 0 && hiddenFromView === 0 && (
         <EmptyState
           icon={IconScroll}
           title={`No workouts logged yet for ${activePersonName}.`}
