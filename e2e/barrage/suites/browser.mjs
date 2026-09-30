@@ -269,7 +269,10 @@ export async function browserMatrix(ctx) {
     for (const q of cache.clientState.queries) {
       if (q.queryKey[0] === 'history' && q.state?.data?.months) {
         const flat = Object.keys(q.state.data.months).sort().reverse().flatMap((m) => q.state.data.months[m].sessions);
-        q.state.data = [...flat, { id: 987654321, startedAt: '2019-01-10T10:00:00Z', endedAt: '2019-01-10T11:00:00Z', manual: true, entries: [{ exerciseId: 1, exerciseName: 'Barrage Legacy Marker', sets: [{ weight: 42, reps: 7, durationSeconds: null, unit: 'lb' }], note: null }] }];
+        // The marker goes FIRST: a pre-sync array is drawn in the order it is held (flattenHistory
+        // passes it through), and History draws a page at a time, so first is what is on screen
+        // without scrolling five years -- which took Playwright's WebKit past 3 minutes.
+        q.state.data = [{ id: 987654321, startedAt: '2019-01-10T10:00:00Z', endedAt: '2019-01-10T11:00:00Z', manual: true, entries: [{ exerciseId: 1, exerciseName: 'Barrage Legacy Marker', sets: [{ weight: 42, reps: 7, durationSeconds: null, unit: 'lb' }], note: null }] }, ...flat];
         rewritten += 1;
       }
     }
@@ -281,7 +284,10 @@ export async function browserMatrix(ctx) {
     await page.reload();
     const result = await converge(page, api, await everyone(), T.converge);
     const formats = Object.values(await persistedHistories(page)).map((h) => h.raw?.format ?? 'array');
-    const markerGone = (await page.getByText('Barrage Legacy Marker').count()) === 0;
+    // Read from what the device HOLDS, not the screen: a marker left in the cache would be dated
+    // 2019, among the oldest workouts once synced, and History would not draw it without a scroll --
+    // an on-screen count of zero would pass either way.
+    const markerGone = Object.values(await persistedHistories(page)).every((h) => !(h.flat ?? []).some((s) => s.id === 987654321));
     return [
       [`a cache in the pre-sync array format (${rewritten} people) renders while unreachable`, { ok: true, detail: 'marker visible' }],
       ['the first sync replaces it: History == server', result],
