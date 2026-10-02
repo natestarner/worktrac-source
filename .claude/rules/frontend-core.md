@@ -46,8 +46,13 @@ Full reasoning: `docs/architecture/design-system.md`.
   copy and empty states use `--color-muted`.
 - **Never recolour the mark's four circles** (`#E8734A` orange, `#F2A65A` amber, `#F2EDE1`
   cream, `#B5542D` rust). **Cream is one of them, not a surface token** — it was
-  `var(--color-surface)` once and rendered a near-black hole in dark mode. `HuddleMark` is the
-  single copy; don't draw a second one.
+  `var(--color-surface)` once and rendered a near-black hole in dark mode. The geometry lives once,
+  in `huddleMarkGeometry.js`; `HuddleMark` (static) and the login screen's `AnimatedLockup` both
+  draw from it, and `AnimatedLockup.test.jsx` pins it to the lockup asset. Don't draw a third copy.
+- **`AnimatedLockup`'s wordmark is static; only the circles move**, and they pass *behind* it. Its
+  first render is the finished logo (reduced motion, no rAF and a failed effect all leave that on
+  screen), its box comes from the asset's own viewBox (`brand-lockup-size.spec.ts` measures it),
+  and it ignores the pointer so a circle in flight can't eat a tap on the form.
 - **The UI accent is deliberately NOT the mark's orange.** `#E8734A` is 2.93:1 on
   `--color-bg` and 3.01:1 under white, so it fails as a border, a focus ring and a button
   fill. `--color-accent` is that hue darkened until it passes. Don't "correct" it.

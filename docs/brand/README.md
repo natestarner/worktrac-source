@@ -48,7 +48,7 @@ dark mode and dissolve the circle into the pill.
 | `favicon.ico`, `favicon-{16,32,48}.png` | `white/` | No — one file |
 | `apple-touch-icon.png`, `icon-{192,512}.png`, `icon-maskable-{192,512}.png` | `white/` | No — one file |
 | `og-image.png` | **`dark/`** | No — a white card disappears against a white feed |
-| `frontend/src/assets/huddle-lockup-*.svg` | `transparent/`, **canvas cropped** — see below | **Yes** — `<picture>` + `media` picks onlight/ondark |
+| `frontend/src/assets/huddle-lockup-*.svg` | `transparent/`, **canvas cropped** — see below | **Yes** — `<picture>` + `media` picks onlight/ondark; `/login` draws the vertical one inline, animated (below) |
 | `frontend/public/email/logo.png` | `transparent/huddle-lockup-horizontal-ondark.png` | No — see the email note below |
 
 The surfaces marked "No" have no variant mechanism at all: a `.ico`, an `apple-touch-icon`, a PWA
@@ -84,6 +84,19 @@ ones (wordmark-to-mark height 0.61 vs 0.52). The mark and the wordmark therefore
 their previous rendered size, and the brand forbids respacing the lockup. The call taken here was
 to anchor the outer box and the wordmark — which is what carries perceived size and governs
 layout — leaving the mark ~11% smaller than it was.
+
+## The login screen's lockup is animated — from the same file
+
+`/login` renders `components/auth/AnimatedLockup.jsx` instead of the `<img>`: the four circles walk
+in to form the huddle (~2.5s, once, from the kit's `logo/v3/logo/animated/huddle-logo.js`) above a
+wordmark that is static from the first frame. It is not a second copy of the artwork. It **parses
+`huddle-lockup-vertical-onlight.svg` at runtime** for the cropped viewBox, the mark group's
+transform and the wordmark paths, so a re-crop of that file moves it too, and the circles come from
+`huddleMarkGeometry.js`, which a unit test pins to the same file. Only geometry is read from it:
+the ink follows the theme through `--brand-wordmark-ink`, and the cream hairline through
+`--brand-mark-hairline`, exactly as the onlight/ondark pair would. Reduced motion shows the
+finished logo. The kit's standalone `.html` exports are not used — they are self-unpacking
+bundles of 430 KB and 1 MB.
 
 ## Email is the one place the logo cannot follow the theme
 
