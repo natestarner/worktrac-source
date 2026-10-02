@@ -10,8 +10,7 @@ import {
   fieldLabelStyle,
   successBannerStyle,
 } from '../components/auth/authStyles';
-import logoLight from '../assets/huddle-lockup-vertical-onlight.svg';
-import logoDark from '../assets/huddle-lockup-vertical-ondark.svg';
+import AnimatedLockup from '../components/auth/AnimatedLockup';
 
 export default function LoginPage() {
   const { login, chooseAccount } = useAuth();
@@ -83,14 +82,7 @@ export default function LoginPage() {
   return (
     <main style={authPageStyle}>
       <form onSubmit={handleSubmit} style={authCardStyle}>
-        <picture>
-          <source srcSet={logoDark} media="(prefers-color-scheme: dark)" />
-          <img
-            src={logoLight}
-            alt="Huddle"
-            style={{ width: 216, maxWidth: '100%', height: 'auto', marginBottom: 40 }}
-          />
-        </picture>
+        <AnimatedLockup width={216} style={{ maxWidth: '100%', height: 'auto', marginBottom: 40 }} />
 
         {/* No visible title on this page -- the lockup above is the branding. A screen reader
             still needs to know which screen it landed on, and axe's page-has-heading-one flagged

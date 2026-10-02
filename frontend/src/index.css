@@ -64,6 +64,9 @@
      property of the GROUND, not of the user's theme -- see HuddleMark's header for the caller
      whose ground stays light in both schemes and therefore pins its own value. */
   --brand-mark-hairline: #bdb6af;
+  /* The wordmark's ink, as the lockup SVGs in assets/ draw it (onlight / ondark). Only the inline
+     AnimatedLockup reads this; the <img> lockups carry the same pair baked into two files. */
+  --brand-wordmark-ink: #3e3a37;
 
   /* --- Status --------------------------------------------------------- */
   /* Raised from #15803d, which was 4.46:1 on its own --color-success-bg. */
@@ -331,6 +334,7 @@
     /* No hairline on a dark ground: the mark's cream circle is already high-contrast there, and
        the brand sheet specifies the outline for light surfaces only. */
     --brand-mark-hairline: transparent;
+    --brand-wordmark-ink: #f2ede1;
 
     /* Both of these were left at their light-mode values and never re-derived,
        landing at ~3.3:1 against the dark surface -- under AA while carrying

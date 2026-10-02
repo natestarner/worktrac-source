@@ -29,6 +29,8 @@
 // brand sheet's own clamp ("below ~114px the 1.5pt hairline is clamped to 1 device px so it stays
 // visible"). At size=14 a scaled 1.5 resolves to ~0.16px -- invisible, which is what the Plus
 // pill's mark used to render.
+import { MARK_CIRCLES } from './huddleMarkGeometry';
+
 export default function HuddleMark({ size = 128, hairline = 'var(--brand-mark-hairline)' }) {
   // The artwork's own aspect ratio, from the viewBox below. Callers pass one number and cannot
   // accidentally squash it.
@@ -36,18 +38,26 @@ export default function HuddleMark({ size = 128, hairline = 'var(--brand-mark-ha
 
   return (
     <svg width={size} height={height} viewBox="162 135 129 115" aria-hidden="true" focusable="false">
-      <circle cx="200" cy="175" r="34" fill="#E8734A" />
-      <circle cx="258" cy="168" r="29" fill="#F2A65A" />
-      <circle
-        cx="198"
-        cy="221"
-        r="25"
-        fill="#F2EDE1"
-        stroke={hairline}
-        strokeWidth="1"
-        vectorEffect="non-scaling-stroke"
-      />
-      <circle cx="250" cy="219" r="19" fill="#B5542D" />
+      {/* MARK_CIRCLES is in the mark's own space; this viewBox predates that module, so shift
+          into it rather than re-derive every caller's framing. */}
+      <g transform="translate(166 139)">
+        {MARK_CIRCLES.map(({ id, cx, cy, r, fill }) =>
+          id === 'cream' ? (
+            <circle
+              key={id}
+              cx={cx}
+              cy={cy}
+              r={r}
+              fill={fill}
+              stroke={hairline}
+              strokeWidth="1"
+              vectorEffect="non-scaling-stroke"
+            />
+          ) : (
+            <circle key={id} cx={cx} cy={cy} r={r} fill={fill} />
+          ),
+        )}
+      </g>
     </svg>
   );
 }

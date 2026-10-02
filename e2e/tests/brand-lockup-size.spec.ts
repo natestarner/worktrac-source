@@ -17,11 +17,16 @@ import { registerHousehold } from './support/auth';
 // only place the crop is observable -- jsdom computes no layout, and neither the CSS nor the JSX
 // changes when the asset does.
 //
-// Both schemes are measured because the lockup is a <picture> with a prefers-color-scheme
+// Both schemes are measured because the header lockup is a <picture> with a prefers-color-scheme
 // <source>: light and dark are two different FILES, so a crop applied to one and not the other
 // is a real and otherwise invisible failure mode.
+//
+// The login screen's lockup is the inline AnimatedLockup instead -- an <svg role="img"> that reads
+// its viewBox out of the same asset file -- so the logo is found by role and name, which matches
+// both the header's <img alt> and the login screen's <svg aria-label>. Its box is the SVG element's
+// own, which the circles' in-flight overflow does not change.
 
-const logo = (page: Page) => page.locator('img[alt="Huddle"]');
+const logo = (page: Page) => page.getByRole('img', { name: 'Huddle', exact: true });
 
 // ⚠️ Measure only once the image has actually LAID OUT, never straight after navigation.
 //
