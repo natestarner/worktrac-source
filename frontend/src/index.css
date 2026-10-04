@@ -1851,6 +1851,95 @@ input[type='search']::-webkit-search-results-decoration {
   font-size: var(--text-base);
 }
 
+/* The "Last time" card when it can page to the best-volume workout (ExerciseDetail).
+
+   The two pages sit side by side in a horizontal scroll-snap strip, so a swipe -- or a
+   trackpad's sideways scroll -- is the browser's own scrolling, with its own momentum
+   and snap, and no gesture code to get wrong. Flex items stretch, so both pages are as
+   tall as the taller one and paging never moves the steppers below the card. */
+.summary-card--paged {
+  position: relative;
+}
+
+.summary-card-pager {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  /* A swipe that hits the end of the strip must not carry on into the browser's own
+     back/forward swipe or rubber-band the whole page sideways. */
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.summary-card-pager::-webkit-scrollbar {
+  display: none;
+}
+
+.summary-card-page {
+  flex: 0 0 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* The pager's visible, clickable half: dots plus a chevron in the card's top-right corner.
+   UNFILLED on purpose. A filled pill was tried and clashed with the set pills right under
+   it -- same grey, same shape -- reading as one more set rather than as a control. What
+   says "control" instead is the chevron in the accent text colour, the app's existing
+   "tap me" signal (BackLink, "Exercise history →"); bare muted dots alone were missed
+   entirely, so don't drop the chevron or mute it. A pointer gets a faint fill on hover.
+   It overhangs the label row's padding-right rather than taking a slot in it, and the
+   ::before reaches the target out to ~40px. */
+.summary-card-pager-btn {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-accent-text);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .summary-card-pager-btn:hover {
+    background: var(--color-subtle-bg);
+  }
+}
+
+.summary-card-pager-btn::before {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--space-2));
+}
+
+.summary-card-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.summary-card-dots > span {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-faint);
+}
+
+.summary-card-dots > span.is-active {
+  background: var(--color-accent);
+}
+
+.summary-card-caption {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
 /* Heading above this session's sets list -- only shown in landscape, where the sets
    column floats beside the input card instead of following it in normal document
    flow, and needs its own label to read as an intentional section rather than

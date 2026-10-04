@@ -214,7 +214,10 @@ export default function HelpTab() {
         </p>
         <p>
           Above them sit two cards: <strong>Last time</strong>, showing that session&rsquo;s sets and
-          any note you left, and your <strong>best</strong> for this exercise. Below,{' '}
+          any note you left, and your <strong>best</strong> for this exercise. When your biggest-volume
+          workout of the exercise was an earlier one, swipe the <strong>Last time</strong> card (or
+          tap the dots in its corner) to see that workout&rsquo;s sets, date and total; the numbers in
+          the steppers still come from last time. Below,{' '}
           <T>This session</T> lists what you&rsquo;ve logged so far, newest at the top, with edit and
           delete on every row.
         </p>

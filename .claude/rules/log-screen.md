@@ -242,6 +242,45 @@ gym basement was silently never celebrated.
       can linger in `history` for up to its 60s `staleTime` and show here, and seed the prefill, for
       that long.
 
+### The "Last time" card's second page: the best-volume workout
+
+When the earlier session holding the volume record is not the last session, the card has two
+pages — "Last time" and "Best volume" — in a horizontal **scroll-snap strip**
+(`.summary-card-pager`). A swipe, or a trackpad's sideways scroll, is the browser's own scrolling;
+dots plus an accent-coloured chevron in the corner page by click. Each page ends in a
+"date · total volume" caption, so the label row only has to fit the name beside the button. The
+sessions come from `ExerciseSummaryDto.bestVolumeSession`, mirrored offline by
+`exerciseSummaryFromHistory.js#deriveBestSessionVolume` and checked against history by
+`mergeBestVolumeSessionWithHistory` (a max by total, ties to the earlier workout, always one of
+its inputs).
+
+**Design history — don't re-derive it.** Bare pager dots on the label were not recognized as a
+control; a `Last time | Best volume` segmented control was recognizable but disliked; a filled
+pill behind the dots clashed with the set pills below it. Unfilled dots + accent chevron + swipe
+is what was settled on (2026-10-04).
+
+- **Display only.** `prefill` reads `lastSession` whichever page is up; paging must never change
+  what gets logged. `ExerciseDetail.test.jsx` pins it (verified red).
+- **Offered only when the two differ.** Same session → no pager, a volume glyph on the label
+  instead. `bestVolumeSession` is **null until two earlier sessions exist** (a lone session is a
+  baseline), so a second-ever workout never claims a "best".
+- **The state follows the scroll, not the other way round.** `handleLastCardScroll` sets
+  `lastCardView` at the halfway point of a swipe. The button sets the state *and* scrolls, and
+  `pagerScrollTarget` makes the handler ignore that smooth scroll's intermediate positions —
+  without it, the halfway read flips the view straight back. A no-deps `useLayoutEffect` re-aligns
+  the strip when the two disagree outside a gesture (a remount starts at page 0; the routine strip
+  swaps exercises without remounting, which resets the view but not the scroll).
+- **Pages are flex items, so both are as tall as the taller** and paging never moves the steppers.
+  The off-page one is `aria-hidden` + `inert` but **in the DOM and beside the card**, so Playwright
+  calls it visible, even in viewport. Assert what is inside the strip's box
+  (`parity-best-volume-card.spec.ts`'s `shownOnCard`), never a bare `getByText`.
+- **The best page collapses runs** (`SetPillRow collapseRuns`, "4×105lb×10"), as the PRs board
+  shows this record. Uncollapsed, a five-set day stacked one pill per row down the half-width card
+  and pushed the steppers down ~110px at 390px. The Last-time page stays per-set.
+- The view is local state stamped with `exercise.id` — every exercise opens on "Last time".
+- `overscroll-behavior-x: contain` on the strip is load-bearing: without it a swipe past the last
+  page carries on into the browser's back/forward gesture.
+
 ### Session volume is a CROSSING, not a flag — don't key it on a session id
 
 `sessionVolume.js#crossesSessionVolume` asks whether the running total passed the record *with this
