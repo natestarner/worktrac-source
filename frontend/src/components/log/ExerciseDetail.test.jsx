@@ -814,6 +814,166 @@ describe('ExerciseDetail Last time and prefill: an out-of-date summary and histo
   });
 });
 
+// The "Last time" card can switch to the earlier session holding the volume record. Display only:
+// the prefill keeps following the last session, and the card never changes height on a switch.
+describe('ExerciseDetail Last time card: switching to the best-volume session', () => {
+  const set = (weight, reps) => ({ weight, reps, durationSeconds: null, unit: 'lb' });
+  const workout = (id, startedAt, sets) => ({
+    id,
+    startedAt,
+    endedAt: startedAt,
+    manual: false,
+    entries: [{ exerciseId: exercise.id, exerciseName: exercise.name, sets, note: null }],
+  });
+  const LAST = { sessionId: 3, startedAt: '2026-09-22T12:00:00Z', sets: [set(135, 5)], note: 'last note' };
+  const BEST = { sessionId: 2, startedAt: '2026-09-15T12:00:00Z', sets: [set(185, 8), set(185, 7)] };
+  const summaryWith = (lastSession, bestVolumeSession) => ({
+    lastSession,
+    best: null,
+    heaviestWeightLb: null,
+    bestSessionVolume: null,
+    volumeKind: 'load',
+    bestVolumeSession,
+  });
+  const prefillDraft = () => ({ ...typedDraft(), draftSource: 'prefill', draftSetCount: 0 });
+
+  async function bothLanded(queryClient) {
+    await waitFor(() => {
+      expect(queryClient.getQueryState(queryKeys.exerciseSummary(7, exercise.id, null))?.status).toBe('success');
+      expect(queryClient.getQueryState(queryKeys.history(7))?.status).toBe('success');
+    });
+  }
+
+  // The pill in the VISIBLE view. The hidden one is still in the DOM (it holds the card's height),
+  // so "is it on screen" is "is it outside an aria-hidden view".
+  const shownPill = (text) =>
+    screen.getAllByText(text, { exact: true }).filter((el) => !el.closest('[aria-hidden="true"]'));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuth.mockReturnValue({ account: { defaultUnit: 'lb' }, people: [] });
+    useUI.mockReturnValue({ showCelebration: vi.fn(), showToast: vi.fn(), startRestTimer: vi.fn(), openConfirm: vi.fn() });
+    listSessionSets.mockResolvedValue([]);
+    getSessionExerciseNote.mockResolvedValue(null);
+    getHistory.mockResolvedValue([]);
+  });
+
+  afterEach(() => vi.clearAllMocks());
+
+  it('opens on Last time and switches to the best-volume session and back', async () => {
+    getExerciseSummary.mockResolvedValue(summaryWith(LAST, BEST));
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient } = renderExerciseDetail();
+    await bothLanded(queryClient);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Show best volume' }));
+    expect(shownPill('185lb×8')).toHaveLength(1);
+    expect(shownPill('135lb×5')).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show last time' }));
+
+    expect(shownPill('135lb×5')).toHaveLength(1);
+    expect(shownPill('185lb×8')).toHaveLength(0);
+    expect(screen.getByText('last note')).toBeInTheDocument();
+  });
+
+  // A swipe is the strip's own horizontal scroll; the view follows it. jsdom has no layout, so the
+  // strip's width and position are stated by hand.
+  it('follows a swipe of the card to the best-volume page and back', async () => {
+    getExerciseSummary.mockResolvedValue(summaryWith(LAST, BEST));
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient, container } = renderExerciseDetail();
+    await bothLanded(queryClient);
+    await screen.findByRole('button', { name: 'Show best volume' });
+
+    const pager = container.querySelector('.summary-card-pager');
+    Object.defineProperty(pager, 'clientWidth', { configurable: true, value: 140 });
+    const swipeTo = (left) => {
+      pager.scrollLeft = left;
+      fireEvent.scroll(pager);
+    };
+
+    swipeTo(140);
+    expect(shownPill('185lb×8')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Show last time' })).toBeInTheDocument();
+
+    swipeTo(0);
+    expect(shownPill('135lb×5')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Show best volume' })).toBeInTheDocument();
+  });
+
+  // The header no longer carries the date, so each view says when -- and how much, the number the
+  // best-volume workout is best at.
+  it("captions each view with that workout's total volume", async () => {
+    getExerciseSummary.mockResolvedValue(summaryWith(LAST, BEST));
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient } = renderExerciseDetail();
+    await bothLanded(queryClient);
+
+    const shownCaption = (text) =>
+      screen.getAllByText(text).filter((el) => !el.closest('[aria-hidden="true"]'));
+    await screen.findByRole('button', { name: 'Show best volume' });
+    expect(shownCaption(/· 675 lb$/)).toHaveLength(1); // 135 × 5
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show best volume' }));
+
+    expect(shownCaption(/· 2775 lb$/)).toHaveLength(1); // 185 × 8 + 185 × 7
+    expect(shownCaption(/· 675 lb$/)).toHaveLength(0);
+  });
+
+  // The switch is a display choice. Logging still starts from the last session's numbers.
+  it('keeps prefilling from the last session while the best-volume session is shown', async () => {
+    getExerciseSummary.mockResolvedValue(summaryWith(LAST, BEST));
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient } = renderExerciseDetail();
+    await bothLanded(queryClient);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Show best volume' }));
+
+    expect(screen.getByLabelText('Weight (lb)')).toHaveValue('135');
+    expect(screen.getByLabelText('Reps')).toHaveValue('5');
+  });
+
+  it('offers no switch, and marks the card, when the last session IS the best-volume one', async () => {
+    getExerciseSummary.mockResolvedValue(summaryWith(LAST, { sessionId: LAST.sessionId, startedAt: LAST.startedAt, sets: LAST.sets }));
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient } = renderExerciseDetail();
+    await bothLanded(queryClient);
+
+    expect(await screen.findByRole('img', { name: 'Also your best volume' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show best volume' })).not.toBeInTheDocument();
+  });
+
+  it('is the plain card when there is no best-volume session', async () => {
+    getExerciseSummary.mockResolvedValue(summaryWith(LAST, null));
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient } = renderExerciseDetail();
+    await bothLanded(queryClient);
+
+    expect(await screen.findByText('135lb×5')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show best volume' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: 'Also your best volume' })).not.toBeInTheDocument();
+  });
+
+  // A summary cached by a build from before this field existed (axis D) has no bestVolumeSession at
+  // all; history's derivation supplies one.
+  it('finds the best-volume session from history when the summary predates the field', async () => {
+    const { bestVolumeSession: _omitted, ...oldShape } = summaryWith(LAST, null);
+    getExerciseSummary.mockResolvedValue(oldShape);
+    getHistory.mockResolvedValue([
+      workout(3, LAST.startedAt, LAST.sets),
+      workout(2, BEST.startedAt, BEST.sets),
+    ]);
+    useAppState.mockReturnValue(prefillDraft());
+    const { queryClient } = renderExerciseDetail();
+    await bothLanded(queryClient);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Show best volume' }));
+
+    expect(shownPill('185lb×7')).toHaveLength(1);
+  });
+});
+
 // The nudge under the steppers. Derived during render from effectiveBest, which already folds in
 // sets that have not synced -- so it works in every connectivity mode by one code path.
 describe('ExerciseDetail close-to-a-PR hint', () => {

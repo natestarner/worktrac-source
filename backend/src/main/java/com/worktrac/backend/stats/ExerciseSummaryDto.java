@@ -43,10 +43,17 @@ import java.math.BigDecimal;
 // frontend/src/utils/exerciseSummaryFromHistory.js mirrors both rules for the offline fallback,
 // excluding by start time rather than by id (offline there is no session id yet).
 //
+// bestVolumeSession is the session whose total IS bestSessionVolume -- same exclusion, same kind --
+// with its sets, for the Log screen's "Last time" card to show beside the last session. A tie goes
+// to the EARLIEST such session, the one that took the record (and the one History badges for it).
+// It is null until there are at least TWO earlier sessions: a lone session is a baseline, not a
+// record (sessionVolume.js#takesSessionVolumeRecord's first-workout rule), and calling it "best"
+// would only repeat "Last time". exerciseSummaryFromHistory.js#deriveBestSessionVolume mirrors it.
+//
 // The bests are null when there is nothing to report, never 0 -- the client reads null as "no
 // prior best on this measure" and 0 as a real record of zero. For session volume that difference
 // is the first-workout rule: null (no earlier session) never celebrates.
 public record ExerciseSummaryDto(LastSessionDto lastSession, BestDto best,
                                  BigDecimal heaviestWeightLb, BigDecimal bestSessionVolume, String volumeKind,
-                                 BigDecimal bestSessionVolumeLb) {
+                                 BigDecimal bestSessionVolumeLb, BestVolumeSessionDto bestVolumeSession) {
 }

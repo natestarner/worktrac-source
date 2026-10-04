@@ -120,7 +120,8 @@ async function grantPlus() {
 
 // 8 weeks, 3 sessions/week, most recent session dated today -- so whatever screen you open shows
 // something recent rather than a wall of "3 months ago". Weight/reps/hold time all progress
-// session over session so Trends has a real line to draw, not a flat one.
+// session over session so Trends has a real line to draw, not a flat one -- except Overhead Press
+// and Push-Up, whose biggest workout is deliberately in the past (see the bottom of the loop).
 function buildHistoryCsv() {
   const WEEKS = 8;
   const SESSIONS_PER_WEEK = 3;
@@ -161,6 +162,26 @@ function buildHistoryCsv() {
       rows.push(`Pull-Up,${dateStr},${nextTime(18, 2)},,,${pullupReps},`);
     }
     rows.push(`Plank,${dateStr},18:50:00,,,,${plankSeconds}`);
+
+    // Two exercises whose biggest day was NOT the last one, every other session. Everything above
+    // only ever goes up, so its last session is always its best-volume session too -- which leaves
+    // the Log screen's "Last time" card with nothing to switch to. These give it something: a big
+    // volume day a couple of weeks back (session 16), lighter sessions since, the most recent one
+    // lighter still. One loaded (pounds) and one bodyweight (total reps).
+    if (i % 2 === 0) {
+      const bigDay = i === 16;
+      const pressSets = bigDay ? [10, 10, 10, 10, 8] : [8, 8, 6];
+      const pressWeight = i === TOTAL - 2 ? 85 : 95 + Math.floor(i / 8) * 5;
+      minute = 0;
+      for (const reps of pressSets) {
+        rows.push(`Overhead Press,${dateStr},${nextTime(19, 3)},${pressWeight},lb,${reps},`);
+      }
+      const pushupSets = bigDay ? [30, 25, 25, 20] : i === TOTAL - 2 ? [15, 12] : [20, 18, 15];
+      minute = 20;
+      for (const reps of pushupSets) {
+        rows.push(`Push-Up,${dateStr},${nextTime(19, 2)},,,${reps},`);
+      }
+    }
   }
 
   return rows.join('\n') + '\n';

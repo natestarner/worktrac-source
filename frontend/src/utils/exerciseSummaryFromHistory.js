@@ -147,6 +147,11 @@ function deriveHeaviestWeightLb(history, exerciseId) {
 // progress -- see the asymmetry note above -- together with the kind it is measured in. Mirrors
 // ExerciseSummaryDto's bestSessionVolume + volumeKind: the kind is decided over EVERY session
 // (including the live one, as the server does), the best over the earlier ones only.
+//
+// Also the session behind that best (`bestVolumeSession`, for the Log screen's "Last time" card),
+// mirroring the server's rules: a tie goes to the EARLIER session -- history is newest-first, so a
+// later-visited equal total replaces the candidate -- and it is null until there are two earlier
+// sessions, because a lone session is a baseline, not a record.
 function deriveBestSessionVolume(history, exerciseId, excludeSessionId, liveSessionStartedAt) {
   const allSets = [];
   for (const session of history || []) {
@@ -157,6 +162,8 @@ function deriveBestSessionVolume(history, exerciseId, excludeSessionId, liveSess
 
   const liveStartedMs = liveSessionStartedAt ? new Date(liveSessionStartedAt).getTime() : null;
   let best = null;
+  let bestSession = null;
+  let sessionCount = 0;
   for (const session of history || []) {
     if (excludeSessionId && session.id === excludeSessionId) continue;
     // Offline the id is unavailable, so fall back to time: anything that started at or after the
@@ -168,9 +175,13 @@ function deriveBestSessionVolume(history, exerciseId, excludeSessionId, liveSess
     const entry = findEntry(session, exerciseId);
     if (!entry) continue;
     const total = sessionVolume(entry.sets, volumeKind);
-    if (best === null || total > best) best = total;
+    sessionCount += 1;
+    if (best === null || total >= best) {
+      best = total;
+      bestSession = { sessionId: session.id, startedAt: session.startedAt, sets: entry.sets };
+    }
   }
-  return { bestSessionVolume: best, volumeKind };
+  return { bestSessionVolume: best, volumeKind, bestVolumeSession: sessionCount < 2 ? null : bestSession };
 }
 
 // Fold client-only sets into the all-time heaviest, for the same reason mergeBestWithLocalSets
@@ -282,4 +293,24 @@ export function mergeLastSessionWithHistory(lastSession, historyLastSession) {
   if (!isUsableLastSession(lastSession)) return historyLastSession;
   if (historyLastSession.sessionId === lastSession.sessionId) return lastSession;
   return Date.parse(historyLastSession.startedAt) > Date.parse(lastSession.startedAt) ? historyLastSession : lastSession;
+}
+
+// The best-volume session ("Last time" card's other view) gets the same check, ranked the way the
+// record itself is: the bigger total in `kind` wins, a tie between two sessions goes to the earlier
+// one (the session that took the record), and the same session on both sides keeps the summary's.
+// A MAX like the priors, so the Free-tier window -- which can only make history miss a session --
+// never hides a better session the summary knows about.
+//
+// ⚠️ ALWAYS returns one of its inputs, for the same reason as mergeLastSessionWithHistory.
+export function mergeBestVolumeSessionWithHistory(bestVolumeSession, historyBestVolumeSession, kind) {
+  if (!isUsableLastSession(historyBestVolumeSession)) return bestVolumeSession ?? null;
+  if (!isUsableLastSession(bestVolumeSession)) return historyBestVolumeSession;
+  if (historyBestVolumeSession.sessionId === bestVolumeSession.sessionId) return bestVolumeSession;
+  const measure = kind ?? undefined;
+  const summaryTotal = sessionVolume(bestVolumeSession.sets, measure);
+  const historyTotal = sessionVolume(historyBestVolumeSession.sets, measure);
+  if (historyTotal !== summaryTotal) return historyTotal > summaryTotal ? historyBestVolumeSession : bestVolumeSession;
+  return Date.parse(historyBestVolumeSession.startedAt) < Date.parse(bestVolumeSession.startedAt)
+    ? historyBestVolumeSession
+    : bestVolumeSession;
 }

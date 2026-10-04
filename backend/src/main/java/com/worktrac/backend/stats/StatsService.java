@@ -107,9 +107,19 @@ public class StatsService {
             volumeByOtherSession.merge(sessionId, sessionVolume.setVolume(s, volumeKind), BigDecimal::add);
             loadVolumeByOtherSession.merge(sessionId, sessionVolume.loadVolumeLb(s), BigDecimal::add);
         }
-        BigDecimal bestSessionVolume = volumeByOtherSession.values().stream()
-                .max(BigDecimal::compareTo)
-                .orElse(null);
+        // `all` is chronological, so the map is too, and a strict `>` leaves a tie with the EARLIER
+        // session -- the one that took the record (see ExerciseSummaryDto on bestVolumeSession).
+        Long bestVolumeSessionId = null;
+        BigDecimal bestSessionVolume = null;
+        for (Map.Entry<Long, BigDecimal> entry : volumeByOtherSession.entrySet()) {
+            if (bestSessionVolume == null || entry.getValue().compareTo(bestSessionVolume) > 0) {
+                bestSessionVolume = entry.getValue();
+                bestVolumeSessionId = entry.getKey();
+            }
+        }
+        // A lone earlier session is a baseline, not a record -- no "best" to show beside it.
+        BestVolumeSessionDto bestVolumeSession = volumeByOtherSession.size() < 2 ? null
+                : buildBestVolumeSession(all, bestVolumeSessionId);
         BigDecimal legacyBestSessionVolumeLb = loadVolumeByOtherSession.values().stream()
                 .max(BigDecimal::compareTo)
                 .orElse(null);
@@ -121,7 +131,7 @@ public class StatsService {
         // 220.5, hid a 100 kg top-weight record online that the offline path correctly found.
         return new ExerciseSummaryDto(lastSession, best, heaviestWeightLb,
                 bestSessionVolume, volumeKind == null ? null : volumeKind.wire(),
-                scaled(legacyBestSessionVolumeLb));
+                scaled(legacyBestSessionVolumeLb), bestVolumeSession);
     }
 
     // Max estimated 1RM across every set ever logged for this person + exercise,
@@ -157,16 +167,31 @@ public class StatsService {
         if (bestSessionId == null) {
             return Optional.empty();
         }
-        Long finalBestSessionId = bestSessionId;
-        List<SetSummaryDto> sets = all.stream()
-                .filter(s -> s.getSession().getId().equals(finalBestSessionId))
-                .sorted(Comparator.comparing(WorkoutSet::getCreatedAt))
-                .map(s -> new SetSummaryDto(s.getWeight(), s.getReps(), s.getDurationSeconds(), s.getUnit()))
-                .toList();
+        List<SetSummaryDto> sets = setsOfSession(all, bestSessionId);
         String note = sessionExerciseNoteRepository.findBySession_IdAndExercise_Id(bestSessionId, exerciseId)
                 .map(SessionExerciseNote::getNote)
                 .orElse(null);
         return Optional.of(new LastSessionDto(bestSessionId, bestStartedAt, sets, note));
+    }
+
+    // No note, unlike buildLastSession: the card shows only the last session's, and looking one up
+    // here would be a second query on every summary.
+    private BestVolumeSessionDto buildBestVolumeSession(List<WorkoutSet> all, Long sessionId) {
+        Instant startedAt = all.stream()
+                .filter(s -> s.getSession().getId().equals(sessionId))
+                .findFirst()
+                .map(s -> s.getSession().getStartedAt())
+                .orElseThrow();
+        return new BestVolumeSessionDto(sessionId, startedAt, setsOfSession(all, sessionId));
+    }
+
+    // One session's sets for this exercise, in the order they were logged.
+    private static List<SetSummaryDto> setsOfSession(List<WorkoutSet> all, Long sessionId) {
+        return all.stream()
+                .filter(s -> s.getSession().getId().equals(sessionId))
+                .sorted(Comparator.comparing(WorkoutSet::getCreatedAt))
+                .map(s -> new SetSummaryDto(s.getWeight(), s.getReps(), s.getDurationSeconds(), s.getUnit()))
+                .toList();
     }
 
     @Transactional(readOnly = true)

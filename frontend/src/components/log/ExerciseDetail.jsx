@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
@@ -38,6 +38,7 @@ import { resolveRestTargetSeconds } from '../../utils/restTarget';
 import {
   deriveExerciseSummaryFromHistory,
   mergeBestWithHistory,
+  mergeBestVolumeSessionWithHistory,
   mergeBestWithLocalSets,
   mergeHeaviestWithLocalSets,
   mergeLastSessionWithHistory,
@@ -54,7 +55,18 @@ import ExerciseNoteModal from '../shared/ExerciseNoteModal';
 import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
 import ReadOnlyWrap from '../shared/ReadOnlyWrap';
-import { IconMore, IconNote, IconPencil, IconPin, IconStar, IconStarFilled, IconTrash, IconTrophy } from '../shared/icons';
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconMore,
+  IconNote,
+  IconPencil,
+  IconPin,
+  IconStar,
+  IconStarFilled,
+  IconTrash,
+  IconTrophy,
+} from '../shared/icons';
 import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
 import PrBadge, { est1rmLabelForSet, prBadgeLabel, prBadgeTitle } from '../shared/PrBadge';
@@ -145,6 +157,11 @@ export default function ExerciseDetail({
   const [justAddedSetId, setJustAddedSetId] = useState(null);
   const [showSessionNoteModal, setShowSessionNoteModal] = useState(false);
   const [showDurationPicker, setShowDurationPicker] = useState(false);
+  // Which session the "Last time" card shows: 'last' or 'bestVolume'. Stamped with the exercise it
+  // was chosen on, because the routine strip swaps `exercise` without remounting this component --
+  // a choice made on bench must not carry over to rows. Plain local state is enough: it is a
+  // display choice for the screen in view, and every exercise opens on "Last time".
+  const [lastCardView, setLastCardView] = useState({ exerciseId: null, view: 'last' });
   // Resolvers for handleLogSet's tap-ack promise, keyed by tempId -- see logSetMutation's
   // onMutate below.
   const logAckResolvers = useRef(new Map());
@@ -623,6 +640,65 @@ export default function ExerciseDetail({
   // it is safe in the recording effect's dependency list below.
   const lastSession = summary ? mergeLastSessionWithHistory(summary.lastSession ?? null, derivedSummary?.lastSession ?? null) : null;
   const prefill = summary ? computePrefillDraft(lastSession, displaySets, defaultUnit) : null;
+
+  // The "Last time" card's other view: the earlier session holding this exercise's volume record.
+  // Checked against history's like lastSession is, ranked in one merged kind like the volume prior.
+  // Display only -- the prefill above keeps reading lastSession whichever view is showing, so a
+  // card toggle can never change what gets logged.
+  //
+  // The switch is offered only when the two are different sessions. When they are the same, the
+  // card says so instead; with fewer than two earlier sessions there is no best (a lone session is
+  // a baseline -- see ExerciseSummaryDto) and the card is exactly what it always was.
+  //
+  // cardVolumeKind is also what each view's caption totals in ("5040 lb", "100 reps", "4:30").
+  const cardVolumeKind = mergeVolumeKinds(summary?.volumeKind ?? null, derivedSummary?.volumeKind ?? null);
+  const bestVolumeSession = summary
+    ? mergeBestVolumeSessionWithHistory(summary.bestVolumeSession ?? null, derivedSummary?.bestVolumeSession ?? null, cardVolumeKind)
+    : null;
+  const lastIsBestVolume = !!lastSession && !!bestVolumeSession && bestVolumeSession.sessionId === lastSession.sessionId;
+  const canShowBestVolume = !!lastSession && !!bestVolumeSession && !lastIsBestVolume;
+  const showingBestVolume =
+    canShowBestVolume && lastCardView.exerciseId === exercise.id && lastCardView.view === 'bestVolume';
+
+  // The card's two pages are a horizontal scroll-snap strip, so a swipe is the browser's own scroll
+  // and `lastCardView` follows it (handleLastCardScroll). The pager button goes the other way: it
+  // sets the view and scrolls to it. While that scroll is in flight its intermediate positions are
+  // ignored -- read halfway, they would flip the view straight back.
+  const lastCardPagerRef = useRef(null);
+  const pagerScrollTarget = useRef(null);
+  const lastCardPage = showingBestVolume ? 1 : 0;
+  const setLastCardPage = (page) =>
+    setLastCardView({ exerciseId: exercise.id, view: page === 1 ? 'bestVolume' : 'last' });
+  function showLastCardPage(page) {
+    setLastCardPage(page);
+    const el = lastCardPagerRef.current;
+    if (!el?.clientWidth) return;
+    pagerScrollTarget.current = page;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (typeof el.scrollTo === 'function') el.scrollTo({ left: page * el.clientWidth, behavior: reduce ? 'auto' : 'smooth' });
+    else el.scrollLeft = page * el.clientWidth;
+  }
+  function handleLastCardScroll(e) {
+    const el = e.currentTarget;
+    if (!el.clientWidth) return;
+    const page = Math.round(el.scrollLeft / el.clientWidth);
+    if (pagerScrollTarget.current !== null) {
+      if (page === pagerScrollTarget.current && Math.abs(el.scrollLeft - page * el.clientWidth) < 2) {
+        pagerScrollTarget.current = null;
+      }
+      return;
+    }
+    if (page !== lastCardPage) setLastCardPage(page);
+  }
+  // Keep the strip on the page the state names whenever they disagree outside a gesture: a remount
+  // (the summary skeleton, a person switch back) starts the strip at page 0, and the routine strip
+  // swaps exercises WITHOUT remounting, which resets the view to "Last time" but not the scroll.
+  // Mid-swipe they agree by construction -- the scroll handler moves the state at the halfway point.
+  useLayoutEffect(() => {
+    const el = lastCardPagerRef.current;
+    if (!el?.clientWidth || pagerScrollTarget.current !== null) return;
+    if (Math.round(el.scrollLeft / el.clientWidth) !== lastCardPage) el.scrollLeft = lastCardPage * el.clientWidth;
+  });
 
   // A set was ADDED since the draft was seeded -- the carry-forward re-seed, and the only thing
   // allowed to replace a value the person typed.
@@ -1255,31 +1331,90 @@ export default function ExerciseDetail({
 
           {ready && (
             <div className="summary-cards-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-              <div className="summary-card" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)' }}>
-                {/* The separator belongs to the date, not to the label: with no previous session
-                    `lastLabel` is empty and a bare "Last time ·" left a middot dangling off the
-                    end of the card -- in both themes, on the app's most-used screen. */}
-                <div style={cardLabelStyle}>Last time{lastLabel && ` · ${lastLabel}`}</div>
-                {lastSession ? (
-                  <SetPillRow sets={lastSession.sets} style={{ marginTop: 2 }} />
+              <div
+                className={canShowBestVolume ? 'summary-card summary-card--paged' : 'summary-card'}
+                style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)' }}
+              >
+                {canShowBestVolume ? (
+                  <>
+                    {/* Two pages side by side in a horizontal scroll-snap strip: a swipe (or a
+                        trackpad's sideways scroll) moves between them natively, and both pages
+                        stretch to the taller one, so switching never moves the steppers below.
+                        The button in the corner is the visible, clickable half -- dots say "there
+                        are two of these", the accent chevron says "tap" and which way the other
+                        one is. Bare muted dots were not recognized as a control; keep the chevron.
+                        (Why it has no fill: index.css, .summary-card-pager-btn.) */}
+                    <button
+                      type="button"
+                      className="summary-card-pager-btn pressable"
+                      onClick={() => showLastCardPage(showingBestVolume ? 0 : 1)}
+                      aria-label={showingBestVolume ? 'Show last time' : 'Show best volume'}
+                    >
+                      <span className="summary-card-dots" aria-hidden="true">
+                        <span className={showingBestVolume ? undefined : 'is-active'} />
+                        <span className={showingBestVolume ? 'is-active' : undefined} />
+                      </span>
+                      {showingBestVolume ? <IconChevronLeft size={14} /> : <IconChevronRight size={14} />}
+                    </button>
+                    <div ref={lastCardPagerRef} className="summary-card-pager" onScroll={handleLastCardScroll}>
+                      {[
+                        ['Last time', lastSession],
+                        ['Best volume', bestVolumeSession],
+                      ].map(([name, session], page) => {
+                        const isBest = page === 1;
+                        const hidden = isBest !== showingBestVolume;
+                        return (
+                          <div
+                            key={name}
+                            className="summary-card-page"
+                            aria-hidden={hidden || undefined}
+                            inert={hidden || undefined}
+                          >
+                            <div style={{ ...cardLabelStyle, paddingRight: 'var(--space-8)' }}>{name}</div>
+                            {/* The best-volume day is usually the many-sets one, and one pill per
+                                set stacks a column down a half-width card. Collapsed into runs, as
+                                the PRs board shows this same record. */}
+                            <SetPillRow sets={session.sets} style={{ marginTop: 2 }} collapseRuns={isBest} />
+                            {/* The date lives here rather than on the label, which has to share
+                                its row with the pager pill -- and beside it the total, which is
+                                what "best volume" is best at. */}
+                            <div className="summary-card-caption">
+                              {formatDateLabel(toLocalDateStr(session.startedAt))} ·{' '}
+                              {formatVolume(sessionVolume(session.sets, cardVolumeKind), cardVolumeKind, defaultUnit)}
+                            </div>
+                            {!isBest && session.note && <LastSessionNote note={session.note} />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
                 ) : (
-                  <div className="summary-card-value" style={{ fontWeight: 'var(--weight-bold)' }}>No sets yet</div>
-                )}
-                {lastSession?.note && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 'var(--space-1)',
-                      fontSize: 'var(--text-xs)',
-                      fontStyle: 'italic',
-                      color: 'var(--color-muted)',
-                      marginTop: 'var(--space-1)',
-                    }}
-                  >
-                    <IconNote size={12} style={{ marginTop: 2 }} />
-                    <span>{lastSession.note}</span>
-                  </div>
+                  <>
+                    {/* The separator belongs to the date, not to the label: with no previous session
+                        `lastLabel` is empty and a bare "Last time ·" left a middot dangling off the
+                        end of the card -- in both themes, on the app's most-used screen. */}
+                    <div style={cardLabelStyle}>
+                      Last time{lastLabel && ` · ${lastLabel}`}
+                      {/* The last session IS the volume record, so there is no second page to
+                          offer -- say so instead, with the glyph History's volume badge uses. */}
+                      {lastIsBestVolume && (
+                        <span
+                          role="img"
+                          aria-label="Also your best volume"
+                          title="Also your best volume"
+                          style={{ marginLeft: 'var(--space-1)', verticalAlign: 'middle', display: 'inline-flex' }}
+                        >
+                          <PrBadge type="sessionVolume" size={11} />
+                        </span>
+                      )}
+                    </div>
+                    {lastSession ? (
+                      <SetPillRow sets={lastSession.sets} style={{ marginTop: 2 }} />
+                    ) : (
+                      <div className="summary-card-value" style={{ fontWeight: 'var(--weight-bold)' }}>No sets yet</div>
+                    )}
+                    {lastSession?.note && <LastSessionNote note={lastSession.note} />}
+                  </>
                 )}
               </div>
               <div className="summary-card" style={{ background: 'var(--color-record-bg)', border: '1px solid var(--color-record-border)', borderRadius: 'var(--radius-lg)' }}>
@@ -1652,6 +1787,27 @@ const cardLabelStyle = {
   letterSpacing: 'var(--tracking-label)',
   marginBottom: 'var(--space-1)',
 };
+
+// The note left on the last session, under its sets on the "Last time" card -- in both the plain
+// card and the paged one, so it lives here once.
+function LastSessionNote({ note }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 'var(--space-1)',
+        fontSize: 'var(--text-xs)',
+        fontStyle: 'italic',
+        color: 'var(--color-muted)',
+        marginTop: 'var(--space-1)',
+      }}
+    >
+      <IconNote size={12} style={{ marginTop: 2 }} />
+      <span>{note}</span>
+    </div>
+  );
+}
 
 // A standing per-person note (persists across every session for this exercise) -- neutral
 // border so it reads as "always true", distinct from the session note's accent border

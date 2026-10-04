@@ -23,6 +23,29 @@ describe('SetPillRow', () => {
     expect(screen.getByText('155lb×3')).toBeInTheDocument();
   });
 
+  // The Log screen's best-volume view: a many-set day must not stack a pill per set.
+  it('collapses consecutive identical sets into one counted pill when asked', () => {
+    const { container } = render(
+      <SetPillRow
+        collapseRuns
+        sets={[
+          { weight: 105, reps: 10, unit: 'lb' },
+          { weight: 105, reps: 10, unit: 'lb' },
+          { weight: 105, reps: 8, unit: 'lb' },
+          { weight: 105, reps: 10, unit: 'lb' },
+          { weight: 0, reps: 0, durationSeconds: 45, unit: 'lb' },
+          { weight: 0, reps: 0, durationSeconds: 45, unit: 'lb' },
+        ]}
+      />,
+    );
+    expect(container.querySelectorAll('.set-pill')).toHaveLength(4);
+    expect(screen.getByText('2×105lb×10')).toBeInTheDocument();
+    expect(screen.getByText('105lb×8')).toBeInTheDocument();
+    // Only CONSECUTIVE sets are one run -- the order the work was done in is kept.
+    expect(screen.getByText('105lb×10')).toBeInTheDocument();
+    expect(screen.getByText('2×0:45')).toBeInTheDocument();
+  });
+
   it('renders a plain pill for every set when prMarks is omitted (no regression)', () => {
     render(<SetPillRow sets={[{ id: 1, weight: 135, reps: 5, unit: 'lb' }]} />);
     expect(screen.queryByTitle(/Personal record/)).not.toBeInTheDocument();

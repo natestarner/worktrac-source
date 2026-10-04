@@ -396,6 +396,59 @@ class TrendsControllerTest extends AbstractIntegrationTest {
         assertTrue(summary.get("bestSessionVolume").isNull());
     }
 
+    // The Log screen's "Last time" card can switch to the session holding the volume record. It
+    // must be the session whose total IS bestSessionVolume, carry its sets in logged order, and
+    // exclude the session in view exactly as bestSessionVolume does.
+    @Test
+    void summaryCarriesTheBestVolumeSessionsSets() throws Exception {
+        long older = createPastSession("2025-12-22T09:00:00Z");
+        logSet(older, 100, 5); // 500 lb
+        long best = createPastSession("2025-12-29T09:00:00Z");
+        logSet(best, 100, 10);
+        logSet(best, 110, 8); // 1880 lb
+        long last = createPastSession("2026-01-05T09:00:00Z");
+        logSet(last, 90, 10); // 900 lb
+        long today = createPastSession("2026-01-12T09:00:00Z");
+        logSet(today, 200, 20); // 4000 lb -- would win if the session in view were not excluded
+
+        JsonNode summary = getSummary(today);
+        JsonNode bestSession = summary.get("bestVolumeSession");
+        assertEquals(best, bestSession.get("sessionId").asLong());
+        assertEquals(last, summary.get("lastSession").get("sessionId").asLong());
+        assertEquals(1880.0, summary.get("bestSessionVolume").asDouble());
+        assertEquals(2, bestSession.get("sets").size());
+        assertEquals(100.0, bestSession.get("sets").get(0).get("weight").asDouble());
+        assertEquals(110.0, bestSession.get("sets").get(1).get("weight").asDouble());
+        assertEquals("2025-12-29T09:00:00Z", bestSession.get("startedAt").asText());
+    }
+
+    // A tie stays with the EARLIER session -- the one that took the record.
+    @Test
+    void bestVolumeSessionTieGoesToTheEarlierSession() throws Exception {
+        long first = createPastSession("2025-12-29T09:00:00Z");
+        logSet(first, 100, 10);
+        long repeat = createPastSession("2026-01-05T09:00:00Z");
+        logSet(repeat, 100, 10);
+        long today = createPastSession("2026-01-12T09:00:00Z");
+        logSet(today, 50, 5);
+
+        assertEquals(first, getSummary(today).get("bestVolumeSession").get("sessionId").asLong());
+    }
+
+    // One earlier session is a baseline, not a record: no best-volume session to show beside it,
+    // although its total is still the celebration's prior.
+    @Test
+    void noBestVolumeSessionWithOnlyOneEarlierSession() throws Exception {
+        long earlier = createPastSession("2026-01-05T09:00:00Z");
+        logSet(earlier, 100, 10);
+        long today = createPastSession("2026-01-12T09:00:00Z");
+        logSet(today, 100, 5);
+
+        JsonNode summary = getSummary(today);
+        assertEquals(1000.0, summary.get("bestSessionVolume").asDouble());
+        assertTrue(summary.get("bestVolumeSession").isNull());
+    }
+
     private JsonNode getSummary(long excludeSessionId) throws Exception {
         String response = mockMvc.perform(get("/api/people/" + personId + "/exercises/" + exerciseId
                         + "/summary?excludeSessionId=" + excludeSessionId)

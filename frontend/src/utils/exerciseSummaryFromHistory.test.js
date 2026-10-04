@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   deriveExerciseSummaryFromHistory,
+  mergeBestVolumeSessionWithHistory,
   mergeBestWithHistory,
   mergeBestWithLocalSets,
   mergeLastSessionWithHistory,
@@ -23,7 +24,14 @@ describe('deriveExerciseSummaryFromHistory', () => {
   // null rather than 0 on every measure: prDetection reads null as "no prior best on this
   // measure" and 0 as a genuine record of zero, and those are different answers for a bodyweight
   // lift -- a 0 would make the first weighted set look like it beat something.
-  const EMPTY = { lastSession: null, best: null, heaviestWeightLb: null, bestSessionVolume: null, volumeKind: null };
+  const EMPTY = {
+    lastSession: null,
+    best: null,
+    heaviestWeightLb: null,
+    bestSessionVolume: null,
+    volumeKind: null,
+    bestVolumeSession: null,
+  };
 
   it('returns null lastSession/best when there is no history at all', () => {
     expect(deriveExerciseSummaryFromHistory([], SQUAT, null)).toEqual(EMPTY);
@@ -472,5 +480,128 @@ describe('mergeLastSessionWithHistory', () => {
     expect([a, b]).toContain(mergeLastSessionWithHistory(a, b));
     expect([a, b]).toContain(mergeLastSessionWithHistory(b, a));
     expect(mergeLastSessionWithHistory(a, a)).toBe(a);
+  });
+});
+
+// The session behind bestSessionVolume, for the Log screen's "Last time" card to switch to. Mirrors
+// StatsService#getSummary's bestVolumeSession: same exclusion, ties to the EARLIER session, and
+// null until there are two earlier sessions (a lone session is a baseline, not a record).
+describe('deriveExerciseSummaryFromHistory bestVolumeSession', () => {
+  const lift = (weight, reps) => ({ weight, reps, durationSeconds: null, unit: 'lb' });
+
+  it('names the earlier session with the biggest total, with its sets, excluding the live one', () => {
+    const history = [
+      session(4, '2026-07-27T00:00:00Z', [entry(SQUAT, [lift(300, 10)])]), // live -- would win
+      session(3, '2026-07-20T00:00:00Z', [entry(SQUAT, [lift(100, 9)])]), // last: 900
+      session(2, '2026-07-13T00:00:00Z', [entry(SQUAT, [lift(100, 10), lift(110, 8)])]), // 1880
+      session(1, '2026-07-06T00:00:00Z', [entry(SQUAT, [lift(100, 5)])]),
+    ];
+
+    const summary = deriveExerciseSummaryFromHistory(history, SQUAT, 4);
+
+    expect(summary.bestVolumeSession).toEqual({
+      sessionId: 2,
+      startedAt: '2026-07-13T00:00:00Z',
+      sets: [lift(100, 10), lift(110, 8)],
+    });
+    expect(summary.bestSessionVolume).toBe(1880);
+    expect(summary.lastSession.sessionId).toBe(3);
+  });
+
+  // Offline there is no live session id, so the live session is excluded by start time.
+  it('excludes the live session by start time when it has no id', () => {
+    const history = [
+      session(4, '2026-07-27T00:00:00Z', [entry(SQUAT, [lift(300, 10)])]),
+      session(3, '2026-07-20T00:00:00Z', [entry(SQUAT, [lift(100, 9)])]),
+      session(2, '2026-07-13T00:00:00Z', [entry(SQUAT, [lift(100, 10)])]),
+    ];
+
+    const summary = deriveExerciseSummaryFromHistory(history, SQUAT, null, '2026-07-27T00:00:00Z');
+
+    expect(summary.bestVolumeSession.sessionId).toBe(2);
+  });
+
+  it('gives a tie to the EARLIER session, the one that took the record', () => {
+    const history = [
+      session(3, '2026-07-20T00:00:00Z', [entry(SQUAT, [lift(100, 10)])]),
+      session(2, '2026-07-13T00:00:00Z', [entry(SQUAT, [lift(100, 10)])]),
+      session(1, '2026-07-06T00:00:00Z', [entry(SQUAT, [lift(50, 10)])]),
+    ];
+
+    expect(deriveExerciseSummaryFromHistory(history, SQUAT, null).bestVolumeSession.sessionId).toBe(2);
+  });
+
+  it('is null with only one earlier session, though its total is still the prior', () => {
+    const history = [
+      session(2, '2026-07-20T00:00:00Z', [entry(SQUAT, [lift(100, 5)])]),
+      session(1, '2026-07-13T00:00:00Z', [entry(SQUAT, [lift(100, 10)])]),
+    ];
+
+    const summary = deriveExerciseSummaryFromHistory(history, SQUAT, 2);
+
+    expect(summary.bestVolumeSession).toBeNull();
+    expect(summary.bestSessionVolume).toBe(1000);
+  });
+
+  it('ranks a bodyweight exercise by total reps', () => {
+    const history = [
+      session(3, '2026-07-20T00:00:00Z', [entry(SQUAT, [lift(0, 10)])]),
+      session(2, '2026-07-13T00:00:00Z', [entry(SQUAT, [lift(0, 8), lift(0, 8)])]),
+    ];
+
+    expect(deriveExerciseSummaryFromHistory(history, SQUAT, null).bestVolumeSession.sessionId).toBe(2);
+  });
+});
+
+// The best-volume session gets the same summary-vs-history check "Last time" does, ranked the way
+// the record is: the bigger total wins, a tie between two sessions goes to the earlier one.
+describe('mergeBestVolumeSessionWithHistory', () => {
+  const best = (sessionId, startedAt, weights) => ({
+    sessionId,
+    startedAt,
+    sets: weights.map((w) => ({ weight: w, reps: 10, durationSeconds: null, unit: 'lb' })),
+  });
+
+  it('returns whichever side has a usable one', () => {
+    const fromSummary = best(1, '2026-09-20T12:00:00Z', [100]);
+    const fromHistory = best(2, '2026-09-22T12:00:00Z', [100]);
+
+    expect(mergeBestVolumeSessionWithHistory(null, null, 'load')).toBeNull();
+    expect(mergeBestVolumeSessionWithHistory(fromSummary, null, 'load')).toBe(fromSummary);
+    expect(mergeBestVolumeSessionWithHistory(fromSummary, { sessionId: 3 }, 'load')).toBe(fromSummary);
+    expect(mergeBestVolumeSessionWithHistory(undefined, fromHistory, 'load')).toBe(fromHistory);
+  });
+
+  // #326's shape: the summary predates a bigger session history already holds.
+  it("takes history's when its session has the bigger total", () => {
+    const stale = best(1, '2026-09-20T12:00:00Z', [100]);
+    const fresh = best(2, '2026-09-22T12:00:00Z', [100, 100]);
+
+    expect(mergeBestVolumeSessionWithHistory(stale, fresh, 'load')).toBe(fresh);
+  });
+
+  // The Free-tier guard: a window-clamped history can only MISS the summary's older, bigger session.
+  it("keeps the summary's when its session has the bigger total", () => {
+    const fromSummary = best(1, '2025-01-20T12:00:00Z', [200, 200]);
+
+    expect(mergeBestVolumeSessionWithHistory(fromSummary, best(2, '2026-09-22T12:00:00Z', [100]), 'load')).toBe(
+      fromSummary,
+    );
+  });
+
+  it("keeps the summary's copy when both name the same session", () => {
+    const fromSummary = best(1, '2026-09-20T12:00:00Z', [100]);
+
+    expect(mergeBestVolumeSessionWithHistory(fromSummary, best(1, '2026-09-20T12:00:00Z', [100, 50]), 'load')).toBe(
+      fromSummary,
+    );
+  });
+
+  it('gives an equal total to the earlier session', () => {
+    const earlier = best(1, '2026-09-20T12:00:00Z', [100]);
+    const later = best(2, '2026-09-22T12:00:00Z', [100]);
+
+    expect(mergeBestVolumeSessionWithHistory(later, earlier, 'load')).toBe(earlier);
+    expect(mergeBestVolumeSessionWithHistory(earlier, later, 'load')).toBe(earlier);
   });
 });

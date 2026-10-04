@@ -22,8 +22,26 @@ import PrBadge, { prBadgeLabel } from './PrBadge';
 // select on the existing phrasing, so appending preserves every one of them where a rewrite would
 // break them all. Note parity-pr-record.spec.ts's standing warning that getByLabel('Record')
 // needs { exact: true } against these.
-export default function SetPillRow({ sets, prMarks, style }) {
+//
+// `collapseRuns` folds consecutive identical sets into one pill with a leading count
+// ("4×105lb×10"), the way the PRs board reads a session-volume record's sets. Only for a caller
+// that passes no prMarks: a run has no single set to carry a mark.
+export default function SetPillRow({ sets, prMarks, style, collapseRuns = false }) {
   if (!sets?.length) return null;
+  if (collapseRuns) {
+    return (
+      <div className="set-pill-row" style={style}>
+        {toRuns(sets).map(({ set, count }, i) => {
+          const text = formatSet(set);
+          return (
+            <span key={i} className="set-pill">
+              {count > 1 ? `${count}×${text}` : text}
+            </span>
+          );
+        })}
+      </div>
+    );
+  }
   return (
     <div className="set-pill-row" style={style}>
       {sets.map((s, i) => {
@@ -49,4 +67,16 @@ export default function SetPillRow({ sets, prMarks, style }) {
       })}
     </div>
   );
+}
+
+// Consecutive sets that read the same are one run. Keyed on the formatted text, so "the same" is
+// exactly "would draw the same pill".
+function toRuns(sets) {
+  const runs = [];
+  for (const set of sets) {
+    const last = runs[runs.length - 1];
+    if (last && formatSet(last.set) === formatSet(set)) last.count += 1;
+    else runs.push({ set, count: 1 });
+  }
+  return runs;
 }
