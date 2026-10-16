@@ -1,7 +1,6 @@
 package com.worktrac.backend.billing;
 
 import com.stripe.exception.StripeException;
-import com.stripe.model.Event;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.config.StripeProperties;
@@ -82,7 +81,7 @@ public class StripeWebhookController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        Event event;
+        StripeService.WebhookEvent event;
         try {
             // Stripe's own check includes a timestamp tolerance (5 minutes by default), which is
             // the replay defence. Do not widen it.
@@ -99,16 +98,16 @@ public class StripeWebhookController {
         // Dashboard, so the same event id arriving twice is routine rather than exceptional. V57's
         // filtered unique index on stripe_event_id is the dedup point -- the duplicate insert
         // failing IS the "already seen" signal, with no check-then-insert race of its own.
-        boolean firstSeen = auditService.recordIfFirstSeen(accountId, event.getId(),
-                SUBSCRIPTION_EVENTS.contains(event.getType())
+        boolean firstSeen = auditService.recordIfFirstSeen(accountId, event.id(),
+                SUBSCRIPTION_EVENTS.contains(event.type())
                         ? BillingEventType.WEBHOOK_APPLIED
                         : BillingEventType.WEBHOOK_IGNORED,
-                "type=" + event.getType());
+                "type=" + event.type());
         if (!firstSeen) {
             return ResponseEntity.ok().build();
         }
 
-        if (!SUBSCRIPTION_EVENTS.contains(event.getType())) {
+        if (!SUBSCRIPTION_EVENTS.contains(event.type())) {
             // Understood, deliberately not acted on. Already recorded as IGNORED above.
             return ResponseEntity.ok().build();
         }
@@ -118,7 +117,7 @@ public class StripeWebhookController {
         } catch (StripeException e) {
             auditService.record(accountId, BillingEventType.WEBHOOK_REJECTED,
                     "Could not re-fetch subscription: " + e.getMessage());
-            log.error("Stripe webhook {} could not be applied", event.getId(), e);
+            log.error("Stripe webhook {} could not be applied", event.id(), e);
             // 5xx so Stripe retries: we could not reach Stripe to re-fetch, which is transient.
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
@@ -132,11 +131,11 @@ public class StripeWebhookController {
     // subscription.updated can arrive after a subscription.created that describes newer state --
     // applying delivered payloads directly lets the stale one win. Reading the subscription back
     // from Stripe makes ordering irrelevant, and lets a missed event self-heal on the next one.
-    private void applyEvent(Event event, Long accountId) throws StripeException {
+    private void applyEvent(StripeService.WebhookEvent event, Long accountId) throws StripeException {
         if (accountId == null) {
             auditService.record(null, BillingEventType.WEBHOOK_REJECTED,
-                    "Could not attribute event " + event.getId() + " (" + event.getType() + ") to an account");
-            log.warn("Stripe webhook {} could not be attributed to an account", event.getId());
+                    "Could not attribute event " + event.id() + " (" + event.type() + ") to an account");
+            log.warn("Stripe webhook {} could not be attributed to an account", event.id());
             return;
         }
 
@@ -147,7 +146,7 @@ public class StripeWebhookController {
         });
         if (subscription == null) {
             auditService.record(accountId, BillingEventType.WEBHOOK_REJECTED,
-                    "Event " + event.getId() + " names an account that no longer exists");
+                    "Event " + event.id() + " names an account that no longer exists");
             return;
         }
 
@@ -155,11 +154,11 @@ public class StripeWebhookController {
         if (stripeSubscriptionId == null) {
             // A checkout.session.completed for a household whose local row has not recorded the
             // subscription id yet. The session carries it.
-            stripeSubscriptionId = subscriptionIdFromEvent(event);
+            stripeSubscriptionId = event.stripeSubscriptionId();
         }
         if (stripeSubscriptionId == null) {
             auditService.record(accountId, BillingEventType.WEBHOOK_IGNORED,
-                    "Event " + event.getType() + " carries no subscription to re-fetch");
+                    "Event " + event.type() + " carries no subscription to re-fetch");
             return;
         }
 
@@ -173,43 +172,13 @@ public class StripeWebhookController {
     //
     // NEVER trusted as an authorization decision -- this only decides WHICH household a
     // Stripe-signed event refers to, after the signature has already proved Stripe sent it.
-    private Optional<Long> resolveAccountId(Event event) {
-        Optional<String> fromMetadata = event.getDataObjectDeserializer().getObject()
-                .filter(obj -> obj instanceof com.stripe.model.HasId)
-                .flatMap(obj -> Optional.ofNullable(metadataAccountId(obj)));
-        if (fromMetadata.isPresent()) {
-            return fromMetadata.flatMap(StripeWebhookController::parseLong);
+    private Optional<Long> resolveAccountId(StripeService.WebhookEvent event) {
+        if (event.accountId() != null) {
+            return parseLong(event.accountId());
         }
-        return customerIdFromEvent(event)
+        return Optional.ofNullable(event.stripeCustomerId())
                 .flatMap(subscriptionRepository::findByStripeCustomerId)
                 .map(subscription -> subscription.getAccount().getId());
-    }
-
-    private static String metadataAccountId(Object stripeObject) {
-        if (stripeObject instanceof com.stripe.model.checkout.Session session) {
-            return StripeService.accountIdFrom(session.getMetadata());
-        }
-        if (stripeObject instanceof com.stripe.model.Subscription subscription) {
-            return StripeService.accountIdFrom(subscription.getMetadata());
-        }
-        return null;
-    }
-
-    private static Optional<String> customerIdFromEvent(Event event) {
-        return event.getDataObjectDeserializer().getObject().map(obj -> {
-            if (obj instanceof com.stripe.model.checkout.Session session) return session.getCustomer();
-            if (obj instanceof com.stripe.model.Subscription subscription) return subscription.getCustomer();
-            if (obj instanceof com.stripe.model.Invoice invoice) return invoice.getCustomer();
-            return null;
-        }).filter(id -> id != null);
-    }
-
-    private static String subscriptionIdFromEvent(Event event) {
-        return event.getDataObjectDeserializer().getObject().map(obj -> {
-            if (obj instanceof com.stripe.model.checkout.Session session) return session.getSubscription();
-            if (obj instanceof com.stripe.model.Subscription subscription) return subscription.getId();
-            return null;
-        }).orElse(null);
     }
 
     private static Optional<Long> parseLong(String value) {

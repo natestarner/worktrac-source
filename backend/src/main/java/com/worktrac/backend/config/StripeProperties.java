@@ -24,7 +24,8 @@ import java.util.Optional;
 //
 // There is deliberately no api-version property: the stripe-java DEPENDENCY VERSION is the API
 // pin. Each SDK release is generated against one Stripe API version and speaks it on every
-// request, so a Dashboard account upgrade cannot change what this code sees. See StripeService.
+// request, so a Dashboard account upgrade cannot change what this code's REQUESTS see. Webhook
+// payloads are the exception (each endpoint has its own version) -- see StripeService.verifyWebhook.
 @Component
 @ConfigurationProperties(prefix = "app.stripe")
 public class StripeProperties {

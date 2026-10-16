@@ -1,5 +1,8 @@
 package com.worktrac.backend.billing;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stripe.StripeClient;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
@@ -19,7 +22,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.Map;
 
 // THE ONLY class in this application that imports com.stripe.*.
 //
@@ -35,6 +37,8 @@ import java.util.Map;
 public class StripeService {
 
     private static final Logger log = LoggerFactory.getLogger(StripeService.class);
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     // Stripe's own vocabulary, mapped once. An unrecognised status fails loudly HERE rather than
     // being guessed at somewhere downstream -- and it maps to INCOMPLETE (not entitled) rather than
@@ -83,6 +87,9 @@ public class StripeService {
     // The SDK does expose a per-request override, and it is called `unsafeSetStripeVersionOverride`
     // for a good reason: pointing a generated client at a different API version hands it responses
     // its own models were never built to parse. Bump the dependency instead.
+    //
+    // WEBHOOKS ARE THE EXCEPTION: their payloads are shaped by each webhook ENDPOINT's own API
+    // version in the Dashboard, which an SDK bump does not move. See verifyWebhook.
     private RequestOptions requestOptions(String idempotencyKey) {
         RequestOptions.RequestOptionsBuilder builder = RequestOptions.builder();
         if (idempotencyKey != null) {
@@ -190,8 +197,57 @@ public class StripeService {
     // Verifies the Stripe-Signature header against the raw request bytes. Stripe's own check
     // includes a timestamp tolerance (5 minutes by default), which is the replay defence -- do not
     // widen it.
-    public com.stripe.model.Event verifyWebhook(String rawBody, String signatureHeader) throws StripeException {
-        return Webhook.constructEvent(rawBody, signatureHeader, properties.getWebhookSecret());
+    //
+    // ⚠️ THE IDS ARE READ FROM THE SIGNED RAW JSON, NEVER FROM THE SDK'S TYPED MODELS. stripe-java
+    // only deserializes an event's data object when the event's API release train matches its own
+    // (EventDataObjectDeserializer.getObject() is empty otherwise), and the train an event arrives
+    // in is set by the webhook ENDPOINT's configuration in the Stripe Dashboard -- not by this code.
+    // Built on getObject(), the 33 -> 34 bump (dahlia -> endive) would have left every webhook
+    // unattributable until each endpoint was upgraded by hand. Object type, metadata.accountId,
+    // customer and subscription are stable across versions, and the subscription itself is always
+    // re-fetched at the SDK's own version. Pinned by StripeWebhookAttributionTest.
+    public WebhookEvent verifyWebhook(String rawBody, String signatureHeader) throws StripeException {
+        com.stripe.model.Event event = Webhook.constructEvent(rawBody, signatureHeader, properties.getWebhookSecret());
+        return webhookEventFrom(event.getId(), event.getType(), rawBody);
+    }
+
+    private static WebhookEvent webhookEventFrom(String id, String type, String rawBody) {
+        JsonNode object;
+        try {
+            object = OBJECT_MAPPER.readTree(rawBody).path("data").path("object");
+        } catch (JsonProcessingException e) {
+            // Unreachable in practice: constructEvent has already parsed these exact bytes.
+            throw new IllegalArgumentException("Stripe webhook body is not JSON", e);
+        }
+        String accountId = textOf(object.path("metadata").path("accountId"));
+        String customerId = idOf(object.path("customer"));
+        // Same per-type reading the typed models gave: only a session and a subscription carry our
+        // metadata, and an invoice is attributed through its customer alone.
+        return switch (String.valueOf(textOf(object.path("object")))) {
+            case "checkout.session" -> new WebhookEvent(id, type, accountId, customerId, idOf(object.path("subscription")));
+            case "subscription" -> new WebhookEvent(id, type, accountId, customerId, textOf(object.path("id")));
+            case "invoice" -> new WebhookEvent(id, type, null, customerId, null);
+            default -> new WebhookEvent(id, type, null, null, null);
+        };
+    }
+
+    private static String textOf(JsonNode node) {
+        return node.isTextual() ? node.asText() : null;
+    }
+
+    // An expandable field arrives as a bare id in a webhook, but as an object if it was expanded.
+    private static String idOf(JsonNode node) {
+        return node.isObject() ? textOf(node.path("id")) : textOf(node);
+    }
+
+    // What a verified webhook says, as app types. Any field may be null -- the controller decides
+    // what an unattributable event means.
+    public record WebhookEvent(
+            String id,
+            String type,
+            String accountId,
+            String stripeCustomerId,
+            String stripeSubscriptionId) {
     }
 
     // Package-private for StripeSubscriptionStateTest, which pins the cancellation mapping. That
@@ -250,10 +306,5 @@ public class StripeService {
             String stripeSubscriptionId,
             boolean complete,
             boolean paid) {
-    }
-
-    // Convenience for callers that need the metadata map off an arbitrary Stripe object.
-    static String accountIdFrom(Map<String, String> metadata) {
-        return metadata == null ? null : metadata.get("accountId");
     }
 }

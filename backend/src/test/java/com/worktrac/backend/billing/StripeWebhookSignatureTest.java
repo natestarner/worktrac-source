@@ -39,7 +39,8 @@ class StripeWebhookSignatureTest {
     }
 
     // Stripe's header format: t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<payload>">.
-    private static String signatureHeader(String payload, Instant timestamp, String secret) {
+    // Package-private: StripeWebhookAttributionTest signs its events with it too.
+    static String signatureHeader(String payload, Instant timestamp, String secret) {
         long seconds = timestamp.getEpochSecond();
         String signedPayload = seconds + "." + payload;
         try {
@@ -59,8 +60,8 @@ class StripeWebhookSignatureTest {
 
         var event = stripeService.verifyWebhook(PAYLOAD, header);
 
-        assertThat(event.getId()).isEqualTo("evt_test_1");
-        assertThat(event.getType()).isEqualTo("customer.subscription.updated");
+        assertThat(event.id()).isEqualTo("evt_test_1");
+        assertThat(event.type()).isEqualTo("customer.subscription.updated");
     }
 
     @Test
