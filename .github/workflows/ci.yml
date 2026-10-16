@@ -352,6 +352,33 @@ jobs:
           token: ${{ secrets.DEPLOY_REPO_PAT }}
           path: deploy
 
+      # download-artifact OVERLAYS the new build onto frontend-build/ and never deletes, so every
+      # deploy used to leave its hashed assets behind. ~50 deploys of them reached Azure Static Web
+      # Apps' 250 MB Free-plan limit and the frontend upload started failing outright
+      # (docs/incidents/2026-10-16-swa-asset-accumulation-250mb.md).
+      #
+      # Keep exactly ONE previous generation -- the assets the outgoing build's sw.js precaches,
+      # which is every file in its assets/ -- so a tab still running that build can lazy-load its
+      # chunks (xlsx converter, Stripe) across the deploy. Anything older is deleted.
+      #
+      # Fails SAFE: if sw.js names no assets (its format changed), nothing is pruned.
+      - name: Prune frontend assets older than the outgoing build
+        run: |
+          set -euo pipefail
+          cd deploy/frontend-build 2>/dev/null || { echo "No frontend-build yet -- nothing to prune"; exit 0; }
+          if [ ! -f sw.js ] || [ ! -d assets ]; then
+            echo "No sw.js or assets/ -- nothing to prune"
+            exit 0
+          fi
+          { grep -oE '"assets/[^"]+"' sw.js || true; } | tr -d '"' | sort -u > "$RUNNER_TEMP/keep.txt"
+          if [ ! -s "$RUNNER_TEMP/keep.txt" ]; then
+            echo "::warning::sw.js lists no assets/ entries -- skipping prune rather than guessing"
+            exit 0
+          fi
+          before=$(du -sm assets | cut -f1)
+          find assets -type f | sort | comm -23 - "$RUNNER_TEMP/keep.txt" | xargs -r rm -f
+          echo "Kept $(wc -l < "$RUNNER_TEMP/keep.txt") outgoing assets; assets/ ${before} MB -> $(du -sm assets | cut -f1) MB"
+
       - name: Download frontend build
         uses: actions/download-artifact@v8
         with:
