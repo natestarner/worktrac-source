@@ -351,6 +351,18 @@ wrong comparison from ever double-sending: the email only goes out while the col
 regardless of how many times `applyStripeState` runs for the same household afterward (a renewal,
 a redelivered webhook, the reconciliation watchdog self-healing a missed one).
 
+- **⚠️ "Still null" is decided by an atomic claim, never by the entity's copy.** One real checkout
+  runs `applyStripeState` ~4 times AT ONCE (`checkout.session.completed`,
+  `customer.subscription.created`, `invoice.paid`, the browser's reconcile), and every transaction
+  loaded the column as null before any committed, so the null check sent the welcome 2–3 times per
+  checkout until 2026-10-16. `SubscriptionRepository.claimPlusWelcome` is one conditional
+  `UPDATE … WHERE plus_welcome_sent_at IS NULL`, and only the caller it returns 1 to publishes.
+  - **It is the column's only writer: the entity maps it `updatable = false`.** Hibernate rewrites
+    every mapped column on update, so a losing transaction's flush would write its stale null back
+    over the winner's claim and re-arm the email for the next webhook.
+  - Pinned by `PlusWelcomeConcurrencyTest`: four real transactions, all forced to read before any
+    writes, under `READ_COMMITTED_SNAPSHOT` (production's setting). Four sends before the fix, one after.
+
 - **`PlusUpgradedEvent` is published from `applyStripeState` only on that first transition** — never
   for a comp grant (`CompGrantService`). A comped household was never charged, and the email's copy
   ("thanks for keeping Huddle going") presumes a purchase just happened.

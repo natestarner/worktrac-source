@@ -341,12 +341,21 @@ public class SubscriptionService {
         // that exact rather than best-effort even if a future edit gets wasEntitled/nowEntitled subtly wrong,
         // and it is why a renewal (Plus -> Plus) or a PAST_DUE recovery (both already Plus) never
         // re-triggers it.
-        boolean firstUpgrade = !wasEntitled && nowEntitled && subscription.getPlusWelcomeSentAt() == null;
-        if (firstUpgrade) {
-            subscription.setPlusWelcomeSentAt(clock.instant());
-        }
+        boolean upgrading = !wasEntitled && nowEntitled && subscription.getPlusWelcomeSentAt() == null;
 
         Subscription saved = subscriptionRepository.save(subscription);
+
+        // ⚠️ The check above reads THIS transaction's copy, which concurrent webhooks all loaded as
+        // null -- so it only decides who may TRY. The atomic claim decides who sends: exactly one
+        // caller sees it return 1. See claimPlusWelcome.
+        boolean firstUpgrade = false;
+        if (upgrading) {
+            Instant now = clock.instant();
+            firstUpgrade = subscriptionRepository.claimPlusWelcome(saved.getId(), now) == 1;
+            if (firstUpgrade) {
+                saved.setPlusWelcomeSentAt(now);
+            }
+        }
 
         // Member logins are gated on this household being Plus, and that answer is cached per login
         // for a minute (AccountAccessService). Without this, a re-upgrade leaves somebody who has

@@ -52,6 +52,9 @@ class SubscriptionServiceTest {
         // save() echoes back whatever it was given -- applyStripeState reads the id and account off
         // its return value, so a bare mock() (which defaults to null) would NPE there.
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        // The welcome claim wins unless a test says otherwise. Losing it under concurrency is
+        // pinned against a real database by PlusWelcomeConcurrencyTest.
+        when(repository.claimPlusWelcome(any(), any())).thenReturn(1);
         clock = new MutableClock();
         events = mock(ApplicationEventPublisher.class);
         // A real StripeProperties with a real price map, not a mock: applyStripeState now derives
@@ -532,6 +535,19 @@ class SubscriptionServiceTest {
             service.applyStripeState(subscription, state(SubscriptionStatus.ACTIVE));
 
             verify(events, never()).publishEvent(any(PlusUpgradedEvent.class));
+        }
+
+        // Another transaction claimed the welcome after this one loaded the row: this copy still
+        // reads null and the transition is real, but only the claim's winner may publish.
+        @Test
+        void aLostClaimPublishesNothing() {
+            Subscription subscription = subscription(SubscriptionStatus.FREE);
+            when(repository.claimPlusWelcome(any(), any())).thenReturn(0);
+
+            Subscription saved = service.applyStripeState(subscription, state(SubscriptionStatus.ACTIVE));
+
+            verify(events, never()).publishEvent(any(PlusUpgradedEvent.class));
+            assertThat(saved.getPlusWelcomeSentAt()).isNull();
         }
 
         // PAST_DUE is already Plus (isEntitled's own dunning-grace case) -- recovering FROM it back to
