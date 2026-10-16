@@ -5,10 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.config.EmailProperties;
 import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.support.AbstractIntegrationTest;
+import com.worktrac.backend.support.EmailTestSupport;
 import com.worktrac.backend.support.MutableClock;
 import com.worktrac.backend.support.RegistrationTestSupport;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -22,6 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -77,6 +81,16 @@ class AuthControllerTest extends AbstractIntegrationTest {
     // runs, instead of merely shadowing it the way a @Primary @TestConfiguration bean would.
     @MockitoBean
     private EmailService emailService;
+
+    @Autowired
+    @Qualifier("emailTaskExecutor")
+    private Executor emailTaskExecutor;
+
+    // See EmailTestSupport: a send still in flight would land in the next test's stubbing.
+    @AfterEach
+    void letInFlightEmailsFinish() {
+        EmailTestSupport.awaitEmailsIdle(emailTaskExecutor);
+    }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
