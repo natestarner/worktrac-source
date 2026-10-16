@@ -380,6 +380,15 @@ forgotten bracket from the same error.
   subscription from Stripe and write *that* — never apply the delivered payload directly, or a
   stale `subscription.updated` overwrites a newer `subscription.created`. Re-fetching also makes a
   missed event self-heal on the next one.
+- **Webhook attribution reads the signed RAW JSON, never the SDK's typed event models.** The
+  stripe-java version pins the API version of every request *we* make, but a webhook's payload is
+  shaped by its endpoint's own API version in the Dashboard (lower's was `2026-08-26.dahlia` when
+  stripe-java 34 moved to `endive`). `EventDataObjectDeserializer.getObject()` returns **empty**
+  across release trains, so attribution built on it turns every webhook into "could not
+  attribute" on the next SDK major, and CI can't see it because every other billing test mocks
+  `StripeService`. `StripeService.verifyWebhook` returns `WebhookEvent` (object type,
+  `metadata.accountId`, customer, subscription id: fields stable across versions), pinned at
+  three release trains by `StripeWebhookAttributionTest`. Don't move back to `getObject()`.
 - **V57's filtered unique index on `stripe_event_id` IS the idempotency mechanism.** Stripe
   redelivers events routinely; the duplicate insert failing is the dedup point
   (`BillingAuditService.recordIfFirstSeen`). Do not add a check-then-insert beside it — it has a
