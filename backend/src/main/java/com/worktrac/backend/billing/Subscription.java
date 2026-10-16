@@ -109,8 +109,13 @@ public class Subscription {
     // mechanism -- SubscriptionService.applyStripeState only sends that email while this column is
     // still null, so a redelivered webhook or a later renewal can never trigger a second one. See
     // .claude/rules/billing.md.
+    //
+    // updatable = false: SubscriptionRepository.claimPlusWelcome is the ONLY writer. Concurrent
+    // webhooks each hold this entity loaded with a null here, and Hibernate rewrites every mapped
+    // column on update, so a losing transaction's flush would put its stale null back over the
+    // winner's claim and re-arm the email for the next event.
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
-    @Column(name = "plus_welcome_sent_at")
+    @Column(name = "plus_welcome_sent_at", updatable = false)
     private Instant plusWelcomeSentAt;
 
     @JdbcTypeCode(SqlTypes.TIMESTAMP)
