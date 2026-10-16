@@ -7,10 +7,13 @@ import com.worktrac.backend.email.EmailService;
 import com.worktrac.backend.registrationaudit.RegistrationEvent;
 import com.worktrac.backend.registrationaudit.RegistrationEventRepository;
 import com.worktrac.backend.registrationaudit.RegistrationEventType;
+import com.worktrac.backend.support.EmailTestSupport;
 import com.worktrac.backend.support.MutableClock;
 import com.worktrac.backend.support.RegistrationTestSupport;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -25,6 +28,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -78,6 +82,16 @@ class PasswordResetControllerTest extends AbstractIntegrationTest {
     @MockitoBean
     private EmailService emailService;
 
+    @Autowired
+    @Qualifier("emailTaskExecutor")
+    private Executor emailTaskExecutor;
+
+    // See EmailTestSupport: a send still in flight would land in the next test's stubbing.
+    @AfterEach
+    void letInFlightEmailsFinish() {
+        EmailTestSupport.awaitEmailsIdle(emailTaskExecutor);
+    }
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // The two password-reset email-outcome events are recorded from RegistrationEmailEventListener's
@@ -103,6 +117,8 @@ class PasswordResetControllerTest extends AbstractIntegrationTest {
     private String registerRealUser(String label, String personName) throws Exception {
         String email = uniqueEmail(label);
         RegistrationTestSupport.registerAndConfirm(mockMvc, objectMapper, testCodeCache, email, personName);
+        // Callers stub emailService next; the registration emails must be done with it first.
+        EmailTestSupport.awaitEmailsIdle(emailTaskExecutor);
         return email;
     }
 

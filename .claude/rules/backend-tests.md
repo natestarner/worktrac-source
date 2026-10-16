@@ -73,8 +73,28 @@ concurrency bugs**:
    `@Isolated`. **If a future test needs `LogCaptor`, mark it `@Isolated` too** rather than relying
    on cross-request log ordering under parallelism.
 2. A separate Mockito `UnfinishedStubbing` failure in `PasswordResetControllerTest`, seen only on
-   the real CI runner, never across 8+ local runs. Root cause unconfirmed.
+   the real CI runner. **Root-caused 2026-10-16, and not a parallelism bug:** it recurred at
+   parallelism=1. See "Stub `EmailService` only while no email is in flight" below.
 
-Re-enabling parallelism needs: (a) root-causing the Mockito failure reproducibly outside CI,
+Re-enabling parallelism needs: (a) ~~root-causing the Mockito failure~~ done,
 (b) auditing the other 23 classes for both failure classes, (c) several green **CI** runs at the
 target parallelism.
+
+## ⚠️ Stub `EmailService` only while no email is in flight
+
+Every email goes out from an `@Async("emailTaskExecutor")` listener on a pool thread. Mockito
+stubbing is **not** safe against the mock being invoked on another thread mid-stub:
+`doThrow(...).when(emailService)` parks the answer on the mock, and a pool thread calling *any*
+method before the stubbed call lands takes it. The test thread then fails with
+`UnfinishedStubbingException` ("detected here" at the `when` line, thrown from the next one). That
+was `PasswordResetControllerTest`'s CI-only flake: `registerRealUser`'s registration success email
+was still in flight when the next line stubbed.
+
+- **After anything that sends email, call `EmailTestSupport.awaitEmailsIdle(emailTaskExecutor)`
+  before stubbing.** Tasks are submitted at commit, so once MockMvc returns, an idle pool means no
+  thread is about to touch the mock.
+- **A class that stubs `EmailService` also waits in `@AfterEach`**, so one test's sends can't land
+  in the next test's stubbing or in Spring's post-test mock reset. `PasswordResetControllerTest`,
+  `AuthControllerTest` and `RegistrationAuditServiceTest` do; copy them.
+- It never reproduces on demand locally (the window is microseconds). Two threads and one mock
+  reproduce it deterministically if you need to see it.

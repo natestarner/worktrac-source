@@ -4,14 +4,17 @@ import com.worktrac.backend.support.AbstractIntegrationTest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.worktrac.backend.email.EmailService;
+import com.worktrac.backend.support.EmailTestSupport;
 import com.worktrac.backend.support.MutableClock;
 import com.worktrac.backend.support.RegistrationTestSupport;
 import com.worktrac.backend.user.TestCodeCache;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
@@ -26,6 +29,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -81,6 +85,16 @@ class RegistrationAuditServiceTest extends AbstractIntegrationTest {
 
     @MockitoBean
     private EmailService emailService;
+
+    @Autowired
+    @Qualifier("emailTaskExecutor")
+    private Executor emailTaskExecutor;
+
+    // See EmailTestSupport: a send still in flight would land in the next test's stubbing.
+    @AfterEach
+    void letInFlightEmailsFinish() {
+        EmailTestSupport.awaitEmailsIdle(emailTaskExecutor);
+    }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
