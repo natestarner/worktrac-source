@@ -23,6 +23,20 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     List<Subscription> findByStatusInAndCurrentPeriodEndLessThan(
             List<SubscriptionStatus> statuses, Instant cutoff);
 
+    // Claims the once-ever welcome email: 1 for the caller that set the column, 0 for everyone else.
+    //
+    // ⚠️ ONE CONDITIONAL STATEMENT, NOT READ-THEN-SET. A real checkout lands three webhooks and the
+    // browser's reconcile within the same second, each in its own transaction, and every one of them
+    // reads the column as null before any commits -- the entity check alone sent the welcome three
+    // times. SQL Server serializes the UPDATE on the row lock, so exactly one caller sees a null to
+    // overwrite. This is the column's ONLY writer: the entity maps it updatable = false, or a losing
+    // transaction's flush would write its stale null back over the winner's claim.
+    // Pinned by PlusWelcomeConcurrencyTest.
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE subscriptions SET plus_welcome_sent_at = :now WHERE id = :id AND plus_welcome_sent_at IS NULL",
+            nativeQuery = true)
+    int claimPlusWelcome(Long id, Instant now);
+
     // Bulk, not entity-at-a-time: AccountDeletionService and TestDataCleanupService both need this
     // and the latter deletes whole cohorts. The FK to accounts is NO ACTION (see V56), so these
     // rows must go before the accounts they point at.
