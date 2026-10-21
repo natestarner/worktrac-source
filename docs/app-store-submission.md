@@ -1,0 +1,118 @@
+# App Store submission: listing, reviewer notes, privacy answers
+
+Drafts for launch checklist phase 10 (store listing and compliance), iOS only. Everything here is
+**a draft for Nate to edit**, written 2026-10-21 from the code and the marketing site. Anything
+Apple decides (rules, field limits, categories) should be re-checked in App Store Connect at
+submission time.
+
+## Listing (checklist 10.3)
+
+| Field | Draft | Limit |
+|---|---|---|
+| Name | Huddle: Workout Tracker | 23 / 30 |
+| Subtitle | Gym log for the whole family | 28 / 30 |
+| Category | Health & Fitness (secondary: none) | |
+| Keywords | `lifting,weightlifting,strength,sets,reps,PR,1RM,training,fitness,offline,kids,coach,routine,barbell` | 99 / 100 |
+| Promotional text | Log a set in two taps, switch between everyone in the house, and keep logging with no signal. Your whole history, PRs and trends, on one screen. | 144 / 170 |
+| Support URL | https://huddle.fitness (the in-app Contact Us also works) | |
+| Marketing URL | https://huddle.fitness | |
+| Privacy Policy URL | https://huddle.fitness/privacy.html | |
+
+Keywords deliberately repeat no word from the name or subtitle (Apple already indexes those) and
+lean on what people search for that the name doesn't say.
+
+### Description
+
+> One screen, the whole family's workout.
+>
+> Huddle is a workout log built for people who train together. Tap a name to switch between
+> everyone in the house: each person keeps their own log, history, records and rest timer, and
+> nobody's numbers get mixed up with anybody else's.
+>
+> LOG A SET IN TWO TAPS
+> Weight and reps prefill from last time, so most sets are one tap and go. What you did last
+> session is right there on the screen.
+>
+> WORKS WITH NO SIGNAL
+> Basement gym? Every set, edit and note saves on your phone first and syncs the moment you're
+> back, in order and without ever double-logging. Your history, PRs and routines stay readable the
+> whole time.
+>
+> RECORDS THAT CELEBRATE
+> Huddle tracks your best estimated 1RM, the heaviest you've ever lifted, and your biggest single
+> workout for every exercise, and celebrates each one as it happens. Every record names the sets
+> behind it.
+>
+> BUILT FOR THE PHONE IN YOUR HAND
+> A "rest's up" notification when your phone is locked between sets, the screen kept awake during a
+> workout, haptics when you hit a PR, and your data exported through the share sheet.
+>
+> FREE FOR THE WHOLE FAMILY
+> Everybody in the house gets their own log at no cost, with no ads. Huddle Plus adds your lifetime
+> history, all-time records, importing past workouts, and personal logins for anyone who wants one.
+
+Before using this, confirm the description matches whatever the app actually offers at
+submission: the "rest's up" notification, keep-awake and haptics are app-only features, and Plus
+details must match `billing.md`.
+
+## Notes for the reviewer (checklist 10.8)
+
+Paste into App Store Connect → the version → App Review Information → Notes, with the demo login
+(checklist 10.1) in the sign-in fields.
+
+> Huddle is a workout log for households: one account holds several people (for example a parent
+> and their children), each with a separate log. Profiles for children are created and managed by
+> the adult account holder; a child does not sign in unless the account holder enables a personal
+> login (a Plus feature).
+>
+> Native functionality: offline logging (sets are stored on the device and sync later, try
+> airplane mode), a local "rest's up" notification when a rest timer finishes while the phone is
+> locked, keeping the screen awake during a workout, haptic feedback on personal records, and
+> exporting data through the share sheet.
+>
+> Payments: on the United States storefront, Huddle Plus is purchased through a link to our web
+> checkout (Stripe), opened in Safari, as permitted for US storefront apps under guideline 3.1.1(a).
+> On any other storefront the app shows no prices, purchase buttons or links. The app is available
+> in the United States only. The demo account is on the Free plan so the upgrade link is visible
+> under Account → Plan & billing.
+>
+> Demo account: [email] / [password].
+
+## Privacy answers (checklist 10.5)
+
+Must match `frontend/ios/App/App/PrivacyInfo.xcprivacy`. Cross-checked against the code on
+2026-10-21. **Tracking: No** (no ads, no analytics SDK, no data shared with data brokers). Every
+type below is **Linked to the user**, purpose **App Functionality** unless noted.
+
+| App Store Connect category | Type | Where it comes from |
+|---|---|---|
+| Contact Info | Email Address | Sign-in, confirmation codes, invitations |
+| Contact Info | Name | The names of the people in a household |
+| Health & Fitness | Fitness | Workouts: exercises, sets, reps, weights, times |
+| Health & Fitness | Health | Bodyweight check-ins |
+| User Content | Other User Content | Workout and check-in notes |
+| User Content | Customer Support | Contact Us messages |
+| Identifiers | User ID | Account and login ids |
+| Identifiers | Device ID | The random per-install id sent with each request to match a bug report to the logs (not an advertising id) |
+| Purchases | Purchase History | Plan and billing events. Purposes: App Functionality, **Analytics** (the upgrade funnel in `billing.md`) |
+| Diagnostics | Crash Data | The last client error, only when attached to a Contact Us message |
+| Diagnostics | Other Diagnostic Data | App build and boot-failure record, attached the same way |
+
+Not collected by the app: payment card details (entered on Stripe's page in Safari), location,
+contacts, photos, browsing history. The server logs IP addresses for rate limiting and security;
+Apple's form has no IP category, and that use is not tracking.
+
+## Age rating (checklist 10.4)
+
+Expect 4+: no violence, mature content, gambling, web browsing or unrestricted user-generated
+content shared between strangers (notes and names are visible only inside one household). Do **not**
+choose the Kids category. Re-check any US state age-assurance requirements at submission time.
+
+## Also due at launch, outside the app
+
+- **The marketing FAQ says the opposite of the launch.** `marketing/index.html` answers "Is there
+  an app to install?" with "No app store, no updates to chase", and "Do I need an iPad…" talks only
+  about browsers. Both change with checklist 11.7 (store badges), once the App Store URL exists.
+- **The Privacy Policy and Terms describe a website.** Checklist 10.7. Drafted on its own branch
+  (`docs/app-store-policies`) so the wording can be reviewed as a legal change and shipped at launch,
+  not before.
