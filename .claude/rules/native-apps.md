@@ -26,6 +26,30 @@ anywhere else.
 - **A new device capability = a new function in `lib/native`, with a test that pins its web
   branch.** If the web branch is not provably today's behaviour, the change is not invisible on
   the web, and its PR must say so.
+- **Plugin chunks are not precached on the web.** `vite.config.js` names any lazy chunk made only of
+  `@capacitor/*` (core excepted) `native-*.js`, and the service worker's `globIgnores` skips them.
+  A new plugin import is covered automatically; don't import a plugin together with app code in
+  one dynamic `import()`, or its chunk loses the prefix and lands in every web install's precache.
+
+The adapters, each one a function whose web branch is the code it replaced:
+
+| Adapter | Web branch (unchanged behaviour) | App branch | Callers |
+|---|---|---|---|
+| `saveFile(blob, name)` | `<a download>` + blob URL | Write to the cache directory, then the share sheet. A dismissed sheet is success, not an error | `api/export.js` |
+| `externalLinkProps(url)` / `openExternal(url)` | `target="_blank"` anchor, no `onClick` | In-app browser sheet (SFSafariViewController) | `LegalLinks.jsx` |
+| `nativeHaptic(pattern)` | returns `false`, so `lib/haptics.js` takes its old routes | Apple's haptic engine; still behind the reduced-motion check | `lib/haptics.js` |
+| `isInstalledApp()` | `display-mode: standalone` / `navigator.standalone` | always `true` | `PullToRefresh.jsx` (History's pull) |
+
+`APP_BUILD` (`lib/appBuild.js`) is `"<platform> <version> (<build>) <instant>"` in the app and the
+bare instant on the web, clamped to **40 characters** because `ContactDiagnostics.appBuild` is
+`@Size(max = 40)` and an over-long value would refuse the whole Contact Us message.
+`NATIVE_APP_VERSION` / `NATIVE_BUILD_NUMBER` are baked in at `build:native` time, so the release
+workflow must pass the same values to `xcodebuild`.
+
+**Deliberately not adapted yet:** `BillingTab`'s Customer Portal `window.open`. Whether that link
+may appear at all depends on the App Store storefront (the billing-channels phase), not just on how
+it opens.
+
 - Never enable `CapacitorHttp` (it patches `fetch`, changing abort/timeout/CORS semantics on one
   platform only; `api/client.js` is the one HTTP path) and never add `@capacitor/network` (a second
   "am I online?" signal; `useOnlineStatus` is the one).

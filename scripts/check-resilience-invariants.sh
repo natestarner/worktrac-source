@@ -246,7 +246,14 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 #   write. A failed or paused fetch loses nothing -- the query keeps the months it holds and was
 #   already marked stale in the step before, so the next reader refetches; queryClient.test.js's
 #   "leaves History marked stale when the fetch cannot complete" pins exactly that.
-EXPECTED_LIB_SWALLOWS=55
+# 58 with the iOS app's adapters (lib/native), none of which sits on a write's path:
+#   installed.js (+1): isInstalledApp's matchMedia try, MOVED here from PullToRefresh.jsx (outside
+#     lib/, so it was never counted) -- the same guard, newly visible to this pin.
+#   links.js (+1): opening the in-app browser from a click handler. A sheet that fails to open
+#     leaves the person on the screen they were on; nothing is queued, nothing can be lost.
+#   haptics.js (+1): the native haptic, with exactly the decoration-only argument lib/haptics.js
+#     earned at 44 -> 47.
+EXPECTED_LIB_SWALLOWS=58
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

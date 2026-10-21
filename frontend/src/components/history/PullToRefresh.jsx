@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isInstalledApp } from '../../lib/native';
 
 // How far a finger must pull down from the top of History before letting go re-downloads it.
 export const PULL_THRESHOLD_PX = 80;
@@ -10,14 +11,10 @@ const gapFor = (pull) => Math.min(Math.round(pull / 2), 64);
 // tab already has one -- a mobile browser's own pull down reloads the page, and a reload on History
 // re-downloads it -- so this listens only in the installed app, where two would fire at once.
 // That is a DISPLAY-MODE branch, never a connectivity one: offline, the refresh it asks for simply
-// waits like any other fetch, and History keeps showing what it holds.
-export function isInstalledApp() {
-  try {
-    return window.matchMedia?.('(display-mode: standalone)').matches === true || window.navigator.standalone === true;
-  } catch {
-    return false;
-  }
-}
+// waits like any other fetch, and History keeps showing what it holds. "Installed" covers the
+// App Store app as well as the Home Screen app (lib/native/installed.js); re-exported here because
+// this is where the rest of History has always imported it from.
+export { isInstalledApp };
 
 // Listens on `targetRef`'s element, not the window: a sheet or dialog opened from History is portalled
 // outside it, so pulling down inside one never refreshes the page under it. A pull starts only with
