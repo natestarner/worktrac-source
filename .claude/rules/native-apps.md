@@ -130,6 +130,10 @@ inside it are gitignored and come from `npx cap sync ios`, so **every build runs
 `build:native` then `cap sync ios` first**. After adding or removing a Capacitor plugin, run
 `npx cap sync ios` and commit the regenerated `ios/App/CapApp-SPM/Package.swift`.
 
+`PrivacyInfo.xcprivacy` is the app target's privacy manifest (Capacitor and each plugin ship their
+own). **It must agree with App Store Connect's App Privacy answers** (`docs/app-store-submission.md`):
+a new kind of data the app sends to the server means a new entry in both.
+
 `Info.plist` declares `ITSAppUsesNonExemptEncryption = false`: Huddle uses only HTTPS, which is
 exempt, and declaring it skips App Store Connect's export-compliance question on every upload.
 
