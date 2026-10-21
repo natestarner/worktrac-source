@@ -10,7 +10,7 @@ import { renderWithQuery } from '../../test/queryWrapper';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
 import { useBillingChannel } from '../../hooks/useBillingChannel';
-import { openExternal } from '../../lib/native';
+import { openExternal, openInBrowser } from '../../lib/native';
 import { readPendingCheckout } from '../../lib/pendingCheckout';
 import {
   createCheckoutLink,
@@ -26,6 +26,7 @@ vi.mock('../../hooks/useBillingChannel', () => ({ useBillingChannel: vi.fn() }))
 vi.mock('../../lib/native', async (importOriginal) => ({
   ...(await importOriginal()),
   openExternal: vi.fn().mockResolvedValue(undefined),
+  openInBrowser: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
@@ -120,7 +121,10 @@ describe("'external' -- the App Store app on the US storefront", () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Plus' }));
 
-    await waitFor(() => expect(openExternal).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_1'));
+    // Safari, not the in-app sheet: closing a sheet never backgrounds the app, so the return that
+    // confirms the payment (useCheckoutResume's visibilitychange) would never fire.
+    await waitFor(() => expect(openInBrowser).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_1'));
+    expect(openExternal).not.toHaveBeenCalled();
     expect(createCheckoutLink).toHaveBeenCalledWith('YEAR', { plan: 'PLUS', band: null });
     expect(createCheckoutSession).not.toHaveBeenCalled();
     expect(readPendingCheckout()).toBe('cs_1');

@@ -45,7 +45,8 @@ The adapters, each one a function whose web branch is the code it replaced:
 | Adapter | Web branch (unchanged behaviour) | App branch | Callers |
 |---|---|---|---|
 | `saveFile(blob, name)` | `<a download>` + blob URL | Write to the cache directory, then the share sheet. A dismissed sheet is success, not an error | `api/export.js` |
-| `externalLinkProps(url)` / `openExternal(url)` | `target="_blank"` anchor, no `onClick` | In-app browser sheet (SFSafariViewController) | `LegalLinks.jsx` |
+| `externalLinkProps(url)` / `openExternal(url)` | `target="_blank"` anchor, no `onClick` | In-app browser sheet (SFSafariViewController) | `LegalLinks.jsx`, `BillingTab`'s portal |
+| `openInBrowser(url)` | new tab | Leaves for Safari (`@capacitor/app-launcher`). **For a page finished outside the app**: closing the in-app sheet never backgrounds the app, so a return that must be noticed (`useCheckoutResume`'s `visibilitychange`) needs Safari | `BillingTab`'s hosted checkout |
 | `nativeHaptic(pattern)` | returns `false`, so `lib/haptics.js` takes its old routes | Apple's haptic engine; still behind the reduced-motion check | `lib/haptics.js` |
 | `isInstalledApp()` | `display-mode: standalone` / `navigator.standalone` | always `true` | `PullToRefresh.jsx` (History's pull) |
 | `keepScreenAwake()` / `allowScreenSleep()` | no-op | `@capacitor-community/keep-awake` while a workout is on screen; iOS releases it on background | `SessionBar.jsx` (its visibility effect) |

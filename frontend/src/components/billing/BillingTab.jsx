@@ -29,7 +29,7 @@ import { accountVocab } from '../../utils/accountVocab';
 import { isPaidPlan, planIncludes } from '../../utils/planFeatures';
 import BackLink from '../shared/BackLink';
 import { useBillingChannel } from '../../hooks/useBillingChannel';
-import { openExternal } from '../../lib/native';
+import { openExternal, openInBrowser } from '../../lib/native';
 import { rememberPendingCheckout } from '../../lib/pendingCheckout';
 
 // The household's plan, and where an upgrade happens.
@@ -221,9 +221,10 @@ export default function BillingTab() {
         // Apple allows a link OUT to a web checkout on the US storefront, never payment UI in the
         // app. The session id is written down BEFORE the browser opens -- synchronously, so a
         // backgrounded app iOS kills can't lose it -- and useCheckoutResume confirms it on return.
+        // Safari, not the in-app sheet: only leaving the app makes the return a visibilitychange.
         const { url, sessionId } = await createCheckoutLink(interval, { plan, band });
         rememberPendingCheckout(sessionId);
-        await openExternal(url);
+        await openInBrowser(url);
         return;
       }
       const { clientSecret, publishableKey } = await createCheckoutSession(interval, { plan, band });
