@@ -1,6 +1,7 @@
 import { getApiUrl } from '../config';
 import { reachabilityMonitor } from '../lib/reachabilityMonitor';
 import { getCorrelationId } from '../lib/correlationId';
+import { CLIENT_ID } from '../lib/appBuild';
 
 const TOKEN_STORAGE_KEY = 'workout-tracker-token';
 
@@ -101,6 +102,10 @@ async function request(path, { method = 'GET', body, isFormData = false, timeout
   // it in the MDC so every log line a request produces is attributable, which is what makes a
   // Contact Us bug report traceable to what actually happened. See lib/correlationId.js.
   headers['X-Correlation-Id'] = getCorrelationId();
+  // Which build sent this ("ios/1.4.0+57", "web/<build instant>"), logged beside every line the
+  // request produces. An App Store install can be months behind, and this is how we learn which
+  // builds are still calling an endpoint before changing it. Unconditional, like the line above.
+  headers['X-Huddle-Client'] = CLIENT_ID;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -180,6 +185,7 @@ export const apiClient = {
     // Same header as `request` -- an export that fails is exactly the kind of thing someone writes
     // in about, so it must be correlatable too.
     headers['X-Correlation-Id'] = getCorrelationId();
+    headers['X-Huddle-Client'] = CLIENT_ID;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), EXPORT_TIMEOUT_MS);

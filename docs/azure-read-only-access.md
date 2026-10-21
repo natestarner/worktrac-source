@@ -139,6 +139,29 @@ and is the table to check when the app never came up at all.
 Because lower runs `min-replicas=0`, a quiet period shows a `GracefulShutdown` line followed by
 a cold start on the next request — that pattern is normal, not a crash.
 
+### Which app builds are live? (run before removing anything from the API)
+
+Every line also carries `[client=…]`: the `X-Huddle-Client` header, `ios/1.4.0+57` from the App
+Store app and `web/<build instant>` from a browser. `GET /api/auth/me` logs one `Session check` line
+per app open, so counting distinct users per client over a window says which builds are still in
+use. An App Store build can stay in use for months, so this is the evidence
+`.claude/rules/api-compatibility.md` asks for before a field, endpoint or validation rule changes.
+
+```bash
+az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a   --analytics-query   "ContainerAppConsoleLogs_CL
+   | where ContainerAppName_s == 'worktrac-backend-production'
+   | where TimeGenerated > ago(30d)
+   | where Log_s contains 'Session check'
+   | extend client = extract(@'\[client=([^\]]+)\]', 1, Log_s),
+            uid = extract(@'\[uid=([^\]]+)\]', 1, Log_s)
+   | summarize people = dcount(uid), lastSeen = max(TimeGenerated) by client
+   | order by client desc" -o table
+```
+
+`client=unknown` is a caller that sent no header: an installed web client from before the header
+existed, or anything that isn't Huddle. Only `ios/…` (and later `android/…`) rows matter for
+`NATIVE_MIN_SUPPORTED_BUILD`; a `web/…` row is gone within hours of a deploy anyway.
+
 ### The extension
 
 `az monitor log-analytics query` lives in an extension. Without it the command tries to

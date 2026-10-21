@@ -20,6 +20,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import PRCelebration from '../components/shared/PRCelebration';
 import OfflineBanner from '../components/shared/OfflineBanner';
 import ConnectionTroubleBanner from '../components/shared/ConnectionTroubleBanner';
+import UpdateAppBanner from '../components/shared/UpdateAppBanner';
 import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
 import ErrorBoundary from '../components/shared/ErrorBoundary';
 import ReadOnlyPersonNotice from '../components/shared/ReadOnlyPersonNotice';
@@ -239,6 +240,7 @@ export default function AppShell() {
       </a>
       <OfflineBanner />
       <ConnectionTroubleBanner />
+      <UpdateAppBanner />
       <OfflineRecoveryPrompt />
       {/* Only what is doing real work stays on screen. All three bars used to travel together as
           one sticky unit, which cost 218px portrait / 178px landscape of permanent chrome -- on an

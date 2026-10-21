@@ -22,6 +22,10 @@ import java.util.List;
 // to" and simply hides the entry. That degrades correctly with no SNAPSHOT_VERSION bump -- the
 // field is additive and its absence has a sensible meaning, unlike the shape change that forced
 // version 2.
+//
+// `client` is what the server tells the App Store app about itself -- the minimum build it still
+// supports (ClientConfigDto). Additive in the same way.
 public record MeResponse(UserDto user, AccountDto account, MembershipDto membership,
-                          List<PersonDto> people, List<AccountChoiceDto> accounts) {
+                          List<PersonDto> people, List<AccountChoiceDto> accounts,
+                          ClientConfigDto client) {
 }

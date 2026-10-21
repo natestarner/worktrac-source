@@ -61,6 +61,17 @@ class CoreCrudControllerTest extends AbstractIntegrationTest {
         token = registerJson.get("token").asText();
     }
 
+    // The App Store app reads its minimum supported build from /me (ClientConfigDto), and the auth
+    // snapshot keeps it for an offline open. Unconfigured, every build is supported and there is no
+    // store link, so no app shows "Update Huddle".
+    @Test
+    void meCarriesTheClientConfigWithEveryBuildSupportedByDefault() throws Exception {
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.client.minSupportedNativeBuild").value(0))
+                .andExpect(jsonPath("$.client.appStoreUrl").value(""));
+    }
+
     @Test
     void cannotDeletePrimaryPerson() throws Exception {
         String meResponse = mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))

@@ -15,11 +15,14 @@ const AUTH_SNAPSHOT_KEY = 'worktrac-auth-snapshot';
 // regression.
 const SNAPSHOT_VERSION = 2;
 
-export function saveAuthSnapshot({ user, account, people, membership }) {
+// `client` (the App Store app's minimum supported build, from /me) is additive with no version bump:
+// a snapshot without it reads as "no minimum known", which shows no update banner -- the right
+// answer for a device that has never been told one.
+export function saveAuthSnapshot({ user, account, people, membership, client }) {
   try {
     localStorage.setItem(
       AUTH_SNAPSHOT_KEY,
-      JSON.stringify({ v: SNAPSHOT_VERSION, user, account, people, membership }),
+      JSON.stringify({ v: SNAPSHOT_VERSION, user, account, people, membership, client }),
     );
   } catch {
     // Private-mode / quota / disabled storage: the snapshot is a progressive enhancement, never a
@@ -51,6 +54,7 @@ export function loadAuthSnapshot() {
       account: parsed.account,
       people: parsed.people || [],
       membership: parsed.membership || null,
+      client: parsed.client || null,
     };
   } catch {
     return null;

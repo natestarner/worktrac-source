@@ -89,3 +89,26 @@ recorded here as it lands:
   in-app browser, real haptics, History's pull-to-refresh in the app, and the store version in
   Contact Us diagnostics. Cost on the web: `@capacitor/core` in the main chunk (~9 KB raw, ~3 KB
   gzipped); the plugins' own chunks are kept out of the precache.
+- **Launch** (`feat/native-launch`): app icon (light + iOS 18 dark), branded launch screen,
+  `MainViewController` painting every background in `--color-bg`, and the Help page's install
+  section in the app.
+- **Version skew** (`feat/native-version-skew`): `X-Huddle-Client` on every request and
+  `[client=…]` on every log line; `/me` carries `client.minSupportedNativeBuild` (env
+  `NATIVE_MIN_SUPPORTED_BUILD`, default 0) and the auth snapshot keeps it for offline opens;
+  `UpdateAppBanner` below it (a banner, never a gate); `.claude/rules/api-compatibility.md`; the
+  frozen list of durable-write keys; and the "Which app builds are live?" query.
+
+## Old builds: why the API is now additive-only
+
+A web bundle lives for hours after a deploy. An App Store build lives until its owner updates,
+which can be months. So the backend now has callers running code that is no longer on `main`, and
+three things follow (the enforceable version is `.claude/rules/api-compatibility.md`):
+
+1. **Know who is calling.** Every request says which build sent it, and the logs can count people
+   per build. Removing a field or tightening a rule waits for that count.
+2. **Ask, never block.** Below `minSupportedNativeBuild` the app shows a banner. A hard gate would
+   turn "this build is old" into "you can't log your set", which is exactly the blank/locked-out
+   outcome the resilience contract forbids, and it would strand whatever was queued.
+3. **Queued writes outlive the code that queued them.** The outbox survives a store update, so the
+   new build must replay what the old one queued, under the same keys with the same variables.
+   `lib/outboxCompatibility.test.js` pins every key ever shipped.

@@ -58,11 +58,12 @@ server:
 #
 # `logging.pattern.level` is Spring Boot's supported hook for extending the default console pattern,
 # which is why there is no logback-spring.xml in this project. Anyone adding one must carry these
-# two keys across, or every log line silently loses its correlation id. The `:-` defaults keep
+# keys across, or every log line silently loses its correlation id. `client` is the app build
+# (X-Huddle-Client, e.g. ios/1.4.0+57) -- what the "which app versions are live?" query reads. The `:-` defaults keep
 # unauthenticated and untagged requests (health checks, the Event Grid webhook) readable.
 logging:
   pattern:
-    level: "%5p [cid=%X{cid:-none}] [uid=%X{uid:-anon}]"
+    level: "%5p [cid=%X{cid:-none}] [uid=%X{uid:-anon}] [client=%X{client:-unknown}]"
 
 management:
   endpoints:
@@ -74,6 +75,11 @@ management:
       show-details: never
 
 app:
+  # The App Store app's minimum supported build and its store link, served on /me
+  # (NativeAppProperties). 0 / empty = every build supported, no link yet.
+  native:
+    min-supported-build: ${NATIVE_MIN_SUPPORTED_BUILD:0}
+    app-store-url: ${NATIVE_APP_STORE_URL:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
   jwt:
