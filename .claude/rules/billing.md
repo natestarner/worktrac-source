@@ -494,6 +494,21 @@ full reasoning; don't move it back in front of the deletes.
   so `BillingTab`'s own reconcile and `PlusCelebration` run exactly as after a web checkout. An unpaid
   result never celebrates and keeps the note (they may only have switched apps); a 4xx forgets it; it
   expires after a day. The webhook and the watchdog apply the purchase regardless.
+- **The app's upgrade funnel is in `billing_events`, so keep its two details' shape.** A link opened
+  is `CHECKOUT_STARTED` with `hosted session=<id>`; a payment the app (or the web) confirmed is
+  `CHECKOUT_RECONCILED` with `session=<id>`. Joining them is the evidence for "would In-App Purchase
+  earn more despite Apple's cut?" A purchase the app never came back for is still applied by the
+  webhook, just not counted here, so treat the ratio as a floor. Count DISTINCT: a paid return is
+  reconciled twice (`useCheckoutResume`, then `BillingTab` on `?checkout=`), so it has two rows.
+  ```sql
+  SELECT COUNT(DISTINCT s.id) AS links_opened,
+         COUNT(DISTINCT CASE WHEN r.id IS NOT NULL THEN s.id END) AS confirmed_paid
+  FROM billing_events s
+  LEFT JOIN billing_events r ON r.event_type = 'CHECKOUT_RECONCILED'
+       AND r.detail LIKE '%session=' + SUBSTRING(s.detail, CHARINDEX('session=', s.detail) + 8, 255)
+  WHERE s.event_type = 'CHECKOUT_STARTED' AND s.detail LIKE '% hosted session=%'
+    AND s.created_at > DATEADD(DAY, -90, GETDATE());
+  ```
 - **⚠️ Verify before every App Store submission** that the US link-out rules still stand: as of
   2026-10 Apple takes no commission on linked purchases while the district court sets a rate, and a
   fee may arrive. Outside the US, selling would need In-App Purchase, which is deferred.

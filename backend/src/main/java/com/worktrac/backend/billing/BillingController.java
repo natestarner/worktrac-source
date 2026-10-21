@@ -129,8 +129,11 @@ public class BillingController {
                     target.accountId(), target.customerId(), target.sku(),
                     origin + "/checkout-complete?session_id={CHECKOUT_SESSION_ID}",
                     origin + "/checkout-complete?cancelled=1");
+            // "hosted" + the session id are the app's upgrade funnel: every link opened, joinable to
+            // the CHECKOUT_RECONCILED row for the same session (query in billing.md). It is the data
+            // that decides, later, whether In-App Purchase would earn more despite Apple's cut.
             auditService.record(target.accountId(), BillingEventType.CHECKOUT_STARTED,
-                    "sku=" + target.sku() + " hosted");
+                    "sku=" + target.sku() + " hosted session=" + checkout.sessionId());
             return Map.of("url", checkout.url(), "sessionId", checkout.sessionId());
         } catch (StripeException e) {
             auditService.record(target.accountId(), BillingEventType.CHECKOUT_STARTED,
@@ -245,7 +248,8 @@ public class BillingController {
             StripeSubscriptionState state = stripeService.fetchSubscriptionState(result.stripeSubscriptionId());
             subscriptionService.applyStripeState(subscription, state);
             auditService.record(accountId, BillingEventType.CHECKOUT_RECONCILED,
-                    "status=" + state.status() + " interval=" + state.billingInterval());
+                    "status=" + state.status() + " interval=" + state.billingInterval()
+                            + " session=" + sessionId);
             return subscriptionService.describe(accountId);
         } catch (StripeException e) {
             log.error("Stripe checkout reconcile failed for account {}", accountId, e);

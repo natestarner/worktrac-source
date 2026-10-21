@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -57,6 +58,9 @@ class CheckoutLinkTest extends AbstractIntegrationTest {
     @Autowired
     private SubscriptionRepository subscriptionRepository;
 
+    @Autowired
+    private BillingEventRepository billingEventRepository;
+
     @MockitoBean
     private StripeService stripeService;
 
@@ -67,6 +71,7 @@ class CheckoutLinkTest extends AbstractIntegrationTest {
 
     private String token;
     private long accountId;
+    private String customerId;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -75,7 +80,9 @@ class CheckoutLinkTest extends AbstractIntegrationTest {
         token = registration.get("token").asText();
         accountId = registration.get("account").get("id").asLong();
         when(stripeService.isConfigured()).thenReturn(true);
-        when(stripeService.createCustomer(anyLong(), any(), any())).thenReturn("cus_test");
+        // One customer per household: the tests share a database, and stripe_customer_id is unique.
+        customerId = "cus_" + UUID.randomUUID();
+        when(stripeService.createCustomer(anyLong(), any(), any())).thenReturn(customerId);
         when(stripeService.createHostedCheckoutSession(anyLong(), anyString(), any(), anyString(), anyString()))
                 .thenReturn(new StripeService.HostedCheckout("https://checkout.stripe.com/c/pay/cs_test_1", "cs_test_1"));
     }
@@ -96,10 +103,22 @@ class CheckoutLinkTest extends AbstractIntegrationTest {
 
         // Stripe lands the BROWSER on a page at the app's own origin -- derived from the embedded
         // checkout's return URL, so no new setting -- which tells the person to go back to the app.
-        verify(stripeService).createHostedCheckoutSession(eq(accountId), eq("cus_test"), eq(PlanSku.PLUS_MONTH),
+        verify(stripeService).createHostedCheckoutSession(eq(accountId), eq(customerId),eq(PlanSku.PLUS_MONTH),
                 eq("https://app.example.test/checkout-complete?session_id={CHECKOUT_SESSION_ID}"),
                 eq("https://app.example.test/checkout-complete?cancelled=1"));
         verify(stripeService, never()).createEmbeddedCheckoutSession(anyLong(), anyString(), any());
+    }
+
+    // The app's upgrade funnel (billing.md): a link opened is a CHECKOUT_STARTED row marked hosted
+    // and carrying its session id, so it can be joined to that session's CHECKOUT_RECONCILED row.
+    @Test
+    void recordsTheOpenedLinkForTheUpgradeFunnel() throws Exception {
+        requestLink(Map.of("plan", "PLUS", "interval", "MONTH")).andExpect(status().isOk());
+
+        assertThat(billingEventRepository.findByAccountIdOrderByCreatedAtDesc(accountId))
+                .filteredOn(e -> e.getEventType() == BillingEventType.CHECKOUT_STARTED)
+                .extracting(BillingEvent::getDetail)
+                .containsExactly("sku=PLUS_MONTH hosted session=cs_test_1");
     }
 
     // The guard that stops a household paying twice applies to the link exactly as it does on the web.
