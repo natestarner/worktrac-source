@@ -292,6 +292,14 @@ export default function HelpTab() {
           <li>Every person has their own timer, running independently in the background.</li>
           <li>It stops climbing at {restCeilingMinutes} minutes, long past any real rest interval.</li>
           <li>Ending the workout clears that person&rsquo;s timer.</li>
+          {/* App-only copy: these two are phone features the browser can't do (see the install
+              section's comment for why words, and only words, may branch on platform). */}
+          {isNativeApp() ? (
+            <li>
+              In the Huddle app, your phone tells you when the bar fills, even if it&rsquo;s locked or
+              you&rsquo;ve switched apps. The screen also stays on while you&rsquo;re mid-workout.
+            </li>
+          ) : null}
         </ul>
         <p>
           <strong>To turn it off:</strong> account menu &rarr; <T>App Settings</T> &rarr;{' '}

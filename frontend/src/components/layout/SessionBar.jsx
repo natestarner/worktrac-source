@@ -4,6 +4,7 @@ import { tryForceUpdate } from '../../lib/swUpdate';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useLiveSession } from '../../hooks/useLiveSession';
+import { allowScreenSleep, keepScreenAwake } from '../../lib/native';
 import { useRestTimerPreference } from '../../hooks/useRestTimerPreference';
 import { DEFAULT_REST_TARGET_SECONDS } from '../../utils/restTarget';
 import { formatRestTime, formatTime } from '../../utils/datetime';
@@ -57,6 +58,18 @@ export default function SessionBar() {
     const root = document.documentElement;
     root.style.setProperty('--bottom-bar-height', 'var(--session-bar-height)');
     return () => root.style.removeProperty('--bottom-bar-height');
+  }, [visible]);
+
+  // The screen stays on while this bar is on screen -- i.e. while the active person is mid-workout --
+  // so an iPad propped against a rack doesn't lock between sets. The App Store app only (a no-op on
+  // the web), and iOS releases it whenever the app goes to the background. Owned here for the same
+  // reason as the reservation above: the component that decides the workout is on screen decides.
+  useEffect(() => {
+    if (!visible) return undefined;
+    keepScreenAwake();
+    return () => {
+      allowScreenSleep();
+    };
   }, [visible]);
 
   if (!visible) return null;
