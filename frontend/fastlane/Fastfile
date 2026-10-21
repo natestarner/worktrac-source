@@ -1,0 +1,82 @@
+# Plumbing only: every decision about WHAT gets built (API origin, version, build number) is made in
+# mobile-release.yml and npm scripts, so this file can be swapped for another build service without
+# moving any of it. Full runbook: docs/architecture/native-apps.md, "Releasing".
+#
+# UNVERIFIED until the Apple Developer account, the App Store Connect API key and the certificates
+# repo exist (launch checklist 1.5-1.12, 6.3-6.4). Written so the first run has something concrete
+# to fail against, not because it has run.
+
+default_platform(:ios)
+
+# The two app variants. Lower is TestFlight-only and points at the lower backend; it is never
+# submitted for review.
+VARIANTS = {
+  "lower" => { bundle_id: "fitness.huddle.app.lower", display_name: "Huddle Lower" },
+  "production" => { bundle_id: "fitness.huddle.app", display_name: "Huddle" },
+}.freeze
+
+def variant(options)
+  env = options[:env] || ENV["HUDDLE_ENV"] || "lower"
+  VARIANTS.fetch(env) { UI.user_error!("env must be lower or production, got #{env}") }
+end
+
+def asc_api_key
+  app_store_connect_api_key(
+    key_id: ENV.fetch("ASC_KEY_ID"),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key_content: ENV.fetch("ASC_KEY_P8"),
+  )
+end
+
+platform :ios do
+  # ONE-TIME (checklist 6.4): create the distribution certificate and both App Store profiles and
+  # store them, encrypted with MATCH_PASSWORD, in the private certificates repo. Every later build
+  # only reads them (readonly). Re-run only when the certificate expires (yearly).
+  desc "Create the signing certificate and profiles (run once, then yearly)"
+  lane :certificates do
+    match(
+      type: "appstore",
+      app_identifier: VARIANTS.values.map { |v| v[:bundle_id] },
+      readonly: false,
+      api_key: asc_api_key,
+    )
+  end
+
+  desc "Build a signed app for one variant and upload it to TestFlight"
+  lane :beta do |options|
+    v = variant(options)
+    setup_ci # a temporary keychain on the CI runner; no Mac of our own holds the certificate
+    api_key = asc_api_key
+
+    match(type: "appstore", app_identifier: [v[:bundle_id]], readonly: true, api_key: api_key)
+
+    update_code_signing_settings(
+      path: "ios/App/App.xcodeproj",
+      targets: ["App"],
+      use_automatic_signing: false,
+      team_id: ENV.fetch("APPLE_TEAM_ID"),
+      bundle_identifier: v[:bundle_id],
+      code_sign_identity: "Apple Distribution",
+      profile_name: ENV.fetch("sigh_#{v[:bundle_id]}_appstore_profile-name"),
+    )
+
+    # The SAME version and build number build:native baked into the bundle (lib/appBuild.js), so
+    # what Contact Us reports is what the App Store shows.
+    build_app(
+      project: "ios/App/App.xcodeproj",
+      scheme: "App",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "build/release",
+      xcargs: [
+        "PRODUCT_BUNDLE_IDENTIFIER=#{v[:bundle_id]}",
+        "APP_DISPLAY_NAME=\"#{v[:display_name]}\"",
+        "MARKETING_VERSION=#{ENV.fetch('NATIVE_APP_VERSION')}",
+        "CURRENT_PROJECT_VERSION=#{ENV.fetch('NATIVE_BUILD_NUMBER')}",
+      ].join(" "),
+    )
+
+    # Promotion from TestFlight to the App Store stays a manual click in App Store Connect.
+    upload_to_testflight(api_key: api_key, skip_waiting_for_build_processing: true)
+  end
+end
