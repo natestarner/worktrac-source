@@ -105,6 +105,29 @@ recorded here as it lands:
   StoreKit plugin) and links out to Stripe's hosted checkout on the US storefront only; everywhere
   else it shows the plan with no way to buy. `POST /api/billing/checkout-link`, the public
   `/checkout-complete` landing page, and a resume reconcile when the app comes back.
+- **Universal links** (`feat/native-links`): the app's Associated Domains entitlement (per variant),
+  in-app routing of a link that opened the app, and the web host serving
+  `/.well-known/apple-app-site-association`. The file itself waits for the Apple Team ID. Contents,
+  with `TEAMID` replaced:
+
+  ```json
+  {
+    "applinks": {
+      "details": [{
+        "appIDs": ["TEAMID.fitness.huddle.app", "TEAMID.fitness.huddle.app.lower"],
+        "components": [
+          { "/": "/join*" },
+          { "/": "/app/*" },
+          { "/": "/checkout-complete*" }
+        ]
+      }]
+    }
+  }
+  ```
+
+  After it deploys, `curl -i https://app.dev.huddle.fitness/.well-known/apple-app-site-association`
+  must return that JSON (not `index.html`) with `Content-Type: application/json`. That is also the
+  first check that the deploy repo's Static Web Apps upload kept the dot directory.
 
 ## Selling in the app: why a link-out, and only in the US
 
