@@ -16,6 +16,21 @@ export async function openExternal(url) {
   await Browser.open({ url });
 }
 
+// Leaves the app for the phone's own browser (Safari), for a page the person finishes OUTSIDE the
+// app -- today only the App Store app's hosted Stripe checkout. Not the in-app sheet above, for two
+// reasons: closing a sheet never takes the app out of the foreground, so useCheckoutResume (which
+// confirms the payment on `visibilitychange`) would never notice they came back; and Apple's US
+// rules are about linking OUT to a web checkout, which Safari unambiguously is.
+// Web: the same new tab as openExternal's web branch.
+export async function openInBrowser(url) {
+  if (!isNativeApp()) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  const { AppLauncher } = await import('@capacitor/app-launcher');
+  await AppLauncher.openUrl({ url });
+}
+
 // Spread onto an <a>: `<a {...externalLinkProps(url)}>Terms</a>`. On the web the result has no
 // onClick at all, so the anchor is the same element it always was; in the app the click is taken
 // over and opened in the in-app browser.

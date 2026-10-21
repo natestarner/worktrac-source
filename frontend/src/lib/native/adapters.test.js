@@ -14,6 +14,7 @@ const plugins = vi.hoisted(() => ({
   writeFile: vi.fn(),
   share: vi.fn(),
   browserOpen: vi.fn(),
+  launcherOpen: vi.fn(),
   notification: vi.fn(),
   impact: vi.fn(),
   keepAwake: vi.fn(),
@@ -42,6 +43,7 @@ vi.mock('@capacitor/filesystem', () => ({
 }));
 vi.mock('@capacitor/share', () => ({ Share: { share: plugins.share } }));
 vi.mock('@capacitor/browser', () => ({ Browser: { open: plugins.browserOpen } }));
+vi.mock('@capacitor/app-launcher', () => ({ AppLauncher: { openUrl: plugins.launcherOpen } }));
 vi.mock('@capacitor/haptics', () => ({
   Haptics: { notification: plugins.notification, impact: plugins.impact },
   ImpactStyle: { Light: 'LIGHT' },
@@ -51,6 +53,7 @@ vi.mock('@capacitor/haptics', () => ({
 import {
   saveFile,
   openExternal,
+  openInBrowser,
   externalLinkProps,
   nativeHaptic,
   isInstalledApp,
@@ -134,6 +137,21 @@ describe('external links', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     await openExternal('https://huddle.fitness/privacy.html');
     expect(open).toHaveBeenCalledWith('https://huddle.fitness/privacy.html', '_blank', 'noopener,noreferrer');
+    expect(plugins.browserOpen).not.toHaveBeenCalled();
+  });
+
+  it('on the web, openInBrowser is the same new tab', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    await openInBrowser('https://checkout.stripe.com/c/pay/cs_1');
+    expect(open).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_1', '_blank', 'noopener,noreferrer');
+    expect(plugins.launcherOpen).not.toHaveBeenCalled();
+  });
+
+  // Leaving the app is the point: only that makes coming back a visibilitychange.
+  it('in the app, openInBrowser leaves for Safari rather than the in-app sheet', async () => {
+    native.on = true;
+    await openInBrowser('https://checkout.stripe.com/c/pay/cs_1');
+    expect(plugins.launcherOpen).toHaveBeenCalledWith({ url: 'https://checkout.stripe.com/c/pay/cs_1' });
     expect(plugins.browserOpen).not.toHaveBeenCalled();
   });
 
