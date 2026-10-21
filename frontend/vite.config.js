@@ -33,6 +33,10 @@ const pwaPlugin = (mode) => VitePWA({
   manifest: false, // keep the existing hand-written public/manifest.webmanifest
   workbox: {
     globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff,woff2}'],
+    // The Capacitor plugins' lazy chunks (named by NATIVE_CHUNK below). lib/native imports them
+    // only inside its native branch, so a browser never loads one -- precaching them would make
+    // every web install and update download ~20 KB of code that can never run there.
+    globIgnores: ['**/native-*.js'],
     navigateFallback: '/index.html',
     // Never hand app-shell HTML to API/health calls; let those hit the network (and fail cleanly
     // offline, which the app handles) instead of being answered with index.html.
@@ -70,8 +74,18 @@ export default defineConfig(({ mode }) => ({
   // says WHICH build it came from. There is no version in package.json worth reading (it is
   // "0.0.0") and no git SHA available here -- that would have to come from the deploy repo -- so
   // the build instant is the honest answer to "which deploy is this".
+  //
+  // The app build adds the store version: an App Store install can be months behind, so "which
+  // release is this person on" matters more there than the build instant. The release workflow
+  // passes the SAME NATIVE_APP_VERSION / NATIVE_BUILD_NUMBER to xcodebuild, so the value baked in
+  // here is the one the App Store shows. Empty on the web.
   define: {
     __APP_BUILD__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')),
+    __APP_VERSION__: JSON.stringify(
+      mode === 'native'
+        ? `${process.env.NATIVE_APP_VERSION || '0.0.0'} (${process.env.NATIVE_BUILD_NUMBER || '0'})`
+        : ''
+    ),
   },
   // No explicit JSX runtime config needed: @vitejs/plugin-react sets the automatic runtime
   // itself (via its own internal oxc config) for dev, build, AND the Vitest transform alike --
@@ -79,6 +93,22 @@ export default defineConfig(({ mode }) => ({
   // esbuild.jsx:'automatic' override here predates plugin-react doing this and had gone
   // redundant; it now just collides with plugin-react's oxc config and prints a
   // "both esbuild and oxc options were set" warning on every run, so it's been dropped.
+  //
+  // Lazy chunks made only of Capacitor plugins get a `native-` prefix so the service worker can
+  // leave them out of the web precache (globIgnores above). @capacitor/core is excluded from the
+  // test: it is the one Capacitor package the web genuinely runs (isNativePlatform), and it lives
+  // in the main chunk anyway.
+  build: {
+    rolldownOptions: {
+      output: {
+        chunkFileNames: (chunk) =>
+          chunk.moduleIds.length > 0 &&
+          chunk.moduleIds.every((id) => /[\\/]@capacitor[\\/](?!core[\\/])/.test(id))
+            ? 'assets/native-[hash].js'
+            : 'assets/[name]-[hash].js',
+      },
+    },
+  },
   server: {
     port: FRONTEND_PORT,
     proxy: devProxy

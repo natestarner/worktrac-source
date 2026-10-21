@@ -10,4 +10,22 @@
 // simply does not exist under a bare `vite dev` module graph or in a Vitest run that skips the
 // define, and an unguarded reference is a ReferenceError at import time rather than a missing
 // string.
-export const APP_BUILD = typeof __APP_BUILD__ === 'string' ? __APP_BUILD__ : 'dev';
+import { nativePlatform } from './native';
+
+const BUILD_INSTANT = typeof __APP_BUILD__ === 'string' ? __APP_BUILD__ : 'dev';
+
+// "1.4.0 (57)" in the App Store app, '' on the web (vite.config.js).
+export const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '';
+
+// ContactDiagnostics.appBuild is @Size(max = 40) on the server, and a longer value would fail
+// validation for the WHOLE message -- a bug report refused because of its own diagnostics. Clamp
+// rather than trust every future version string to stay short.
+const APP_BUILD_MAX = 40;
+
+export function formatAppBuild(version, platform, instant) {
+  const full = version ? `${platform} ${version} ${instant}` : instant;
+  return full.slice(0, APP_BUILD_MAX);
+}
+
+// Web: "2026-10-21 01:00", exactly as before. App: "ios 1.4.0 (57) 2026-10-21 01:00".
+export const APP_BUILD = formatAppBuild(APP_VERSION, nativePlatform(), BUILD_INSTANT);

@@ -85,3 +85,7 @@ recorded here as it lands:
 
 - **Shell** (`feat/native-shell`): `lib/native` + guard, `build:native`, the committed iOS project
   with every planned plugin installed, `ITSAppUsesNonExemptEncryption`, `mobile-ci.yml`.
+- **Adapters** (`feat/native-adapters`): export through the share sheet, Terms/Privacy in the
+  in-app browser, real haptics, History's pull-to-refresh in the app, and the store version in
+  Contact Us diagnostics. Cost on the web: `@capacitor/core` in the main chunk (~9 KB raw, ~3 KB
+  gzipped); the plugins' own chunks are kept out of the precache.

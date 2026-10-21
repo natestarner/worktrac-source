@@ -30,6 +30,13 @@
 // wanted a buzz and doesn't get one is mildly disappointed, while someone with a vestibular or
 // sensory sensitivity who gets an unrequested one is worse off. This is a judgement call rather
 // than a spec, and it is the first thing to revisit if anyone reports a missing buzz.
+//
+// ## The App Store app
+//
+// Inside the app none of the above is needed: lib/native/haptics.js reaches Apple's real haptic
+// engine, so it goes first. It sits AFTER the reduced-motion check, so the same preference governs
+// both, and it keeps the same decoration-only contract.
+import { nativeHaptic } from './native';
 
 // Milliseconds. Short enough to read as a tick rather than an alert -- a PR is a good thing, and a
 // long buzz is what phones use for errors and calls.
@@ -94,6 +101,9 @@ export function tryHaptic(pattern = 'complete') {
   const shape = PATTERNS[pattern] ?? PATTERNS.complete;
   try {
     if (prefersReducedMotion()) return 'suppressed';
+    // Inside the App Store app: Apple's real haptic engine. Always false on the web, so a browser
+    // takes exactly the two routes below, as it always has.
+    if (nativeHaptic(pattern)) return 'native';
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
       // Returns false when the UA refuses (a background tab, a disallowed gesture context).
       return navigator.vibrate(shape) ? 'vibrate' : 'refused';
