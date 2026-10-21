@@ -45,6 +45,14 @@ the **current** build's handler for that key. A rename orphans every write an ol
 - **A handler must accept every variables shape its key has ever been persisted with.** Add fields
   with defaults; never reinterpret an existing one.
 
+## What a build left on the device is API too
+
+`lib/persistedCompatibility.test.js` freezes, as literal strings, what shipped builds persisted
+(auth snapshot, app-state slices, the checkout note, the ended-workout marker, History's cached
+shapes). **Changing a persisted shape means ADDING a fixture for the new one and keeping the old**;
+editing an existing fixture to make the test pass deletes the only record of what is on people's
+phones.
+
 ## Before removing anything: which builds are still calling?
 
 Every request carries `X-Huddle-Client` (`ios/1.4.0+57`, `web/<build instant>`), logged as
