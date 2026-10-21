@@ -13,6 +13,7 @@
     "build:native": "vite build --mode native && node scripts/write-native-config.mjs"
   },
   "dependencies": {
+    "@capacitor-community/keep-awake": "8.0.1",
     "@capacitor/app": "8.1.2",
     "@capacitor/browser": "8.0.5",
     "@capacitor/core": "8.5.3",

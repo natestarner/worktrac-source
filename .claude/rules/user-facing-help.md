@@ -64,6 +64,7 @@ that isn't one.
 | **when two sets tie, the heavier one holds the record; an exact repeat leaves it with the earlier workout** (and a vest only decides which of two equal holds is named) | `StatsService#bestSet` / `isBetter` and the chronological set loads, `utils/statsFromHistory.js` |
 | History's date search: **a workout that ran past midnight counts on both days, and its heading shows both dates** | `utils/exerciseFilter.js#sessionDaySpan`, `HistoryTab.jsx#sessionHeaderLabel` |
 | **reloading on History, or pulling down on it in the Home Screen app, re-downloads the whole History of the person on screen**, and offline it waits for the connection | `lib/historyReload.js`, `components/history/PullToRefresh.jsx`, `refreshHistory`'s `full` in `lib/queryClient.js` |
+| **in the App Store app only**: the phone says when the rest bar fills even when locked or in another app, and the screen stays on mid-workout | `hooks/useRestNotifications.js`, `lib/native/notifications.js`, `lib/native/keepAwake.js`, `SessionBar.jsx`'s keep-awake effect. App-only copy, pinned in `HelpTab.native.test.jsx` |
 
 **If your change alters a row's left-hand column, update the handbook in the same PR.** If it
 doesn't, no action — this rule is not a prompt to re-read the page on every edit.

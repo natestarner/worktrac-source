@@ -16,6 +16,25 @@ const plugins = vi.hoisted(() => ({
   browserOpen: vi.fn(),
   notification: vi.fn(),
   impact: vi.fn(),
+  keepAwake: vi.fn(),
+  allowSleep: vi.fn(),
+  checkPermissions: vi.fn(),
+  requestPermissions: vi.fn(),
+  schedule: vi.fn(),
+  getPending: vi.fn(),
+  cancel: vi.fn(),
+}));
+vi.mock('@capacitor-community/keep-awake', () => ({
+  KeepAwake: { keepAwake: plugins.keepAwake, allowSleep: plugins.allowSleep },
+}));
+vi.mock('@capacitor/local-notifications', () => ({
+  LocalNotifications: {
+    checkPermissions: plugins.checkPermissions,
+    requestPermissions: plugins.requestPermissions,
+    schedule: plugins.schedule,
+    getPending: plugins.getPending,
+    cancel: plugins.cancel,
+  },
 }));
 vi.mock('@capacitor/filesystem', () => ({
   Filesystem: { writeFile: plugins.writeFile },
@@ -29,13 +48,24 @@ vi.mock('@capacitor/haptics', () => ({
   NotificationType: { Success: 'SUCCESS' },
 }));
 
-import { saveFile, openExternal, externalLinkProps, nativeHaptic, isInstalledApp } from './index';
+import {
+  saveFile,
+  openExternal,
+  externalLinkProps,
+  nativeHaptic,
+  isInstalledApp,
+  keepScreenAwake,
+  allowScreenSleep,
+  scheduleRestNotifications,
+  cancelRestNotifications,
+} from './index';
 
 beforeEach(() => {
   native.on = false;
   Object.values(plugins).forEach((fn) => fn.mockReset());
   plugins.writeFile.mockResolvedValue({ uri: 'file:///cache/workout-data.csv' });
   plugins.share.mockResolvedValue(undefined);
+  plugins.getPending.mockResolvedValue({ notifications: [] });
 });
 
 afterEach(() => {
@@ -150,5 +180,72 @@ describe('isInstalledApp', () => {
     native.on = true;
     window.matchMedia = vi.fn().mockReturnValue({ matches: false });
     expect(isInstalledApp()).toBe(true);
+  });
+});
+
+describe('keep the screen awake', () => {
+  it('does nothing on the web', async () => {
+    await keepScreenAwake();
+    await allowScreenSleep();
+    expect(plugins.keepAwake).not.toHaveBeenCalled();
+    expect(plugins.allowSleep).not.toHaveBeenCalled();
+  });
+
+  it('holds and releases the screen in the app, and never throws if the plugin does', async () => {
+    native.on = true;
+    await keepScreenAwake();
+    await allowScreenSleep();
+    expect(plugins.keepAwake).toHaveBeenCalledTimes(1);
+    expect(plugins.allowSleep).toHaveBeenCalledTimes(1);
+
+    plugins.keepAwake.mockRejectedValue(new Error('nope'));
+    await expect(keepScreenAwake()).resolves.toBeUndefined();
+  });
+});
+
+describe('rest notifications', () => {
+  const at = new Date('2026-10-21T12:01:30Z');
+
+  it('schedule nothing on the web', async () => {
+    await scheduleRestNotifications([{ personId: 1, at, name: 'Nate' }]);
+    await cancelRestNotifications();
+    expect(plugins.schedule).not.toHaveBeenCalled();
+    expect(plugins.getPending).not.toHaveBeenCalled();
+  });
+
+  it('in the app, replace any pending rest nudge with one per person, named', async () => {
+    native.on = true;
+    plugins.getPending.mockResolvedValue({
+      notifications: [
+        { id: 700000001, extra: { kind: 'rest' } },
+        { id: 42, extra: { kind: 'something-else' } },
+      ],
+    });
+
+    await scheduleRestNotifications([{ personId: 1, at, name: 'Nate' }]);
+
+    // Only OUR earlier nudge is cancelled; anything else the app ever schedules is left alone.
+    expect(plugins.cancel).toHaveBeenCalledWith({ notifications: [{ id: 700000001 }] });
+    const [{ notifications }] = plugins.schedule.mock.calls[0];
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      title: 'Rest’s up',
+      body: 'Nate, time for your next set.',
+      schedule: { at },
+      extra: { kind: 'rest', personId: 1 },
+    });
+  });
+
+  it('cancel only rest nudges when the app comes back', async () => {
+    native.on = true;
+    plugins.getPending.mockResolvedValue({ notifications: [{ id: 700000002, extra: { kind: 'rest' } }] });
+    await cancelRestNotifications();
+    expect(plugins.cancel).toHaveBeenCalledWith({ notifications: [{ id: 700000002 }] });
+  });
+
+  it('never throws when the device refuses', async () => {
+    native.on = true;
+    plugins.schedule.mockRejectedValue(new Error('not permitted'));
+    await expect(scheduleRestNotifications([{ personId: 1, at, name: null }])).resolves.toBeUndefined();
   });
 });

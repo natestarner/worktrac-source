@@ -44,12 +44,19 @@ The adapters, each one a function whose web branch is the code it replaced:
 | `externalLinkProps(url)` / `openExternal(url)` | `target="_blank"` anchor, no `onClick` | In-app browser sheet (SFSafariViewController) | `LegalLinks.jsx` |
 | `nativeHaptic(pattern)` | returns `false`, so `lib/haptics.js` takes its old routes | Apple's haptic engine; still behind the reduced-motion check | `lib/haptics.js` |
 | `isInstalledApp()` | `display-mode: standalone` / `navigator.standalone` | always `true` | `PullToRefresh.jsx` (History's pull) |
+| `keepScreenAwake()` / `allowScreenSleep()` | no-op | `@capacitor-community/keep-awake` while a workout is on screen; iOS releases it on background | `SessionBar.jsx` (its visibility effect) |
+| `scheduleRestNotifications` / `cancelRestNotifications` / `ensureRestNotificationPermission` | no-op | Local notification at the moment each running rest timer fills, scheduled on `visibilitychange: hidden`, cancelled on return; permission asked when a rest timer first starts, never at launch | `hooks/useRestNotifications.js` (mounted in `AppShell`) |
 
 `APP_BUILD` (`lib/appBuild.js`) is `"<platform> <version> (<build>) <instant>"` in the app and the
 bare instant on the web, clamped to **40 characters** because `ContactDiagnostics.appBuild` is
 `@Size(max = 40)` and an over-long value would refuse the whole Contact Us message.
 `NATIVE_APP_VERSION` / `NATIVE_BUILD_NUMBER` are baked in at `build:native` time, so the release
 workflow must pass the same values to `xcodebuild`.
+
+**Rest notifications only ever cancel their own** (`extra.kind === 'rest'`), so a later feature
+that schedules notifications is never clobbered by the rest timer's cancel-on-return. Keep-awake has
+**no setting** yet (decided 2026-10-21): a workout on screen keeps it on, and that is the only case.
+If anyone asks for a switch, it is a per-device App Settings toggle, not per person.
 
 **Deliberately not adapted yet:** `BillingTab`'s Customer Portal `window.open`. Whether that link
 may appear at all depends on the App Store storefront (the billing-channels phase), not just on how

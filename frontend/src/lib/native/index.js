@@ -4,3 +4,9 @@ export { saveFile } from './files';
 export { openExternal, externalLinkProps } from './links';
 export { nativeHaptic } from './haptics';
 export { isInstalledApp } from './installed';
+export { keepScreenAwake, allowScreenSleep } from './keepAwake';
+export {
+  ensureRestNotificationPermission,
+  scheduleRestNotifications,
+  cancelRestNotifications,
+} from './notifications';

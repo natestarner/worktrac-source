@@ -43,4 +43,15 @@ describe('HelpTab install section', () => {
     expect(screen.queryByText(/there is no app store/)).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Put it on your home screen' })).not.toBeInTheDocument();
   });
+
+  it('mentions the lock-screen rest nudge and the stay-awake screen only inside the app', () => {
+    renderHelp();
+    expect(screen.queryByText(/your phone tells you when the bar fills/)).not.toBeInTheDocument();
+  });
+
+  it('describes them inside the app', () => {
+    native.on = true;
+    renderHelp();
+    expect(screen.getByText(/your phone tells you when the bar fills/)).toBeInTheDocument();
+  });
 });

@@ -253,7 +253,13 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 #     leaves the person on the screen they were on; nothing is queued, nothing can be lost.
 #   haptics.js (+1): the native haptic, with exactly the decoration-only argument lib/haptics.js
 #     earned at 44 -> 47.
-EXPECTED_LIB_SWALLOWS=58
+# 63 with the app's two phone-only extras, neither on any write's path:
+#   notifications.js (+3): asking permission, scheduling and cancelling the "rest's up" nudge. A
+#     nudge that could not be scheduled is a missing reminder; the rest timer on screen is
+#     wall-clock and untouched, and nothing queued or logged is involved.
+#   keepAwake.js (+2): holding and releasing the screen during a workout. A failure means the
+#     screen may lock between sets, exactly as it does today; iOS releases the hold on background.
+EXPECTED_LIB_SWALLOWS=63
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"
