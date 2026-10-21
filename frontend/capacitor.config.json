@@ -1,0 +1,8 @@
+{
+  "appId": "fitness.huddle.app.lower",
+  "appName": "Huddle Lower",
+  "webDir": "dist",
+  "plugins": {
+    "CapacitorHttp": { "enabled": false }
+  }
+}

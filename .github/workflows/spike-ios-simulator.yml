@@ -1,0 +1,101 @@
+name: Spike — iOS simulator build
+
+# THROWAWAY (checklist 2.5). Proves the Capacitor iOS project compiles with no Apple account, then
+# boots it in an iPhone and an iPad simulator and keeps screenshots + the device log as artifacts,
+# since there is no Mac to look at it on. Unsigned (CODE_SIGNING_ALLOWED=NO): simulator builds
+# need no certificate. Runs only on the spike branch and is deleted with it.
+
+on:
+  push:
+    branches: [worktree-spike-capacitor]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spike-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-simulator:
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Capacitor 8 is built against Xcode 26; the runner's default may be older.
+      - name: Select newest Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
+          xcodebuild -version
+
+      - run: npm ci
+      - run: npm run build:native
+      - run: npx cap sync ios
+
+      - name: Build for simulator (unsigned)
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tail -40
+
+      - name: Boot, launch, screenshot
+        run: |
+          set -euo pipefail
+          APP=build/Build/Products/Debug-iphonesimulator/App.app
+          OUT=spike-out
+          mkdir -p "$OUT"
+
+          # Newest iOS runtime's first iPhone and first iPad.
+          pick() {
+            xcrun simctl list devices available -j | jq -r --arg kind "$1" '
+              .devices | to_entries
+              | map(select(.key | test("iOS")))
+              | sort_by(.key | capture("iOS-(?<v>[0-9-]+)").v | split("-") | map(tonumber))
+              | last.value | map(select(.name | startswith($kind))) | first.udid'
+          }
+
+          for KIND in iPhone iPad; do
+            UDID=$(pick "$KIND")
+            NAME=$(xcrun simctl list devices -j | jq -r --arg u "$UDID" '.devices[][] | select(.udid==$u) | .name')
+            echo "== $KIND: $NAME ($UDID)"
+            xcrun simctl boot "$UDID"
+            xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl install "$UDID" "$APP"
+            xcrun simctl ui "$UDID" appearance light
+            xcrun simctl launch "$UDID" fitness.huddle.app.lower
+            sleep 20
+            xcrun simctl io "$UDID" screenshot "$OUT/$KIND-light.png"
+            xcrun simctl ui "$UDID" appearance dark
+            sleep 4
+            xcrun simctl io "$UDID" screenshot "$OUT/$KIND-dark.png"
+            # Capacitor mirrors the WebView console into the unified log.
+            xcrun simctl spawn "$UDID" log show --last 3m --style compact \
+              --predicate 'process == "App"' > "$OUT/$KIND-device.log" || true
+            xcrun simctl shutdown "$UDID"
+          done
+
+          ditto -c -k --keepParent "$APP" "$OUT/HuddleLower-simulator.app.zip"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: spike-ios-simulator
+          path: frontend/spike-out/
+          retention-days: 14

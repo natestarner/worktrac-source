@@ -20,7 +20,11 @@ const devProxy = {
   '/actuator': { target: BACKEND_ORIGIN, changeOrigin: true },
 }
 
-const pwaPlugin = VitePWA({
+// SPIKE: `--mode native` (npm run build:native) disables the SW -- WKWebView won't run one on
+// capacitor://, and on Android it would serve a stale bundle across app updates. disable:true keeps
+// virtual:pwa-register importable as a no-op, so main.jsx is unchanged.
+const pwaPlugin = (mode) => VitePWA({
+  disable: mode === 'native',
   registerType: 'prompt', // never auto-reload mid-workout; ServiceWorkerUpdater prompts instead
   injectRegister: null, // we call registerSW() ourselves in main.jsx
   manifest: false, // keep the existing hand-written public/manifest.webmanifest
@@ -57,8 +61,8 @@ const pwaPlugin = VitePWA({
 })
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), ...(isTest ? [] : [pwaPlugin])],
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), ...(isTest ? [] : [pwaPlugin(mode)])],
   // Stamped into the bundle at build time and attached to Contact Us submissions, so a bug report
   // says WHICH build it came from. There is no version in package.json worth reading (it is
   // "0.0.0") and no git SHA available here -- that would have to come from the deploy repo -- so
@@ -91,4 +95,4 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/setupTests.js'
   }
-})
+}))
