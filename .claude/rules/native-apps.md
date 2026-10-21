@@ -9,6 +9,8 @@ paths:
   - ".github/workflows/mobile-*.yml"
   - "frontend/fastlane/**"
   - "frontend/Gemfile*"
+  - "frontend/public/staticwebapp.config.json"
+  - "frontend/public/.well-known/**"
 ---
 
 # Native apps (Capacitor) invariants
@@ -48,6 +50,7 @@ The adapters, each one a function whose web branch is the code it replaced:
 | `isInstalledApp()` | `display-mode: standalone` / `navigator.standalone` | always `true` | `PullToRefresh.jsx` (History's pull) |
 | `keepScreenAwake()` / `allowScreenSleep()` | no-op | `@capacitor-community/keep-awake` while a workout is on screen; iOS releases it on background | `SessionBar.jsx` (its visibility effect) |
 | `scheduleRestNotifications` / `cancelRestNotifications` / `ensureRestNotificationPermission` | no-op | Local notification at the moment each running rest timer fills, scheduled on `visibilitychange: hidden`, cancelled on return; permission asked when a rest timer first starts, never at launch | `hooks/useRestNotifications.js` (mounted in `AppShell`) |
+| `listenForAppLinks(onPath)` | no-op (the browser already loaded the URL) | A universal link that opened the app (`appUrlOpen`, or the launch URL on a cold start) becomes an in-app path | `AppLinkRouter.jsx` (mounted in `App.jsx`, outside every route) |
 
 `APP_BUILD` (`lib/appBuild.js`) is `"<platform> <version> (<build>) <instant>"` in the app and the
 bare instant on the web, clamped to **40 characters** because `ContactDiagnostics.appBuild` is
@@ -71,6 +74,30 @@ storefront stays there. Full rules: `billing.md`, "Selling in the App Store app"
 - Never enable `CapacitorHttp` (it patches `fetch`, changing abort/timeout/CORS semantics on one
   platform only; `api/client.js` is the one HTTP path) and never add `@capacitor/network` (a second
   "am I online?" signal; `useOnlineStatus` is the one).
+
+## Universal links: three halves, and each one fails silently
+
+A link to `app.huddle.fitness` (an invitation, an email's "Open Huddle") opens the installed app
+only when all three agree. A missing half produces no error anywhere: the link just opens Safari.
+
+1. **The app claims the domain.** `ios/App/App/App.entitlements` asks for
+   `applinks:$(APP_LINK_DOMAIN)`, a build setting (`app.huddle.fitness`; the Fastfile sets
+   `app.dev.huddle.fitness` for Huddle Lower). Signing needs **Associated Domains** on both App IDs
+   (checklist 1.7), or `match`'s profiles won't carry the entitlement and the release build fails.
+2. **The site vouches for the app.** `frontend/public/.well-known/apple-app-site-association`
+   names both app IDs (`<TEAMID>.fitness.huddle.app` and `….lower`), because lower and production
+   serve the SAME frontend build; each app's entitlement decides which domain it actually claims.
+   It claims `/join*`, `/app/*` and `/checkout-complete*` only. **Not yet committed: it needs the
+   Team ID** (checklist 1.5).
+   - `staticwebapp.config.json` keeps `/.well-known/*` out of the single-page fallback and serves
+     the file as JSON; without that exclusion iOS receives `index.html` (`appLinks.test.js` pins it).
+   - `ci.yml` uploads the build with `include-hidden-files: true`: `upload-artifact` skips dot
+     directories by default, which would drop the file on its way to the deploy repo.
+3. **The app routes it.** `listenForAppLinks` → `AppLinkRouter` turns the URL into a path for the
+   router. `/checkout-complete` becomes `/app/billing?checkout=<id>`, because that page's "go back to
+   the app" is nonsense inside the app. Hosts other than the two web apps are ignored.
+
+Apple fetches the file through its own CDN, so a change can take a day to reach devices.
 
 ## The app build has no service worker, and that is correct
 

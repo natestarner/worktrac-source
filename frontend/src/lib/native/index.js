@@ -11,3 +11,4 @@ export {
   cancelRestNotifications,
 } from './notifications';
 export { initialBillingChannel, resolveBillingChannel } from './billingChannel';
+export { appPathForUrl, listenForAppLinks } from './appLinks';

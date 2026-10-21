@@ -185,6 +185,9 @@ jobs:
         with:
           name: frontend-build
           path: frontend/dist/
+          # dist/.well-known/apple-app-site-association is what lets email links open the iOS app.
+          # upload-artifact skips dot-directories by default, which would drop it without a word.
+          include-hidden-files: true
           retention-days: 1
 
       - name: No frontend changes — skipping build/test

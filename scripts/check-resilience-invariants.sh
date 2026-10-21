@@ -263,7 +263,10 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 #   Stripe checkout to confirm on return. Storage-availability guards like correlationId.js's. A lost
 #   note costs the instant on-return celebration only: the webhook and the reconciliation watchdog
 #   apply the purchase regardless, and nothing queued or logged is involved.
-EXPECTED_LIB_SWALLOWS=66
+# 68 with lib/native/appLinks.js (+2): an unparseable URL (not ours, so ignored) and a universal
+#   link the App plugin failed to deliver. Either way the app opens where tapping its icon would;
+#   only the link's destination is lost, never anything queued or logged.
+EXPECTED_LIB_SWALLOWS=68
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

@@ -11,8 +11,8 @@ default_platform(:ios)
 # The two app variants. Lower is TestFlight-only and points at the lower backend; it is never
 # submitted for review.
 VARIANTS = {
-  "lower" => { bundle_id: "fitness.huddle.app.lower", display_name: "Huddle Lower" },
-  "production" => { bundle_id: "fitness.huddle.app", display_name: "Huddle" },
+  "lower" => { bundle_id: "fitness.huddle.app.lower", display_name: "Huddle Lower", link_domain: "app.dev.huddle.fitness" },
+  "production" => { bundle_id: "fitness.huddle.app", display_name: "Huddle", link_domain: "app.huddle.fitness" },
 }.freeze
 
 def variant(options)
@@ -71,6 +71,8 @@ platform :ios do
       xcargs: [
         "PRODUCT_BUNDLE_IDENTIFIER=#{v[:bundle_id]}",
         "APP_DISPLAY_NAME=\"#{v[:display_name]}\"",
+        # Which web app's links this variant opens (App.entitlements).
+        "APP_LINK_DOMAIN=#{v[:link_domain]}",
         "MARKETING_VERSION=#{ENV.fetch('NATIVE_APP_VERSION')}",
         "CURRENT_PROJECT_VERSION=#{ENV.fetch('NATIVE_BUILD_NUMBER')}",
       ].join(" "),
