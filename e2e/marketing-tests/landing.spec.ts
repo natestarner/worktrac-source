@@ -93,6 +93,18 @@ test.describe('marketing landing page', () => {
     await expect(footer.getByRole('link', { name: 'Privacy' })).toBeVisible();
   });
 
+  // Apple and Google verify the developer against a website that names the seller, and the seller
+  // name must match the legal entity exactly -- "Starner Consulting" without the "Co." is not it.
+  // Every page, because a reviewer can land on any of them.
+  for (const path of ['/', '/for-trainers.html', '/pricing.html', '/terms.html', '/privacy.html']) {
+    test(`${path} names the legal entity in its footer`, async ({ page }) => {
+      await page.goto(path);
+      await expect(page.locator('.site-footer__legal')).toHaveText(
+        'Huddle is made by Starner Consulting Co.'
+      );
+    });
+  }
+
   test('does not scroll horizontally', async ({ page }) => {
     await page.goto('/');
     const { scrollW, clientW } = await page.evaluate(() => ({

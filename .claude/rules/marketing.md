@@ -50,6 +50,13 @@ presents as *the whole page* scrolling, not as a wrapped footer, because nothing
 wraps now, but every added link still costs width somewhere. `landing.spec.ts`'s horizontal-scroll
 assertion is what catches it.
 
+⚠️ **Every page's footer names the legal entity: "Huddle is made by Starner Consulting Co."**
+(`.site-footer__legal`, its own full-width row, so it costs the link row nothing). Apple's
+Organization enrollment and App Review, and Google Play, check the seller against a website that
+names it, and the seller name is the legal entity **exactly**, "Co." included. Terms §1 says the
+same. Don't shorten it to "Starner Consulting", don't drop it as footer clutter, and give any new
+page the same line. `landing.spec.ts` asserts it on every page.
+
 ## The inline brand mark carries a ground-aware hairline
 
 The four-circle mark is inlined in `index.html` (header **and** footer), `privacy.html` and

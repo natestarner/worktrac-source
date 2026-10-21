@@ -1468,6 +1468,17 @@ img {
   color: var(--color-muted);
 }
 
+/* The seller's legal name, exactly as registered -- the App Store and Play verify the developer
+   against a website that names it, so keep the "Co." Its own full-width row under the brand + links
+   row. */
+.site-footer__legal {
+  flex-basis: 100%;
+  margin: 0;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
 
 /* Terms and Privacy. Long-form prose rather than marketing sections, so headings need their own
    rhythm -- the section styles here are built for one heading per screen, not a dozen. */
