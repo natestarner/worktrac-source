@@ -1,0 +1,5 @@
+# The private repo holding the encrypted signing certificate and profiles (checklist 1.12). The URL
+# and its credentials come from the protected GitHub Environment, never from this file.
+git_url(ENV.fetch("MATCH_GIT_URL"))
+storage_mode("git")
+type("appstore")

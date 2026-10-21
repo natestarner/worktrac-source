@@ -7,6 +7,8 @@ paths:
   - "frontend/scripts/*native*"
   - "frontend/scripts/ios-*"
   - ".github/workflows/mobile-*.yml"
+  - "frontend/fastlane/**"
+  - "frontend/Gemfile*"
 ---
 
 # Native apps (Capacitor) invariants
@@ -128,3 +130,23 @@ iPad, and uploads light/dark screenshots plus `*-console.log`. **The console com
 `simctl launch --stdout/--stderr`, not `log show`** (never `--console-pty`, which took the app down with it when backgrounded): Capacitor prints the WebView console to stdout,
 so the unified log never contains it. Not a required check (macOS runners are slow and flakier);
 promote it once it has a track record.
+
+## Releasing: `mobile-release.yml` + fastlane (unverified until the Apple account exists)
+
+Manual dispatch only, from a protected GitHub Environment per target (`mobile-lower`,
+`mobile-production`). Never trigger it on `push`/`pull_request`: the repo is public and those
+secrets sign and upload as Huddle.
+
+- **One project, two apps.** The bundle id and the home-screen name are build settings
+  (`PRODUCT_BUNDLE_IDENTIFIER`, `APP_DISPLAY_NAME`), overridden per variant by the Fastfile; the
+  committed project is the production app. Don't fork the Xcode project per environment.
+- **Version and build number are set ONCE, in the workflow**, and reach both the JS bundle
+  (`build:native` bakes them into `APP_BUILD` / `X-Huddle-Client`) and `xcodebuild`. The build
+  number is `github.run_number` — monotonic, as both stores require. Never set either by hand in
+  the project.
+- **The Fastfile is plumbing.** What gets built is decided in the workflow and npm scripts, so
+  another build service (Capawesome Cloud is the fallback; Appflow is end-of-life) can replace
+  fastlane without moving any decision.
+- **No `Gemfile.lock` yet** (no Ruby here). The first run uploads the one it resolved as the
+  `gemfile-lock` artifact; commit it, so every later release installs the same gems.
+

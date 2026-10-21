@@ -97,6 +97,32 @@ recorded here as it lands:
   `NATIVE_MIN_SUPPORTED_BUILD`, default 0) and the auth snapshot keeps it for offline opens;
   `UpdateAppBanner` below it (a banner, never a gate); `.claude/rules/api-compatibility.md`; the
   frozen list of durable-write keys; and the "Which app builds are live?" query.
+- **Phone extras** (`feat/native-extras`): "rest's up" local notification while backgrounded, the
+  screen kept on during a workout, and the matching Help lines.
+- **Release pipeline** (`feat/native-release`): `mobile-release.yml`, the Fastfile/Matchfile and
+  per-variant bundle id + display name. Unverified until the Apple account exists.
+
+## Releasing (once the Apple account exists)
+
+Everything below is written but **has never run**: it needs the Apple Developer account, the App
+Store Connect API key and the private certificates repo (launch checklist 1.5–1.12). First run, in
+order:
+
+1. **Create the GitHub Environments** `mobile-lower` and `mobile-production` (Settings →
+   Environments), restricted to `main`, production with a required reviewer. Secrets in each:
+   `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (the .p8 file's contents), `APPLE_TEAM_ID`,
+   `MATCH_PASSWORD`, `MATCH_GIT_URL` (`https://github.com/<owner>/worktrac-certs.git`),
+   `MATCH_GIT_BASIC_AUTHORIZATION` (base64 of `username:token` for the fine-grained token).
+   Variable: `NATIVE_API_URL` (the lower or production backend origin).
+2. **Actions → "Release mobile app" → lane `certificates`**, environment `lower`. This creates the
+   distribution certificate and both App Store profiles in the certificates repo. Once only, then
+   yearly.
+3. **Lane `beta`, environment `lower`.** Builds Huddle Lower against the lower backend and uploads
+   it to TestFlight. Commit the `gemfile-lock` artifact from this run as `frontend/Gemfile.lock`.
+4. Production is the same lane with environment `production`, dispatched from `main`; promoting
+   the build from TestFlight to the App Store is a manual click in App Store Connect.
+
+Expect the first runs to need fixes: nothing here could be exercised without the account.
 
 ## Old builds: why the API is now additive-only
 

@@ -1,0 +1,104 @@
+name: Release mobile app (iOS → TestFlight)
+
+# Builds a SIGNED iOS app and uploads it to TestFlight. Manual only: never on push or pull_request,
+# because this repo is public and the secrets below can sign and upload as Huddle.
+#
+# Secrets and variables live in a GitHub Environment per target -- `mobile-lower` and
+# `mobile-production` -- restricted to `main`, with Nate as a required reviewer on production
+# (launch checklist 6.3). The workflow never names a secret it does not need for the lane it runs.
+#
+# UNVERIFIED until the Apple Developer account, App Store Connect API key and certificates repo
+# exist. The runbook, including the first-run order, is docs/architecture/native-apps.md "Releasing".
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which app -- "lower" is Huddle Lower (TestFlight only), "production" is Huddle
+        type: choice
+        options: [lower, production]
+        default: lower
+      lane:
+        description: '"beta" builds and uploads; "certificates" is the one-time signing setup (6.4)'
+        type: choice
+        options: [beta, certificates]
+        default: beta
+      version:
+        description: The version people see in the App Store, e.g. 1.0.0 (bump for each release)
+        type: string
+        default: '1.0.0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    environment: mobile-${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      HUDDLE_ENV: ${{ inputs.environment }}
+      NATIVE_APP_VERSION: ${{ inputs.version }}
+      # Monotonic per workflow, which is what both stores require of a build number.
+      NATIVE_BUILD_NUMBER: ${{ github.run_number }}
+      NATIVE_API_URL: ${{ vars.NATIVE_API_URL }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+      MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+    steps:
+      - name: Production builds come from main only
+        if: inputs.environment == 'production' && github.ref != 'refs/heads/main'
+        run: |
+          echo "Production builds must be dispatched from main (got ${GITHUB_REF})." >&2
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Select newest Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
+          xcodebuild -version
+
+      - run: bundle install
+      - run: npm ci
+
+      - name: Build the web bundle for the app
+        if: inputs.lane == 'beta'
+        run: npm run build:native
+
+      - name: Copy it into the iOS project
+        if: inputs.lane == 'beta'
+        run: npx cap sync ios
+
+      - run: bundle exec fastlane ios ${{ inputs.lane }} env:${{ inputs.environment }}
+
+      # There is no Gemfile.lock in the repo yet (nothing here could run Ruby). Keep the one this
+      # run resolved so it can be committed and every later release installs the same gems.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gemfile-lock
+          path: frontend/Gemfile.lock
+          if-no-files-found: ignore
