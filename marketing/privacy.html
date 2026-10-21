@@ -53,19 +53,20 @@
     <section class="section">
       <div class="container--narrow legal">
         <h1 class="section__title">Privacy Policy</h1>
-        <p class="legal__meta">Last updated 7 September 2026</p>
+        <p class="legal__meta">Last updated 21 October 2026</p>
 
         <p class="prose prose--lead">Huddle is a small product built for households. We collect what the app needs to work and nothing else. <strong>We do not sell your data, we do not advertise in the app, and we do not track you around the internet.</strong></p>
 
         <h2>What we collect</h2>
         <ul class="prose">
           <li><strong>Your account:</strong> the email address you register with, your household name, and the names of the people you add. If you give someone in your household their own sign-in, we also collect their email address and a password they choose. We store passwords only as a one-way hash &mdash; nobody at Huddle can read one, including the person who set up the household.</li>
-          <li><strong>What you log:</strong> exercises, sets, weights, reps, durations, rest times, notes, routines and personal records.</li>
+          <li><strong>What you log:</strong> exercises, sets, weights, reps, durations, rest times, notes, routines and personal records, and body-weight check-ins if they are recorded.</li>
           <li><strong>Operational records:</strong> timestamps, error diagnostics and a per-install correlation id, so we can work out what went wrong when something breaks.</li>
           <li><strong>If you subscribe:</strong> a Stripe customer identifier and your subscription status. <strong>We never see or store your card number.</strong></li>
           <li><strong>If you write to us:</strong> whatever you put in the message.</li>
+          <li><strong>If you use the iPhone or iPad app:</strong> the app's version and build number, sent with each request so we know which versions are still in use. The app checks which country's App Store your Apple account uses, on your device, only to decide whether it may offer Plus; that answer is not sent to us. Rest-timer reminders are notifications your phone schedules for itself: we run no push service and hold no device token.</li>
         </ul>
-        <p class="prose">We do not ask for your date of birth, your weight, or any health information beyond the numbers you choose to log as workouts.</p>
+        <p class="prose">We do not ask for your date of birth or any health information beyond what you choose to log: your workouts, and body-weight check-ins if you record them.</p>
 
         <h2>Why we collect it</h2>
         <p class="prose">To run the app: to show you your own workouts and keep each person's separate, to sign you in, to invite someone to their own sign-in and tell them when it is created or removed, to take payment if you choose Plus, to email you a verification code or tell you a payment failed, and to fix problems. That is the whole list.</p>
@@ -75,6 +76,7 @@
           <li><strong>Microsoft Azure:</strong> hosting and database, in the United States.</li>
           <li><strong>Stripe:</strong> payments, if you subscribe. Stripe handles your card directly under its own privacy policy.</li>
           <li><strong>Azure Communication Services:</strong> the emails we send you.</li>
+          <li><strong>Apple:</strong> distributes the iPhone and iPad app through the App Store, under Apple's own privacy policy. Apple sends us nothing about you, and buying Plus never goes through Apple.</li>
         </ul>
         <p class="prose">Each of these processes data on our instructions to run the service. Nobody else gets your data, and we will not sell or rent it. If we are ever legally compelled to hand something over, we will tell you unless we are prohibited from doing so.</p>
 
@@ -120,7 +122,7 @@
         <p class="prose">Your workouts stay until you delete them or your account. <strong>Your plan never deletes anything.</strong> On Free, History, PRs and Trends show the last 90 days; everything older stays saved, and all of it is on screen again if you subscribe. Deleting your account removes your data from our live systems immediately; encrypted backups age out within 35 days. Payment records are kept as long as tax and accounting law requires.</p>
 
         <h2>Storage on your device</h2>
-        <p class="prose">Huddle stores things in your browser so it keeps working with no signal: your sign-in token, a copy of your recent data, and any changes waiting to sync. That is what makes the app usable in a basement. It is not advertising or analytics tracking, and it stays on your device. Clearing your browser data or signing out removes it.</p>
+        <p class="prose">Huddle stores things in your browser (or, in the iPhone and iPad app, in the app's own storage) so it keeps working with no signal: your sign-in token, a copy of your recent data, and any changes waiting to sync. That is what makes the app usable in a basement. It is not advertising or analytics tracking, and it stays on your device. Clearing your browser data, deleting the app, or signing out removes it.</p>
 
         <h2>Security</h2>
         <p class="prose">Traffic is encrypted in transit, passwords are stored hashed and never in plain text, and each household's data is scoped to its own account on every single request. No system is perfect; if we ever have a breach affecting you, we will tell you promptly.</p>
