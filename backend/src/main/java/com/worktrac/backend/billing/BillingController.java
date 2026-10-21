@@ -89,6 +89,66 @@ public class BillingController {
     @RequiresPermission(Permission.MANAGE_BILLING)
     @Transactional
     public Map<String, String> createCheckoutSession(@Valid @RequestBody CheckoutRequest request) {
+        CheckoutTarget target = prepareCheckout(request);
+        try {
+            String clientSecret = stripeService.createEmbeddedCheckoutSession(
+                    target.accountId(), target.customerId(), target.sku());
+            auditService.record(target.accountId(), BillingEventType.CHECKOUT_STARTED,
+                    "sku=" + target.sku());
+            return Map.of("clientSecret", clientSecret, "publishableKey", stripeService.publishableKey());
+        } catch (StripeException e) {
+            // The real reason, not just an event-type label -- same rule the registration audit
+            // trail follows.
+            auditService.record(target.accountId(), BillingEventType.CHECKOUT_STARTED,
+                    "FAILED: " + e.getMessage());
+            log.error("Stripe checkout session creation failed for account {}", target.accountId(), e);
+            throw new ServiceUnavailableException("Could not reach our payment provider. Try again shortly.");
+        }
+    }
+
+    /**
+     * The App Store app's checkout on the US storefront: a link to Stripe's HOSTED page, opened in
+     * the phone's browser, because Apple allows linking out to a web checkout there but not payment
+     * UI inside the app. Same request, same guards and same price mapping as the embedded checkout
+     * above ({@link #prepareCheckout}), so a household cannot buy anything here that it could not
+     * buy on the web, and the webhook, reconcile and watchdog handle the result identically.
+     *
+     * <p>Answers {@code {url, sessionId}}. The app keeps the session id and reconciles it through
+     * the existing {@code /checkout-session/{id}/reconcile} when it returns to the foreground;
+     * Stripe sends the browser to {@code /checkout-complete}, which only tells the person to go back
+     * to the app. Additive: the web never calls it.
+     */
+    @PostMapping("/checkout-link")
+    @RequiresPermission(Permission.MANAGE_BILLING)
+    @Transactional
+    public Map<String, String> createCheckoutLink(@Valid @RequestBody CheckoutRequest request) {
+        CheckoutTarget target = prepareCheckout(request);
+        String origin = appOrigin();
+        try {
+            StripeService.HostedCheckout checkout = stripeService.createHostedCheckoutSession(
+                    target.accountId(), target.customerId(), target.sku(),
+                    origin + "/checkout-complete?session_id={CHECKOUT_SESSION_ID}",
+                    origin + "/checkout-complete?cancelled=1");
+            // "hosted" + the session id are the app's upgrade funnel: every link opened, joinable to
+            // the CHECKOUT_RECONCILED row for the same session (query in billing.md). It is the data
+            // that decides, later, whether In-App Purchase would earn more despite Apple's cut.
+            auditService.record(target.accountId(), BillingEventType.CHECKOUT_STARTED,
+                    "sku=" + target.sku() + " hosted session=" + checkout.sessionId());
+            return Map.of("url", checkout.url(), "sessionId", checkout.sessionId());
+        } catch (StripeException e) {
+            auditService.record(target.accountId(), BillingEventType.CHECKOUT_STARTED,
+                    "FAILED (hosted): " + e.getMessage());
+            log.error("Stripe hosted checkout creation failed for account {}", target.accountId(), e);
+            throw new ServiceUnavailableException("Could not reach our payment provider. Try again shortly.");
+        }
+    }
+
+    private record CheckoutTarget(Long accountId, String customerId, PlanSku sku) {
+    }
+
+    // Everything both checkouts must refuse or resolve before Stripe is asked for anything. One copy,
+    // so the embedded and hosted checkouts cannot drift apart on who may buy what.
+    private CheckoutTarget prepareCheckout(CheckoutRequest request) {
         requireStripe();
         Long accountId = currentUser.accountId();
         if (!rateLimiter.tryConsumePerAccount(accountId)) {
@@ -138,19 +198,22 @@ public class BillingController {
                 subscription.setStripeCustomerId(customerId);
             }
 
-            String clientSecret = stripeService.createEmbeddedCheckoutSession(
-                    accountId, customerId, sku);
-            auditService.record(accountId, BillingEventType.CHECKOUT_STARTED,
-                    "sku=" + sku);
-            return Map.of("clientSecret", clientSecret, "publishableKey", stripeService.publishableKey());
+            return new CheckoutTarget(accountId, customerId, sku);
         } catch (StripeException e) {
-            // The real reason, not just an event-type label -- same rule the registration audit
-            // trail follows.
             auditService.record(accountId, BillingEventType.CHECKOUT_STARTED,
                     "FAILED: " + e.getMessage());
-            log.error("Stripe checkout session creation failed for account {}", accountId, e);
+            log.error("Stripe customer creation failed for account {}", accountId, e);
             throw new ServiceUnavailableException("Could not reach our payment provider. Try again shortly.");
         }
+    }
+
+    // The app's origin, from the embedded checkout's own return URL (e.g.
+    // https://app.huddle.fitness/app/billing). Derived rather than configured, so the hosted
+    // checkout's landing page needs no new setting in the three places billing config lives.
+    private String appOrigin() {
+        java.net.URI uri = java.net.URI.create(stripeProperties.getReturnUrl());
+        String port = uri.getPort() == -1 ? "" : ":" + uri.getPort();
+        return uri.getScheme() + "://" + uri.getHost() + port;
     }
 
     // Reads a completed checkout back from Stripe and applies it SYNCHRONOUSLY. This -- not the
@@ -185,7 +248,8 @@ public class BillingController {
             StripeSubscriptionState state = stripeService.fetchSubscriptionState(result.stripeSubscriptionId());
             subscriptionService.applyStripeState(subscription, state);
             auditService.record(accountId, BillingEventType.CHECKOUT_RECONCILED,
-                    "status=" + state.status() + " interval=" + state.billingInterval());
+                    "status=" + state.status() + " interval=" + state.billingInterval()
+                            + " session=" + sessionId);
             return subscriptionService.describe(accountId);
         } catch (StripeException e) {
             log.error("Stripe checkout reconcile failed for account {}", accountId, e);

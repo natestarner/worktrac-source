@@ -30,3 +30,11 @@ export function reconcileCheckout(sessionId) {
 export function createPortalSession() {
   return apiClient.post('/api/billing/portal-session');
 }
+
+// The App Store app's checkout on the US storefront (lib/native/billingChannel.js 'external'):
+// returns { url, sessionId } for Stripe's HOSTED page, which the app opens in the phone's browser.
+// Same symbols as createCheckoutSession, same server-side guards and price mapping. The app keeps
+// `sessionId` and reconciles it through reconcileCheckout when it comes back to the foreground.
+export function createCheckoutLink(interval, { plan, band } = {}) {
+  return apiClient.post('/api/billing/checkout-link', { interval, plan, band });
+}

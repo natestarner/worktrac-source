@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useBillingChannel } from '../../hooks/useBillingChannel';
 
 // The one way this app asks someone to upgrade, so every prompt reads the same and none of them
 // can drift into being pushier than the others.
@@ -17,7 +18,13 @@ import { Link } from 'react-router-dom';
 // reach the 44px touch target; a control nested in the paragraph cannot without wrecking the line.
 // It is deliberately NOT a second upgrade path: keep it to explanation, or this stops being one way
 // to ask and becomes two.
+//
+// In the App Store app outside the US storefront (billing channel 'none') the SENTENCE stays and
+// the "See Plus" link goes. Apple allows no route toward a non-store purchase there, but hiding the
+// sentence too would make a clamped screen look complete -- the bug HistoryWindowNotice exists to
+// prevent. A fact about the person's own data, with nothing to tap, is not a call to action.
 export default function PlusUpsell({ plan, children, action }) {
+  const channel = useBillingChannel();
   if (plan !== 'FREE') return null;
 
   return (
@@ -28,9 +35,11 @@ export default function PlusUpsell({ plan, children, action }) {
           "Go Plus" (the header badge). Playwright matches accessible names as a case-insensitive
           substring, so three controls that can share a screen need three mutually non-containing
           names. See .claude/rules/frontend-core.md. */}
-      <Link to="/app/billing" className="pressable" style={linkStyle}>
-        See Plus
-      </Link>
+      {channel !== 'none' && (
+        <Link to="/app/billing" className="pressable" style={linkStyle}>
+          See Plus
+        </Link>
+      )}
     </div>
   );
 }

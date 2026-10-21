@@ -8,6 +8,7 @@ import { useUI } from '../../context/UIContext';
 import { listLogins, addAndInviteLogin, inviteLogin, revokeLogin, unlockLogin } from '../../api/logins';
 import { planIncludes } from '../../utils/planFeatures';
 import { planCopy } from '../billing/planCopy';
+import { useBillingChannel } from '../../hooks/useBillingChannel';
 
 /**
  * The owner's login manager: who in this household can sign in, and inviting the ones who cannot.
@@ -32,6 +33,7 @@ export default function LoginsSection({ plan, vocab, refreshPeople }) {
   const [addingPerson, setAddingPerson] = useState(false);
   const { run } = useGatedMutation();
   const { showToast, openConfirm } = useUI();
+  const channel = useBillingChannel();
 
   const load = useCallback(async () => {
     try {
@@ -206,9 +208,15 @@ export default function LoginsSection({ plan, vocab, refreshPeople }) {
                   // one-off treatment as much as to a hardcoded value. No HuddleMark here: billing.md
                   // reserves the mark for badges naming Plus as a product, and a small text link
                   // inside a dense row is exactly the "clutter" case it calls out.
-                  <Link to="/app/billing" className="pressable plan-badge plan-badge--upgrade">
-                    Unlock with Plus
-                  </Link>
+                  // In the App Store app outside the US storefront there is nowhere to send them
+                  // (billing channel 'none'): say why there is no Enable login, link nothing.
+                  channel === 'none' ? (
+                    <span style={planNoteStyle}>Part of Plus</span>
+                  ) : (
+                    <Link to="/app/billing" className="pressable plan-badge plan-badge--upgrade">
+                      Unlock with Plus
+                    </Link>
+                  )
                 ) : (
                   <OfflineDisabledWrap message="Sending an invite needs a connection.">
                     <button onClick={() => setInvitingPerson(row)} style={linkStyle}>
@@ -464,4 +472,9 @@ const cancelStyle = {
   fontWeight: 600,
   color: 'var(--color-text)',
   cursor: 'pointer',
+};
+
+const planNoteStyle = {
+  fontSize: 'var(--text-sm)',
+  color: 'var(--color-muted)',
 };

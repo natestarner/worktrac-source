@@ -8,6 +8,7 @@ import { listLogins } from '../../api/logins';
 import { useUI } from '../../context/UIContext';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import {
+  createCheckoutLink,
   createCheckoutSession,
   createPortalSession,
   getSubscription,
@@ -27,6 +28,9 @@ import { PLUS_BENEFITS, PRO_ADDITIONS, PRO_BANDS, planCopy } from './planCopy';
 import { accountVocab } from '../../utils/accountVocab';
 import { isPaidPlan, planIncludes } from '../../utils/planFeatures';
 import BackLink from '../shared/BackLink';
+import { useBillingChannel } from '../../hooks/useBillingChannel';
+import { openExternal, openInBrowser } from '../../lib/native';
+import { rememberPendingCheckout } from '../../lib/pendingCheckout';
 
 // The household's plan, and where an upgrade happens.
 //
@@ -62,6 +66,10 @@ export default function BillingTab() {
   // itself, and a second copy of that answer here is the kind of duplicate the
   // mechanism table exists to prevent.
   const { pending, run } = useGatedMutation();
+  // 'embedded' on the web (everything below is exactly as before), 'external' in the App Store app
+  // on the US storefront (Stripe's hosted page, in the phone's browser), 'none' elsewhere in the
+  // app (the plan, with no price, purchase or portal). lib/native/billingChannel.js has the rules.
+  const channel = useBillingChannel();
 
   const { isOwner } = useAccountAccess();
 
@@ -209,6 +217,16 @@ export default function BillingTab() {
   // that forgets the argument still gets the old, correct behaviour rather than a 400.
   const handleUpgrade = run(
     async ({ plan = 'PLUS', band = null } = {}) => {
+      if (channel === 'external') {
+        // Apple allows a link OUT to a web checkout on the US storefront, never payment UI in the
+        // app. The session id is written down BEFORE the browser opens -- synchronously, so a
+        // backgrounded app iOS kills can't lose it -- and useCheckoutResume confirms it on return.
+        // Safari, not the in-app sheet: only leaving the app makes the return a visibilitychange.
+        const { url, sessionId } = await createCheckoutLink(interval, { plan, band });
+        rememberPendingCheckout(sessionId);
+        await openInBrowser(url);
+        return;
+      }
       const { clientSecret, publishableKey } = await createCheckoutSession(interval, { plan, band });
       setCheckout({ clientSecret, publishableKey });
     },
@@ -223,8 +241,9 @@ export default function BillingTab() {
       const { url } = await createPortalSession();
       // A NEW TAB, not a navigation. Stripe's Customer Portal is redirect-only (no embedded
       // variant exists), and replacing this document would hand an installed PWA's session to
-      // Safari with no reliable way back.
-      window.open(url, '_blank', 'noopener,noreferrer');
+      // Safari with no reliable way back. openExternal's web branch is exactly that new tab; in
+      // the App Store app it is the in-app browser sheet.
+      await openExternal(url);
     },
     {
       offlineMessage: 'Managing your plan needs a connection.',
@@ -266,15 +285,16 @@ export default function BillingTab() {
           vocab={accountVocab(account?.vocab)}
           subscription={subscription}
           pending={pending}
-          onManage={handleManageBilling}
+          onManage={channel === 'none' ? null : handleManageBilling}
           pausableLogins={pausableLogins}
           interval={interval}
           proBand={proBand}
           onProBandChange={setProBand}
-          onUpgrade={handleUpgrade}
+          onUpgrade={channel === 'none' ? null : handleUpgrade}
         />
       ) : (
         <FreeSummary
+          canBuy={channel !== 'none'}
           interval={interval}
           proBand={proBand}
           onProBandChange={setProBand}
@@ -384,7 +404,7 @@ function PaidSummary({
         </div>
       )}
 
-      {!comped && (
+      {!comped && onManage && (
         <OfflineDisabledWrap message="Managing your plan needs a connection.">
           {/* marginBottom, not the ProUpgradeCard SectionLabel below getting a matching marginTop:
               FreeSummary's copy of that same label already sits under a cardStyle div (its own
@@ -408,7 +428,7 @@ function PaidSummary({
           may carry (frontend-core.md), and a household already paying for Plus is exactly who
           should see this upsell in the same brand-accent fill as every other primary action rather
           than blending into the surface behind it. */}
-      {plan === 'PLUS' && (
+      {plan === 'PLUS' && onUpgrade && (
         <ProUpgradeCard
           interval={interval}
           band={proBand}
@@ -476,16 +496,44 @@ function renewalLine(cancelling, periodEnd, name, plan) {
     : `Renews ${formatDate(periodEnd)}.`;
 }
 
-function FreeSummary({ interval, onIntervalChange, proBand, onProBandChange, pending, onUpgrade, onStartFree, proCardRef }) {
+function FreeSummary({
+  interval,
+  onIntervalChange,
+  proBand,
+  onProBandChange,
+  pending,
+  onUpgrade,
+  onStartFree,
+  proCardRef,
+  canBuy = true,
+}) {
+  const planCard = (
+    <div style={cardStyle}>
+      <div style={planHeadingStyle}>Free</div>
+      <p style={mutedLineStyle}>
+        Everyone in your household, unlimited workouts, and your full data export. Always.
+      </p>
+    </div>
+  );
+
+  // The App Store app outside the US storefront (billing channel 'none'): the plan and what it
+  // includes, and nothing that prices, sells or points toward buying another.
+  if (!canBuy) {
+    return (
+      <>
+        <SectionLabel>Your plan</SectionLabel>
+        {planCard}
+        <Button variant="ghost" fullWidth onClick={onStartFree}>
+          Back to logging
+        </Button>
+      </>
+    );
+  }
+
   return (
     <>
       <SectionLabel>Your plan</SectionLabel>
-      <div style={cardStyle}>
-        <div style={planHeadingStyle}>Free</div>
-        <p style={mutedLineStyle}>
-          Everyone in your household, unlimited workouts, and your full data export. Always.
-        </p>
-      </div>
+      {planCard}
 
       <SectionLabel>Upgrade to Plus</SectionLabel>
       <div style={cardStyle}>

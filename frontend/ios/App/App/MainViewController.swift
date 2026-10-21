@@ -9,6 +9,12 @@ import Capacitor
 /// splash is NOT held until the page renders, because a bundle that failed to boot would then sit
 /// behind a splash forever instead of showing boot-watchdog.js's way out.
 class MainViewController: CAPBridgeViewController {
+    /// The app's own plugins (not from npm), registered with the bridge the way Capacitor's docs
+    /// prescribe for local plugins. Today: the App Store storefront lookup the billing channel needs.
+    override open func capacitorDidLoad() {
+        bridge?.registerPluginInstance(StorefrontPlugin())
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         let background = UIColor(named: "LaunchBackground")

@@ -22,6 +22,7 @@ import OfflineBanner from '../components/shared/OfflineBanner';
 import ConnectionTroubleBanner from '../components/shared/ConnectionTroubleBanner';
 import UpdateAppBanner from '../components/shared/UpdateAppBanner';
 import { useRestNotifications } from '../hooks/useRestNotifications';
+import { useCheckoutResume } from '../hooks/useCheckoutResume';
 import OfflineRecoveryPrompt from '../components/shared/OfflineRecoveryPrompt';
 import ErrorBoundary from '../components/shared/ErrorBoundary';
 import ReadOnlyPersonNotice from '../components/shared/ReadOnlyPersonNotice';
@@ -39,6 +40,8 @@ export default function AppShell() {
   const { selfPersonId, isPaused } = useAccountAccess();
   // "Rest's up" while the app is in the background -- the App Store app only; a no-op on the web.
   useRestNotifications();
+  // Confirms an App Store checkout on return from Stripe's page; reads nothing on the web.
+  useCheckoutResume();
   const [showWelcome, setShowWelcome] = useState(false);
   const accountId = account?.id;
 

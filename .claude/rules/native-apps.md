@@ -43,7 +43,8 @@ The adapters, each one a function whose web branch is the code it replaced:
 | Adapter | Web branch (unchanged behaviour) | App branch | Callers |
 |---|---|---|---|
 | `saveFile(blob, name)` | `<a download>` + blob URL | Write to the cache directory, then the share sheet. A dismissed sheet is success, not an error | `api/export.js` |
-| `externalLinkProps(url)` / `openExternal(url)` | `target="_blank"` anchor, no `onClick` | In-app browser sheet (SFSafariViewController) | `LegalLinks.jsx` |
+| `externalLinkProps(url)` / `openExternal(url)` | `target="_blank"` anchor, no `onClick` | In-app browser sheet (SFSafariViewController) | `LegalLinks.jsx`, `BillingTab`'s portal |
+| `openInBrowser(url)` | new tab | Leaves for Safari (`@capacitor/app-launcher`). **For a page finished outside the app**: closing the in-app sheet never backgrounds the app, so a return that must be noticed (`useCheckoutResume`'s `visibilitychange`) needs Safari | `BillingTab`'s hosted checkout |
 | `nativeHaptic(pattern)` | returns `false`, so `lib/haptics.js` takes its old routes | Apple's haptic engine; still behind the reduced-motion check | `lib/haptics.js` |
 | `isInstalledApp()` | `display-mode: standalone` / `navigator.standalone` | always `true` | `PullToRefresh.jsx` (History's pull) |
 | `keepScreenAwake()` / `allowScreenSleep()` | no-op | `@capacitor-community/keep-awake` while a workout is on screen; iOS releases it on background | `SessionBar.jsx` (its visibility effect) |
@@ -60,9 +61,13 @@ that schedules notifications is never clobbered by the rest timer's cancel-on-re
 **no setting** yet (decided 2026-10-21): a workout on screen keeps it on, and that is the only case.
 If anyone asks for a switch, it is a per-device App Settings toggle, not per person.
 
-**Deliberately not adapted yet:** `BillingTab`'s Customer Portal `window.open`. Whether that link
-may appear at all depends on the App Store storefront (the billing-channels phase), not just on how
-it opens.
+**Billing channels** (`lib/native/billingChannel.js`, read through `hooks/useBillingChannel`):
+`'embedded'` on the web (today's checkout, unchanged), `'external'` in the app on the **US App Store
+storefront** (Stripe's hosted page in the phone's browser), `'none'` anywhere else in the app (no
+price, purchase, upgrade link or portal). The storefront comes from the app's own StoreKit plugin
+(`ios/App/App/StorefrontPlugin.swift`, registered in `MainViewController.capacitorDidLoad`), never
+from region, language or IP. **It fails closed**: the app starts at `'none'` and an unreadable
+storefront stays there. Full rules: `billing.md`, "Selling in the App Store app".
 
 - Never enable `CapacitorHttp` (it patches `fetch`, changing abort/timeout/CORS semantics on one
   platform only; `api/client.js` is the one HTTP path) and never add `@capacitor/network` (a second
