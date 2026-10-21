@@ -21,6 +21,11 @@ that ran before the app existed**. A component never asks "am I native?" and bra
 `scripts/check-resilience-invariants.sh` (§5b) fails the build on a static or dynamic import
 anywhere else.
 
+- **The one sanctioned exception is COPY that describes the platform itself.** `HelpTab`'s install
+  section reads `isNativeApp()` because "add Huddle to your home screen" is false inside the app.
+  Words may branch; behaviour may not. Each such branch carries a comment and a test pinning both
+  variants (`HelpTab.native.test.jsx`). If a branch would change what a control *does*, it belongs
+  in `lib/native` instead.
 - **Plugins are imported lazily, inside the native branch.** `@capacitor/core` is the only package
   a browser downloads, and on the web `isNativePlatform()` is a constant `false`.
 - **A new device capability = a new function in `lib/native`, with a test that pins its web
