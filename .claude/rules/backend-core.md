@@ -145,8 +145,12 @@ one as a record literal.
 ## Request correlation — the MDC keys are load-bearing
 
 `RequestDiagnosticsFilter` (registered **first** in the chain) puts the browser's per-install
-`X-Correlation-Id` into the SLF4J MDC as `cid`; `JwtAuthenticationFilter` adds `uid` once it has
-resolved a principal. `application.yml`'s **`logging.pattern.level`** is what emits them.
+`X-Correlation-Id` into the SLF4J MDC as `cid`, and the client build (`X-Huddle-Client`,
+`ios/1.4.0+57` / `web/<instant>`) as `client`; `JwtAuthenticationFilter` adds `uid` once it has
+resolved a principal. `application.yml`'s **`logging.pattern.level`** is what emits them. `client`
+is what tells us which App Store builds are still calling before anything is removed from the API
+(`api-compatibility.md`); its sanitizer admits `._+/:` as well, and still nothing that could leave
+its `[client=…]` slot.
 
 - **There is no `logback-spring.xml` in this project, on purpose.** Adding one overrides Boot's
   default console pattern and silently drops both keys — every log line keeps printing, just

@@ -23,6 +23,8 @@ import com.worktrac.backend.user.dto.ResetPasswordRequest;
 import com.worktrac.backend.user.dto.StartSessionRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,6 +34,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     private final AuthService authService;
     private final RegistrationService registrationService;
@@ -187,6 +191,11 @@ public class AuthController {
 
     @GetMapping("/me")
     public MeResponse me() {
+        // One INFO line per session check -- every app open makes one. The line itself says little;
+        // the [uid=...] and [client=...] the log pattern adds to it are the point: counting distinct
+        // users per client build is how we learn which App Store builds are still in use before
+        // anything is removed from the API (docs/azure-read-only-access.md).
+        log.info("Session check");
         return authService.me(currentUser.access());
     }
 }

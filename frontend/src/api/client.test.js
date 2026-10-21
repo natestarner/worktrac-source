@@ -56,6 +56,19 @@ describe('apiClient', () => {
     expect(options.headers['X-Correlation-Id']).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
   });
 
+  // Which build sent the request, logged server-side beside every line -- how we learn which App
+  // Store builds are still calling an endpoint before changing it. The backend keeps only this
+  // character set (RequestDiagnosticsFilter#sanitizeClient), so a value outside it would be lost.
+  it('attaches the client build to every request', async () => {
+    global.fetch.mockReturnValue(jsonResponse({ ok: true }));
+
+    await apiClient.get('/api/public');
+
+    const [, options] = global.fetch.mock.calls[0];
+    expect(options.headers['X-Huddle-Client']).toMatch(/^web\//);
+    expect(options.headers['X-Huddle-Client']).toMatch(/^[A-Za-z0-9._+/:-]{1,40}$/);
+  });
+
   it('sends the same correlation id on the next request', async () => {
     // A fresh Response per call -- a single mocked object can only have its body read once.
     global.fetch.mockImplementation(() => jsonResponse({ ok: true }));

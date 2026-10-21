@@ -10,6 +10,7 @@ import com.worktrac.backend.common.NotFoundException;
 import com.worktrac.backend.common.TooManyRequestsException;
 import com.worktrac.backend.common.UnauthorizedException;
 import com.worktrac.backend.config.AdminProperties;
+import com.worktrac.backend.config.NativeAppProperties;
 import com.worktrac.backend.membership.AccountAccess;
 import com.worktrac.backend.membership.AccountMembership;
 import com.worktrac.backend.membership.AccountRole;
@@ -26,6 +27,7 @@ import com.worktrac.backend.ratelimit.LoginRateLimiter;
 import com.worktrac.backend.security.JwtService;
 import com.worktrac.backend.user.dto.AcceptInviteRequest;
 import com.worktrac.backend.user.dto.AuthResponse;
+import com.worktrac.backend.user.dto.ClientConfigDto;
 import com.worktrac.backend.user.dto.LoginRequest;
 import com.worktrac.backend.user.dto.MeResponse;
 import org.slf4j.Logger;
@@ -80,6 +82,7 @@ public class AuthService {
     // membership operation that happens to mint a token -- which is exactly why the orchestration
     // lives here, beside the rate limiter and the lockout, rather than there.
     private final MembershipInviteService inviteService;
+    private final NativeAppProperties nativeAppProperties;
     private final Clock clock;
 
     public AuthService(AccountRepository accountRepository, UserRepository userRepository,
@@ -88,6 +91,7 @@ public class AuthService {
                         SubscriptionService subscriptionService, LoginRateLimiter loginRateLimiter,
                         AccountMembershipRepository membershipRepository, PersonService personService,
                         MembershipInviteService inviteService,
+                        NativeAppProperties nativeAppProperties,
                         Clock clock) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
@@ -100,6 +104,7 @@ public class AuthService {
         this.membershipRepository = membershipRepository;
         this.personService = personService;
         this.inviteService = inviteService;
+        this.nativeAppProperties = nativeAppProperties;
         this.clock = clock;
     }
 
@@ -455,7 +460,8 @@ public class AuthService {
                 AccountDto.from(account, subscriptionService.entitledPlan(accountId)),
                 MembershipDto.from(access, ownerNameForMember(accountId, access.accountRole())),
                 personService.list(access),
-                households);
+                households,
+                ClientConfigDto.from(nativeAppProperties));
     }
 
     /**

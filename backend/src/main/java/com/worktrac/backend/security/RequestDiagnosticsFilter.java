@@ -27,6 +27,12 @@ import java.io.IOException;
 // truncated before it reaches the MDC, because it ends up inside log lines. An attacker-controlled
 // value containing newlines could otherwise forge log entries.
 //
+// The same filter tags each line with the CLIENT BUILD (X-Huddle-Client: "ios/1.4.0+57" from the
+// App Store app, "web/2026-10-21T01:00" from a browser). An App Store install can be months
+// behind, so before anything is removed from the API, the logs have to be able to say which builds
+// are still calling it (docs/azure-read-only-access.md). Sanitized the same way, with a character
+// set that admits the version punctuation.
+//
 // KNOWN LIMIT, deliberately not worked around: MDC is thread-local, so it does NOT propagate into
 // @Async("emailTaskExecutor") tasks. The email listeners' log lines carry no correlation id; they
 // correlate through contact_messages.alert_message_id instead. Its absence there is expected, not a
@@ -36,9 +42,12 @@ public class RequestDiagnosticsFilter extends OncePerRequestFilter {
     public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
 
     public static final String CORRELATION_ID_MDC_KEY = "cid";
+    public static final String CLIENT_HEADER = "X-Huddle-Client";
+    public static final String CLIENT_MDC_KEY = "client";
     public static final String USER_ID_MDC_KEY = "uid";
 
     private static final int MAX_LENGTH = 64;
+    private static final int CLIENT_MAX_LENGTH = 40;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
@@ -47,6 +56,10 @@ public class RequestDiagnosticsFilter extends OncePerRequestFilter {
         if (correlationId != null) {
             MDC.put(CORRELATION_ID_MDC_KEY, correlationId);
         }
+        String client = sanitizeClient(request.getHeader(CLIENT_HEADER));
+        if (client != null) {
+            MDC.put(CLIENT_MDC_KEY, client);
+        }
         try {
             filterChain.doFilter(request, response);
         } finally {
@@ -54,6 +67,7 @@ public class RequestDiagnosticsFilter extends OncePerRequestFilter {
             // unrelated request the container hands the thread next -- which is worse than having
             // no correlation id at all, because it points triage confidently at the wrong session.
             MDC.remove(CORRELATION_ID_MDC_KEY);
+            MDC.remove(CLIENT_MDC_KEY);
             MDC.remove(USER_ID_MDC_KEY);
         }
     }
@@ -69,5 +83,19 @@ public class RequestDiagnosticsFilter extends OncePerRequestFilter {
             trimmed = trimmed.substring(0, MAX_LENGTH);
         }
         return trimmed.matches("[A-Za-z0-9_-]+") ? trimmed : null;
+    }
+
+    // Same rule as above, widened only by the punctuation a build string needs ("ios/1.4.0+57",
+    // "web/2026-10-21T01:00"). No spaces, brackets or newlines, so it cannot break out of its
+    // [client=...] slot in the log pattern.
+    static String sanitizeClient(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.length() > CLIENT_MAX_LENGTH) {
+            trimmed = trimmed.substring(0, CLIENT_MAX_LENGTH);
+        }
+        return trimmed.matches("[A-Za-z0-9._+/:-]+") ? trimmed : null;
     }
 }

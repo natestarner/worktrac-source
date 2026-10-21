@@ -6,6 +6,7 @@ const SNAPSHOT = {
   account: { id: 7, defaultUnit: 'lb' },
   people: [{ id: 1, name: 'Nate' }, { id: 2, name: 'Sam' }],
   membership: { accountRole: 'OWNER', personId: 1, membersSeeEveryone: true },
+  client: { minSupportedNativeBuild: 57, appStoreUrl: '' },
 };
 
 describe('authSnapshot', () => {
@@ -15,6 +16,17 @@ describe('authSnapshot', () => {
   it('round-trips a saved identity snapshot', () => {
     saveAuthSnapshot(SNAPSHOT);
     expect(loadAuthSnapshot()).toEqual(SNAPSHOT);
+  });
+
+  // A snapshot written before /me carried `client` must still load (no version bump), and must read
+  // as "no minimum known" -- which shows the App Store app no update banner.
+  it('loads a snapshot that predates the client config, with no minimum known', () => {
+    const { client: _client, ...older } = SNAPSHOT;
+    localStorage.setItem('worktrac-auth-snapshot', JSON.stringify({ v: 2, ...older }));
+
+    const loaded = loadAuthSnapshot();
+    expect(loaded.user).toEqual(SNAPSHOT.user);
+    expect(loaded.client).toBeNull();
   });
 
   it('returns null when nothing is stored', () => {
@@ -44,6 +56,7 @@ describe('authSnapshot', () => {
       account: SNAPSHOT.account,
       people: [],
       membership: null,
+      client: null,
     });
   });
 

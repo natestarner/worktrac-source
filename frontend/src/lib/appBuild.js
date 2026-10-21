@@ -29,3 +29,24 @@ export function formatAppBuild(version, platform, instant) {
 
 // Web: "2026-10-21 01:00", exactly as before. App: "ios 1.4.0 (57) 2026-10-21 01:00".
 export const APP_BUILD = formatAppBuild(APP_VERSION, nativePlatform(), BUILD_INSTANT);
+
+// The store build number (57), or null on the web, which has no build to fall behind.
+export function parseBuildNumber(version) {
+  const match = /\((\d+)\)\s*$/.exec(version ?? '');
+  return match ? Number(match[1]) : null;
+}
+export const NATIVE_BUILD_NUMBER = parseBuildNumber(APP_VERSION);
+
+// Sent as X-Huddle-Client on every request (api/client.js) and logged beside each line on the
+// server, so "which App Store builds are still calling us?" has an answer before anything is
+// removed from the API. App: "ios/1.4.0+57". Web: "web/2026-10-21T01:00". Only characters the
+// server's sanitizer keeps (RequestDiagnosticsFilter#sanitizeClient), so it is never dropped there.
+export function formatClientId(version, platform, instant) {
+  if (version) {
+    const build = parseBuildNumber(version);
+    const marketing = version.replace(/\s*\(\d+\)\s*$/, '');
+    return `${platform}/${marketing}${build === null ? '' : `+${build}`}`.slice(0, 40);
+  }
+  return `web/${instant.replace(' ', 'T')}`.slice(0, 40);
+}
+export const CLIENT_ID = formatClientId(APP_VERSION, nativePlatform(), BUILD_INSTANT);

@@ -110,4 +110,50 @@ class RequestDiagnosticsFilterTest {
     void truncatesAnOverlongIdRatherThanRejectingIt() throws Exception {
         assertEquals("a".repeat(64), capturedDuringChain(requestWith("a".repeat(200)))[0]);
     }
+
+    // --- The client build (X-Huddle-Client) ---------------------------------------------------
+
+    private String clientDuringChain(String client) throws Exception {
+        MockHttpServletRequest request = requestWith(null);
+        if (client != null) {
+            request.addHeader(RequestDiagnosticsFilter.CLIENT_HEADER, client);
+        }
+        String[] seen = new String[1];
+        FilterChain chain = mock(FilterChain.class);
+        doAnswer(invocation -> {
+            seen[0] = MDC.get(RequestDiagnosticsFilter.CLIENT_MDC_KEY);
+            return null;
+        }).when(chain).doFilter(any(), any());
+        filter.doFilter(request, new MockHttpServletResponse(), chain);
+        return seen[0];
+    }
+
+    // What lets the logs say which App Store builds are still calling the API before anything is
+    // removed from it.
+    @Test
+    void tagsTheRequestWithTheClientBuildTheAppAndTheWebSend() throws Exception {
+        assertEquals("ios/1.4.0+57", clientDuringChain("ios/1.4.0+57"));
+        assertEquals("web/2026-10-21T01:00", clientDuringChain("web/2026-10-21T01:00"));
+    }
+
+    @Test
+    void clearsTheClientBuildAfterTheRequest() throws Exception {
+        clientDuringChain("ios/1.4.0+57");
+        assertNull(MDC.get(RequestDiagnosticsFilter.CLIENT_MDC_KEY));
+        assertNull(clientDuringChain(null));
+    }
+
+    // It sits inside a [client=...] slot in every log line, so nothing that could close the bracket
+    // or start a new line may reach it.
+    @Test
+    void dropsAClientBuildThatCouldForgeALogLine() throws Exception {
+        assertNull(clientDuringChain("ios/1.0\n2026 INFO forged"));
+        assertNull(clientDuringChain("ios 1.0"));
+        assertNull(clientDuringChain("ios]1.0["));
+    }
+
+    @Test
+    void truncatesAnOverlongClientBuild() throws Exception {
+        assertEquals("i".repeat(40), clientDuringChain("i".repeat(100)));
+    }
 }
