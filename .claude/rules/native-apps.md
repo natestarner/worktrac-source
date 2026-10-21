@@ -21,6 +21,11 @@ that ran before the app existed**. A component never asks "am I native?" and bra
 `scripts/check-resilience-invariants.sh` (§5b) fails the build on a static or dynamic import
 anywhere else.
 
+- **The one sanctioned exception is COPY that describes the platform itself.** `HelpTab`'s install
+  section reads `isNativeApp()` because "add Huddle to your home screen" is false inside the app.
+  Words may branch; behaviour may not. Each such branch carries a comment and a test pinning both
+  variants (`HelpTab.native.test.jsx`). If a branch would change what a control *does*, it belongs
+  in `lib/native` instead.
 - **Plugins are imported lazily, inside the native branch.** `@capacitor/core` is the only package
   a browser downloads, and on the web `isNativePlatform()` is a constant `false`.
 - **A new device capability = a new function in `lib/native`, with a test that pins its web
@@ -86,6 +91,28 @@ inside it are gitignored and come from `npx cap sync ios`, so **every build runs
 
 `Info.plist` declares `ITSAppUsesNonExemptEncryption = false`: Huddle uses only HTTPS, which is
 exempt, and declaring it skips App Store Connect's export-compliance question on every upload.
+
+## Launch: one background colour from the launch screen to the first frame
+
+The launch image (`Splash.imageset`), the WebView and its window are all the page's `--color-bg`
+(`#faf9f7` light, `#171614` dark) via the `LaunchBackground` colour set and `MainViewController`
+(Capacitor's bridge, subclassed only to paint those backgrounds; `SceneDelegate` instantiates it).
+Capacitor's default is the system white/black, which flashes against both.
+
+- **The splash is never held until the page renders.** `@capacitor/splash-screen` keeps its
+  default auto-hide. Holding it for a `hide()` call from JS would mean a bundle that fails to boot
+  sits behind the splash forever, hiding `boot-watchdog.js`'s fallback. Matching colours removes
+  the flash without making the splash something boot has to dismiss.
+- **The status bar needs no code.** The app follows the system appearance only (no in-app theme
+  switch), and iOS already picks dark or light status-bar text for it. If an in-app theme override
+  is ever added, it must drive `@capacitor/status-bar` from `lib/native`.
+- **The icon PNGs must be opaque (RGB).** App Store Connect rejects an app icon with an alpha
+  channel. `AppIcon.appiconset` holds the 1024px light icon (the PWA's white tile) and an iOS 18
+  dark variant (the dark tile from `public/icon.svg`); both are rendered from the brand geometry,
+  never hand-drawn (see `docs/brand/README.md`).
+- `MainViewController.swift` is registered in `project.pbxproj` by hand (no Xcode here). A new
+  Swift file needs the same four entries (PBXBuildFile, PBXFileReference, the App group, Sources),
+  and `mobile-ci` is what proves it compiles.
 
 ## `mobile-ci.yml` is the only place the app is seen before TestFlight
 

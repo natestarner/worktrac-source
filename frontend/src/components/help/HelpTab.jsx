@@ -4,6 +4,7 @@ import { EXERCISE_METRICS } from '../trends/exerciseMetrics';
 import { WEEKLY_METRICS } from '../trends/weeklyMetrics';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
 import { useUI } from '../../context/UIContext';
+import { isNativeApp } from '../../lib/native';
 import Button from '../shared/Button';
 import BackLink from '../shared/BackLink';
 
@@ -131,13 +132,32 @@ export default function HelpTab() {
           rest timers and routines all have working defaults, and can wait until you want them.
         </p>
 
-        <h3 className="help-h3">Put it on your home screen</h3>
-        <p>
-          Huddle is a website, so there is no app store. Open <strong>app.huddle.fitness</strong> in
-          your phone or tablet browser and from your browser's settings, tap{' '}
-          <T>Add to Home Screen</T>. It then opens full-screen like any other app. Importantly, it
-          keeps working when there&rsquo;s no signal.
-        </p>
+        {/* The one place the handbook's WORDS depend on where it is being read: it describes how
+            to get Huddle onto a phone, and inside the App Store app that is already done. A copy
+            branch only -- behaviour never branches on platform outside lib/native
+            (.claude/rules/native-apps.md). The web copy changes when the App Store listing is
+            live and there is a link to give. */}
+        {isNativeApp() ? (
+          <>
+            <h3 className="help-h3">You&rsquo;re using the Huddle app</h3>
+            <p>
+              It&rsquo;s already on your home screen, and it keeps working when there&rsquo;s no
+              signal. Updates arrive through the App Store. Everything you log here is the same
+              Huddle you&rsquo;d see at <strong>app.huddle.fitness</strong>, so you can switch
+              between the app and a browser whenever you like.
+            </p>
+          </>
+        ) : (
+          <>
+            <h3 className="help-h3">Put it on your home screen</h3>
+            <p>
+              Huddle is a website, so there is no app store. Open <strong>app.huddle.fitness</strong>{' '}
+              in your phone or tablet browser and from your browser's settings, tap{' '}
+              <T>Add to Home Screen</T>. It then opens full-screen like any other app. Importantly,
+              it keeps working when there&rsquo;s no signal.
+            </p>
+          </>
+        )}
       </Section>
 
       <Section id="people" title="Adding and switching people">
