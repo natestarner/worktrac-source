@@ -101,6 +101,33 @@ recorded here as it lands:
   screen kept on during a workout, and the matching Help lines.
 - **Release pipeline** (`feat/native-release`): `mobile-release.yml`, the Fastfile/Matchfile and
   per-variant bundle id + display name. Unverified until the Apple account exists.
+- **Billing channels** (`feat/native-billing`): the app reads its App Store storefront (a small
+  StoreKit plugin) and links out to Stripe's hosted checkout on the US storefront only; everywhere
+  else it shows the plan with no way to buy. `POST /api/billing/checkout-link`, the public
+  `/checkout-complete` landing page, and a resume reconcile when the app comes back.
+
+## Selling in the app: why a link-out, and only in the US
+
+Apple's rules decide what an App Store app may show about paying, and they differ by storefront.
+Since the 2025 Epic v. Apple injunction, an app on the **US** storefront may link to a web
+checkout with no Apple commission (as of 2026-10, while the district court sets a rate; a fee may
+come). Everywhere else, a link or price for a digital subscription is grounds for rejection unless
+the app also sells through In-App Purchase, which would mean a second billing system, a second
+entitlement source and Apple's cut. So the app has three billing channels (`billing.md`, "Selling
+in the App Store app"):
+
+- **The web is untouched.** Its checkout is the embedded one; nothing about a browser changed.
+- **The storefront comes from StoreKit, not from the person.** Region, language and IP all lie
+  about which store the Apple ID belongs to, and the store is what App Review judges.
+- **It fails closed.** Until StoreKit answers `USA`, the app shows no way to buy. A US household
+  that briefly sees no button loses a second; a non-US reviewer who sees one rejects the build.
+- **The purchase is the same purchase.** `/checkout-link` shares every check with
+  `/checkout-session` (`BillingController.prepareCheckout`); only the Stripe page differs, so the
+  webhook, the watchdog and the reconcile need nothing new. The app notes the session id before
+  leaving and reconciles it on return, which is what makes the plan update in front of them.
+
+**Re-check the US rule before every App Store submission.** It comes from a court order under
+appeal, not from Apple's guidelines being settled.
 
 ## Releasing (once the Apple account exists)
 

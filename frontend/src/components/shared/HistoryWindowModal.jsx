@@ -5,6 +5,7 @@ import { PLUS_BENEFITS } from '../billing/planCopy';
 import { windowLabel } from './historyWindowCopy';
 import HuddleMark from './HuddleMark';
 import { formatDate } from '../../utils/datetime';
+import { useBillingChannel } from '../../hooks/useBillingChannel';
 
 // The explainer behind HistoryWindowNotice's "About your full history" control.
 //
@@ -20,6 +21,8 @@ import { formatDate } from '../../utils/datetime';
 // not to, and an upgrade taken on a complete picture is the only kind worth having.
 export default function HistoryWindowModal({ historyWindow, onClose }) {
   const navigate = useNavigate();
+  // 'none' = the App Store app outside the US storefront: the explanation stays, the way to buy goes.
+  const channel = useBillingChannel();
   const hidden = historyWindow?.hiddenSessions ?? 0;
   const since = historyWindow?.earliestHiddenAt;
 
@@ -67,16 +70,18 @@ export default function HistoryWindowModal({ historyWindow, onClose }) {
             behind this), "See Plus" (the notice that opened it, also still on screen) or "Close"
             (this modal's X). Playwright matches accessible names as a case-insensitive substring,
             so those four have to stay mutually non-containing. See .claude/rules/billing.md. */}
-        <Button
-          variant="primary"
-          fullWidth
-          onClick={() => {
-            onClose();
-            navigate('/app/billing');
-          }}
-        >
-          Unlock full history
-        </Button>
+        {channel !== 'none' && (
+          <Button
+            variant="primary"
+            fullWidth
+            onClick={() => {
+              onClose();
+              navigate('/app/billing');
+            }}
+          >
+            Unlock full history
+          </Button>
+        )}
         <Link to="/app/help#plan" className="pressable" style={handbookLinkStyle} onClick={onClose}>
           How Free and Plus differ
         </Link>

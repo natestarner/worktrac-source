@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import HuddleMark from '../shared/HuddleMark';
 import { isKnownPlan } from '../../utils/planFeatures';
 import { planCopy } from './planCopy';
+import { useBillingChannel } from '../../hooks/useBillingChannel';
 
 // The household's plan, in the header, immediately left of the account menu.
 //
@@ -39,12 +40,18 @@ import { planCopy } from './planCopy';
 export default function PlanBadge() {
   const { account } = useAuth();
   const plan = account?.plan;
+  const channel = useBillingChannel();
 
   if (!isKnownPlan(plan)) {
     return null;
   }
 
   if (plan === 'FREE') {
+    // In the App Store app outside the US storefront there is nowhere it may lead (billing channel
+    // 'none'), so a Free household's header simply carries no badge -- the same render-nothing a
+    // household with an unknown plan gets.
+    if (channel === 'none') return null;
+
     // No hairline override here, unlike the Plus pill below: .plan-badge--upgrade is
     // `background: transparent`, so it sits on the header's own theme-following ground and the
     // default --brand-mark-hairline is already correct in both schemes. Only a ground that stays

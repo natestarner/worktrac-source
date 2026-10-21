@@ -60,9 +60,13 @@ that schedules notifications is never clobbered by the rest timer's cancel-on-re
 **no setting** yet (decided 2026-10-21): a workout on screen keeps it on, and that is the only case.
 If anyone asks for a switch, it is a per-device App Settings toggle, not per person.
 
-**Deliberately not adapted yet:** `BillingTab`'s Customer Portal `window.open`. Whether that link
-may appear at all depends on the App Store storefront (the billing-channels phase), not just on how
-it opens.
+**Billing channels** (`lib/native/billingChannel.js`, read through `hooks/useBillingChannel`):
+`'embedded'` on the web (today's checkout, unchanged), `'external'` in the app on the **US App Store
+storefront** (Stripe's hosted page in the phone's browser), `'none'` anywhere else in the app (no
+price, purchase, upgrade link or portal). The storefront comes from the app's own StoreKit plugin
+(`ios/App/App/StorefrontPlugin.swift`, registered in `MainViewController.capacitorDidLoad`), never
+from region, language or IP. **It fails closed**: the app starts at `'none'` and an unreadable
+storefront stays there. Full rules: `billing.md`, "Selling in the App Store app".
 
 - Never enable `CapacitorHttp` (it patches `fetch`, changing abort/timeout/CORS semantics on one
   platform only; `api/client.js` is the one HTTP path) and never add `@capacitor/network` (a second

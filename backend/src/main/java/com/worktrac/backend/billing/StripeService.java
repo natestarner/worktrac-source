@@ -155,6 +155,41 @@ public class StripeService {
         return session.getClientSecret();
     }
 
+    /**
+     * A HOSTED checkout (Stripe's own page, opened in the phone's browser) for the App Store app on
+     * the US storefront, where Apple allows a link out to a web checkout but not payment UI inside
+     * the app. Everything that decides what is bought -- the price mapping, the account metadata on
+     * both the session and the subscription, promotion codes -- is identical to the embedded one, so
+     * the webhook, the reconcile endpoint and the watchdog treat the result exactly the same.
+     *
+     * <p>Stripe redirects to {@code successUrl}/{@code cancelUrl} in the BROWSER, not the app; the
+     * app finishes the purchase by reconciling the session id it already holds when it comes back to
+     * the foreground. No deep link is involved, so a redirect from checkout.stripe.com that fails to
+     * reopen the app strands nobody. UI mode is left unset, which is hosted.
+     */
+    public HostedCheckout createHostedCheckoutSession(Long accountId, String stripeCustomerId, PlanSku sku,
+                                                      String successUrl, String cancelUrl) throws StripeException {
+        com.stripe.param.checkout.SessionCreateParams params =
+                com.stripe.param.checkout.SessionCreateParams.builder()
+                        .setMode(Mode.SUBSCRIPTION)
+                        .setCustomer(stripeCustomerId)
+                        .setSuccessUrl(successUrl)
+                        .setCancelUrl(cancelUrl)
+                        .addLineItem(LineItem.builder().setPrice(priceIdFor(sku)).setQuantity(1L).build())
+                        .setAllowPromotionCodes(true)
+                        .putMetadata("accountId", String.valueOf(accountId))
+                        .setSubscriptionData(
+                                com.stripe.param.checkout.SessionCreateParams.SubscriptionData.builder()
+                                        .putMetadata("accountId", String.valueOf(accountId))
+                                        .build())
+                        .build();
+        Session session = client().checkout().sessions().create(params, requestOptions(null));
+        return new HostedCheckout(session.getUrl(), session.getId());
+    }
+
+    public record HostedCheckout(String url, String sessionId) {
+    }
+
     // Reads a completed checkout session back from Stripe. Returns the account id Stripe is holding
     // in metadata so the caller can verify it belongs to the household asking -- without that
     // check, anyone could reconcile someone else's checkout by guessing a session id.

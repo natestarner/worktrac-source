@@ -259,7 +259,11 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 #     wall-clock and untouched, and nothing queued or logged is involved.
 #   keepAwake.js (+2): holding and releasing the screen during a workout. A failure means the
 #     screen may lock between sets, exactly as it does today; iOS releases the hold on background.
-EXPECTED_LIB_SWALLOWS=63
+# 66 with lib/pendingCheckout.js (+3: remember, read, clear) -- the App Store app's note of which
+#   Stripe checkout to confirm on return. Storage-availability guards like correlationId.js's. A lost
+#   note costs the instant on-return celebration only: the webhook and the reconciliation watchdog
+#   apply the purchase regardless, and nothing queued or logged is involved.
+EXPECTED_LIB_SWALLOWS=66
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"

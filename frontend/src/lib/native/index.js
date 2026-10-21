@@ -10,3 +10,4 @@ export {
   scheduleRestNotifications,
   cancelRestNotifications,
 } from './notifications';
+export { initialBillingChannel, resolveBillingChannel } from './billingChannel';

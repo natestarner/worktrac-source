@@ -464,6 +464,40 @@ full reasoning; don't move it back in front of the deletes.
 - **"Plus" is a substring of "Profile"**, `UserMenu`'s first item, in the same header subtree. Assert
   the badge with `exact: true` / an exact string, always.
 
+## Selling in the App Store app: three billing channels
+
+`hooks/useBillingChannel` answers `'embedded' | 'external' | 'none'` (`lib/native/billingChannel.js`):
+
+| Channel | Where | What the upgrade surfaces do |
+|---|---|---|
+| `embedded` | The web, any browser or installed PWA | Exactly what this file describes everywhere else. Unchanged |
+| `external` | The App Store app, **US storefront** | "Upgrade" calls `POST /api/billing/checkout-link` and opens Stripe's HOSTED page in the phone's browser; the Customer Portal opens outside the app too |
+| `none` | The App Store app anywhere else, or storefront unknown | **No** price, purchase button, "Go Plus" badge, "See Plus" link, "Unlock with Plus", "Unlock full history", portal or Pro upgrade. The billing screen shows the plan only |
+
+- **The gate lives INSIDE the surfaces** (`PlusUpsell`, `PlanBadge`, `BillingTab`, `LoginsSection`,
+  `HistoryWindowModal`), never at their call sites, so "one way to ask for an upgrade" is also one
+  place that decides whether asking is allowed. A new upgrade surface must read the channel too, and
+  `billingChannels.test.jsx` is where its `none` case belongs.
+- **It fails closed.** The app renders `none` until StoreKit says `USA`. A purchase button shown to a
+  non-US account is an App Review rejection; a missing one costs a US household a second.
+- **On `none` the factual sentence stays; only the way to buy goes.** `PlusUpsell` keeps its text
+  ("Your full history has 47 more workouts") and drops "See Plus". Hiding the sentence too would make
+  a clamped screen look complete, the bug "The window must SAY it is clamping" exists to prevent.
+- **`/checkout-link` is the SAME purchase as `/checkout-session`.** Both go through
+  `BillingController.prepareCheckout` (rate limit, already-paying refusal, `PlanSku` mapping,
+  per-tier "do we sell it here", customer reuse); only the Stripe page differs. Its landing page
+  (`/checkout-complete`) is derived from `app.stripe.return-url`'s origin, so it needs **no new
+  setting** in the three places billing config lives.
+- **The app finishes the purchase on return, through the existing reconcile.** It writes the session
+  id synchronously before leaving (`lib/pendingCheckout.js`); `useCheckoutResume` reconciles it each
+  time the app comes back, and only when the result is a paid plan opens `/app/billing?checkout=<id>`
+  so `BillingTab`'s own reconcile and `PlusCelebration` run exactly as after a web checkout. An unpaid
+  result never celebrates and keeps the note (they may only have switched apps); a 4xx forgets it; it
+  expires after a day. The webhook and the watchdog apply the purchase regardless.
+- **⚠️ Verify before every App Store submission** that the US link-out rules still stand: as of
+  2026-10 Apple takes no commission on linked purchases while the district court sets a rate, and a
+  fee may arrive. Outside the US, selling would need In-App Purchase, which is deferred.
+
 ## ⚠️ A plan decides what a SCREEN shows — and, separately, what a LOGIN can do
 
 The line above ("a plan decides what a screen SHOWS, never what exists") was written about **data**,
