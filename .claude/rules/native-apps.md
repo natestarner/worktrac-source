@@ -91,6 +91,6 @@ exempt, and declaring it skips App Store Connect's export-compliance question on
 
 There is no Mac here. The workflow builds unsigned for the simulator, boots the newest iPhone and
 iPad, and uploads light/dark screenshots plus `*-console.log`. **The console comes from
-`simctl launch --console-pty`, not `log show`**: Capacitor prints the WebView console to stdout,
+`simctl launch --stdout/--stderr`, not `log show`** (never `--console-pty`, which took the app down with it when backgrounded): Capacitor prints the WebView console to stdout,
 so the unified log never contains it. Not a required check (macOS runners are slow and flakier);
 promote it once it has a track record.
