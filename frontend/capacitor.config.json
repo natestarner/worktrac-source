@@ -1,0 +1,9 @@
+{
+  "appId": "fitness.huddle.app",
+  "appName": "Huddle",
+  "webDir": "dist",
+  "plugins": {
+    "CapacitorHttp": { "enabled": false },
+    "Keyboard": { "resize": "none" }
+  }
+}

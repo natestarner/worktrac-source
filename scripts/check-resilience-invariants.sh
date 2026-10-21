@@ -258,6 +258,23 @@ elif [ "$ACTUAL_LIB_SWALLOWS" -lt "$EXPECTED_LIB_SWALLOWS" ]; then
 fi
 
 # ---------------------------------------------------------------------------------------------
+# 5b. Native (Capacitor) code is confined to lib/native/. Every other file calls a function from
+#     there whose web branch is exactly the pre-app code, so the web keeps one code path and a
+#     component never branches on platform itself (.claude/rules/native-apps.md). A direct
+#     @capacitor/* import elsewhere is a second, untested way to reach a device API.
+# ---------------------------------------------------------------------------------------------
+OUT=$(grep -E "(from|import\()[[:space:]]*['\"]@capacitor/" "$INDEX" \
+  | awk -F: -v p="$SRC/lib/native/" 'index($1, p) != 1 { print "  " $0 }')
+if [ -n "$OUT" ]; then
+  fail "@capacitor/* imported outside $SRC/lib/native/"
+  echo "$OUT" >&2
+  echo "  -> Add (or reuse) a function in lib/native/ whose web branch is today's code, and call that." >&2
+fi
+if [ "$(count_in "from[[:space:]]*['\"]@capacitor/core['\"]" "$SRC/lib/native/platform.js")" -eq 0 ]; then
+  fail "lib/native/platform.js no longer imports @capacitor/core -- this check's assumption has rotted."
+fi
+
+# ---------------------------------------------------------------------------------------------
 # 6. The documentation tiering CLAUDE.md describes but nothing enforced: every rule file must be
 #    path-scoped (one without paths: loads on every request and defeats the tiering), and
 #    CLAUDE.md itself must stay small -- it reached 84 KB once, and a bloated CLAUDE.md causes

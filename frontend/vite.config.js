@@ -20,7 +20,14 @@ const devProxy = {
   '/actuator': { target: BACKEND_ORIGIN, changeOrigin: true },
 }
 
-const pwaPlugin = VitePWA({
+// `vite build --mode native` (npm run build:native) is the bundle inside the iOS/Android app, and it
+// ships with NO service worker. WKWebView doesn't run one on Capacitor's capacitor:// scheme, and on
+// Android one would keep serving the old bundle after a store update. The app needs none anyway: its
+// files are on the device, so a cold boot offline never depended on a precache. `disable` (rather
+// than dropping the plugin) keeps virtual:pwa-register importable as a no-op, so main.jsx and the
+// update banner run the same code on both builds and simply never see an update.
+const pwaPlugin = (mode) => VitePWA({
+  disable: mode === 'native',
   registerType: 'prompt', // never auto-reload mid-workout; ServiceWorkerUpdater prompts instead
   injectRegister: null, // we call registerSW() ourselves in main.jsx
   manifest: false, // keep the existing hand-written public/manifest.webmanifest
@@ -57,8 +64,8 @@ const pwaPlugin = VitePWA({
 })
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), ...(isTest ? [] : [pwaPlugin])],
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), ...(isTest ? [] : [pwaPlugin(mode)])],
   // Stamped into the bundle at build time and attached to Contact Us submissions, so a bug report
   // says WHICH build it came from. There is no version in package.json worth reading (it is
   // "0.0.0") and no git SHA available here -- that would have to come from the deploy repo -- so
@@ -91,4 +98,4 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/setupTests.js'
   }
-})
+}))
