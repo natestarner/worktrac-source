@@ -1,0 +1,77 @@
+name: Mobile CI — iOS simulator build
+
+# Proves the iOS app still compiles and boots whenever the code inside it changes, and keeps
+# screenshots + the app's console as artifacts, since nobody here has a Mac to look at it on.
+#
+# - Unsigned (CODE_SIGNING_ALLOWED=NO): a simulator build needs no certificate and no Apple account,
+#   so this uses no secrets and is safe on a public repo.
+# - Not a required check yet: macOS runners are slower and flakier than the Linux ones, and a red
+#   run here must not block an unrelated web fix. Promote it once it has a track record.
+# - Builds against lower's API. The signed store builds come from mobile-release.yml, never from here.
+# Full design: docs/architecture/native-apps.md.
+
+on:
+  push:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/mobile-ci.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  ios-simulator:
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NATIVE_API_URL: https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Capacitor 8 is built against Xcode 26; the runner image's default may be older.
+      - name: Select newest Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
+          xcodebuild -version
+
+      - run: npm ci
+      - run: npm run build:native
+      - run: npx cap sync ios
+
+      - name: Build for simulator (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tail -40
+
+      - name: Boot, launch, screenshot
+        run: bash scripts/ios-simulator-smoke.sh build/Build/Products/Debug-iphonesimulator/App.app mobile-ci-out
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ios-simulator
+          path: frontend/mobile-ci-out/
+          retention-days: 14
