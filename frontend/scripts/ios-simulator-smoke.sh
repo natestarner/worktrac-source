@@ -3,8 +3,8 @@
 # light and dark mode, and keeps the app's own console. Runs on a GitHub macOS runner
 # (mobile-ci.yml); there is no Mac locally, so these artifacts are how the app is seen at all.
 #
-# The console comes from `simctl launch --console-pty`, NOT the unified log: Capacitor prints the
-# WebView's console.* (the "⚡️  [log]" lines) to stdout, so `log show` never contains it.
+# The console comes from `simctl launch --stdout/--stderr`, NOT the unified log: Capacitor prints
+# the WebView's console.* (the "⚡️  [log]" lines) to stdout, so `log show` never contains it.
 #
 # Usage: bash scripts/ios-simulator-smoke.sh <path/to/App.app> <out-dir>
 set -euo pipefail
@@ -32,8 +32,12 @@ for KIND in iPhone iPad; do
   xcrun simctl ui "$UDID" appearance light
   xcrun simctl install "$UDID" "$APP"
 
-  xcrun simctl launch --console-pty "$UDID" "$BUNDLE_ID" > "$OUT/$KIND-console.log" 2>&1 &
-  CONSOLE_PID=$!
+  # --stdout/--stderr write the app's console to files and return at once. --console-pty did
+  # capture it, but backgrounded with no terminal it took the app down with it: the screenshots
+  # showed the home screen.
+  xcrun simctl launch --terminate-running-process \
+    --stdout="$PWD/$OUT/$KIND-console.log" --stderr="$PWD/$OUT/$KIND-console.log" \
+    "$UDID" "$BUNDLE_ID"
   sleep 20
   xcrun simctl io "$UDID" screenshot "$OUT/$KIND-light.png"
 
@@ -43,7 +47,6 @@ for KIND in iPhone iPad; do
   sleep 10
   xcrun simctl io "$UDID" screenshot "$OUT/$KIND-dark.png"
 
-  kill "$CONSOLE_PID" 2>/dev/null || true
   xcrun simctl shutdown "$UDID"
 done
 
