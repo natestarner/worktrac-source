@@ -266,7 +266,9 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 # 68 with lib/native/appLinks.js (+2): an unparseable URL (not ours, so ignored) and a universal
 #   link the App plugin failed to deliver. Either way the app opens where tapping its icon would;
 #   only the link's destination is lost, never anything queued or logged.
-EXPECTED_LIB_SWALLOWS=68
+# 69 with lib/native/keyboard.js (+1): the keyboard plugin failed to load. The WebView still shrinks
+#   above the keyboard (capacitor.config.json); only the extra scroll on a long page is lost.
+EXPECTED_LIB_SWALLOWS=69
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"
