@@ -34,6 +34,9 @@ platform :ios do
   # only reads them (readonly). Re-run only when the certificate expires (yearly).
   desc "Create the signing certificate and profiles (run once, then yearly)"
   lane :certificates do
+    # match installs what it creates into a keychain. Without setup_ci's temporary one it targets
+    # the runner's login keychain, whose password nobody can type, and the run fails or hangs there.
+    setup_ci
     match(
       type: "appstore",
       app_identifier: VARIANTS.values.map { |v| v[:bundle_id] },
