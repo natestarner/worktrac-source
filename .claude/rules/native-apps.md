@@ -52,6 +52,7 @@ The adapters, each one a function whose web branch is the code it replaced:
 | `keepScreenAwake()` / `allowScreenSleep()` | no-op | `@capacitor-community/keep-awake` while a workout is on screen; iOS releases it on background | `SessionBar.jsx` (its visibility effect) |
 | `scheduleRestNotifications` / `cancelRestNotifications` / `ensureRestNotificationPermission` | no-op | Local notification at the moment each running rest timer fills, scheduled on `visibilitychange: hidden`, cancelled on return; permission asked when a rest timer first starts, never at launch | `hooks/useRestNotifications.js` (mounted in `AppShell`) |
 | `listenForAppLinks(onPath)` | no-op (the browser already loaded the URL) | A universal link that opened the app (`appUrlOpen`, or the launch URL on a cold start) becomes an in-app path | `AppLinkRouter.jsx` (mounted in `App.jsx`, outside every route) |
+| `keepFocusedFieldVisible()` | no-op (Safari keeps the field in view itself) | Scrolls a focused field that is under the keyboard or the `SessionBar` to the centre (see "Keyboard" below) | `FocusedFieldKeeper.jsx` (mounted in `App.jsx`, outside every route) |
 
 `APP_BUILD` (`lib/appBuild.js`) is `"<platform> <version> (<build>) <instant>"` in the app and the
 bare instant on the web, clamped to **40 characters** because `ContactDiagnostics.appBuild` is
@@ -119,13 +120,23 @@ version-skew rules once they land).
 without an `https://` `NATIVE_API_URL`, deliberately: a store binary pointed at the wrong backend
 is not a redeploy away from fixed.
 
-## Keyboard: `resize: "none"` is the Safari-matching setting
+## Keyboard: `resize: "native"`, plus `keepFocusedFieldVisible`
 
-Installing `@capacitor/keyboard` applies its default (`native`), which **resizes the WebView**
-when the keyboard opens. That moves the bottom-fixed `SessionBar` and changes `vh` mid-typing,
-which Safari never does. `"none"` leaves keyboard avoidance to WKWebView itself, as in Safari.
-**Not yet verified on a device** (checklist 2.4/9.2): confirm on the Log screen's weight and reps
-fields before changing it either way.
+**`"none"` is NOT "leave it to WKWebView".** `@capacitor/keyboard` removes WKWebView's own keyboard
+observers on load (so its resize modes can work), and WebKit's "scroll the focused field into
+view" goes with them. Under `"none"` nothing replaces it: the first TestFlight build (2026-10-24)
+left the login form's fields under the keyboard with no way to see them. Don't go back to it.
+
+- **`"native"` shrinks the WebView to end at the top of the keyboard.** A short screen re-centres
+  in what is left (the login form). The cost: `vh`/`dvh` change while typing, and the fixed
+  `SessionBar` rides on top of the keyboard instead of hiding behind it, as in most native apps.
+- **`keepFocusedFieldVisible`** (`lib/native/keyboard.js`, mounted by `FocusedFieldKeeper` in
+  `App.jsx`) covers longer pages: on `keyboardDidShow`, and on `focusin` (moving between fields
+  with the keyboard up fires no keyboard event), a field that is off screen or under the
+  `SessionBar` (`--bottom-bar-height`) is scrolled to the centre. A field already in view never
+  moves.
+- **Still to confirm on a device:** the Log screen's weight and reps fields with a workout running
+  (the `SessionBar` case), and a long modal such as Contact Us.
 
 ## The iOS project is committed; its web copy is not
 

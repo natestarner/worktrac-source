@@ -4,6 +4,6 @@
   "webDir": "dist",
   "plugins": {
     "CapacitorHttp": { "enabled": false },
-    "Keyboard": { "resize": "none" }
+    "Keyboard": { "resize": "native" }
   }
 }

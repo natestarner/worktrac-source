@@ -25,6 +25,7 @@ import AdminRoute from './routes/AdminRoute';
 import AppShell from './routes/AppShell';
 import ServiceWorkerUpdater from './components/shared/ServiceWorkerUpdater';
 import AppLinkRouter from './components/shared/AppLinkRouter';
+import FocusedFieldKeeper from './components/shared/FocusedFieldKeeper';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import CriticalErrorFallback from './components/shared/CriticalErrorFallback';
 import LogTab from './components/log/LogTab';
@@ -135,6 +136,7 @@ export default function App() {
           <UIProvider>
             <ServiceWorkerUpdater />
             <AppLinkRouter />
+            <FocusedFieldKeeper />
             {/* Last-resort boundary. AppShell has a tighter one around the tab panel that keeps
                 navigation alive; this one only catches a throw outside any tab -- the shell
                 itself (Header, PersonPillBar, SessionBar and AppShell's own effects are NOT

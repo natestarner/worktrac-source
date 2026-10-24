@@ -70,7 +70,7 @@ npx cap sync ios                                                # copies dist/ i
 | Service worker | Precaches the shell; silently reloads after a deploy | None | Offline cold boot is *more* reliable in the app (no precache to miss). The "SW silent forced reload" condition doesn't exist there. |
 | Updates | Next navigation after a deploy | Only via the App Store | Old builds live for months. Backend changes must stay additive (version-skew rules, Phase 7). |
 | `config.json` | Fetched, with a last-known fallback | Local file | Can't fail to load |
-| Keyboard | Overlays the page | `Keyboard.resize: "none"` to match | Needs a device check (see the rule file) |
+| Keyboard | Overlays the page; Safari scrolls the field into view | `Keyboard.resize: "native"` (the WebView ends at the keyboard) plus `keepFocusedFieldVisible` | The keyboard plugin disables WebKit's own scroll-into-view, so `"none"` (tried first, to match Safari) left the login fields under the keyboard on the first TestFlight build. The `SessionBar` now rides on the keyboard while typing |
 | Background | Tab keeps running for a while | JS suspended; app may be killed | Same as a reload at an arbitrary instant (resilience axis C), which the app already survives |
 
 Storage (`localStorage` for the auth token and UI state, IndexedDB for the outbox and query cache)

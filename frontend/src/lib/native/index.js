@@ -12,3 +12,4 @@ export {
 } from './notifications';
 export { initialBillingChannel, resolveBillingChannel } from './billingChannel';
 export { appPathForUrl, listenForAppLinks } from './appLinks';
+export { keepFocusedFieldVisible } from './keyboard';
