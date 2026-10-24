@@ -1,7 +1,7 @@
 # fastlane, for the signed iOS builds mobile-release.yml uploads to TestFlight. Pinned exactly so a
-# release is reproducible; bump deliberately. There is no Gemfile.lock yet because nothing here can
-# run Ruby -- the first release run resolves it, and that lock should be committed from the run's
-# artifact (docs/architecture/native-apps.md, "Releasing").
+# release is reproducible; bump deliberately. Gemfile.lock came from the first release run (nothing
+# here can run Ruby); after a bump, commit the lock the next run uploads as its gemfile-lock artifact
+# (docs/architecture/native-apps.md, "Releasing").
 source "https://rubygems.org"
 
 gem "fastlane", "2.240.1"

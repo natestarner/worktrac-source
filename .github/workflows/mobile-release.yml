@@ -7,8 +7,8 @@ name: Release mobile app (iOS → TestFlight)
 # `mobile-production` -- restricted to `main`, with Nate as a required reviewer on production
 # (launch checklist 6.3). The workflow never names a secret it does not need for the lane it runs.
 #
-# UNVERIFIED until the Apple Developer account, App Store Connect API key and certificates repo
-# exist. The runbook, including the first-run order, is docs/architecture/native-apps.md "Releasing".
+# Both lanes first ran green on 2026-10-24 (lower). The runbook, including the first-run order, is
+# docs/architecture/native-apps.md "Releasing".
 
 on:
   workflow_dispatch:
@@ -94,8 +94,8 @@ jobs:
 
       - run: bundle exec fastlane ios ${{ inputs.lane }} env:${{ inputs.environment }}
 
-      # There is no Gemfile.lock in the repo yet (nothing here could run Ruby). Keep the one this
-      # run resolved so it can be committed and every later release installs the same gems.
+      # Nothing on the dev machine can run Ruby, so this is how a new Gemfile.lock reaches the repo:
+      # after a deliberate gem bump, commit the one this run resolved.
       - uses: actions/upload-artifact@v7
         if: always()
         with:

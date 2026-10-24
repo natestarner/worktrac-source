@@ -2,9 +2,7 @@
 # mobile-release.yml and npm scripts, so this file can be swapped for another build service without
 # moving any of it. Full runbook: docs/architecture/native-apps.md, "Releasing".
 #
-# UNVERIFIED until the Apple Developer account, the App Store Connect API key and the certificates
-# repo exist (launch checklist 1.5-1.12, 6.3-6.4). Written so the first run has something concrete
-# to fail against, not because it has run.
+# Both lanes first ran green on 2026-10-24 (certificates, then beta for Huddle Lower).
 
 default_platform(:ios)
 

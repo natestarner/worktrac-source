@@ -171,7 +171,7 @@ iPad, and uploads light/dark screenshots plus `*-console.log`. **The console com
 so the unified log never contains it. Not a required check (macOS runners are slow and flakier);
 promote it once it has a track record.
 
-## Releasing: `mobile-release.yml` + fastlane (unverified until the Apple account exists)
+## Releasing: `mobile-release.yml` + fastlane (first ran green 2026-10-24)
 
 Manual dispatch only, from a protected GitHub Environment per target (`mobile-lower`,
 `mobile-production`). Never trigger it on `push`/`pull_request`: the repo is public and those
@@ -187,6 +187,7 @@ secrets sign and upload as Huddle.
 - **The Fastfile is plumbing.** What gets built is decided in the workflow and npm scripts, so
   another build service (Capawesome Cloud is the fallback; Appflow is end-of-life) can replace
   fastlane without moving any decision.
-- **No `Gemfile.lock` yet** (no Ruby here). The first run uploads the one it resolved as the
-  `gemfile-lock` artifact; commit it, so every later release installs the same gems.
+- **`Gemfile.lock` is committed** (from the first release run, 2026-10-24), so every release
+  installs the same gems. There is no Ruby here: after bumping fastlane in the `Gemfile`, commit the
+  lock the next run uploads as its `gemfile-lock` artifact.
 

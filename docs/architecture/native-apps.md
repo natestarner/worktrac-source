@@ -142,9 +142,10 @@ appeal, not from Apple's guidelines being settled.
 
 ## Releasing (once the Apple account exists)
 
-Everything below is written but **has never run**: it needs the Apple Developer account, the App
-Store Connect API key and the private certificates repo (launch checklist 1.5–1.12). First run, in
-order:
+First run on 2026-10-24, in this order. The only fix it needed was found before running: the
+`certificates` lane lacked `setup_ci`, so `match` would have tried the runner's login keychain
+(#417). The certificates run and the first Huddle Lower upload to TestFlight then both passed first
+time.
 
 1. **Create the GitHub Environments** `mobile-lower` and `mobile-production` (Settings →
    Environments), restricted to `main`, production with a required reviewer. Secrets in each:
@@ -156,11 +157,11 @@ order:
    distribution certificate and both App Store profiles in the certificates repo. Once only, then
    yearly.
 3. **Lane `beta`, environment `lower`.** Builds Huddle Lower against the lower backend and uploads
-   it to TestFlight. Commit the `gemfile-lock` artifact from this run as `frontend/Gemfile.lock`.
+   it to TestFlight. Its `gemfile-lock` artifact became `frontend/Gemfile.lock`; do the same after
+   any gem bump, since nothing here can run Ruby.
 4. Production is the same lane with environment `production`, dispatched from `main`; promoting
    the build from TestFlight to the App Store is a manual click in App Store Connect.
 
-Expect the first runs to need fixes: nothing here could be exercised without the account.
 
 ## Old builds: why the API is now additive-only
 
