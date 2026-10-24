@@ -85,13 +85,17 @@ only when all three agree. A missing half produces no error anywhere: the link j
    `applinks:$(APP_LINK_DOMAIN)`, a build setting (`app.huddle.fitness`; the Fastfile sets
    `app.dev.huddle.fitness` for Huddle Lower). Signing needs **Associated Domains** on both App IDs
    (checklist 1.7), or `match`'s profiles won't carry the entitlement and the release build fails.
-2. **The site vouches for the app.** `frontend/public/.well-known/apple-app-site-association`
+2. **The site vouches for the app.** `frontend/public/.well-known/apple-app-site-association.json`
    names both app IDs (`R73HV8H48W.fitness.huddle.app` and `….lower`; `R73HV8H48W` is the Apple
    Team ID), because lower and production serve the SAME frontend build; each app's entitlement
    decides which domain it actually claims. It claims `/join*`, `/app/*` and `/checkout-complete*`
    only, and `appLinks.test.js` pins both lists.
-   - `staticwebapp.config.json` keeps `/.well-known/*` out of the single-page fallback and serves
-     the file as JSON; without that exclusion iOS receives `index.html` (`appLinks.test.js` pins it).
+   - `staticwebapp.config.json` keeps `/.well-known/*` out of the single-page fallback; without that
+     exclusion iOS receives `index.html` (`appLinks.test.js` pins it).
+   - **The file is stored as `.json` and the extensionless URL Apple fetches is a route `rewrite`
+     onto it.** Static Web Apps sets a static file's `Content-Type` from its extension and ignores
+     a route's `Content-Type` header (lower served the extensionless file as
+     `application/octet-stream` with the header rule in place). Don't rename it back.
    - `ci.yml` uploads the build with `include-hidden-files: true`: `upload-artifact` skips dot
      directories by default, which would drop the file on its way to the deploy repo.
 3. **The app routes it.** `listenForAppLinks` → `AppLinkRouter` turns the URL into a path for the
