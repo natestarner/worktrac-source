@@ -22,6 +22,7 @@ vi.mock('@capacitor/app', () => ({
 
 import { appPathForUrl, listenForAppLinks } from './appLinks';
 import webAppConfig from '../../../public/staticwebapp.config.json';
+import aasaText from '../../../public/.well-known/apple-app-site-association?raw';
 
 // Lets the adapter's async setup (dynamic import, addListener, getLaunchUrl) run to completion.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -74,6 +75,16 @@ describe('the web host serves the link-ownership file', () => {
   it('serves it as JSON', () => {
     const route = webAppConfig.routes.find((r) => r.route === '/.well-known/apple-app-site-association');
     expect(route?.headers['Content-Type']).toBe('application/json');
+  });
+
+  // Both apps, because lower and production serve the same build; each app's entitlement decides
+  // which domain it claims. A typo in the Team ID breaks every link with no error anywhere.
+  // The claimed paths are the app's screens plus the two entry points emails and Stripe link to;
+  // anything else (the marketing pages, /login on a laptop) stays in the browser.
+  it('names both apps under the team, and claims only the app paths', () => {
+    const [details] = JSON.parse(aasaText).applinks.details;
+    expect(details.appIDs).toEqual(['R73HV8H48W.fitness.huddle.app', 'R73HV8H48W.fitness.huddle.app.lower']);
+    expect(details.components.map((c) => c['/'])).toEqual(['/join*', '/app/*', '/checkout-complete*']);
   });
 });
 
