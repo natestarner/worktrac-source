@@ -237,7 +237,7 @@ export default function AppShell() {
   const personBarSticks = people.length >= 2;
 
   return (
-    <div className="app-shell" style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div className="app-shell" style={{ minHeight: 'var(--viewport-min-height)', background: 'var(--color-bg)' }}>
       {/* The first thing a keyboard reaches, and invisible until it is focused. Without it,
           getting to the log form meant tabbing through the account menu, every person pill and
           all five tab links on every single screen. Targets the <main> below. */}

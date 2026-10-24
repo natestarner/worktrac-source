@@ -110,7 +110,7 @@ export default function RegisterPage() {
   return (
     <main
       style={{
-        minHeight: '100vh',
+        minHeight: 'var(--viewport-min-height)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
