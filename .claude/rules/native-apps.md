@@ -86,10 +86,10 @@ only when all three agree. A missing half produces no error anywhere: the link j
    `app.dev.huddle.fitness` for Huddle Lower). Signing needs **Associated Domains** on both App IDs
    (checklist 1.7), or `match`'s profiles won't carry the entitlement and the release build fails.
 2. **The site vouches for the app.** `frontend/public/.well-known/apple-app-site-association`
-   names both app IDs (`<TEAMID>.fitness.huddle.app` and `….lower`), because lower and production
-   serve the SAME frontend build; each app's entitlement decides which domain it actually claims.
-   It claims `/join*`, `/app/*` and `/checkout-complete*` only. **Not yet committed: it needs the
-   Team ID** (checklist 1.5).
+   names both app IDs (`R73HV8H48W.fitness.huddle.app` and `….lower`; `R73HV8H48W` is the Apple
+   Team ID), because lower and production serve the SAME frontend build; each app's entitlement
+   decides which domain it actually claims. It claims `/join*`, `/app/*` and `/checkout-complete*`
+   only, and `appLinks.test.js` pins both lists.
    - `staticwebapp.config.json` keeps `/.well-known/*` out of the single-page fallback and serves
      the file as JSON; without that exclusion iOS receives `index.html` (`appLinks.test.js` pins it).
    - `ci.yml` uploads the build with `include-hidden-files: true`: `upload-artifact` skips dot

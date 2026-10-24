@@ -107,25 +107,10 @@ recorded here as it lands:
   `/checkout-complete` landing page, and a resume reconcile when the app comes back.
 - **Universal links** (`feat/native-links`): the app's Associated Domains entitlement (per variant),
   in-app routing of a link that opened the app, and the web host serving
-  `/.well-known/apple-app-site-association`. The file itself waits for the Apple Team ID. Contents,
-  with `TEAMID` replaced:
-
-  ```json
-  {
-    "applinks": {
-      "details": [{
-        "appIDs": ["TEAMID.fitness.huddle.app", "TEAMID.fitness.huddle.app.lower"],
-        "components": [
-          { "/": "/join*" },
-          { "/": "/app/*" },
-          { "/": "/checkout-complete*" }
-        ]
-      }]
-    }
-  }
-  ```
-
-  After it deploys, `curl -i https://app.dev.huddle.fitness/.well-known/apple-app-site-association`
+  `/.well-known/apple-app-site-association`.
+- **The link-ownership file** (`feat/native-aasa-file`): `frontend/public/.well-known/apple-app-site-association`,
+  naming both apps under the Apple Team ID `R73HV8H48W` and claiming `/join*`, `/app/*` and
+  `/checkout-complete*`. After it deploys, `curl -i https://app.dev.huddle.fitness/.well-known/apple-app-site-association`
   must return that JSON (not `index.html`) with `Content-Type: application/json`. That is also the
   first check that the deploy repo's Static Web Apps upload kept the dot directory.
 
