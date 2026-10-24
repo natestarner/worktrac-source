@@ -81,7 +81,7 @@ export default function PausedLoginScreen() {
 }
 
 const wrapStyle = {
-  minHeight: '100vh',
+  minHeight: 'var(--viewport-min-height)',
   background: 'var(--color-bg)',
   display: 'flex',
   alignItems: 'center',

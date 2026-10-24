@@ -127,6 +127,21 @@ which Safari never does. `"none"` leaves keyboard avoidance to WKWebView itself,
 **Not yet verified on a device** (checklist 2.4/9.2): confirm on the Log screen's weight and reps
 fields before changing it either way.
 
+## The app draws under the status bar; the page leaves room with `--safe-top`
+
+Capacitor's WebView fills the whole screen, so the page starts **behind** the iOS clock, signal and
+battery. Safari and the home-screen web app start it below the status bar, where
+`env(safe-area-inset-top)` is 0, so none of this changes the web. The first TestFlight build drew
+the Huddle header and the account menu under the clock (2026-10-24).
+
+- `body` is padded by `--safe-top`, and `body::before` is an opaque strip of that height
+  (`--z-status-bar`, above the chrome and below every scrim) so content scrolling up under the clock
+  stays out of it.
+- `.app-chrome` sticks at `top: var(--safe-top)`, and `--sticky-chrome-clearance` includes it.
+- **Never write `100vh` for a screen-filling box; use `var(--viewport-min-height)`.** With the body
+  padded, a bare `100vh` overflows by the status bar's height and the page scrolls on screens that
+  should fit. **Never `top: 0` for new sticky or fixed chrome**; use `var(--safe-top)`.
+
 ## The iOS project is committed; its web copy is not
 
 `frontend/ios/` is committed. `ios/App/App/public/` and the generated `capacitor.config.json`

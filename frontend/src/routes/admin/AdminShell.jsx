@@ -34,7 +34,7 @@ export default function AdminShell() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div style={{ minHeight: 'var(--viewport-min-height)', background: 'var(--color-bg)' }}>
       <div
         style={{
           display: 'flex',

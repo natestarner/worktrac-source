@@ -246,7 +246,19 @@
      bottom sheet's scrim has to cover "End workout" while the sheet is open. */
   --z-app-chrome: 10;
   --z-header-menu: 12;
+  /* The strip behind the iOS status bar (body::before) must cover the chrome and the header menu
+     scrolling up beneath it, and stay under every scrim so a modal still dims it. */
+  --z-status-bar: 15;
   --z-bottom-bar: 20;
+
+  /* --- Top safe area ------------------------------------------------------
+     The App Store app draws edge to edge, so the page starts BEHIND the iOS status bar (the clock,
+     signal and battery) and must leave that much room itself. Safari and the home-screen web app
+     start the page below the status bar, and there env() is 0px -- so every use below is a no-op
+     on the web. --viewport-min-height replaces a bare 100vh for anything that fills the screen:
+     with the body padded by --safe-top, 100vh would overflow by exactly that much. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --viewport-min-height: calc(100vh - var(--safe-top));
 
   /* --- Bottom bar geometry ---------------------------------------------
      The session bar's content row. `--bottom-bar-height` is the RESERVED
@@ -268,8 +280,9 @@
      Deliberately generous rather than exact: the chrome's height varies with
      whether the person bar is showing (one person vs. several), and
      overshooting costs a little whitespace where undershooting hides the
-     target behind the chrome. */
-  --sticky-chrome-clearance: 132px;
+     target behind the chrome. Plus --safe-top, because in the App Store app the chrome sticks
+     below the status bar rather than at the very top. */
+  --sticky-chrome-clearance: calc(132px + var(--safe-top));
 
   /* --- Log picker chips -------------------------------------------------
      The picker's exercise chips are bounded by ROWS, not by a count of
@@ -438,10 +451,25 @@ body {
   font-weight: var(--weight-normal);
   line-height: var(--leading-normal);
   -webkit-font-smoothing: antialiased;
+  padding-top: var(--safe-top);
+}
+
+/* An opaque strip behind the status bar, so content scrolling up under it stays unreadable
+   instead of colliding with the clock. Zero height on the web (see --safe-top). */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--safe-top);
+  background: var(--color-bg);
+  z-index: var(--z-status-bar);
+  pointer-events: none;
 }
 
 #root {
-  min-height: 100svh;
+  min-height: calc(100svh - var(--safe-top));
 }
 
 /* ===========================================================================
@@ -1527,10 +1555,11 @@ input[type='search']::-webkit-search-results-decoration {
    person bar only for a household of two or more) -- but it is always a contiguous run ending
    at the tab bar, which is what lets this stay a single element at top:0 instead of a stack of
    sticky siblings each needing the summed height of the ones above it as its own `top`.
-   Anything anchored to the chrome's bottom edge below depends on that. */
+   Anything anchored to the chrome's bottom edge below depends on that. It sticks just below the
+   iOS status bar in the app (--safe-top; 0 on the web). */
 .app-chrome {
   position: sticky;
-  top: 0;
+  top: var(--safe-top);
   z-index: var(--z-app-chrome);
   background: var(--color-bg);
 }

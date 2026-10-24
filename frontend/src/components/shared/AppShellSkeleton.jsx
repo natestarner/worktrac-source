@@ -15,7 +15,7 @@ import Skeleton from './Skeleton';
 // control here, it needs the same treatment. See UserMenu.jsx.
 export default function AppShellSkeleton() {
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div style={{ minHeight: 'var(--viewport-min-height)', background: 'var(--color-bg)' }}>
       <Header booting />
 
       <div
