@@ -4,7 +4,7 @@
 <dict>
 	<!-- Universal links: links to this web app open the installed app. APP_LINK_DOMAIN is a build
 	     setting (app.huddle.fitness; the Fastfile sets app.dev.huddle.fitness for Huddle Lower), and
-	     the site's half is frontend/public/.well-known/apple-app-site-association. Signing needs the
+	     the site's half is frontend/public/.well-known/apple-app-site-association.json. Signing needs the
 	     Associated Domains capability on both App IDs (launch checklist 1.7). -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>

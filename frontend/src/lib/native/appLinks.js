@@ -1,6 +1,6 @@
 // Universal links: a link to app.huddle.fitness (an invitation, "Open Huddle" in an email) that iOS
 // hands to the installed app instead of Safari. The site's half of that handshake is
-// public/.well-known/apple-app-site-association; the app's is App.entitlements.
+// public/.well-known/apple-app-site-association.json; the app's is App.entitlements.
 //
 // Web: nothing to do. A browser follows the link itself, so there is no listener at all.
 // App: the link arrives as `appUrlOpen` while the app is running, or as the launch URL when it

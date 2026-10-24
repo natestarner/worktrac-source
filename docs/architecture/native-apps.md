@@ -108,11 +108,14 @@ recorded here as it lands:
 - **Universal links** (`feat/native-links`): the app's Associated Domains entitlement (per variant),
   in-app routing of a link that opened the app, and the web host serving
   `/.well-known/apple-app-site-association`.
-- **The link-ownership file** (`feat/native-aasa-file`): `frontend/public/.well-known/apple-app-site-association`,
+- **The link-ownership file** (`feat/native-aasa-file`): `frontend/public/.well-known/apple-app-site-association.json`,
   naming both apps under the Apple Team ID `R73HV8H48W` and claiming `/join*`, `/app/*` and
   `/checkout-complete*`. After it deploys, `curl -i https://app.dev.huddle.fitness/.well-known/apple-app-site-association`
   must return that JSON (not `index.html`) with `Content-Type: application/json`. That is also the
-  first check that the deploy repo's Static Web Apps upload kept the dot directory.
+  first check that the deploy repo's Static Web Apps upload kept the dot directory. The first
+  deploy served it as `application/octet-stream`: Static Web Apps takes a file's type from its
+  extension and ignores a route's `Content-Type` header, so the file is now stored as `.json`
+  and that URL is a rewrite onto it.
 
 ## Selling in the app: why a link-out, and only in the US
 
