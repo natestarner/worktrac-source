@@ -36,7 +36,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Nothing is uploaded unless this commit's app builds for the simulator and reaches its login
+  # screen (mobile-ci.yml). A beta that can't start would otherwise reach every tester's phone.
+  # No secrets: it builds unsigned, against lower's API, whichever app is being released.
+  simulator:
+    if: inputs.lane == 'beta'
+    uses: ./.github/workflows/mobile-ci.yml
+
   ios:
+    needs: simulator
+    # `certificates` builds nothing, so it skips the gate rather than being skipped by it.
+    if: ${{ !cancelled() && (needs.simulator.result == 'success' || inputs.lane == 'certificates') }}
     runs-on: macos-15
     timeout-minutes: 60
     environment: mobile-${{ inputs.environment }}

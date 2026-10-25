@@ -60,8 +60,10 @@ npx cap sync ios                                                # copies dist/ i
   fixed by redeploying.
 - There is no Mac in this project. Every iOS build happens on a GitHub macOS runner.
   `mobile-ci.yml` builds unsigned for the simulator on every push that touches `frontend/`, boots
-  an iPhone and an iPad, and uploads screenshots and the app's console. Signed TestFlight/App
-  Store builds will come from a separate, manually triggered release workflow.
+  an iPhone and an iPad, uploads screenshots and the app's console, and then has Maestro check the
+  login screen actually appeared (`e2e/mobile/launch.yaml`) -- the console can't say, because a
+  healthy boot logs nothing. Signed TestFlight/App Store builds come from the manually triggered
+  `mobile-release.yml`, which runs `mobile-ci.yml` first and uploads only if it passes.
 
 ## What is different from the web, and why it is fine
 

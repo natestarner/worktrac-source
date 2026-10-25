@@ -1,0 +1,17 @@
+# The app starts: a fresh install, cold, reaches the login screen and not boot-watchdog.js's
+# "Huddle couldn't load" fallback. Needs no account and no secret, so it runs on every push in
+# mobile-ci.yml and gates every TestFlight upload (mobile-release.yml).
+#
+# The unsigned simulator build is the committed project, i.e. the production bundle id, pointed at
+# lower's API (mobile-ci.yml's NATIVE_API_URL).
+appId: fitness.huddle.app
+name: Launch reaches the login screen
+---
+- launchApp:
+    clearState: true
+# Generous: the first launch after install includes WebKit's own cold start on a shared runner.
+- extendedWaitUntil:
+    visible: 'Log in'
+    timeout: 60000
+- assertVisible: 'Email'
+- assertNotVisible: "Huddle couldn't load"

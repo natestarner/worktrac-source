@@ -1,12 +1,15 @@
 name: Mobile CI — iOS simulator build
 
-# Proves the iOS app still compiles and boots whenever the code inside it changes, and keeps
+# Proves the iOS app still compiles and STARTS whenever the code inside it changes, and keeps
 # screenshots + the app's console as artifacts, since nobody here has a Mac to look at it on.
 #
 # - Unsigned (CODE_SIGNING_ALLOWED=NO): a simulator build needs no certificate and no Apple account,
 #   so this uses no secrets and is safe on a public repo.
-# - Not a required check yet: macOS runners are slower and flakier than the Linux ones, and a red
-#   run here must not block an unrelated web fix. Promote it once it has a track record.
+# - "Starts" is read off the screen, by Maestro (e2e/mobile/launch.yaml): the login screen appears and
+#   boot-watchdog.js's fallback doesn't. The console can't tell us: a healthy boot logs nothing.
+# - Gates TestFlight: mobile-release.yml calls this workflow (workflow_call) and uploads only if it
+#   passes. On push it is still not a required check -- macOS runners are slower and flakier than
+#   the Linux ones, and a red run here must not block merging an unrelated web fix.
 # - Builds against lower's API. The signed store builds come from mobile-release.yml, never from here.
 # Full design: docs/architecture/native-apps.md.
 
@@ -15,13 +18,17 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/mobile-ci.yml'
+      - 'e2e/mobile/**'
   workflow_dispatch: {}
+  workflow_call: {}
 
 permissions:
   contents: read
 
+# github.workflow is the CALLER's name under workflow_call, so a release's gate never shares a group
+# with push runs on main -- where a newer pending run would cancel it and fail the release.
 concurrency:
-  group: mobile-ci-${{ github.ref }}
+  group: mobile-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -33,6 +40,9 @@ jobs:
         working-directory: frontend
     env:
       NATIVE_API_URL: https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io
+      MAESTRO_VERSION: 2.11.0
+      # From the release's checksums_sha256.txt. Bump both together.
+      MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
     steps:
       - uses: actions/checkout@v7
 
@@ -68,6 +78,23 @@ jobs:
 
       - name: Boot, launch, screenshot
         run: bash scripts/ios-simulator-smoke.sh build/Build/Products/Debug-iphonesimulator/App.app mobile-ci-out
+
+      - uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      # Straight from the release, checksum-verified, rather than piping get.maestro.mobile.dev to bash.
+      - name: Install Maestro
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/maestro.zip" \
+            "https://github.com/mobile-dev-inc/maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip"
+          echo "${MAESTRO_SHA256}  $RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
+
+      - name: The app starts (reaches the login screen)
+        run: bash scripts/ios-maestro.sh build/Build/Products/Debug-iphonesimulator/App.app mobile-ci-out/maestro ../e2e/mobile/launch.yaml
 
       - uses: actions/upload-artifact@v7
         if: always()
