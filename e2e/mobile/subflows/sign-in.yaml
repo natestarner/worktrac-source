@@ -20,9 +20,10 @@ appId: fitness.huddle.app
     index: 0
 - inputText: ${MAESTRO_PASSWORD}
 # The first TestFlight build left these fields under the keyboard (native-apps.md, "Keyboard"). With
-# the keyboard up, the field being typed into and the button below it must both still be on screen.
+# the keyboard STILL UP, the field being typed into and the button below it must both be on screen
+# and tappable -- so no hideKeyboard here. (It also submits: on iOS Maestro's hideKeyboard sent the
+# keyboard's Go key from the password field, signing in before the tap below could find the button.)
 - assertVisible: 'Password'
-- hideKeyboard
 - tapOn: 'Log in'
 # A cold lower can hold the first request ~35s (resilience.md, axis B); sign-in waits 45s for it.
 - extendedWaitUntil:
