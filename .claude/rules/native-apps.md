@@ -263,6 +263,10 @@ contains it.
   never retried. Its `--debug-output` (XCTest runner logs) is in the artifact.
 - **Proven both ways before it gated anything:** a deliberately broken boot failed on `"Log in" is
   visible`, and a good build passed in about a minute. A gate that can't fail guards nothing.
+- **`launch.yaml` relaunches the app ONCE if the login form hasn't appeared.** A fresh CI simulator
+  has drawn a blank WebView (background colour, no watchdog fallback, so no JS ran) for over a
+  minute while the same build booted fine in the screenshot step. A real boot failure fails the
+  relaunch too, so it still gates; re-prove that with a broken-boot branch after changing the flow.
 
 ## `mobile-flows.yml`: the app, signed in, on the simulator
 
