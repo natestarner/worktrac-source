@@ -16,8 +16,12 @@ name: Survives the background and a relaunch
 - extendedWaitUntil:
     visible: 'End workout'
     timeout: 30000
-- assertVisible: 'Set 1'
-- assertNotVisible: 'Log in'
+# The set is still there (its row can sit below the fold), and nothing signed the person out.
+- scrollUntilVisible:
+    element: '.*× 6.*'
+    direction: DOWN
+    timeout: 15000
+- assertNotVisible: 'Forgot password\?'
 
 # Killed, then opened from the icon: a cold start on persisted state.
 - stopApp
@@ -25,5 +29,5 @@ name: Survives the background and a relaunch
 - extendedWaitUntil:
     visible: 'End workout'
     timeout: 60000
-- assertNotVisible: 'Log in'
+- assertNotVisible: 'Forgot password\?'
 - assertNotVisible: "Huddle couldn't load"

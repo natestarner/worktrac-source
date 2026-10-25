@@ -22,6 +22,10 @@ name: Checkout return link lands on Billing and lets go
 # iOS asks before any custom-scheme link opens an app -- the same prompt a person sees after tapping
 # "Return to the Huddle app" in Safari. Left unanswered it also sits over every later flow.
 - tapOn: 'Open'
+- takeScreenshot: after-open
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: after-open-settled
 - extendedWaitUntil:
     visible: '(?i)your plan'
     timeout: 30000

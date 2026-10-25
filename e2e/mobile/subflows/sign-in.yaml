@@ -6,8 +6,13 @@
 # accessibility reports for them is not something to bet a flow on.
 appId: fitness.huddle.app
 ---
-- launchApp:
-    clearState: true
+# One retry of the launch only: Maestro sometimes reports "App did not stop in time" restarting the
+# app after the previous flow. That is the simulator, and no step of the flow has run yet.
+- retry:
+    maxRetries: 1
+    commands:
+      - launchApp:
+          clearState: true
 - extendedWaitUntil:
     visible: 'Forgot password\?'
     timeout: 60000
