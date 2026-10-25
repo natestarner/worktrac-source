@@ -1,6 +1,6 @@
-# Fresh install, then sign in as the household seed-household.mjs created. Every flow starts here, so
-# each one stands alone: Maestro does not promise an order, and a flow that leaned on another's
-# leftovers would fail for reasons that have nothing to do with what it tests.
+# Fresh install, then sign in as EMAIL -- the calling flow's own household (seed-household.mjs seeds
+# one per flow, MAESTRO_EMAIL_<n>). Every flow starts here, so each one stands alone: Maestro does not
+# promise an order, and flows that shared a household saw each other's sessions.
 #
 # Text matches are regexes; (?i) because section labels are text-transform: uppercase and what iOS
 # accessibility reports for them is not something to bet a flow on.
@@ -14,7 +14,7 @@ appId: fitness.huddle.app
 - tapOn:
     text: 'Email'
     index: 0
-- inputText: ${MAESTRO_EMAIL}
+- inputText: ${EMAIL}
 - tapOn:
     text: 'Password'
     index: 0

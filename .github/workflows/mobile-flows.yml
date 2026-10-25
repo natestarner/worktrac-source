@@ -56,11 +56,13 @@ jobs:
         with:
           native-api-url: ${{ env.NATIVE_API_URL }}
 
-      - name: Create a throwaway household on lower
+      - name: Create a throwaway household per flow on lower
         working-directory: e2e/mobile
         env:
           API_URL: ${{ env.NATIVE_API_URL }}
           E2E_TEST_SUPPORT_KEY: ${{ secrets.E2E_TEST_SUPPORT_KEY_LOWER }}
+          # One per file in e2e/mobile/flows/ -- each signs in as MAESTRO_EMAIL_<its number>.
+          SEED_COUNT: '6'
         run: node seed-household.mjs
 
       - name: Signed-in flows

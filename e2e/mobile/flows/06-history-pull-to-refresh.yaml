@@ -7,7 +7,10 @@
 appId: fitness.huddle.app
 name: History's pull to refresh
 ---
-- runFlow: ../subflows/sign-in.yaml
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_6}
 - runFlow: ../subflows/log-a-set.yaml
 - tapOn: 'History'
 - extendedWaitUntil:

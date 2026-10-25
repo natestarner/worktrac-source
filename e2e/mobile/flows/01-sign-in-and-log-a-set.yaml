@@ -4,5 +4,8 @@
 appId: fitness.huddle.app
 name: Sign in and log a set
 ---
-- runFlow: ../subflows/sign-in.yaml
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_1}
 - runFlow: ../subflows/log-a-set.yaml

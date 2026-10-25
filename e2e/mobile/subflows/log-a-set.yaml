@@ -4,10 +4,11 @@ appId: fitness.huddle.app
 ---
 - tapOn: 'Search all exercises'
 - inputText: 'Barbell Bench Press'
-# index 1: index 0 is the search field itself, which now holds the same text.
+# The result under "Search results" -- not "the second match", which is the search field itself on a
+# fresh Log screen and a Session exercises card once a workout is running.
 - tapOn:
     text: 'Barbell Bench Press'
-    index: 1
+    below: '(?i)search results'
 - extendedWaitUntil:
     visible: 'Log set'
     timeout: 30000
@@ -29,8 +30,10 @@ appId: fitness.huddle.app
 - tapOn:
     text: 'New PR!'
     optional: true
-- extendedWaitUntil:
-    visible: 'Set 1'
+# The new row, which can sit below the fold. Its reps are the typed 6 (the household is this flow's
+# own, so no other set exists to match).
+- scrollUntilVisible:
+    element: '.*× 6.*'
+    direction: DOWN
     timeout: 30000
-- assertVisible: '.*× 6.*'
 - assertVisible: 'End workout'

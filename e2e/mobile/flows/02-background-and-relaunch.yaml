@@ -4,7 +4,10 @@
 appId: fitness.huddle.app
 name: Survives the background and a relaunch
 ---
-- runFlow: ../subflows/sign-in.yaml
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_2}
 - runFlow: ../subflows/log-a-set.yaml
 
 # Background, then back (no relaunch: the same process resumes).

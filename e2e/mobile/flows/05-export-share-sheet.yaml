@@ -3,7 +3,10 @@
 appId: fitness.huddle.app
 name: Export opens the share sheet
 ---
-- runFlow: ../subflows/sign-in.yaml
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_5}
 # Export is disabled until there is something to export.
 - runFlow: ../subflows/log-a-set.yaml
 - tapOn: 'History'

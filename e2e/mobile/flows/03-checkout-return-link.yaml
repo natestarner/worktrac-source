@@ -5,15 +5,19 @@
 #   session id is fake, so the reconcile fails; the webhook is what applies a real payment.
 # - Leaving Billing must STICK. On 2026-10-24 every tab tap re-read the link and bounced back to
 #   "Your plan" (#423).
-# - Billing shows no price or upgrade: the simulator has no readable App Store storefront, so the
-#   billing channel must stay 'none' (billing.md: it fails closed).
+# - NOT checked: billing failing closed with no storefront. The simulator reports the US storefront,
+#   so the app is on the 'external' channel and shows prices legitimately (billing.md); the 'none'
+#   case can't be produced here (first run, 2026-10-25).
 # - Back from Billing goes somewhere (useGoBack), since Billing was reached by a link.
 #
 # The unsigned simulator build is the production bundle id, so its scheme is fitness.huddle.app.
 appId: fitness.huddle.app
 name: Checkout return link lands on Billing and lets go
 ---
-- runFlow: ../subflows/sign-in.yaml
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_3}
 - openLink: 'fitness.huddle.app://checkout-complete?session_id=cs_test_maestro_return'
 # iOS asks before any custom-scheme link opens an app -- the same prompt a person sees after tapping
 # "Return to the Huddle app" in Safari. Left unanswered it also sits over every later flow.
@@ -22,9 +26,6 @@ name: Checkout return link lands on Billing and lets go
     visible: '(?i)your plan'
     timeout: 30000
 
-# Fails closed: no price, no purchase.
-- assertNotVisible: '(?i)upgrade to plus'
-- assertNotVisible: '.*\$[0-9].*'
 
 # The bounce: leave, wait, and still be where we went.
 - tapOn: 'History'

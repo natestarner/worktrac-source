@@ -28,6 +28,10 @@ UDID=$(xcrun simctl create "maestro-iphone" "$TYPE" "$RUNTIME")
 echo "== fresh $TYPE on $RUNTIME: $UDID"
 xcrun simctl boot "$UDID"
 xcrun simctl bootstatus "$UDID" -b
+# A fresh device shows iOS's one-time "slide to type" keyboard tutorial over the keyboard the first
+# time one appears, and it sat over a search field mid-flow (2026-10-25). Mark it already seen.
+xcrun simctl spawn "$UDID" defaults write com.apple.Preferences DidShowContinuousPathIntroduction -bool true || true
+xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences KeyboardContinuousPathEnabled -bool false || true
 # The Simulator app attached to the device: XCTest's first app launch on a headless runner is where
 # the hang above happened, and a device with its UI host running is the configuration Xcode expects.
 open -a Simulator --args -CurrentDeviceUDID "$UDID" || true

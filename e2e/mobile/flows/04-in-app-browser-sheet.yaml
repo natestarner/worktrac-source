@@ -3,9 +3,13 @@
 appId: fitness.huddle.app
 name: The in-app browser sheet opens and closes
 ---
-- runFlow: ../subflows/sign-in.yaml
-# The account menu's trigger is the signed-in person's name (seed-household.mjs).
-- tapOn: ${MAESTRO_PERSON}
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_4}
+# The account menu's trigger: the signed-in person's name and a caret, which iOS reports as one label
+# ("Alex ▾"). Maestro matches whole labels, so the bare name finds nothing.
+- tapOn: '${MAESTRO_PERSON} ▾'
 - tapOn: 'App Settings'
 - scrollUntilVisible:
     element: 'Terms'
