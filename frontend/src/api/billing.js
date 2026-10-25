@@ -28,7 +28,7 @@ export function reconcileCheckout(sessionId) {
 
 // Returns { url } for Stripe's hosted Customer Portal. `returnTo: 'app'` (the App Store app, which
 // shows the portal in an in-app browser sheet) makes the portal's "Return to Huddle" land on
-// /billing-done, a page that says to tap Done, rather than on a signed-out web app in the sheet.
+// /billing-done, a page that says to close the sheet, rather than on a signed-out web app inside it.
 export function createPortalSession({ returnTo } = {}) {
   const query = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : '';
   return apiClient.post(`/api/billing/portal-session${query}`);

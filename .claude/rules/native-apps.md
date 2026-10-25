@@ -136,9 +136,11 @@ The in-app sheet (`openExternal`) is a separate browser with **its own storage**
 signed out of Huddle inside it, always. So anything a sheet-hosted page links back to on
 `app.huddle.fitness` is a signed-out web app in the sheet. Stripe's Customer Portal is the case
 that exists: the app asks `POST /portal-session?returnTo=app`, and the portal's "Return to Huddle"
-lands on `/billing-done`, a public page that says to tap Done. That path is deliberately **not** in
-the association file, so iOS keeps it in the sheet. Coming back is noticed by `openExternal`'s
-`onClose`, never by a page or a visibility event.
+lands on `/billing-done`, a public page that says to close the sheet (its top-left button: an X on
+iOS 26, "Done" before). It has **no link back into the web app** -- that link would be the
+signed-out copy -- and no "open the app" button, since the app is already behind the sheet. That
+path is deliberately **not** in the association file, so iOS keeps it in the sheet. Coming back is
+noticed by `openExternal`'s `onClose`, never by a page or a visibility event.
 
 ## WebView settings (`capacitor.config.json`)
 

@@ -141,7 +141,7 @@ describe("'external' -- the App Store app on the US storefront", () => {
     await waitFor(() =>
       expect(openExternal).toHaveBeenCalledWith('https://billing.stripe.com/p/session_1', expect.any(Object)),
     );
-    // In the sheet, /app/billing would be a signed-out web app; /billing-done says to tap Done.
+    // In the sheet, /app/billing would be a signed-out web app; /billing-done says to close the sheet.
     expect(createPortalSession).toHaveBeenCalledWith({ returnTo: 'app' });
   });
 
