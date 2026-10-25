@@ -9,6 +9,8 @@ appId: fitness.huddle.app
     maxRetries: 2
     commands:
       - tapOn: 'Search all exercises'
+      # A retry after text that DID land must not type it twice.
+      - eraseText: 40
       - inputText: 'Barbell Bench Press'
       - extendedWaitUntil:
           visible: '(?i)search results'
