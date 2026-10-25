@@ -44,28 +44,53 @@ export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-300000}
 # No anonymous usage reports from CI.
 export MAESTRO_CLI_NO_ANALYTICS=1
 
-run_flows() {
+# One Maestro session per flow FILE, with the app force-quit between them. In one session, a flow that
+# left an iOS sheet or prompt over the app (the share sheet, "Open in Huddle?") made the next flow's
+# launchApp fail with "App did not stop in time" before any of its steps ran -- a cascade that cost
+# two or three flows a run (2026-10-25). A directory argument is expanded to its *.yaml files.
+FLOWS=()
+for arg in "$@"; do
+  if [ -d "$arg" ]; then
+    for f in "$arg"/*.yaml; do FLOWS+=("$f"); done
+  else
+    FLOWS+=("$arg")
+  fi
+done
+BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+
+run_flow() {
+  local flow="$1" name
+  name=$(basename "$flow" .yaml)
   maestro --device "$UDID" test \
-    --format junit --output "$OUT/report.xml" \
+    --format junit --output "$OUT/report-$name.xml" \
     --test-output-dir "$OUT" \
     --debug-output "$OUT/debug" \
-    "$@" 2>&1 | tee "$OUT/maestro-run.log"
-  return "${PIPESTATUS[0]}"
+    "$flow" 2>&1 | tee "$OUT/.last-run.log"
+  local status="${PIPESTATUS[0]}"
+  cat "$OUT/.last-run.log" >> "$OUT/maestro-run.log"
+  return "$status"
 }
 
 set +e
-run_flows "$@"
-rc=$?
-# One retry, and ONLY when the driver never started: that is the runner's simulator, not the app, and
-# no step of any flow ran. A flow that ran and failed is never retried -- that is the signal.
-if [ "$rc" -ne 0 ] && grep -q "iOS driver not ready in time" "$OUT/maestro-run.log"; then
-  echo "::warning::Maestro's iOS driver never started; retrying once on the same device."
-  run_flows "$@"
-  rc=$?
-fi
+rc=0
+for flow in "${FLOWS[@]}"; do
+  xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1
+  run_flow "$flow"
+  frc=$?
+  # One retry, and ONLY when the driver never started: that is the runner's simulator, not the app,
+  # and no step of the flow ran. A flow that ran and failed is never retried -- that is the signal.
+  if [ "$frc" -ne 0 ] && grep -q "iOS driver not ready in time" "$OUT/.last-run.log"; then
+    echo "::warning::Maestro's iOS driver never started for $flow; retrying it once."
+    run_flow "$flow"
+    frc=$?
+  fi
+  [ "$frc" -ne 0 ] && rc=1
+done
 set -e
+echo "== Summary"
+grep -E '^\[(Passed|Failed)\]' "$OUT/maestro-run.log" || true
 
-# Whatever the flow ended on, pass or fail: the first thing anyone wants when a step times out.
+# Whatever the last flow ended on, pass or fail: the first thing anyone wants when a step times out.
 xcrun simctl io "$UDID" screenshot "$OUT/final.png" || true
 xcrun simctl shutdown "$UDID" || true
 xcrun simctl delete "$UDID" || true

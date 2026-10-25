@@ -2,8 +2,17 @@
 # set. Leaves the workout running (the SessionBar's "End workout" is on screen).
 appId: fitness.huddle.app
 ---
-- tapOn: 'Search all exercises'
-- inputText: 'Barbell Bench Press'
+# Tap, type, and wait for the result, retried together: on a loaded runner the text sometimes never
+# reached the field right after sign-in (the screenshot showed an empty search box), which is input
+# timing in the simulator, not the app.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn: 'Search all exercises'
+      - inputText: 'Barbell Bench Press'
+      - extendedWaitUntil:
+          visible: '(?i)search results'
+          timeout: 10000
 # The result under "Search results" -- not "the second match", which is the search field itself on a
 # fresh Log screen and a Session exercises card once a workout is running.
 - tapOn:
