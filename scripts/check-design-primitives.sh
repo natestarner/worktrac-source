@@ -144,9 +144,26 @@ if [ "$handrolled" -gt "$EXPECTED_HANDROLLED_CARDS" ]; then
   fail=1
 fi
 
+# -- 6. A screen-filling box is --viewport-min-height, not 100vh ---------------
+#
+# In the App Store app the body is padded by the status bar's height (--safe-top in index.css), so
+# a bare 100vh overflows by exactly that much and the screen scrolls when it has nothing to scroll.
+# #422 moved every full-screen box to the token but missed authPageStyle, and the login screen
+# scrolled on the first TestFlight build. index.css defines the token from 100vh, so CSS is not
+# scanned. A maxHeight in vh is fine -- a cap cannot push the page past the screen.
+bare_vh=$(grep -rnE "\b(minHeight|height): '100(s|d|l)?vh'" --include='*.jsx' --include='*.js' "$SRC" \
+  | grep -v '\.test\.jsx\?:' || true)
+
+if [ -n "$bare_vh" ]; then
+  echo "FAIL: a bare vh height overflows by the status bar in the App Store app:"
+  printf '%s\n' "$bare_vh" | while read -r line; do note "${line#"$SRC"/}"; done
+  note "Use var(--viewport-min-height) (index.css), which already subtracts --safe-top."
+  fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "check-design-primitives: FAILED"
   exit 1
 fi
 
-echo "check-design-primitives: OK (section labels, primitive shadowing, --color-faint as text, weight ceiling)."
+echo "check-design-primitives: OK (section labels, primitive shadowing, --color-faint as text, weight ceiling, viewport height)."

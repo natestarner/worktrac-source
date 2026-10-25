@@ -55,7 +55,12 @@ Full reasoning: `docs/architecture/design-system.md`.
 - **`AnimatedLockup`'s wordmark is static; only the circles move**, and they pass *behind* it. Its
   first render is the finished logo (reduced motion, no rAF and a failed effect all leave that on
   screen), its box comes from the asset's own viewBox (`brand-lockup-size.spec.ts` measures it),
-  and it ignores the pointer so a circle in flight can't eat a tap on the form.
+  and it ignores the pointer so a circle in flight can't eat a tap on the form. The one exception
+  is a transparent rect over the resting box: a tap there replays the walk-in from frame 0. Keep
+  the hit area to that box, never the overflowing SVG.
+- **A screen-filling box uses `var(--viewport-min-height)`, never `100vh`.** In the App Store app
+  the body is padded by the status bar (`--safe-top`), so `100vh` scrolls by exactly that much.
+  `check-design-primitives.sh` (§6) fails the build on a bare `minHeight`/`height` of `100vh`.
 - **The UI accent is deliberately NOT the mark's orange.** `#E8734A` is 2.93:1 on
   `--color-bg` and 3.01:1 under white, so it fails as a border, a focus ring and a button
   fill. `--color-accent` is that hue darkened until it passes. Don't "correct" it.

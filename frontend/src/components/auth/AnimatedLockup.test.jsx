@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AnimatedLockup from './AnimatedLockup';
 import { readLockup } from './lockupAsset';
@@ -83,6 +83,54 @@ describe('AnimatedLockup', () => {
     const { container } = render(<AnimatedLockup width={216} />);
     frame(0); // the clock starts here
     frame(10_000); // long past the end
+    expect(circlePositions(container)).toEqual(RESTING);
+  });
+
+  it('plays the walk-in again from the start when the logo is tapped', () => {
+    mockReducedMotion(false);
+    let frame;
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      frame = cb;
+      return 1;
+    });
+    const { container } = render(<AnimatedLockup width={216} />);
+    frame(0);
+    frame(10_000);
+    expect(circlePositions(container)).toEqual(RESTING);
+
+    fireEvent.click(screen.getByTestId('lockup-replay'));
+    circlePositions(container).forEach((p, i) => {
+      expect(Math.hypot(p.cx - RESTING[i].cx, p.cy - RESTING[i].cy)).toBeGreaterThan(50);
+    });
+
+    // And it finishes in place again, on a clock that restarted at the tap.
+    frame(20_000);
+    frame(30_000);
+    expect(circlePositions(container)).toEqual(RESTING);
+  });
+
+  it('restarts a walk-in that is still running when tapped', () => {
+    mockReducedMotion(false);
+    let frame;
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      frame = cb;
+      return 1;
+    });
+    const cancel = vi.spyOn(window, 'cancelAnimationFrame');
+    render(<AnimatedLockup width={216} />);
+    frame(0);
+    frame(1_000); // mid-walk
+
+    fireEvent.click(screen.getByTestId('lockup-replay'));
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it('leaves the finished logo alone when tapped under reduced motion', () => {
+    mockReducedMotion(true);
+    const raf = vi.spyOn(window, 'requestAnimationFrame');
+    const { container } = render(<AnimatedLockup width={216} />);
+    fireEvent.click(screen.getByTestId('lockup-replay'));
+    expect(raf).not.toHaveBeenCalled();
     expect(circlePositions(container)).toEqual(RESTING);
   });
 });
