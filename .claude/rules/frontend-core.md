@@ -406,9 +406,11 @@ each held month's fingerprint and keeps every month the server does not resend
   them, so a sync that only moves a check time leaves `months` (and `flattenHistory`'s memo, keyed
   by that object) untouched. A scoped sync never audits.
 - **The whole History is re-downloaded only when the person asks** (`lib/historyReload.js`): a
-  reload whose document URL was `/app/history` (the navigation entry's `name`, never
-  `location.pathname`, which a later tab switch changes), or a pull down on History in the installed
-  app (`PullToRefresh.jsx`). The pull listens only in standalone display mode, because a browser's
+  reload whose document URL was `/app/history` -- `location.href` captured ONCE while the bundle
+  evaluates (`LOADED_URL`), never `location.pathname` read later (a tab switch changes it) and never
+  the navigation entry's `name`, which Safari sets to the worker's `/index.html` (#431) -- or a pull
+  down on History in the installed app (`PullToRefresh.jsx`). The pull listens only in standalone
+  display mode, because a browser's
   own pull down already reloads the page. Both call `refreshHistory(..., { full: true })` for the
   active person, after the persisted cache is restored. `full` is owed like a scope: a write refresh
   that cancels it carries it on. A second full request while one is in flight is dropped. Never add
