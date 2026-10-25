@@ -18,6 +18,12 @@ name: Checkout return link lands on Billing and lets go
     file: ../subflows/sign-in.yaml
     env:
       EMAIL: ${MAESTRO_EMAIL_3}
+# Opened from History, not from where sign-in lands: if the link is ignored the app stays here, and
+# if something sends it to Log afterwards, that shows too. (On Log the two looked the same.)
+- tapOn: 'History'
+- extendedWaitUntil:
+    visible: 'Export data'
+    timeout: 30000
 - openLink: 'fitness.huddle.app://checkout-complete?session_id=cs_test_maestro_return'
 # iOS asks before any custom-scheme link opens an app -- the same prompt a person sees after tapping
 # "Return to the Huddle app" in Safari. Left unanswered it also sits over every later flow.

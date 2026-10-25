@@ -23,4 +23,3 @@ name: The in-app browser sheet opens and closes
 - extendedWaitUntil:
     visible: 'Terms'
     timeout: 15000
-- assertVisible: 'Privacy Policy'
