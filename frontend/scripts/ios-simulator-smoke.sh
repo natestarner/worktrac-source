@@ -14,14 +14,7 @@ OUT="$2"
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
 mkdir -p "$OUT"
 
-# First device of the given kind on the newest iOS runtime installed.
-pick() {
-  xcrun simctl list devices available -j | jq -r --arg kind "$1" '
-    .devices | to_entries
-    | map(select(.key | test("iOS")))
-    | sort_by(.key | capture("iOS-(?<v>[0-9-]+)").v | split("-") | map(tonumber))
-    | last.value | map(select(.name | startswith($kind))) | first.udid'
-}
+source "$(dirname "$0")/ios-simulator-lib.sh"
 
 for KIND in iPhone iPad; do
   UDID=$(pick "$KIND")
