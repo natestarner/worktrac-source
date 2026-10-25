@@ -16,6 +16,10 @@ name: Mobile flows — the app, signed in, on the simulator
 on:
   workflow_dispatch: {}
   workflow_call: {}
+  # TEMPORARY, remove before merging: a workflow can't be dispatched until it is on main, so this
+  # is how the flows are iterated on their own branch.
+  push:
+    branches: [ci/mobile-app-flows]
 
 permissions:
   contents: read
