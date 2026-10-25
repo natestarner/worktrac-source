@@ -1,4 +1,4 @@
-import { APIRequestContext, Page, expect } from '@playwright/test';
+import { APIRequestContext, Page, expect, test } from '@playwright/test';
 import { registerHousehold, setBillingPlan } from './support/auth';
 import { pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
@@ -70,8 +70,14 @@ forEachConnectivityMode<Record<string, never>>('Last time card pages to the best
     await expectShown(page, '.set-pill', '4×110lb×10', false);
     // A swipe: the strip's own horizontal scroll, as a trackpad sends it. (Back is the button,
     // below, so both ways of paging run in every mode.)
-    await page.locator('.summary-card-pager').hover();
-    await page.mouse.wheel(300, 0);
+    // Phones (mobile WebKit) have no wheel; there the swipe is the strip scrolling, which is what a
+    // finger does to it. The same scroll handler pages it either way.
+    if (test.info().project.use.isMobile) {
+      await page.locator('.summary-card-pager').evaluate((el) => el.scrollBy({ left: 300 }));
+    } else {
+      await page.locator('.summary-card-pager').hover();
+      await page.mouse.wheel(300, 0);
+    }
   },
   assert: async (page) => {
     await expectShown(page, '.set-pill', '4×110lb×10');

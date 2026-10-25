@@ -45,7 +45,10 @@ test.describe('Handbook', () => {
     await expect(page.getByRole('heading', { name: 'Huddle Handbook' })).toBeVisible();
   });
 
-  test('a contents link jumps to that section instead of leaving the page', async ({ page, request }) => {
+  test('a contents link jumps to that section instead of leaving the page', async ({ page, request, isMobile }) => {
+    // At phone width the contents fold into a closed "Jump to a section" <details> (HelpTab.jsx),
+    // deliberately; this spec drives the desktop layout, where the list is always open.
+    test.skip(isMobile, 'drives the desktop contents list; phones fold it into "Jump to a section"');
     await registerHousehold(page, request, 'Bronte');
     await openHelp(page);
 
