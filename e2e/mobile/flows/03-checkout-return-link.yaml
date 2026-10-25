@@ -1,0 +1,46 @@
+# The URL scheme that brings someone back from Stripe's hosted checkout in Safari (native-apps.md,
+# "Universal links don't bring someone back from Stripe; the URL scheme does").
+#
+# - It lands on Billing (appLinks.js routes checkout-complete to /app/billing?checkout=...). The
+#   session id is fake, so the reconcile fails; the webhook is what applies a real payment.
+# - Leaving Billing must STICK. On 2026-10-24 every tab tap re-read the link and bounced back to
+#   "Your plan" (#423).
+# - Billing shows no price or upgrade: the simulator has no readable App Store storefront, so the
+#   billing channel must stay 'none' (billing.md: it fails closed).
+# - Back from Billing goes somewhere (useGoBack), since Billing was reached by a link.
+#
+# The unsigned simulator build is the production bundle id, so its scheme is fitness.huddle.app.
+appId: fitness.huddle.app
+name: Checkout return link lands on Billing and lets go
+---
+- runFlow: ../subflows/sign-in.yaml
+- openLink: 'fitness.huddle.app://checkout-complete?session_id=cs_test_maestro_return'
+- extendedWaitUntil:
+    visible: '(?i)your plan'
+    timeout: 30000
+
+# Fails closed: no price, no purchase.
+- assertNotVisible: '(?i)upgrade to plus'
+- assertNotVisible: '.*\$[0-9].*'
+
+# The bounce: leave, wait, and still be where we went.
+- tapOn: 'History'
+- extendedWaitUntil:
+    visible: 'Export data'
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertNotVisible: '(?i)your plan'
+- tapOn: 'Log'
+- extendedWaitUntil:
+    visible: 'Search all exercises'
+    timeout: 30000
+- assertNotVisible: '(?i)your plan'
+
+# And again from a cold start, where the link is the launch URL (read once per process).
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: 'Search all exercises'
+    timeout: 60000
+- assertNotVisible: '(?i)your plan'

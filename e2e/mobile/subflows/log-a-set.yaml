@@ -1,0 +1,33 @@
+# From the Log screen's picker: open Barbell Bench Press, type the reps with the keyboard, log the
+# set. Leaves the workout running (the SessionBar's "End workout" is on screen).
+appId: fitness.huddle.app
+---
+- tapOn: 'Search all exercises'
+- inputText: 'Barbell Bench Press'
+# index 1: index 0 is the search field itself, which now holds the same text.
+- tapOn:
+    text: 'Barbell Bench Press'
+    index: 1
+- extendedWaitUntil:
+    visible: 'Log set'
+    timeout: 30000
+# The reps field selects its text on focus (WeightRepsStepper.jsx), so typing replaces the prefill.
+- tapOn:
+    text: 'Reps'
+    index: 0
+- inputText: '8'
+# The SessionBar case native-apps.md still lists as unconfirmed: once a workout is running, a field
+# being typed into must stay above both the keyboard and the bar riding on it.
+- assertVisible:
+    text: 'Reps'
+    index: 0
+- hideKeyboard
+- tapOn: 'Log set'
+# A first set is always a record, and the celebration stays up until dismissed.
+- tapOn:
+    text: 'New PR!'
+    optional: true
+- extendedWaitUntil:
+    visible: 'Set 1'
+    timeout: 30000
+- assertVisible: 'End workout'

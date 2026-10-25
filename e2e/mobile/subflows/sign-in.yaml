@@ -1,0 +1,30 @@
+# Fresh install, then sign in as the household seed-household.mjs created. Every flow starts here, so
+# each one stands alone: Maestro does not promise an order, and a flow that leaned on another's
+# leftovers would fail for reasons that have nothing to do with what it tests.
+#
+# Text matches are regexes; (?i) because section labels are text-transform: uppercase and what iOS
+# accessibility reports for them is not something to bet a flow on.
+appId: fitness.huddle.app
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: 'Log in'
+    timeout: 60000
+- tapOn:
+    text: 'Email'
+    index: 0
+- inputText: ${MAESTRO_EMAIL}
+- tapOn:
+    text: 'Password'
+    index: 0
+- inputText: ${MAESTRO_PASSWORD}
+# The first TestFlight build left these fields under the keyboard (native-apps.md, "Keyboard"). With
+# the keyboard up, the field being typed into and the button below it must both still be on screen.
+- assertVisible: 'Password'
+- hideKeyboard
+- tapOn: 'Log in'
+# A cold lower can hold the first request ~35s (resilience.md, axis B); sign-in waits 45s for it.
+- extendedWaitUntil:
+    visible: 'Search all exercises'
+    timeout: 90000

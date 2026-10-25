@@ -1,0 +1,22 @@
+# Export hands the file to the iOS share sheet (lib/native's saveFile), and dismissing the sheet is
+# success, not an error: no "couldn't export" toast afterwards.
+appId: fitness.huddle.app
+name: Export opens the share sheet
+---
+- runFlow: ../subflows/sign-in.yaml
+# Export is disabled until there is something to export.
+- runFlow: ../subflows/log-a-set.yaml
+- tapOn: 'History'
+- extendedWaitUntil:
+    visible: 'Export data'
+    timeout: 30000
+- tapOn: 'Export data'
+# The share sheet names the file and offers Save to Files; its close control is an X labelled Close.
+- extendedWaitUntil:
+    visible: '(?i)save to files'
+    timeout: 60000
+- tapOn: '(?i)^(close|cancel)$'
+- extendedWaitUntil:
+    visible: 'Export data'
+    timeout: 15000
+- assertNotVisible: "(?i).*couldn't.*"

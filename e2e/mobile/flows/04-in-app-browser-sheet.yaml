@@ -1,0 +1,22 @@
+# Terms opens in the in-app browser sheet (openExternal), and closing the sheet returns to the same
+# screen. The sheet's close control is "Done" before iOS 26 and an X after; matching both by label.
+appId: fitness.huddle.app
+name: The in-app browser sheet opens and closes
+---
+- runFlow: ../subflows/sign-in.yaml
+# The account menu's trigger is the signed-in person's name (seed-household.mjs).
+- tapOn: ${MAESTRO_PERSON}
+- tapOn: 'App Settings'
+- scrollUntilVisible:
+    element: 'Terms'
+    direction: DOWN
+    timeout: 20000
+- tapOn: 'Terms'
+- extendedWaitUntil:
+    visible: '(?i)^(done|close)$'
+    timeout: 30000
+- tapOn: '(?i)^(done|close)$'
+- extendedWaitUntil:
+    visible: 'Terms'
+    timeout: 15000
+- assertVisible: 'Privacy Policy'

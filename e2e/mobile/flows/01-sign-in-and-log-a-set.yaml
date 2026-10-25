@@ -1,0 +1,8 @@
+# The critical path: sign in, log a set with the keyboard, see the workout running. Covers the login
+# form's fields staying above the keyboard and the reps field staying above the SessionBar while
+# typing -- both things only the app's WebView settings decide (native-apps.md, "Keyboard").
+appId: fitness.huddle.app
+name: Sign in and log a set
+---
+- runFlow: ../subflows/sign-in.yaml
+- runFlow: ../subflows/log-a-set.yaml

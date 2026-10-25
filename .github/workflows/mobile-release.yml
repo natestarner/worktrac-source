@@ -43,6 +43,14 @@ jobs:
     if: inputs.lane == 'beta'
     uses: ./.github/workflows/mobile-ci.yml
 
+  # The signed-in flows (mobile-flows.yml). Beside the upload, not before it: nothing `needs:` this
+  # yet, so a red result is reported without holding a beta back. Promote it to a gate once it has a
+  # track record.
+  flows:
+    if: inputs.lane == 'beta'
+    uses: ./.github/workflows/mobile-flows.yml
+    secrets: inherit
+
   ios:
     needs: simulator
     # `certificates` builds nothing, so it skips the gate rather than being skipped by it.
