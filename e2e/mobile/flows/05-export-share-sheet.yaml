@@ -14,11 +14,16 @@ name: Export opens the share sheet
     visible: 'Export data'
     timeout: 30000
 - tapOn: 'Export data'
-# The share sheet names the file and offers Save to Files; its close control is an X labelled Close.
+# The share sheet covers the app, so the button behind it leaves the accessibility tree. Not "Save to
+# Files": on the CI simulator the sheet opens but never draws its contents (2026-10-25), so nothing in
+# it can be matched -- and a flow that waits for it leaves the sheet up over the next flow.
 - extendedWaitUntil:
-    visible: '(?i)save to files'
+    notVisible: 'Export data'
     timeout: 60000
-- tapOn: '(?i)^(close|cancel)$'
+# Dismissed the way a person flicks it away. Dismissing is success, not an error (lib/native saveFile).
+- swipe:
+    direction: DOWN
+    duration: 600
 - extendedWaitUntil:
     visible: 'Export data'
     timeout: 15000
