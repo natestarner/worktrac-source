@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, useSearchParams } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
 import { onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BillingTab from './BillingTab';
@@ -255,6 +255,46 @@ describe('BillingTab', () => {
       { tone: 'info' },
     ));
     expect(screen.queryByText('Welcome to Huddle Plus')).not.toBeInTheDocument();
+  });
+
+  // The reconcile goes out to Stripe, so it can still be in flight when the person taps away. Its
+  // `finally` strips ?checkout= with setSearchParams, which React Router resolves against the BILLING
+  // route -- so it navigated back to Billing from wherever they had gone. Found by the simulator
+  // flow 03-checkout-return-link (lower, 2026-10-25): History loaded, then Billing came back.
+  it('does not pull the person back to Billing when the reconcile finishes after they have left', async () => {
+    const showToast = vi.fn();
+    useUI.mockReturnValue({ releaseOnboarding: vi.fn(), showToast });
+    useAuth.mockReturnValue({ account: { id: 1, plan: 'FREE' }, refreshPeople: vi.fn().mockResolvedValue() });
+    getSubscription.mockResolvedValue(null);
+    let rejectReconcile;
+    reconcileCheckout.mockReturnValue(new Promise((_, reject) => { rejectReconcile = reject; }));
+    function Where() {
+      return <output data-testid="where">{useLocation().pathname}</output>;
+    }
+
+    renderWithQuery(
+      <MemoryRouter initialEntries={['/app/billing?checkout=cs_test_leave']}>
+        <Link to="/app/history">Go to History</Link>
+        <Where />
+        <Routes>
+          <Route path="/app/billing" element={<BillingTab />} />
+          <Route path="/app/history" element={<p>History screen</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(reconcileCheckout).toHaveBeenCalledWith('cs_test_leave'));
+
+    fireEvent.click(screen.getByText('Go to History'));
+    expect(await screen.findByText('History screen')).toBeInTheDocument();
+
+    rejectReconcile(new Error('No such checkout.session'));
+    // The catch has run once the toast is up; its finally (the strip) runs right after it. Then give
+    // the navigation that strip would cause time to land, and look ONCE -- a polling waitFor would
+    // pass on its first look, before the bounce, which is how a first draft of this passed on the bug.
+    await waitFor(() => expect(showToast).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByTestId('where')).toHaveTextContent('/app/history');
+    expect(screen.getByText('History screen')).toBeInTheDocument();
   });
 
   // ── Arriving from the trainer page's ?plan=pro CTAs ─────────────────────────────────────────

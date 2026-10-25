@@ -144,6 +144,19 @@ export default function BillingTab() {
   // pass on both the buggy and fixed code, which is worse than no test at all.
   const checkoutParam = searchParams.get('checkout');
   const reconciledRef = useRef(null);
+  // Whether Billing is still on screen when the reconcile settles. Only the URL strip below asks it:
+  // setSearchParams navigates relative to THIS route, so run after the person has left (the reconcile
+  // goes out to Stripe, which takes long enough to tap away), it pulled them back to Billing from
+  // wherever they had gone -- seen in the App Store app's checkout-return flow on lower. Set again on
+  // every mount, so StrictMode's mount/cleanup/mount leaves it true; it is NOT a cleanup "cancelled"
+  // flag on the success path, which the comment above explains is wrong here.
+  const onScreenRef = useRef(false);
+  useEffect(() => {
+    onScreenRef.current = true;
+    return () => {
+      onScreenRef.current = false;
+    };
+  }, []);
   useEffect(() => {
     if (!checkoutParam || reconciledRef.current === checkoutParam) return;
     reconciledRef.current = checkoutParam;
@@ -166,11 +179,14 @@ export default function BillingTab() {
         // Saying so beats a spinner that resolves into nothing.
         showToast('Payment received. Your plan will update shortly.', { tone: 'info' });
       } finally {
-        // Strip the param so a reload or a shared link cannot replay it.
+        // Strip the param so a reload or a shared link cannot replay it -- but only while Billing is
+        // still the screen. Once they have left, the param left with them; stripping it would navigate.
         setCheckout(null);
-        const next = new URLSearchParams(searchParams);
-        next.delete('checkout');
-        setSearchParams(next, { replace: true });
+        if (onScreenRef.current) {
+          const next = new URLSearchParams(searchParams);
+          next.delete('checkout');
+          setSearchParams(next, { replace: true });
+        }
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps

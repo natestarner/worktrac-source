@@ -433,6 +433,14 @@ forgotten bracket from the same error.
   is scheduled (tried a real `setTimeout`-deferred mock explicitly wrapped in `<StrictMode>`; only
   one invocation ever fired). The regression guard lives in `e2e/tests/billing.spec.ts` instead,
   against the real dev server.
+- **…and its URL strip (`setSearchParams`, dropping `?checkout=`) runs ONLY while Billing is still on
+  screen** (`onScreenRef`, set on every mount). `setSearchParams` navigates relative to the Billing
+  route, and the reconcile goes out to Stripe, so a person who taps away before it settles was
+  pulled back to Billing from wherever they went (found by the simulator flow
+  `03-checkout-return-link` on lower, 2026-10-25). Only the strip is guarded: the refresh and the
+  celebration still run, so this is not the cleanup "cancelled" flag the bullet above forbids.
+  Pinned by `BillingTab.test.jsx`'s "does not pull the person back to Billing", which fails without
+  the guard.
 
 ## Deleting an account must stop the money
 
