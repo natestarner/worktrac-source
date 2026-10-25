@@ -36,6 +36,7 @@ set +e
 maestro --device "$UDID" test \
   --format junit --output "$OUT/report.xml" \
   --test-output-dir "$OUT" \
+  --debug-output "$OUT/debug" \
   "$@"
 rc=$?
 set -e
