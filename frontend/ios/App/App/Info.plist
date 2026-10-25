@@ -18,6 +18,21 @@
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<!-- The checkout landing page's "Return to the Huddle app" button (lib/native/appLinks.js,
+	     appReturnUrl). The scheme is the bundle id, so Huddle and Huddle Lower never claim each
+	     other's links. A universal link can't do this job: iOS keeps a tap on a same-site link, and
+	     Stripe's post-payment redirect, in Safari. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>

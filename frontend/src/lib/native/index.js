@@ -11,5 +11,5 @@ export {
   cancelRestNotifications,
 } from './notifications';
 export { initialBillingChannel, resolveBillingChannel } from './billingChannel';
-export { appPathForUrl, listenForAppLinks } from './appLinks';
+export { appPathForUrl, appReturnUrl, listenForAppLinks } from './appLinks';
 export { keepFocusedFieldVisible } from './keyboard';

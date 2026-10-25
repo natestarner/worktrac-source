@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { reconcileCheckout } from '../api/billing';
 import { clearPendingCheckout, readPendingCheckout } from '../lib/pendingCheckout';
@@ -22,8 +22,14 @@ import { isPaidPlan } from '../utils/planFeatures';
 // Only the App Store app ever writes the marker, so on the web this reads null and does nothing.
 // Calls reconcileCheckout directly, as BillingTab does: it is an idempotent confirmation, not a
 // purchase, so it has no gate to pass and nothing to queue.
+//
+// Subscribes once, reaching navigate through a ref: under <BrowserRouter> navigate changes on every
+// pathname change, and as a dependency it re-ran this on every tab tap -- a reconcile per tap while
+// a checkout was still pending (AppLinkRouter had the same shape and it trapped people on billing).
 export function useCheckoutResume() {
   const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   useEffect(() => {
     let running = false;
     async function check() {
@@ -35,7 +41,7 @@ export function useCheckoutResume() {
         const result = await reconcileCheckout(sessionId);
         if (isPaidPlan(result?.plan)) {
           clearPendingCheckout();
-          navigate(`/app/billing?checkout=${encodeURIComponent(sessionId)}`);
+          navigateRef.current(`/app/billing?checkout=${encodeURIComponent(sessionId)}`);
         }
       } catch (error) {
         const status = error?.status;
@@ -47,5 +53,5 @@ export function useCheckoutResume() {
     check();
     document.addEventListener('visibilitychange', check);
     return () => document.removeEventListener('visibilitychange', check);
-  }, [navigate]);
+  }, []);
 }
