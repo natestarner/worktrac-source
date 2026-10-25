@@ -15,6 +15,21 @@ name: Launch reaches the login screen
 - extendedWaitUntil:
     visible: 'Forgot password\?'
     timeout: 60000
+    optional: true
+# ONE relaunch if it didn't appear. On a fresh CI simulator the WebView has been seen drawing nothing
+# at all -- the background colour for a minute, not even boot-watchdog's fallback, so no JS ran --
+# while the same build booted to this screen in the screenshot step moments earlier (#436, 2026-10-25).
+# A build that genuinely can't start fails this second launch too (a boot failure is deterministic),
+# so the gate still catches it; what it no longer does is block a release on one simulator stall.
+- runFlow:
+    when:
+      notVisible: 'Forgot password\?'
+    commands:
+      - stopApp
+      - launchApp
+      - extendedWaitUntil:
+          visible: 'Forgot password\?'
+          timeout: 60000
 - assertVisible:
     text: 'Log in'
     below: 'Forgot password\?'
