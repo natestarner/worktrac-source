@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onlineManager } from '@tanstack/react-query';
 import {
@@ -55,6 +55,12 @@ export const RECONNECT_RETRY_MAX_MS = 30000;
 // so attempts 1-2 failing is the ORDINARY scale-to-zero path, not a fault. Stalling earlier would
 // fire on every cold boot; this fires only once the wait is genuinely unexplained.
 export const BOOT_STALL_AFTER_ATTEMPTS = 3;
+
+// How old a confirmed identity may be before coming back to the app re-asks /me (see
+// reconcileIdentity). Long enough that glancing at another app mid-set costs nothing -- /me is the
+// hottest endpoint the server has -- and short enough that anything changed elsewhere is on screen
+// by the next time someone actually picks the phone up.
+export const IDENTITY_STALE_AFTER_MS = 5 * 60 * 1000;
 
 // Records which account currently owns whatever's sitting in the live outbox. If a DIFFERENT
 // account is becoming active than the one the outbox pointer says owns it (a shared device: A's
@@ -141,6 +147,11 @@ async function verifyNewSession(token) {
 export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const [state, setState] = useState(EMPTY);
+  // When the server last confirmed this identity (any /me that landed), so coming back to the app
+  // re-asks only once it is IDENTITY_STALE_AFTER_MS old. 0 = never this page: an offline boot from
+  // the snapshot re-asks on the first return. And whether a reconcile is already on the wire.
+  const identityConfirmedAtRef = useRef(0);
+  const reconcilingRef = useRef(false);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -189,6 +200,7 @@ export function AuthProvider({ children }) {
           // A verified live session -- record the identity so a later cold start with no network
           // can still boot into the app, and mark durable storage so the offline cache isn't
           // evicted.
+          identityConfirmedAtRef.current = Date.now();
           saveAuthSnapshot(data);
           adoptOutboxScope(data.account?.id, data.user?.id);
           requestPersistentStorage();
@@ -245,18 +257,31 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // When connectivity returns after an offline boot, silently reconcile the identity against the
-  // server (role/people may have changed) and drop the `offline` flag. A failure here is harmless --
-  // we simply stay on the cached identity until the next reconnect.
+  // Silently reconcile the identity against the server -- plan, people, membership, the minimum
+  // supported app build -- and drop the `offline` flag. Two moments ask for it:
+  //   - connectivity returns (after an offline boot, or any outage), and
+  //   - the app or tab is visible again after IDENTITY_STALE_AFTER_MS without a confirmed /me.
+  // The second is what keeps an App Store app current: iOS resumes a suspended process without
+  // reloading it, sometimes days later, and nothing else re-asks /me between boots. So a person
+  // added on the iPad, a plan changed on the web or an "update the app" minimum never reached the
+  // phone until iOS happened to kill it. A browser tab gets the same refresh on return; it needed it
+  // less only because tabs reload more. Every QUERY already refetches on focus (TanStack); /me is
+  // not a query, which is why it had to be asked for.
+  //
+  // A failure is harmless -- the cached identity stands until the next moment -- except a definitive
+  // 401, which api/client.js turns into a sign-out, correctly: the token itself is no longer valid.
+  // Asked only while online: offline it can only fail, and coming back online asks anyway.
   useEffect(() => {
-    return onlineManager.subscribe((online) => {
-      if (!online || !getAuthToken()) return;
-      // Same staleness class as the boot effect above: this subscription lives for the whole app
-      // session, so its apiMe() call can still be in flight when a logout+login happens meanwhile.
+    function reconcileIdentity() {
+      if (reconcilingRef.current || !onlineManager.isOnline() || !getAuthToken()) return;
+      reconcilingRef.current = true;
+      // Same staleness class as the boot effect above: these listeners live for the whole app
+      // session, so this apiMe() call can still be in flight when a logout+login happens meanwhile.
       const tokenAtCall = getAuthToken();
       apiMe()
         .then((data) => {
           if (getAuthToken() !== tokenAtCall) return; // a newer login/logout happened meanwhile
+          identityConfirmedAtRef.current = Date.now();
           saveAuthSnapshot(data);
           // Spread the previous state first so an in-flight `freshLogin` flag (see login()/
           // confirmEmail() below) isn't silently clobbered back to falsy if this reconcile happens
@@ -265,8 +290,24 @@ export function AuthProvider({ children }) {
         })
         .catch(() => {
           // Still unreachable (server down while network is up) -- keep the cached identity.
+        })
+        .finally(() => {
+          reconcilingRef.current = false;
         });
+    }
+    function onVisible() {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - identityConfirmedAtRef.current < IDENTITY_STALE_AFTER_MS) return;
+      reconcileIdentity();
+    }
+    const unsubscribe = onlineManager.subscribe((online) => {
+      if (online) reconcileIdentity();
     });
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      unsubscribe();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   // Everything that turns a freshly-minted token into a live session, in the one order that is
@@ -281,6 +322,7 @@ export function AuthProvider({ children }) {
   // smaller seam than a second copy of six ordered steps.
   const establishSession = useCallback(async (token, { afterSnapshot } = {}) => {
     const data = await verifyNewSession(token);
+    identityConfirmedAtRef.current = Date.now();
     saveAuthSnapshot(data);
     afterSnapshot?.(data);
     const switchedAccount = adoptOutboxScope(data.account?.id, data.user?.id);
@@ -455,6 +497,7 @@ export function AuthProvider({ children }) {
   // in step so a later cold start reflects the latest people/account too.
   const refreshPeople = useCallback(async () => {
     const data = await apiMe();
+    identityConfirmedAtRef.current = Date.now();
     saveAuthSnapshot(data);
     setState((s) => ({ ...s, account: data.account, people: data.people }));
   }, []);
