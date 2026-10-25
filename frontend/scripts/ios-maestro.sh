@@ -25,6 +25,13 @@ xcrun simctl bootstatus "$UDID" -b
 xcrun simctl ui "$UDID" appearance light
 xcrun simctl install "$UDID" "$APP"
 
+# Maestro drives iOS through an XCTest runner it installs on first use, and on a cold GitHub runner
+# that takes minutes, not the default's seconds: the first runs here failed with "iOS driver not ready
+# in time" before a single step ran, for a good build and a broken one alike. In milliseconds.
+export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-300000}"
+# No anonymous usage reports from CI.
+export MAESTRO_CLI_NO_ANALYTICS=1
+
 set +e
 maestro --device "$UDID" test \
   --format junit --output "$OUT/report.xml" \
