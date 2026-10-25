@@ -29,7 +29,9 @@ export default function UpdateAppBanner({ build = NATIVE_BUILD_NUMBER }) {
         working. Nothing you&rsquo;ve logged is lost.
       </span>
       {storeUrl ? (
-        <a {...externalLinkProps(storeUrl)} className="pressable" style={linkStyle}>
+        // leaveApp: handed to iOS, the listing opens in the App Store itself rather than as a web
+        // preview in the in-app browser sheet.
+        <a {...externalLinkProps(storeUrl, { leaveApp: true })} className="pressable" style={linkStyle}>
           Update
         </a>
       ) : null}

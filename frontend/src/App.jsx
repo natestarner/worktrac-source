@@ -20,6 +20,7 @@ import ForgotPasswordPage from './routes/ForgotPasswordPage';
 import ResetPasswordPage from './routes/ResetPasswordPage';
 import JoinPage from './routes/JoinPage';
 import CheckoutCompletePage from './routes/CheckoutCompletePage';
+import BillingDonePage from './routes/BillingDonePage';
 import ProtectedRoute from './routes/ProtectedRoute';
 import AdminRoute from './routes/AdminRoute';
 import AppShell from './routes/AppShell';
@@ -158,6 +159,7 @@ export default function App() {
             <Route path="/join" element={<JoinPage />} />
             {/* Where Stripe's hosted checkout (the App Store app's US purchase) lands the BROWSER. */}
             <Route path="/checkout-complete" element={<CheckoutCompletePage />} />
+            <Route path="/billing-done" element={<BillingDonePage />} />
             <Route element={<ProtectedRoute />}>
               <Route path="/app" element={<AppShell />}>
                 <Route index element={<Navigate to="log" replace />} />

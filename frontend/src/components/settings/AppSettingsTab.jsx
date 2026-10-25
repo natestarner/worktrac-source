@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import SectionLabel from '../shared/SectionLabel';
-import { useNavigate } from 'react-router-dom';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { useUI } from '../../context/UIContext';
@@ -32,13 +31,14 @@ import { invalidateAfterImport } from '../../lib/queryClient';
 import Card from '../shared/Card';
 import { planIncludes } from '../../utils/planFeatures';
 import BackLink from '../shared/BackLink';
+import { useGoBack } from '../../hooks/useGoBack';
 
 // Every setting here is household-wide -- nothing is scoped to whichever person happens to be
 // active. Units and the shared tag vocabulary are account-level; the rest timer is a per-person
 // preference but shown for EVERY person at once so the whole household is configured from one
 // screen (not one toggle that depends on who's selected).
 export default function AppSettingsTab() {
-  const navigate = useNavigate();
+  const goBack = useGoBack();
   const { account, people, refreshPeople } = useAuth();
   // The derived entitlement, carried in the auth snapshot -- so this reads correctly on a cold
   // offline boot rather than depending on a request that may not have come back. An UNKNOWN plan
@@ -222,7 +222,7 @@ export default function AppSettingsTab() {
 
   return (
     <div>
-      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
+      <BackLink onClick={goBack}>&larr; Back</BackLink>
 
       <SectionLabel>Units</SectionLabel>
       <Card size="dense" style={{ marginBottom: 24 }}>

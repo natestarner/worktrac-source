@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { queryKeys } from '../../api/queryKeys';
 import { listRoster } from '../../api/roster';
@@ -9,6 +8,7 @@ import Card from '../shared/Card';
 import Skeleton from '../shared/Skeleton';
 import EmptyState from '../shared/EmptyState';
 import BackLink from '../shared/BackLink';
+import { useGoBack } from '../../hooks/useGoBack';
 
 /**
  * The roster — everyone on the account, quietest first.
@@ -22,7 +22,7 @@ import BackLink from '../shared/BackLink';
  * with a wrong date reorders the one screen whose entire purpose is the order.
  */
 export default function RosterTab() {
-  const navigate = useNavigate();
+  const goBack = useGoBack();
   const { account, people } = useAuth();
   const vocab = accountVocab(account?.vocab);
 
@@ -47,7 +47,7 @@ export default function RosterTab() {
 
   return (
     <div>
-      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
+      <BackLink onClick={goBack}>&larr; Back</BackLink>
 
       <SectionLabel>{capitalize(vocab.member)}s</SectionLabel>
 

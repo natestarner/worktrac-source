@@ -23,6 +23,7 @@ vi.mock('@capacitor/app', () => ({
 import { appPathForUrl, listenForAppLinks } from './appLinks';
 import webAppConfig from '../../../public/staticwebapp.config.json';
 import aasa from '../../../public/.well-known/apple-app-site-association.json';
+import entitlements from '../../../ios/App/App/App.entitlements?raw';
 
 // Lets the adapter's async setup (dynamic import, addListener, getLaunchUrl) run to completion.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -88,6 +89,14 @@ describe('the web host serves the link-ownership file', () => {
     const [details] = aasa.applinks.details;
     expect(details.appIDs).toEqual(['R73HV8H48W.fitness.huddle.app', 'R73HV8H48W.fitness.huddle.app.lower']);
     expect(details.components.map((c) => c['/'])).toEqual(['/join*', '/app/*', '/checkout-complete*']);
+  });
+
+  // Password AutoFill: without both halves the app's login screen never offers the password saved
+  // for the site, and nothing anywhere reports that.
+  it('vouches for both apps for saved passwords too, and the app claims the same domain for them', () => {
+    expect(aasa.webcredentials.apps).toEqual(['R73HV8H48W.fitness.huddle.app', 'R73HV8H48W.fitness.huddle.app.lower']);
+    expect(entitlements).toContain('<string>webcredentials:$(APP_LINK_DOMAIN)</string>');
+    expect(entitlements).toContain('<string>applinks:$(APP_LINK_DOMAIN)</string>');
   });
 });
 
