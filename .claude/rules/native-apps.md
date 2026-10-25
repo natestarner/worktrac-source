@@ -285,6 +285,12 @@ contains it.
 - **Not on push.** It needs `E2E_TEST_SUPPORT_KEY_LOWER`, kept in the `mobile-e2e` environment
   (any branch) apart from the signing secrets (main only). Dispatch it, or `mobile-release.yml`
   calls it.
+- **The key exists twice and must match:** `worktrac-deploy`'s repo secret (what lower's backend is
+  given at deploy) and this repo's `mobile-e2e` environment. To rotate, set both from one value
+  (`KEY=$(openssl rand -hex 32)`, piped into `gh secret set` for each), then make sure a lower deploy
+  **queued after** the change runs. A run queued before it carried the old key through every job:
+  on 2026-10-25 its own e2e passed while the seed got 404 on the same revision, because a wrong key
+  and a missing code answer identically.
 - **Non-blocking for now:** the release runs it beside the upload, and nothing `needs:` it. Make the
   `ios` job need it once it has a track record.
 - **What it cannot see** (the on-device checklist keeps these): universal links (the unsigned build
