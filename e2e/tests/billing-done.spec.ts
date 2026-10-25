@@ -8,13 +8,10 @@ test.describe('billing done (Customer Portal return in the app)', () => {
     await page.goto('/billing-done');
 
     await expect(page.getByRole('heading', { name: 'All done' })).toBeVisible();
-    await expect(page.getByText(/Tap Done to go back to Huddle/)).toBeVisible();
+    await expect(page.getByText(/Close this window with the button in the top-left corner/)).toBeVisible();
     await expect(page).toHaveURL(/\/billing-done$/);
 
-    // For a browser that IS signed in, the billing screen itself.
-    await expect(page.getByRole('link', { name: 'Open Huddle in this browser instead' })).toHaveAttribute(
-      'href',
-      '/app/billing',
-    );
+    // Nothing to follow: any link into the web app would open it signed out, inside the sheet.
+    await expect(page.getByRole('link')).toHaveCount(0);
   });
 });

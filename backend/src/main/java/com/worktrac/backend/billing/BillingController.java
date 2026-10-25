@@ -265,7 +265,7 @@ public class BillingController {
     // `returnTo=app` is the App Store app, which opens the portal in an in-app browser sheet. The
     // portal's "Return to Huddle" there must not load /app/billing: the sheet has its own browser
     // storage, so that is a signed-out copy of the web app inside the sheet. /billing-done instead
-    // says to tap Done, which closes the sheet onto the app itself. Optional and additive, so a
+    // says to close the sheet, which lands on the app itself. Optional and additive, so a
     // build that doesn't send it keeps the original return URL (api-compatibility.md).
     @PostMapping("/portal-session")
     @RequiresPermission(Permission.MANAGE_BILLING)
