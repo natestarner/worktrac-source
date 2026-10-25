@@ -82,7 +82,11 @@ test.describe('Accessibility baseline', () => {
   test('the skip link is fully off-screen until focused, then fully on', async ({
     page,
     request,
+    browserName,
   }) => {
+    // Safari moves focus with Tab only to form controls unless "Press Tab to highlight each item" is
+    // on, so the skip link is never reached by keyboard in WebKit. Not a phone concern: no keyboard.
+    test.skip(browserName === 'webkit', "WebKit's Tab skips links by default");
     await registerHousehold(page, request, 'Curie');
 
     const skip = page.locator('.skip-link');

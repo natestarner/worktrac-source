@@ -262,6 +262,11 @@ gh run view -R $OWNER/worktrac-deploy <run-id> \
 All four must be green: `deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`,
 `e2e-tests`.
 
+`e2e-tests-webkit` (the same suite in Safari's engine, after `e2e-tests`) is **non-blocking**: its
+`continue-on-error` keeps the run green either way. Don't wait on it to call the deploy done, and
+don't fix its failures under this command. Report a red one in the summary, with its failing specs
+(same `--log-failed` grep, `-j` its job), so it can be triaged on its own (`e2e-tests.md`, "WebKit").
+
 If `e2e-tests` is red, get the failing spec names in **one** call before doing anything else —
 that list is what the attribution protocol below operates on:
 

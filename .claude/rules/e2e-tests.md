@@ -185,8 +185,41 @@ Full narrative: `docs/architecture/testing.md`.
   it.
 
 - **E2E never runs in this repo's CI.** `ci.yml` is `backend-ci` + `frontend-ci` only. The suite
-  runs in GitHub in exactly one place: `worktrac-deploy`'s `deploy-lower.yml`, job `e2e-tests`,
-  on push to `lower`. Locally it runs via `scripts/e2e.sh`. There is nowhere else to look.
+  runs in GitHub in one place: `worktrac-deploy`'s `deploy-lower.yml`, on push to `lower` -- job
+  `e2e-tests` (Chrome), then job `e2e-tests-webkit` (below). Locally it runs via `scripts/e2e.sh`.
+
+## WebKit: the same suite in Safari's engine, at iPhone size
+
+`E2E_ENGINE=webkit` swaps the one project for `webkit` (`devices['iPhone 15']`): the engine the App
+Store app's WKWebView and Safari both run. **Never both projects at once** -- the lower Chrome job
+runs a bare `npx playwright test`, so an unconditional second project would silently double it.
+
+- **On lower it is `e2e-tests-webkit`, NON-BLOCKING** (`continue-on-error`) while it builds a track
+  record, and it runs **after** `e2e-tests`, never beside it, so lower's 5-DTU database never takes
+  two suites at once. Its artifacts are `playwright-report-webkit` / `e2e-results-json-webkit`.
+- **Locally: `E2E_ENGINE=webkit bash scripts/e2e.sh`.** Playwright's Windows WebKit build needs a
+  `zlib1.dll` this machine lacks; copying Git's (`C:\Program Files\Git\mingw64\bin\zlib1.dll`) into
+  `%LOCALAPPDATA%\ms-playwright\webkit-<rev>\` fixes "Host system is missing dependencies".
+- **Service workers are blocked in the WebKit project, and must stay blocked.** In WebKit,
+  `page.route` cannot see a request that passes through a service worker, even one the worker
+  doesn't answer (every `/api` call). Lower serves the production build, which registers one, so the
+  first lower WebKit run had 8 "failures" that were all the real request slipping past a fault the
+  spec thought it had injected (queued-write banners never appearing, mocked checkout and people
+  responses ignored). Blocking matches local `vite dev` and the App Store app, neither of which has a
+  worker. **What the worker changes in Safari is tested in `playwright.pwa.config.ts`, not here** --
+  #431 (a reload on History never re-downloads it in Safari, because the worker-served page's
+  navigation entry is named `/index.html`) is exactly the kind of bug only a worker shows.
+- **It is phone-sized, so a failure is engine OR layout.** Before calling one a Safari bug, run it
+  in Chrome at the same size (a temporary `chromium` project with `devices['iPhone 15']`): the help
+  contents and the Trends "?" spec failed in both, so they were layout.
+- **Specs it cannot drive skip on `isMobile`/`browserName`, each with its reason:** a mouse-driven
+  dnd-kit drag (touch emulation doesn't deliver it), Tab to a link (Safari skips links by default),
+  and two desktop-layout specs. `parity-best-volume-card` pages the strip by scrolling it on phones,
+  since mobile WebKit has no wheel. **A real WebKit bug gets its issue, and the annotation names it:**
+  `test.fail(browserName === 'webkit')` when it fails every time (the job then flags the day it
+  starts passing), `test.fixme` when it is intermittent -- a `test.fail` on an intermittent bug is a
+  flaky test by construction. `history-sync`'s double download (#429) is the second kind: most local
+  runs, never yet against lower.
 - **A green lower run is not evidence the suite is stable.** CI sets `retries: 2`, so a test that
   fails and then passes is recorded `flaky` while the run still reports success — the run-level
   conclusion carries no flake signal at all. Measured 2026-08-14 across the 51 runs then retained:

@@ -255,6 +255,14 @@ contains it.
 - Maestro is installed from its GitHub release with a pinned SHA-256 (`MAESTRO_VERSION` /
   `MAESTRO_SHA256` in `.github/actions/ios-simulator-app`, which both mobile workflows build
   through); bump both together, never pipe the install script to bash.
+- **Maestro runs on a FRESH simulator** (`simctl create`, same model and runtime as the newest
+  iPhone), never the one the screenshot step just used. Re-booting that one is where Maestro's
+  XCTest driver hung on its first app launch and the simulator's launch service died ("(ipc/mig)
+  server died", Xcode 26.3 / iOS 26.2), failing good and broken builds alike before any step ran.
+  `ios-maestro.sh` retries once **only** on "iOS driver not ready"; a flow that ran and failed is
+  never retried. Its `--debug-output` (XCTest runner logs) is in the artifact.
+- **Proven both ways before it gated anything:** a deliberately broken boot failed on `"Log in" is
+  visible`, and a good build passed in about a minute. A gate that can't fail guards nothing.
 
 ## `mobile-flows.yml`: the app, signed in, on the simulator
 

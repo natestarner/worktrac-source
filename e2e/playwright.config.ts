@@ -168,10 +168,22 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-  ],
+  // One engine per run, chosen by E2E_ENGINE, never both: the lower pipeline's Chrome job runs a
+  // bare `npx playwright test`, so a second project listed unconditionally would silently double
+  // that job (and its load on lower's 5-DTU database).
+  //
+  // `webkit` is Safari's engine at iPhone size: what the App Store app (WKWebView) and Safari both
+  // run. It is not the app itself -- no Capacitor, no native plugins -- so it catches engine
+  // differences (date parsing, CSS, scroll anchoring), not native ones; those are e2e/mobile/.
+  //
+  // Service workers are BLOCKED in it. In WebKit a request that passes through a worker -- even one
+  // the worker doesn't answer, like every /api call here -- is invisible to page.route, so every
+  // fault-injection spec (failNetwork, failWithStatus, a mocked response) silently let the real
+  // request through on lower, where the production build registers one. Locally `vite dev` has no
+  // worker, so this is also the default suite's own premise; the App Store app has none either.
+  // Worker-specific behaviour belongs in playwright.pwa.config.ts.
+  projects:
+    process.env.E2E_ENGINE === 'webkit'
+      ? [{ name: 'webkit', use: { ...devices['iPhone 15'], serviceWorkers: 'block' } }]
+      : [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 });

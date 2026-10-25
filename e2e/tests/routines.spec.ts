@@ -108,7 +108,10 @@ test.describe('Routines', () => {
   // The grip handle's arrow-key path is covered in RoutineFormModal.test.jsx -- jsdom never lays
   // out real geometry, so it can't drive dnd-kit's PointerSensor. This is the one place an actual
   // pointer drag is exercised, in a real browser with real layout.
-  test('drag a grip handle to reorder exercises, and the new order survives the save', async ({ page, request }) => {
+  test('drag a grip handle to reorder exercises, and the new order survives the save', async ({ page, request, isMobile }) => {
+    // Driven with a mouse drag, which mobile WebKit's touch emulation does not deliver to dnd-kit's
+    // pointer sensor. A touch-driven drag needs its own harness; until then, desktop only.
+    test.skip(isMobile, 'mouse-driven dnd-kit drag; touch drag needs its own harness');
     await registerHousehold(page, request, 'Avery');
 
     await page.getByRole('link', { name: 'Routines' }).click();
