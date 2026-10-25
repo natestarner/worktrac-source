@@ -10,8 +10,13 @@ name: Launch reaches the login screen
 - launchApp:
     clearState: true
 # Generous: the first launch after install includes WebKit's own cold start on a shared runner.
+# "Forgot password?" first, because the bare text "Log in" is also LoginPage's visually hidden <h1>
+# and would pass with no form rendered at all. Then the button itself, below it.
 - extendedWaitUntil:
-    visible: 'Log in'
+    visible: 'Forgot password\?'
     timeout: 60000
+- assertVisible:
+    text: 'Log in'
+    below: 'Forgot password\?'
 - assertVisible: 'Email'
 - assertNotVisible: "Huddle couldn't load"

@@ -1,0 +1,27 @@
+# A pull down on History re-downloads it (PullToRefresh.jsx). On the web it is on only in the
+# home-screen app, so no Playwright spec (desktop Chrome) ever drives it; in the App Store app it is
+# always on (isInstalledApp is true there).
+#
+# What this pins: the gesture works and History survives it. Maestro's swipe is one atomic gesture,
+# so the "Release to refresh History" label mid-pull is not observable here; the unit tests own that.
+appId: fitness.huddle.app
+name: History's pull to refresh
+---
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_6}
+- runFlow: ../subflows/log-a-set.yaml
+- tapOn: 'History'
+- extendedWaitUntil:
+    visible: '.*Barbell Bench Press.*'
+    timeout: 30000
+- swipe:
+    start: 50%, 35%
+    end: 50%, 85%
+    duration: 1200
+- waitForAnimationToEnd:
+    timeout: 10000
+- assertVisible: '.*Barbell Bench Press.*'
+- assertVisible: 'Export data'
+- assertNotVisible: "Huddle couldn't load"

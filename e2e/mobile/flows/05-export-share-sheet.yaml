@@ -1,0 +1,30 @@
+# Export hands the file to the iOS share sheet (lib/native's saveFile), and dismissing the sheet is
+# success, not an error: no "couldn't export" toast afterwards.
+appId: fitness.huddle.app
+name: Export opens the share sheet
+---
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_5}
+# Export is disabled until there is something to export.
+- runFlow: ../subflows/log-a-set.yaml
+- tapOn: 'History'
+- extendedWaitUntil:
+    visible: 'Export data'
+    timeout: 30000
+- tapOn: 'Export data'
+# The share sheet covers the app, so the button behind it leaves the accessibility tree. Not "Save to
+# Files": on the CI simulator the sheet opens but never draws its contents (2026-10-25), so nothing in
+# it can be matched -- and a flow that waits for it leaves the sheet up over the next flow.
+- extendedWaitUntil:
+    notVisible: 'Export data'
+    timeout: 60000
+# Dismissed the way a person flicks it away. Dismissing is success, not an error (lib/native saveFile).
+- swipe:
+    direction: DOWN
+    duration: 600
+- extendedWaitUntil:
+    visible: 'Export data'
+    timeout: 15000
+- assertNotVisible: "(?i).*couldn't.*"

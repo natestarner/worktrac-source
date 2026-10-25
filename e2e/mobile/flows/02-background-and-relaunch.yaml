@@ -1,0 +1,33 @@
+# iOS suspends the app in the background and kills it when it likes. Coming back either way must find
+# the person still signed in with their workout and set intact -- the app's equivalent of a reload at
+# an arbitrary instant (resilience.md, axis C), plus #425's re-check of the identity on return.
+appId: fitness.huddle.app
+name: Survives the background and a relaunch
+---
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_2}
+- runFlow: ../subflows/log-a-set.yaml
+
+# Background, then back (no relaunch: the same process resumes).
+- pressKey: home
+- launchApp
+- extendedWaitUntil:
+    visible: 'End workout'
+    timeout: 30000
+# The set is still there (its row can sit below the fold), and nothing signed the person out.
+- scrollUntilVisible:
+    element: '.*× 6.*'
+    direction: DOWN
+    timeout: 15000
+- assertNotVisible: 'Forgot password\?'
+
+# Killed, then opened from the icon: a cold start on persisted state.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: 'End workout'
+    timeout: 60000
+- assertNotVisible: 'Forgot password\?'
+- assertNotVisible: "Huddle couldn't load"

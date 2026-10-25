@@ -1,0 +1,72 @@
+name: Mobile flows — the app, signed in, on the simulator
+
+# Drives the real iOS app (the unsigned simulator build, against lower) through the flows only the
+# app can break: the keyboard over the login form and the reps field, surviving the background and a
+# relaunch, the checkout return link, the in-app browser sheet, the share sheet, History's pull to
+# refresh. The flows are e2e/mobile/flows/; what they cover and why is docs/architecture/native-apps.md.
+#
+# - NOT on push or pull_request. It needs the lower test-support key to create a throwaway household
+#   (e2e/mobile/seed-household.mjs), and this repo is public. Dispatch it by hand, or let
+#   mobile-release.yml call it.
+# - The key lives in the `mobile-e2e` environment, apart from the signing secrets in mobile-lower /
+#   mobile-production, so it can run from any branch while those stay restricted to main.
+# - NON-BLOCKING for TestFlight while it builds a track record: mobile-release.yml runs it beside the
+#   upload, not before. Make the upload `needs:` it once it has earned that.
+
+on:
+  workflow_dispatch: {}
+  workflow_call: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-flows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  flows:
+    runs-on: macos-15
+    timeout-minutes: 75
+    environment: mobile-e2e
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NATIVE_API_URL: https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io
+    steps:
+      - name: The lower test-support key is configured
+        # Before checkout, so frontend/ (the job's default) doesn't exist yet.
+        working-directory: .
+        env:
+          KEY: ${{ secrets.E2E_TEST_SUPPORT_KEY_LOWER }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::Add E2E_TEST_SUPPORT_KEY_LOWER to this repo's mobile-e2e environment (the same value worktrac-deploy's lower deploy uses)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/ios-simulator-app
+        with:
+          native-api-url: ${{ env.NATIVE_API_URL }}
+
+      - name: Create a throwaway household per flow on lower
+        working-directory: e2e/mobile
+        env:
+          API_URL: ${{ env.NATIVE_API_URL }}
+          E2E_TEST_SUPPORT_KEY: ${{ secrets.E2E_TEST_SUPPORT_KEY_LOWER }}
+          # One per file in e2e/mobile/flows/ -- each signs in as MAESTRO_EMAIL_<its number>.
+          SEED_COUNT: '6'
+        run: node seed-household.mjs
+
+      - name: Signed-in flows
+        run: bash scripts/ios-maestro.sh build/Build/Products/Debug-iphonesimulator/App.app mobile-flows-out ../e2e/mobile/flows
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mobile-flows
+          path: frontend/mobile-flows-out/
+          retention-days: 30

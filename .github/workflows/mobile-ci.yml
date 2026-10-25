@@ -18,6 +18,7 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/mobile-ci.yml'
+      - '.github/actions/ios-simulator-app/**'
       - 'e2e/mobile/**'
   workflow_dispatch: {}
   workflow_call: {}
@@ -38,60 +39,15 @@ jobs:
     defaults:
       run:
         working-directory: frontend
-    env:
-      NATIVE_API_URL: https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io
-      MAESTRO_VERSION: 2.11.0
-      # From the release's checksums_sha256.txt. Bump both together.
-      MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v7
+      - uses: ./.github/actions/ios-simulator-app
         with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      # Capacitor 8 is built against Xcode 26; the runner image's default may be older.
-      - name: Select newest Xcode
-        run: |
-          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
-          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
-          xcodebuild -version
-
-      - run: npm ci
-      - run: npm run build:native
-      - run: npx cap sync ios
-
-      - name: Build for simulator (unsigned)
-        run: |
-          set -o pipefail
-          xcodebuild \
-            -project ios/App/App.xcodeproj \
-            -scheme App \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            build | tail -40
+          native-api-url: https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io
 
       - name: Boot, launch, screenshot
         run: bash scripts/ios-simulator-smoke.sh build/Build/Products/Debug-iphonesimulator/App.app mobile-ci-out
-
-      - uses: actions/setup-java@v6
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      # Straight from the release, checksum-verified, rather than piping get.maestro.mobile.dev to bash.
-      - name: Install Maestro
-        run: |
-          curl -fsSL -o "$RUNNER_TEMP/maestro.zip" \
-            "https://github.com/mobile-dev-inc/maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip"
-          echo "${MAESTRO_SHA256}  $RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
-          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
 
       - name: The app starts (reaches the login screen)
         run: bash scripts/ios-maestro.sh build/Build/Products/Debug-iphonesimulator/App.app mobile-ci-out/maestro ../e2e/mobile/launch.yaml

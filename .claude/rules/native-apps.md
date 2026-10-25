@@ -234,7 +234,7 @@ Capacitor's default is the system white/black, which flashes against both.
   Swift file needs the same four entries (PBXBuildFile, PBXFileReference, the App group, Sources),
   and `mobile-ci` is what proves it compiles.
 
-## `mobile-ci.yml` is the only place the app is seen before TestFlight
+## `mobile-ci.yml`: does the app build and start?
 
 There is no Mac here. The workflow builds unsigned for the simulator, boots the newest iPhone and
 iPad, and uploads light/dark screenshots plus `*-console.log`. **The console comes from
@@ -253,7 +253,8 @@ contains it.
 - **Its concurrency group includes `github.workflow`**, which under `workflow_call` is the caller's
   name. Sharing push's group on `main` would let a newer pending push run cancel a release's gate.
 - Maestro is installed from its GitHub release with a pinned SHA-256 (`MAESTRO_VERSION` /
-  `MAESTRO_SHA256` in the workflow); bump both together, never pipe the install script to bash.
+  `MAESTRO_SHA256` in `.github/actions/ios-simulator-app`, which both mobile workflows build
+  through); bump both together, never pipe the install script to bash.
 - **Maestro runs on a FRESH simulator** (`simctl create`, same model and runtime as the newest
   iPhone), never the one the screenshot step just used. Re-booting that one is where Maestro's
   XCTest driver hung on its first app launch and the simulator's launch service died ("(ipc/mig)
@@ -262,6 +263,53 @@ contains it.
   never retried. Its `--debug-output` (XCTest runner logs) is in the artifact.
 - **Proven both ways before it gated anything:** a deliberately broken boot failed on `"Log in" is
   visible`, and a good build passed in about a minute. A gate that can't fail guards nothing.
+
+## `mobile-flows.yml`: the app, signed in, on the simulator
+
+`e2e/mobile/flows/` drives the real app against lower through what only the app can break:
+
+| Flow | What it pins |
+|---|---|
+| `01-sign-in-and-log-a-set` | Login fields and button stay above the keyboard; reps typed with the keypad up and "Log set" tapped straight away keeps the typed value |
+| `02-background-and-relaunch` | Background → back, and killed → relaunched: still signed in, workout intact |
+| `03-checkout-return-link` | The scheme link lands on Billing and a tab tap **leaves it** (#423). ⚠️ Intermittently the link takes no effect at all: #434 |
+| `04-in-app-browser-sheet` | Terms opens in the sheet; closing it returns to the same screen |
+| `05-export-share-sheet` | Export opens the share sheet (it covers the app); flicking it away is not an error |
+| `06-history-pull-to-refresh` | History survives the pull (on only in installed apps, so no Playwright spec drives it) |
+
+- **Scope: critical path plus what differs from the web.** Everything else is the same React code
+  the Playwright suite already covers; don't port specs here.
+- **Each flow stands alone, three ways.** Its own household (`seed-household.mjs` seeds one per flow,
+  `MAESTRO_EMAIL_<n>`, passed as `EMAIL` to `subflows/sign-in.yaml`); a fresh install
+  (`launchApp: clearState`); and its own Maestro session with the app force-quit first
+  (`ios-maestro.sh`). Sharing a household let one flow's session change another's screen, and sharing
+  a session let a sheet one flow left up fail the next flow's launch ("App did not stop in time").
+  Seeding through the API also means the welcome modal is never armed.
+- **Not on push.** It needs `E2E_TEST_SUPPORT_KEY_LOWER`, kept in the `mobile-e2e` environment
+  (any branch) apart from the signing secrets (main only). Dispatch it, or `mobile-release.yml`
+  calls it.
+- **The key exists twice and must match:** `worktrac-deploy`'s repo secret (what lower's backend is
+  given at deploy) and this repo's `mobile-e2e` environment. To rotate, set both from one value
+  (`KEY=$(openssl rand -hex 32)`, piped into `gh secret set` for each), then make sure a lower deploy
+  **queued after** the change runs. A run queued before it carried the old key through every job:
+  on 2026-10-25 its own e2e passed while the seed got 404 on the same revision, because a wrong key
+  and a missing code answer identically.
+- **Non-blocking for now:** the release runs it beside the upload, and nothing `needs:` it. Make the
+  `ios` job need it once it has a track record.
+- **What it cannot see** (the on-device checklist keeps these): universal links (the unsigned build
+  has no Associated Domains), a real Stripe purchase, Password AutoFill, haptics, keep-awake, the
+  real App Store storefront, and hard offline (the simulator shares the Mac's network).
+- **Maestro matches the WHOLE accessibility label, as a regex.** iOS often reports a compound control
+  as one label: the account menu is `"Alex ▾"`, a History card is its name plus its set pills. Use
+  `.*name.*` or the full label. Section labels use `(?i)` (`text-transform: uppercase`).
+- **Two traps that cost a round each:** `LoginPage` has a visually hidden `<h1>Log in</h1>` that iOS
+  reports over the email field, so target the button `below: 'Forgot password\?'`; and on iOS
+  Maestro's `hideKeyboard` presses the keyboard's Go key (submitting the login form) and cannot
+  dismiss a numeric keypad at all. Don't use it here.
+- **Known simulator stalls, not app bugs:** the share sheet and the Safari sheet can open and draw
+  nothing for 30s+ on the runner; iOS's one-time keyboard tutorial is switched off in
+  `ios-maestro.sh`; and the simulator reports the **US** storefront, so the app is on the
+  `external` channel there and the `none` (fail-closed) case cannot be exercised.
 
 ## Releasing: `mobile-release.yml` + fastlane (first ran green 2026-10-24)
 

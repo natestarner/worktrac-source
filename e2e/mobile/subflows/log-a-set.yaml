@@ -1,0 +1,50 @@
+# From the Log screen's picker: open Barbell Bench Press, type the reps with the keyboard, log the
+# set. Leaves the workout running (the SessionBar's "End workout" is on screen).
+appId: fitness.huddle.app
+---
+# Tap, type, and wait for the result, retried together: on a loaded runner the text sometimes never
+# reached the field right after sign-in (the screenshot showed an empty search box), which is input
+# timing in the simulator, not the app.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn: 'Search all exercises'
+      # A retry after text that DID land must not type it twice.
+      - eraseText: 40
+      - inputText: 'Barbell Bench Press'
+      - extendedWaitUntil:
+          visible: '(?i)search results'
+          timeout: 10000
+# The result under "Search results" -- not "the second match", which is the search field itself on a
+# fresh Log screen and a Session exercises card once a workout is running.
+- tapOn:
+    text: 'Barbell Bench Press'
+    below: '(?i)search results'
+- extendedWaitUntil:
+    visible: 'Log set'
+    timeout: 30000
+# The reps field selects its text on focus (WeightRepsStepper.jsx), so typing replaces the prefill.
+# 6, not the usual prefill, so the row below can only show it if the typed value was used.
+- tapOn:
+    text: 'Reps'
+    index: 0
+- inputText: '6'
+# With the keypad STILL UP, as a person does it: there is no hideKeyboard on a numeric keypad (no
+# return key; Maestro gives up), and the field commits on blur -- so this tap is also the check that
+# blurring into "Log set" doesn't lose what was just typed.
+- scrollUntilVisible:
+    element: 'Log set'
+    direction: DOWN
+    timeout: 10000
+- tapOn: 'Log set'
+# A first set is always a record, and the celebration stays up until dismissed.
+- tapOn:
+    text: 'New PR!'
+    optional: true
+# The new row, which can sit below the fold. Its reps are the typed 6 (the household is this flow's
+# own, so no other set exists to match).
+- scrollUntilVisible:
+    element: '.*× 6.*'
+    direction: DOWN
+    timeout: 30000
+- assertVisible: 'End workout'
