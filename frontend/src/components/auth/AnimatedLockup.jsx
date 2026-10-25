@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef } from 'react';
+import { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import { MARK_CIRCLES } from '../shared/huddleMarkGeometry';
 import { readLockup } from './lockupAsset';
 
@@ -18,7 +18,9 @@ import { readLockup } from './lockupAsset';
 //
 // The circles are drawn BEFORE the wordmark, so the two that walk in from below pass behind it.
 // The SVG overflows its box while they are in flight and ignores the pointer, so a tap on the form
-// beneath is never eaten by a circle mid-walk.
+// beneath is never eaten by a circle mid-walk. The one thing that does take the pointer is a
+// transparent rect over the logo's resting box: a tap on the logo plays the walk-in again, from the
+// start, even if it is still running. Reduced motion makes that tap a no-op, as it should.
 //
 // Motion is driven by requestAnimationFrame writing attributes straight onto the nodes -- no React
 // re-render per frame. The first render is the FINISHED logo: with reduced motion, no rAF, or a
@@ -99,6 +101,11 @@ export default function AnimatedLockup({ width, style }) {
   const hairlineRef = useRef(null);
   const maskCircleRef = useRef(null);
   const orange = MARK_CIRCLES.find((c) => c.id === 'orange');
+  const [vbX, vbY] = viewBox.split(/\s+/).map(Number);
+  // Bumped by a tap on the logo. The effect below re-runs on it: its cleanup cancels the walk in
+  // progress and the new run rewinds to frame 0, both before the browser paints.
+  const [play, setPlay] = useState(0);
+  const replay = useCallback(() => setPlay((n) => n + 1), []);
 
   useLayoutEffect(() => {
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -135,7 +142,7 @@ export default function AnimatedLockup({ width, style }) {
       if (raf) cancelAnimationFrame(raf);
       render(END);
     };
-  }, []);
+  }, [play]);
 
   return (
     <svg
@@ -151,6 +158,23 @@ export default function AnimatedLockup({ width, style }) {
         ...style,
       }}
     >
+      {/* The tap target: the resting box only, so a circle in flight never takes the pointer.
+          Drawn first and transparent, so it sits behind everything it covers. */}
+      <rect
+        data-testid="lockup-replay"
+        x={vbX}
+        y={vbY}
+        width={vbWidth}
+        height={vbHeight}
+        fill="transparent"
+        onClick={replay}
+        style={{
+          pointerEvents: 'all',
+          cursor: 'pointer',
+          WebkitTapHighlightColor: 'transparent',
+          touchAction: 'manipulation',
+        }}
+      />
       <g transform={markTransform}>
         <defs>
           {/* Generous bounds: the hairline must stay visible while the cream circle is in flight

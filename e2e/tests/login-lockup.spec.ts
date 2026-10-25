@@ -1,8 +1,9 @@
 import { test, expect, Page } from '@playwright/test';
 
 // The login screen's animated lockup (frontend/src/components/auth/AnimatedLockup.jsx): the four
-// circles walk in to form the huddle above a static wordmark. These pin what jsdom cannot see --
-// a real browser's frame loop, the reduced-motion media feature, and hit-testing over the form.
+// circles walk in to form the huddle above a static wordmark, and again on a tap on the logo. These
+// pin what jsdom cannot see -- a real browser's frame loop, the reduced-motion media feature, and
+// hit-testing over the logo and the form.
 // Its rendered SIZE is brand-lockup-size.spec.ts's job.
 
 // Each circle's resting centre, in the mark's own space (huddleMarkGeometry.js), in paint order.
@@ -57,6 +58,32 @@ test.describe('login lockup animation', () => {
     await expect(lockup(page)).toBeVisible();
     // No poll: with reduced motion there is nothing to wait for.
     expect(await circleCentres(page)).toEqual(RESTING);
+  });
+
+  test('tapping the logo plays the walk-in again', async ({ page }) => {
+    await page.goto('/login');
+    await expect(lockup(page)).toBeVisible();
+    await expect.poll(() => circleCentres(page), { timeout: 10_000 }).toEqual(RESTING);
+
+    // Hold the frame loop at the tap, so the rewound first frame can be read before it moves on.
+    // A tap that missed (the SVG ignores the pointer; only the resting-box rect takes it) would
+    // leave the circles at rest.
+    await page.evaluate(() => {
+      window.requestAnimationFrame = () => 0;
+    });
+    await page.getByTestId('lockup-replay').click();
+    const centres = await circleCentres(page);
+    centres.forEach(([x, y], i) => {
+      expect(Math.hypot(x - RESTING[i][0], y - RESTING[i][1])).toBeGreaterThan(50);
+    });
+  });
+
+  test('a replay plays through and lands every circle back in place', async ({ page }) => {
+    await page.goto('/login');
+    await expect(lockup(page)).toBeVisible();
+    await expect.poll(() => circleCentres(page), { timeout: 10_000 }).toEqual(RESTING);
+    await page.getByTestId('lockup-replay').click();
+    await expect.poll(() => circleCentres(page), { timeout: 10_000 }).toEqual(RESTING);
   });
 
   test('the form is usable while the circles are still walking in', async ({ page }) => {

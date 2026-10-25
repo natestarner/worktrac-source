@@ -67,8 +67,11 @@ export const authCardStyle = {
   boxShadow: 'var(--shadow-2), var(--elevation-hairline)',
 };
 
+// --viewport-min-height, not 100vh: in the App Store app the body is padded by the status bar's
+// height (index.css, --safe-top), and 100vh on top of that made every one of these screens
+// scrollable by exactly that much.
 export const authPageStyle = {
-  minHeight: '100vh',
+  minHeight: 'var(--viewport-min-height)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
