@@ -238,9 +238,30 @@ Capacitor's default is the system white/black, which flashes against both.
 
 There is no Mac here. The workflow builds unsigned for the simulator, boots the newest iPhone and
 iPad, and uploads light/dark screenshots plus `*-console.log`. **The console comes from
-`simctl launch --stdout/--stderr`, not `log show`** (never `--console-pty`, which took the app down with it when backgrounded): Capacitor prints the WebView console to stdout,
-so the unified log never contains it. Not a required check (macOS runners are slow and flakier);
-promote it once it has a track record.
+`simctl launch --stdout/--stderr`, not `log show`** (never `--console-pty`, which took the app down
+with it when backgrounded): Capacitor prints the WebView console to stdout, so the unified log never
+contains it.
+
+- **"It starts" is read off the screen, not the console.** A healthy boot logs nothing, so the
+  console cannot tell a working app from a blank one. `scripts/ios-maestro.sh` runs
+  `e2e/mobile/launch.yaml` with Maestro, which reads the WebView through iOS accessibility: a
+  fresh install must reach "Log in" and must not show `boot-watchdog.js`'s "Huddle couldn't load".
+  Keep that flow account-free and secret-free; it runs on every push.
+- **It gates TestFlight.** `mobile-release.yml` calls it (`workflow_call`) and its `ios` job
+  `needs:` it, so a beta that can't start is never uploaded. On push it is still not a required
+  check (macOS runners are slow and flakier); a red run there must not block an unrelated web fix.
+- **Its concurrency group includes `github.workflow`**, which under `workflow_call` is the caller's
+  name. Sharing push's group on `main` would let a newer pending push run cancel a release's gate.
+- Maestro is installed from its GitHub release with a pinned SHA-256 (`MAESTRO_VERSION` /
+  `MAESTRO_SHA256` in the workflow); bump both together, never pipe the install script to bash.
+- **Maestro runs on a FRESH simulator** (`simctl create`, same model and runtime as the newest
+  iPhone), never the one the screenshot step just used. Re-booting that one is where Maestro's
+  XCTest driver hung on its first app launch and the simulator's launch service died ("(ipc/mig)
+  server died", Xcode 26.3 / iOS 26.2), failing good and broken builds alike before any step ran.
+  `ios-maestro.sh` retries once **only** on "iOS driver not ready"; a flow that ran and failed is
+  never retried. Its `--debug-output` (XCTest runner logs) is in the artifact.
+- **Proven both ways before it gated anything:** a deliberately broken boot failed on `"Log in" is
+  visible`, and a good build passed in about a minute. A gate that can't fail guards nothing.
 
 ## Releasing: `mobile-release.yml` + fastlane (first ran green 2026-10-24)
 
