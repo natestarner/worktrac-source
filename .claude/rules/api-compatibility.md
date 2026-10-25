@@ -56,7 +56,9 @@ phones.
 ## Before removing anything: which builds are still calling?
 
 Every request carries `X-Huddle-Client` (`ios/1.4.0+57`, `web/<build instant>`), logged as
-`[client=…]` beside `[uid=…]` on every line, and `/me` logs one `Session check` line per app open.
+`[client=…]` beside `[uid=…]` on every line, and `/me` logs one `Session check` line per app open
+(boot, and each return to the app after five minutes away, so a resumed App Store build is counted
+too; before that, an app iOS never killed was invisible to this query).
 The saved query in `docs/azure-read-only-access.md` ("Which app builds are live?") counts distinct
 users per build over a window. **Run it before any removal**, and say what it showed in the PR.
 
