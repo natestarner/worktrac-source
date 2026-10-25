@@ -5,12 +5,14 @@ import { reconcileCheckout } from '../api/billing';
 import { readPendingCheckout, rememberPendingCheckout } from '../lib/pendingCheckout';
 
 const navigate = vi.fn();
-vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
+let navigateForRender = navigate;
+vi.mock('react-router-dom', () => ({ useNavigate: () => navigateForRender }));
 vi.mock('../api/billing', () => ({ reconcileCheckout: vi.fn() }));
 
 beforeEach(() => {
   localStorage.clear();
   navigate.mockReset();
+  navigateForRender = navigate;
   reconcileCheckout.mockReset();
   Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
 });
@@ -67,6 +69,23 @@ describe('useCheckoutResume', () => {
 
     await waitFor(() => expect(reconcileCheckout).toHaveBeenCalled());
     expect(readPendingCheckout()).toBe('cs_later');
+  });
+
+  // <BrowserRouter> hands out a new navigate on every pathname change. Re-running per identity was a
+  // reconcile request on every tab tap while a checkout stayed pending.
+  it('asks once per return, not once per navigation', async () => {
+    rememberPendingCheckout('cs_open');
+    reconcileCheckout.mockResolvedValue({ plan: 'FREE' });
+
+    const { rerender } = renderHook(() => useCheckoutResume());
+    await waitFor(() => expect(reconcileCheckout).toHaveBeenCalledTimes(1));
+    navigateForRender = vi.fn();
+    rerender();
+    navigateForRender = vi.fn();
+    rerender();
+    await Promise.resolve();
+
+    expect(reconcileCheckout).toHaveBeenCalledTimes(1);
   });
 
   it('forgets a checkout older than a day without asking -- a Stripe session lives 24 hours', () => {

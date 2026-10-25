@@ -51,7 +51,8 @@ The adapters, each one a function whose web branch is the code it replaced:
 | `isInstalledApp()` | `display-mode: standalone` / `navigator.standalone` | always `true` | `PullToRefresh.jsx` (History's pull) |
 | `keepScreenAwake()` / `allowScreenSleep()` | no-op | `@capacitor-community/keep-awake` while a workout is on screen; iOS releases it on background | `SessionBar.jsx` (its visibility effect) |
 | `scheduleRestNotifications` / `cancelRestNotifications` / `ensureRestNotificationPermission` | no-op | Local notification at the moment each running rest timer fills, scheduled on `visibilitychange: hidden`, cancelled on return; permission asked when a rest timer first starts, never at launch | `hooks/useRestNotifications.js` (mounted in `AppShell`) |
-| `listenForAppLinks(onPath)` | no-op (the browser already loaded the URL) | A universal link that opened the app (`appUrlOpen`, or the launch URL on a cold start) becomes an in-app path | `AppLinkRouter.jsx` (mounted in `App.jsx`, outside every route) |
+| `listenForAppLinks(onPath)` | no-op (the browser already loaded the URL) | A universal link (or the checkout scheme link) that opened the app (`appUrlOpen`, or the launch URL, read once per launch) becomes an in-app path | `AppLinkRouter.jsx` (mounted in `App.jsx`, outside every route) |
+| `appReturnUrl(hostname, search)` | the same on both: a pure function | `<bundle id>://checkout-complete…` for the app claiming that host, or `null` | `CheckoutCompletePage`'s "Return to the Huddle app" |
 | `keepFocusedFieldVisible()` | no-op (Safari keeps the field in view itself) | Scrolls a focused field that is under the keyboard or the `SessionBar` to the centre (see "Keyboard" below) | `FocusedFieldKeeper.jsx` (mounted in `App.jsx`, outside every route) |
 
 `APP_BUILD` (`lib/appBuild.js`) is `"<platform> <version> (<build>) <instant>"` in the app and the
@@ -102,6 +103,23 @@ only when all three agree. A missing half produces no error anywhere: the link j
 3. **The app routes it.** `listenForAppLinks` → `AppLinkRouter` turns the URL into a path for the
    router. `/checkout-complete` becomes `/app/billing?checkout=<id>`, because that page's "go back to
    the app" is nonsense inside the app. Hosts other than the two web apps are ignored.
+   - **⚠️ `App.getLaunchUrl()` is NOT the launch URL.** Capacitor returns
+     `ApplicationDelegateProxy.lastURL`: the last link that opened the app, never cleared. So
+     `listenForAppLinks` reads it **once per process** (`launchUrlRead`), and `AppLinkRouter`
+     subscribes **once** (navigate through a ref, `[]` deps). Under `<BrowserRouter>` `navigate`
+     changes identity on every pathname change. With `[navigate]` as the dependency, every tab tap
+     re-subscribed and re-read the checkout link, so on 2026-10-24 the first TestFlight purchase
+     left the person unable to leave the billing screen. `useCheckoutResume` has the same shape
+     for the same reason. Pinned by `appLinks.test.js` and `AppLinkRouter.test.jsx`, both verified
+     red against the old code.
+
+**Universal links don't bring someone back from Stripe; the URL scheme does.** iOS opens a universal
+link only when someone taps it on another site. Stripe's redirect after paying is not a tap, and a
+tap on `/checkout-complete` is a same-site link, so both stay in Safari. The landing page's "Return
+to the Huddle app" is `<bundle id>://checkout-complete?…` (`appReturnUrl`). `Info.plist` registers
+`$(PRODUCT_BUNDLE_IDENTIFIER)` as the scheme, so Huddle and Huddle Lower never claim each other's
+links. The scheme routes `checkout-complete` and nothing else, because any page or app can open a
+custom scheme. Changing a bundle id means changing `APP_SCHEMES` in `appLinks.js` too.
 
 Apple fetches the file through its own CDN, so a change can take a day to reach devices.
 
