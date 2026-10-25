@@ -288,6 +288,15 @@ Both `AuthContext` effects that call `apiMe()` in the background discard their r
 current auth token no longer matches the one active when the call was made — a general "is this
 response still relevant" guard. See `docs/incidents/2026-07-31-stale-me-clobbers-freshlogin.md`.
 
+**`/me` is re-asked when the app comes back, not only at boot.** `reconcileIdentity` runs on a
+reconnect **and** on `visibilitychange: visible` once the identity is `IDENTITY_STALE_AFTER_MS`
+(5 min) old. The App Store app resumes a suspended process without reloading, sometimes days later,
+so plan, people, membership and the minimum supported build otherwise stayed whatever the last boot
+said. Every query already refetches on focus; `/me` is not a query, which is why it needs its own
+trigger. Any `/me` that lands stamps `identityConfirmedAtRef` (boot, `establishSession`,
+`refreshPeople`, the reconcile), and one in flight blocks another. Pinned by
+`AuthContext.resume.test.jsx`, verified red against the boot-and-reconnect-only version.
+
 ## A set write invalidates every view derived from sets
 
 `queryClient.js`'s `LOG_SET` `onSettled` and `reconcileSetChange` must refresh **all** of
