@@ -9,7 +9,7 @@ appId: fitness.huddle.app
 - launchApp:
     clearState: true
 - extendedWaitUntil:
-    visible: 'Log in'
+    visible: 'Forgot password\?'
     timeout: 60000
 - tapOn:
     text: 'Email'
@@ -24,7 +24,12 @@ appId: fitness.huddle.app
 # and tappable -- so no hideKeyboard here. (It also submits: on iOS Maestro's hideKeyboard sent the
 # keyboard's Go key from the password field, signing in before the tap below could find the button.)
 - assertVisible: 'Password'
-- tapOn: 'Log in'
+# The BUTTON, not the first "Log in": LoginPage has a visually hidden <h1>Log in</h1> for screen
+# readers at the top of the form, and iOS reports it sitting over the email field -- tapping the
+# first match focused the email field and never signed in.
+- tapOn:
+    text: 'Log in'
+    below: 'Forgot password\?'
 # A cold lower can hold the first request ~35s (resilience.md, axis B); sign-in waits 45s for it.
 - extendedWaitUntil:
     visible: 'Search all exercises'
