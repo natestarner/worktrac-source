@@ -185,8 +185,30 @@ Full narrative: `docs/architecture/testing.md`.
   it.
 
 - **E2E never runs in this repo's CI.** `ci.yml` is `backend-ci` + `frontend-ci` only. The suite
-  runs in GitHub in exactly one place: `worktrac-deploy`'s `deploy-lower.yml`, job `e2e-tests`,
-  on push to `lower`. Locally it runs via `scripts/e2e.sh`. There is nowhere else to look.
+  runs in GitHub in one place: `worktrac-deploy`'s `deploy-lower.yml`, on push to `lower` -- job
+  `e2e-tests` (Chrome), then job `e2e-tests-webkit` (below). Locally it runs via `scripts/e2e.sh`.
+
+## WebKit: the same suite in Safari's engine, at iPhone size
+
+`E2E_ENGINE=webkit` swaps the one project for `webkit` (`devices['iPhone 15']`): the engine the App
+Store app's WKWebView and Safari both run. **Never both projects at once** -- the lower Chrome job
+runs a bare `npx playwright test`, so an unconditional second project would silently double it.
+
+- **On lower it is `e2e-tests-webkit`, NON-BLOCKING** (`continue-on-error`) while it builds a track
+  record, and it runs **after** `e2e-tests`, never beside it, so lower's 5-DTU database never takes
+  two suites at once. Its artifacts are `playwright-report-webkit` / `e2e-results-json-webkit`.
+- **Locally: `E2E_ENGINE=webkit bash scripts/e2e.sh`.** Playwright's Windows WebKit build needs a
+  `zlib1.dll` this machine lacks; copying Git's (`C:\Program Files\Git\mingw64\bin\zlib1.dll`) into
+  `%LOCALAPPDATA%\ms-playwright\webkit-<rev>\` fixes "Host system is missing dependencies".
+- **It is phone-sized, so a failure is engine OR layout.** Before calling one a Safari bug, run it
+  in Chrome at the same size (a temporary `chromium` project with `devices['iPhone 15']`): the help
+  contents and the Trends "?" spec failed in both, so they were layout.
+- **Specs it cannot drive skip on `isMobile`/`browserName`, each with its reason:** a mouse-driven
+  dnd-kit drag (touch emulation doesn't deliver it), Tab to a link (Safari skips links by default),
+  and two desktop-layout specs. `parity-best-volume-card` pages the strip by scrolling it on phones,
+  since mobile WebKit has no wheel. **A real WebKit bug is `test.fail(browserName === 'webkit')` with
+  its issue, never a skip** -- e.g. `history-sync`'s double download (#429), so the job flags the
+  day it starts passing.
 - **A green lower run is not evidence the suite is stable.** CI sets `retries: 2`, so a test that
   fails and then passes is recorded `flaky` while the run still reports success — the run-level
   conclusion carries no flake signal at all. Measured 2026-08-14 across the 51 runs then retained:

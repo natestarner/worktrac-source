@@ -54,7 +54,10 @@ async function visibleRoutineOrder(page: Page, names: string[]) {
 }
 
 test.describe('Routine reordering', () => {
-  test('drag reorders the list, and the new order survives a reload', async ({ page, request }) => {
+  test('drag reorders the list, and the new order survives a reload', async ({ page, request, isMobile }) => {
+    // Driven with a mouse drag, which mobile WebKit's touch emulation does not deliver to dnd-kit's
+    // pointer sensor. A touch-driven drag needs its own harness; until then, desktop only.
+    test.skip(isMobile, 'mouse-driven dnd-kit drag; touch drag needs its own harness');
     await registerHousehold(page, request, 'Nico');
     await seedRoutines(page, request, ROUTINE_NAMES);
 

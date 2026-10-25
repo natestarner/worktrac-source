@@ -168,10 +168,15 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-  ],
+  // One engine per run, chosen by E2E_ENGINE, never both: the lower pipeline's Chrome job runs a
+  // bare `npx playwright test`, so a second project listed unconditionally would silently double
+  // that job (and its load on lower's 5-DTU database).
+  //
+  // `webkit` is Safari's engine at iPhone size: what the App Store app (WKWebView) and Safari both
+  // run. It is not the app itself -- no Capacitor, no native plugins -- so it catches engine
+  // differences (date parsing, CSS, scroll anchoring), not native ones; those are e2e/mobile/.
+  projects:
+    process.env.E2E_ENGINE === 'webkit'
+      ? [{ name: 'webkit', use: { ...devices['iPhone 15'] } }]
+      : [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 });
