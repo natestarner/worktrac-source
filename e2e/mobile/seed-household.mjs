@@ -43,18 +43,23 @@ if (!registered.ok) {
   process.exit(1);
 }
 
-// The code is cached per backend instance and can take a moment to appear (auth.ts's
-// fetchPendingCode retries for the same reason).
+// The code lives in memory on the backend INSTANCE that handled the register (TestCodeCache), so
+// while lower is scaled out -- routinely, when an e2e suite is running against it -- a lookup can
+// land on another instance and 404. Requests spread across instances, so retrying long enough
+// reaches the right one. (A wrong key also 404s, deliberately, so the endpoint can't be probed;
+// the last status is printed to tell "never found" from anything else.)
 let code = null;
-for (let attempt = 0; attempt < 15 && !code; attempt++) {
+let lastStatus = null;
+for (let attempt = 0; attempt < 60 && !code; attempt++) {
   const response = await call('GET', `/api/auth/test/pending-code?email=${encodeURIComponent(email)}`, null, {
     'X-E2E-Test-Key': testKey,
   });
+  lastStatus = response.status;
   if (response.ok) code = (await response.json()).code;
   else await new Promise((resolve) => setTimeout(resolve, 1000));
 }
 if (!code) {
-  console.error(`no pending code appeared for ${email}`);
+  console.error(`no pending code for ${email} after 60 tries (last status ${lastStatus})`);
   process.exit(1);
 }
 
