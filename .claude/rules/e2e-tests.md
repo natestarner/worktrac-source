@@ -157,7 +157,9 @@ Full narrative: `docs/architecture/testing.md`.
      `e2e.sh` fails the run with a loud message in that case, so a mid-run death can never again be
      mistaken for a batch of code regressions.
 - Service-worker-dependent specs (cold boot, reload-while-offline) live in
-  `offline-durability.spec.ts` and run **only** via `cd e2e && npm run test:pwa`
+  `offline-durability.spec.ts`, plus `history-full-refresh.spec.ts` in the `webkit-pwa` project
+  (Safari's engine WITH the worker -- the default WebKit project blocks workers, so only here can a
+  worker-only Safari bug like #431 show). They run via `cd e2e && npm run test:pwa`
   (`playwright.pwa.config.ts`, which builds + previews on port 3000 — needed for local CORS, since
   `vite preview`'s proxy forwards the browser's real `Origin`). They're excluded from the fast
   default project.

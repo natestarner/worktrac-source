@@ -20,7 +20,7 @@ const baseURL = `http://localhost:${FRONTEND_PORT}`;
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['**/offline-durability.spec.ts'],
+  testMatch: ['**/offline-durability.spec.ts', '**/history-full-refresh.spec.ts'],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -50,7 +50,18 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium-pwa',
+      testMatch: ['**/offline-durability.spec.ts'],
       use: { ...devices['Desktop Chrome'] },
+    },
+    // Safari's engine WITH the production service worker -- the one combination the default suite
+    // cannot reach (vite dev has no worker, and the default WebKit project blocks workers so
+    // page.route can see requests; e2e-tests.md, "WebKit"). Worker-served Safari is where #431
+    // lived: the navigation entry of a reload on History is named /index.html, so the full
+    // re-download never fired. history-full-refresh.spec.ts is that bug's regression test here.
+    {
+      name: 'webkit-pwa',
+      testMatch: ['**/history-full-refresh.spec.ts'],
+      use: { ...devices['iPhone 15'] },
     },
   ],
 });

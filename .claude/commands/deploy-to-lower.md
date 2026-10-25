@@ -165,16 +165,17 @@ real `Origin`, so any other port is refused. `playwright.pwa.config.ts` starts i
 `vite preview` with `reuseExistingServer: false`, which is why the dev server has to be out of the
 way first.
 
-**All 4 should pass.** Treat any failure here as yours. (One of them was recorded as a known
+**All should pass (7, with 2 skipped: the Chrome-only touch specs in `history-full-refresh`).** Treat any failure here as yours. (One of them was recorded as a known
 pre-existing failure from 2026-08-10 to 2026-08-14. It wasn't rot and it wasn't the app — the
 harness was measuring lie-fi, because `context.setOffline` does not survive into the document a
 reload creates. See `docs/incidents/2026-08-14-cold-boot-offline-spec-measured-liefi.md`.)
 
-Four specs that **cannot** run in the default project: they need the production service worker to
-precache the app shell, which `vite dev` does not provide, so `playwright.config.ts` excludes them
-and `playwright.pwa.config.ts` builds + previews instead. They are the regression tests for two of
-the most expensive incidents in `docs/incidents/` — an ended workout coming back to life, and a
-create-then-log-set deadlocking the outbox across a reload mid-lie-fi.
+Specs that **cannot** run in the default project: they need the production service worker, which
+`vite dev` does not provide, so `playwright.pwa.config.ts` builds + previews instead. Its
+`chromium-pwa` project runs `offline-durability.spec.ts`, the regression tests for two of the most
+expensive incidents in `docs/incidents/` -- an ended workout coming back to life, and a
+create-then-log-set deadlocking the outbox across a reload mid-lie-fi. Its `webkit-pwa` project runs
+`history-full-refresh.spec.ts` in Safari's engine WITH the worker, which is where #431 lived.
 
 Until 2026-08-09 nothing ran them: not the default local gate, not branch CI (which has no
 Playwright at all), and not this runbook. **Run them whenever the change touches

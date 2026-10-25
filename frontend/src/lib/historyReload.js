@@ -11,11 +11,22 @@
 // A reload the app starts itself (a service-worker update) counts too when it lands on History; that
 // is an occasional extra download, never a wrong one.
 
-// Whether this page load was a reload of the History tab. The navigation entry's `name` is the URL the
-// document was LOADED at, so this is right whenever it is asked: History's chunk may load long after a
-// reload of another tab, by which time location.pathname is /app/history for an ordinary tab switch.
-export function isHistoryReload(entry) {
-  return entry?.type === 'reload' && HISTORY_URL.test(String(entry.name));
+// The URL this document was LOADED at, read once while the bundle evaluates -- before React renders,
+// so before the router can redirect or a tab switch can change it. Asking location later would be
+// wrong: by the time History mounts, location.pathname is /app/history after an ordinary tab switch.
+//
+// ⚠️ Not the navigation entry's `name`, which this used to read. In Safari, when the service worker
+// answers the navigation (Workbox's navigateFallback), `name` is the RESPONSE's URL, `/index.html`, so
+// a reload on History never matched and silently did an ordinary sync instead (#431). Chrome reports
+// the document URL there, which is how it went unnoticed until the suite ran in WebKit with a worker.
+//
+// This only holds while this module is in the STATIC import graph (it is: HistoryTab, eagerly
+// imported by App.jsx). If History is ever lazy-loaded, capture this in main.jsx instead.
+const LOADED_URL = String(globalThis.location?.href ?? '');
+
+// Whether this page load was a reload of the History tab.
+export function isHistoryReload(entry, loadedUrl = LOADED_URL) {
+  return entry?.type === 'reload' && HISTORY_URL.test(String(loadedUrl));
 }
 
 // scheme://host/app/history, optionally with a trailing slash, a query or a hash.
@@ -29,10 +40,10 @@ let taken = false;
 
 // True the FIRST time it is asked on a page load that was a reload of History, false ever after --
 // so a History tab that mounts again later (a person switch, a tab switch back) does not re-download.
-export function takeHistoryReload(entry = navigationEntry()) {
+export function takeHistoryReload(entry = navigationEntry(), loadedUrl = LOADED_URL) {
   if (taken) return false;
   taken = true;
-  return isHistoryReload(entry);
+  return isHistoryReload(entry, loadedUrl);
 }
 
 // Test seam: each test is a fresh "page load".
