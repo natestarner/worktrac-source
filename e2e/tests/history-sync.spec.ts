@@ -154,9 +154,10 @@ test('a month whose fingerprint matches but whose content does not is re-read, r
 // makes. It must be sent once. The boot warm used to replace a sync already in flight with its own,
 // and the server finishes an abandoned request anyway, so a fresh sign-in paid for two.
 test('a fresh sign-in downloads History once', async ({ page, request, browserName }) => {
-  // Known: WebKit sends two full syncs here (#429). Expected to fail there until that is fixed, so
-  // the WebKit run reports it the moment it starts passing instead of hiding it.
-  test.fail(browserName === 'webkit', 'WebKit downloads History twice on sign-in (#429)');
+  // Known: WebKit sometimes sends two full syncs here (#429) -- most local runs, but not every one,
+  // and not once against lower's ~800ms round trips. A test.fail on an intermittent bug is a flaky
+  // test by construction, so WebKit skips it until #429 is fixed; Chrome keeps guarding the rule.
+  test.fixme(browserName === 'webkit', 'WebKit intermittently downloads History twice on sign-in (#429)');
   const sync = await watchSync(page);
   await registerHousehold(page, request, 'Once');
   await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
