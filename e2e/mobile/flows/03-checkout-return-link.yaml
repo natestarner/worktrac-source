@@ -9,6 +9,8 @@
 #   so the app is on the 'external' channel and shows prices legitimately (billing.md); the 'none'
 #   case can't be produced here (first run, 2026-10-25).
 # - Back from Billing goes somewhere (useGoBack), since Billing was reached by a link.
+# - ⚠️ KNOWN INTERMITTENT (#434): in some runs the link takes no effect at all -- the prompt is gone
+#   and the app is where it was. Kept running, non-blocking, because it is the evidence for #434.
 #
 # The unsigned simulator build is the production bundle id, so its scheme is fitness.huddle.app.
 appId: fitness.huddle.app

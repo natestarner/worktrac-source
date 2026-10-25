@@ -16,9 +16,11 @@ name: The in-app browser sheet opens and closes
     direction: DOWN
     timeout: 20000
 - tapOn: 'Terms'
+# A minute: on the CI simulator the sheet has been seen blank -- not even its toolbar drawn -- for over
+# 30s before it rendered (2026-10-25), the same stall the share sheet shows there.
 - extendedWaitUntil:
     visible: '(?i)^(done|close)$'
-    timeout: 30000
+    timeout: 60000
 - tapOn: '(?i)^(done|close)$'
 - extendedWaitUntil:
     visible: 'Terms'

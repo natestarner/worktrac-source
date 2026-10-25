@@ -270,18 +270,21 @@ contains it.
 
 | Flow | What it pins |
 |---|---|
-| `01-sign-in-and-log-a-set` | Login fields and the reps field stay above the keyboard (and the `SessionBar`) while typing |
+| `01-sign-in-and-log-a-set` | Login fields and button stay above the keyboard; reps typed with the keypad up and "Log set" tapped straight away keeps the typed value |
 | `02-background-and-relaunch` | Background → back, and killed → relaunched: still signed in, workout intact |
-| `03-checkout-return-link` | The scheme link lands on Billing, a tab tap **leaves it** (#423), no price shows (billing fails closed with no storefront) |
+| `03-checkout-return-link` | The scheme link lands on Billing and a tab tap **leaves it** (#423). ⚠️ Intermittently the link takes no effect at all: #434 |
 | `04-in-app-browser-sheet` | Terms opens in the sheet; closing it returns to the same screen |
-| `05-export-share-sheet` | Export opens the share sheet; dismissing it is not an error |
+| `05-export-share-sheet` | Export opens the share sheet (it covers the app); flicking it away is not an error |
 | `06-history-pull-to-refresh` | History survives the pull (on only in installed apps, so no Playwright spec drives it) |
 
 - **Scope: critical path plus what differs from the web.** Everything else is the same React code
   the Playwright suite already covers; don't port specs here.
-- **Each flow starts from `subflows/sign-in.yaml` (a fresh install), so each stands alone.**
-  Maestro promises no order. The household comes from `seed-household.mjs` (register → test-support
-  code → confirm, via the API), so the welcome modal is never armed.
+- **Each flow stands alone, three ways.** Its own household (`seed-household.mjs` seeds one per flow,
+  `MAESTRO_EMAIL_<n>`, passed as `EMAIL` to `subflows/sign-in.yaml`); a fresh install
+  (`launchApp: clearState`); and its own Maestro session with the app force-quit first
+  (`ios-maestro.sh`). Sharing a household let one flow's session change another's screen, and sharing
+  a session let a sheet one flow left up fail the next flow's launch ("App did not stop in time").
+  Seeding through the API also means the welcome modal is never armed.
 - **Not on push.** It needs `E2E_TEST_SUPPORT_KEY_LOWER`, kept in the `mobile-e2e` environment
   (any branch) apart from the signing secrets (main only). Dispatch it, or `mobile-release.yml`
   calls it.
@@ -296,7 +299,17 @@ contains it.
 - **What it cannot see** (the on-device checklist keeps these): universal links (the unsigned build
   has no Associated Domains), a real Stripe purchase, Password AutoFill, haptics, keep-awake, the
   real App Store storefront, and hard offline (the simulator shares the Mac's network).
-- Text matches are regexes; section labels use `(?i)` because they are `text-transform: uppercase`.
+- **Maestro matches the WHOLE accessibility label, as a regex.** iOS often reports a compound control
+  as one label: the account menu is `"Alex ▾"`, a History card is its name plus its set pills. Use
+  `.*name.*` or the full label. Section labels use `(?i)` (`text-transform: uppercase`).
+- **Two traps that cost a round each:** `LoginPage` has a visually hidden `<h1>Log in</h1>` that iOS
+  reports over the email field, so target the button `below: 'Forgot password\?'`; and on iOS
+  Maestro's `hideKeyboard` presses the keyboard's Go key (submitting the login form) and cannot
+  dismiss a numeric keypad at all. Don't use it here.
+- **Known simulator stalls, not app bugs:** the share sheet and the Safari sheet can open and draw
+  nothing for 30s+ on the runner; iOS's one-time keyboard tutorial is switched off in
+  `ios-maestro.sh`; and the simulator reports the **US** storefront, so the app is on the
+  `external` channel there and the `none` (fail-closed) case cannot be exercised.
 
 ## Releasing: `mobile-release.yml` + fastlane (first ran green 2026-10-24)
 
