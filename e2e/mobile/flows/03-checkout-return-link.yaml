@@ -15,6 +15,9 @@ name: Checkout return link lands on Billing and lets go
 ---
 - runFlow: ../subflows/sign-in.yaml
 - openLink: 'fitness.huddle.app://checkout-complete?session_id=cs_test_maestro_return'
+# iOS asks before any custom-scheme link opens an app -- the same prompt a person sees after tapping
+# "Return to the Huddle app" in Safari. Left unanswered it also sits over every later flow.
+- tapOn: 'Open'
 - extendedWaitUntil:
     visible: '(?i)your plan'
     timeout: 30000

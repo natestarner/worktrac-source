@@ -12,16 +12,18 @@ appId: fitness.huddle.app
     visible: 'Log set'
     timeout: 30000
 # The reps field selects its text on focus (WeightRepsStepper.jsx), so typing replaces the prefill.
+# 6, not the usual prefill, so the row below can only show it if the typed value was used.
 - tapOn:
     text: 'Reps'
     index: 0
-- inputText: '8'
-# The SessionBar case native-apps.md still lists as unconfirmed: once a workout is running, a field
-# being typed into must stay above both the keyboard and the bar riding on it.
-- assertVisible:
-    text: 'Reps'
-    index: 0
-- hideKeyboard
+- inputText: '6'
+# With the keypad STILL UP, as a person does it: there is no hideKeyboard on a numeric keypad (no
+# return key; Maestro gives up), and the field commits on blur -- so this tap is also the check that
+# blurring into "Log set" doesn't lose what was just typed.
+- scrollUntilVisible:
+    element: 'Log set'
+    direction: DOWN
+    timeout: 10000
 - tapOn: 'Log set'
 # A first set is always a record, and the celebration stays up until dismissed.
 - tapOn:
@@ -30,4 +32,5 @@ appId: fitness.huddle.app
 - extendedWaitUntil:
     visible: 'Set 1'
     timeout: 30000
+- assertVisible: '.*× 6.*'
 - assertVisible: 'End workout'
