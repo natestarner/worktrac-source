@@ -132,13 +132,37 @@ describe("'external' -- the App Store app on the US storefront", () => {
     expect(screen.queryByTestId('stripe-embedded-checkout')).not.toBeInTheDocument();
   });
 
-  it('Manage billing opens the Customer Portal outside the app', async () => {
+  it('Manage billing opens the Customer Portal outside the app, returning to a page that says to close it', async () => {
     createPortalSession.mockResolvedValue({ url: 'https://billing.stripe.com/p/session_1' });
     renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE' });
 
     fireEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
 
-    await waitFor(() => expect(openExternal).toHaveBeenCalledWith('https://billing.stripe.com/p/session_1'));
+    await waitFor(() =>
+      expect(openExternal).toHaveBeenCalledWith('https://billing.stripe.com/p/session_1', expect.any(Object)),
+    );
+    // In the sheet, /app/billing would be a signed-out web app; /billing-done says to tap Done.
+    expect(createPortalSession).toHaveBeenCalledWith({ returnTo: 'app' });
+  });
+
+  // Closing the sheet never backgrounds the app, so nothing else would notice a cancellation or a
+  // plan change made there: the billing screen would keep showing the plan as it was.
+  it('closing the portal refreshes the plan and the subscription', async () => {
+    createPortalSession.mockResolvedValue({ url: 'https://billing.stripe.com/p/session_1' });
+    const view = renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE' });
+    const { refreshPeople } = useAuth.mock.results.at(-1).value;
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
+    await waitFor(() => expect(openExternal).toHaveBeenCalled());
+    const fetchesBefore = getSubscription.mock.calls.length;
+    expect(refreshPeople).not.toHaveBeenCalled();
+
+    const { onClose } = openExternal.mock.calls[0][1];
+    onClose();
+
+    expect(refreshPeople).toHaveBeenCalled();
+    await waitFor(() => expect(getSubscription.mock.calls.length).toBeGreaterThan(fetchesBefore));
+    view.unmount();
   });
 });
 
@@ -154,5 +178,15 @@ describe("'embedded' -- the web, unchanged", () => {
     expect(await screen.findByTestId('stripe-embedded-checkout')).toBeInTheDocument();
     expect(createCheckoutLink).not.toHaveBeenCalled();
     expect(readPendingCheckout()).toBeNull();
+  });
+
+  it('Manage billing asks for the portal exactly as before, returning to the billing screen', async () => {
+    createPortalSession.mockResolvedValue({ url: 'https://billing.stripe.com/p/session_1' });
+    renderBilling({ id: 1, plan: 'PLUS' }, { plan: 'PLUS', status: 'ACTIVE' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
+
+    await waitFor(() => expect(openExternal).toHaveBeenCalled());
+    expect(createPortalSession).toHaveBeenCalledWith({ returnTo: undefined });
   });
 });

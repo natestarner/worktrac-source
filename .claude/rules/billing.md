@@ -471,7 +471,7 @@ full reasoning; don't move it back in front of the deletes.
 | Channel | Where | What the upgrade surfaces do |
 |---|---|---|
 | `embedded` | The web, any browser or installed PWA | Exactly what this file describes everywhere else. Unchanged |
-| `external` | The App Store app, **US storefront** | "Upgrade" calls `POST /api/billing/checkout-link` and opens Stripe's HOSTED page in the phone's browser; the Customer Portal opens outside the app too |
+| `external` | The App Store app, **US storefront** | "Upgrade" calls `POST /api/billing/checkout-link` and opens Stripe's HOSTED page in the phone's browser; the Customer Portal opens in the in-app browser sheet with `returnTo=app` (its "Return to Huddle" lands on `/billing-done`, not a signed-out web app), and closing the sheet refreshes the plan (`native-apps.md`) |
 | `none` | The App Store app anywhere else, or storefront unknown | **No** price, purchase button, "Go Plus" badge, "See Plus" link, "Unlock with Plus", "Unlock full history", portal or Pro upgrade. The billing screen shows the plan only |
 
 - **The gate lives INSIDE the surfaces** (`PlusUpsell`, `PlanBadge`, `BillingTab`, `LoginsSection`,

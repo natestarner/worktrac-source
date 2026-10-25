@@ -10,5 +10,8 @@
         ]
       }
     ]
+  },
+  "webcredentials": {
+    "apps": ["R73HV8H48W.fitness.huddle.app", "R73HV8H48W.fitness.huddle.app.lower"]
   }
 }

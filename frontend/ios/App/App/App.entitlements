@@ -6,9 +6,13 @@
 	     setting (app.huddle.fitness; the Fastfile sets app.dev.huddle.fitness for Huddle Lower), and
 	     the site's half is frontend/public/.well-known/apple-app-site-association.json. Signing needs the
 	     Associated Domains capability on both App IDs (launch checklist 1.7). -->
+	<!-- webcredentials: the same domain for Password AutoFill, so the login screen offers the
+	     password someone saved for that site in Safari. The site's half is the "webcredentials"
+	     section of the same file. Same capability, so the App IDs and profiles need no change. -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:$(APP_LINK_DOMAIN)</string>
+		<string>webcredentials:$(APP_LINK_DOMAIN)</string>
 	</array>
 </dict>
 </plist>

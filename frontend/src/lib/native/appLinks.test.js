@@ -20,14 +20,17 @@ vi.mock('@capacitor/app', () => ({
   },
 }));
 
-import { appPathForUrl, listenForAppLinks } from './appLinks';
+import { appPathForUrl, appReturnUrl, listenForAppLinks, resetLaunchUrlForTests } from './appLinks';
+import infoPlist from '../../../ios/App/App/Info.plist?raw';
 import webAppConfig from '../../../public/staticwebapp.config.json';
 import aasa from '../../../public/.well-known/apple-app-site-association.json';
+import entitlements from '../../../ios/App/App/App.entitlements?raw';
 
 // Lets the adapter's async setup (dynamic import, addListener, getLaunchUrl) run to completion.
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 beforeEach(() => {
+  resetLaunchUrlForTests();
   env.native = false;
   env.launchUrl = undefined;
   env.listeners = [];
@@ -62,6 +65,47 @@ describe('appPathForUrl', () => {
     expect(appPathForUrl('http://app.huddle.fitness/join?i=1')).toBeNull();
     expect(appPathForUrl('not a url')).toBeNull();
   });
+
+  // The landing page's "Return to the Huddle app" button, through each app's own URL scheme.
+  it('routes the checkout return button to the billing reconcile, in both apps', () => {
+    expect(appPathForUrl('fitness.huddle.app://checkout-complete?session_id=cs_1')).toBe(
+      '/app/billing?checkout=cs_1',
+    );
+    expect(appPathForUrl('fitness.huddle.app.lower://checkout-complete?cancelled=1')).toBe('/app/billing');
+  });
+
+  // Anything on the phone can open a custom scheme, so it answers the one link it exists for.
+  it('ignores every other path on the scheme', () => {
+    expect(appPathForUrl('fitness.huddle.app://join?i=1')).toBeNull();
+    expect(appPathForUrl('fitness.huddle.app://app/profile')).toBeNull();
+    expect(appPathForUrl('some.other.app://checkout-complete?session_id=cs_1')).toBeNull();
+  });
+});
+
+describe('appReturnUrl', () => {
+  it("names the app that claims the page's host, carrying the query through", () => {
+    expect(appReturnUrl('app.huddle.fitness', '?session_id=cs_1')).toBe(
+      'fitness.huddle.app://checkout-complete?session_id=cs_1',
+    );
+    expect(appReturnUrl('app.dev.huddle.fitness', '?cancelled=1')).toBe(
+      'fitness.huddle.app.lower://checkout-complete?cancelled=1',
+    );
+  });
+
+  it('offers nothing where no app claims the host', () => {
+    expect(appReturnUrl('localhost', '?session_id=cs_1')).toBeNull();
+    expect(appReturnUrl('huddle.fitness', '')).toBeNull();
+  });
+
+  // The button goes nowhere unless the app registers the scheme it builds -- and the scheme is the
+  // bundle id the Fastfile gives each variant, which is how the two apps never claim each other's.
+  it('builds the scheme the app registers in Info.plist', () => {
+    expect(infoPlist).toMatch(
+      /<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>\$\(PRODUCT_BUNDLE_IDENTIFIER\)<\/string>/,
+    );
+    expect(appReturnUrl('app.huddle.fitness', '')).toMatch(/^fitness\.huddle\.app:\/\//);
+    expect(appReturnUrl('app.dev.huddle.fitness', '')).toMatch(/^fitness\.huddle\.app\.lower:\/\//);
+  });
 });
 
 // The site's half of the handshake. iOS fetches /.well-known/apple-app-site-association before it
@@ -88,6 +132,14 @@ describe('the web host serves the link-ownership file', () => {
     const [details] = aasa.applinks.details;
     expect(details.appIDs).toEqual(['R73HV8H48W.fitness.huddle.app', 'R73HV8H48W.fitness.huddle.app.lower']);
     expect(details.components.map((c) => c['/'])).toEqual(['/join*', '/app/*', '/checkout-complete*']);
+  });
+
+  // Password AutoFill: without both halves the app's login screen never offers the password saved
+  // for the site, and nothing anywhere reports that.
+  it('vouches for both apps for saved passwords too, and the app claims the same domain for them', () => {
+    expect(aasa.webcredentials.apps).toEqual(['R73HV8H48W.fitness.huddle.app', 'R73HV8H48W.fitness.huddle.app.lower']);
+    expect(entitlements).toContain('<string>webcredentials:$(APP_LINK_DOMAIN)</string>');
+    expect(entitlements).toContain('<string>applinks:$(APP_LINK_DOMAIN)</string>');
   });
 });
 
@@ -120,6 +172,28 @@ describe('listenForAppLinks', () => {
     env.listeners[0].fn({ url: 'https://app.huddle.fitness/join?i=9' });
     expect(onPath).toHaveBeenCalledTimes(1);
     expect(onPath).toHaveBeenCalledWith('/join?i=9');
+  });
+
+  // Capacitor's getLaunchUrl() keeps answering with the last link that opened the app, forever. A
+  // second subscription (AppLinkRouter re-running) must not route it again: after an App Store
+  // checkout that was every tab tap landing back on the billing screen.
+  it('routes the launch link once per launch, not once per subscription', async () => {
+    env.native = true;
+    env.launchUrl = 'https://app.dev.huddle.fitness/checkout-complete?session_id=cs_9';
+    const first = vi.fn();
+    const stopFirst = listenForAppLinks(first);
+    await settle();
+    stopFirst();
+
+    const second = vi.fn();
+    listenForAppLinks(second);
+    await settle();
+
+    expect(first).toHaveBeenCalledWith('/app/billing?checkout=cs_9');
+    expect(second).not.toHaveBeenCalled();
+    // A link that opens the app later still arrives, through the listener.
+    env.listeners[1].fn({ url: 'https://app.dev.huddle.fitness/join?i=3' });
+    expect(second).toHaveBeenCalledWith('/join?i=3');
   });
 
   it('stops listening when unmounted', async () => {

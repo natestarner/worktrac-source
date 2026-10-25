@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
@@ -260,9 +261,15 @@ public class BillingController {
     // The hosted Customer Portal: card updates, invoices, plan switches and cancellation. Redirect
     // only -- Stripe has no embedded variant -- so the frontend opens it in a NEW TAB, leaving the
     // installed PWA's own document alive behind it.
+    //
+    // `returnTo=app` is the App Store app, which opens the portal in an in-app browser sheet. The
+    // portal's "Return to Huddle" there must not load /app/billing: the sheet has its own browser
+    // storage, so that is a signed-out copy of the web app inside the sheet. /billing-done instead
+    // says to tap Done, which closes the sheet onto the app itself. Optional and additive, so a
+    // build that doesn't send it keeps the original return URL (api-compatibility.md).
     @PostMapping("/portal-session")
     @RequiresPermission(Permission.MANAGE_BILLING)
-    public Map<String, String> createPortalSession() {
+    public Map<String, String> createPortalSession(@RequestParam(required = false) String returnTo) {
         requireStripe();
         Long accountId = currentUser.accountId();
         if (!rateLimiter.tryConsumePerAccount(accountId)) {
@@ -276,8 +283,10 @@ public class BillingController {
         }
 
         try {
-            String url = stripeService.createPortalSession(
-                    subscription.getStripeCustomerId(), stripeProperties.getReturnUrl());
+            String returnUrl = "app".equals(returnTo)
+                    ? appOrigin() + "/billing-done"
+                    : stripeProperties.getReturnUrl();
+            String url = stripeService.createPortalSession(subscription.getStripeCustomerId(), returnUrl);
             auditService.record(accountId, BillingEventType.PORTAL_OPENED, null);
             return Map.of("url", url);
         } catch (StripeException e) {

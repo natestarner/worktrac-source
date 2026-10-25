@@ -57,12 +57,25 @@ describe('ProfileTab', () => {
     expect(screen.getByText('PRIMARY')).toBeInTheDocument();
   });
 
-  it('navigates back when Back is clicked', () => {
+  it('navigates back when Back is clicked and there is somewhere to go back to', () => {
+    window.history.replaceState({ idx: 2 }, '');
     render(<ProfileTab />);
 
     fireEvent.click(screen.getByRole('button', { name: /Back/ }));
 
     expect(navigate).toHaveBeenCalledWith(-1);
+    window.history.replaceState(null, '');
+  });
+
+  // Opened straight onto Profile (the app relaunching where iOS killed it): navigate(-1) would do
+  // nothing, so Back goes to Log.
+  it('goes to Log when Profile is the first screen in history', () => {
+    window.history.replaceState(null, '');
+    render(<ProfileTab />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Back/ }));
+
+    expect(navigate).toHaveBeenCalledWith('/app/log', { replace: true });
   });
 
   it('only shows a Remove option for non-primary people', () => {
