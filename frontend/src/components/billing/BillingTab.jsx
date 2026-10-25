@@ -28,6 +28,7 @@ import { PLUS_BENEFITS, PRO_ADDITIONS, PRO_BANDS, planCopy } from './planCopy';
 import { accountVocab } from '../../utils/accountVocab';
 import { isPaidPlan, planIncludes } from '../../utils/planFeatures';
 import BackLink from '../shared/BackLink';
+import { useGoBack } from '../../hooks/useGoBack';
 import { useBillingChannel } from '../../hooks/useBillingChannel';
 import { openExternal, openInBrowser } from '../../lib/native';
 import { rememberPendingCheckout } from '../../lib/pendingCheckout';
@@ -48,6 +49,7 @@ export default function BillingTab() {
   const { account, refreshPeople } = useAuth();
   const { releaseOnboarding, showToast } = useUI();
   const navigate = useNavigate();
+  const goBack = useGoBack();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [interval, setInterval] = useState('YEAR');
@@ -236,14 +238,31 @@ export default function BillingTab() {
     },
   );
 
+  // Whatever the portal could have changed: the plan (/me), the subscription's wording (renews vs
+  // ends), who would lose a login, and -- if the plan itself moved -- every person's History window.
+  // The portal changes Stripe at once, but our copy updates when its webhook lands, so this can
+  // still read the old state for a second or two; any later visit to this screen refetches.
+  function refreshAfterPortal() {
+    refreshPeople().catch(() => {});
+    queryClient.invalidateQueries({ queryKey: queryKeys.subscription() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.accountLogins() });
+    refreshHistoryForEveryone(queryClient);
+    queryClient.invalidateQueries({ queryKey: queryKeys.historyWindowForEveryone() });
+  }
+
   const handleManageBilling = run(
     async () => {
-      const { url } = await createPortalSession();
+      // 'external' is the App Store app, the only channel that shows the portal in a browser sheet;
+      // there the portal's own "Return to Huddle" must not load the web app inside it.
+      const { url } = await createPortalSession({ returnTo: channel === 'external' ? 'app' : undefined });
       // A NEW TAB, not a navigation. Stripe's Customer Portal is redirect-only (no embedded
       // variant exists), and replacing this document would hand an installed PWA's session to
       // Safari with no reliable way back. openExternal's web branch is exactly that new tab; in
-      // the App Store app it is the in-app browser sheet.
-      await openExternal(url);
+      // the App Store app it is the in-app browser sheet, and closing that sheet is the only sign
+      // the person is back (it never backgrounds the app, so refetch-on-focus never fires).
+      // Not awaited past opening: the gated button's spinner is for opening the portal, not for
+      // the whole visit.
+      await openExternal(url, { onClose: refreshAfterPortal });
     },
     {
       offlineMessage: 'Managing your plan needs a connection.',
@@ -263,7 +282,7 @@ export default function BillingTab() {
 
   return (
     <div>
-      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
+      <BackLink onClick={goBack}>&larr; Back</BackLink>
 
       {checkout ? (
         <>

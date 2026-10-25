@@ -19,7 +19,10 @@ Full reasoning: `docs/architecture/design-system.md`.
 - **Reach for a primitive before writing a style object.** `Button` (with `variant`/`size`), `Card`,
   `Input`, `IconButton`, `SectionLabel`, `EmptyState`, `BackLink` in `components/shared/`. At most
   **one** `variant="primary"` visible per screen.
-- **Every "← Back" link is a `BackLink`** (a second link on its row is its `aside`, a
+- **Every "← Back" link is a `BackLink`, and its `onClick` is `useGoBack()`**, never a bare
+  `navigate(-1)`. That does nothing when the screen is the first entry in history (the App Store
+  app relaunching on the screen iOS killed it on, a deep link in a fresh tab); `useGoBack` goes to
+  Log then, reading React Router's `history.state.idx` (a second link on its row is its `aside`, a
   `ForwardLink`). There were four hand-rolled recipes — 13px and 15px, 12/16/22px below, three of
   them 17px tap targets. Its 40px target overhangs the text with a negative block margin so the row
   is only as tall as the words; don't "fix" that back into a plain 40px box, which reads as ~10px of

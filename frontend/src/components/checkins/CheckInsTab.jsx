@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useAppState } from '../../context/AppStateContext';
 import { useAccountAccess } from '../../hooks/useAccountAccess';
@@ -17,6 +16,7 @@ import IconButton from '../shared/IconButton';
 import OfflineDisabledWrap from '../shared/OfflineDisabledWrap';
 import { IconClose } from '../shared/icons';
 import BackLink from '../shared/BackLink';
+import { useGoBack } from '../../hooks/useGoBack';
 
 /**
  * Check-ins for the ACTIVE person: a weigh-in, a note, or both.
@@ -33,7 +33,7 @@ import BackLink from '../shared/BackLink';
  * forbids.
  */
 export default function CheckInsTab() {
-  const navigate = useNavigate();
+  const goBack = useGoBack();
   const queryClient = useQueryClient();
   const { account, people } = useAuth();
   const { activePersonId, checkInDraft, setCheckInDraft, clearCheckInDraft } = useAppState();
@@ -101,7 +101,7 @@ export default function CheckInsTab() {
 
   return (
     <div>
-      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
+      <BackLink onClick={goBack}>&larr; Back</BackLink>
 
       <SectionLabel>Check-ins{person ? ` — ${person.name}` : ''}</SectionLabel>
 

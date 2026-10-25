@@ -2,6 +2,7 @@
   "appId": "fitness.huddle.app",
   "appName": "Huddle",
   "webDir": "dist",
+  "ios": { "allowsLinkPreview": false },
   "plugins": {
     "CapacitorHttp": { "enabled": false },
     "Keyboard": { "resize": "native" }

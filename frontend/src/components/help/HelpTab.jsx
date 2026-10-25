@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { EXERCISE_METRICS } from '../trends/exerciseMetrics';
 import { WEEKLY_METRICS } from '../trends/weeklyMetrics';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
@@ -7,6 +7,7 @@ import { useUI } from '../../context/UIContext';
 import { isNativeApp } from '../../lib/native';
 import Button from '../shared/Button';
 import BackLink from '../shared/BackLink';
+import { useGoBack } from '../../hooks/useGoBack';
 
 // The end-user handbook. Invariants + what invalidates them: `.claude/rules/user-facing-help.md`.
 //
@@ -51,7 +52,7 @@ const SECTIONS = [
 const restCeilingMinutes = REST_CEILING_SECONDS / 60;
 
 export default function HelpTab() {
-  const navigate = useNavigate();
+  const goBack = useGoBack();
   const { hash } = useLocation();
   const { startTour } = useUI();
 
@@ -85,7 +86,7 @@ export default function HelpTab() {
 
   return (
     <div className="help">
-      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
+      <BackLink onClick={goBack}>&larr; Back</BackLink>
 
       <h1 className="help-title">Huddle Handbook</h1>
       <p className="help-standfirst">

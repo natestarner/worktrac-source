@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import SectionLabel from '../shared/SectionLabel';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useGatedMutation } from '../../hooks/useGatedMutation';
 import { useUI } from '../../context/UIContext';
@@ -13,6 +12,7 @@ import ChangePasswordSection from './ChangePasswordSection';
 import LoginsSection from './LoginsSection';
 import { accountVocab, capitalize } from '../../utils/accountVocab';
 import BackLink from '../shared/BackLink';
+import { useGoBack } from '../../hooks/useGoBack';
 
 export default function ProfileTab() {
   const { user, account, people, refreshPeople } = useAuth();
@@ -21,7 +21,7 @@ export default function ProfileTab() {
   // is the common case for a browser that has not reloaded across the deploy.
   const vocab = accountVocab(account?.vocab);
   const { openConfirm } = useUI();
-  const navigate = useNavigate();
+  const goBack = useGoBack();
   const primary = people.find((p) => p.isPrimary);
   const self = people.find((p) => String(p.id) === String(selfPersonId));
   const [editingPerson, setEditingPerson] = useState(null);
@@ -44,7 +44,7 @@ export default function ProfileTab() {
 
   return (
     <div>
-      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
+      <BackLink onClick={goBack}>&larr; Back</BackLink>
 
       {/* "Account holder" is the owner's framing and is actively wrong for a member: user.email
           is the MEMBER's own address, so that heading would sit above their email describing

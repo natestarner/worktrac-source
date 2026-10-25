@@ -14,6 +14,7 @@ const plugins = vi.hoisted(() => ({
   writeFile: vi.fn(),
   share: vi.fn(),
   browserOpen: vi.fn(),
+  browserAddListener: vi.fn(),
   launcherOpen: vi.fn(),
   notification: vi.fn(),
   impact: vi.fn(),
@@ -42,7 +43,9 @@ vi.mock('@capacitor/filesystem', () => ({
   Directory: { Cache: 'CACHE' },
 }));
 vi.mock('@capacitor/share', () => ({ Share: { share: plugins.share } }));
-vi.mock('@capacitor/browser', () => ({ Browser: { open: plugins.browserOpen } }));
+vi.mock('@capacitor/browser', () => ({
+  Browser: { open: plugins.browserOpen, addListener: plugins.browserAddListener },
+}));
 vi.mock('@capacitor/app-launcher', () => ({ AppLauncher: { openUrl: plugins.launcherOpen } }));
 vi.mock('@capacitor/haptics', () => ({
   Haptics: { notification: plugins.notification, impact: plugins.impact },
@@ -166,6 +169,61 @@ describe('external links', () => {
     await vi.waitFor(() =>
       expect(plugins.browserOpen).toHaveBeenCalledWith({ url: 'https://huddle.fitness/terms.html' })
     );
+  });
+
+  // The App Store listing belongs in the App Store, not in Apple's web preview of it inside the sheet.
+  it('in the app, a leaveApp link is handed to iOS instead of the in-app sheet', async () => {
+    native.on = true;
+    const props = externalLinkProps('https://apps.apple.com/app/id1', { leaveApp: true });
+
+    props.onClick({ preventDefault: vi.fn() });
+
+    await vi.waitFor(() => expect(plugins.launcherOpen).toHaveBeenCalledWith({ url: 'https://apps.apple.com/app/id1' }));
+    expect(plugins.browserOpen).not.toHaveBeenCalled();
+  });
+
+  it('on the web, a leaveApp link is the same new-tab anchor', () => {
+    expect(externalLinkProps('https://apps.apple.com/app/id1', { leaveApp: true })).toEqual({
+      href: 'https://apps.apple.com/app/id1',
+      target: '_blank',
+      rel: 'noopener noreferrer',
+    });
+  });
+
+  // Closing the sheet never backgrounds the app, so this is the only sign the person came back.
+  it('in the app, tells the caller when the sheet is closed, once', async () => {
+    native.on = true;
+    let finished;
+    const remove = vi.fn();
+    plugins.browserAddListener.mockImplementation(async (event, fn) => {
+      expect(event).toBe('browserFinished');
+      finished = fn;
+      return { remove };
+    });
+    const onClose = vi.fn();
+
+    await openExternal('https://billing.stripe.com/p/session_1', { onClose });
+    expect(onClose).not.toHaveBeenCalled();
+    finished();
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalled();
+  });
+
+  it('in the app, stops waiting for a sheet that failed to open', async () => {
+    native.on = true;
+    const remove = vi.fn();
+    plugins.browserAddListener.mockResolvedValue({ remove });
+    plugins.browserOpen.mockRejectedValue(new Error('no browser'));
+
+    await expect(openExternal('https://billing.stripe.com/p/x', { onClose: vi.fn() })).rejects.toThrow('no browser');
+    expect(remove).toHaveBeenCalled();
+  });
+
+  it('in the app, listens for nothing when nobody asked to know', async () => {
+    native.on = true;
+    await openExternal('https://huddle.fitness/terms.html');
+    expect(plugins.browserAddListener).not.toHaveBeenCalled();
   });
 });
 

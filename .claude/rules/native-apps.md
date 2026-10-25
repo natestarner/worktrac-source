@@ -45,7 +45,7 @@ The adapters, each one a function whose web branch is the code it replaced:
 | Adapter | Web branch (unchanged behaviour) | App branch | Callers |
 |---|---|---|---|
 | `saveFile(blob, name)` | `<a download>` + blob URL | Write to the cache directory, then the share sheet. A dismissed sheet is success, not an error | `api/export.js` |
-| `externalLinkProps(url)` / `openExternal(url)` | `target="_blank"` anchor, no `onClick` | In-app browser sheet (SFSafariViewController) | `LegalLinks.jsx`, `BillingTab`'s portal |
+| `externalLinkProps(url, { leaveApp })` / `openExternal(url, { onClose })` | `target="_blank"` anchor, no `onClick`; `onClose` never runs | In-app browser sheet (SFSafariViewController). `onClose` fires on the sheet's `browserFinished`, the **only** sign the person came back: the sheet never backgrounds the app, so `visibilitychange` and TanStack's refetch-on-focus never fire. `leaveApp` hands the URL to iOS instead (`openInBrowser`), for a destination that is another app | `LegalLinks.jsx`, `BillingTab`'s portal (`onClose` refreshes the plan), `UpdateAppBanner` (`leaveApp`: the App Store listing opens in the App Store, not as a web preview in the sheet) |
 | `openInBrowser(url)` | new tab | Leaves for Safari (`@capacitor/app-launcher`). **For a page finished outside the app**: closing the in-app sheet never backgrounds the app, so a return that must be noticed (`useCheckoutResume`'s `visibilitychange`) needs Safari | `BillingTab`'s hosted checkout |
 | `nativeHaptic(pattern)` | returns `false`, so `lib/haptics.js` takes its old routes | Apple's haptic engine; still behind the reduced-motion check | `lib/haptics.js` |
 | `isInstalledApp()` | `display-mode: standalone` / `navigator.standalone` | always `true` | `PullToRefresh.jsx` (History's pull) |
@@ -122,6 +122,31 @@ links. The scheme routes `checkout-complete` and nothing else, because any page 
 custom scheme. Changing a bundle id means changing `APP_SCHEMES` in `appLinks.js` too.
 
 Apple fetches the file through its own CDN, so a change can take a day to reach devices.
+
+**Password AutoFill uses the same two files.** The entitlement also asks for
+`webcredentials:$(APP_LINK_DOMAIN)` and the association file has a `webcredentials` section naming
+both apps, so the login screen offers the password saved for the site. Same Associated Domains
+capability, so no profile change. Without it nothing fails: the login screen just never suggests a
+saved password. `appLinks.test.js` pins both halves. Developers report iOS's own "Save password?"
+prompt still rarely appears inside a web view, so fill is the part this guarantees.
+
+## A browser sheet's return trip is the app's job, not the web page's
+
+The in-app sheet (`openExternal`) is a separate browser with **its own storage**: the person is
+signed out of Huddle inside it, always. So anything a sheet-hosted page links back to on
+`app.huddle.fitness` is a signed-out web app in the sheet. Stripe's Customer Portal is the case
+that exists: the app asks `POST /portal-session?returnTo=app`, and the portal's "Return to Huddle"
+lands on `/billing-done`, a public page that says to tap Done. That path is deliberately **not** in
+the association file, so iOS keeps it in the sheet. Coming back is noticed by `openExternal`'s
+`onClose`, never by a page or a visibility event.
+
+## WebView settings (`capacitor.config.json`)
+
+- **`ios.allowsLinkPreview: false`.** WKWebView's default previews a link on long press, and the
+  tab bar is links, so a long press on History previewed an internal `capacitor://localhost` page.
+- Capacitor sets `scrollView.bounces = false` itself. Nothing here needs the bounce:
+  `PullToRefresh` measures finger distance, not overscroll.
+- `capacitorConfig.test.js` pins the values with their reasons.
 
 ## The app build has no service worker, and that is correct
 

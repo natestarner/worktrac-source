@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import Button from '../shared/Button';
 import Card from '../shared/Card';
 import Input from '../shared/Input';
@@ -17,6 +17,7 @@ import { clearClientError, formatClientError, readClientError } from '../../lib/
 import { clearBootFailure, formatBootFailure, readBootFailure } from '../../lib/bootFailure';
 import { APP_BUILD } from '../../lib/appBuild';
 import BackLink from '../shared/BackLink';
+import { useGoBack } from '../../hooks/useGoBack';
 
 const CATEGORIES = [
   { label: 'Suggestion', value: 'SUGGESTION' },
@@ -38,7 +39,7 @@ const MESSAGE_MIN = 10;
 // person, so refusing offline costs the person nothing -- their text is still there when they come
 // back online.
 export default function ContactTab() {
-  const navigate = useNavigate();
+  const goBack = useGoBack();
   const location = useLocation();
   const { activePersonId, contactDraft, setContactDraft, clearContactDraft } = useAppState();
   const { showToast } = useUI();
@@ -123,7 +124,7 @@ export default function ContactTab() {
   if (sent) {
     return (
       <div>
-        <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
+        <BackLink onClick={goBack}>&larr; Back</BackLink>
         <SectionLabel style={sectionLabelSpacing}>Contact us</SectionLabel>
         <Card>
           <div role="status" style={sentPanelStyle}>
@@ -142,7 +143,7 @@ export default function ContactTab() {
 
   return (
     <div>
-      <BackLink onClick={() => navigate(-1)}>&larr; Back</BackLink>
+      <BackLink onClick={goBack}>&larr; Back</BackLink>
       <SectionLabel style={sectionLabelSpacing}>Contact us</SectionLabel>
 
       <Card style={{ marginBottom: 'var(--space-6)' }}>
