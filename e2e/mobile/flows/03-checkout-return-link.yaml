@@ -9,8 +9,10 @@
 #   so the app is on the 'external' channel and shows prices legitimately (billing.md); the 'none'
 #   case can't be produced here (first run, 2026-10-25).
 # - Back from Billing goes somewhere (useGoBack), since Billing was reached by a link.
-# - ⚠️ KNOWN INTERMITTENT (#434): in some runs the link takes no effect at all -- the prompt is gone
-#   and the app is where it was. Kept running, non-blocking, because it is the evidence for #434.
+# - #434: some runs saw the link take no effect. With the app's console captured
+#   (console-03-checkout-return-link.log), every run where iOS delivered the link shows it reach
+#   appLinks.js and land on Billing; the one failure since was iOS's prompt arriving minutes late.
+#   If it recurs, read that log first: no "openURLContexts" line means iOS never handed it over.
 #
 # The unsigned simulator build is the production bundle id, so its scheme is fitness.huddle.app.
 appId: fitness.huddle.app
@@ -29,6 +31,13 @@ name: Checkout return link lands on Billing and lets go
 - openLink: 'fitness.huddle.app://checkout-complete?session_id=cs_test_maestro_return'
 # iOS asks before any custom-scheme link opens an app -- the same prompt a person sees after tapping
 # "Return to the Huddle app" in Safari. Left unanswered it also sits over every later flow.
+# ⚠️ Waited for, not just tapped: on the runner the prompt has arrived two MINUTES late (run
+# 40251542825), after this flow had given up, and then covered the next three flows' login screens.
+# The app's console showed no openURLContexts at all, so that run's "ignored link" was the
+# simulator, not the app (#434).
+- extendedWaitUntil:
+    visible: 'Open in .*Huddle.*'
+    timeout: 120000
 - tapOn: 'Open'
 - takeScreenshot: after-open
 - waitForAnimationToEnd:

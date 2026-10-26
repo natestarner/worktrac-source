@@ -17,6 +17,13 @@ appId: fitness.huddle.app
           # copies into the artifact after the flow (AppDelegate.swift, #434).
           arguments:
             huddleConsoleToFile: true
+# A system prompt another flow left behind outlives the app being quit and hides the screen from
+# Maestro: flow 03's "Open in Huddle?" once arrived late and failed the three flows after it.
+- runFlow:
+    when:
+      visible: 'Open in .*Huddle.*'
+    commands:
+      - tapOn: 'Cancel'
 - extendedWaitUntil:
     visible: 'Forgot password\?'
     timeout: 60000

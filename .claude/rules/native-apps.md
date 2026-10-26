@@ -276,7 +276,7 @@ contains it.
 |---|---|
 | `01-sign-in-and-log-a-set` | Login fields and button stay above the keyboard; reps typed with the keypad up and "Log set" tapped straight away keeps the typed value |
 | `02-background-and-relaunch` | Background → back, and killed → relaunched: still signed in, workout intact |
-| `03-checkout-return-link` | The scheme link lands on Billing and a tab tap **leaves it** (#423). ⚠️ Intermittently the link takes no effect at all: #434 |
+| `03-checkout-return-link` | The scheme link lands on Billing and a tab tap **leaves it** (#423, #438). It waits up to 2 minutes for iOS's "Open in Huddle?" prompt, which has arrived that late on the runner (#434) |
 | `04-in-app-browser-sheet` | Terms opens in the sheet; closing it returns to the same screen |
 | `05-export-share-sheet` | Export opens the share sheet (it covers the app); flicking it away is not an error |
 | `06-history-pull-to-refresh` | History survives the pull (on only in installed apps, so no Playwright spec drives it) |
@@ -310,6 +310,13 @@ contains it.
   reports over the email field, so target the button `below: 'Forgot password\?'`; and on iOS
   Maestro's `hideKeyboard` presses the keyboard's Go key (submitting the login form) and cannot
   dismiss a numeric keypad at all. Don't use it here.
+- **Each flow's app console is in the artifact as `console-<flow>.log`.** Capacitor prints its bridge
+  log and the page's `console.*` to stdout, which Maestro's launch throws away, so Debug builds given
+  the `huddleConsoleToFile` launch argument (`subflows/sign-in.yaml` passes it) write it to
+  `Documents/console.log` and `ios-maestro.sh` copies it out (`AppDelegate.swift`). Release builds
+  never do. **Read it before blaming the app**: for #434 it showed iOS never delivered the link.
+- **A system prompt survives the app being quit** and hides the screen from Maestro, so
+  `subflows/sign-in.yaml` cancels a stray "Open in Huddle?" before signing in.
 - **Known simulator stalls, not app bugs:** the share sheet and the Safari sheet can open and draw
   nothing for 30s+ on the runner; iOS's one-time keyboard tutorial is switched off in
   `ios-maestro.sh`; and the simulator reports the **US** storefront, so the app is on the
