@@ -15,6 +15,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        // #434: the native half of a link's trip, to set beside appLinks.js's half in console.log.
+        print("Huddle: openURLContexts \(URLContexts.map { $0.url.absoluteString })")
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }
 

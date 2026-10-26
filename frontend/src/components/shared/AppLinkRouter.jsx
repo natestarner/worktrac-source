@@ -15,6 +15,17 @@ export default function AppLinkRouter() {
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
-  useEffect(() => listenForAppLinks((path) => navigateRef.current(path)), []);
+  useEffect(
+    () =>
+      listenForAppLinks((path) => {
+        navigateRef.current(path);
+        // #434: where the app actually is after the link, to catch anything that moves it on.
+        // Remove with appLinks.js's logging once that issue is settled.
+        for (const ms of [1000, 5000]) {
+          setTimeout(() => console.info(`[appLinks] at +${ms}ms`, window.location.pathname + window.location.search), ms);
+        }
+      }),
+    [],
+  );
   return null;
 }
