@@ -68,6 +68,11 @@ run_flow() {
     "$flow" 2>&1 | tee "$OUT/.last-run.log"
   local status="${PIPESTATUS[0]}"
   cat "$OUT/.last-run.log" >> "$OUT/maestro-run.log"
+  # The app's own console (Capacitor's bridge log and the page's console.*), written by Debug builds
+  # launched with huddleConsoleToFile (AppDelegate.swift). Absent for a flow that never got that far.
+  local data
+  data=$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data 2>/dev/null) &&
+    cp "$data/Documents/console.log" "$OUT/console-$name.log" 2>/dev/null || true
   return "$status"
 }
 

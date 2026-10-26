@@ -13,6 +13,10 @@ appId: fitness.huddle.app
     commands:
       - launchApp:
           clearState: true
+          # Debug builds then write their console to Documents/console.log, which ios-maestro.sh
+          # copies into the artifact after the flow (AppDelegate.swift, #434).
+          arguments:
+            huddleConsoleToFile: true
 - extendedWaitUntil:
     visible: 'Forgot password\?'
     timeout: 60000

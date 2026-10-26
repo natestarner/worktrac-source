@@ -55,7 +55,9 @@ name: Checkout return link lands on Billing and lets go
 
 # And again from a cold start, where the link is the launch URL (read once per process).
 - stopApp
-- launchApp
+- launchApp:
+    arguments:
+      huddleConsoleToFile: true
 - extendedWaitUntil:
     visible: 'Search all exercises'
     timeout: 60000

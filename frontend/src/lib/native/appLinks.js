@@ -81,11 +81,15 @@ export function listenForAppLinks(onPath) {
   let handle = null;
   let last = { url: null, at: 0 };
 
-  const deliver = (url) => {
+  // #434: every link that reaches JS, and what became of it. The simulator flows read these from
+  // the app's console.log (AppDelegate); remove once that issue is settled.
+  const deliver = (url, source) => {
+    console.info(`[appLinks] ${source}`, url, stopped ? '(stopped)' : '');
     if (stopped || !url) return;
     const now = Date.now();
     if (url === last.url && now - last.at < SAME_TAP_MS) return;
     const path = appPathForUrl(url);
+    console.info('[appLinks] path', path);
     if (!path) return;
     last = { url, at: now };
     onPath(path);
@@ -95,14 +99,16 @@ export function listenForAppLinks(onPath) {
     try {
       const { App } = await import('@capacitor/app');
       if (stopped) return;
-      const listener = await App.addListener('appUrlOpen', (event) => deliver(event.url));
+      const listener = await App.addListener('appUrlOpen', (event) => deliver(event.url, 'appUrlOpen'));
+      console.info('[appLinks] listening', stopped ? '(already stopped)' : '');
       if (stopped) listener.remove();
       else handle = listener;
       if (launchUrlRead) return;
       launchUrlRead = true;
       const launch = await App.getLaunchUrl();
-      deliver(launch?.url);
-    } catch {
+      deliver(launch?.url, 'launch');
+    } catch (error) {
+      console.info('[appLinks] failed', error);
       // The plugin failed to load or answer. The app then simply opens where it would have opened
       // anyway (the last screen, or Log), which is what a tap on the app icon does. Nothing is
       // written or lost; only the link's destination is.

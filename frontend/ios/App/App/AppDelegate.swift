@@ -7,7 +7,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        #if DEBUG
+        // The simulator flows' only window into the app (#434). Capacitor prints its bridge log and
+        // the page's console to stdout, which is thrown away when Maestro launches the app, so with
+        // the launch argument the sign-in subflow passes, write both to Documents/console.log;
+        // ios-maestro.sh copies it out after each flow. Debug builds only (TestFlight is Release),
+        // and never without the argument, so a run from Xcode keeps its own console.
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.contains("huddleConsoleToFile") }),
+           let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let path = documents.appendingPathComponent("console.log").path
+            freopen(path, "a", stdout)
+            freopen(path, "a", stderr)
+            setvbuf(stdout, nil, _IOLBF, 0)
+            setvbuf(stderr, nil, _IONBF, 0)
+            print("Huddle: launched, arguments \(ProcessInfo.processInfo.arguments.dropFirst())")
+        }
+        #endif
         return true
     }
 
