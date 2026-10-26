@@ -32,6 +32,11 @@ test.describe('Pro — check-ins', () => {
       await page.getByRole('checkbox').check();
     }
     await save.click();
+    // ⚠️ The empty field is the "saved" signal, not the entry's text. The draft clears only once the
+    // POST has succeeded, but the text is on screen before that -- React mirrors a controlled
+    // textarea's value into its text, so getByText(body) matched the field itself. Waiting on that
+    // let the caller sign out mid-save, and WebKit aborted the POST (lower, 2026-10-25).
+    await expect(field).toHaveValue('');
     await expect(page.getByText(body)).toBeVisible();
   }
 
