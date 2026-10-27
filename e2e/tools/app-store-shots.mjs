@@ -7,13 +7,25 @@
  *   ipad    13" display  1032 x 1376 CSS px @2x = 2064 x 2752  (required: Huddle runs on iPad)
  *
  * Usage (from e2e/):
- *   FRONTEND=http://localhost:3001 EMAIL=... PASSWORD=... node tools/app-store-shots.mjs <outDir>
+ *   FRONTEND=https://app.huddle.fitness EMAIL=... PASSWORD=... node tools/app-store-shots.mjs <outDir>
  *
  *   DEVICES=iphone,ipad     which sizes (default both)
+ *   API=...                 the backend origin; default: the frontend's /config.json apiUrl
  *   ALLOW_WRITES=1          also capture the two scenes that have to LOG A SET -- mid-workout with
  *                           the rest timer running, and the PR celebration. Off by default, so
- *                           pointing this at the production reviewer account changes nothing; on
- *                           for a local copy.
+ *                           pointing this at the production reviewer account changes nothing.
+ *
+ * Files are numbered in STORE order, not capture order: only the first two or three show in search
+ * results, so they carry the pitch (log fast, celebrate records, watch strength climb).
+ *
+ * Framing: a screen that opens on chrome a buyer doesn't care about (a Free-plan notice, filters,
+ * action buttons) is scrolled so its best content sits just under the sticky person/tab bar. That
+ * is a scroll position anyone can reach, not an edit -- nothing on the page is hidden or restyled.
+ *
+ * The write scenes log three Back Squat sets for Alex (the third one a real est.-1RM record), then
+ * DELETE exactly those sets and end the workout, so the reviewer account goes back to its seeded
+ * state. They refuse to run if Alex already has a workout in progress -- that would be someone
+ * else's, and the cleanup would delete it.
  *
  * Every image is a capture of the running app -- no mockups -- the same rule the marketing site's
  * screenshots follow (docs/marketing-site.md). The iOS status bar is not drawn: these are web
@@ -33,31 +45,72 @@ const DEVICES = {
 };
 const which = (process.env.DEVICES || 'iphone,ipad').split(',');
 if (!EMAIL || !PASSWORD) throw new Error('set EMAIL and PASSWORD for the household to capture');
+const API = process.env.API || (await (await fetch(`${FRONTEND}/config.json`)).json()).apiUrl;
+
+// The write scenes' sets, chosen against Alex's seeded squat (best est. 1RM 277.5 = 225 x 7): two
+// working sets that are not records, then one that is (235 x 6 = est. 282).
+const WORKING_SETS = [[225, 5], [225, 6]];
+const RECORD_SET = [235, 6];
 
 mkdirSync(OUT, { recursive: true });
 const browser = await chromium.launch();
+try {
+  for (const device of which) await capture(device);
+} finally {
+  await browser.close();
+}
 
-// Every device's read-only screens come first. A logged set starts a workout on the SERVER, and
-// from then on every screen on every device carries the "Session in progress" bar -- so the
-// set-logging scenes run last, once, on the first device.
-for (const device of which) await capture(device, false);
-if (ALLOW_WRITES) await capture(which[0], true);
-await browser.close();
-
-async function capture(device, writes) {
+async function capture(device) {
   const ctx = await browser.newContext({ ...DEVICES[device], colorScheme: 'light' });
   const page = await ctx.newPage();
+
+  // Loaded means no skeleton anywhere and the network quiet -- a shot taken a beat early shows grey
+  // placeholder bars where Last time and Best belong.
+  const settle = async () => {
+    await page.waitForLoadState('networkidle');
+    await page.waitForFunction(() => !document.querySelector('[class*="skeleton" i]'), null, { timeout: 30_000 });
+    await page.waitForTimeout(800); // charts and the refresh indicator
+  };
   const shot = async (name) => {
-    await page.waitForTimeout(800); // let charts and the refresh indicator settle
+    await settle();
     await page.screenshot({ path: `${OUT}/${device}-${name}.png` });
     console.log(`${device}-${name}.png`);
   };
   const tab = async (name) => {
     await page.getByRole('link', { name, exact: true }).click();
-    await page.waitForLoadState('networkidle');
-    // The app keeps the window's scroll position across a tab switch, so a tab opened after the
-    // scrolled Trends chart would be captured partway down. Every screen starts from its top.
+    await settle();
+    // The app keeps the window's scroll position across a tab switch; every screen starts from its top.
     await page.evaluate(() => window.scrollTo(0, 0));
+  };
+  const person = async (name) => {
+    await page.locator('.person-pill-bar').getByRole('button', { name: new RegExp(name) }).click();
+    await settle();
+  };
+  // Scroll so `locator`'s top sits `gap` CSS px under the sticky chrome. Repeats because charts lay
+  // out lazily as they scroll in, which moves everything below them after the first scroll.
+  // With `card`, the edge parked is the bordered card around the text, not the text itself -- so
+  // the gap above it is the page's own spacing and no sliver of the card above shows.
+  const park = async (locator, gap, { card = false } = {}) => {
+    await locator.waitFor();
+    for (let i = 0; i < 5; i++) {
+      const delta = await locator.evaluate((el, [g, toCard]) => {
+        let target = el;
+        while (toCard && target.parentElement && getComputedStyle(target).borderTopWidth === '0px') target = target.parentElement;
+        const chrome = document.querySelector('.app-chrome')?.getBoundingClientRect().bottom ?? 0;
+        return target.getBoundingClientRect().top - chrome - g;
+      }, [gap, card]);
+      if (Math.abs(delta) < 1) return;
+      await page.evaluate((d) => window.scrollBy(0, d), delta);
+      await page.waitForTimeout(400);
+    }
+  };
+  const openExercise = async (name) => {
+    await tab('Log');
+    const backToPicker = page.getByRole('button', { name: /All exercises/ });
+    if (await backToPicker.isVisible()) await backToPicker.click();
+    await page.getByRole('button', { name, exact: true }).first().click();
+    await page.getByRole('button', { name: /^Log set/ }).waitFor();
+    await settle();
   };
 
   await page.goto(`${FRONTEND}/login`);
@@ -65,65 +118,90 @@ async function capture(device, writes) {
   await page.getByPlaceholder('Password').fill(PASSWORD);
   await page.getByPlaceholder('Password').press('Enter');
   await page.waitForURL(/\/app\//, { timeout: 60_000 });
-  await page.waitForLoadState('networkidle');
+  await settle();
 
-  const openSquat = async () => {
-    await tab('Log');
-    const backToPicker = page.getByRole('button', { name: /All exercises/ });
-    if (await backToPicker.isVisible()) await backToPicker.click();
-    await page.getByRole('button', { name: 'Barbell Back Squat', exact: true }).first().click();
-    await page.getByRole('button', { name: /^Log set/ }).waitFor();
-  };
-
-  if (writes) {
-    await openSquat();
-    // Mid-workout: one set at what the screen prefilled, so the rest timer is running.
-    await page.getByRole('button', { name: /^Log set/ }).click();
-    await page.getByText('Set 1', { exact: true }).waitFor();
-    await page.waitForTimeout(4000); // a few seconds on the rest clock reads as real
-    await shot('1-log-mid-workout');
-
-    // A record: a heavier set than any before it.
-    const weight = page.getByRole('textbox', { name: 'Weight (lb)' });
-    await weight.fill('245');
-    await weight.press('Enter');
-    const reps = page.getByRole('textbox', { name: 'Reps' });
-    await reps.fill('5');
-    await reps.press('Enter');
-    await page.getByRole('button', { name: /^Log set/ }).click();
-    await page.getByText('New PR!').waitFor();
-    await page.waitForTimeout(1200); // past the entrance animation
-    await shot('2-pr-celebration');
-    await page.getByText('New PR!').click({ force: true });
-    await ctx.close();
-    return;
+  // ---- read-only scenes, before anything is logged (a live workout puts its bar on every screen)
+  await person('Sam');
+  await tab('Trends');
+  await page.locator('select').last().selectOption({ label: 'Barbell Back Squat' });
+  if (device === 'iphone') {
+    await park(page.getByText(/^Exercise progress/).first(), 12, { card: true });
+    await shot('03-progress-chart');
+    await page.evaluate(() => window.scrollTo(0, 0));
+    // Below Streak and This week: a Tuesday-morning "0 workouts, -4 vs last week" is no pitch.
+    await park(page.getByText(/^Volume · last 30 days$/i).first(), 12, { card: true });
+  } else {
+    // The iPad lays Streak, This week and Volume out as one row, and the page is too short to park
+    // the progress chart at the top -- so one Trends shot, from the heatmap down: the weekly bars
+    // and the squat chart both fit under it.
+    await park(page.getByText(/^Consistency/).first(), 12, { card: true });
   }
+  await shot('04-trends-overview');
+
+  await person('Alex');
+  await tab('PRs');
+  await park(page.getByText('Record', { exact: true }).first(), 12);
+  await shot('05-prs');
 
   await tab('History');
-  await shot('3-history');
+  await park(page.getByText(/ · \d{1,2}:\d{2} [AP]M$/).first(), 12);
+  await shot('06-history');
 
-  await tab('Trends');
-  await shot('4-trends');
-  await page.locator('select').last().selectOption({ label: 'Barbell Back Squat' });
-  // Park the chart's card just under the sticky chrome, so the whole chart is on screen.
-  await page.evaluate(() => {
-    const heading = [...document.querySelectorAll('*')].find((el) =>
-      el.childElementCount === 0 && el.textContent.startsWith('Exercise progress'));
-    const card = heading.closest('section, [class*="card"]') ?? heading.parentElement.parentElement;
-    const chromeBottom = document.querySelector('.app-chrome')?.getBoundingClientRect().bottom ?? 0;
-    window.scrollBy(0, card.getBoundingClientRect().top - chromeBottom - 12);
-  });
-  await shot('5-trends-exercise');
+  await tab('Log');
+  const backToPicker = page.getByRole('button', { name: /All exercises/ });
+  if (await backToPicker.isVisible()) await backToPicker.click();
+  await shot('07-start-workout');
 
-  await tab('PRs');
-  await shot('6-prs');
-
-  await tab('Routines');
-  await shot('7-routines');
-
-  // Log: the exercise screen before a set -- Last time, Best, the steppers.
-  await openSquat();
-  await shot('1-log');
-
+  if (ALLOW_WRITES) await writeScenes();
   await ctx.close();
+
+  async function writeScenes() {
+    const token = await page.evaluate(() => localStorage.getItem('workout-tracker-token'));
+    const call = async (method, path) => {
+      const res = await fetch(`${API}${path}`, { method, headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}`);
+      return res.status === 204 ? null : res.json();
+    };
+    const alex = (await call('GET', '/api/people')).find((p) => p.name === 'Alex');
+    if (await call('GET', `/api/people/${alex.id}/sessions/live`)) {
+      throw new Error('Alex already has a workout in progress -- not logging over it (and not deleting it)');
+    }
+    try {
+      await openExercise('Barbell Back Squat');
+      for (const [w, r] of WORKING_SETS) await logSet(w, r);
+      // A minute on the rest clock reads as the middle of a workout; a few seconds reads as a demo.
+      await page.waitForTimeout(72_000);
+      await shot('01-log-mid-workout');
+
+      await logSet(...RECORD_SET);
+      await page.getByText('New PR!').waitFor();
+      await page.waitForTimeout(1200); // past the entrance animation, confetti still falling
+      await page.screenshot({ path: `${OUT}/${device}-02-pr-celebration.png` });
+      console.log(`${device}-02-pr-celebration.png`);
+      await page.keyboard.press('Escape');
+    } finally {
+      // Delete exactly this run's sets (the guard above means the live workout is ours), then end it.
+      const live = await call('GET', `/api/people/${alex.id}/sessions/live`);
+      if (live) {
+        await page.waitForLoadState('networkidle');
+        const squat = (await call('GET', `/api/people/${alex.id}/exercises`)).find((e) => e.name === 'Barbell Back Squat');
+        for (const s of await call('GET', `/api/sessions/${live.id}/sets?exerciseId=${squat.id}`)) {
+          await call('DELETE', `/api/sets/${s.id}`);
+        }
+        await call('POST', `/api/people/${alex.id}/sessions/live/end`);
+        console.log(`cleaned up: workout ${live.id} emptied and ended`);
+      }
+    }
+  }
+
+  async function logSet(weight, reps) {
+    const before = await page.getByText(/^Set \d+$/).count();
+    for (const [label, value] of [['Weight (lb)', weight], ['Reps', reps]]) {
+      const box = page.getByRole('textbox', { name: label });
+      await box.fill(String(value));
+      await box.press('Enter');
+    }
+    await page.getByRole('button', { name: /^Log set/ }).click();
+    await page.getByText(`Set ${before + 1}`, { exact: true }).waitFor();
+  }
 }

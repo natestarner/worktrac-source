@@ -96,6 +96,20 @@ checks that every barbell lift's est.-1RM and top-weight charts finish at their 
   13" (2064 × 2752) sizes App Store Connect requires, light mode, captured from the running app. Two
   scenes have to log a set (mid-workout with the rest timer running, and the PR celebration); they
   run only with `ALLOW_WRITES=1`, so against production it captures read-only screens unless asked.
+  They log three squat sets for Alex (the third a real est.-1RM record), then delete exactly those
+  sets and end the workout, so the account returns to its seeded state. They refuse to start if
+  Alex already has a workout going.
+- **Framing:** History, PRs and Trends open on the Free plan's "See Plus" notice, so those scenes
+  scroll until their content sits just under the sticky person/tab bar. Nothing is hidden or
+  restyled. The app's logo header scrolls away with it; it is kept only where a screen is captured
+  from the top. Don't splice it back in, because that would show a screen state that can't exist.
+- **Captions** come from `e2e/tools/app-store-frames.mjs`. Each real capture, unaltered, sits under
+  the brand lockup and a one-line headline on a cream ground, with the mark's circles faint behind
+  it. Nate chose the `cream` theme on 2026-10-27 over `night` and `sunrise`, and asked for quieter
+  background circles. The headlines reuse the marketing site's own claims. These captioned panels
+  are what gets uploaded.
+- **Store order is the file number.** Only the first two or three show in search results: logging,
+  the PR celebration, then the strength chart.
 - **Capture the finals in the morning.** The mid-workout scene shows the real start time ("Session in
   progress · started 6:12 AM" reads like a gym; "10:44 PM" does not).
 - The window a Free account shows moves forward every day. By mid-November the July vacation and
