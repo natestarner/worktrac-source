@@ -174,7 +174,9 @@ test.describe('marketing landing page', () => {
     const images = page.locator('main img[src*="/assets/shots/"]');
     expect(await images.count()).toBeGreaterThan(0);
     for (const img of await images.all()) {
-      await img.scrollIntoViewIfNeeded();
+      // Scrolled near so a lazy one loads. The hero tablet is hidden on phones; it isn't lazy, so it
+      // loads without being scrolled to.
+      if (await img.isVisible()) await img.scrollIntoViewIfNeeded();
       await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
       const { src, declared, natural } = await img.evaluate((el: HTMLImageElement) => ({
         src: el.getAttribute('src'),
