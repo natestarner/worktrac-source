@@ -140,9 +140,11 @@ test.describe('Log workout', () => {
 
     // First-ever set is always a PR -- Epley's 1RM collapses to a meaningless 0 at
     // weight 0, so the celebration should show the rep count instead.
+    // Scoped to the overlay: the Best card behind it names the same record ("Most reps · 8 reps").
     await expect(page.getByText('New PR!')).toBeVisible();
-    await expect(page.getByText('8 reps')).toBeVisible();
-    await expect(page.getByText('Bodyweight')).toBeVisible();
+    const celebration = page.getByRole('dialog');
+    await expect(celebration.getByText('8 reps')).toBeVisible();
+    await expect(celebration.getByText('Bodyweight')).toBeVisible();
     await page.getByText('New PR!').click({ force: true }); // dismiss (scrim click)
 
     await page.getByRole('link', { name: 'PRs' }).click();
