@@ -166,57 +166,22 @@ test.describe('marketing landing page', () => {
     expect(accentColor).not.toBe('rgb(28, 27, 25)'); // --color-text: never stuck on the pre-animation ink color
   });
 
-  test('the household clip loads only once scrolled near, and never under reduced motion', async ({ page }) => {
-    const video = page.locator('video.js-lazy-video');
-
-    // Reduced motion: the clip must never be fetched -- the poster frame is the whole experience.
-    await page.emulateMedia({ reducedMotion: 'reduce' });
+  // Every product screenshot is re-taken by tools/marketing-demo-shots.mjs, and each <img> declares
+  // its size up front so the page doesn't jump while they load. A re-take that changes a capture's
+  // shape without the markup following stretches it -- silently, and differently at every width.
+  test('every product image is declared at its real shape', async ({ page }) => {
     await page.goto('/');
-    const clipRequests: string[] = [];
-    page.on('request', (r) => r.url().includes('app-household.webm') && clipRequests.push(r.url()));
-    await video.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(500);
-    expect(clipRequests).toEqual([]);
-    await expect(video).toHaveAttribute('poster', /app-household-poster\.jpg/);
-
-    // Normal motion: nothing fetched before the section is in view, something fetched after.
-    // A fresh goto (not reload) so the scroll position from the reduced-motion check above --
-    // which deliberately scrolled the video into view -- doesn't carry over and pre-empt this.
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.goto('/');
-    const beforeScroll: string[] = [];
-    page.on('request', (r) => r.url().includes('app-household.webm') && beforeScroll.push(r.url()));
-    await page.waitForTimeout(300);
-    expect(beforeScroll).toEqual([]);
-
-    await video.scrollIntoViewIfNeeded();
-    await expect
-      .poll(async () => video.evaluate((v: HTMLVideoElement) => v.currentSrc), { timeout: 5000 })
-      .toContain('app-household.webm');
-  });
-
-  // Regression test for a real bug (2026-08-24, found on the deployed lower site): the base
-  // `img { height: auto }` rule doesn't cover <video>, so the household clip's `height="761"`
-  // HTML attribute applied as a literal CSS height regardless of how far width:100% shrank the
-  // box -- barely visible on desktop (~10% too tall), badly broken on a phone-width column
-  // (nearly 2x too tall, most of the card empty). Assert the rendered box keeps the video's own
-  // aspect ratio at both a phone and a desktop width, rather than assuming a fix at one width
-  // implies the other.
-  test('the household clip keeps its own aspect ratio at both a phone and a desktop width', async ({ page }) => {
-    for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
-      const context = await page.context().browser()!.newContext({ viewport });
-      const p = await context.newPage();
-      await p.goto('/');
-      const video = p.locator('video.js-lazy-video');
-      await video.scrollIntoViewIfNeeded();
-      const ratios = await video.evaluate((v: HTMLVideoElement) => ({
-        rendered: v.clientWidth / v.clientHeight,
-        // videoWidth/videoHeight report the clip's real intrinsic resolution once metadata
-        // loads; falling back to the width/height HTML attributes covers a slow/blocked load.
-        natural: (v.videoWidth || Number(v.getAttribute('width'))) / (v.videoHeight || Number(v.getAttribute('height'))),
+    const images = page.locator('main img[src*="/assets/shots/"]');
+    expect(await images.count()).toBeGreaterThan(0);
+    for (const img of await images.all()) {
+      await img.scrollIntoViewIfNeeded();
+      await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+      const { src, declared, natural } = await img.evaluate((el: HTMLImageElement) => ({
+        src: el.getAttribute('src'),
+        declared: Number(el.getAttribute('width')) / Number(el.getAttribute('height')),
+        natural: el.naturalWidth / el.naturalHeight,
       }));
-      expect(ratios.rendered, `at ${viewport.width}px wide`).toBeCloseTo(ratios.natural, 1);
-      await context.close();
+      expect(declared, src!).toBeCloseTo(natural, 2);
     }
   });
 });

@@ -126,17 +126,18 @@ with `<img>`'s styling just because the two look similar in markup. Verify at a 
 width (390px), not just desktop: the distortion scales with how much the width shrinks, so a
 desktop-only check can look "close enough" while a phone-width check is unmistakably broken.
 
-## Product screenshots: real captures, with two documented manual exceptions
+## Product screenshots: one script, one household
 
-`marketing/assets/shots/` is meant to be fully reproducible via
-`e2e/tools/marketing-capture.mjs` + `marketing-shots.mjs` (see `docs/marketing-site.md`). As of
-2026-08-26 four files are a manual, undocumented-in-tooling exception (device-iphone.jpg,
-app-log.jpg, plus the household section's video and poster) — see the blockquote in
-`docs/marketing-site.md` for what that means before assuming the scripted pipeline will
-regenerate them. `device-ipad.jpg`, `app-trends-main.jpg` and `app-trends-secondary.jpg` were
-re-sourced 2026-08-26 from real on-device iPad captures (see below) and are no longer part of
-this exception, though they're still not produced by the scripted pipeline either — they were
-hand-cropped once, not wired into `marketing-shots.mjs`.
+Every image in `marketing/assets/shots/` and `assets/og-image.png` comes from
+`e2e/tools/marketing-demo-shots.mjs`, captured from the reviewer demo household (Alex, Sam,
+Jordan), the same people the App Store screenshots show. **Don't add a capture from anywhere else**
+(an on-device photo, a real family's account): it brings back mismatched names and a real family on
+a public page, which is what this replaced on 2026-10-27.
+
+- **Its `workout` scene logs real sets on the account App Review uses.** Never run it while a
+  submission is in review; `SCENES=trends,offline,og` writes nothing.
+- **After a re-take, update each `<img>`'s `width`/`height`.** `landing.spec.ts` fails any image
+  whose declared shape doesn't match its file.
 
 ## Device-framed screenshots must use the device's real aspect ratio, not a content-tight crop
 
@@ -148,12 +149,12 @@ the bezel read as a wide, flat panel rather than a tablet. The mask-fade this fi
 section describes was partly hiding this — fading the bottom out meant the wrong proportions
 never resolved into a hard, legible edge.
 
-**Fix: use the device's full real screenshot, status bar and all**, not a tight content crop —
-`device-ipad.jpg` is now a real iPad Air 11" capture (2360×1640 native, ~1.44:1) resized to
-1700×1181, letting the correct aspect ratio come from the source rather than being reconstructed
-after the fact. This only matters for the **device-framed** images (currently just the hero) —
-`.figure`-card screenshots (Log screen, Trends) aren't device silhouettes, so they can crop to
-any shape without looking wrong; keep cropping those to content, excluding OS chrome, as before.
+**Fix: use the device's full screen at its real proportions**, not a tight content crop. The hero
+pair are full-screen captures at a real iPad Air 11" landscape (1180 x 820) and 6.9" iPhone
+(440 x 956) viewport, so the aspect ratio comes from the source rather than being reconstructed
+after the fact. This only matters for the **device-framed** images (currently just the hero):
+`.figure`-card screenshots (Log screen, Trends) aren't device silhouettes, so they can crop to any
+shape without looking wrong. Keep cropping those to content, excluding OS chrome, as before.
 
 ## Shadow depth: `--contact-shadow`, not a new box-shadow value
 
@@ -182,24 +183,6 @@ rather than cast a shadow. That mask was quietly swallowing each device's own `b
 a mask clips everything painted for the element, shadow included — which is part of why the pair
 read as dissolving into the page rather than resting on it.
 
-## Regenerating the household video needs `ffmpeg`, and the source is HEVC, not H.264
-
-`ipad_video_showcase.MP4`-style source recordings from an iPad are **HEVC** (`hvc1`), not H.264.
-Chromium — including Playwright's bundled build — cannot decode HEVC, so loading one into a
-`<video>` element (e.g. to pull frames via canvas, as `docs/marketing-site.md`'s household-video
-section assumed) hangs forever waiting for a `loadedmetadata` event that never fires. This isn't
-a timeout to raise; the browser genuinely cannot read the file.
-
-There is no system `ffmpeg` on the dev machine this was found on, and installing one via
-`choco install ffmpeg` fails without admin rights (`Cannot create directory
-"C:\ProgramData\chocolatey\lib-bad"`). **A portable static build works with no install and no
-admin rights**: download `https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip`,
-unzip anywhere writable, and call `<extracted>\bin\ffmpeg.exe` by full path. That single binary
-handles probing (`-i` with no output), scanning content via a contact-sheet
-(`-vf fps=1,tile=NxM`), trimming (`-ss`/`-t`), cropping (`-vf crop=...`), and the final VP9
-encode (`-c:v libvpx-vp9`) — no Chromium/canvas workaround needed at all once ffmpeg is
-available.
-
 ## A class this stylesheet does not define fails SILENTLY, and nothing catches it
 
 There is no build step, so an unknown class name is not an error anywhere — not at author time,
@@ -217,8 +200,8 @@ as a raw browser disclosure triangle. Both shipped to production on `for-trainer
   `details` into a second FAQ mechanism.
 
 **When adding markup here, check every class you write actually exists in `styles.css`.** The
-whole-file audit is one pass over `class="..."` against `\.([a-zA-Z0-9_-]+)` in the stylesheet; the
-only legitimate miss is a JS hook (`js-lazy-video`). `e2e/marketing-tests` cannot catch this class
+whole-file audit is one pass over `class="..."` against `\.([a-zA-Z0-9_-]+)` in the stylesheet; a
+JS hook class would be the only legitimate miss (there are none today). `e2e/marketing-tests` cannot catch this class
 of bug — every assertion there is about text and links, and unstyled markup still contains both.
 
 ## The header is a width budget, and a button label must never wrap
