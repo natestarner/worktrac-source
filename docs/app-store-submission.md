@@ -14,7 +14,7 @@ submission time.
 | Category | Health & Fitness (secondary: none) | |
 | Keywords | `lifting,weightlifting,strength,sets,reps,PR,1RM,training,fitness,offline,kids,coach,routine,barbell` | 99 / 100 |
 | Promotional text | Log a set in two taps, switch between everyone in the house, and keep logging with no signal. Your whole history, PRs and trends, on one screen. | 144 / 170 |
-| Support URL | https://huddle.fitness (the in-app Contact Us also works) | |
+| Support URL | https://huddle.fitness/support.html (public, so it works signed out; Stripe's support URL is the same page) | |
 | Marketing URL | https://huddle.fitness | |
 | Privacy Policy URL | https://huddle.fitness/privacy.html | |
 

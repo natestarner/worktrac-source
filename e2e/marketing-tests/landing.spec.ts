@@ -93,10 +93,23 @@ test.describe('marketing landing page', () => {
     await expect(footer.getByRole('link', { name: 'Privacy' })).toBeVisible();
   });
 
+  // Stripe receipts and the App Store listing both name this page as the support URL, and the
+  // people who follow it (a charge they don't recognize, a forgotten password) are mostly signed
+  // out -- which is why it lives here and not at the app's own /app/help.
+  test('the support page is reachable from the footer and gives a way to reach us', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('.site-footer').getByRole('link', { name: 'Support' }).click();
+    await expect(page).toHaveURL(/\/support\.html$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Support' })).toBeVisible();
+    await expect(
+      page.locator('main').getByRole('link', { name: 'support@huddle.fitness' }).first()
+    ).toHaveAttribute('href', 'mailto:support@huddle.fitness');
+  });
+
   // Apple and Google verify the developer against a website that names the seller, and the seller
   // name must match the legal entity exactly -- "Starner Consulting" without the "Co." is not it.
   // Every page, because a reviewer can land on any of them.
-  for (const path of ['/', '/for-trainers.html', '/pricing.html', '/terms.html', '/privacy.html']) {
+  for (const path of ['/', '/for-trainers.html', '/pricing.html', '/terms.html', '/privacy.html', '/support.html']) {
     test(`${path} names the legal entity in its footer`, async ({ page }) => {
       await page.goto(path);
       await expect(page.locator('.site-footer__legal')).toHaveText(

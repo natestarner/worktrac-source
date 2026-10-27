@@ -20,6 +20,13 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+  <!-- The support URL Stripe receipts and the App Store listing point at, so it must be public and
+       reachable signed out. -->
+  <url>
+    <loc>https://huddle.fitness/support.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
+  </url>
   <!-- Legal pages were absent from this file until now, which meant the two documents a visitor is
        most likely to go looking for were the two least likely to be indexed. -->
   <url>
