@@ -218,13 +218,13 @@ forEachConnectivityMode<{ personName: string }>('a bodyweight volume record coun
     const back = page.getByRole('button', { name: /All exercises/ });
     if (await back.isVisible()) await back.click();
     await pickExercise(page, 'Chin-up');
-    // ⚠️ The "Last time" card, NOT the Best card's "(0lb×10)". The Best card folds in sets that are
+    // ⚠️ The "Last time" card, NOT the Best card's "10 reps". The Best card folds in sets that are
     // still saving (effectiveBest over pendingBeforeSession -- which includes a create from a
     // workout already ended), so it passed on the in-flight baseline write itself and proved
     // nothing about the server. "Last time" is only ever filled by a summary the server returned,
     // so if the drain above ever stops doing its job this fails HERE, in setup, instead of letting
     // the mode run over the wrong data.
-    await expect(page.getByText('0lb×10', { exact: true })).toBeVisible();
+    await expect(page.getByText('BW×10', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: /All exercises/ }).click();
     return { personName };
   },

@@ -94,7 +94,7 @@ test.describe('endurance exercises', () => {
     await expect(page.getByRole('button', { name: 'Start timer' })).toHaveCount(0);
 
     await logSetAt(page, 0, 15);
-    await expect(page.getByText('0 lb × 15')).toBeVisible();
+    await expect(page.getByText('BW × 15')).toBeVisible();
   });
 
   test('a household can add its own timed exercise', async ({ page, request }) => {

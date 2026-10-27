@@ -13,6 +13,8 @@ import { formatRestTime } from './datetime';
 // where you read it back.
 //
 //   135lb×8      a lift
+//   BW×10        a bodyweight set -- a weight of 0 means bodyweight (the handbook says so), and
+//                "0lb×10" read as a blank someone forgot to fill in
 //   0:45         a bodyweight hold
 //   25lb×0:45    a loaded hold
 
@@ -20,11 +22,16 @@ function isHold(set) {
   return set != null && set.durationSeconds != null;
 }
 
+function isBodyweight(set) {
+  return Number(set?.weight) === 0;
+}
+
 export function formatSet(set) {
   if (isHold(set)) {
     const time = formatRestTime(set.durationSeconds);
     return Number(set.weight) > 0 ? `${set.weight}${set.unit || 'lb'}×${time}` : time;
   }
+  if (isBodyweight(set)) return `BW×${set.reps}`;
   return `${set.weight}${set.unit || 'lb'}×${set.reps}`;
 }
 
@@ -33,6 +40,7 @@ export function formatSetSpaced(set) {
     const time = formatRestTime(set.durationSeconds);
     return Number(set.weight) > 0 ? `${set.weight} ${set.unit || 'lb'} × ${time}` : time;
   }
+  if (isBodyweight(set)) return `BW × ${set.reps}`;
   return `${set.weight} ${set.unit || 'lb'} × ${set.reps}`;
 }
 

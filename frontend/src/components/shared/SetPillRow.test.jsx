@@ -89,8 +89,7 @@ describe('SetPillRow', () => {
     // The same record must not be "Longest hold" in the overlay and "est. 1rm" on the row it made.
     it('names a bodyweight record by its reps, not as an estimated 1RM', () => {
       render(<SetPillRow sets={[{ id: 1, weight: 0, reps: 12, unit: 'lb' }]} prMarks={[['est1rm']]} />);
-      // formatSet spells a bodyweight set "0lb×12" -- existing behaviour, not part of this change.
-      expect(screen.getByTitle(/Personal record/)).toHaveAccessibleName('0lb×12, personal record: most reps');
+      expect(screen.getByTitle(/Personal record/)).toHaveAccessibleName('BW×12, personal record: most reps');
     });
 
     it('names a hold record by its duration', () => {
