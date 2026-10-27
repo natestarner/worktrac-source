@@ -108,6 +108,12 @@ checks that every barbell lift's est.-1RM and top-weight charts finish at their 
   it. Nate chose the `cream` theme on 2026-10-27 over `night` and `sunrise`, and asked for quieter
   background circles. The headlines reuse the marketing site's own claims. These captioned panels
   are what gets uploaded.
+- **Header** (version page → Header and Search Results → Header) comes from
+  `e2e/tools/app-store-header.mjs`: 21:9, 3840 x 1646. The lockup and the site's hero line sit inside
+  the art safe area from Apple's own template (1646 x 661, centred), and the tool refuses to render
+  if they don't fit. Two real captures flank it outside the safe area. **Search Results is left
+  empty on purpose**: without that asset, the first three screenshots show in search, and those sell
+  the app better than one banner. Every asset is RGB with no alpha channel, as Apple requires.
 - **Store order is the file number.** Only the first two or three show in search results: logging,
   the PR celebration, then the strength chart.
 - **Capture the finals in the morning.** The mid-workout scene shows the real start time ("Session in
