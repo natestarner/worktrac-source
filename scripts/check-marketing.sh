@@ -179,6 +179,22 @@ for page in "${PAGES[@]}"; do
 done
 [ "$missing_sitemap" -eq 0 ] && pass "every page is in sitemap.xml"
 
+# --- 10. Every App Store reference names the same, real app ------------------
+# The badge links, the FAQ link and Safari's Smart App Banner each carry the app's numeric App Store
+# id. A typo in one sends people to somebody else's app or to a "not available" page, and nothing on
+# our side would show it.
+store_ids=$(grep -ohE 'apps\.apple\.com/[^"]*/id[^"/?]+|apple-itunes-app" content="app-id=[^"]+' "${PAGES[@]}" \
+  | sed -E 's#.*/id##; s#.*app-id=##' | sort -u)
+if [ -z "$store_ids" ]; then
+  pass "no App Store links"
+elif [ "$(printf '%s\n' "$store_ids" | wc -l)" -ne 1 ]; then
+  fail "App Store links disagree on the app id: $(echo $store_ids)"
+elif ! printf '%s' "$store_ids" | grep -qE '^[0-9]+$'; then
+  fail "App Store app id is not a number: $store_ids"
+else
+  pass "every App Store link names app id $store_ids"
+fi
+
 echo
 if [ "$fails" -gt 0 ]; then
   echo "$fails check(s) failed."

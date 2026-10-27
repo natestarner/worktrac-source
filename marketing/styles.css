@@ -695,6 +695,7 @@ img {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
   gap: var(--space-3);
 }
 
@@ -1413,6 +1414,31 @@ img {
 .cta-final .prose {
   max-width: 52ch;
   font-size: var(--text-lead);
+}
+
+.cta-final__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Apple's "Download on the App Store" badge, its own artwork unaltered (assets/app-store-badge.svg,
+   from developer.apple.com). Apple's rules for it: never recoloured, redrawn or animated, at least
+   40px tall on screen, and clear space of a quarter of its height around it -- the 12px gap of the
+   rows it sits in. 54px matches .btn's min-height, so it reads as a peer of the button beside it.
+   The black badge is the one Apple prefers on any ground; its grey keyline carries it on the dark
+   band, so there is no white variant to keep in sync. */
+.store-badge {
+  display: inline-flex;
+  border-radius: var(--radius-md);
+}
+
+.store-badge img {
+  display: block;
+  width: auto;
+  height: 54px;
 }
 
 .site-footer {
