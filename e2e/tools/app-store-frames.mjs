@@ -40,7 +40,7 @@ const THEMES = {
   // Warm paper. Calm, and the app's own orange controls become the brightest thing on the page.
   cream: {
     ground: 'linear-gradient(165deg, #fbf8f3 0%, #f4ebe0 100%)',
-    ink: '#3e3a37', sub: '#6e655e', lockup: 'onlight', circleOpacity: 0.07,
+    ink: '#3e3a37', sub: '#6e655e', lockup: 'onlight', circleOpacity: 0.08,
     shadow: '0 30px 80px rgba(90, 50, 20, 0.22), 0 0 0 1px rgba(62, 58, 55, 0.08)',
   },
   // The brand kit's dark surface, with an orange glow behind the screenshot.
@@ -72,18 +72,19 @@ for (const file of readdirSync(IN).filter((f) => f.endsWith('.png')).sort()) {
   const [W, H] = SIZES[device];
   const [title, sub] = CAPTIONS[scene];
   const u = W / 1320; // type and spacing scale with the canvas width
-  // The mark's four circles as soft caps tucked into the corners, their outer edges OFF the canvas.
-  // Each edge must reach the side of the canvas before the headline starts, so no arc or seam ever
-  // crosses the words (Nate, 2026-10-27: arcs meeting under the writing read as chaotic). Measured
-  // in canvas WIDTHS, from the top or bottom edge, so the curve clears the text on the squarer iPad
-  // canvas too: [colour, x, y from that edge, radius].
-  const circles = [
-    ['#E8734A', 0.02, -0.18, 0.35, 'top'], ['#F2A65A', 0.98, -0.19, 0.33, 'top'],
-    ['#F2EDE1', 0.04, 0.11, 0.34, 'bottom'], ['#B5542D', 0.96, 0.07, 0.3, 'bottom'],
-  ].map(([c, fx, fy, fr, edge]) => {
-    const r = fr * W;
-    const cy = edge === 'top' ? fy * W : H - fy * W;
-    return `<i style="left:${fx * W - r}px;top:${cy - r}px;width:${2 * r}px;height:${2 * r}px;background:${c}"></i>`;
+  // The mark itself, blown up behind the screenshot: its four circles in their real arrangement
+  // (marketing/index.html's brand__mark), so it reads as the huddle gathered behind the phone rather
+  // than as decoration. It shows only beside the screenshot, and its top edge stays well below the
+  // headline -- arcs that met the words read as chaotic, corner caps as ornament (Nate, 2026-10-27).
+  const MARK = [['#E8734A', 200, 175, 34], ['#F2A65A', 258, 168, 29], ['#F2EDE1', 198, 221, 25], ['#B5542D', 250, 219, 19]];
+  const scale = (1.25 * W) / 121; // the mark is 121 units wide; the cluster bleeds off both sides
+  const [mx, my] = [226, 192]; // the mark's centre
+  const reach = (my - 141) * scale; // centre to the top of the highest circle (the orange)
+  const cy = Math.max(0.62 * H, 0.62 * W + reach); // headline ends ~0.37W down; keep a clear band
+  const circles = MARK.map(([c, x, y, r0]) => {
+    const r = r0 * scale;
+    const [x0, y0] = [W / 2 + (x - mx) * scale, cy + (y - my) * scale];
+    return `<i style="left:${x0 - r}px;top:${y0 - r}px;width:${2 * r}px;height:${2 * r}px;background:${c}"></i>`;
   }).join('');
   const src = `data:image/png;base64,${readFileSync(join(IN, file)).toString('base64')}`;
   await page.setViewportSize({ width: W, height: H });
