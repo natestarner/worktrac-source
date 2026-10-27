@@ -317,7 +317,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     const slow = await delayNetwork(page, /\/api\/people\/\d+\/live-sets/, 4000);
     await page.getByRole('button', { name: /Log set/ }).click();
     await dismissPrCelebration(page);
-    await expect(page.getByText('0 lb × 8', { exact: true })).toBeVisible();
+    await expect(page.getByText('BW × 8', { exact: true })).toBeVisible();
 
     // Outlast the query persister's 1s throttle so the PROVISIONAL session is what reaches disk --
     // without this the reload restores a snapshot with no liveSession entry and the interesting
@@ -332,7 +332,7 @@ test.describe('Intermittent connectivity — online but the backend is unreachab
     // Settled state: the session is live again and the set is listed under it -- i.e. the
     // revalidation resolved to the REAL session id rather than leaving contextSessionId null.
     await expect(page.getByText(/Session in progress/)).toBeVisible();
-    await expect(page.getByText('0 lb × 8', { exact: true })).toBeVisible();
+    await expect(page.getByText('BW × 8', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(1);
   });
 });

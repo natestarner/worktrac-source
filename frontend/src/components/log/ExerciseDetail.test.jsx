@@ -2695,6 +2695,20 @@ describe('ExerciseDetail duration-tracked exercises', () => {
     expect(screen.getByText('1:45')).toBeInTheDocument();
   });
 
+  // Epley is 0 at a weight of 0, so a pull-up's Best card read "0 lb  (0lb×10)" under "Est. 1RM".
+  // Its record is the most reps -- the name History's badge and the PR overlay already give it.
+  it('names a bodyweight Best card by its reps, not a zero estimate', async () => {
+    getExerciseSummary.mockResolvedValue({
+      lastSession: null,
+      best: { weight: 0, reps: 11, unit: 'lb', est1rm: 0 },
+    });
+    renderExerciseDetail({ exercise, liveSession: { id: 101 } });
+
+    expect(await screen.findByText('11 reps')).toBeInTheDocument();
+    expect(screen.getByText('Most reps')).toBeInTheDocument();
+    expect(screen.queryByText(/0 lb/)).toBeNull();
+  });
+
   it('a strength exercise is completely untouched -- still Reps, still no timer', async () => {
     mockDraft({ draftExerciseId: exercise.id, weightDraft: 135, repsDraft: 8 });
     renderExerciseDetail({ exercise });

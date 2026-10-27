@@ -32,7 +32,7 @@ const EXERCISE = 'Barbell Bench Press';
 // Matches parity-active-loop.spec.ts: a brand-new exercise has no prefill, a blank weight logs as
 // 0 (bodyweight), and reps falls back to 8. The multiplication sign is U+00D7, as rendered by
 // formatSetSpaced.
-const ROW_LABEL = '0 lb × 8';
+const ROW_LABEL = 'BW × 8';
 
 // See parity-active-loop.spec.ts -- the picker filters CLIENT-SIDE over the single `exercises`
 // query, so a mode entered before the boot warm finished leaves it permanently empty. Pay that

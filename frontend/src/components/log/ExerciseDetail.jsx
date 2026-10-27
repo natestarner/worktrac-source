@@ -1087,15 +1087,22 @@ export default function ExerciseDetail({
   // A hold has no est. 1RM (BestDto sends null), so the card names the record it actually has:
   // the longest hold. Rendering "null lb" would be the "0 lb column" mistake bodyweightOnly
   // already avoids on the records table.
+  //
+  // A bodyweight best is the same mistake in reps: Epley collapses to 0 at a weight of 0, so the
+  // card read "0 lb  (0lb×10)" under "Est. 1RM". Its record is the most reps, so it says that.
   const bestText = !effectiveBest
     ? 'No PR yet'
     : effectiveBest.durationSeconds != null
       ? formatSetSpaced(effectiveBest)
-      : `${effectiveBest.est1rm} ${effectiveBest.unit}  (${effectiveBest.weight}${effectiveBest.unit}×${effectiveBest.reps})`;
+      : Number(effectiveBest.weight) === 0
+        ? `${effectiveBest.reps} ${effectiveBest.reps === 1 ? 'rep' : 'reps'}`
+        : `${effectiveBest.est1rm} ${effectiveBest.unit}  (${effectiveBest.weight}${effectiveBest.unit}×${effectiveBest.reps})`;
   // No "Best" prefix -- the record-tinted card already reads as a best against the plain "Last
   // time" card beside it, and the word was pushing the date onto its own wrapped line on iPhone
   // portrait once a name like "Est. 1RM" and a date both had to fit ("Best · Est. 1RM · Sep 12").
-  const bestCardLabel = isDuration ? 'Longest hold' : 'Est. 1RM';
+  // Named by the record the best set actually holds, through the same helper History's badge and
+  // the PR overlay use, so the three cannot call one record different things.
+  const bestCardLabel = effectiveBest ? est1rmLabelForSet(effectiveBest) : isDuration ? 'Longest hold' : 'Est. 1RM';
   // The same pair `lastLabel` uses above -- toLocalDateStr first, because slicing a UTC ISO string
   // directly lands on the wrong day either side of midnight (see utils/datetime.js).
   const bestDateLabel = effectiveBest?.sessionStartedAt

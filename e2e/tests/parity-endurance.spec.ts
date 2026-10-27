@@ -53,8 +53,8 @@ forEachConnectivityMode<void>('a hold logs and reads back as time', {
     await expect(page.getByText('Set 1')).toBeVisible();
     await expect(holdRow(page)).toBeVisible();
     // And never as a rep count -- the failure mode if durationSeconds is dropped anywhere along
-    // the way is a row reading "0 lb × 0", not a missing row.
-    await expect(page.getByText('0 lb × 0', { exact: true })).toHaveCount(0);
+    // the way is a row reading "BW × 0", not a missing row.
+    await expect(page.getByText('BW × 0', { exact: true })).toHaveCount(0);
   },
   afterReconnect: async (page) => {
     // The half `assert` cannot see while degraded: that the seconds actually reached the server

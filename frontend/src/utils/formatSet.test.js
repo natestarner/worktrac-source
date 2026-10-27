@@ -17,6 +17,29 @@ describe('formatSetSpaced', () => {
   });
 });
 
+// A weight of 0 is bodyweight, not a blank -- "0lb×10" on a pull-up read as a forgotten field.
+describe('formatSet with a bodyweight set', () => {
+  it('reads BW in place of a zero weight, whatever the unit', () => {
+    expect(formatSet({ weight: 0, reps: 10, unit: 'lb' })).toBe('BW×10');
+    expect(formatSet({ weight: 0, reps: 10, unit: 'kg' })).toBe('BW×10');
+    expect(formatSetSpaced({ weight: 0, reps: 10, unit: 'lb' })).toBe('BW × 10');
+  });
+
+  // The API sends weights as strings off a BigDecimal ("0.00"), and a draft can hold "0".
+  it('treats a zero sent as text the same way', () => {
+    expect(formatSet({ weight: '0.00', reps: 8 })).toBe('BW×8');
+    expect(formatSetSpaced({ weight: '0', reps: 8 })).toBe('BW × 8');
+  });
+
+  it('leaves any added load as a weight', () => {
+    expect(formatSet({ weight: 25, reps: 6, unit: 'lb' })).toBe('25lb×6');
+  });
+
+  it('still shows a bodyweight hold as a bare time', () => {
+    expect(formatSet({ weight: 0, reps: 0, durationSeconds: 45 })).toBe('0:45');
+  });
+});
+
 // A hold is the second measure a set can carry (see the exercises.tracking_type discriminator).
 // Times are m:ss via formatRestTime, the app's one seconds-to-clock formatter, so a duration reads
 // the same here as in the stepper, the hold timer and the rest timer.

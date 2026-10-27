@@ -4,7 +4,7 @@ import { dismissPrCelebration, pickExercise } from './support/exercises';
 import { forEachConnectivityMode } from './support/parity';
 
 const EXERCISE = 'Barbell Bench Press';
-const ROW_LABEL = '0 lb × 8';
+const ROW_LABEL = 'BW × 8';
 
 /**
  * ⚠️ THE SWITCH ITSELF IS NOT WHAT IS UNDER TEST HERE, AND IT CANNOT BE.

@@ -32,8 +32,8 @@ const NOTE_TEXT = 'Felt strong today';
 const editButtons = (page: Page) => page.getByRole('button', { name: 'Edit', exact: true });
 const deleteButtons = (page: Page) => page.getByRole('button', { name: 'Delete', exact: true });
 
-// The logged-set row renders as "<weight> lb × <reps>". Exact again -- the Est. 1RM readout on the
-// same screen renders it inside a longer string.
+// The logged-set row renders as "<weight> lb × <reps>", or "BW × <reps>" at a weight of 0 (formatSet).
+// Exact again -- the Est. 1RM readout on the same screen renders it inside a longer string.
 //
 // The weight here is 0 because these specs deliberately log at whatever the prefill offers, and a
 // brand-new exercise now has no prefill at all (computePrefillDraft returns null -- see
@@ -42,7 +42,7 @@ const deleteButtons = (page: Page) => page.getByRole('button', { name: 'Delete',
 // every connectivity mode; the number itself is incidental, and the specs that do care about the
 // number (offline-reads, offline-active-loop) set it explicitly.
 const setRow = (page: Page, weight: number, reps = 8) =>
-  page.getByText(`${weight} lb × ${reps}`, { exact: true });
+  page.getByText(weight === 0 ? `BW × ${reps}` : `${weight} lb × ${reps}`, { exact: true });
 
 // Loads the exercise catalog while still online, so the in-mode search has something to filter.
 // ExercisePicker searches CLIENT-SIDE over the single `exercises` query and renders results only

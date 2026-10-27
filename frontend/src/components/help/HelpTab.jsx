@@ -246,8 +246,8 @@ export default function HelpTab() {
         <Note title="A weight of 0 means bodyweight">
           <p>
             It isn&rsquo;t a blank you forgot to fill in. Pull-ups, push-ups and dips are logged at 0,
-            and Huddle treats that as a real value. Those exercises get ranked by reps rather than
-            by weight everywhere it matters.
+            and Huddle treats that as a real value: those sets read <strong>BW</strong>, as in BW ×
+            10. Those exercises get ranked by reps rather than by weight everywhere it matters.
           </p>
         </Note>
 

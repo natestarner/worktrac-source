@@ -75,7 +75,7 @@ forEachConnectivityMode<Record<string, never>>('no false "first time" record aft
 // (mergeLastSessionWithHistory).
 //
 // ⚠️ SAMPLED PER ANIMATION FRAME, not asserted with a retrying matcher. The stale card corrects
-// itself once the refetch lands, so `toBeVisible('0lb×12')` would simply wait the bug out and pass
+// itself once the refetch lands, so `toBeVisible('BW×12')` would simply wait the bug out and pass
 // against the unfixed code (e2e-tests.md: "a retrying matcher cannot assert 'this was never shown'").
 // The sampler starts before the exercise is reopened and records whether the Last time card EVER
 // held the previous workout's 10.
@@ -98,7 +98,7 @@ forEachConnectivityMode<Record<string, never>>('Last time shows the workout just
       const tick = () => {
         for (const card of document.querySelectorAll<HTMLElement>('.summary-card')) {
           const text = card.textContent ?? '';
-          if (text.startsWith('Last time') && text.includes('0lb×10')) w.__staleLastTime = true;
+          if (text.startsWith('Last time') && text.includes('BW×10')) w.__staleLastTime = true;
         }
         if (!w.__stopSampling) requestAnimationFrame(tick);
       };
@@ -108,7 +108,7 @@ forEachConnectivityMode<Record<string, never>>('Last time shows the workout just
   },
   act: async () => {},
   assert: async (page) => {
-    await expect(page.getByText('0lb×12', { exact: true })).toBeVisible();
+    await expect(page.getByText('BW×12', { exact: true })).toBeVisible();
     const sawStale = await page.evaluate(() => {
       const w = window as unknown as { __staleLastTime: boolean; __stopSampling: boolean };
       w.__stopSampling = true;
