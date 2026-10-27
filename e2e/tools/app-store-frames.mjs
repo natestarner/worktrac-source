@@ -61,13 +61,13 @@ if (!theme) throw new Error(`THEME must be one of ${Object.keys(THEMES).join(', 
 const lockup = `data:image/svg+xml;base64,${readFileSync(
   new URL(`../../frontend/src/assets/huddle-lockup-horizontal-${theme.lockup}.svg`, import.meta.url),
 ).toString('base64')}`;
-const SIZES = { iphone: [1320, 2868], ipad: [2064, 2752] };
+const SIZES = { iphone63: [1206, 2622], iphone: [1320, 2868], ipad: [2064, 2752] };
 
 mkdirSync(OUT, { recursive: true });
 const browser = await chromium.launch();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 for (const file of readdirSync(IN).filter((f) => f.endsWith('.png')).sort()) {
-  const [, device, scene] = file.match(/^(iphone|ipad)-(.+)\.png$/) ?? [];
+  const [, device, scene] = file.match(/^(iphone63|iphone|ipad)-(.+)\.png$/) ?? [];
   if (!CAPTIONS[scene] || (ONLY && !ONLY.split(',').some((s) => scene.startsWith(s)))) continue;
   const [W, H] = SIZES[device];
   const [title, sub] = CAPTIONS[scene];

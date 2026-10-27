@@ -3,13 +3,16 @@
  * Signs in to an existing household (the reviewer demo, or a local copy made by
  * tools/demo-household.mjs) and captures each screen at:
  *
- *   iphone  6.9" display  440 x 956 CSS px @3x = 1320 x 2868   (required)
+ *   iphone63  Dynamic Island, medium  402 x 874 CSS px @3x = 1206 x 2622  (REQUIRED: App Store
+ *             Connect's default iPhone slot, the iPhone 17 Pro / 16 Pro size)
+ *   iphone    Dynamic Island, large   440 x 956 CSS px @3x = 1320 x 2868  (optional: Pro Max, under
+ *             "View All Sizes in Media Manager")
  *   ipad    13" display  1032 x 1376 CSS px @2x = 2064 x 2752  (required: Huddle runs on iPad)
  *
  * Usage (from e2e/):
  *   FRONTEND=https://app.huddle.fitness EMAIL=... PASSWORD=... node tools/app-store-shots.mjs <outDir>
  *
- *   DEVICES=iphone,ipad     which sizes (default both)
+ *   DEVICES=iphone63,iphone,ipad   which sizes (default all three)
  *   API=...                 the backend origin; default: the frontend's /config.json apiUrl
  *   ALLOW_WRITES=1          also capture the two scenes that have to LOG A SET -- mid-workout with
  *                           the rest timer running, and the PR celebration. Off by default, so
@@ -40,10 +43,11 @@ const OUT = process.argv[2] || './app-store-shots';
 const { EMAIL, PASSWORD } = process.env;
 const ALLOW_WRITES = process.env.ALLOW_WRITES === '1';
 const DEVICES = {
+  iphone63: { viewport: { width: 402, height: 874 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
   iphone: { viewport: { width: 440, height: 956 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
   ipad: { viewport: { width: 1032, height: 1376 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
 };
-const which = (process.env.DEVICES || 'iphone,ipad').split(',');
+const which = (process.env.DEVICES || 'iphone63,iphone,ipad').split(',');
 if (!EMAIL || !PASSWORD) throw new Error('set EMAIL and PASSWORD for the household to capture');
 const API = process.env.API || (await (await fetch(`${FRONTEND}/config.json`)).json()).apiUrl;
 
@@ -124,7 +128,7 @@ async function capture(device) {
   await person('Sam');
   await tab('Trends');
   await page.locator('select').last().selectOption({ label: 'Barbell Back Squat' });
-  if (device === 'iphone') {
+  if (device.startsWith('iphone')) {
     await park(page.getByText(/^Exercise progress/).first(), 12, { card: true });
     await shot('03-progress-chart');
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -168,7 +172,8 @@ async function capture(device) {
     }
     try {
       await openExercise('Barbell Back Squat');
-      for (const [w, r] of WORKING_SETS) await logSet(w, r);
+      // The 6.3" screen is shorter: a second set row would sit under the session bar, so it logs one.
+      for (const [w, r] of device === 'iphone63' ? WORKING_SETS.slice(0, 1) : WORKING_SETS) await logSet(w, r);
       // A minute on the rest clock reads as the middle of a workout; a few seconds reads as a demo.
       await page.waitForTimeout(72_000);
       await shot('01-log-mid-workout');
