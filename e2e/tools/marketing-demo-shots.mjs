@@ -49,6 +49,7 @@ const API = (await (await fetch(`${FRONTEND}/config.json`)).json()).apiUrl;
 const WORKING_SETS = [[225, 5], [225, 6]];
 const RECORD_SET = [235, 6];
 const EXERCISE = 'Barbell Back Squat';
+const ROUTINE = 'Lower A'; // Alex's, and it opens on EXERCISE
 
 const TABLET = { viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1700 / 1180, isMobile: true, hasTouch: true };
 const PHONE = { viewport: { width: 440, height: 956 }, deviceScaleFactor: 800 / 440, isMobile: true, hasTouch: true };
@@ -134,6 +135,15 @@ function drive(page) {
     await page.getByRole('button', { name: /^Log set/ }).waitFor();
     await settle();
   };
+  // Starting a routine is device-local state (no request), and opens its first exercise.
+  const startRoutine = async (name) => {
+    await tab('Log');
+    const backToPicker = page.getByRole('button', { name: /All exercises/ });
+    if (await backToPicker.isVisible()) await backToPicker.click();
+    await page.getByRole('button', { name: new RegExp(`^${name}`) }).click();
+    await page.getByRole('button', { name: /^Log set/ }).waitFor();
+    await settle();
+  };
   const logSet = async (weight, reps, { wait = true } = {}) => {
     const before = await page.getByText(/^Set \d+$/).count();
     for (const [label, value] of [['Weight (lb)', weight], ['Reps', reps]]) {
@@ -170,7 +180,7 @@ function drive(page) {
     });
     console.log(path);
   };
-  return { settle, tab, person, openExercise, logSet, card };
+  return { settle, tab, person, openExercise, startRoutine, logSet, card };
 }
 
 async function trends({ page, person, tab, card }) {
@@ -189,7 +199,10 @@ async function trends({ page, person, tab, card }) {
 async function workout(figure) {
   const tablet = await open(TABLET);
   await tablet.person('Alex');
-  await tablet.openExercise(EXERCISE);
+  // Mid-routine on the tablet: the routine strip shows a feature the hero otherwise wouldn't, and
+  // fills the landscape screen. Lower A opens on the squat. Not on the phone, where the strip would
+  // push the logged sets off the screen.
+  await tablet.startRoutine(ROUTINE);
   for (const [w, r] of WORKING_SETS) await tablet.logSet(w, r);
   await tablet.page.waitForTimeout(45_000); // the rest ring part-way round reads as mid-workout
   await tablet.settle();
