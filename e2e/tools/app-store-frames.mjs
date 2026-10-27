@@ -40,7 +40,7 @@ const THEMES = {
   // Warm paper. Calm, and the app's own orange controls become the brightest thing on the page.
   cream: {
     ground: 'linear-gradient(165deg, #fbf8f3 0%, #f4ebe0 100%)',
-    ink: '#3e3a37', sub: '#6e655e', lockup: 'onlight', circleOpacity: 0.12,
+    ink: '#3e3a37', sub: '#6e655e', lockup: 'onlight', circleOpacity: 0.07,
     shadow: '0 30px 80px rgba(90, 50, 20, 0.22), 0 0 0 1px rgba(62, 58, 55, 0.08)',
   },
   // The brand kit's dark surface, with an orange glow behind the screenshot.
@@ -72,13 +72,18 @@ for (const file of readdirSync(IN).filter((f) => f.endsWith('.png')).sort()) {
   const [W, H] = SIZES[device];
   const [title, sub] = CAPTIONS[scene];
   const u = W / 1320; // type and spacing scale with the canvas width
-  // The mark's four circles, blown up and set BEHIND the screenshot so they show only around its
-  // edges: depth, and the brand, without competing with the headline. Fractions of the canvas.
+  // The mark's four circles as soft caps tucked into the corners, their outer edges OFF the canvas.
+  // Each edge must reach the side of the canvas before the headline starts, so no arc or seam ever
+  // crosses the words (Nate, 2026-10-27: arcs meeting under the writing read as chaotic). Measured
+  // in canvas WIDTHS, from the top or bottom edge, so the curve clears the text on the squarer iPad
+  // canvas too: [colour, x, y from that edge, radius].
   const circles = [
-    ['#E8734A', 0.14, 0.40, 0.40], ['#F2A65A', 0.88, 0.33, 0.33], ['#F2EDE1', 0.10, 0.86, 0.27], ['#B5542D', 0.90, 0.80, 0.22],
-  ].map(([c, fx, fy, fr]) => {
+    ['#E8734A', 0.02, -0.18, 0.35, 'top'], ['#F2A65A', 0.98, -0.19, 0.33, 'top'],
+    ['#F2EDE1', 0.04, 0.11, 0.34, 'bottom'], ['#B5542D', 0.96, 0.07, 0.3, 'bottom'],
+  ].map(([c, fx, fy, fr, edge]) => {
     const r = fr * W;
-    return `<i style="left:${fx * W - r}px;top:${fy * H - r}px;width:${2 * r}px;height:${2 * r}px;background:${c}"></i>`;
+    const cy = edge === 'top' ? fy * W : H - fy * W;
+    return `<i style="left:${fx * W - r}px;top:${cy - r}px;width:${2 * r}px;height:${2 * r}px;background:${c}"></i>`;
   }).join('');
   const src = `data:image/png;base64,${readFileSync(join(IN, file)).toString('base64')}`;
   await page.setViewportSize({ width: W, height: H });
