@@ -57,6 +57,15 @@ names it, and the seller name is the legal entity **exactly**, "Co." included. T
 same. Don't shorten it to "Starner Consulting", don't drop it as footer clutter, and give any new
 page the same line. `landing.spec.ts` asserts it on every page.
 
+## `support.html` is the support URL other systems point at
+
+Stripe's customer support URL (on every receipt) and the App Store listing's support URL both name
+`https://huddle.fitness/support.html`. It must stay **public and readable signed out** — the people
+who follow it (an unrecognized charge, a forgotten password, a cancelled subscriber) mostly cannot
+sign in, which is why it is not the app's `/app/help`. Don't move or rename it without updating
+Stripe (Settings → Business → Public details) and `docs/app-store-submission.md`. Its answers
+restate Terms §5–6 (cancellation, the 30-day refund); change them together.
+
 ## The inline brand mark carries a ground-aware hairline
 
 The four-circle mark is inlined in `index.html` (header **and** footer), `privacy.html` and
