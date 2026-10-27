@@ -78,6 +78,29 @@ Paste into App Store Connect → the version → App Review Information → Note
 >
 > Demo account: [email] / [password].
 
+## The demo account and the screenshots (checklist 10.1, 10.2)
+
+The reviewer's demo household is three made-up people (Alex, Sam, Jordan) with about 20 weeks of
+training, on the Free plan. It was written into the production account on 2026-10-26 by
+`e2e/tools/demo-household.mjs`, through the app's own API. Its training is modelled, not drawn:
+each lift has an underlying strength that grows like a real person's, the reps logged are what that
+strength allows at the weight on the bar, and the weight follows what a lifter does (add after a
+clean session, repeat after a miss, drop back after a third stall). So the plateaus, the flu in late
+August, the family vacation in July and the recoveries all come out of the model. The tool also
+checks that every barbell lift's est.-1RM and top-weight charts finish at their best.
+
+- **Never put a real account's login in the repo.** The tool reads it from the environment.
+- **A local copy** (`--register --write` against a local stack) is the same household, for trying
+  screens before touching production.
+- **Screenshots** come from `e2e/tools/app-store-shots.mjs`: the iPhone 6.9" (1320 × 2868) and iPad
+  13" (2064 × 2752) sizes App Store Connect requires, light mode, captured from the running app. Two
+  scenes have to log a set (mid-workout with the rest timer running, and the PR celebration); they
+  run only with `ALLOW_WRITES=1`, so against production it captures read-only screens unless asked.
+- **Capture the finals in the morning.** The mid-workout scene shows the real start time ("Session in
+  progress · started 6:12 AM" reads like a gym; "10:44 PM" does not).
+- The window a Free account shows moves forward every day. By mid-November the July vacation and
+  most of the flu dip have scrolled out of the reviewer's 90 days; re-seed if that matters.
+
 ## Privacy answers (checklist 10.5)
 
 Must match `frontend/ios/App/App/PrivacyInfo.xcprivacy`. Cross-checked against the code on
@@ -113,6 +136,14 @@ choose the Kids category. Re-check any US state age-assurance requirements at su
 - **The marketing FAQ says the opposite of the launch.** `marketing/index.html` answers "Is there
   an app to install?" with "No app store, no updates to chase", and "Do I need an iPad…" talks only
   about browsers. Both change with checklist 11.7 (store badges), once the App Store URL exists.
+- **Re-check the US link-out terms right before submitting.** Checked 2026-10-27: guideline 3.1.1(a)
+  says entitlements "are not required for developers to include buttons, external links, or other
+  calls to action in their United States storefront apps", and Apple currently charges no commission
+  on those purchases. That second part is open: the Ninth Circuit (Dec 2025) let Apple charge a fee
+  based on its costs and sent the amount back to the district court, where Apple has proposed 15%
+  (5% for Small Business Program members, per press reports, Aug 2026). A fee would not change the
+  app; it would change Plus's margin. Joining the free App Store Small Business Program before then
+  is cheap insurance.
 - **The Privacy Policy and Terms describe a website.** Checklist 10.7. Drafted on its own branch
   (`docs/app-store-policies`) so the wording can be reviewed as a legal change and shipped at launch,
   not before.
