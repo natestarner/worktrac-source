@@ -224,6 +224,21 @@ test.describe('marketing landing page', () => {
       .toMatch(/app-household\.(mp4|webm)$/);
   });
 
+  // Safari plays only the MP4, and this site sends nosniff, so a clip served as
+  // application/octet-stream shows Safari the poster and nothing else -- shipped that way to lower on
+  // 2026-10-28. The local preview server types it right regardless, so this only bites when the suite
+  // runs against a deployed site (MARKETING_BASE_URL); check-marketing.sh check 11 guards the config.
+  test('the household clip is served as video, in every format', async ({ page, request }) => {
+    await page.goto('/');
+    const sources = await page.locator('video.js-lazy-video source').evaluateAll((els) => els.map((el) => el.getAttribute('data-src')!));
+    expect(sources.length).toBeGreaterThan(1);
+    for (const src of sources) {
+      const res = await request.get(src, { headers: { Range: 'bytes=0-99' } });
+      expect(res.status(), src).toBeLessThan(300);
+      expect(res.headers()['content-type'], src).toMatch(/^video\//);
+    }
+  });
+
   // The base `img { height: auto }` rule doesn't cover <video>, so a clip's height attribute applies
   // as a literal CSS height unless something says otherwise -- barely visible on desktop, badly
   // broken in a phone-width column (2026-08-24). Assert the rendered box keeps the clip's shape at

@@ -195,6 +195,21 @@ else
   pass "every App Store link names app id $store_ids"
 fi
 
+# --- 11. Every video format the pages use has a MIME type in the SWA config ----------------------
+# Azure Static Web Apps serves an extension it doesn't know as application/octet-stream, and this
+# site sends X-Content-Type-Options: nosniff, so a browser takes that at face value. Chrome falls
+# back to another <source>; Safari, which plays only the MP4, shows the poster instead of the clip.
+# The local preview (python http.server) sends the right type, so nothing local catches this.
+# Shipped broken 2026-10-28 (.mp4 unmapped); found by curl on the deployed lower site.
+missing_mime=0
+for ext in $(grep -ohE '\.(mp4|webm|mov|m4v|ogv)"' "${PAGES[@]}" | tr -d '"' | sort -u); do
+  if ! grep -qF "\"$ext\": \"video/" "$DIR/staticwebapp.config.json"; then
+    fail "staticwebapp.config.json has no video MIME type for $ext (it would be served as application/octet-stream)"
+    missing_mime=$((missing_mime + 1))
+  fi
+done
+[ "$missing_mime" -eq 0 ] && pass "every video format on the pages has a MIME type"
+
 echo
 if [ "$fails" -gt 0 ]; then
   echo "$fails check(s) failed."
