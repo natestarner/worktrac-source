@@ -813,6 +813,13 @@ img {
   margin: 0 auto;
 }
 
+/* No CSS status band over the clip: the band is painted into the video itself, in the colour of the
+   app's header in each frame, so it dims with the app when the PR celebration's backdrop comes up.
+   A CSS band stayed white over a dimmed screen. */
+.device--phone.device--clip .device__screen {
+  padding-top: 0;
+}
+
 .device--tablet {
   width: 82%;
   border-radius: clamp(20px, 3.2vw, 40px);

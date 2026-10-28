@@ -21,13 +21,18 @@
  * Recording: Chrome's own screencast (each frame the compositor paints, with its timestamp), not
  * Playwright's recordVideo, which encodes at a fixed 1 Mbit/s and blurs text.
  *
- * Encoding happens in Microsoft Edge, which carries the H.264 encoder that Safari and every iPhone
- * need (Playwright's own Chromium does not), so there is no separate video tool to install:
+ * Encoding happens in a browser, so there is no separate video tool to install -- Microsoft Edge,
+ * whose H.264 output (what Safari and every iPhone need) is the one verified by playing it back.
+ * (Playwright's Chromium here reports H.264 support too, 2026-10-27, but isn't the one tested.)
  *   - app-household.mp4 (H.264): Edge's WebCodecs VideoEncoder, frame by frame at 30 fps, packed by
  *     tools/mp4-mux.mjs. NOT Edge's MediaRecorder, whose MP4 froze between keyframes in playback.
- *   - app-household.webm (VP9): Edge's MediaRecorder, replaying the frames in real time. Browsers
- *     without H.264 (Playwright's Chromium among them) play this one.
+ *   - app-household.webm (VP9): Edge's MediaRecorder, replaying the frames in real time, for any
+ *     browser without H.264.
  *   - app-household-poster.jpg: the celebration, which reduced-motion visitors see instead.
+ *
+ * Each frame gets a status-bar band painted above it, in the colour of the app's own header in that
+ * frame -- so when the celebration dims the app, the band dims with it. The page's phone frame draws
+ * no band of its own for this clip (.device--clip): a CSS band stayed white over a dimmed screen.
  *
  * It LOGS ONE REAL SET for Sam. It notes the sets that existed before, deletes exactly the one it
  * added afterwards, and ends the workout only if it started one -- an open workout it found is
@@ -49,7 +54,8 @@ mkdirSync(FRAMES, { recursive: true });
 mkdirSync(OUT, { recursive: true });
 
 const EXERCISE = 'Barbell Back Squat';
-const VIDEO = { width: 720, height: 1564, fps: 30 }; // 440 x 956 CSS px, at about 1.64x
+// 440 x 956 CSS px at about 1.64x, under a 44px status-bar band painted into every frame (below).
+const VIDEO = { width: 720, height: 1564, band: 44, fps: 30 };
 
 // ---------------------------------------------------------------- 1. record
 if (!ENCODE_ONLY) {
@@ -213,18 +219,25 @@ await ep.route('http://localhost:9/**', (route) => {
   return route.fulfill({ path: join(FRAMES, name), contentType: 'image/jpeg' });
 });
 await ep.goto('http://localhost:9/');
-await ep.evaluate(() => {
+await ep.evaluate((V) => {
+  // The frame under a band the colour of its own header's top edge: white, or dimmed with the app.
+  window.paint = (g, bmp) => {
+    g.drawImage(bmp, 0, V.band, V.width, V.height);
+    const [r, gr, b] = g.getImageData(V.width / 2, V.band + 2, 1, 1).data;
+    g.fillStyle = `rgb(${r},${gr},${b})`;
+    g.fillRect(0, 0, V.width, V.band);
+  };
   window.toBase64 = (bytes) => {
     let s = '';
     for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     return btoa(s);
   };
-});
+}, VIDEO);
 
 // MP4: one source frame per 1/30 s slot (the last one painted by then), encoded one by one, with a
 // keyframe every second so a loop or a late start never waits long for a clean picture.
 const h264 = await ep.evaluate(async ({ files, tl, dur, V }) => {
-  const config = { codec: 'avc1.640028', width: V.width, height: V.height, bitrate: 2_500_000, framerate: V.fps, avc: { format: 'avc' }, latencyMode: 'quality' };
+  const config = { codec: 'avc1.640028', width: V.width, height: V.height + V.band, bitrate: 2_500_000, framerate: V.fps, avc: { format: 'avc' }, latencyMode: 'quality' };
   if (!(await VideoEncoder.isConfigSupported(config)).supported) throw new Error('Edge cannot encode H.264 here');
   const chunks = [];
   let avcC = null;
@@ -240,14 +253,14 @@ const h264 = await ep.evaluate(async ({ files, tl, dur, V }) => {
   });
   enc.configure(config);
   const canvas = document.querySelector('canvas');
-  Object.assign(canvas, { width: V.width, height: V.height });
-  const g = canvas.getContext('2d');
+  Object.assign(canvas, { width: V.width, height: V.height + V.band });
+  const g = canvas.getContext('2d', { willReadFrequently: true });
   let shown = -1;
   for (let k = 0, n = Math.round(dur * V.fps); k < n; k++) {
     const i = Math.max(0, tl.findLastIndex((t) => t <= k / V.fps + 1e-6));
     if (i !== shown) {
       const bmp = await createImageBitmap(await (await fetch(`/${files[i]}`)).blob(), { resizeWidth: V.width, resizeHeight: V.height, resizeQuality: 'high' });
-      g.drawImage(bmp, 0, 0);
+      window.paint(g, bmp);
       bmp.close();
       shown = i;
     }
@@ -262,17 +275,17 @@ const h264 = await ep.evaluate(async ({ files, tl, dur, V }) => {
   return { avcC, chunks: chunks.sort((a, b) => a.ts - b.ts) };
 }, { files, tl, dur, V: VIDEO });
 writeFileSync(join(OUT, 'app-household.mp4'), muxMp4({
-  width: VIDEO.width, height: VIDEO.height, fps: VIDEO.fps, avcC: Buffer.from(h264.avcC, 'base64'),
+  width: VIDEO.width, height: VIDEO.height + VIDEO.band, fps: VIDEO.fps, avcC: Buffer.from(h264.avcC, 'base64'),
   samples: h264.chunks.map((c) => ({ data: Buffer.from(c.data, 'base64'), key: c.key })),
 }));
 
 // WebM: MediaRecorder, replaying the frames onto the canvas at their recorded times.
 const vp9 = await ep.evaluate(async ({ files, tl, dur, V }) => {
   const canvas = document.querySelector('canvas');
-  Object.assign(canvas, { width: V.width, height: V.height });
-  const g = canvas.getContext('2d');
+  Object.assign(canvas, { width: V.width, height: V.height + V.band });
+  const g = canvas.getContext('2d', { willReadFrequently: true });
   const blobs = await Promise.all(files.map(async (f) => (await fetch(`/${f}`)).blob()));
-  const draw = async (i) => { const bmp = await createImageBitmap(blobs[i]); g.drawImage(bmp, 0, 0, V.width, V.height); bmp.close(); };
+  const draw = async (i) => { const bmp = await createImageBitmap(blobs[i]); window.paint(g, bmp); bmp.close(); };
   await draw(0);
   const rec = new MediaRecorder(canvas.captureStream(V.fps), { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 2_500_000 });
   const chunks = [];
@@ -295,8 +308,8 @@ writeFileSync(join(OUT, 'app-household.webm'), Buffer.from(vp9, 'base64'));
 // The poster: the celebration, the frame reduced-motion visitors get instead of the clip.
 const posterJpg = await ep.evaluate(async ({ f, V }) => {
   const c = document.querySelector('canvas');
-  Object.assign(c, { width: V.width, height: V.height });
-  c.getContext('2d').drawImage(await createImageBitmap(await (await fetch(`/${f}`)).blob()), 0, 0, V.width, V.height);
+  Object.assign(c, { width: V.width, height: V.height + V.band });
+  window.paint(c.getContext('2d', { willReadFrequently: true }), await createImageBitmap(await (await fetch(`/${f}`)).blob()));
   return c.toDataURL('image/jpeg', 0.88).split(',')[1];
 }, { f: files[at], V: VIDEO });
 writeFileSync(join(OUT, 'app-household-poster.jpg'), Buffer.from(posterJpg, 'base64'));

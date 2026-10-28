@@ -245,8 +245,8 @@ ENCODE_ONLY=1 node tools/marketing-demo-clip.mjs <workDir> ../marketing/assets/s
   tapped, and a lingering ring read as a tap on Nice.
 - **Recorded from Chrome's screencast**, frame by frame with timestamps, not Playwright's
   `recordVideo` (a fixed 1 Mbit/s that blurs text).
-- **Encoded in Microsoft Edge**, which has the H.264 encoder Safari and every iPhone need
-  (Playwright's Chromium doesn't), so there is no video tool to install. Running a downloaded
+- **Encoded in Microsoft Edge**, whose H.264 output (what Safari and every iPhone need) is the
+  one verified by playing it back, so there is no video tool to install. Running a downloaded
   encoder binary is blocked in this environment anyway. MP4 comes from Edge's **WebCodecs**
   encoder, packed by `e2e/tools/mp4-mux.mjs`. **Not Edge's MediaRecorder**: its MP4 froze between
   keyframes in playback, so a 9-second clip showed its first frame for 5 seconds. WebM (VP9) does

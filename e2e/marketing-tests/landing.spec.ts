@@ -167,8 +167,7 @@ test.describe('marketing landing page', () => {
   });
 
   // The clip ships twice (H.264 MP4 for Safari and iPhones, VP9 WebM for browsers without H.264) and
-  // the browser picks by each <source>'s type, so this accepts whichever one it chose. Playwright's
-  // own Chromium has no H.264, so here it is the WebM.
+  // the browser picks by each <source>'s type, so this accepts whichever one it chose.
   test('the household clip loads only once scrolled near, and never under reduced motion', async ({ page }) => {
     const video = page.locator('video.js-lazy-video');
     const isClip = (url: string) => /app-household\.(mp4|webm)$/.test(url);
