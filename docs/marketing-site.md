@@ -190,8 +190,9 @@ FRONTEND=https://app.huddle.fitness EMAIL=... PASSWORD=... ALLOW_WRITES=1   node
 The login is the reviewer account's (kept outside the repo; never commit it). What each scene
 does:
 
-- **`workout`** logs two squat sets for Alex for the hero pair and the log card, waits out part of
-  the rest timer, then logs a real est.-1RM record for the celebration still. It refuses to start if
+- **`workout`** starts Alex's Squat Day routine on the tablet (the routine strip fills the
+  landscape screen; starting one writes nothing), logs two squat sets for the hero pair and the log
+  card, waits out part of the rest timer, then logs a real est.-1RM record for the celebration still. It refuses to start if
   Alex already has a workout going, and deletes exactly its own sets and ends the workout after,
   as `app-store-shots.mjs` does. **It writes to the account App Review signs in to**, so don't run
   it while a submission is in review: `SCENES=trends,offline,og` re-takes everything else without

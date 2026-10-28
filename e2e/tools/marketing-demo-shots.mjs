@@ -49,7 +49,7 @@ const API = (await (await fetch(`${FRONTEND}/config.json`)).json()).apiUrl;
 const WORKING_SETS = [[225, 5], [225, 6]];
 const RECORD_SET = [235, 6];
 const EXERCISE = 'Barbell Back Squat';
-const ROUTINE = 'Lower A'; // Alex's, and it opens on EXERCISE
+const ROUTINE = 'Squat Day'; // Alex's, and it opens on EXERCISE
 
 const TABLET = { viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1700 / 1180, isMobile: true, hasTouch: true };
 const PHONE = { viewport: { width: 440, height: 956 }, deviceScaleFactor: 800 / 440, isMobile: true, hasTouch: true };
@@ -200,7 +200,7 @@ async function workout(figure) {
   const tablet = await open(TABLET);
   await tablet.person('Alex');
   // Mid-routine on the tablet: the routine strip shows a feature the hero otherwise wouldn't, and
-  // fills the landscape screen. Lower A opens on the squat. Not on the phone, where the strip would
+  // fills the landscape screen. Squat Day opens on the squat. Not on the phone, where the strip would
   // push the logged sets off the screen.
   await tablet.startRoutine(ROUTINE);
   for (const [w, r] of WORKING_SETS) await tablet.logSet(w, r);
@@ -218,7 +218,10 @@ async function workout(figure) {
   await phone.ctx.close();
   await tablet.ctx.close();
 
-  // The figure cards come from the same workout, on the plain 1000px layout.
+  // The figure cards come from the same workout, on the plain 1000px layout. Reloaded first: this
+  // page warmed its cache before the tablet logged anything, and would show the workout empty.
+  await figure.page.reload();
+  await figure.settle();
   await figure.person('Alex');
   await figure.openExercise(EXERCISE);
   await figure.page.getByText('Set 2', { exact: true }).waitFor();
