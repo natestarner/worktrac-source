@@ -11,15 +11,16 @@
  *   device-ipad.jpg      hero tablet: Alex mid-workout, iPad Air 11" landscape (1180 x 820)
  *   device-iphone.jpg    hero phone: the same workout on a 6.9" iPhone (440 x 956)
  *   app-log.jpg          "Log a set in two taps"
- *   app-household.jpg    "Everyone's in the huddle": the New PR! celebration, cropped close
  *   app-trends-main.jpg  Sam's squat, est. 1RM climbing, with the all-time bests under it
  *   app-trends-secondary.jpg  Sam's workouts per week
- *   ...-phone.jpg        each of those four again at phone width, for <picture> on small screens:
+ *   ...-phone.jpg        each of those three again at phone width, for <picture> on small screens:
  *                        a 1000px-wide capture shrunk to a phone's column leaves 5px text
  *   app-offline(-dark).png    the offline banner with two sets waiting, light and dark
  *   og-image.png         the 1200 x 630 link preview, built from the hero phone capture
  *
- * The hero, log and celebration scenes LOG REAL SETS for Alex, so they need ALLOW_WRITES=1, refuse
+ * "Everyone's in the huddle" is a video, not an image here: tools/marketing-demo-clip.mjs.
+ *
+ * The hero and log scenes LOG REAL SETS for Alex, so they need ALLOW_WRITES=1, refuse
  * to start if Alex already has a workout going, and delete exactly their own sets and end the
  * workout afterwards -- the same contract as tools/app-store-shots.mjs. The offline scene logs its
  * two sets with the network cut and closes the browser before reconnecting, so they never leave it.
@@ -46,10 +47,8 @@ const SHOTS = join(ASSETS, 'shots');
 mkdirSync(SHOTS, { recursive: true });
 const API = (await (await fetch(`${FRONTEND}/config.json`)).json()).apiUrl;
 
-// Chosen against Alex's seeded squat (best est. 1RM 277.5 = 225 x 7): working sets that are not
-// records, then one that is (235 x 6 = est. 282).
+// Chosen against Alex's seeded squat (best est. 1RM 277.5 = 225 x 7): working sets, not records.
 const WORKING_SETS = [[225, 5], [225, 6]];
-const RECORD_SET = [235, 6];
 const EXERCISE = 'Barbell Back Squat';
 const ROUTINE = 'Squat Day'; // Alex's, and it opens on EXERCISE
 
@@ -224,15 +223,14 @@ async function workout(figure) {
   await phone.ctx.close();
   await tablet.ctx.close();
 
-  // The figure cards come from the same workout, at tablet and at phone width. Each logs its own
-  // record set for its celebration: the second one has to beat the first to be a record at all.
-  await figureScenes(figure, '', RECORD_SET);
+  // The log card comes from the same workout, at tablet and at phone width.
+  await figureScenes(figure, '');
   const figurePhone = await open(FIGURE_PHONE);
-  await figureScenes(figurePhone, '-phone', [RECORD_SET[0] + 5, RECORD_SET[1]]);
+  await figureScenes(figurePhone, '-phone');
   await figurePhone.ctx.close();
 }
 
-async function figureScenes(f, suffix, recordSet) {
+async function figureScenes(f, suffix) {
   // Reloaded first: a page that warmed its cache before the tablet logged anything would show the
   // workout empty.
   await f.page.reload();
@@ -251,23 +249,6 @@ async function figureScenes(f, suffix, recordSet) {
   await f.page.screenshot({ path: join(SHOTS, `app-log${suffix}.jpg`), type: 'jpeg', quality: 88, clip: { x: 0, y: 0, width, height: Math.ceil(logged) + 24 } });
   console.log(`app-log${suffix}.jpg`);
 
-  await f.logSet(...recordSet);
-  await f.page.getByText('New PR!').waitFor();
-  await f.page.waitForTimeout(1200); // past the entrance animation, confetti still falling
-  // Close around the card, with a small margin of the dimmed app behind it: a wider crop is mostly
-  // grey and cuts words in half at its edges.
-  const card = await f.page.getByText('New PR!').evaluate((el) => {
-    let box = el;
-    while (box.parentElement && getComputedStyle(box).borderTopLeftRadius === '0px') box = box.parentElement;
-    const r = box.getBoundingClientRect();
-    return { x: r.x, y: r.y, w: r.width, h: r.height };
-  });
-  const pad = 24;
-  const clip = { x: card.x - pad, y: card.y - pad, width: card.w + 2 * pad, height: card.h + 2 * pad };
-  await f.page.screenshot({ path: join(SHOTS, `app-household${suffix}.jpg`), type: 'jpeg', quality: 88, clip });
-  console.log(`app-household${suffix}.jpg`);
-  await f.page.keyboard.press('Escape');
-  await f.page.waitForLoadState('networkidle');
 }
 
 // Two sets logged with the network cut, so the app's own banner says what is waiting. The context

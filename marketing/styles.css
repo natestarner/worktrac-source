@@ -794,9 +794,23 @@ img {
   line-height: 0; /* no descender gap under the screenshot */
 }
 
-.device__screen img {
+.device__screen img,
+.device__screen video {
   width: 100%;
+  /* Explicit for <video>: the base img rule doesn't reach it, and its height attribute would
+     otherwise apply as a literal CSS height (.claude/rules/marketing.md). */
   height: auto;
+  display: block;
+}
+
+/* The household clip: the hero's phone standing on its own in a section column, not leaning on
+   the tablet. Same bezel, island and status band; only the placement differs. */
+.device--phone.device--clip {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  width: min(300px, 78%);
+  margin: 0 auto;
 }
 
 .device--tablet {

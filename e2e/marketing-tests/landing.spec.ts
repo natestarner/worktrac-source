@@ -166,6 +166,58 @@ test.describe('marketing landing page', () => {
     expect(accentColor).not.toBe('rgb(28, 27, 25)'); // --color-text: never stuck on the pre-animation ink color
   });
 
+  // The clip ships twice (H.264 MP4 for Safari and iPhones, VP9 WebM for browsers without H.264) and
+  // the browser picks by each <source>'s type, so this accepts whichever one it chose. Playwright's
+  // own Chromium has no H.264, so here it is the WebM.
+  test('the household clip loads only once scrolled near, and never under reduced motion', async ({ page }) => {
+    const video = page.locator('video.js-lazy-video');
+    const isClip = (url: string) => /app-household\.(mp4|webm)$/.test(url);
+
+    // Reduced motion: the clip must never be fetched -- the poster frame is the whole experience.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/');
+    const clipRequests: string[] = [];
+    page.on('request', (r) => isClip(r.url()) && clipRequests.push(r.url()));
+    await video.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+    expect(clipRequests).toEqual([]);
+    await expect(video).toHaveAttribute('poster', /app-household-poster\.jpg/);
+
+    // Normal motion: nothing fetched before the section is in view, something fetched after.
+    // A fresh goto so the scroll position from the check above doesn't carry over.
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto('/');
+    const beforeScroll: string[] = [];
+    page.on('request', (r) => isClip(r.url()) && beforeScroll.push(r.url()));
+    await page.waitForTimeout(300);
+    expect(beforeScroll).toEqual([]);
+
+    await video.scrollIntoViewIfNeeded();
+    await expect
+      .poll(async () => video.evaluate((v: HTMLVideoElement) => v.currentSrc), { timeout: 5000 })
+      .toMatch(/app-household\.(mp4|webm)$/);
+  });
+
+  // The base `img { height: auto }` rule doesn't cover <video>, so a clip's height attribute applies
+  // as a literal CSS height unless something says otherwise -- barely visible on desktop, badly
+  // broken in a phone-width column (2026-08-24). Assert the rendered box keeps the clip's shape at
+  // both widths rather than assuming one implies the other.
+  test('the household clip keeps its own aspect ratio at both a phone and a desktop width', async ({ page }) => {
+    for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+      const context = await page.context().browser()!.newContext({ viewport });
+      const p = await context.newPage();
+      await p.goto('/');
+      const video = p.locator('video.js-lazy-video');
+      await video.scrollIntoViewIfNeeded();
+      const ratios = await video.evaluate((v: HTMLVideoElement) => ({
+        rendered: v.clientWidth / v.clientHeight,
+        natural: (v.videoWidth || Number(v.getAttribute('width'))) / (v.videoHeight || Number(v.getAttribute('height'))),
+      }));
+      expect(ratios.rendered, `at ${viewport.width}px wide`).toBeCloseTo(ratios.natural, 1);
+      await context.close();
+    }
+  });
+
   // Every product screenshot is re-taken by tools/marketing-demo-shots.mjs, and each <img> declares
   // its size up front so the page doesn't jump while they load. A re-take that changes a capture's
   // shape without the markup following stretches it -- silently, and differently at every width.

@@ -179,8 +179,8 @@ production account by `e2e/tools/demo-household.mjs`). That is the same househol
 screenshots show, so the site and the listing tell one story, and nobody's real family is on a
 public page. The earlier set mixed a real family's names across screenshots, a deadlift chart that
 dived halfway across, and a household video whose still frame caught the app mid-save; the
-on-device captures, the video and the `marketing-capture.mjs` / `marketing-shots.mjs` pipeline that
-went with them are gone.
+on-device captures, the old video and the `marketing-capture.mjs` / `marketing-shots.mjs` pipeline
+that went with them are gone.
 
 ```bash
 cd e2e
@@ -192,7 +192,7 @@ does:
 
 - **`workout`** starts Alex's Squat Day routine on the tablet (the routine strip fills the
   landscape screen; starting one writes nothing), logs two squat sets for the hero pair and the log
-  card, waits out part of the rest timer, then logs a real est.-1RM record for the celebration still. It refuses to start if
+  card (tablet and phone width), and waits out part of the rest timer. It refuses to start if
   Alex already has a workout going, and deletes exactly its own sets and ends the workout after,
   as `app-store-shots.mjs` does. **It writes to the account App Review signs in to**, so don't run
   it while a submission is in review: `SCENES=trends,offline,og` re-takes everything else without
@@ -224,6 +224,39 @@ Things that cost a round trip when they were learned:
   touches the sets this run logged for Alex.
 - **Free shows 90 days**, so Trends' six-month consistency grid is mostly empty on the demo account.
   That is why the second Trends image is the weekly bars, not the grid.
+
+### The household clip
+
+"Everyone's in the huddle" plays nine seconds of the real app on a phone, in the hero's phone frame:
+switch to Sam, "+" weight and "+" reps, Log set, the New PR! celebration, then her squat chart with
+the set just logged as its new high. `e2e/tools/marketing-demo-clip.mjs` records and encodes it:
+
+```bash
+cd e2e
+FRONTEND=https://app.huddle.fitness EMAIL=... PASSWORD=... ALLOW_WRITES=1   node tools/marketing-demo-clip.mjs <workDir> ../marketing/assets/shots
+ENCODE_ONLY=1 node tools/marketing-demo-clip.mjs <workDir> ../marketing/assets/shots   # re-encode only
+```
+
+- **It logs one real set for Sam** and deletes exactly that set afterwards. It ends the workout only
+  if it started one, because an open workout it found belongs to someone else (App Review uses
+  this account). Not during a review.
+- **A soft ring marks each tap**, like iOS's "Show touches". It is the only thing drawn over the
+  app. It fades within about a third of a second, because "Nice" sits exactly where "Log set" was
+  tapped, and a lingering ring read as a tap on Nice.
+- **Recorded from Chrome's screencast**, frame by frame with timestamps, not Playwright's
+  `recordVideo` (a fixed 1 Mbit/s that blurs text).
+- **Encoded in Microsoft Edge**, which has the H.264 encoder Safari and every iPhone need
+  (Playwright's Chromium doesn't), so there is no video tool to install. Running a downloaded
+  encoder binary is blocked in this environment anyway. MP4 comes from Edge's **WebCodecs**
+  encoder, packed by `e2e/tools/mp4-mux.mjs`. **Not Edge's MediaRecorder**: its MP4 froze between
+  keyframes in playback, so a 9-second clip showed its first frame for 5 seconds. WebM (VP9) does
+  come from MediaRecorder, which is fine for that format.
+- **The page lists MP4 first and WebM second**, and the browser picks by `type`. `lazy-video.js`
+  wires up every `<source>`, so that choice works. Reduced-motion visitors get the poster (the
+  celebration) and no video bytes.
+- **Check the encode by playing it, not by seeking.** Sample frames while it plays in Edge (which
+  decodes H.264). The broken MediaRecorder MP4 reported the right duration and seeked without
+  complaint.
 
 ### The hero's device frames
 

@@ -138,6 +138,10 @@ a public page, which is what this replaced on 2026-10-27.
   submission is in review; `SCENES=trends,offline,og` writes nothing.
 - **After a re-take, update each `<img>`'s `width`/`height`.** `landing.spec.ts` fails any image
   whose declared shape doesn't match its file.
+- **The household clip** comes from `e2e/tools/marketing-demo-clip.mjs`, and it writes too (one
+  set for Sam, deleted after). Its MP4 must come from Edge's WebCodecs encoder + `mp4-mux.mjs`,
+  **never Edge's MediaRecorder**: that MP4 freezes between keyframes, and only playing it shows
+  that (the duration and seeking look fine). Narrative: `docs/marketing-site.md`.
 
 ## Device-framed screenshots must use the device's real aspect ratio, not a content-tight crop
 

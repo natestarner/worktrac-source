@@ -149,12 +149,24 @@
     <section class="section section--tight">
       <div class="container split reveal">
         <div class="split__media">
-          <figure class="figure figure--narrow">
-            <picture>
-              <source srcset="/assets/shots/app-household-phone.jpg" media="(max-width: 700px)" width="368" height="548" />
-              <img src="/assets/shots/app-household.jpg" width="368" height="476" loading="lazy" alt="Huddle's New PR! celebration for Alex's Barbell Back Squat: a top-weight record and a new best estimated one-rep max, with confetti." />
-            </picture>
-          </figure>
+          <!-- Nine seconds of the real app (tools/marketing-demo-clip.mjs): switch to Sam, + weight,
+               + reps, Log set, the New PR! celebration, then her squat chart with the set just
+               logged as its new high. Nothing loads until this scrolls near the viewport
+               (lazy-video.js); reduced-motion visitors get the poster, the celebration, and no
+               video bytes. MP4 is H.264 for Safari and iPhones; WebM for browsers without it. -->
+          <div class="device device--phone device--clip">
+            <div class="device__screen">
+              <video
+                class="js-lazy-video"
+                width="720" height="1564"
+                poster="/assets/shots/app-household-poster.jpg"
+                muted loop playsinline preload="none"
+                aria-label="Huddle on an iPhone: switching from Alex to Sam, tapping plus on weight and reps, logging the set, a New PR! celebration with confetti, then Sam's squat chart with today's set as its new high point.">
+                <source data-src="/assets/shots/app-household.mp4" type='video/mp4; codecs="avc1.640028"' />
+                <source data-src="/assets/shots/app-household.webm" type='video/webm; codecs="vp9"' />
+              </video>
+            </div>
+          </div>
         </div>
         <div class="split__text">
           <p class="eyebrow">The household</p>
@@ -401,5 +413,6 @@
   </footer>
 
   <script src="/app-links.js"></script>
+  <script src="/lazy-video.js" defer></script>
 </body>
 </html>
