@@ -799,10 +799,14 @@ img {
 
 /* Sized off the tablet, not the viewport: a phone is roughly a fifth of an iPad's
    landscape width, and holding that ratio is what keeps the pair reading as two
-   real objects rather than two screenshots at arbitrary scales. */
+   real objects rather than two screenshots at arbitrary scales.
+
+   right: -4% hangs it a little past the tablet's edge, so it sits beside the tablet's "This
+   session" column rather than over the sets logged in it. Small enough that it never reaches past
+   .hero's side padding at any width the pair is shown (>700px), so nothing is clipped. */
 .device--phone {
   position: absolute;
-  right: 3%;
+  right: -4%;
   bottom: -2%;
   width: 21%;
   border-radius: clamp(16px, 2.2vw, 26px);
