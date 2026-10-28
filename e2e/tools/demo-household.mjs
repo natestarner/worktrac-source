@@ -485,8 +485,10 @@ for (const { person, sessions, notes } of plans) {
     await call('PUT', `/api/sessions/${nt.session.id}/exercises/${exId(nt.exercise)}/note`, { note: nt.note });
   }
   // Their programme, as routines.
-  const names = person.name === 'Alex' ? ['Lower A', 'Upper A', 'Lower B', 'Upper B']
-    : person.name === 'Sam' ? ['Full Body A', 'Full Body B'] : ['Day 1', 'Day 2'];
+  // Named the way people name their own (renamed in production 2026-10-27; "Lower A" read like a
+  // template, and the marketing hero shows the routine strip).
+  const names = person.name === 'Alex' ? ['Squat Day', 'Bench Day', 'Deadlift Day', 'Press & Pull']
+    : person.name === 'Sam' ? ['Squat + Bench', 'Deadlift + Press'] : ['After-School Lift', 'Weekend Lift'];
   for (let i = 0; i < person.rotation.length; i++) {
     await call('POST', `/api/people/${pid}/routines`, { name: names[i], exercises: person.rotation[i].map((x) => ({ exerciseId: exId(x) })) });
   }
