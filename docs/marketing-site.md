@@ -172,121 +172,107 @@ config/production/marketing-robots.txt   →  User-agent: *
 
 ## The product screenshots are real, and regenerating them is scripted
 
-Every product image under `marketing/assets/shots/` is a screenshot of the app actually
-running — no mockups, no drawn approximations. That is a deliberate constraint: a hand-drawn
-"screenshot" drifts from the product the moment either changes, and it always looks like
-what it is.
-
-> **`device-iphone.jpg` and `app-log.jpg` are a manual exception.** They were retaken directly
-> on-device (one from a screen recording) rather than through this pipeline, are JPEG instead of
-> PNG, and — because no dark capture was retaken alongside them — have no `-dark` counterpart, so
-> their `<img>` tags in `index.html` don't use the
-> `<picture><source media="(prefers-color-scheme: dark)">` pattern; they show the same light
-> screenshot in dark mode. `marketing-shots.mjs` still only knows how to produce the old
-> filenames/crops it's documented for below, so running it will NOT regenerate these two — it
-> needs updating first (new anchors, JPEG output, dark captures) before this exception can close.
-> `app-offline.png`/`app-offline-dark.png` are unaffected and still follow the scripted flow.
->
-> **`device-ipad.jpg`, `app-trends-main.jpg` and `app-trends-secondary.jpg` were re-sourced
-> 2026-08-26 from a fresh batch of real on-device iPad captures** (not the scripted pipeline
-> either, but a different manual source than the first three). `app-trends-main.jpg`/
-> `-secondary.jpg` are still content-tight crops, same convention as before, just higher
-> fidelity. `device-ipad.jpg` is different in kind, not just quality: it used to be a
-> content-tight crop too, but that made sense only as a plain screenshot — wrapped in the hero's
-> `.device` CSS bezel, a content-tight crop's aspect ratio *is* the apparent device shape, and
-> tight-cropped it was nowhere near a real iPad's (~2:1 rather than ~1.4:1). It's now the real
-> device's full screenshot, status bar included, at its native ~1.44:1 aspect ratio, cropped only
-> for file size. **Any future device-framed screenshot (as opposed to a plain `.figure` card)
-> needs the same treatment** — see `.claude/rules/marketing.md`.
->
-> **The household section (`app-household.webm` + `app-household-poster.jpg`) is a bigger
-> exception: it's video, not a screenshot**, and nothing in this pipeline produces video. It's a
-> 14s trimmed, cropped, re-encoded (VP9/WebM) clip of the same source recording `app-log.jpg`'s
-> frame came from, re-cut 2026-08-26 from that same source. **The source is HEVC (`hvc1`), not
-> H.264** — this doc previously said H.264, which was wrong; the real obstacle is that Chromium
-> (including Playwright's bundled build) cannot decode HEVC at all, so a `<video>` element never
-> fires `loadedmetadata` against it. There's no system `ffmpeg` on the machine this was last done
-> on and `choco install` needs admin rights this environment doesn't have, but a portable static
-> build (`ffmpeg-release-essentials.zip` from `gyan.dev`, no install, just unzip and call the
-> `.exe` by path) handles the whole job — probing, scanning content via a contact-sheet, trimming,
-> cropping and the final VP9 encode — with no Chromium/canvas involvement at all. It's loaded and
-> played by `marketing/lazy-video.js`: nothing is fetched until the section scrolls near the
-> viewport, and a visitor with `prefers-reduced-motion` never fetches it at all — the `poster`
-> frame stands in as a plain still image for them. There is still no dark variant and no
-> regeneration *script* for this one; redoing it means repeating the manual ffmpeg pass above.
-
-Two scripts in `e2e/tools/` do it, and they need this worktree's stack up:
+Every product image under `marketing/assets/shots/` (and the link preview, `assets/og-image.png`)
+is a capture of the app actually running, no mockups. Since 2026-10-27 they all come from one
+script and one household: the reviewer demo household (Alex, Sam and Jordan, written into the
+production account by `e2e/tools/demo-household.mjs`). That is the same household the App Store
+screenshots show, so the site and the listing tell one story, and nobody's real family is on a
+public page. The earlier set mixed a real family's names across screenshots, a deadlift chart that
+dived halfway across, and a household video whose still frame caught the app mid-save; the
+on-device captures, the old video and the `marketing-capture.mjs` / `marketing-shots.mjs` pipeline
+that went with them are gone.
 
 ```bash
-bash scripts/up.sh
-
-cd e2e && npm ci
-# 1. Seed a household -- 3 people, 15 weeks, ~850 sets. Sessions-per-week varies (mostly 3,
-#    some 2 and 4, one 5) on shifting weekdays, and the weights stall once and deload once,
-#    so the charts look like training rather than a generated ramp. Prints the login.
-FRONTEND=http://localhost:3003 node tools/marketing-capture.mjs
-
-# 2. Screenshot the running app, light and dark.
-FRONTEND=http://localhost:3003 EMAIL=<email from step 1> node tools/marketing-shots.mjs ../marketing/assets/shots
-SCHEME=dark FRONTEND=http://localhost:3003 EMAIL=<same> node tools/marketing-shots.mjs ../marketing/assets/shots
+cd e2e
+FRONTEND=https://app.huddle.fitness EMAIL=... PASSWORD=... ALLOW_WRITES=1   node tools/marketing-demo-shots.mjs ../marketing/assets
 ```
+
+The login is the reviewer account's (kept outside the repo; never commit it). What each scene
+does:
+
+- **`workout`** starts Alex's Squat Day routine on the tablet (the routine strip fills the
+  landscape screen; starting one writes nothing), logs two squat sets for the hero pair and the log
+  card (tablet and phone width), and waits out part of the rest timer. It refuses to start if
+  Alex already has a workout going, and deletes exactly its own sets and ends the workout after,
+  as `app-store-shots.mjs` does. **It writes to the account App Review signs in to**, so don't run
+  it while a submission is in review: `SCENES=trends,offline,og` re-takes everything else without
+  writing anything.
+- **`trends`** captures Sam's squat chart and weekly workouts, card by card.
+- **`offline`** logs two sets with the network cut and closes the browser before reconnecting, so
+  they only ever exist in that throwaway profile. Light and dark, since the page swaps them with
+  `<picture><source media="(prefers-color-scheme: dark)">`.
+- **`og`** builds the 1200 x 630 link preview from the hero phone capture.
+
+**Phone-width versions.** The log card, the celebration and both Trends cards are also captured at
+440px wide (`...-phone.jpg`) and served on screens 700px and narrower through
+`<picture><source media="(max-width: 700px)">`. A 1000px-wide capture shrunk into a phone's
+column left 5px text, and phones are where most visitors arrive from. Each `<source>` declares its
+own `width`/`height`.
+
+Then update each `<img>`'s (and `<source>`'s) `width`/`height` in `index.html` to the new files.
+`landing.spec.ts`'s "declared at its real shape" test fails on any image whose declared shape no
+longer matches the file.
 
 Things that cost a round trip when they were learned:
 
-- **The Trends charts are not built on the shared `Card` primitive** — each is a plain div with
-  inline surface/border/radius styles. `marketing-shots.mjs` anchors on the heading text and
-  walks up two levels rather than looking for `.card`.
-- **Sticky chrome paints over an element screenshot** of anything taller than the viewport:
-  Playwright scrolls the element into view and the sticky layer follows it down. The script
-  demotes `sticky`/`fixed` to `static` for the capture.
-- **The offline shot is genuinely offline** — the script cuts the network, logs two real sets,
-  and captures the app's own "2 changes waiting to sync" banner. It is deliberately a viewport
-  capture rather than an element crop, because that banner lives in the chrome above
-  `.tab-panel`.
-- **Seed before the app loads, not after.** `offlineCacheWarm` caches whatever it finds, so data
-  inserted behind a running app's back leaves sections blank for about a minute.
-- **Anchor sessions to real Mondays, not to rolling 7-day blocks counted back from now.** The
-  workouts-per-week chart bins by calendar week, so rolling blocks bleed across boundaries and
-  flatten the intended 2/3/4/5 distribution into a near-constant 3.
-- **End the session the script starts.** The offline step leaves a live session behind; on the
-  next run the Log tab then opens to the picker instead of the exercise, which silently turned
-  the hero's log screenshot into a picture of the exercise list.
+- **Sticky chrome paints over an element screenshot** of anything taller than the viewport, so the
+  card scenes demote `sticky`/`fixed` to `static` first.
+- **A pointer left over a chart leaves its hover tooltip in the shot.** The card scenes park the
+  mouse at (0, 0).
+- **The demo account is shared with App Review.** Its other people may have a workout going (a
+  green dot on their pill) that the script did not start. Leave it alone: the cleanup only ever
+  touches the sets this run logged for Alex.
+- **Free shows 90 days**, so Trends' six-month consistency grid is mostly empty on the demo account.
+  That is why the second Trends image is the weekly bars, not the grid.
 
-Each shot is captured at `deviceScaleFactor: 2` and downscaled by the `width`/`height`
-attributes on the `<img>`, so it stays sharp on a retina display. Light and dark are separate
-files, swapped with `<picture><source media="(prefers-color-scheme: dark)">` — the same
-mechanism the app uses for its logo.
+### The household clip
+
+"Everyone's in the huddle" plays nine seconds of the real app on a phone, in the hero's phone frame:
+switch to Sam, "+" weight and "+" reps, Log set, the New PR! celebration, then her squat chart with
+the set just logged as its new high. `e2e/tools/marketing-demo-clip.mjs` records and encodes it:
+
+```bash
+cd e2e
+FRONTEND=https://app.huddle.fitness EMAIL=... PASSWORD=... ALLOW_WRITES=1   node tools/marketing-demo-clip.mjs <workDir> ../marketing/assets/shots
+ENCODE_ONLY=1 node tools/marketing-demo-clip.mjs <workDir> ../marketing/assets/shots   # re-encode only
+```
+
+- **It logs one real set for Sam** and deletes exactly that set afterwards. It ends the workout only
+  if it started one, because an open workout it found belongs to someone else (App Review uses
+  this account). Not during a review.
+- **A soft ring marks each tap**, like iOS's "Show touches". It is the only thing drawn over the
+  app. It fades within about a third of a second, because "Nice" sits exactly where "Log set" was
+  tapped, and a lingering ring read as a tap on Nice.
+- **Recorded from Chrome's screencast**, frame by frame with timestamps, not Playwright's
+  `recordVideo` (a fixed 1 Mbit/s that blurs text).
+- **Encoded in Microsoft Edge**, whose H.264 output (what Safari and every iPhone need) is the
+  one verified by playing it back, so there is no video tool to install. Running a downloaded
+  encoder binary is blocked in this environment anyway. MP4 comes from Edge's **WebCodecs**
+  encoder, packed by `e2e/tools/mp4-mux.mjs`. **Not Edge's MediaRecorder**: its MP4 froze between
+  keyframes in playback, so a 9-second clip showed its first frame for 5 seconds. WebM (VP9) does
+  come from MediaRecorder, which is fine for that format.
+- **The page lists MP4 first and WebM second**, and the browser picks by `type`. `lazy-video.js`
+  wires up every `<source>`, so that choice works. Reduced-motion visitors get the poster (the
+  celebration) and no video bytes.
+- **Check the encode by playing it, not by seeking.** Sample frames while it plays in Edge (which
+  decodes H.264). The broken MediaRecorder MP4 reported the right duration and seeked without
+  complaint.
 
 ### The hero's device frames
 
-This section describes the original intent (`device-ipad.png`/`device-iphone.png`, captured at
-a real device *viewport* via browser automation); the shipped files are `.jpg` and, as of
-2026-08-26, `device-ipad.jpg` is a real on-device photo rather than a simulated-viewport capture
-— see the manual-exceptions blockquote above for what actually ships today.
+The hero pair are **full screens at real device proportions**, iPad Air 11" landscape (1180 x 820)
+and a 6.9" iPhone (440 x 956), each captured at the scale that makes the file exactly the size the
+markup declares, so nothing is resampled. The app's layout genuinely differs at those widths (the
+log screen goes two-column on the tablet), and the CSS bezel takes its shape from the image, so a
+crop of some other screen would show as the wrong device (`.claude/rules/marketing.md`).
 
-The underlying reasoning still holds regardless of capture method: **real device proportions**
-(iPad Pro 11" landscape, iPhone 14 Pro portrait, or whatever real device did the capturing)
-rather than cropped out of a desktop capture, because the app's layout genuinely differs at
-those widths — the log screen goes two-column on a tablet, the tab bar reflows on a phone. A
-desktop crop squeezed into a tablet bezel looks like exactly what it is.
+The bezels themselves are **pure CSS** (`.device` in `styles.css`), with no chrome images to keep
+in sync. The phone frame adds a **status-bar band** above the screenshot, in the app's own header
+colour, for the dynamic island to sit in: a browser capture starts at the page content.
 
-The bezels themselves are **pure CSS** (`.device` in `styles.css`) — no chrome images to keep in
-sync. Two things about them:
-
-- The tablet capture logs three real sets first. Without them the bottom half of an 834px-tall
-  viewport is empty, which reads as an empty app rather than one mid-workout.
-- The phone frame adds a **status-bar band** above the screenshot, in the app's own header
-  colour, for the dynamic island to sit in. A browser screenshot starts at the page content, so
-  without that band the island lands on top of the app's logo.
-
-Below 700px the hero drops the tablet and keeps the phone: a tablet screenshot scaled to 390px
-is unreadable, while a phone screenshot at phone size is exactly what a visitor on a phone is
-being sold.
-
-`DEVICES_ONLY=1` re-runs just these two. The full run drives three browser contexts hard, and
-this worktree's Vite has the load-dependent habit of dying under exactly that
-(`.claude/rules/dev-stack.md`) — it died twice during this work, both times with the documented
-`rc=127` at comfortable memory. Restart with `bash scripts/up.sh` and re-run.
+Below 700px the hero drops the tablet and keeps the phone: a tablet screenshot scaled to 390px is
+unreadable, while a phone screenshot at phone size is exactly what a visitor on a phone is being
+sold.
 
 ## Checking it locally
 

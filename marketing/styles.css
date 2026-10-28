@@ -405,6 +405,12 @@ img {
   max-width: 58ch;
 }
 
+/* A second, body-size paragraph in a centred section head ran the container's full width (~140
+   characters a line at desktop) beside the lead's 58ch. */
+.section__head .prose:not(.prose--lead) {
+  max-width: 68ch;
+}
+
 /* ============================================================================
    Buttons
    ========================================================================= */
@@ -621,8 +627,11 @@ img {
    Hero — centred, with real product shots breaking the bottom edge
    ========================================================================= */
 
+/* Bottom padding is short on purpose: the feature row under the hero shares its background, so
+   nothing but empty space marks the boundary, and at 64px (+ that section's own top padding) it
+   read as a hole under the trust line. */
 .hero {
-  padding: clamp(24px, 3vw, 44px) clamp(20px, 5vw, 72px) clamp(40px, 5vw, 64px);
+  padding: clamp(24px, 3vw, 44px) clamp(20px, 5vw, 72px) clamp(28px, 2.5vw, 36px);
   overflow: hidden;
 }
 
@@ -695,6 +704,7 @@ img {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
   gap: var(--space-3);
 }
 
@@ -738,10 +748,12 @@ img {
 .hero__devices {
   position: relative;
   z-index: 0; /* contains the ::after contact shadow's negative z-index to this element */
-  width: min(820px, 100%);
+  /* 940 = an 820px tablet (82%) plus the phone standing beside it. */
+  width: min(940px, 100%);
   margin: clamp(20px, 2.8vw, 40px) auto 0;
-  /* Room for the phone to hang below the tablet without crowding the CTA under it. */
-  padding-bottom: clamp(20px, 3.5vw, 44px);
+  /* Room for the phone to hang below the tablet without crowding the CTA under it. At true scale
+     the phone is nearly the tablet's height and hangs ~60px lower, hence more than the old 44px. */
+  padding-bottom: clamp(28px, 4.5vw, 60px);
 }
 
 /* A dedicated contact shadow under the pair, on top of each .device's own --shadow-4 below.
@@ -783,12 +795,34 @@ img {
   line-height: 0; /* no descender gap under the screenshot */
 }
 
-.device__screen img {
+.device__screen img,
+.device__screen video {
   width: 100%;
+  /* Explicit for <video>: the base img rule doesn't reach it, and its height attribute would
+     otherwise apply as a literal CSS height (.claude/rules/marketing.md). */
   height: auto;
+  display: block;
+}
+
+/* The household clip: the hero's phone standing on its own in a section column, not leaning on
+   the tablet. Same bezel, island and status band; only the placement differs. */
+.device--phone.device--clip {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  width: min(300px, 78%);
+  margin: 0 auto;
+}
+
+/* No CSS status band over the clip: the band is painted into the video itself, in the colour of the
+   app's header in each frame, so it dims with the app when the PR celebration's backdrop comes up.
+   A CSS band stayed white over a dimmed screen. */
+.device--phone.device--clip .device__screen {
+  padding-top: 0;
 }
 
 .device--tablet {
+  width: 82%;
   border-radius: clamp(20px, 3.2vw, 40px);
   padding: clamp(7px, 1.2vw, 14px);
 }
@@ -797,14 +831,18 @@ img {
   border-radius: clamp(13px, 2.1vw, 27px);
 }
 
-/* Sized off the tablet, not the viewport: a phone is roughly a fifth of an iPad's
-   landscape width, and holding that ratio is what keeps the pair reading as two
-   real objects rather than two screenshots at arbitrary scales. */
+/* True to scale: a 6.9" iPhone is 78mm wide against an 11" iPad Air's 248mm in landscape, so the
+   phone is 31% of the tablet's width (25.5% of a container the tablet fills 82% of). It was 21%,
+   which read as a smaller phone standing farther back, though it sits in front.
+
+   At that size it would cover the tablet's "This session" column, so the tablet sits left in the
+   container and the phone stands at the right edge, overlapping only the tablet's last few percent.
+   right: 0 keeps it inside .hero__devices, so nothing is clipped at any width. */
 .device--phone {
   position: absolute;
-  right: 3%;
-  bottom: -2%;
-  width: 21%;
+  right: 0;
+  bottom: -3%;
+  width: 25.5%;
   border-radius: clamp(16px, 2.2vw, 26px);
   padding: clamp(3px, 0.6vw, 7px);
   z-index: 2;
@@ -981,11 +1019,17 @@ img {
    regardless -- harmless-looking on desktop (a modest ~10% too tall, letterboxed), badly broken
    on a narrow phone column (width shrinks much further, height doesn't move: nearly 2x too
    tall, most of the card empty). Found on the deployed lower site, 2026-08-24. */
-.figure img,
-.figure video {
+.figure img {
   width: 100%;
   height: auto;
   display: block;
+}
+
+/* Portrait captures (the celebration card, the phone-width offline shot) beside a few lines of
+   text: at the split's full column width they stood three times the text's height. */
+.figure--narrow {
+  max-width: 400px;
+  margin-inline: auto;
 }
 
 .figure--quiet {
@@ -1157,6 +1201,18 @@ img {
   font-size: 16px;
   line-height: 1.55;
   color: var(--color-muted);
+}
+
+.note + .note {
+  margin-top: var(--space-3);
+}
+
+.note--promise svg {
+  color: var(--color-success);
+}
+
+.note--promise strong {
+  color: var(--color-text);
 }
 
 /* ============================================================================
@@ -1413,6 +1469,31 @@ img {
 .cta-final .prose {
   max-width: 52ch;
   font-size: var(--text-lead);
+}
+
+.cta-final__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Apple's "Download on the App Store" badge, its own artwork unaltered (assets/app-store-badge.svg,
+   from developer.apple.com). Apple's rules for it: never recoloured, redrawn or animated, at least
+   40px tall on screen, and clear space of a quarter of its height around it -- the 12px gap of the
+   rows it sits in. 54px matches .btn's min-height, so it reads as a peer of the button beside it.
+   The black badge is the one Apple prefers on any ground; its grey keyline carries it on the dark
+   band, so there is no white variant to keep in sync. */
+.store-badge {
+  display: inline-flex;
+  border-radius: var(--radius-md);
+}
+
+.store-badge img {
+  display: block;
+  width: auto;
+  height: 54px;
 }
 
 .site-footer {

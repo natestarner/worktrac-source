@@ -20,6 +20,9 @@
   <meta name="twitter:description" content="Separate workout tracking for every person in the house, on one shared screen. Celebrate your PRs together." />
   <meta name="twitter:image" content="https://huddle.fitness/assets/og-image.png" />
 
+  <!-- Safari's Smart App Banner on iPhone and iPad: "Open" if the app is installed, "Get" if not.
+       Same app id as every apps.apple.com link (check-marketing.sh check 10). -->
+  <meta name="apple-itunes-app" content="app-id=6826555272" />
   <meta name="theme-color" content="#faf9f7" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#171614" media="(prefers-color-scheme: dark)" />
 
@@ -72,12 +75,12 @@
       <div class="hero__devices">
         <div class="device device--tablet">
           <div class="device__screen">
-            <img src="/assets/shots/device-ipad.jpg" width="1700" height="1181" fetchpriority="high" alt="Huddle on an iPad: Nate, Beckett and Uriah along the top, Barbell Back Squat open, and three sets logged this session." />
+            <img src="/assets/shots/device-ipad.jpg" width="1700" height="1181" fetchpriority="high" alt="Huddle on an iPad: Alex, Sam and Jordan along the top, Alex part-way through the Squat Day routine on Barbell Back Squat, with last time and best est. 1RM above the weight and reps, and two sets logged this session." />
           </div>
         </div>
         <div class="device device--phone">
           <div class="device__screen">
-            <img src="/assets/shots/device-iphone.jpg" width="800" height="1531" alt="Huddle on an iPhone: Barbell Back Squat open, last time 298 lb for four sets of 6, weight and reps steppers set to 298 and 6 above a Log set for Nate button." />
+            <img src="/assets/shots/device-iphone.jpg" width="800" height="1738" alt="Huddle on an iPhone: Barbell Back Squat open for Alex, last time 225 lb for four sets, steppers set to 225 and 5 above a Log set for Alex button, two sets logged below." />
           </div>
         </div>
       </div>
@@ -89,6 +92,9 @@
         <div class="hero__actions">
           <a class="btn btn--primary" href="https://app.huddle.fitness/register">Start free</a>
           <a class="btn btn--secondary" href="https://app.huddle.fitness/register?plan=plus">Go Plus</a>
+          <a class="store-badge" href="https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272">
+            <img src="/assets/app-store-badge.svg" width="162" height="54" alt="Download on the App Store" />
+          </a>
         </div>
         <a class="hero__more" href="#features">See how it works
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>
@@ -136,7 +142,10 @@
         </div>
         <div class="split__media">
           <figure class="figure">
-            <img src="/assets/shots/app-log.jpg" width="1000" height="1018" loading="lazy" alt="Dumbbell Bench Press in Huddle mid-routine: last time was 90 lb for 8, 8, 8 and 9 reps; weight and reps steppers set to 90 and 8 above a Log set for Nate button; Set 1 already logged at 90 lb x 8." />
+            <picture>
+              <source srcset="/assets/shots/app-log-phone.jpg" media="(max-width: 700px)" width="440" height="696" />
+              <img src="/assets/shots/app-log.jpg" width="1000" height="665" loading="lazy" alt="Barbell Back Squat in Huddle: last time's four sets and the best est. 1RM above weight and reps steppers prefilled from last time, a note of how many more reps would be a PR, and a Log set for Alex button." />
+            </picture>
           </figure>
         </div>
       </div>
@@ -146,20 +155,24 @@
     <section class="section section--tight">
       <div class="container split reveal">
         <div class="split__media">
-          <!-- A real screen recording: switching from Nate to Beckett and logging a new
-               PR. Nothing loads until this scrolls near the viewport (lazy-video.js), and
-               visitors who prefer reduced motion get the poster frame only, no video bytes
-               fetched at all. -->
-          <figure class="figure">
-            <video
-              class="js-lazy-video"
-              width="780" height="1088"
-              poster="/assets/shots/app-household-poster.jpg"
-              muted loop playsinline preload="none"
-              aria-label="Huddle switching from Nate to Beckett mid-workout, then celebrating a new Barbell Bench Press PR for Beckett with a confetti burst.">
-              <source data-src="/assets/shots/app-household.webm" type="video/webm" />
-            </video>
-          </figure>
+          <!-- Nine seconds of the real app (tools/marketing-demo-clip.mjs): switch to Sam, + weight,
+               + reps, Log set, the New PR! celebration, then her squat chart with the set just
+               logged as its new high. Nothing loads until this scrolls near the viewport
+               (lazy-video.js); reduced-motion visitors get the poster, the celebration, and no
+               video bytes. MP4 is H.264 for Safari and iPhones; WebM for browsers without it. -->
+          <div class="device device--phone device--clip">
+            <div class="device__screen">
+              <video
+                class="js-lazy-video"
+                width="720" height="1608"
+                poster="/assets/shots/app-household-poster.jpg"
+                muted loop playsinline preload="none"
+                aria-label="Huddle on an iPhone: switching from Alex to Sam, tapping plus on weight and reps, logging the set, a New PR! celebration with confetti, then Sam's squat chart with today's set as its new high point.">
+                <source data-src="/assets/shots/app-household.mp4" type='video/mp4; codecs="avc1.640028"' />
+                <source data-src="/assets/shots/app-household.webm" type='video/webm; codecs="vp9"' />
+              </video>
+            </div>
+          </div>
         </div>
         <div class="split__text">
           <p class="eyebrow">The household</p>
@@ -180,10 +193,16 @@
       </div>
       <div class="figure-stack figure-stack--trends reveal">
         <figure class="figure">
-          <img src="/assets/shots/app-trends-main.jpg" width="900" height="1180" loading="lazy" alt="Exercise progress for Barbell Deadlift: estimated one-rep max rising to 449.7 lb, with personal records marked, and the sets behind them listed below." />
+          <picture>
+            <source srcset="/assets/shots/app-trends-main-phone.jpg" media="(max-width: 700px)" width="392" height="669" />
+            <img src="/assets/shots/app-trends-main.jpg" width="792" height="669" loading="lazy" alt="Exercise progress for Sam's Barbell Back Squat: estimated one-rep max climbing from 180.8 lb in August to 228 lb in late October, records marked, with the all-time bests listed below." />
+          </picture>
         </figure>
         <figure class="figure figure--quiet">
-          <img src="/assets/shots/app-trends-secondary.jpg" width="900" height="1091" loading="lazy" alt="A streak of 7 weeks, 3 workouts this week, volume up 163% versus last month, a six-month consistency grid, and workouts-per-week and volume-per-week bar charts." />
+          <picture>
+            <source srcset="/assets/shots/app-trends-secondary-phone.jpg" media="(max-width: 700px)" width="392" height="282" />
+            <img src="/assets/shots/app-trends-secondary.jpg" width="792" height="282" loading="lazy" alt="Workouts per week for Sam: two to four workouts most weeks from August through October." />
+          </picture>
         </figure>
       </div>
     </section>
@@ -198,10 +217,10 @@
           <p class="prose">Your history, PRs and routines stay readable the whole time, for everyone in the house.</p>
         </div>
         <div class="split__media">
-          <figure class="figure">
+          <figure class="figure figure--narrow">
             <picture>
               <source srcset="/assets/shots/app-offline-dark.png" media="(prefers-color-scheme: dark)" />
-              <img src="/assets/shots/app-offline.png" width="1000" height="560" loading="lazy" alt="Huddle with no connection: a banner reads &quot;Offline: 2 changes waiting to sync. They'll sync when you reconnect.&quot; above the log screen, which is still fully usable." />
+              <img src="/assets/shots/app-offline.png" width="600" height="853" loading="lazy" alt="Huddle with no connection: a banner reads &quot;Offline: 2 changes waiting to sync. They'll sync when you reconnect.&quot; above Alex's Barbell Bench Press, with the two sets just logged listed below." />
             </picture>
           </figure>
         </div>
@@ -227,11 +246,11 @@
             <ul class="plan__features">
               <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>Your whole family, on one account</li>
               <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>No ads, on Free or Plus</li>
-              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg><strong>Export everything</strong> to CSV, any time</li>
+              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg><span><strong>Export everything</strong> to CSV, any time</span></li>
               <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>Unlimited workouts, sets and exercises</li>
               <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>Works with no internet, syncs when you're back</li>
               <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>PRs, routines, rest timer, trends</li>
-              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>The last <strong>90 days</strong> of history</li>
+              <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg><span>The last <strong>90 days</strong> of history</span></li>
             </ul>
             <a class="btn btn--secondary btn--full" href="https://app.huddle.fitness/register">Start free</a>
           </div>
@@ -258,7 +277,7 @@
              third column. .plans is repeat(2, minmax(0,1fr)): a third card would need a new grid
              template and a rethink of the <=780px stack, and it would make the trainer tier as
              loud as the family ones on the page whose whole job is converting families. -->
-        <p class="prose" style="text-align: center; margin-top: var(--space-5)">
+        <p class="prose" style="text-align: center; margin: var(--space-5) 0 var(--space-6)">
           Training clients, or coaching a team? <a href="/for-trainers.html">Huddle Pro</a> gives every
           client their own private login, assigned programs and a roster.
         </p>
@@ -316,6 +335,14 @@
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
           <p>Your workouts are never deleted on Free. The app shows you the last 90 days, and everything older is waiting &mdash; it all comes back the moment you upgrade.</p>
         </div>
+
+        <!-- Each claim is the Privacy Policy's own ("We do not sell your data, we do not advertise in
+             the app, and we do not track you around the internet"; export on either plan). Change
+             them together. -->
+        <div class="note note--promise">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="m9 12 2 2 4-4" /></svg>
+          <p><strong>No ads, and your data stays yours.</strong> We never sell it or track you around the internet, and you can export all of it to CSV any time, on either plan. <a href="/privacy.html">Read the privacy policy</a>.</p>
+        </div>
       </div>
     </section>
 
@@ -339,7 +366,7 @@
         </div>
         <div class="faq__item">
           <h3 class="faq__q">Is there an app to install?</h3>
-          <p class="prose">Add it to your home screen and it runs full-screen like any other app, offline included. No app store, no updates to chase.</p>
+          <p class="prose">On iPhone and iPad, yes: <a href="https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272">get Huddle from the App Store</a>. On Android or a computer there's nothing to install. Open it in your browser and add it to your home screen, and it runs full-screen like any other app, offline included. It's the same account everywhere, so your whole history comes with you.</p>
         </div>
         <div class="faq__item">
           <h3 class="faq__q">What happens to my older workouts on Free?</h3>
@@ -355,7 +382,7 @@
         </div>
         <div class="faq__item">
           <h3 class="faq__q">Do I need an iPad, or does it work on my phone too?</h3>
-          <p class="prose">Any of them. Phone, tablet or laptop, in whatever browser you already have. The screenshots feature an iPad because that's what's bolted to our gym wall, but Huddle fits itself to whatever screen you open it on.</p>
+          <p class="prose">Any of them. There's an app for iPhone and iPad, and on anything else (an Android phone, a tablet, a laptop) it runs in the browser you already have. The screenshots feature an iPad because that's what's bolted to our gym wall, but Huddle fits itself to whatever screen you open it on.</p>
         </div>
       </div>
     </section>
@@ -365,7 +392,12 @@
       <div class="cta-final reveal">
         <h2 class="section__title">Get everyone logging tonight</h2>
         <p class="prose">Sign up with an email, confirm the code, add the people you train with. You'll be logging your first set in about two minutes.</p>
-        <a class="btn btn--on-dark" href="https://app.huddle.fitness/register">Start free</a>
+        <div class="cta-final__actions">
+          <a class="btn btn--on-dark" href="https://app.huddle.fitness/register">Start free</a>
+          <a class="store-badge" href="https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272">
+            <img src="/assets/app-store-badge.svg" width="162" height="54" alt="Download on the App Store" />
+          </a>
+        </div>
       </div>
     </section>
   </main>
