@@ -142,6 +142,10 @@ a public page, which is what this replaced on 2026-10-27.
   set for Sam, deleted after). Its MP4 must come from Edge's WebCodecs encoder + `mp4-mux.mjs`,
   **never Edge's MediaRecorder**: that MP4 freezes between keyframes, and only playing it shows
   that (the duration and seeking look fine). Narrative: `docs/marketing-site.md`.
+- **Every video format needs a MIME type in `staticwebapp.config.json`.** Azure SWA serves an
+  unknown extension as `application/octet-stream`, the site sends `nosniff`, and Safari (MP4 only)
+  then shows just the poster. The local preview types it right, so only `check-marketing.sh`
+  check 11 and the deployed-site run of `landing.spec.ts` catch it (2026-10-28, `.mp4`).
 
 ## Device-framed screenshots must use the device's real aspect ratio, not a content-tight crop
 
