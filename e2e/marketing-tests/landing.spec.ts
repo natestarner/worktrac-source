@@ -93,6 +93,33 @@ test.describe('marketing landing page', () => {
     await expect(footer.getByRole('link', { name: 'Privacy' })).toBeVisible();
   });
 
+  // The iPhone and iPad app: Apple's badge in the hero and the closing band, and Safari's Smart App
+  // Banner, all naming one listing. check-marketing.sh checks the ids agree across every page; this
+  // checks a visitor actually sees the badge, at no less than the 40px Apple requires.
+  test('offers the App Store app beside the web sign-up', async ({ page }) => {
+    await page.goto('/');
+
+    const listing = /^https:\/\/apps\.apple\.com\/us\/app\/huddle-workout-tracker\/id\d+$/;
+    for (const scope of ['.hero', '.cta-final']) {
+      const badge = page.locator(scope).getByRole('link', { name: 'Download on the App Store' });
+      await expect(badge).toBeVisible();
+      await expect(badge).toHaveAttribute('href', listing);
+      // Loaded, not just present: until it is, Chrome draws the alt text in its place.
+      const img = badge.locator('img');
+      await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+      const box = await img.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(40);
+    }
+
+    const banner = await page.locator('meta[name="apple-itunes-app"]').getAttribute('content');
+    const id = (await page.locator('.hero .store-badge').getAttribute('href'))!.split('/id')[1];
+    expect(banner).toBe(`app-id=${id}`);
+
+    // The FAQ used to answer "No app store" -- it must point at the app now.
+    const faq = page.locator('.faq__item', { hasText: 'Is there an app to install?' });
+    await expect(faq.getByRole('link', { name: 'get Huddle from the App Store' })).toHaveAttribute('href', listing);
+  });
+
   // Stripe receipts and the App Store listing both name this page as the support URL, and the
   // people who follow it (a charge they don't recognize, a forgotten password) are mostly signed
   // out -- which is why it lives here and not at the app's own /app/help.
