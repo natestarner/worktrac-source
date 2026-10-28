@@ -11,9 +11,11 @@
  *   device-ipad.jpg      hero tablet: Alex mid-workout, iPad Air 11" landscape (1180 x 820)
  *   device-iphone.jpg    hero phone: the same workout on a 6.9" iPhone (440 x 956)
  *   app-log.jpg          "Log a set in two taps"
- *   app-household.jpg    "Everyone's in the huddle": the New PR! celebration, pills above it
+ *   app-household.jpg    "Everyone's in the huddle": the New PR! celebration, cropped close
  *   app-trends-main.jpg  Sam's squat, est. 1RM climbing, with the all-time bests under it
  *   app-trends-secondary.jpg  Sam's workouts per week
+ *   ...-phone.jpg        each of those four again at phone width, for <picture> on small screens:
+ *                        a 1000px-wide capture shrunk to a phone's column leaves 5px text
  *   app-offline(-dark).png    the offline banner with two sets waiting, light and dark
  *   og-image.png         the 1200 x 630 link preview, built from the hero phone capture
  *
@@ -53,15 +55,19 @@ const ROUTINE = 'Squat Day'; // Alex's, and it opens on EXERCISE
 
 const TABLET = { viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1700 / 1180, isMobile: true, hasTouch: true };
 const PHONE = { viewport: { width: 440, height: 956 }, deviceScaleFactor: 800 / 440, isMobile: true, hasTouch: true };
-// The plain figure cards: a tablet-width layout at 2x, downscaled by the <img> width/height.
+// The plain figure cards: a tablet-width layout at 2x, downscaled by the <img> width/height, and the
+// same cards at phone width for the page's small-screen <source>.
 const FIGURE = { viewport: { width: 1000, height: 1100 }, deviceScaleFactor: 2 };
+const FIGURE_PHONE = { viewport: { width: 440, height: 956 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 
 const browser = await chromium.launch();
 try {
   if (SCENES.includes('trends')) {
-    const figure = await open(FIGURE);
-    await trends(figure);
-    await figure.ctx.close();
+    for (const [device, suffix] of [[FIGURE, ''], [FIGURE_PHONE, '-phone']]) {
+      const f = await open(device);
+      await trends(f, suffix);
+      await f.ctx.close();
+    }
   }
   if (SCENES.includes('workout')) await workoutScenes();
   if (SCENES.includes('offline')) for (const scheme of ['light', 'dark']) await offline(scheme);
@@ -183,7 +189,7 @@ function drive(page) {
   return { settle, tab, person, openExercise, startRoutine, logSet, card };
 }
 
-async function trends({ page, person, tab, card }) {
+async function trends({ page, person, tab, card }, suffix) {
   await person('Sam');
   await tab('Trends');
   await page.locator('select').last().selectOption({ label: EXERCISE });
@@ -191,9 +197,9 @@ async function trends({ page, person, tab, card }) {
   // Down to the end of All-time bests: the chart and the records it names, not the lifetime table.
   const bests = await page.getByText(/^Most reps in a set$/).first().evaluate((el) => el.getBoundingClientRect().bottom);
   const top = await page.getByText(/^Exercise progress/).first().evaluate((el) => el.getBoundingClientRect().top);
-  await card(/^Exercise progress/, join(SHOTS, 'app-trends-main.jpg'), bests - top + 44);
+  await card(/^Exercise progress/, join(SHOTS, `app-trends-main${suffix}.jpg`), bests - top + 44);
   await page.evaluate(() => window.scrollTo(0, 0));
-  await card(/^Workouts per week$/, join(SHOTS, 'app-trends-secondary.jpg'));
+  await card(/^Workouts per week$/, join(SHOTS, `app-trends-secondary${suffix}.jpg`));
 }
 
 async function workout(figure) {
@@ -218,30 +224,50 @@ async function workout(figure) {
   await phone.ctx.close();
   await tablet.ctx.close();
 
-  // The figure cards come from the same workout, on the plain 1000px layout. Reloaded first: this
-  // page warmed its cache before the tablet logged anything, and would show the workout empty.
-  await figure.page.reload();
-  await figure.settle();
-  await figure.person('Alex');
-  await figure.openExercise(EXERCISE);
-  await figure.page.getByText('Set 2', { exact: true }).waitFor();
-  await figure.page.evaluate(() => window.scrollTo(0, 0));
+  // The figure cards come from the same workout, at tablet and at phone width. Each logs its own
+  // record set for its celebration: the second one has to beat the first to be a record at all.
+  await figureScenes(figure, '', RECORD_SET);
+  const figurePhone = await open(FIGURE_PHONE);
+  await figureScenes(figurePhone, '-phone', [RECORD_SET[0] + 5, RECORD_SET[1]]);
+  await figurePhone.ctx.close();
+}
+
+async function figureScenes(f, suffix, recordSet) {
+  // Reloaded first: a page that warmed its cache before the tablet logged anything would show the
+  // workout empty.
+  await f.page.reload();
+  await f.settle();
+  await f.person('Alex');
+  await f.openExercise(EXERCISE);
+  await f.page.getByText('Set 2', { exact: true }).waitFor();
+  await f.page.evaluate(() => window.scrollTo(0, 0));
+  const width = f.page.viewportSize().width;
   // Down to the Log set card's bottom edge: the steppers and the button are the pitch.
-  const logged = await figure.page.getByRole('button', { name: /^Log set/ }).evaluate((el) => {
+  const logged = await f.page.getByRole('button', { name: /^Log set/ }).evaluate((el) => {
     let card = el;
     while (card.parentElement && getComputedStyle(card).borderTopWidth === '0px') card = card.parentElement;
     return card.getBoundingClientRect().bottom;
   });
-  await figure.page.screenshot({ path: join(SHOTS, 'app-log.jpg'), type: 'jpeg', quality: 88, clip: { x: 0, y: 0, width: 1000, height: Math.ceil(logged) + 24 } });
-  console.log('app-log.jpg');
+  await f.page.screenshot({ path: join(SHOTS, `app-log${suffix}.jpg`), type: 'jpeg', quality: 88, clip: { x: 0, y: 0, width, height: Math.ceil(logged) + 24 } });
+  console.log(`app-log${suffix}.jpg`);
 
-  await figure.logSet(...RECORD_SET);
-  await figure.page.getByText('New PR!').waitFor();
-  await figure.page.waitForTimeout(1200); // past the entrance animation, confetti still falling
-  await figure.page.screenshot({ path: join(SHOTS, 'app-household.jpg'), type: 'jpeg', quality: 88, clip: { x: 0, y: 0, width: 1000, height: 900 } });
-  console.log('app-household.jpg');
-  await figure.page.keyboard.press('Escape');
-  await figure.page.waitForLoadState('networkidle');
+  await f.logSet(...recordSet);
+  await f.page.getByText('New PR!').waitFor();
+  await f.page.waitForTimeout(1200); // past the entrance animation, confetti still falling
+  // Close around the card, with a small margin of the dimmed app behind it: a wider crop is mostly
+  // grey and cuts words in half at its edges.
+  const card = await f.page.getByText('New PR!').evaluate((el) => {
+    let box = el;
+    while (box.parentElement && getComputedStyle(box).borderTopLeftRadius === '0px') box = box.parentElement;
+    const r = box.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  });
+  const pad = 24;
+  const clip = { x: card.x - pad, y: card.y - pad, width: card.w + 2 * pad, height: card.h + 2 * pad };
+  await f.page.screenshot({ path: join(SHOTS, `app-household${suffix}.jpg`), type: 'jpeg', quality: 88, clip });
+  console.log(`app-household${suffix}.jpg`);
+  await f.page.keyboard.press('Escape');
+  await f.page.waitForLoadState('networkidle');
 }
 
 // Two sets logged with the network cut, so the app's own banner says what is waiting. The context

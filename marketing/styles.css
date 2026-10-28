@@ -405,6 +405,12 @@ img {
   max-width: 58ch;
 }
 
+/* A second, body-size paragraph in a centred section head ran the container's full width (~140
+   characters a line at desktop) beside the lead's 58ch. */
+.section__head .prose:not(.prose--lead) {
+  max-width: 68ch;
+}
+
 /* ============================================================================
    Buttons
    ========================================================================= */
@@ -988,11 +994,17 @@ img {
    regardless -- harmless-looking on desktop (a modest ~10% too tall, letterboxed), badly broken
    on a narrow phone column (width shrinks much further, height doesn't move: nearly 2x too
    tall, most of the card empty). Found on the deployed lower site, 2026-08-24. */
-.figure img,
-.figure video {
+.figure img {
   width: 100%;
   height: auto;
   display: block;
+}
+
+/* Portrait captures (the celebration card, the phone-width offline shot) beside a few lines of
+   text: at the split's full column width they stood three times the text's height. */
+.figure--narrow {
+  max-width: 400px;
+  margin-inline: auto;
 }
 
 .figure--quiet {
@@ -1164,6 +1176,18 @@ img {
   font-size: 16px;
   line-height: 1.55;
   color: var(--color-muted);
+}
+
+.note + .note {
+  margin-top: var(--space-3);
+}
+
+.note--promise svg {
+  color: var(--color-success);
+}
+
+.note--promise strong {
+  color: var(--color-text);
 }
 
 /* ============================================================================

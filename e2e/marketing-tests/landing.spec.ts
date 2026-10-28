@@ -178,12 +178,20 @@ test.describe('marketing landing page', () => {
       // loads without being scrolled to.
       if (await img.isVisible()) await img.scrollIntoViewIfNeeded();
       await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
-      const { src, declared, natural } = await img.evaluate((el: HTMLImageElement) => ({
-        src: el.getAttribute('src'),
-        declared: Number(el.getAttribute('width')) / Number(el.getAttribute('height')),
-        natural: el.naturalWidth / el.naturalHeight,
-      }));
-      expect(declared, src!).toBeCloseTo(natural, 2);
+      // Inside a <picture>, the file loaded may be a <source>'s (the phone-width capture on a small
+      // screen), which declares its own size -- check whichever one the browser chose.
+      const { src, declared, natural } = await img.evaluate((el: HTMLImageElement) => {
+        const chosen = [...(el.parentElement?.querySelectorAll('source') ?? [])].find(
+          (s) => s.hasAttribute('width') && el.currentSrc.endsWith(s.getAttribute('srcset')!),
+        );
+        const sized = chosen ?? el;
+        return {
+          src: el.currentSrc,
+          declared: Number(sized.getAttribute('width')) / Number(sized.getAttribute('height')),
+          natural: el.naturalWidth / el.naturalHeight,
+        };
+      });
+      expect(declared, src).toBeCloseTo(natural, 2);
     }
   });
 });

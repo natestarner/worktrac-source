@@ -203,7 +203,13 @@ does:
   `<picture><source media="(prefers-color-scheme: dark)">`.
 - **`og`** builds the 1200 x 630 link preview from the hero phone capture.
 
-Then update each `<img>`'s `width`/`height` in `index.html` to the new files.
+**Phone-width versions.** The log card, the celebration and both Trends cards are also captured at
+440px wide (`...-phone.jpg`) and served on screens 700px and narrower through
+`<picture><source media="(max-width: 700px)">`. A 1000px-wide capture shrunk into a phone's
+column left 5px text, and phones are where most visitors arrive from. Each `<source>` declares its
+own `width`/`height`.
+
+Then update each `<img>`'s (and `<source>`'s) `width`/`height` in `index.html` to the new files.
 `landing.spec.ts`'s "declared at its real shape" test fails on any image whose declared shape no
 longer matches the file.
 
