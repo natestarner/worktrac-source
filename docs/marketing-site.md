@@ -220,8 +220,15 @@ longer matches the file.
 
 Things that cost a round trip when they were learned:
 
-- **Sticky chrome paints over an element screenshot** of anything taller than the viewport, so the
-  card scenes demote `sticky`/`fixed` to `static` first.
+- **Sticky chrome paints over an element screenshot** of anything taller than the viewport, so a
+  card that doesn't fit under it gets `sticky`/`fixed` demoted to `static`. **Only** that card:
+  the demotion leaves a stale page-wide hairline in Chromium's mobile emulation, which drew over
+  the top of the phone-width weekly chart (its "4" and its tallest bars) in every capture. A card
+  that fits is centred under the chrome and shot as the screen shows it, without `fullPage`, which
+  lays the page out again and moves the card out from under a clip measured on screen.
+- **The crop walks up to the nearest bordered element, so start it above anything bordered.** The
+  log card's walk started on the "Log set" button, which has a 1px border of its own, so it stopped
+  there and the crop ended 5px under the card's edge: a card that looked cut off.
 - **A pointer left over a chart leaves its hover tooltip in the shot.** The card scenes park the
   mouse at (0, 0).
 - **The demo account is shared with App Review.** Its other people may have a workout going (a

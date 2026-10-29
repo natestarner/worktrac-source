@@ -159,15 +159,14 @@ function drive(page) {
     await page.getByRole('button', { name: /^Log set/ }).click();
     if (wait) await page.getByText(`Set ${before + 1}`, { exact: true }).waitFor();
   };
-  // A bordered card, from its own top edge, cut off after `rows` CSS px if it runs longer. The app's
-  // sticky chrome is demoted first, or it paints over any element taller than the viewport.
+  // A bordered card, from its own top edge, cut off after `maxHeight` CSS px if it runs longer.
+  //
+  // A card that fits below the app's sticky chrome is centred there and shot as the app draws it.
+  // Only a taller one gets the chrome demoted to static (or it paints over the card), because the
+  // demotion leaves a stale page-wide hairline in Chromium's mobile emulation: the phone-width
+  // weekly chart came out with its top 10px, the "4" and the tallest bars, under a line the app
+  // never draws.
   const card = async (heading, path, maxHeight) => {
-    await page.evaluate(() => {
-      for (const el of document.querySelectorAll('*')) {
-        const p = getComputedStyle(el).position;
-        if (p === 'sticky' || p === 'fixed') el.style.position = 'static';
-      }
-    });
     const el = page.getByText(heading).first();
     await el.waitFor();
     const handle = await el.evaluateHandle((node) => {
@@ -175,14 +174,35 @@ function drive(page) {
       while (target.parentElement && getComputedStyle(target).borderTopWidth === '0px') target = target.parentElement;
       return target;
     });
-    await handle.evaluate((node) => node.scrollIntoView({ block: 'start' }));
+    // Centres the part that will be shot (the card can run on past maxHeight) in the space under
+    // the chrome, when it fits there.
+    const fits = await handle.evaluate((node, max) => {
+      const chrome = Math.max(0, ...[...document.querySelectorAll('*')]
+        .filter((e) => ['sticky', 'fixed'].includes(getComputedStyle(e).position) && e.getBoundingClientRect().top <= 0)
+        .map((e) => e.getBoundingClientRect().bottom));
+      const height = Math.min(node.getBoundingClientRect().height, max ?? Infinity);
+      if (height > window.innerHeight - chrome) return false;
+      window.scrollBy(0, node.getBoundingClientRect().top - (chrome + (window.innerHeight - chrome - height) / 2));
+      return true;
+    }, maxHeight);
+    if (!fits) {
+      await page.evaluate(() => {
+        for (const e of document.querySelectorAll('*')) {
+          const p = getComputedStyle(e).position;
+          if (p === 'sticky' || p === 'fixed') e.style.position = 'static';
+        }
+      });
+      await handle.evaluate((node) => node.scrollIntoView({ block: 'start' }));
+    }
     await page.mouse.move(0, 0); // a pointer left over a chart leaves its hover tooltip in the shot
     await page.waitForTimeout(600);
     const box = await handle.boundingBox();
-    await page.screenshot({
-      path, type: 'jpeg', quality: 88, fullPage: true,
-      clip: { x: box.x, y: box.y + (await page.evaluate(() => window.scrollY)), width: box.width, height: Math.min(box.height, maxHeight ?? box.height) },
-    });
+    const height = Math.min(box.height, maxHeight ?? box.height);
+    // A fullPage capture lays the page out again at its full height, which moves the card out from
+    // under a clip measured on screen, so only the card that cannot fit on screen uses one.
+    await page.screenshot(fits
+      ? { path, type: 'jpeg', quality: 88, clip: { x: box.x, y: box.y, width: box.width, height } }
+      : { path, type: 'jpeg', quality: 88, fullPage: true, clip: { x: box.x, y: box.y + (await page.evaluate(() => window.scrollY)), width: box.width, height } });
     console.log(path);
   };
   return { settle, tab, person, openExercise, startRoutine, logSet, card };
@@ -240,9 +260,11 @@ async function figureScenes(f, suffix) {
   await f.page.getByText('Set 2', { exact: true }).waitFor();
   await f.page.evaluate(() => window.scrollTo(0, 0));
   const width = f.page.viewportSize().width;
-  // Down to the Log set card's bottom edge: the steppers and the button are the pitch.
+  // Down to the Log set card's bottom edge: the steppers and the button are the pitch. The walk
+  // starts above the button, which has a border of its own: starting on it stopped there, and the
+  // crop ended 5px under the card's edge so the card looked cut off.
   const logged = await f.page.getByRole('button', { name: /^Log set/ }).evaluate((el) => {
-    let card = el;
+    let card = el.parentElement;
     while (card.parentElement && getComputedStyle(card).borderTopWidth === '0px') card = card.parentElement;
     return card.getBoundingClientRect().bottom;
   });
