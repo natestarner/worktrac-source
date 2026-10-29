@@ -210,18 +210,19 @@ for ext in $(grep -ohE '\.(mp4|webm|mov|m4v|ogv)"' "${PAGES[@]}" | tr -d '"' | s
 done
 [ "$missing_mime" -eq 0 ] && pass "every video format on the pages has a MIME type"
 
-# --- 12. Every link-preview image is a file this site ships ------------------
-# og:image / twitter:image are absolute URLs, so check 2 never looks at them. The preview is renamed
-# whenever it changes (messaging apps cache it by URL), and a page left pointing at the old name
-# unfurls with no image at all -- a broken link preview, visible only in someone else's chat.
-missing_og=0
-for url in $(grep -ohE '(og|twitter):image" content="https://huddle\.fitness/[^"]+' "${PAGES[@]}" | sed -E 's#.*https://huddle\.fitness/##' | sort -u); do
+# --- 12. Every absolute asset URL is a file this site ships -----------------
+# og:image, twitter:image and the JSON-LD image/logo are absolute URLs, so check 2 never looks at
+# them. The link preview is renamed whenever it changes (messaging apps cache it by URL), and a page
+# left pointing at the old name unfurls with no image at all -- a broken link preview, visible only
+# in someone else's chat.
+missing_abs=0
+for url in $(grep -ohE 'https://huddle\.fitness/assets/[^"]+' "${PAGES[@]}" | sed -E 's#https://huddle\.fitness/##' | sort -u); do
   if [ ! -f "$DIR/$url" ]; then
-    fail "link preview image $url is not in $DIR/"
-    missing_og=$((missing_og + 1))
+    fail "$url is linked by absolute URL but is not in $DIR/"
+    missing_abs=$((missing_abs + 1))
   fi
 done
-[ "$missing_og" -eq 0 ] && pass "every link-preview image exists"
+[ "$missing_abs" -eq 0 ] && pass "every absolute asset URL exists"
 
 echo
 if [ "$fails" -gt 0 ]; then
