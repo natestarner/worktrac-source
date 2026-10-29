@@ -284,6 +284,15 @@ ENCODE_ONLY=1 node tools/marketing-demo-clip.mjs <workDir> ../marketing/assets/s
 - **The page lists MP4 first and WebM second**, and the browser picks by `type`. `lazy-video.js`
   wires up every `<source>`, so that choice works. Reduced-motion visitors get the poster (the
   celebration) and no video bytes.
+- **The H.264 frames are converted to BT.709 limited range by the tool, not by the encoder.** Handed
+  the canvas, Edge's encoder converts to *full* range (its `decoderConfig.colorSpace` says
+  `fullRange: true`) and writes no colour description into the stream, so every player assumes
+  limited range and stretches it: the light greys that draw the app's card borders, chips and tab
+  track clip to white, darks crush to black and the orange oversaturates. It looked "washed out,
+  fine detail gone" on the site (2026-10-28). Measured against the source frames, 30.7 dB before and
+  43.7 dB after; the WebM, whose MediaRecorder tags its own stream, was 39.6 dB all along.
+  `toI420` does the conversion and `mp4-mux.mjs` writes a matching `colr` box. To compare an encode
+  with its source, decode its first frame in Edge: headless Edge never shows a seeked frame.
 - **Check the encode by playing it, not by seeking.** Sample frames while it plays in Edge (which
   decodes H.264). The broken MediaRecorder MP4 reported the right duration and seeked without
   complaint.

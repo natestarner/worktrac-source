@@ -158,6 +158,10 @@ a public page, which is what this replaced on 2026-10-27.
   set for Sam, deleted after). Its MP4 must come from Edge's WebCodecs encoder + `mp4-mux.mjs`,
   **never Edge's MediaRecorder**: that MP4 freezes between keyframes, and only playing it shows
   that (the duration and seeking look fine). Narrative: `docs/marketing-site.md`.
+- **Feed that encoder I420 in BT.709 limited range (`toI420`), never the canvas.** From a canvas it
+  encodes FULL range and says nothing in the stream, so players stretch it and every light grey in
+  the app (borders, chips, the tab track) clips to white. Keep the `colr` box `mp4-mux.mjs` writes
+  in step with whatever `toI420` produces.
 - **Every video format needs a MIME type in `staticwebapp.config.json`.** Azure SWA serves an
   unknown extension as `application/octet-stream`, the site sends `nosniff`, and Safari (MP4 only)
   then shows just the poster. The local preview types it right, so only `check-marketing.sh`
