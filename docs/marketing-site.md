@@ -279,6 +279,26 @@ Below 700px the hero drops the tablet and keeps the phone: a tablet screenshot s
 unreadable, while a phone screenshot at phone size is exactly what a visitor on a phone is being
 sold.
 
+## What search engines and AI assistants read
+
+Added 2026-10-28, after an SEO review found three gaps:
+
+- **Unknown URLs answered 200 with the homepage.** `staticwebapp.config.json`'s 404 override now
+  rewrites to `404.html` and keeps the 404 status. Anything that relied on the old catch-all (an
+  old app-path bookmark from the Namecheap-forwarding days, say) lands on a page that links home
+  and to the app's sign-in, rather than silently on the homepage.
+- **No structured data.** `index.html` carries one JSON-LD graph: the `Organization` (Starner
+  Consulting Co., brand Huddle), the `WebSite`, the `SoftwareApplication` (platforms, App Store
+  link, Free/Plus/Pro entry prices) and the homepage FAQ as a `FAQPage`. `for-trainers.html` has
+  its own `FAQPage` pointing at the same app `@id`. Google stopped showing FAQ rich results for
+  most sites in 2023; the markup is there because crawlers and AI assistants read it to work out
+  what Huddle is, not for a search-result widget.
+- **`pricing.html` had no `<h1>`.**
+
+`e2e/marketing-tests/search.spec.ts` keeps the hand-written JSON-LD in step with the visible FAQ
+and the pricing page. Sitemap submission is a one-time, by-hand step in Google Search Console and
+Bing Webmaster Tools, against `https://huddle.fitness/sitemap.xml`.
+
 ## Checking it locally
 
 ```bash

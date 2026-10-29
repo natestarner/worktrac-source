@@ -8,6 +8,7 @@
     { "route": "/pricing", "rewrite": "/pricing.html" },
     { "route": "/support.html", "headers": { "Cache-Control": "no-cache" } },
     { "route": "/support", "rewrite": "/support.html" },
+    { "route": "/404.html", "headers": { "Cache-Control": "no-cache" } },
     { "route": "/styles.css", "headers": { "Cache-Control": "public, max-age=3600" } },
     { "route": "/app-links.js", "headers": { "Cache-Control": "public, max-age=3600" } },
     { "route": "/assets/*", "headers": { "Cache-Control": "public, max-age=604800" } }
@@ -18,7 +19,7 @@
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains"
   },
   "responseOverrides": {
-    "404": { "rewrite": "/index.html", "statusCode": 200 }
+    "404": { "rewrite": "/404.html" }
   },
   "mimeTypes": {
     ".webmanifest": "application/manifest+json",
