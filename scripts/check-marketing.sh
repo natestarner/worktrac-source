@@ -17,6 +17,8 @@
 #   7. No retired brand colour       -- brand v3 dropped the teal #163b3e this
 #                                       site used to carry; a stray copy is the
 #                                       one regression nothing else would catch.
+#  12. Unknown URLs answer 404       -- not the homepage with a 200, which made
+#                                       every bad URL a duplicate homepage.
 #
 # Usage: bash scripts/check-marketing.sh
 set -euo pipefail
@@ -30,6 +32,11 @@ INDEX="$DIR/index.html"
 # index.html while it was the only page, which would have left a second audience page's asset
 # paths, dev hosts, alt text and canonical URL entirely unchecked.
 PAGES=("$DIR"/*.html)
+
+# The not-found page is served for URLs that match nothing (check 12). It is deliberately not
+# indexable, so it has no canonical (check 6) and no sitemap entry (check 9); every other check
+# still reads it.
+NOT_FOUND="$DIR/404.html"
 
 fails=0
 
@@ -121,6 +128,7 @@ done
 canon_fails=0
 declare -A seen_canonical
 for page in "${PAGES[@]}"; do
+  [ "$page" = "$NOT_FOUND" ] && continue
   name=$(basename "$page")
   canonical=$(grep -oE '<link rel="canonical" href="[^"]*"' "$page" | sed -E 's/.*href="([^"]*)".*/\1/')
   ogurl=$(grep -oE '<meta property="og:url" content="[^"]*"' "$page" | sed -E 's/.*content="([^"]*)".*/\1/')
@@ -169,6 +177,7 @@ done
 # concerned, and adding one is exactly when this is forgotten.
 missing_sitemap=0
 for page in "${PAGES[@]}"; do
+  [ "$page" = "$NOT_FOUND" ] && continue
   name=$(basename "$page")
   slug="$name"
   [ "$name" = "index.html" ] && slug=""
@@ -178,6 +187,70 @@ for page in "${PAGES[@]}"; do
   fi
 done
 [ "$missing_sitemap" -eq 0 ] && pass "every page is in sitemap.xml"
+
+# --- 10. Every App Store reference names the same, real app ------------------
+# The badge links, the FAQ link and Safari's Smart App Banner each carry the app's numeric App Store
+# id. A typo in one sends people to somebody else's app or to a "not available" page, and nothing on
+# our side would show it.
+store_ids=$(grep -ohE 'apps\.apple\.com/[^"]*/id[^"/?]+|apple-itunes-app" content="app-id=[^"]+' "${PAGES[@]}" \
+  | sed -E 's#.*/id##; s#.*app-id=##' | sort -u)
+if [ -z "$store_ids" ]; then
+  pass "no App Store links"
+elif [ "$(printf '%s\n' "$store_ids" | wc -l)" -ne 1 ]; then
+  fail "App Store links disagree on the app id: $(echo $store_ids)"
+elif ! printf '%s' "$store_ids" | grep -qE '^[0-9]+$'; then
+  fail "App Store app id is not a number: $store_ids"
+else
+  pass "every App Store link names app id $store_ids"
+fi
+
+# --- 11. Every video format the pages use has a MIME type in the SWA config ----------------------
+# Azure Static Web Apps serves an extension it doesn't know as application/octet-stream, and this
+# site sends X-Content-Type-Options: nosniff, so a browser takes that at face value. Chrome falls
+# back to another <source>; Safari, which plays only the MP4, shows the poster instead of the clip.
+# The local preview (python http.server) sends the right type, so nothing local catches this.
+# Shipped broken 2026-10-28 (.mp4 unmapped); found by curl on the deployed lower site.
+missing_mime=0
+for ext in $(grep -ohE '\.(mp4|webm|mov|m4v|ogv)"' "${PAGES[@]}" | tr -d '"' | sort -u); do
+  if ! grep -qF "\"$ext\": \"video/" "$DIR/staticwebapp.config.json"; then
+    fail "staticwebapp.config.json has no video MIME type for $ext (it would be served as application/octet-stream)"
+    missing_mime=$((missing_mime + 1))
+  fi
+done
+[ "$missing_mime" -eq 0 ] && pass "every video format on the pages has a MIME type"
+
+# --- 12. Unknown URLs get a real 404 ------------------------------------------------------------
+# The override used to rewrite to /index.html with "statusCode": 200, so every mistyped or retired
+# URL answered as a copy of the homepage, which search engines treat as duplicate content. It must
+# rewrite to the not-found page and leave the 404 status alone, and that page must say noindex.
+override=$(grep -oE '"404": *\{[^}]*\}' "$DIR/staticwebapp.config.json" || true)
+if [ -z "$override" ]; then
+  fail "staticwebapp.config.json has no 404 override (SWA would serve its own generic page)"
+elif printf '%s' "$override" | grep -q 'statusCode'; then
+  fail "staticwebapp.config.json's 404 override sets a statusCode; a not-found URL must answer 404"
+elif ! printf '%s' "$override" | grep -q '"rewrite": *"/404.html"'; then
+  fail "staticwebapp.config.json's 404 override does not rewrite to /404.html: $override"
+elif [ ! -f "$NOT_FOUND" ]; then
+  fail "404.html is missing"
+elif ! grep -q '<meta name="robots" content="noindex"' "$NOT_FOUND"; then
+  fail "404.html does not carry a noindex robots meta"
+else
+  pass "unknown URLs answer 404 with a noindex page"
+fi
+
+# --- 13. Every absolute asset URL is a file this site ships -----------------
+# og:image, twitter:image and the JSON-LD image/logo are absolute URLs, so check 2 never looks at
+# them. The link preview is renamed whenever it changes (messaging apps cache it by URL), and a page
+# left pointing at the old name unfurls with no image at all -- a broken link preview, visible only
+# in someone else's chat.
+missing_abs=0
+for url in $(grep -ohE 'https://huddle\.fitness/assets/[^"]+' "${PAGES[@]}" | sed -E 's#https://huddle\.fitness/##' | sort -u); do
+  if [ ! -f "$DIR/$url" ]; then
+    fail "$url is linked by absolute URL but is not in $DIR/"
+    missing_abs=$((missing_abs + 1))
+  fi
+done
+[ "$missing_abs" -eq 0 ] && pass "every absolute asset URL exists"
 
 echo
 if [ "$fails" -gt 0 ]; then

@@ -153,9 +153,12 @@ choose the Kids category. Re-check any US state age-assurance requirements at su
 
 ## Also due at launch, outside the app
 
-- **The marketing FAQ says the opposite of the launch.** `marketing/index.html` answers "Is there
-  an app to install?" with "No app store, no updates to chase", and "Do I need an iPad…" talks only
-  about browsers. Both change with checklist 11.7 (store badges), once the App Store URL exists.
+- **The marketing site announces the app** (checklist 11.7). Apple's own "Download on the App
+  Store" badge, unaltered, sits in the homepage hero and in the closing band of the homepage and
+  `pricing.html`. Every page carries Safari's Smart App Banner (`apple-itunes-app`), and the two FAQ
+  answers that used to say "No app store" now point at the listing. `check-marketing.sh` check 10
+  fails unless every App Store link and banner names the same numeric app id (the Apple ID under App
+  Store Connect → App Information).
 - **Re-check the US link-out terms right before submitting.** Checked 2026-10-27: guideline 3.1.1(a)
   says entitlements "are not required for developers to include buttons, external links, or other
   calls to action in their United States storefront apps", and Apple currently charges no commission
@@ -164,6 +167,7 @@ choose the Kids category. Re-check any US state age-assurance requirements at su
   (5% for Small Business Program members, per press reports, Aug 2026). A fee would not change the
   app; it would change Plus's margin. Joining the free App Store Small Business Program before then
   is cheap insurance.
-- **The Privacy Policy and Terms describe a website.** Checklist 10.7. Drafted on its own branch
-  (`docs/app-store-policies`) so the wording can be reviewed as a legal change and shipped at launch,
-  not before.
+- **The Privacy Policy and Terms cover the app** (checklist 10.7). `marketing/privacy.html` and
+  `marketing/terms.html` describe the iPhone and iPad app: what it reads on the device, Apple as
+  distributor, and that buying in the US app is Stripe in Safari. Live on huddle.fitness since
+  2026-10-27 (#448).

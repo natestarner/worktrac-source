@@ -93,6 +93,33 @@ test.describe('marketing landing page', () => {
     await expect(footer.getByRole('link', { name: 'Privacy' })).toBeVisible();
   });
 
+  // The iPhone and iPad app: Apple's badge in the hero and the closing band, and Safari's Smart App
+  // Banner, all naming one listing. check-marketing.sh checks the ids agree across every page; this
+  // checks a visitor actually sees the badge, at no less than the 40px Apple requires.
+  test('offers the App Store app beside the web sign-up', async ({ page }) => {
+    await page.goto('/');
+
+    const listing = /^https:\/\/apps\.apple\.com\/us\/app\/huddle-workout-tracker\/id\d+$/;
+    for (const scope of ['.hero', '.cta-final']) {
+      const badge = page.locator(scope).getByRole('link', { name: 'Download on the App Store' });
+      await expect(badge).toBeVisible();
+      await expect(badge).toHaveAttribute('href', listing);
+      // Loaded, not just present: until it is, Chrome draws the alt text in its place.
+      const img = badge.locator('img');
+      await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+      const box = await img.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(40);
+    }
+
+    const banner = await page.locator('meta[name="apple-itunes-app"]').getAttribute('content');
+    const id = (await page.locator('.hero .store-badge').getAttribute('href'))!.split('/id')[1];
+    expect(banner).toBe(`app-id=${id}`);
+
+    // The FAQ used to answer "No app store" -- it must point at the app now.
+    const faq = page.locator('.faq__item', { hasText: 'Is there an app to install?' });
+    await expect(faq.getByRole('link', { name: 'get Huddle from the App Store' })).toHaveAttribute('href', listing);
+  });
+
   // Stripe receipts and the App Store listing both name this page as the support URL, and the
   // people who follow it (a charge they don't recognize, a forgotten password) are mostly signed
   // out -- which is why it lives here and not at the app's own /app/help.
@@ -109,7 +136,7 @@ test.describe('marketing landing page', () => {
   // Apple and Google verify the developer against a website that names the seller, and the seller
   // name must match the legal entity exactly -- "Starner Consulting" without the "Co." is not it.
   // Every page, because a reviewer can land on any of them.
-  for (const path of ['/', '/for-trainers.html', '/pricing.html', '/terms.html', '/privacy.html', '/support.html']) {
+  for (const path of ['/', '/for-trainers.html', '/pricing.html', '/terms.html', '/privacy.html', '/support.html', '/404.html']) {
     test(`${path} names the legal entity in its footer`, async ({ page }) => {
       await page.goto(path);
       await expect(page.locator('.site-footer__legal')).toHaveText(
@@ -166,42 +193,56 @@ test.describe('marketing landing page', () => {
     expect(accentColor).not.toBe('rgb(28, 27, 25)'); // --color-text: never stuck on the pre-animation ink color
   });
 
+  // The clip ships twice (H.264 MP4 for Safari and iPhones, VP9 WebM for browsers without H.264) and
+  // the browser picks by each <source>'s type, so this accepts whichever one it chose.
   test('the household clip loads only once scrolled near, and never under reduced motion', async ({ page }) => {
     const video = page.locator('video.js-lazy-video');
+    const isClip = (url: string) => /app-household\.(mp4|webm)$/.test(url);
 
     // Reduced motion: the clip must never be fetched -- the poster frame is the whole experience.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/');
     const clipRequests: string[] = [];
-    page.on('request', (r) => r.url().includes('app-household.webm') && clipRequests.push(r.url()));
+    page.on('request', (r) => isClip(r.url()) && clipRequests.push(r.url()));
     await video.scrollIntoViewIfNeeded();
     await page.waitForTimeout(500);
     expect(clipRequests).toEqual([]);
     await expect(video).toHaveAttribute('poster', /app-household-poster\.jpg/);
 
     // Normal motion: nothing fetched before the section is in view, something fetched after.
-    // A fresh goto (not reload) so the scroll position from the reduced-motion check above --
-    // which deliberately scrolled the video into view -- doesn't carry over and pre-empt this.
+    // A fresh goto so the scroll position from the check above doesn't carry over.
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/');
     const beforeScroll: string[] = [];
-    page.on('request', (r) => r.url().includes('app-household.webm') && beforeScroll.push(r.url()));
+    page.on('request', (r) => isClip(r.url()) && beforeScroll.push(r.url()));
     await page.waitForTimeout(300);
     expect(beforeScroll).toEqual([]);
 
     await video.scrollIntoViewIfNeeded();
     await expect
       .poll(async () => video.evaluate((v: HTMLVideoElement) => v.currentSrc), { timeout: 5000 })
-      .toContain('app-household.webm');
+      .toMatch(/app-household\.(mp4|webm)$/);
   });
 
-  // Regression test for a real bug (2026-08-24, found on the deployed lower site): the base
-  // `img { height: auto }` rule doesn't cover <video>, so the household clip's `height="761"`
-  // HTML attribute applied as a literal CSS height regardless of how far width:100% shrank the
-  // box -- barely visible on desktop (~10% too tall), badly broken on a phone-width column
-  // (nearly 2x too tall, most of the card empty). Assert the rendered box keeps the video's own
-  // aspect ratio at both a phone and a desktop width, rather than assuming a fix at one width
-  // implies the other.
+  // Safari plays only the MP4, and this site sends nosniff, so a clip served as
+  // application/octet-stream shows Safari the poster and nothing else -- shipped that way to lower on
+  // 2026-10-28. The local preview server types it right regardless, so this only bites when the suite
+  // runs against a deployed site (MARKETING_BASE_URL); check-marketing.sh check 11 guards the config.
+  test('the household clip is served as video, in every format', async ({ page, request }) => {
+    await page.goto('/');
+    const sources = await page.locator('video.js-lazy-video source').evaluateAll((els) => els.map((el) => el.getAttribute('data-src')!));
+    expect(sources.length).toBeGreaterThan(1);
+    for (const src of sources) {
+      const res = await request.get(src, { headers: { Range: 'bytes=0-99' } });
+      expect(res.status(), src).toBeLessThan(300);
+      expect(res.headers()['content-type'], src).toMatch(/^video\//);
+    }
+  });
+
+  // The base `img { height: auto }` rule doesn't cover <video>, so a clip's height attribute applies
+  // as a literal CSS height unless something says otherwise -- barely visible on desktop, badly
+  // broken in a phone-width column (2026-08-24). Assert the rendered box keeps the clip's shape at
+  // both widths rather than assuming one implies the other.
   test('the household clip keeps its own aspect ratio at both a phone and a desktop width', async ({ page }) => {
     for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
       const context = await page.context().browser()!.newContext({ viewport });
@@ -211,12 +252,39 @@ test.describe('marketing landing page', () => {
       await video.scrollIntoViewIfNeeded();
       const ratios = await video.evaluate((v: HTMLVideoElement) => ({
         rendered: v.clientWidth / v.clientHeight,
-        // videoWidth/videoHeight report the clip's real intrinsic resolution once metadata
-        // loads; falling back to the width/height HTML attributes covers a slow/blocked load.
         natural: (v.videoWidth || Number(v.getAttribute('width'))) / (v.videoHeight || Number(v.getAttribute('height'))),
       }));
       expect(ratios.rendered, `at ${viewport.width}px wide`).toBeCloseTo(ratios.natural, 1);
       await context.close();
+    }
+  });
+
+  // Every product screenshot is re-taken by tools/marketing-demo-shots.mjs, and each <img> declares
+  // its size up front so the page doesn't jump while they load. A re-take that changes a capture's
+  // shape without the markup following stretches it -- silently, and differently at every width.
+  test('every product image is declared at its real shape', async ({ page }) => {
+    await page.goto('/');
+    const images = page.locator('main img[src*="/assets/shots/"]');
+    expect(await images.count()).toBeGreaterThan(0);
+    for (const img of await images.all()) {
+      // Scrolled near so a lazy one loads. The hero tablet is hidden on phones; it isn't lazy, so it
+      // loads without being scrolled to.
+      if (await img.isVisible()) await img.scrollIntoViewIfNeeded();
+      await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+      // Inside a <picture>, the file loaded may be a <source>'s (the phone-width capture on a small
+      // screen), which declares its own size -- check whichever one the browser chose.
+      const { src, declared, natural } = await img.evaluate((el: HTMLImageElement) => {
+        const chosen = [...(el.parentElement?.querySelectorAll('source') ?? [])].find(
+          (s) => s.hasAttribute('width') && el.currentSrc.endsWith(s.getAttribute('srcset')!),
+        );
+        const sized = chosen ?? el;
+        return {
+          src: el.currentSrc,
+          declared: Number(sized.getAttribute('width')) / Number(sized.getAttribute('height')),
+          natural: el.naturalWidth / el.naturalHeight,
+        };
+      });
+      expect(declared, src).toBeCloseTo(natural, 2);
     }
   });
 });

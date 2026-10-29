@@ -1,0 +1,6 @@
+# The app is not meant to be found in search: huddle.fitness is. Every response from this origin
+# carries "X-Robots-Tag: noindex" (staticwebapp.config.json's globalHeaders), and crawling stays
+# ALLOWED on purpose. A "Disallow: /" here would stop crawlers fetching the pages at all, so they
+# would never see the noindex, and any app URL they already knew would stay indexed.
+User-agent: *
+Allow: /

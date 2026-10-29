@@ -21,7 +21,7 @@
 // do -- fast early for a novice, slow for an intermediate, with flat stretches -- plus day-to-day
 // form. The reps logged on each set are what that strength allows at the weight on the bar (Epley,
 // inverted), less fatigue across sets. The WEIGHT on the bar follows what a lifter actually does:
-// add after a clean session (not always), repeat after missed reps, drop back ~10% after a third
+// add after a clean session (not always), repeat after missed reps, drop back ~8% after a third
 // stall. Illness and a vacation knock strength down and it recovers over the following weeks.
 // So plateaus, resets and setbacks emerge from the model instead of being drawn on.
 const WRITE = process.argv.includes('--write');
