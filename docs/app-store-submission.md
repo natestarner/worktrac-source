@@ -78,6 +78,49 @@ Paste into App Store Connect → the version → App Review Information → Note
 >
 > Demo account: [email] / [password].
 
+## The demo account and the screenshots (checklist 10.1, 10.2)
+
+The reviewer's demo household is three made-up people (Alex, Sam, Jordan) with about 20 weeks of
+training, on the Free plan. It was written into the production account on 2026-10-26 by
+`e2e/tools/demo-household.mjs`, through the app's own API. Its training is modelled, not drawn:
+each lift has an underlying strength that grows like a real person's, the reps logged are what that
+strength allows at the weight on the bar, and the weight follows what a lifter does (add after a
+clean session, repeat after a miss, drop back after a third stall). So the plateaus, the flu in late
+August, the family vacation in July and the recoveries all come out of the model. The tool also
+checks that every barbell lift's est.-1RM and top-weight charts finish at their best.
+
+- **Never put a real account's login in the repo.** The tool reads it from the environment.
+- **A local copy** (`--register --write` against a local stack) is the same household, for trying
+  screens before touching production.
+- **Screenshots** come from `e2e/tools/app-store-shots.mjs`: the iPhone 6.9" (1320 × 2868) and iPad
+  13" (2064 × 2752) sizes App Store Connect requires, light mode, captured from the running app. Two
+  scenes have to log a set (mid-workout with the rest timer running, and the PR celebration); they
+  run only with `ALLOW_WRITES=1`, so against production it captures read-only screens unless asked.
+  They log three squat sets for Alex (the third a real est.-1RM record), then delete exactly those
+  sets and end the workout, so the account returns to its seeded state. They refuse to start if
+  Alex already has a workout going.
+- **Framing:** History, PRs and Trends open on the Free plan's "See Plus" notice, so those scenes
+  scroll until their content sits just under the sticky person/tab bar. Nothing is hidden or
+  restyled. The app's logo header scrolls away with it; it is kept only where a screen is captured
+  from the top. Don't splice it back in, because that would show a screen state that can't exist.
+- **Captions** come from `e2e/tools/app-store-frames.mjs`. Each real capture, unaltered, sits under
+  the brand lockup and a one-line headline on a cream ground, with the mark's circles faint behind
+  it. Nate chose the `cream` theme on 2026-10-27 over `night` and `sunrise`, and asked for quieter
+  background circles. The headlines reuse the marketing site's own claims. These captioned panels
+  are what gets uploaded.
+- **Header** (version page → Header and Search Results → Header) comes from
+  `e2e/tools/app-store-header.mjs`: 21:9, 3840 x 1646. The lockup and the site's hero line sit inside
+  the art safe area from Apple's own template (1646 x 661, centred), and the tool refuses to render
+  if they don't fit. Two real captures flank it outside the safe area. **Search Results is left
+  empty on purpose**: without that asset, the first three screenshots show in search, and those sell
+  the app better than one banner. Every asset is RGB with no alpha channel, as Apple requires.
+- **Store order is the file number.** Only the first two or three show in search results: logging,
+  the PR celebration, then the strength chart.
+- **Capture the finals in the morning.** The mid-workout scene shows the real start time ("Session in
+  progress · started 6:12 AM" reads like a gym; "10:44 PM" does not).
+- The window a Free account shows moves forward every day. By mid-November the July vacation and
+  most of the flu dip have scrolled out of the reviewer's 90 days; re-seed if that matters.
+
 ## Privacy answers (checklist 10.5)
 
 Must match `frontend/ios/App/App/PrivacyInfo.xcprivacy`. Cross-checked against the code on
@@ -116,6 +159,15 @@ choose the Kids category. Re-check any US state age-assurance requirements at su
   answers that used to say "No app store" now point at the listing. `check-marketing.sh` check 10
   fails unless every App Store link and banner names the same numeric app id (the Apple ID under App
   Store Connect → App Information).
-- **The Privacy Policy and Terms describe a website.** Checklist 10.7. Drafted on its own branch
-  (`docs/app-store-policies`) so the wording can be reviewed as a legal change and shipped at launch,
-  not before.
+- **Re-check the US link-out terms right before submitting.** Checked 2026-10-27: guideline 3.1.1(a)
+  says entitlements "are not required for developers to include buttons, external links, or other
+  calls to action in their United States storefront apps", and Apple currently charges no commission
+  on those purchases. That second part is open: the Ninth Circuit (Dec 2025) let Apple charge a fee
+  based on its costs and sent the amount back to the district court, where Apple has proposed 15%
+  (5% for Small Business Program members, per press reports, Aug 2026). A fee would not change the
+  app; it would change Plus's margin. Joining the free App Store Small Business Program before then
+  is cheap insurance.
+- **The Privacy Policy and Terms cover the app** (checklist 10.7). `marketing/privacy.html` and
+  `marketing/terms.html` describe the iPhone and iPad app: what it reads on the device, Apple as
+  distributor, and that buying in the US app is Stripe in Safari. Live on huddle.fitness since
+  2026-10-27 (#448).
