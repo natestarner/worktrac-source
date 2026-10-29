@@ -10,7 +10,6 @@
     { "route": "/support", "rewrite": "/support.html" },
     { "route": "/404.html", "headers": { "Cache-Control": "no-cache" } },
     { "route": "/styles.css", "headers": { "Cache-Control": "public, max-age=3600" } },
-    { "route": "/app-links.js", "headers": { "Cache-Control": "public, max-age=3600" } },
     { "route": "/assets/*", "headers": { "Cache-Control": "public, max-age=604800" } }
   ],
   "globalHeaders": {

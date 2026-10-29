@@ -8,8 +8,9 @@ import { defineConfig, devices } from '@playwright/test';
 // service worker and no per-worker contention, so none of that file's worker/timeout reasoning
 // applies here.
 //
-// Run against a local static server:
-//   cd marketing && python -m http.server 8099
+// Run against a local preview (a copy filled with the local origins; marketing/ itself holds
+// placeholders that only a deploy or this script fills):
+//   bash scripts/preview-marketing.sh
 //   cd e2e && npm run test:marketing
 // Or against a deployed environment:
 //   MARKETING_BASE_URL=https://dev.huddle.fitness npm run test:marketing

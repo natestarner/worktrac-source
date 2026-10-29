@@ -53,6 +53,11 @@ jobs:
               - 'shared/**'
             marketing:
               - 'marketing/**'
+              - 'scripts/check-marketing.sh'
+              - 'scripts/*site-origins*'
+              - 'scripts/preview-marketing.sh'
+              - 'e2e/marketing-tests/**'
+              - 'e2e/playwright.marketing.config.ts'
 
   # ──────────────────────────────────────────────
   # Job 0b: The degraded-conditions contract (.claude/rules/resilience.md) -- the app must behave
@@ -233,14 +238,17 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      # A copy filled with the local origins, the way a deploy fills it -- marketing/ itself holds
+      # __SITE_ORIGIN__-style placeholders (scripts/fill-site-origins.sh).
       - name: Serve the marketing site
         if: env.RUN_REAL == 'true'
         run: |
-          python3 -m http.server 8099 --directory marketing &
+          bash scripts/preview-marketing.sh > "$RUNNER_TEMP/marketing-preview.log" 2>&1 &
           for i in $(seq 1 20); do
             curl -sf http://localhost:8099/ > /dev/null && break
             sleep 0.5
           done
+          cat "$RUNNER_TEMP/marketing-preview.log"
 
       - name: Run marketing e2e
         if: env.RUN_REAL == 'true'
@@ -393,6 +401,21 @@ jobs:
         with:
           name: marketing-build
           path: deploy/marketing-build
+
+      # Both builds hold __SITE_ORIGIN__ / __APP_ORIGIN__ / __SITE_ROBOTS__ placeholders, and every
+      # deploy (lower and production) fills them from its own config/<env>/site-origins.env before
+      # upload. The fill script travels with the files it fills, so the lower->production promotion
+      # carries the matching version and the deploy repo never keeps a copy of its own.
+      - name: Checkout source scripts (the deploy-time fill)
+        uses: actions/checkout@v7
+        with:
+          path: source
+          sparse-checkout: scripts
+
+      - name: Ship the deploy-time fill and its post-deploy check
+        run: |
+          mkdir -p deploy/tools
+          cp source/scripts/fill-site-origins.sh source/scripts/verify-site-origins.sh deploy/tools/
 
       - name: Update image tag
         run: |

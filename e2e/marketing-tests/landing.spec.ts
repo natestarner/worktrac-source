@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectedOrigins } from './site-origins';
 
 // Coverage for the marketing landing page. The things worth asserting here are the ones that
 // silently break and cost signups: a CTA that stops pointing at the app, the pricing claim
@@ -27,17 +28,17 @@ test.describe('marketing landing page', () => {
   test('every app CTA points at a real app route on the matching environment', async ({ page }) => {
     await page.goto('/');
 
-    const host = new URL(page.url()).hostname;
-    // app-links.js rewrites to the lower app on a dev.* host; everywhere else stays production.
-    const expectedApp = host.startsWith('dev.') ? 'app.dev.huddle.fitness' : 'app.huddle.fitness';
+    // Each deploy fills its own app origin into the CTAs (scripts/fill-site-origins.sh), so lower's
+    // page sends people to lower's app and production's to production's.
+    const { app } = expectedOrigins(page.url());
 
-    const hrefs = await page.locator('a[href*="huddle.fitness"]').evaluateAll((els) =>
+    const hrefs = await page.locator('a[href*="/login"], a[href*="/register"]').evaluateAll((els) =>
       els.map((el) => (el as HTMLAnchorElement).href)
     );
 
     expect(hrefs.length).toBeGreaterThan(0);
     for (const href of hrefs) {
-      expect(href).toContain(expectedApp);
+      expect(new URL(href).origin).toBe(app);
       expect(href).toMatch(/\/(login|register)(\?|$)/);
     }
   });
