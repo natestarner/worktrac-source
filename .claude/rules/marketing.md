@@ -149,6 +149,9 @@ a public page, which is what this replaced on 2026-10-27.
 
 - **Its `workout` scene logs real sets on the account App Review uses.** Never run it while a
   submission is in review; `SCENES=trends,offline,og` writes nothing.
+- **Every scene's browser signs in, against a cap of 20 sign-ins per hour per email.** A full run
+  is 8. Repeated runs empty the demo account's bucket, and App Review's sign-in is refused with
+  yours until it refills (one every 3 minutes).
 - **After a re-take, update each `<img>`'s `width`/`height`.** `landing.spec.ts` fails any image
   whose declared shape doesn't match its file.
 - **The household clip** comes from `e2e/tools/marketing-demo-clip.mjs`, and it writes too (one
@@ -173,9 +176,18 @@ never resolved into a hard, legible edge.
 **Fix: use the device's full screen at its real proportions**, not a tight content crop. The hero
 pair are full-screen captures at a real iPad Air 11" landscape (1180 x 820) and 6.9" iPhone
 (440 x 956) viewport, so the aspect ratio comes from the source rather than being reconstructed
-after the fact. This only matters for the **device-framed** images (currently just the hero):
-`.figure`-card screenshots (Log screen, Trends) aren't device silhouettes, so they can crop to any
-shape without looking wrong. Keep cropping those to content, excluding OS chrome, as before.
+after the fact. This only matters for the **device-framed** images (the hero pair, the household
+clip and the offline phone, the last two sharing `.device--solo`): `.figure`-card screenshots (Log
+screen, Trends) aren't device silhouettes, so they can crop to any shape without looking wrong.
+
+## A card is a close-up: it never contains the app's chrome
+
+**A `.figure` card must not show the app's logo, person pills or tabs.** Those are what say
+"screen", so a card holding them reads as a phone that is missing its bezel, however clean its
+crop (2026-10-28: the log and offline cards both did). Crop a card to one piece of the app, as the
+Trends cards are, and the log card starts under `.app-chrome`. When the story needs the whole screen
+(the offline banner sits at its very top), put it in a device frame instead. The rule of thumb:
+a device where the pitch is "on your phone", a card where it is "look at this feature".
 
 ## Shadow depth: `--contact-shadow`, not a new box-shadow value
 

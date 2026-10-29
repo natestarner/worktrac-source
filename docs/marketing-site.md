@@ -199,7 +199,8 @@ does:
   writing anything.
 - **`trends`** captures Sam's squat chart and weekly workouts, card by card.
 - **`offline`** logs two sets with the network cut and closes the browser before reconnecting, so
-  they only ever exist in that throwaway profile. Light and dark, since the page swaps them with
+  they only ever exist in that throwaway profile. A whole 6.9" iPhone screen, framed on the page
+  like the hero phone (below). Light and dark, since the page swaps them with
   `<picture><source media="(prefers-color-scheme: dark)">`.
 - **`og`** builds the 1200 x 630 link preview from the hero phone capture, framed in the hero's
   phone bezel (frame, status band, island) so the unfurl reads as a phone, not a floating card.
@@ -231,12 +232,23 @@ Things that cost a round trip when they were learned:
   so it stopped there and the crop ended 5px under the card's edge: a card that looked cut off.
   Ending 24px under the card instead showed the top edge of the sets card 17px below it. It now
   runs to the bottom of the sets card, the last thing on the screen.
+- **A card that shows the app's header reads as a phone missing its bezel.** The log and offline
+  cards both held the logo, the person pills and the tabs, and looked like images left out of a
+  device frame. The log card now starts just under `.app-chrome` and keeps 24px either side of the
+  cards, so it reads as a close-up like the Trends cards; the offline screen, whose banner IS the top
+  of the screen, moved into a phone frame instead (`.claude/rules/marketing.md`).
 - **A frontend fix can be shot before it ships**: `FRONTEND_DIST=../frontend/dist` (after `npm run
   build` there) serves the app's files from that build at the production origin, with production's
   `config.json`, API and CORS. The offline shots were re-taken this way when the banner's "sync ."
   spacing was fixed (2026-10-28), so the site didn't wait a deploy to stop showing the bug.
 - **A pointer left over a chart leaves its hover tooltip in the shot.** The card scenes park the
   mouse at (0, 0).
+- **Every browser the script opens signs in, and sign-ins are capped at 20 per hour per email**
+  (`login-per-email-per-hour`), refilling one every 3 minutes. A full run signs in 8 times (2 for
+  trends, 4 for workout, 2 for offline), so three runs in an hour, or a few runs plus probes, empty
+  the bucket: the browser's sign-in then gets a 429 and the script dies on `waitForURL`. That
+  bucket is the demo account's, from anywhere, so **App Review is locked out with you** until it
+  refills. Hit it on 2026-10-28 after a night of re-takes; space runs out and run only the scenes you need.
 - **The demo account is shared with App Review.** Its other people may have a workout going (a
   green dot on their pill) that the script did not start. Leave it alone: the cleanup only ever
   touches the sets this run logged for Alex.
@@ -276,9 +288,10 @@ ENCODE_ONLY=1 node tools/marketing-demo-clip.mjs <workDir> ../marketing/assets/s
   decodes H.264). The broken MediaRecorder MP4 reported the right duration and seeked without
   complaint.
 
-### The hero's device frames
+### The device frames
 
-The hero pair are **full screens at real device proportions**, iPad Air 11" landscape (1180 x 820)
+The hero pair, and the offline phone further down, are **full screens at real device proportions**,
+iPad Air 11" landscape (1180 x 820)
 and a 6.9" iPhone (440 x 956), each captured at the scale that makes the file exactly the size the
 markup declares, so nothing is resampled. The app's layout genuinely differs at those widths (the
 log screen goes two-column on the tablet), and the CSS bezel takes its shape from the image, so a
@@ -286,7 +299,11 @@ crop of some other screen would show as the wrong device (`.claude/rules/marketi
 
 The bezels themselves are **pure CSS** (`.device` in `styles.css`), with no chrome images to keep
 in sync. The phone frame adds a **status-bar band** above the screenshot, in the app's own header
-colour, for the dynamic island to sit in: a browser capture starts at the page content.
+colour, for the dynamic island to sit in: a browser capture starts at the page content. The offline
+phone's band is the banner's colour instead (`.device--offline`), since that screen opens on the
+banner. The household clip and the offline phone stand alone in their columns with
+`.device--solo`; the clip paints its band into the video and takes `.device--clip` to drop the CSS
+one.
 
 Below 700px the hero drops the tablet and keeps the phone: a tablet screenshot scaled to 390px is
 unreadable, while a phone screenshot at phone size is exactly what a visitor on a phone is being

@@ -32,7 +32,7 @@
  *
  * Each frame gets a status-bar band painted above it, in the colour of the app's own header in that
  * frame -- so when the celebration dims the app, the band dims with it. The page's phone frame draws
- * no band of its own for this clip (.device--clip): a CSS band stayed white over a dimmed screen.
+ * no band of its own for this clip (.device--clip, on top of the shared .device--solo placement): a CSS band stayed white over a dimmed screen.
  *
  * It LOGS ONE REAL SET for Sam. It notes the sets that existed before, deletes exactly the one it
  * added afterwards, and ends the workout only if it started one -- an open workout it found is

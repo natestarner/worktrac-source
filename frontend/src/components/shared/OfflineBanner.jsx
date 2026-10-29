@@ -61,6 +61,7 @@ export default function OfflineBanner() {
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'center',
+          textAlign: 'center',
           gap: 8,
           padding: '8px 16px',
           background: 'var(--color-subtle-bg)',
@@ -70,48 +71,51 @@ export default function OfflineBanner() {
           borderBottom: '1px solid var(--color-faint)',
         }}
       >
-        {caughtUp ? (
-          <IconCheck size={14} />
-        ) : (
-          <span
-            aria-hidden="true"
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: 'var(--color-muted)',
-            }}
-          />
-        )}
-        {caughtUp && <span>All caught up.</span>}
-        {online && queued > 0 && <span>Syncing&hellip; </span>}
-        {!online && queued > 0 && <span>Offline: </span>}
-        {!online && queued === 0 && (
-          <span>Offline. Your changes are saved on this device and will sync when you reconnect.</span>
-        )}
-        {/* One inline run, so the row's flex gap can't open between the count and its full stop:
-            as siblings it read "2 changes waiting to sync . They'll sync when you reconnect." */}
-        {queued > 0 && (
-          <span>
-            <button
-              onClick={() => setShowOutbox(true)}
-              aria-haspopup="dialog"
-              style={{
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                color: 'inherit',
-                font: 'inherit',
-                fontWeight: 700,
-                textDecoration: 'underline',
-                cursor: 'pointer',
-              }}
-            >
-              {queuedLabel}
-            </button>
-            {!online && <>. They&rsquo;ll sync when you reconnect.</>}
+        {/* The indicator and the whole message are one inline run, so they wrap as a sentence. As
+            separate flex items the row's gap opened before the full stop ("waiting to sync . They'll
+            sync"), and on a phone the items wrapped as blocks, leaving the dot, or "Offline:", alone
+            on a line of its own. */}
+        <span>
+          <span aria-hidden="true" style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 8, lineHeight: 0 }}>
+            {caughtUp ? (
+              <IconCheck size={14} />
+            ) : (
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: 'var(--color-muted)',
+                }}
+              />
+            )}
           </span>
-        )}
+          {caughtUp && 'All caught up.'}
+          {!online && queued === 0 && 'Offline. Your changes are saved on this device and will sync when you reconnect.'}
+          {queued > 0 && (
+            <>
+              {online ? <>Syncing&hellip; </> : 'Offline: '}
+              <button
+                onClick={() => setShowOutbox(true)}
+                aria-haspopup="dialog"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  color: 'inherit',
+                  font: 'inherit',
+                  fontWeight: 700,
+                  textDecoration: 'underline',
+                  cursor: 'pointer',
+                }}
+              >
+                {queuedLabel}
+              </button>
+              {!online && <>. They&rsquo;ll sync when you reconnect.</>}
+            </>
+          )}
+        </span>
         {pinned && (
           <Button
             onClick={handleGoBackOnline}

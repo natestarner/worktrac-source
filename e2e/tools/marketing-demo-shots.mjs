@@ -10,12 +10,13 @@
  *
  *   device-ipad.jpg      hero tablet: Alex mid-workout, iPad Air 11" landscape (1180 x 820)
  *   device-iphone.jpg    hero phone: the same workout on a 6.9" iPhone (440 x 956)
- *   app-log.jpg          "Log a set in two taps"
+ *   app-log.jpg          "Log a set in two taps": the log screen's content, cropped below the app's chrome
  *   app-trends-main.jpg  Sam's squat, est. 1RM climbing, with the all-time bests under it
  *   app-trends-secondary.jpg  Sam's workouts per week
  *   ...-phone.jpg        each of those three again at phone width, for <picture> on small screens:
  *                        a 1000px-wide capture shrunk to a phone's column leaves 5px text
- *   app-offline(-dark).png    the offline banner with two sets waiting, light and dark
+ *   app-offline(-dark).jpg    the offline banner with two sets waiting, light and dark: a full phone
+ *                        screen like the hero phone, since the page shows it in the same frame
  *   <OG_IMAGE>           the 1200 x 630 link preview, built from the hero phone capture
  *
  * "Everyone's in the huddle" is a video, not an image here: tools/marketing-demo-clip.mjs.
@@ -25,7 +26,7 @@
  * workout afterwards -- the same contract as tools/app-store-shots.mjs. The offline scene logs its
  * two sets with the network cut and closes the browser before reconnecting, so they never leave it.
  *
- * Device-framed images (the hero pair) are full screens at the device's real aspect ratio -- the
+ * Device-framed images (the hero pair, the offline phone) are full screens at the device's real aspect ratio -- the
  * CSS bezel takes its shape from the image (.claude/rules/marketing.md). Each is captured at the
  * scale that makes the file exactly the size index.html declares, so nothing is resampled.
  *
@@ -275,16 +276,29 @@ async function figureScenes(f, suffix) {
   await f.openExercise(EXERCISE);
   await f.page.getByText('Set 2', { exact: true }).waitFor();
   await f.page.evaluate(() => window.scrollTo(0, 0));
-  const width = f.page.viewportSize().width;
-  // Down past the sets just logged: the steppers, the button and what they produced are the pitch.
-  // Not the Log set card's own edge: the sets card starts 17px under it, so any margin there shows
-  // the next card's top edge, and no margin shows a card cut off at the frame.
-  const logged = await f.page.getByText('Set 1', { exact: true }).evaluate((el) => {
-    let card = el;
-    while (card.parentElement && getComputedStyle(card).borderTopWidth === '0px') card = card.parentElement;
-    return card.getBoundingClientRect().bottom;
+  // The log screen's content and nothing above it: no logo, people or tabs. With them the card read
+  // as a phone screen missing its bezel; without them it reads as a close-up, like the Trends cards.
+  // From just under the sticky chrome (its hairline hangs 1px below it) down past the sets just
+  // logged, since the sets card starts 17px under the Log set card: any margin there shows its top
+  // edge. 24px either side of the cards, inside the frame.
+  const crop = await f.page.getByText('Set 1', { exact: true }).evaluate((el) => {
+    const bordered = (start) => {
+      let card = start;
+      while (card.parentElement && getComputedStyle(card).borderTopWidth === '0px') card = card.parentElement;
+      return card.getBoundingClientRect();
+    };
+    const logCard = bordered([...document.querySelectorAll('button')].find((b) => /^Log set/.test(b.textContent.trim())).parentElement);
+    return {
+      top: document.querySelector('.app-chrome').getBoundingClientRect().bottom + 1,
+      bottom: bordered(el).bottom + 24,
+      left: Math.max(0, logCard.left - 24),
+      right: Math.min(window.innerWidth, logCard.right + 24),
+    };
   });
-  await f.page.screenshot({ path: join(SHOTS, `app-log${suffix}.jpg`), type: 'jpeg', quality: 88, clip: { x: 0, y: 0, width, height: Math.ceil(logged) + 24 } });
+  await f.page.screenshot({
+    path: join(SHOTS, `app-log${suffix}.jpg`), type: 'jpeg', quality: 88,
+    clip: { x: crop.left, y: crop.top, width: crop.right - crop.left, height: Math.ceil(crop.bottom - crop.top) },
+  });
   console.log(`app-log${suffix}.jpg`);
 
 }
@@ -292,9 +306,10 @@ async function figureScenes(f, suffix) {
 // Two sets logged with the network cut, so the app's own banner says what is waiting. The context
 // is closed while still offline: the queued sets live only in this throwaway browser profile.
 async function offline(scheme) {
-  // Narrower than the other cards, so the banner -- the whole point -- stays legible at the size the
-  // page shows it, and the two waiting sets fit under it.
-  const s = await open({ viewport: { width: 600, height: 1100 }, deviceScaleFactor: 2 }, scheme);
+  // A whole phone screen, framed on the page like the hero phone: "no signal in the basement" is a
+  // story about the phone in your hand, and the banner sits at the top of its screen. As a cropped
+  // card, the logo and tabs between the banner and the sets made it read as a phone missing its bezel.
+  const s = await open(PHONE, scheme);
   await s.person('Alex');
   await s.openExercise('Barbell Bench Press');
   await s.ctx.setOffline(true);
@@ -302,15 +317,11 @@ async function offline(scheme) {
   await s.page.getByText('Set 1', { exact: true }).waitFor();
   await s.logSet(135, 8, { wait: false });
   await s.page.getByText(/2 changes waiting/).first().waitFor();
+  await s.page.evaluate(() => window.scrollTo(0, 0));
   await s.page.mouse.move(0, 0);
   await s.page.waitForTimeout(800);
-  const bottom = await s.page.getByText('Set 1', { exact: true }).evaluate((el) => {
-    let card = el;
-    while (card.parentElement && getComputedStyle(card).borderTopWidth === '0px') card = card.parentElement;
-    return card.getBoundingClientRect().bottom + window.scrollY;
-  });
-  const name = scheme === 'dark' ? 'app-offline-dark.png' : 'app-offline.png';
-  await s.page.screenshot({ path: join(SHOTS, name), fullPage: true, clip: { x: 0, y: 0, width: 600, height: Math.ceil(bottom) + 20 } });
+  const name = scheme === 'dark' ? 'app-offline-dark.jpg' : 'app-offline.jpg';
+  await s.page.screenshot({ path: join(SHOTS, name), type: 'jpeg', quality: 88 });
   console.log(name);
   await s.ctx.close();
 }
