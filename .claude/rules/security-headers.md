@@ -20,6 +20,7 @@ that actually holds the auth token, had no `globalHeaders` block at all.
 | `Strict-Transport-Security` | A first-visit downgrade to plaintext. |
 | `Referrer-Policy: strict-origin-when-cross-origin` | Leaking in-app paths to third parties. |
 | `Permissions-Policy` | Silently available device APIs the app never uses. **`payment=(self)` and not `()`** — Stripe's embedded checkout runs inside the app's own document, so denying payment outright breaks upgrading to Plus. |
+| `X-Robots-Tag: noindex` (**app only**) | App routes (`/login`, `/register`, ...) being indexed as thin pages titled "Huddle" that compete with `huddle.fitness` for the brand name. ⚠️ **Never copy this one to `marketing/`**: it would remove the marketing site, the page meant to rank, from search. It pairs with `frontend/public/robots.txt`, which must keep *allowing* crawling (a `Disallow` hides the noindex from crawlers) and stay in `navigationFallback.exclude` (otherwise `/robots.txt` answers with the app shell). Pinned by `searchIndexing.test.js`; the header itself only by `e2e/tests/search-indexing.spec.ts` on a deployed environment. |
 
 ## The token makes framing worse than it looks
 

@@ -36,6 +36,162 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,700&display=swap" />
   <link rel="stylesheet" href="/styles.css" />
+
+  <!-- Structured data: tells search engines and AI assistants, in a format they read directly,
+       that Huddle is an app, what it runs on and costs, who makes it, and what the FAQ says. The
+       FAQPage text is the visible FAQ word for word, and every offer price must appear on
+       pricing.html; search.spec.ts fails if either drifts. Change them together. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://huddle.fitness/#organization",
+        "name": "Starner Consulting Co.",
+        "url": "https://huddle.fitness/",
+        "logo": "https://huddle.fitness/assets/apple-touch-icon.png",
+        "email": "support@huddle.fitness",
+        "brand": {
+          "@type": "Brand",
+          "name": "Huddle"
+        }
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://huddle.fitness/#website",
+        "name": "Huddle",
+        "alternateName": "Huddle Fitness",
+        "url": "https://huddle.fitness/",
+        "publisher": {
+          "@id": "https://huddle.fitness/#organization"
+        }
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://huddle.fitness/#app",
+        "name": "Huddle",
+        "alternateName": [
+          "Huddle Workout Tracker",
+          "Huddle Fitness"
+        ],
+        "description": "A workout log built for a family sharing one screen. Separate tracking for every person, personal records worth celebrating together, and it keeps working with no internet connection. Huddle Pro adds private client logins and assigned programs for personal trainers.",
+        "applicationCategory": "HealthApplication",
+        "operatingSystem": "iOS, iPadOS, web browser",
+        "url": "https://huddle.fitness/",
+        "installUrl": "https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272",
+        "sameAs": [
+          "https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272"
+        ],
+        "image": "https://huddle.fitness/assets/og-image.png",
+        "publisher": {
+          "@id": "https://huddle.fitness/#organization"
+        },
+        "offers": [
+          {
+            "@type": "Offer",
+            "name": "Free",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          {
+            "@type": "Offer",
+            "name": "Plus",
+            "price": "29",
+            "priceCurrency": "USD",
+            "priceSpecification": {
+              "@type": "UnitPriceSpecification",
+              "price": "29",
+              "priceCurrency": "USD",
+              "unitText": "year"
+            }
+          },
+          {
+            "@type": "Offer",
+            "name": "Pro, up to 5 clients",
+            "price": "19",
+            "priceCurrency": "USD",
+            "priceSpecification": {
+              "@type": "UnitPriceSpecification",
+              "price": "19",
+              "priceCurrency": "USD",
+              "unitText": "month"
+            }
+          }
+        ]
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Do my kids need their own logins?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No — one login covers the whole household for free, and everyone else is a profile you tap to switch. If an older kid wants their own sign-in instead, that's available with Plus. Either way, their data stays completely separate from yours."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does it really work without internet?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes, for logging: sets, edits, notes, favourites, new exercises. Setup changes like routines and adding people need a connection, and the app tells you so."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I import my previous workouts?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes, with Plus. Bring in all your past workouts and your trends, PRs and history fill in instantly. Nothing to re-enter by hand."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is there an app to install?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "On iPhone and iPad, yes: get Huddle from the App Store. On Android or a computer there's nothing to install. Open it in your browser and add it to your home screen, and it runs full-screen like any other app, offline included. It's the same account everywhere, so your whole history comes with you."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What happens to my older workouts on Free?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Nothing is deleted, ever. Free shows the last 90 days; Plus shows all of it. Subscribe and your full history is back instantly."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Who is this actually for?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "It was built for a dad and his kids sharing one screen in a basement. If that sounds like your house, it will fit."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why not just track this in a spreadsheet?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "You can, but nothing prefills, nobody's PRs get flagged, and it falls apart the moment two people share one phone mid-workout. Huddle does all of that on its own, with no formulas to fix and no columns to remember."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Do I need an iPad, or does it work on my phone too?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Any of them. There's an app for iPhone and iPad, and on anything else (an Android phone, a tablet, a laptop) it runs in the browser you already have. The screenshots feature an iPad because that's what's bolted to our gym wall, but Huddle fits itself to whatever screen you open it on."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
