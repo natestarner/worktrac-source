@@ -6,7 +6,7 @@
  *   FRONTEND=https://app.huddle.fitness EMAIL=... PASSWORD=... ALLOW_WRITES=1 \
  *     node tools/marketing-demo-shots.mjs ../marketing/assets
  *
- * Writes into <assetsDir>/shots/ and <assetsDir>/og-image.png:
+ * Writes into <assetsDir>/shots/ and <assetsDir>/<OG_IMAGE>:
  *
  *   device-ipad.jpg      hero tablet: Alex mid-workout, iPad Air 11" landscape (1180 x 820)
  *   device-iphone.jpg    hero phone: the same workout on a 6.9" iPhone (440 x 956)
@@ -16,7 +16,7 @@
  *   ...-phone.jpg        each of those three again at phone width, for <picture> on small screens:
  *                        a 1000px-wide capture shrunk to a phone's column leaves 5px text
  *   app-offline(-dark).png    the offline banner with two sets waiting, light and dark
- *   og-image.png         the 1200 x 630 link preview, built from the hero phone capture
+ *   <OG_IMAGE>           the 1200 x 630 link preview, built from the hero phone capture
  *
  * "Everyone's in the huddle" is a video, not an image here: tools/marketing-demo-clip.mjs.
  *
@@ -281,6 +281,11 @@ async function offline(scheme) {
 // real hero phone capture, on the App Store art's cream ground. The phone wears the hero's bezel
 // (styles.css .device--phone): warm near-black frame, a status band in the app header's white, and
 // a drawn island -- bare, the capture read as a floating card rather than a phone.
+//
+// Messaging apps cache a preview by its image URL, and the site serves assets for a week, so a
+// changed image under the same name keeps unfurling as the old one. Give each new image a new name,
+// and point every page's og:image / twitter:image at it.
+const OG_IMAGE = 'og-image-2026-10.png';
 async function ogImage() {
   const data = (file, type) => `data:${type};base64,${readFileSync(file).toString('base64')}`;
   const lockup = data(new URL('../../frontend/src/assets/huddle-lockup-horizontal-onlight.svg', import.meta.url), 'image/svg+xml');
@@ -311,7 +316,7 @@ async function ogImage() {
 <div class="copy"><img src="${lockup}" alt=""><h1>One screen, the whole family’s workout.</h1><p>Track and celebrate your PRs together.</p></div>
 <div class="phone"><div class="screen"><span class="island"></span><img src="${phone}"></div></div>`);
   await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({ path: join(ASSETS, 'og-image.png') });
-  console.log('og-image.png');
+  await page.screenshot({ path: join(ASSETS, OG_IMAGE) });
+  console.log(OG_IMAGE);
   await page.close();
 }

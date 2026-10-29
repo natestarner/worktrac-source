@@ -172,7 +172,7 @@ config/production/marketing-robots.txt   →  User-agent: *
 
 ## The product screenshots are real, and regenerating them is scripted
 
-Every product image under `marketing/assets/shots/` (and the link preview, `assets/og-image.png`)
+Every product image under `marketing/assets/shots/` (and the link preview, `assets/og-image-<yyyy-mm>.png`)
 is a capture of the app actually running, no mockups. Since 2026-10-27 they all come from one
 script and one household: the reviewer demo household (Alex, Sam and Jordan, written into the
 production account by `e2e/tools/demo-household.mjs`). That is the same household the App Store
@@ -204,7 +204,9 @@ does:
 - **`og`** builds the 1200 x 630 link preview from the hero phone capture, framed in the hero's
   phone bezel (frame, status band, island) so the unfurl reads as a phone, not a floating card.
   It writes nothing to the account: `EMAIL=x PASSWORD=x SCENES=og` re-renders it from the
-  `device-iphone.jpg` already on disk.
+  `device-iphone.jpg` already on disk. **A changed preview gets a new filename** (the script's
+  `OG_IMAGE`, and every page's `og:image` / `twitter:image`): iMessage, Signal and the like cache
+  the unfurl by image URL, and the site serves assets with a week's `max-age`.
 
 **Phone-width versions.** The log card, the celebration and both Trends cards are also captured at
 440px wide (`...-phone.jpg`) and served on screens 700px and narrower through

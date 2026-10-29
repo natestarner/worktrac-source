@@ -47,7 +47,7 @@ dark mode and dissolve the circle into the pill.
 | `frontend/public/icon.svg`, `marketing/assets/icon.svg` | **merged by hand** from `white/huddle-icon-light-bg.svg` + `dark/huddle-icon-dark-bg.svg` | **Yes** — internal `@media`; tile and hairline switch |
 | `favicon.ico`, `favicon-{16,32,48}.png` | `white/` | No — one file |
 | `apple-touch-icon.png`, `icon-{192,512}.png`, `icon-maskable-{192,512}.png` | `white/` | No — one file |
-| `og-image.png` | **`dark/`** | No — a white card disappears against a white feed |
+| `frontend/public/og-image.png` | **`dark/`** | No — a white card disappears against a white feed. (The marketing site's link preview is not from the kit: `e2e/tools/marketing-demo-shots.mjs` builds it from a product capture, `docs/marketing-site.md`) |
 | `frontend/src/assets/huddle-lockup-*.svg` | `transparent/`, **canvas cropped** — see below | **Yes** — `<picture>` + `media` picks onlight/ondark; `/login` draws the vertical one inline, animated (below) |
 | `frontend/public/email/logo.png` | `transparent/huddle-lockup-horizontal-ondark.png` | No — see the email note below |
 
