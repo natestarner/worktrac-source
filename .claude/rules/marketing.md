@@ -34,8 +34,10 @@ Adding a third audience page (`for-teams.html` is the planned one) means copying
   visitors are sent at the PRODUCTION app and the lower page is indexable alongside the real one.
   Neither is visible from the page.
 - **Add it to `sitemap.xml`** (check 9).
-- **Add an explicit route to `staticwebapp.config.json`.** The 404 rewrite sends anything unmatched to
-  `/index.html` with a 200, so a missing route means the new page silently serves the homepage.
+- **Add an explicit route to `staticwebapp.config.json`** (its `no-cache` header, and the
+  extensionless rewrite). Without the rewrite, `/for-teams` answers 404; the `.html` file itself
+  still serves.
+- **Exactly one `<h1>`.** `search.spec.ts` asserts it on every indexable page.
 - **One discreet link each way.** The header link is `site-nav__link--optional`, which hides at
   ≤760px; the footer link does not hide, so it counts against the width below.
 
@@ -56,6 +58,17 @@ Organization enrollment and App Review, and Google Play, check the seller agains
 names it, and the seller name is the legal entity **exactly**, "Co." included. Terms §1 says the
 same. Don't shorten it to "Starner Consulting", don't drop it as footer clutter, and give any new
 page the same line. `landing.spec.ts` asserts it on every page.
+
+## Unknown URLs answer a real 404, and the structured data is a second copy
+
+- **`404.html` is served WITH the 404 status** (`responseOverrides` rewrites to it and sets no
+  `statusCode`). It was `/index.html` with a 200, which told search engines every mistyped or
+  retired URL was a duplicate homepage. Never put `"statusCode": 200` back; check 12 fails it.
+  `404.html` is `noindex`, has no canonical and is not in the sitemap, so checks 6 and 9 skip it.
+- **The JSON-LD in `index.html` and `for-trainers.html` restates the page by hand** (no build
+  step). Its FAQPage is the visible FAQ word for word, and its offer prices must appear on
+  `pricing.html`. Edit an FAQ answer or a price and update the JSON-LD in the same change;
+  `search.spec.ts` fails when they drift.
 
 ## `support.html` is the support URL other systems point at
 
