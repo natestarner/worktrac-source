@@ -226,9 +226,15 @@ Things that cost a round trip when they were learned:
   the top of the phone-width weekly chart (its "4" and its tallest bars) in every capture. A card
   that fits is centred under the chrome and shot as the screen shows it, without `fullPage`, which
   lays the page out again and moves the card out from under a clip measured on screen.
-- **The crop walks up to the nearest bordered element, so start it above anything bordered.** The
-  log card's walk started on the "Log set" button, which has a 1px border of its own, so it stopped
-  there and the crop ended 5px under the card's edge: a card that looked cut off.
+- **A crop must end in open page, never between two cards.** The log card's crop walked up from
+  the "Log set" button to the nearest bordered element, but the button has a 1px border of its own,
+  so it stopped there and the crop ended 5px under the card's edge: a card that looked cut off.
+  Ending 24px under the card instead showed the top edge of the sets card 17px below it. It now
+  runs to the bottom of the sets card, the last thing on the screen.
+- **A frontend fix can be shot before it ships**: `FRONTEND_DIST=../frontend/dist` (after `npm run
+  build` there) serves the app's files from that build at the production origin, with production's
+  `config.json`, API and CORS. The offline shots were re-taken this way when the banner's "sync ."
+  spacing was fixed (2026-10-28), so the site didn't wait a deploy to stop showing the bug.
 - **A pointer left over a chart leaves its hover tooltip in the shot.** The card scenes park the
   mouse at (0, 0).
 - **The demo account is shared with App Review.** Its other people may have a workout going (a

@@ -28,10 +28,15 @@
  * Device-framed images (the hero pair) are full screens at the device's real aspect ratio -- the
  * CSS bezel takes its shape from the image (.claude/rules/marketing.md). Each is captured at the
  * scale that makes the file exactly the size index.html declares, so nothing is resampled.
+ *
+ * FRONTEND_DIST=../frontend/dist serves the app's own files from a local build at FRONTEND's
+ * origin, so a frontend fix can be captured before it is deployed. config.json and the API stay
+ * FRONTEND's, and so does the origin, which is what its CORS allows. Service workers are blocked,
+ * or the deployed one would answer from its own precache.
  */
 import { chromium } from 'playwright';
-import { mkdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { extname, join } from 'node:path';
 
 const FRONTEND = process.env.FRONTEND || 'https://app.huddle.fitness';
 const ASSETS = process.argv[2];
@@ -105,7 +110,18 @@ async function workoutScenes() {
 }
 
 async function open(device, colorScheme = 'light') {
-  const ctx = await browser.newContext({ ...device, colorScheme });
+  const DIST = process.env.FRONTEND_DIST;
+  const ctx = await browser.newContext({ ...device, colorScheme, ...(DIST && { serviceWorkers: 'block' }) });
+  if (DIST) {
+    const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json' };
+    await ctx.route(`${FRONTEND}/**`, (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/config.json') return route.continue();
+      const file = join(DIST, path);
+      const served = existsSync(file) && statSync(file).isFile() ? file : join(DIST, 'index.html'); // SPA fallback
+      return route.fulfill({ body: readFileSync(served), contentType: types[extname(served)] ?? 'application/octet-stream' });
+    });
+  }
   const page = await ctx.newPage();
   const helpers = drive(page);
   await page.goto(`${FRONTEND}/login`);
@@ -260,11 +276,11 @@ async function figureScenes(f, suffix) {
   await f.page.getByText('Set 2', { exact: true }).waitFor();
   await f.page.evaluate(() => window.scrollTo(0, 0));
   const width = f.page.viewportSize().width;
-  // Down to the Log set card's bottom edge: the steppers and the button are the pitch. The walk
-  // starts above the button, which has a border of its own: starting on it stopped there, and the
-  // crop ended 5px under the card's edge so the card looked cut off.
-  const logged = await f.page.getByRole('button', { name: /^Log set/ }).evaluate((el) => {
-    let card = el.parentElement;
+  // Down past the sets just logged: the steppers, the button and what they produced are the pitch.
+  // Not the Log set card's own edge: the sets card starts 17px under it, so any margin there shows
+  // the next card's top edge, and no margin shows a card cut off at the frame.
+  const logged = await f.page.getByText('Set 1', { exact: true }).evaluate((el) => {
+    let card = el;
     while (card.parentElement && getComputedStyle(card).borderTopWidth === '0px') card = card.parentElement;
     return card.getBoundingClientRect().bottom;
   });

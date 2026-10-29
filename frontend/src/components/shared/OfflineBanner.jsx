@@ -89,25 +89,29 @@ export default function OfflineBanner() {
         {!online && queued === 0 && (
           <span>Offline. Your changes are saved on this device and will sync when you reconnect.</span>
         )}
+        {/* One inline run, so the row's flex gap can't open between the count and its full stop:
+            as siblings it read "2 changes waiting to sync . They'll sync when you reconnect." */}
         {queued > 0 && (
-          <button
-            onClick={() => setShowOutbox(true)}
-            aria-haspopup="dialog"
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              color: 'inherit',
-              font: 'inherit',
-              fontWeight: 700,
-              textDecoration: 'underline',
-              cursor: 'pointer',
-            }}
-          >
-            {queuedLabel}
-          </button>
+          <span>
+            <button
+              onClick={() => setShowOutbox(true)}
+              aria-haspopup="dialog"
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                color: 'inherit',
+                font: 'inherit',
+                fontWeight: 700,
+                textDecoration: 'underline',
+                cursor: 'pointer',
+              }}
+            >
+              {queuedLabel}
+            </button>
+            {!online && <>. They&rsquo;ll sync when you reconnect.</>}
+          </span>
         )}
-        {!online && queued > 0 && <span>. They&rsquo;ll sync when you reconnect.</span>}
         {pinned && (
           <Button
             onClick={handleGoBackOnline}

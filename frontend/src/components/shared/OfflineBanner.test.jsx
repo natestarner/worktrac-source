@@ -231,6 +231,24 @@ describe('OfflineBanner', () => {
     });
   });
 
+  // The banner is a flex row with a gap, so as separate children the count and its sentence read
+  // "1 change waiting to sync . They'll sync…". jsdom has no layout; sharing a parent is the guard.
+  it('keeps the queued count and its sentence in one run, so no gap opens before the full stop', async () => {
+    onlineManager.setOnline(false);
+    const { queryClient } = renderBanner();
+    act(() => {
+      dispatchLogSet(queryClient, {
+        mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
+        idempotencyKey: 'run', clientLoggedAt: 't', tempId: 'temp-run',
+      });
+    });
+
+    const countButton = await screen.findByRole('button', { name: '1 change waiting to sync' });
+    expect(countButton.parentElement.textContent).toBe(
+      '1 change waiting to sync. They’ll sync when you reconnect.',
+    );
+  });
+
   it('closes the outbox detail modal from its Done button', async () => {
     onlineManager.setOnline(false);
     const { queryClient } = renderBanner();
