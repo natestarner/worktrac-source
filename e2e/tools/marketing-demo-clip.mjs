@@ -32,7 +32,7 @@
  *
  * Each frame gets a status-bar band painted above it, in the colour of the app's own header in that
  * frame -- so when the celebration dims the app, the band dims with it. The page's phone frame draws
- * no band of its own for this clip (.device--clip): a CSS band stayed white over a dimmed screen.
+ * no band of its own for this clip (.device--clip, on top of the shared .device--solo placement): a CSS band stayed white over a dimmed screen.
  *
  * It LOGS ONE REAL SET for Sam. It notes the sets that existed before, deletes exactly the one it
  * added afterwards, and ends the workout only if it started one -- an open workout it found is
@@ -227,6 +227,28 @@ await ep.evaluate((V) => {
     g.fillStyle = `rgb(${r},${gr},${b})`;
     g.fillRect(0, 0, V.width, V.band);
   };
+  // The canvas as I420 in BT.709 limited range (luma 16-235), the space players assume when a file
+  // says nothing and the one the MP4 then declares. Handing the encoder the canvas itself made Edge
+  // convert to FULL range (its decoderConfig.colorSpace says so) while writing nothing into the
+  // stream: every player read it as limited and stretched it, so the light greys that draw the app's
+  // card borders, chips and tab track clipped to white, darks crushed to black and the orange
+  // oversaturated (2026-10-28: 30.7 dB against the source frames; this path, 43.7 dB).
+  window.toI420 = (g, W, H) => {
+    const px = g.getImageData(0, 0, W, H).data;
+    const out = new Uint8Array((W * H * 3) / 2);
+    const Y = out.subarray(0, W * H), U = out.subarray(W * H, (W * H * 5) / 4), Vc = out.subarray((W * H * 5) / 4);
+    const luma = (r, gr, b) => 0.2126 * r + 0.7152 * gr + 0.0722 * b;
+    for (let i = 0, p = 0; i < W * H; i++, p += 4) Y[i] = Math.round(16 + (219 * luma(px[p], px[p + 1], px[p + 2])) / 255);
+    for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) {
+      let r = 0, gr = 0, b = 0;
+      for (const p of [(y * W + x) * 4, (y * W + x + 1) * 4, ((y + 1) * W + x) * 4, ((y + 1) * W + x + 1) * 4]) { r += px[p]; gr += px[p + 1]; b += px[p + 2]; }
+      [r, gr, b] = [r / 1020, gr / 1020, b / 1020];
+      const l = luma(r, gr, b), o = (y / 2) * (W / 2) + x / 2;
+      U[o] = Math.round(128 + (224 * (b - l)) / 1.8556);
+      Vc[o] = Math.round(128 + (224 * (r - l)) / 1.5748);
+    }
+    return out;
+  };
   window.toBase64 = (bytes) => {
     let s = '';
     for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -264,7 +286,11 @@ const h264 = await ep.evaluate(async ({ files, tl, dur, V }) => {
       bmp.close();
       shown = i;
     }
-    const frame = new VideoFrame(canvas, { timestamp: Math.round((k * 1e6) / V.fps), duration: Math.round(1e6 / V.fps) });
+    const frame = new VideoFrame(window.toI420(g, V.width, V.height + V.band), {
+      format: 'I420', codedWidth: V.width, codedHeight: V.height + V.band,
+      timestamp: Math.round((k * 1e6) / V.fps), duration: Math.round(1e6 / V.fps),
+      colorSpace: { primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: false },
+    });
     enc.encode(frame, { keyFrame: k % V.fps === 0 });
     frame.close();
     while (enc.encodeQueueSize > 8) await new Promise((r) => setTimeout(r, 5));
@@ -276,6 +302,7 @@ const h264 = await ep.evaluate(async ({ files, tl, dur, V }) => {
 }, { files, tl, dur, V: VIDEO });
 writeFileSync(join(OUT, 'app-household.mp4'), muxMp4({
   width: VIDEO.width, height: VIDEO.height + VIDEO.band, fps: VIDEO.fps, avcC: Buffer.from(h264.avcC, 'base64'),
+  colr: { primaries: 1, transfer: 1, matrix: 1, fullRange: false }, // BT.709, limited: what toI420 wrote
   samples: h264.chunks.map((c) => ({ data: Buffer.from(c.data, 'base64'), key: c.key })),
 }));
 

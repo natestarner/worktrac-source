@@ -10,12 +10,13 @@
  *
  *   device-ipad.jpg      hero tablet: Alex mid-workout, iPad Air 11" landscape (1180 x 820)
  *   device-iphone.jpg    hero phone: the same workout on a 6.9" iPhone (440 x 956)
- *   app-log.jpg          "Log a set in two taps"
+ *   app-log.jpg          "Log a set in two taps": the log screen's content, cropped below the app's chrome
  *   app-trends-main.jpg  Sam's squat, est. 1RM climbing, with the all-time bests under it
  *   app-trends-secondary.jpg  Sam's workouts per week
  *   ...-phone.jpg        each of those three again at phone width, for <picture> on small screens:
  *                        a 1000px-wide capture shrunk to a phone's column leaves 5px text
- *   app-offline(-dark).png    the offline banner with two sets waiting, light and dark
+ *   app-offline(-dark).jpg    the offline banner with two sets waiting, light and dark: a full phone
+ *                        screen like the hero phone, since the page shows it in the same frame
  *   <OG_IMAGE>           the 1200 x 630 link preview, built from the hero phone capture
  *
  * "Everyone's in the huddle" is a video, not an image here: tools/marketing-demo-clip.mjs.
@@ -25,13 +26,18 @@
  * workout afterwards -- the same contract as tools/app-store-shots.mjs. The offline scene logs its
  * two sets with the network cut and closes the browser before reconnecting, so they never leave it.
  *
- * Device-framed images (the hero pair) are full screens at the device's real aspect ratio -- the
+ * Device-framed images (the hero pair, the offline phone) are full screens at the device's real aspect ratio -- the
  * CSS bezel takes its shape from the image (.claude/rules/marketing.md). Each is captured at the
  * scale that makes the file exactly the size index.html declares, so nothing is resampled.
+ *
+ * FRONTEND_DIST=../frontend/dist serves the app's own files from a local build at FRONTEND's
+ * origin, so a frontend fix can be captured before it is deployed. config.json and the API stay
+ * FRONTEND's, and so does the origin, which is what its CORS allows. Service workers are blocked,
+ * or the deployed one would answer from its own precache.
  */
 import { chromium } from 'playwright';
-import { mkdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { extname, join } from 'node:path';
 
 const FRONTEND = process.env.FRONTEND || 'https://app.huddle.fitness';
 const ASSETS = process.argv[2];
@@ -105,7 +111,18 @@ async function workoutScenes() {
 }
 
 async function open(device, colorScheme = 'light') {
-  const ctx = await browser.newContext({ ...device, colorScheme });
+  const DIST = process.env.FRONTEND_DIST;
+  const ctx = await browser.newContext({ ...device, colorScheme, ...(DIST && { serviceWorkers: 'block' }) });
+  if (DIST) {
+    const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json' };
+    await ctx.route(`${FRONTEND}/**`, (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/config.json') return route.continue();
+      const file = join(DIST, path);
+      const served = existsSync(file) && statSync(file).isFile() ? file : join(DIST, 'index.html'); // SPA fallback
+      return route.fulfill({ body: readFileSync(served), contentType: types[extname(served)] ?? 'application/octet-stream' });
+    });
+  }
   const page = await ctx.newPage();
   const helpers = drive(page);
   await page.goto(`${FRONTEND}/login`);
@@ -159,15 +176,14 @@ function drive(page) {
     await page.getByRole('button', { name: /^Log set/ }).click();
     if (wait) await page.getByText(`Set ${before + 1}`, { exact: true }).waitFor();
   };
-  // A bordered card, from its own top edge, cut off after `rows` CSS px if it runs longer. The app's
-  // sticky chrome is demoted first, or it paints over any element taller than the viewport.
+  // A bordered card, from its own top edge, cut off after `maxHeight` CSS px if it runs longer.
+  //
+  // A card that fits below the app's sticky chrome is centred there and shot as the app draws it.
+  // Only a taller one gets the chrome demoted to static (or it paints over the card), because the
+  // demotion leaves a stale page-wide hairline in Chromium's mobile emulation: the phone-width
+  // weekly chart came out with its top 10px, the "4" and the tallest bars, under a line the app
+  // never draws.
   const card = async (heading, path, maxHeight) => {
-    await page.evaluate(() => {
-      for (const el of document.querySelectorAll('*')) {
-        const p = getComputedStyle(el).position;
-        if (p === 'sticky' || p === 'fixed') el.style.position = 'static';
-      }
-    });
     const el = page.getByText(heading).first();
     await el.waitFor();
     const handle = await el.evaluateHandle((node) => {
@@ -175,14 +191,35 @@ function drive(page) {
       while (target.parentElement && getComputedStyle(target).borderTopWidth === '0px') target = target.parentElement;
       return target;
     });
-    await handle.evaluate((node) => node.scrollIntoView({ block: 'start' }));
+    // Centres the part that will be shot (the card can run on past maxHeight) in the space under
+    // the chrome, when it fits there.
+    const fits = await handle.evaluate((node, max) => {
+      const chrome = Math.max(0, ...[...document.querySelectorAll('*')]
+        .filter((e) => ['sticky', 'fixed'].includes(getComputedStyle(e).position) && e.getBoundingClientRect().top <= 0)
+        .map((e) => e.getBoundingClientRect().bottom));
+      const height = Math.min(node.getBoundingClientRect().height, max ?? Infinity);
+      if (height > window.innerHeight - chrome) return false;
+      window.scrollBy(0, node.getBoundingClientRect().top - (chrome + (window.innerHeight - chrome - height) / 2));
+      return true;
+    }, maxHeight);
+    if (!fits) {
+      await page.evaluate(() => {
+        for (const e of document.querySelectorAll('*')) {
+          const p = getComputedStyle(e).position;
+          if (p === 'sticky' || p === 'fixed') e.style.position = 'static';
+        }
+      });
+      await handle.evaluate((node) => node.scrollIntoView({ block: 'start' }));
+    }
     await page.mouse.move(0, 0); // a pointer left over a chart leaves its hover tooltip in the shot
     await page.waitForTimeout(600);
     const box = await handle.boundingBox();
-    await page.screenshot({
-      path, type: 'jpeg', quality: 88, fullPage: true,
-      clip: { x: box.x, y: box.y + (await page.evaluate(() => window.scrollY)), width: box.width, height: Math.min(box.height, maxHeight ?? box.height) },
-    });
+    const height = Math.min(box.height, maxHeight ?? box.height);
+    // A fullPage capture lays the page out again at its full height, which moves the card out from
+    // under a clip measured on screen, so only the card that cannot fit on screen uses one.
+    await page.screenshot(fits
+      ? { path, type: 'jpeg', quality: 88, clip: { x: box.x, y: box.y, width: box.width, height } }
+      : { path, type: 'jpeg', quality: 88, fullPage: true, clip: { x: box.x, y: box.y + (await page.evaluate(() => window.scrollY)), width: box.width, height } });
     console.log(path);
   };
   return { settle, tab, person, openExercise, startRoutine, logSet, card };
@@ -239,14 +276,29 @@ async function figureScenes(f, suffix) {
   await f.openExercise(EXERCISE);
   await f.page.getByText('Set 2', { exact: true }).waitFor();
   await f.page.evaluate(() => window.scrollTo(0, 0));
-  const width = f.page.viewportSize().width;
-  // Down to the Log set card's bottom edge: the steppers and the button are the pitch.
-  const logged = await f.page.getByRole('button', { name: /^Log set/ }).evaluate((el) => {
-    let card = el;
-    while (card.parentElement && getComputedStyle(card).borderTopWidth === '0px') card = card.parentElement;
-    return card.getBoundingClientRect().bottom;
+  // The log screen's content and nothing above it: no logo, people or tabs. With them the card read
+  // as a phone screen missing its bezel; without them it reads as a close-up, like the Trends cards.
+  // From just under the sticky chrome (its hairline hangs 1px below it) down past the sets just
+  // logged, since the sets card starts 17px under the Log set card: any margin there shows its top
+  // edge. 24px either side of the cards, inside the frame.
+  const crop = await f.page.getByText('Set 1', { exact: true }).evaluate((el) => {
+    const bordered = (start) => {
+      let card = start;
+      while (card.parentElement && getComputedStyle(card).borderTopWidth === '0px') card = card.parentElement;
+      return card.getBoundingClientRect();
+    };
+    const logCard = bordered([...document.querySelectorAll('button')].find((b) => /^Log set/.test(b.textContent.trim())).parentElement);
+    return {
+      top: document.querySelector('.app-chrome').getBoundingClientRect().bottom + 1,
+      bottom: bordered(el).bottom + 24,
+      left: Math.max(0, logCard.left - 24),
+      right: Math.min(window.innerWidth, logCard.right + 24),
+    };
   });
-  await f.page.screenshot({ path: join(SHOTS, `app-log${suffix}.jpg`), type: 'jpeg', quality: 88, clip: { x: 0, y: 0, width, height: Math.ceil(logged) + 24 } });
+  await f.page.screenshot({
+    path: join(SHOTS, `app-log${suffix}.jpg`), type: 'jpeg', quality: 88,
+    clip: { x: crop.left, y: crop.top, width: crop.right - crop.left, height: Math.ceil(crop.bottom - crop.top) },
+  });
   console.log(`app-log${suffix}.jpg`);
 
 }
@@ -254,9 +306,10 @@ async function figureScenes(f, suffix) {
 // Two sets logged with the network cut, so the app's own banner says what is waiting. The context
 // is closed while still offline: the queued sets live only in this throwaway browser profile.
 async function offline(scheme) {
-  // Narrower than the other cards, so the banner -- the whole point -- stays legible at the size the
-  // page shows it, and the two waiting sets fit under it.
-  const s = await open({ viewport: { width: 600, height: 1100 }, deviceScaleFactor: 2 }, scheme);
+  // A whole phone screen, framed on the page like the hero phone: "no signal in the basement" is a
+  // story about the phone in your hand, and the banner sits at the top of its screen. As a cropped
+  // card, the logo and tabs between the banner and the sets made it read as a phone missing its bezel.
+  const s = await open(PHONE, scheme);
   await s.person('Alex');
   await s.openExercise('Barbell Bench Press');
   await s.ctx.setOffline(true);
@@ -264,15 +317,11 @@ async function offline(scheme) {
   await s.page.getByText('Set 1', { exact: true }).waitFor();
   await s.logSet(135, 8, { wait: false });
   await s.page.getByText(/2 changes waiting/).first().waitFor();
+  await s.page.evaluate(() => window.scrollTo(0, 0));
   await s.page.mouse.move(0, 0);
   await s.page.waitForTimeout(800);
-  const bottom = await s.page.getByText('Set 1', { exact: true }).evaluate((el) => {
-    let card = el;
-    while (card.parentElement && getComputedStyle(card).borderTopWidth === '0px') card = card.parentElement;
-    return card.getBoundingClientRect().bottom + window.scrollY;
-  });
-  const name = scheme === 'dark' ? 'app-offline-dark.png' : 'app-offline.png';
-  await s.page.screenshot({ path: join(SHOTS, name), fullPage: true, clip: { x: 0, y: 0, width: 600, height: Math.ceil(bottom) + 20 } });
+  const name = scheme === 'dark' ? 'app-offline-dark.jpg' : 'app-offline.jpg';
+  await s.page.screenshot({ path: join(SHOTS, name), type: 'jpeg', quality: 88 });
   console.log(name);
   await s.ctx.close();
 }

@@ -3,7 +3,11 @@
  * H.264 MP4 too, but its output froze in playback between keyframes (its inter frames referenced
  * data it never wrote), so the encoding is driven directly and only the container is built here.
  *
- *   muxMp4({ width, height, fps, avcC, samples: [{ data: Buffer, key: boolean }] }) -> Buffer
+ *   muxMp4({ width, height, fps, avcC, colr?, samples: [{ data: Buffer, key: boolean }] }) -> Buffer
+ *
+ * colr ({ primaries, transfer, matrix, fullRange }, ISO/IEC 23091-2 code points: 1 = BT.709) writes
+ * an 'nclx' colour box. WebCodecs' H.264 output carries no colour description in its SPS, so without
+ * one every player guesses the RGB<->YUV formula, and Edge's guess shifted the app's orange.
  *
  * Layout: ftyp, moov, mdat -- moov first ("faststart"), so a browser can start playing before the
  * whole file arrives. One chunk holding every sample; every sample lasts one frame (1/fps s).
@@ -19,7 +23,7 @@ const full = (type, version, flags, ...parts) => box(type, Buffer.from([version,
 const zeros = (n) => Buffer.alloc(n);
 const MATRIX = Buffer.concat([0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000].map(u32));
 
-export function muxMp4({ width, height, fps, avcC, samples }) {
+export function muxMp4({ width, height, fps, avcC, colr, samples }) {
   const n = samples.length;
   const movieTimescale = 1000;
   const durationMs = Math.round((n * 1000) / fps);
@@ -37,7 +41,8 @@ export function muxMp4({ width, height, fps, avcC, samples }) {
       u32(0x00480000), u32(0x00480000),      // 72 dpi
       u32(0), u16(1), zeros(32),             // reserved, frame_count, compressorname
       u16(0x0018), u16(0xffff),              // depth, pre_defined -1
-      box('avcC', Buffer.from(avcC)));
+      box('avcC', Buffer.from(avcC)),
+      ...(colr ? [box('colr', Buffer.from('nclx', 'latin1'), u16(colr.primaries), u16(colr.transfer), u16(colr.matrix), Buffer.from([colr.fullRange ? 0x80 : 0]))] : []));
     const stsd = full('stsd', 0, 0, u32(1), avc1);
     const stts = full('stts', 0, 0, u32(1), u32(n), u32(1));
     const keys = samples.map((s, i) => (s.key ? i + 1 : 0)).filter(Boolean);

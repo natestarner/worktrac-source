@@ -804,9 +804,10 @@ img {
   display: block;
 }
 
-/* The household clip: the hero's phone standing on its own in a section column, not leaning on
-   the tablet. Same bezel, island and status band; only the placement differs. */
-.device--phone.device--clip {
+/* The hero's phone standing on its own in a section column, not leaning on the tablet: the
+   household clip and the offline screen. Same bezel, island and status band; only the placement
+   differs. */
+.device--phone.device--solo {
   position: relative;
   right: auto;
   bottom: auto;
@@ -819,6 +820,13 @@ img {
    A CSS band stayed white over a dimmed screen. */
 .device--phone.device--clip .device__screen {
   padding-top: 0;
+}
+
+/* The offline screen opens on the app's offline banner, not its white header, so the band the
+   island sits in takes the banner's colour. The app's banner is --color-subtle-bg, the same value as
+   this page's in both schemes, and the screenshot swaps light/dark on the same media query. */
+.device--phone.device--offline .device__screen {
+  background: var(--color-subtle-bg);
 }
 
 .device--tablet {
@@ -1023,13 +1031,6 @@ img {
   width: 100%;
   height: auto;
   display: block;
-}
-
-/* Portrait captures (the celebration card, the phone-width offline shot) beside a few lines of
-   text: at the split's full column width they stood three times the text's height. */
-.figure--narrow {
-  max-width: 400px;
-  margin-inline: auto;
 }
 
 .figure--quiet {

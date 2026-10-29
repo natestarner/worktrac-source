@@ -231,6 +231,34 @@ describe('OfflineBanner', () => {
     });
   });
 
+  // The banner is a flex row with a gap, so as separate children the count and its sentence read
+  // "1 change waiting to sync . They'll sync…", and on a phone the dot and "Offline:" each wrapped
+  // onto a line of their own. jsdom has no layout; one parent holding the dot and the whole sentence
+  // is the guard.
+  it('keeps the dot and the whole queued message in one run, so it wraps as a sentence with no gap before the full stop', async () => {
+    onlineManager.setOnline(false);
+    const { queryClient } = renderBanner();
+    act(() => {
+      dispatchLogSet(queryClient, {
+        mode: 'live', personId: 7, exerciseId: 1, weight: 135, reps: 5, unit: 'lb',
+        idempotencyKey: 'run', clientLoggedAt: 't', tempId: 'temp-run',
+      });
+    });
+
+    const countButton = await screen.findByRole('button', { name: '1 change waiting to sync' });
+    const run = countButton.parentElement;
+    expect(run.textContent).toBe('Offline: 1 change waiting to sync. They’ll sync when you reconnect.');
+    expect(run.firstElementChild).toHaveAttribute('aria-hidden', 'true'); // the dot
+  });
+
+  // The same wrap, with nothing queued: the long offline sentence and its dot are one run too.
+  it('keeps the dot in the same run as the nothing-queued offline message', () => {
+    onlineManager.setOnline(false);
+    renderBanner();
+    const message = screen.getByText(/Your changes are saved on this device/);
+    expect(message.firstElementChild).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('closes the outbox detail modal from its Done button', async () => {
     onlineManager.setOnline(false);
     const { queryClient } = renderBanner();

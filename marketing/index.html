@@ -299,8 +299,8 @@
         <div class="split__media">
           <figure class="figure">
             <picture>
-              <source srcset="/assets/shots/app-log-phone.jpg" media="(max-width: 700px)" width="440" height="696" />
-              <img src="/assets/shots/app-log.jpg" width="1000" height="665" loading="lazy" alt="Barbell Back Squat in Huddle: last time's four sets and the best est. 1RM above weight and reps steppers prefilled from last time, a note of how many more reps would be a PR, and a Log set for Alex button." />
+              <source srcset="/assets/shots/app-log-phone.jpg" media="(max-width: 700px)" width="440" height="637" />
+              <img src="/assets/shots/app-log.jpg" width="840" height="606" loading="lazy" alt="Barbell Back Squat in Huddle: last time's four sets and the best est. 1RM above weight and reps steppers prefilled from last time, a note of how many more reps would be a PR, a Log set for Alex button, and the two sets just logged below it." />
             </picture>
           </figure>
         </div>
@@ -316,7 +316,7 @@
                logged as its new high. Nothing loads until this scrolls near the viewport
                (lazy-video.js); reduced-motion visitors get the poster, the celebration, and no
                video bytes. MP4 is H.264 for Safari and iPhones; WebM for browsers without it. -->
-          <div class="device device--phone device--clip">
+          <div class="device device--phone device--solo device--clip">
             <div class="device__screen">
               <video
                 class="js-lazy-video"
@@ -373,12 +373,16 @@
           <p class="prose">Your history, PRs and routines stay readable the whole time, for everyone in the house.</p>
         </div>
         <div class="split__media">
-          <figure class="figure figure--narrow">
-            <picture>
-              <source srcset="/assets/shots/app-offline-dark.png" media="(prefers-color-scheme: dark)" />
-              <img src="/assets/shots/app-offline.png" width="600" height="853" loading="lazy" alt="Huddle with no connection: a banner reads &quot;Offline: 2 changes waiting to sync. They'll sync when you reconnect.&quot; above Alex's Barbell Bench Press, with the two sets just logged listed below." />
-            </picture>
-          </figure>
+          <!-- A whole phone screen in the hero's phone frame: no signal in the basement is a story
+               about the phone in your hand (tools/marketing-demo-shots.mjs, offline scene). -->
+          <div class="device device--phone device--solo device--offline">
+            <div class="device__screen">
+              <picture>
+                <source srcset="/assets/shots/app-offline-dark.jpg" media="(prefers-color-scheme: dark)" width="800" height="1738" />
+                <img src="/assets/shots/app-offline.jpg" width="800" height="1738" loading="lazy" alt="Huddle on an iPhone with no connection: a banner reads &quot;Offline: 2 changes waiting to sync. They'll sync when you reconnect.&quot; above Alex's Barbell Bench Press, with the two sets just logged listed below." />
+              </picture>
+            </div>
+          </div>
         </div>
       </div>
     </section>
