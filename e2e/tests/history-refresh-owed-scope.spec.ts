@@ -97,6 +97,10 @@ test('two writes to different months, drained together, both reach History', asy
   await goOnline(page);
   await expectHistoryMatchesServer(page, request);
   await expect(page.getByText('315lb×3')).toHaveCount(2);
+  // The handler holds every sync 2s, so one can still be in flight as the test ends. Its route.fetch
+  // then runs against a closed context and Playwright reports "route.fetch: Test ended" as an error
+  // outside any test, which fails the whole run with every test green (lower, 2026-10-29).
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
 
 // App opened with a set still queued from offline, after ANOTHER device changed a workout in another
@@ -155,4 +159,6 @@ test('app opened with a queued set still picks up another device\'s change in an
   await reopened.goto('/app/history');
   await expectHistoryMatchesServer(reopened, request);
   await expect(reopened.getByText('405lb×1')).toBeVisible();
+  // Same in-flight-at-teardown race as the test above.
+  await context.unrouteAll({ behavior: 'ignoreErrors' });
 });
