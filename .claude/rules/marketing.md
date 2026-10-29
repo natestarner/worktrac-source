@@ -141,7 +141,7 @@ desktop-only check can look "close enough" while a phone-width check is unmistak
 
 ## Product screenshots: one script, one household
 
-Every image in `marketing/assets/shots/` and `assets/og-image.png` comes from
+Every image in `marketing/assets/shots/` and the link preview `assets/og-image-<yyyy-mm>.png` (renamed whenever it changes, so caches refetch it) comes from
 `e2e/tools/marketing-demo-shots.mjs`, captured from the reviewer demo household (Alex, Sam,
 Jordan), the same people the App Store screenshots show. **Don't add a capture from anywhere else**
 (an on-device photo, a real family's account): it brings back mismatched names and a real family on

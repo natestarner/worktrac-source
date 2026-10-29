@@ -238,6 +238,20 @@ else
   pass "unknown URLs answer 404 with a noindex page"
 fi
 
+# --- 13. Every absolute asset URL is a file this site ships -----------------
+# og:image, twitter:image and the JSON-LD image/logo are absolute URLs, so check 2 never looks at
+# them. The link preview is renamed whenever it changes (messaging apps cache it by URL), and a page
+# left pointing at the old name unfurls with no image at all -- a broken link preview, visible only
+# in someone else's chat.
+missing_abs=0
+for url in $(grep -ohE 'https://huddle\.fitness/assets/[^"]+' "${PAGES[@]}" | sed -E 's#https://huddle\.fitness/##' | sort -u); do
+  if [ ! -f "$DIR/$url" ]; then
+    fail "$url is linked by absolute URL but is not in $DIR/"
+    missing_abs=$((missing_abs + 1))
+  fi
+done
+[ "$missing_abs" -eq 0 ] && pass "every absolute asset URL exists"
+
 echo
 if [ "$fails" -gt 0 ]; then
   echo "$fails check(s) failed."
