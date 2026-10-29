@@ -47,7 +47,9 @@ marketing/**  ──►  marketing-ci (scripts/check-marketing.sh)
                                             │
                                             ▼  push triggers deploy-lower.yml
                               cp config/lower/marketing-robots.txt → robots.txt
+                              tools/fill-site-origins.sh config/lower/site-origins.env
                               Azure/static-web-apps-deploy@v1  (marketing SWA lower)
+                              tools/verify-site-origins.sh  (the live pages)
                                             │
                                             ▼  manual promotion to `production`
                               same steps against the production marketing SWA
@@ -58,21 +60,63 @@ why `scripts/check-marketing.sh` exists — it is the only thing between a typo'
 asset path and a 404 in production. It runs in CI and is worth running by hand
 before pushing.
 
-### The one per-environment difference
+### Each environment names only itself
 
-Both environments get byte-identical files. `marketing/app-links.js` rewrites
-the CTA links to `app.dev.huddle.fitness` and injects a `noindex` meta at
-runtime when the hostname starts with `dev.`. This is environment config, not a
-connectivity branch — it does not belong on the resilience register in
-`.claude/rules/resilience.md`, which governs `frontend/src`.
+Both environments get byte-identical files, and each deploy fills in its own
+addresses. Wherever a page must name an absolute URL (canonical, `og:url`,
+`og:image`, `twitter:image`, the JSON-LD, every app CTA, `sitemap.xml`) the
+source says `__SITE_ORIGIN__` or `__APP_ORIGIN__`, and every indexable page's
+robots meta says `__SITE_ROBOTS__`. The app's own `frontend/index.html` does the
+same for its share tags.
 
-`robots.txt` is swapped at deploy time instead, mirroring the existing
-`config.json` correction, so the lower site is disallowed even to a crawler that
-ignores the meta tag.
+| | lower | production |
+|---|---|---|
+| `SITE_ORIGIN` | `https://dev.huddle.fitness` | `https://huddle.fitness` |
+| `APP_ORIGIN` | `https://app.dev.huddle.fitness` | `https://app.huddle.fitness` |
+| `SITE_ROBOTS` | `noindex, nofollow` | `index, follow` |
+
+The values live in `worktrac-deploy`'s `config/<env>/site-origins.env`, beside
+the `frontend-env.json` that gives the app its API origin. **Both deploys run
+the same step**: `tools/fill-site-origins.sh` on the files about to be uploaded,
+then `tools/verify-site-origins.sh` on the live pages. That way lower tests the
+exact step production will run. `promote-to-lower` copies both scripts from
+`scripts/` into the deploy repo's `tools/` with every release, so the fill always
+matches the placeholders it fills, and the lower→production promotion carries
+them along.
+
+**Why not `config.json`, the way the app gets its API origin:** link previews
+(iMessage, Slack, Signal) and most crawlers read the raw HTML and never run a
+script. Until 2026-10-29 the pages named production and `app-links.js` swapped
+the CTAs on `dev.` hosts at runtime. A shared dev.huddle.fitness link then
+unfurled with production's share image, a file that only lower had at the
+time. Production answered with its 404 page, which is HTML with a 200 status,
+so the preview showed no picture.
+
+What stops it coming back:
+
+- `check-marketing.sh` check 4 fails any page, the sitemap or `robots.txt` that
+  hardcodes a `*huddle.fitness` origin.
+- Check 14 runs the real fill on a copy, so an unknown or misspelt placeholder
+  fails before merge.
+- The fill itself refuses to finish if any `__NAME__` placeholder survives.
+- `verify-site-origins.sh` fails the deploy if a live page names another
+  environment, or if its share image doesn't come back as `image/*`.
+- `e2e/marketing-tests/site-origins.spec.ts` asserts the same from the response
+  body, locally and against a deployed site.
+
+`robots.txt` is still swapped whole at deploy time
+(`config/<env>/marketing-robots.txt`), so the lower site is disallowed even to a
+crawler that ignores the meta tag. This is environment config, not a
+connectivity branch, so it does not belong on the resilience register in
+`.claude/rules/resilience.md`.
+
+**The App Store app is the one build no deploy fills.** `npm run build:native`
+packages `frontend/index.html` with its share-tag placeholders still in it.
+That's harmless, because nothing reads Open Graph tags inside an installed app.
 
 ### No CORS change is needed
 
-Every CTA is a plain link to `app.huddle.fitness`. The marketing site makes no
+Every CTA is a plain link to the environment's own app (`APP_ORIGIN`). The marketing site makes no
 API calls, so `CORS_ALLOWED_ORIGINS` does not need `huddle.fitness` added. If a
 form is ever added here (a waitlist, a newsletter), that stops being true and
 the origin has to be added to both `backend-env.json` files in the deploy repo.
@@ -132,7 +176,8 @@ so there is nothing to break. Managed certificates take a few minutes after
 validation.
 
 `www` serves identical content to the apex, which is why the page carries
-`<link rel="canonical" href="https://huddle.fitness/">`.
+`<link rel="canonical" href="__SITE_ORIGIN__/">`, filled at deploy as
+`https://huddle.fitness/` in production.
 
 ### 4. Deploy-repo jobs
 
@@ -343,8 +388,8 @@ Bing Webmaster Tools, against `https://huddle.fitness/sitemap.xml`.
 ```bash
 bash scripts/check-marketing.sh          # static checks; also runs in CI
 
-cd marketing && python -m http.server 8099
-cd e2e && npm ci
+bash scripts/preview-marketing.sh        # a filled copy on :8099 (marketing/ holds placeholders)
+cd e2e && npm ci && npm run test:marketing
 node tools/marketing-contrast.mjs        # WCAG AA audit, light + dark
 node tools/marketing-screens.mjs <dir>   # screenshots + overflow/console check
 ```

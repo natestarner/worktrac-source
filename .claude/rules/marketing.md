@@ -30,9 +30,12 @@ Adding a third audience page (`for-teams.html` is the planned one) means copying
 - **Its own `<title>`, description, canonical and `og:url`** — check 6 now fails a page with no
   canonical *and* a page sharing one with another page, which is how an audience page silently stops
   being indexed.
-- **Load `/app-links.js` blocking, exactly as the others do** (check 8). Without it, lower-environment
-  visitors are sent at the PRODUCTION app and the lower page is indexable alongside the real one.
-  Neither is visible from the page.
+- **Name no environment: every absolute URL is `__SITE_ORIGIN__/…` or `__APP_ORIGIN__/…`, and the
+  head carries `<meta name="robots" content="__SITE_ROBOTS__" />`** (checks 4, 8 and 14). Each
+  deploy fills them (`site-origins.md`). A hardcoded `https://huddle.fitness` sends lower's visitors
+  and link previews to production, and a page without the robots placeholder is indexable on lower
+  alongside the real one. Neither is visible from the page. Add the page to `PAGES` in
+  `e2e/marketing-tests/site-origins.spec.ts` too.
 - **Add it to `sitemap.xml`** (check 9).
 - **Add an explicit route to `staticwebapp.config.json`** (its `no-cache` header, and the
   extensionless rewrite). Without the rewrite, `/for-teams` answers 404; the `.html` file itself

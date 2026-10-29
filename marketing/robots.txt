@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://huddle.fitness/sitemap.xml
+Sitemap: __SITE_ORIGIN__/sitemap.xml

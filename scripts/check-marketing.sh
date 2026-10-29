@@ -9,8 +9,9 @@
 #   1. Required files exist          -- a missing styles.css deploys silently.
 #   2. Every local href/src resolves -- a typo'd asset path 404s in production.
 #   3. No insecure http:// links     -- mixed content is blocked by the browser.
-#   4. No dev host in source         -- the dev URL is applied at runtime by
-#                                       app-links.js, never hardcoded.
+#   4. No environment's origin in source -- every absolute site/app URL is a
+#                                       __SITE_ORIGIN__ / __APP_ORIGIN__ placeholder
+#                                       that each deploy fills (fill-site-origins.sh).
 #   5. Every <img> has alt           -- the design-system accessibility bar.
 #   6. Canonical + og:url agree      -- www serves identical content, so a
 #                                       disagreement splits the indexing.
@@ -19,6 +20,8 @@
 #                                       one regression nothing else would catch.
 #  12. Unknown URLs answer 404       -- not the homepage with a 200, which made
 #                                       every bad URL a duplicate homepage.
+#  14. Every placeholder fills       -- a placeholder the fill script doesn't know
+#                                       would fail the deploy; fail here first.
 #
 # Usage: bash scripts/check-marketing.sh
 set -euo pipefail
@@ -52,7 +55,7 @@ pass() {
 echo "Checking $DIR ..."
 
 # --- 1. Required files -------------------------------------------------------
-for f in index.html styles.css app-links.js robots.txt sitemap.xml staticwebapp.config.json; do
+for f in index.html styles.css robots.txt sitemap.xml staticwebapp.config.json; do
   if [ -f "$DIR/$f" ]; then
     pass "$f present"
   else
@@ -100,16 +103,20 @@ else
   pass "no insecure http:// references"
 fi
 
-# --- 4. No dev host hardcoded in the page ------------------------------------
-# app-links.js legitimately names it; index.html must not.
-dev_host=0
-for page in "${PAGES[@]}"; do
-  if grep -q 'app\.dev\.huddle\.fitness' "$page"; then
-    fail "$(basename "$page") hardcodes app.dev.huddle.fitness (app-links.js applies it at runtime)"
-    dev_host=$((dev_host + 1))
+# --- 4. No environment's origin hardcoded -------------------------------------
+# The same files deploy to lower and production, so a page naming https://huddle.fitness sends a
+# dev.huddle.fitness visitor (or link preview) to production, and naming the dev host does the
+# reverse. Every absolute site or app URL is a placeholder the deploy fills. Email addresses
+# (support@huddle.fitness) are the same everywhere and aren't origins, so they're not matched.
+hardcoded=0
+for f in "${PAGES[@]}" "$DIR/sitemap.xml" "$DIR/robots.txt"; do
+  if grep -qE 'https?://([a-z0-9-]+\.)*huddle\.fitness' "$f"; then
+    fail "$(basename "$f") hardcodes an environment's origin (use __SITE_ORIGIN__ / __APP_ORIGIN__):"
+    grep -noE 'https?://([a-z0-9-]+\.)*huddle\.fitness[^" <]*' "$f" | sed 's/^/        /'
+    hardcoded=$((hardcoded + 1))
   fi
 done
-[ "$dev_host" -eq 0 ] && pass "no dev host hardcoded in any page"
+[ "$hardcoded" -eq 0 ] && pass "no environment's origin hardcoded in any page, the sitemap or robots.txt"
 
 # --- 5. Every <img> has an alt attribute -------------------------------------
 missing_alt=0
@@ -159,18 +166,19 @@ else
   pass "no retired teal #163b3e"
 fi
 
-# --- 8. Every page loads app-links.js ----------------------------------------
-# It rewrites every CTA host on the dev deployment and injects noindex there. A page that forgets it
-# sends lower-environment visitors to the PRODUCTION app and lets the lower landing page be indexed
-# alongside the real one -- neither of which is visible from the page itself.
-missing_links=0
+# --- 8. Every indexable page takes its environment's robots meta -------------
+# Lower fills __SITE_ROBOTS__ with noindex, production with index. A page without it is indexable on
+# dev.huddle.fitness alongside the real one, which is invisible from the page itself. 404.html is
+# noindex everywhere, so it keeps its own fixed value.
+missing_robots=0
 for page in "${PAGES[@]}"; do
-  if ! grep -q 'src="/app-links.js"' "$page"; then
-    fail "$(basename "$page") does not load app-links.js"
-    missing_links=$((missing_links + 1))
+  [ "$page" = "$NOT_FOUND" ] && continue
+  if ! grep -q '<meta name="robots" content="__SITE_ROBOTS__" />' "$page"; then
+    fail "$(basename "$page") has no <meta name=\"robots\" content=\"__SITE_ROBOTS__\" />"
+    missing_robots=$((missing_robots + 1))
   fi
 done
-[ "$missing_links" -eq 0 ] && pass "every page loads app-links.js"
+[ "$missing_robots" -eq 0 ] && pass "every indexable page takes its environment's robots meta"
 
 # --- 9. Every page is in the sitemap -----------------------------------------
 # A page nobody links to and nothing lists is a page that does not exist as far as search is
@@ -181,7 +189,7 @@ for page in "${PAGES[@]}"; do
   name=$(basename "$page")
   slug="$name"
   [ "$name" = "index.html" ] && slug=""
-  if ! grep -q "huddle.fitness/$slug<" "$DIR/sitemap.xml"; then
+  if ! grep -q "__SITE_ORIGIN__/$slug<" "$DIR/sitemap.xml"; then
     fail "$name is not listed in sitemap.xml"
     missing_sitemap=$((missing_sitemap + 1))
   fi
@@ -244,13 +252,26 @@ fi
 # left pointing at the old name unfurls with no image at all -- a broken link preview, visible only
 # in someone else's chat.
 missing_abs=0
-for url in $(grep -ohE 'https://huddle\.fitness/assets/[^"]+' "${PAGES[@]}" | sed -E 's#https://huddle\.fitness/##' | sort -u); do
+for url in $(grep -ohE '__SITE_ORIGIN__/assets/[^"]+' "${PAGES[@]}" | sed -E 's#__SITE_ORIGIN__/##' | sort -u); do
   if [ ! -f "$DIR/$url" ]; then
     fail "$url is linked by absolute URL but is not in $DIR/"
     missing_abs=$((missing_abs + 1))
   fi
 done
 [ "$missing_abs" -eq 0 ] && pass "every absolute asset URL exists"
+
+# --- 14. Every placeholder is one the deploy can fill ------------------------
+# Runs the real fill on a throwaway copy, so a misspelt or new placeholder fails here, before merge,
+# rather than in the middle of a deploy.
+fill_tmp=$(mktemp -d)
+cp -r "$DIR/." "$fill_tmp/"
+if fill_out=$(bash scripts/fill-site-origins.sh scripts/site-origins.local.env "$fill_tmp" 2>&1); then
+  pass "every placeholder fills ($(printf '%s' "$fill_out" | grep -oE 'filled [0-9]+ file\(s\)'))"
+else
+  fail "fill-site-origins.sh refuses this site:"
+  printf '%s\n' "$fill_out" | sed 's/^/        /'
+fi
+rm -rf "$fill_tmp"
 
 echo
 if [ "$fails" -gt 0 ]; then

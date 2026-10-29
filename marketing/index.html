@@ -6,19 +6,20 @@
 
   <title>Huddle: One screen, the whole family's workout</title>
   <meta name="description" content="A workout log built for a family sharing one screen. Separate tracking for every person, personal records worth celebrating together, and it keeps working when your service is out." />
-  <link rel="canonical" href="https://huddle.fitness/" />
+  <link rel="canonical" href="__SITE_ORIGIN__/" />
+  <meta name="robots" content="__SITE_ROBOTS__" />
 
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://huddle.fitness/" />
+  <meta property="og:url" content="__SITE_ORIGIN__/" />
   <meta property="og:title" content="Huddle: One screen, the whole family's workout" />
   <meta property="og:description" content="Separate workout tracking for every person in the house, on one shared screen. Celebrate your PRs together." />
-  <meta property="og:image" content="https://huddle.fitness/assets/og-image-2026-10.png" />
+  <meta property="og:image" content="__SITE_ORIGIN__/assets/og-image-2026-10.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Huddle: One screen, the whole family's workout" />
   <meta name="twitter:description" content="Separate workout tracking for every person in the house, on one shared screen. Celebrate your PRs together." />
-  <meta name="twitter:image" content="https://huddle.fitness/assets/og-image-2026-10.png" />
+  <meta name="twitter:image" content="__SITE_ORIGIN__/assets/og-image-2026-10.png" />
 
   <!-- Safari's Smart App Banner on iPhone and iPad: "Open" if the app is installed, "Get" if not.
        Same app id as every apps.apple.com link (check-marketing.sh check 10). -->
@@ -47,10 +48,10 @@
     "@graph": [
       {
         "@type": "Organization",
-        "@id": "https://huddle.fitness/#organization",
+        "@id": "__SITE_ORIGIN__/#organization",
         "name": "Starner Consulting Co.",
-        "url": "https://huddle.fitness/",
-        "logo": "https://huddle.fitness/assets/apple-touch-icon.png",
+        "url": "__SITE_ORIGIN__/",
+        "logo": "__SITE_ORIGIN__/assets/apple-touch-icon.png",
         "email": "support@huddle.fitness",
         "brand": {
           "@type": "Brand",
@@ -59,17 +60,17 @@
       },
       {
         "@type": "WebSite",
-        "@id": "https://huddle.fitness/#website",
+        "@id": "__SITE_ORIGIN__/#website",
         "name": "Huddle",
         "alternateName": "Huddle Fitness",
-        "url": "https://huddle.fitness/",
+        "url": "__SITE_ORIGIN__/",
         "publisher": {
-          "@id": "https://huddle.fitness/#organization"
+          "@id": "__SITE_ORIGIN__/#organization"
         }
       },
       {
         "@type": "SoftwareApplication",
-        "@id": "https://huddle.fitness/#app",
+        "@id": "__SITE_ORIGIN__/#app",
         "name": "Huddle",
         "alternateName": [
           "Huddle Workout Tracker",
@@ -78,14 +79,14 @@
         "description": "A workout log built for a family sharing one screen. Separate tracking for every person, personal records worth celebrating together, and it keeps working with no internet connection. Huddle Pro adds private client logins and assigned programs for personal trainers.",
         "applicationCategory": "HealthApplication",
         "operatingSystem": "iOS, iPadOS, web browser",
-        "url": "https://huddle.fitness/",
+        "url": "__SITE_ORIGIN__/",
         "installUrl": "https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272",
         "sameAs": [
           "https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272"
         ],
-        "image": "https://huddle.fitness/assets/og-image-2026-10.png",
+        "image": "__SITE_ORIGIN__/assets/og-image-2026-10.png",
         "publisher": {
-          "@id": "https://huddle.fitness/#organization"
+          "@id": "__SITE_ORIGIN__/#organization"
         },
         "offers": [
           {
@@ -212,8 +213,8 @@
       <a class="site-nav__link site-nav__link--optional" href="#pricing">Pricing</a>
       <a class="site-nav__link site-nav__link--optional" href="#faq">FAQ</a>
       <a class="site-nav__link site-nav__link--optional" href="/for-trainers.html">For trainers</a>
-      <a class="site-nav__link site-nav__link--strong" href="https://app.huddle.fitness/login">Log in</a>
-      <a class="btn btn--primary btn--small" href="https://app.huddle.fitness/register">Start free</a>
+      <a class="site-nav__link site-nav__link--strong" href="__APP_ORIGIN__/login">Log in</a>
+      <a class="btn btn--primary btn--small" href="__APP_ORIGIN__/register">Start free</a>
     </nav>
   </header>
 
@@ -246,8 +247,8 @@
            anything. -->
       <div class="hero__cta">
         <div class="hero__actions">
-          <a class="btn btn--primary" href="https://app.huddle.fitness/register">Start free</a>
-          <a class="btn btn--secondary" href="https://app.huddle.fitness/register?plan=plus">Go Plus</a>
+          <a class="btn btn--primary" href="__APP_ORIGIN__/register">Start free</a>
+          <a class="btn btn--secondary" href="__APP_ORIGIN__/register?plan=plus">Go Plus</a>
           <a class="store-badge" href="https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272">
             <img src="/assets/app-store-badge.svg" width="162" height="54" alt="Download on the App Store" />
           </a>
@@ -412,7 +413,7 @@
               <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>PRs, routines, rest timer, trends</li>
               <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg><span>The last <strong>90 days</strong> of history</span></li>
             </ul>
-            <a class="btn btn--secondary btn--full" href="https://app.huddle.fitness/register">Start free</a>
+            <a class="btn btn--secondary btn--full" href="__APP_ORIGIN__/register">Start free</a>
           </div>
 
           <div class="plan plan--featured">
@@ -429,7 +430,7 @@
               <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-strong)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg><span><strong>Personal logins</strong> for anyone in the household who wants one</span></li>
               <li><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-strong)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5" /></svg>Everything in Free, for everyone in the house</li>
             </ul>
-            <a class="btn btn--primary btn--full" href="https://app.huddle.fitness/register?plan=plus">Go Plus</a>
+            <a class="btn btn--primary btn--full" href="__APP_ORIGIN__/register?plan=plus">Go Plus</a>
           </div>
         </div>
 
@@ -553,7 +554,7 @@
         <h2 class="section__title">Get everyone logging tonight</h2>
         <p class="prose">Sign up with an email, confirm the code, add the people you train with. You'll be logging your first set in about two minutes.</p>
         <div class="cta-final__actions">
-          <a class="btn btn--on-dark" href="https://app.huddle.fitness/register">Start free</a>
+          <a class="btn btn--on-dark" href="__APP_ORIGIN__/register">Start free</a>
           <a class="store-badge" href="https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272">
             <img src="/assets/app-store-badge.svg" width="162" height="54" alt="Download on the App Store" />
           </a>
@@ -572,8 +573,8 @@
     </div>
     <nav class="site-footer__links" aria-label="Footer">
       <a href="#pricing">Pricing</a>
-      <a href="https://app.huddle.fitness/login">Log in</a>
-      <a href="https://app.huddle.fitness/register">Start free</a>
+      <a href="__APP_ORIGIN__/login">Log in</a>
+      <a href="__APP_ORIGIN__/register">Start free</a>
       <a href="/for-trainers.html">For trainers</a>
       <a href="/pricing.html">Compare plans</a>
       <a href="/support.html">Support</a>
@@ -583,7 +584,6 @@
     <p class="site-footer__legal">Huddle is made by Starner Consulting Co.</p>
   </footer>
 
-  <script src="/app-links.js"></script>
   <script src="/lazy-video.js" defer></script>
 </body>
 </html>
