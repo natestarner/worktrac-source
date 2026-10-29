@@ -201,7 +201,10 @@ does:
 - **`offline`** logs two sets with the network cut and closes the browser before reconnecting, so
   they only ever exist in that throwaway profile. Light and dark, since the page swaps them with
   `<picture><source media="(prefers-color-scheme: dark)">`.
-- **`og`** builds the 1200 x 630 link preview from the hero phone capture.
+- **`og`** builds the 1200 x 630 link preview from the hero phone capture, framed in the hero's
+  phone bezel (frame, status band, island) so the unfurl reads as a phone, not a floating card.
+  It writes nothing to the account: `EMAIL=x PASSWORD=x SCENES=og` re-renders it from the
+  `device-iphone.jpg` already on disk.
 
 **Phone-width versions.** The log card, the celebration and both Trends cards are also captured at
 440px wide (`...-phone.jpg`) and served on screens 700px and narrower through
