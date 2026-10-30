@@ -19,6 +19,7 @@
 		C0DE00000000000000000002 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000001 /* MainViewController.swift */; };
 		C0DE00000000000000000004 /* StorefrontPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000003 /* StorefrontPlugin.swift */; };
 		C0DE00000000000000000006 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000005 /* PrivacyInfo.xcprivacy */; };
+		C0DE00000000000000000008 /* AppReviewPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000007 /* AppReviewPlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,7 @@
 		C0DE00000000000000000001 /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		C0DE00000000000000000003 /* StorefrontPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorefrontPlugin.swift; sourceTree = "<group>"; };
 		C0DE00000000000000000005 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		C0DE00000000000000000007 /* AppReviewPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppReviewPlugin.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -73,6 +75,7 @@
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
 				C0DE00000000000000000001 /* MainViewController.swift */,
 				C0DE00000000000000000003 /* StorefrontPlugin.swift */,
+				C0DE00000000000000000007 /* AppReviewPlugin.swift */,
 				C0DE00000000000000000005 /* PrivacyInfo.xcprivacy */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
@@ -172,6 +175,7 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				C0DE00000000000000000002 /* MainViewController.swift in Sources */,
 				C0DE00000000000000000004 /* StorefrontPlugin.swift in Sources */,
+				C0DE00000000000000000008 /* AppReviewPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

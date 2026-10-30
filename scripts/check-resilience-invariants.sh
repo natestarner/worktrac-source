@@ -268,7 +268,11 @@ SWALLOW_RE='catch[[:space:]]*\{|\.catch\(\(\)[[:space:]]*=>[[:space:]]*\{[[:spac
 #   only the link's destination is lost, never anything queued or logged.
 # 69 with lib/native/keyboard.js (+1): the keyboard plugin failed to load. The WebView still shrinks
 #   above the keyboard (capacitor.config.json); only the extra scroll on a long page is lost.
-EXPECTED_LIB_SWALLOWS=69
+# 71 with lib/reviewPrompt.js and lib/native/review.js (+2): the rating schedule's count could not be
+#   read or written (private mode, quota), which can only delay or skip an App Store rating request;
+#   and a malformed listing URL, which only hides the "Rate Huddle" menu item. Nothing queued or
+#   logged depends on either.
+EXPECTED_LIB_SWALLOWS=71
 ACTUAL_LIB_SWALLOWS=$(count_where "$SWALLOW_RE" under "$SRC/lib/")
 if [ "$ACTUAL_LIB_SWALLOWS" -gt "$EXPECTED_LIB_SWALLOWS" ]; then
   fail "silently-swallowed errors in $SRC/lib is $ACTUAL_LIB_SWALLOWS, above the pinned $EXPECTED_LIB_SWALLOWS"
