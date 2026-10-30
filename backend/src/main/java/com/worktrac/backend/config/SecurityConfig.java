@@ -5,6 +5,7 @@ import com.worktrac.backend.security.JwtAuthenticationFilter;
 import com.worktrac.backend.security.TokenAuthenticator;
 import com.worktrac.backend.security.RequestDiagnosticsFilter;
 import com.worktrac.backend.security.RequestSizeLimitFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -30,7 +31,10 @@ public class SecurityConfig {
                                                      TokenAuthenticator tokenAuthenticator,
                                                      CorsConfigurationSource corsConfigurationSource,
                                                      RequestLimitProperties requestLimitProperties,
-                                                     AdminProperties adminProperties) throws Exception {
+                                                     AdminProperties adminProperties,
+                                                     // On in lower only -- see RequestDiagnosticsFilter.
+                                                     @Value("${app.request-log.enabled:false}") boolean logEveryRequest)
+            throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 // CSRF protection defends session-cookie auth from forged cross-site requests
@@ -108,7 +112,7 @@ public class SecurityConfig {
                 .addFilterBefore(new JwtAuthenticationFilter(tokenAuthenticator, adminProperties),
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new AuthRequestLoggingFilter(), JwtAuthenticationFilter.class)
-                .addFilterBefore(new RequestDiagnosticsFilter(), AuthRequestLoggingFilter.class)
+                .addFilterBefore(new RequestDiagnosticsFilter(logEveryRequest), AuthRequestLoggingFilter.class)
                 // Ahead of everything: an oversized body must be refused before anything reads it.
                 // Nothing bounded request bodies before this -- Tomcat's maxPostSize covers only
                 // form-encoded bodies, so a single multi-gigabyte POST to the unauthenticated

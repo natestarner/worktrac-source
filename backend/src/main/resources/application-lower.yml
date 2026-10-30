@@ -21,6 +21,11 @@ spring:
     clean-disabled: true    # never allow clean outside local dev, even in lower env
 
 app:
+  request-log:
+    # One "access ..." line per request (RequestDiagnosticsFilter). Lower scales to zero and was
+    # waking almost daily with no trace of the caller; this names it -- user agent, origin, ip and,
+    # for a signed-in tab, the uid. Off everywhere else (SecurityConfig's @Value default).
+    enabled: true
   email:
     # Same pattern/reasoning as application-local.yml -- not sensitive, safe to commit as a
     # fixed literal. Lower is the other profile e2e actually runs against (the deploy-lower.yml

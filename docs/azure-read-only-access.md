@@ -162,6 +162,47 @@ az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a 
 existed, or anything that isn't Huddle. Only `ios/…` (and later `android/…`) rows matter for
 `NATIVE_MIN_SUPPORTED_BUILD`; a `web/…` row is gone within hours of a deploy anyway.
 
+### What keeps waking lower? (the access log)
+
+Lower scales to zero, so every wake-up is some caller reaching its ingress — and ACA keeps no
+ingress request log. Lower alone (`app.request-log.enabled` in `application-lower.yml`) writes one
+line per request from `RequestDiagnosticsFilter`:
+
+```
+INFO [cid=…] [uid=42] [client=web/2026-10-21T01:00] … access GET /api/auth/me -> 200 (12 ms) ip=203.0.113.7 ua="Mozilla/5.0 (iPad; …)" origin=https://app-lower.huddle.fitness
+```
+
+The first request after each cold start is the one that woke it. This lists those callers:
+
+```bash
+az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a   --analytics-query   "ContainerAppConsoleLogs_CL
+   | where ContainerAppName_s == 'worktrac-backend-lower'
+   | where TimeGenerated > ago(7d)
+   | where Log_s matches regex @' access [A-Z]+ /'
+   | extend ip = extract(@'ip=(\S+)', 1, Log_s),
+            ua = extract(@'ua=.(.*). origin=', 1, Log_s),
+            origin = extract(@'origin=(\S+)', 1, Log_s),
+            uid = extract(@'\[uid=([^\]]+)\]', 1, Log_s),
+            client = extract(@'\[client=([^\]]+)\]', 1, Log_s),
+            req = extract(@'access (\S+ \S+)', 1, Log_s)
+   | summarize requests = count(), firstSeen = min(TimeGenerated), lastSeen = max(TimeGenerated),
+               paths = make_set(req, 5) by ip, ua, origin, uid, client
+   | order by lastSeen desc" -o table
+```
+
+How to read a row:
+
+- **`uid` set, `origin=https://app-lower.huddle.fitness`** — a signed-in lower tab or installed
+  web app. The `ua` names the device (iPad, iPhone, Windows Chrome); `uid` names the account.
+  Close that tab, or remove the lower PWA from the home screen.
+- **`client=ios/…`** — a native build pointed at lower (a TestFlight or dev build).
+- **`uid=anon`, `origin=-`, odd paths (`/.env`, `/wp-login.php`)** — an internet scanner. Nothing to
+  close; it hits a 401/404 and leaves. These will keep waking lower as long as its URL is public.
+- **Bursts of hundreds of `huddle+e2e-…` requests from one ip** — the deploy's own e2e run.
+
+kube-probe health checks are deliberately not logged: they reach a running container directly and
+never wake a scaled-to-zero one.
+
 ### The extension
 
 `az monitor log-analytics query` lives in an extension. Without it the command tries to
