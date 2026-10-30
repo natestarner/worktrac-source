@@ -2,6 +2,7 @@ import { queryClient, enqueueOutboxWrite, isUnsyncedWrite, END_WORKOUT_MUTATION_
 import { queryKeys } from '../../api/queryKeys';
 import { markCreatesEnded, markSessionEnded } from '../../lib/endedSessions';
 import { tryHaptic } from '../../lib/haptics';
+import { askForReviewAfterWorkout } from '../../lib/reviewPrompt';
 import { useAppState } from '../../context/AppStateContext';
 import { useUI } from '../../context/UIContext';
 import { useSessionRecap } from '../../hooks/useSessionRecap';
@@ -60,6 +61,9 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
     // stays tied to the act itself rather than to whatever the caller does afterwards.
     tryHaptic('complete');
     onEnded(recap);
+    // After the recap, never before it: the App Store rating sheet, on the schedule in
+    // lib/reviewPrompt.js (3rd workout, then every 5th). A no-op on the web.
+    askForReviewAfterWorkout({ setCount });
   }
 
   return (

@@ -15,6 +15,16 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }));
+// The web's real appReviewUrl unless a test switches to the App Store app's answer.
+const nativeEnv = vi.hoisted(() => ({ inApp: false, openInBrowser: vi.fn() }));
+vi.mock('../../lib/native', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    appReviewUrl: (storeUrl) => (nativeEnv.inApp && storeUrl ? `${storeUrl}?action=write-review` : actual.appReviewUrl(storeUrl)),
+    openInBrowser: (...args) => nativeEnv.openInBrowser(...args),
+  };
+});
 // Needed only by the in-flight case below: an unmocked dispatch would make a real jsdom fetch,
 // which fails and lands the write on failureCount > 0 -- a state the OLD predicate counted too, so
 // the test would pass either way and guard nothing. A never-resolving mock is what holds the write
@@ -76,6 +86,39 @@ describe('UserMenu', () => {
     // Drop the paused mutation WITHOUT resuming it (resuming would fire a real request in jsdom).
     queryClient.getMutationCache().clear();
     onlineManager.setOnline(true);
+  });
+
+  describe('Rate Huddle', () => {
+    const LISTING = 'https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272';
+    afterEach(() => {
+      nativeEnv.inApp = false;
+    });
+
+    it('is not in the web menu, even with a listing URL configured', () => {
+      useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false, client: { appStoreUrl: LISTING } });
+      renderMenu();
+      openMenu();
+      expect(screen.getByRole('menuitem', { name: 'Contact Us' })).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: 'Rate Huddle' })).not.toBeInTheDocument();
+    });
+
+    it("opens the App Store's write-a-review page from the app's menu", () => {
+      nativeEnv.inApp = true;
+      useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false, client: { appStoreUrl: LISTING } });
+      renderMenu();
+      openMenu();
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Rate Huddle' }));
+      expect(nativeEnv.openInBrowser).toHaveBeenCalledWith(`${LISTING}?action=write-review`);
+      expect(screen.queryByRole('menuitem', { name: 'Rate Huddle' })).not.toBeInTheDocument();
+    });
+
+    it('is not in the app menu while the listing URL is not configured', () => {
+      nativeEnv.inApp = true;
+      useAuth.mockReturnValue({ people: [], logout: vi.fn(), isAdmin: false, client: { appStoreUrl: '' } });
+      renderMenu();
+      openMenu();
+      expect(screen.queryByRole('menuitem', { name: 'Rate Huddle' })).not.toBeInTheDocument();
+    });
   });
 
   // Cheap and high-value: stops a refactor silently deleting an attribute nothing else in this

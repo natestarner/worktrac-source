@@ -151,6 +151,14 @@ Expect 4+: no violence, mature content, gambling, web browsing or unrestricted u
 content shared between strangers (notes and names are visible only inside one household). Do **not**
 choose the Kids category. Re-check any US state age-assurance requirements at submission time.
 
+## Ratings
+
+The app asks for a rating with Apple's own sheet (no "Enjoying Huddle?" screen first, which would
+be review gating under guideline 5.6.1) after the 3rd finished workout, then every 5th, at least 30
+days apart, and offers "Rate Huddle" in the account menu. That menu item needs `NATIVE_APP_STORE_URL`
+set on the backend (the same listing URL the update banner uses); without it the item is hidden.
+Details: `docs/architecture/native-apps.md`, "Asking for a rating".
+
 ## Also due at launch, outside the app
 
 - **The marketing site announces the app** (checklist 11.7). Apple's own "Download on the App

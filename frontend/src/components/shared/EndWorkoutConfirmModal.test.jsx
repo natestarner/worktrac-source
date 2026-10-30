@@ -5,6 +5,7 @@ import EndWorkoutConfirmModal from './EndWorkoutConfirmModal';
 import { LOG_SET_MUTATION_KEY, queryClient } from '../../lib/queryClient';
 import { isCreateInEndedWorkout, isSessionEnded } from '../../lib/endedSessions';
 import { queryKeys } from '../../api/queryKeys';
+import { askForReviewAfterWorkout } from '../../lib/reviewPrompt';
 
 vi.mock('../../api/sets', () => ({
   logLiveSet: vi.fn(() => new Promise(() => {})),
@@ -20,6 +21,7 @@ vi.mock('../../api/sessions', () => ({
 vi.mock('../../context/UIContext', () => ({ useUI: () => ({ clearRestTimer: vi.fn() }) }));
 vi.mock('../../context/AppStateContext', () => ({ useAppState: () => ({ setRestTimer: vi.fn() }) }));
 vi.mock('../../lib/haptics', () => ({ tryHaptic: vi.fn() }));
+vi.mock('../../lib/reviewPrompt', () => ({ askForReviewAfterWorkout: vi.fn() }));
 
 const PERSON = 7;
 
@@ -81,5 +83,19 @@ describe('EndWorkoutConfirmModal', () => {
 
     expect(isSessionEnded(PERSON, 55)).toBe(true);
     expect(isCreateInEndedWorkout(PERSON, 'optimistic-a')).toBe(false);
+  });
+
+  // The rating schedule (lib/reviewPrompt.js) counts finished workouts by their sets, so the End
+  // tap hands it the same count the recap shows -- including sets still queued offline.
+  it('tells the rating schedule how many sets the ended workout had', () => {
+    askForReviewAfterWorkout.mockClear();
+    queryClient.setQueryData(queryKeys.liveSession(PERSON), { id: null, startedAt: '2026-09-23T09:00:00Z' });
+    logPendingSet('optimistic-a');
+    logPendingSet('optimistic-b');
+
+    endWorkout();
+
+    expect(askForReviewAfterWorkout).toHaveBeenCalledTimes(1);
+    expect(askForReviewAfterWorkout).toHaveBeenCalledWith({ setCount: 2 });
   });
 });
