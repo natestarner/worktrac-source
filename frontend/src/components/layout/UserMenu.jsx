@@ -7,6 +7,7 @@ import { useAccountAccess } from '../../hooks/useAccountAccess';
 import { planIncludes } from '../../utils/planFeatures';
 import { accountVocab, capitalize } from '../../utils/accountVocab';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
+import { appReviewUrl, openInBrowser } from '../../lib/native';
 
 // `booting` is passed by AppShellSkeleton only. That skeleton renders a REAL Header so the
 // boot paint matches the loaded one pixel-for-pixel -- but the tree it renders is guaranteed to
@@ -24,7 +25,8 @@ import { TOUR_ANCHORS } from '../onboarding/tourSteps';
 // lands after the real Header mounts instead of opening a menu that is about to disappear.
 // See docs/incidents/2026-08-13-e2e-parallel-flakiness.md.
 export default function UserMenu({ booting = false }) {
-  const { people, logout, isAdmin, accounts, account, switchAccount } = useAuth();
+  const { people, logout, isAdmin, accounts, account, switchAccount, client } = useAuth();
+  const reviewUrl = appReviewUrl(client?.appStoreUrl);
   const vocab = accountVocab(account?.vocab);
   const { selfPersonId, isMember } = useAccountAccess();
   const navigate = useNavigate();
@@ -247,6 +249,19 @@ export default function UserMenu({ booting = false }) {
               ("What the consistency grid shows") and contain no "help". */}
           <MenuItem label="Help" onClick={() => go('/app/help')} />
           <MenuItem label="Contact Us" onClick={() => go('/app/contact')} />
+          {/* The App Store's "write a review" page, always on hand beside Contact Us: praise goes
+              one way, a problem the other, and neither is gated on the other. Only in the App
+              Store app with the listing URL configured (appReviewUrl is null otherwise), so the
+              web menu is unchanged. Opens in the App Store app itself, not the in-app sheet. */}
+          {reviewUrl && (
+            <MenuItem
+              label="Rate Huddle"
+              onClick={() => {
+                setOpen(false);
+                openInBrowser(reviewUrl);
+              }}
+            />
+          )}
           {isAdmin && (
             <>
               <div style={{ borderTop: '1px solid var(--color-border)' }} />

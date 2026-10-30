@@ -54,6 +54,17 @@ The adapters, each one a function whose web branch is the code it replaced:
 | `listenForAppLinks(onPath)` | no-op (the browser already loaded the URL) | A universal link (or the checkout scheme link) that opened the app (`appUrlOpen`, or the launch URL, read once per launch) becomes an in-app path | `AppLinkRouter.jsx` (mounted in `App.jsx`, outside every route) |
 | `appReturnUrl(hostname, search)` | the same on both: a pure function | `<bundle id>://checkout-complete…` for the app claiming that host, or `null` | `CheckoutCompletePage`'s "Return to the Huddle app" |
 | `keepFocusedFieldVisible()` | no-op (Safari keeps the field in view itself) | Scrolls a focused field that is under the keyboard or the `SessionBar` to the centre (see "Keyboard" below) | `FocusedFieldKeeper.jsx` (mounted in `App.jsx`, outside every route) |
+| `requestAppReview()` | returns `false`, nothing shown | Apple's own rating sheet (`ios/App/App/AppReviewPlugin.swift`); iOS decides whether it appears | `lib/reviewPrompt.js`, from `EndWorkoutConfirmModal`'s End tap |
+| `appReviewUrl(storeUrl)` | `null` (so the web menu is unchanged) | The listing (`/me`'s `client.appStoreUrl`) with `?action=write-review`, or `null` while that is unset | `UserMenu`'s "Rate Huddle", opened with `openInBrowser` (the App Store app, not the sheet) |
+
+**Rating requests use Apple's sheet only, never a screen of ours first** (guideline 5.6.1; an
+"Enjoying Huddle?" step that sends only the happy ones on is review gating). `lib/reviewPrompt.js`
+owns WHEN: 1.5s after the End tap on the 3rd finished workout with a set in it, then every 5th
+after the last ask, never within 30 days of it; counted per device in localStorage
+(`huddle-review-prompt`). Apple reports nothing back, so "has rated" is unknowable; iOS's own
+limit (three a year, normally none after a rating) covers it. The sheet never appears in TestFlight
+and always appears in a Debug build, so the schedule is proven by `reviewPrompt.test.js`, not on a
+device.
 
 `APP_BUILD` (`lib/appBuild.js`) is `"<platform> <version> (<build>) <instant>"` in the app and the
 bare instant on the web, clamped to **40 characters** because `ContactDiagnostics.appBuild` is

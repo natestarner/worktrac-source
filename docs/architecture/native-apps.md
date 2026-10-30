@@ -119,6 +119,32 @@ recorded here as it lands:
   extension and ignores a route's `Content-Type` header, so the file is now stored as `.json`
   and that URL is a rewrite onto it.
 
+- **Rating prompt** (`feat-app-review-prompt`): Apple's rating sheet after the 3rd finished
+  workout, then every 5th (at least 30 days apart), from the app's own StoreKit plugin
+  (`AppReviewPlugin.swift`); and "Rate Huddle" beside Contact Us in the account menu.
+
+## Asking for a rating: Apple's sheet, at the end of a workout
+
+The usual pattern ("Enjoying Huddle?" first, then the store prompt only for a yes) was considered
+and rejected. Apple requires its own API for rating requests (guideline 5.6.1), and filtering who
+sees it is review gating, which risks a rejection. Apple's sheet is already one tap of stars
+without leaving the app, so a screen in front of it would only cost ratings. Unhappy people get
+Contact Us, which sits beside "Rate Huddle" in the menu at all times rather than as a branch of the
+prompt.
+
+**When:** the "End workout" tap, 1.5s later, once the recap has been said. A PR felt like the
+happier moment, but it lands mid-workout with a rest timer running. The 3rd workout with a set in
+it, then every 5th after the last ask, and never within 30 days of the last ask. Counted per device,
+because the rating goes to the phone's Apple ID whoever was logging.
+
+**What it can't know:** whether the person rated, or whether the sheet even appeared. Apple
+reports neither. iOS shows the sheet at most three times a year per app and normally not again once
+someone has rated, so the schedule only has to avoid asking often; Apple does the rest. An ask
+iOS declines still counts, so the next waits for five more workouts.
+
+**Testing:** the sheet never appears in TestFlight builds and always appears in Debug builds, so
+neither tells you the schedule works. `reviewPrompt.test.js` does.
+
 ## Selling in the app: why a link-out, and only in the US
 
 Apple's rules decide what an App Store app may show about paying, and they differ by storefront.
