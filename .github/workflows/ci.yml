@@ -34,6 +34,10 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       marketing: ${{ steps.filter.outputs.marketing }}
+      # Whether this change touches anything that ships. Only those PRs build the artifacts that
+      # main promotes as-is (resolve-tested-build); a docs-only PR stays fast and its merge simply
+      # takes the full build.
+      deployable: ${{ steps.filter.outputs.backend == 'true' || steps.filter.outputs.frontend == 'true' || steps.filter.outputs.marketing == 'true' }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
@@ -83,16 +87,58 @@ jobs:
         run: bash scripts/check-design-primitives.sh
 
   # ──────────────────────────────────────────────
+  # Job 0c: On a push to main, can we ship the build this code's PR already made and tested?
+  #
+  # "Protect main" requires a branch to be up to date before it merges, so the merged code is
+  # normally byte-for-byte what the PR's CI built and tested. Running mvn verify and rebuilding
+  # here again repeated a result that was already proven -- ~10 minutes of every merge. When
+  # scripts/resolve-tested-build.sh can prove the match (same git tree, every gating job green,
+  # the image named for that exact tree), fast=true: the test jobs below skip their real work and
+  # docker-build / promote-to-lower ship the PR's artifacts. Anything it cannot prove falls back
+  # to the full build exactly as before, so a wrong answer can only cost time.
+  #
+  # Runs on every event (the step is what's gated) so the jobs that `need` it are never skipped by
+  # a skipped dependency -- backend-ci and frontend-ci are required checks on PRs.
+  # ──────────────────────────────────────────────
+  resolve-tested-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      fast: ${{ steps.resolve.outputs.fast }}
+      run_id: ${{ steps.resolve.outputs.run_id }}
+      image_artifact: ${{ steps.resolve.outputs.image_artifact }}
+      frontend_artifact: ${{ steps.resolve.outputs.frontend_artifact }}
+      marketing_artifact: ${{ steps.resolve.outputs.marketing_artifact }}
+    steps:
+      - name: Checkout source
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+
+      - name: Find the PR build that tested this exact code
+        id: resolve
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/resolve-tested-build.sh
+
+  # ──────────────────────────────────────────────
   # Job 1: Build and test the backend
   # ──────────────────────────────────────────────
   backend-ci:
     runs-on: ubuntu-latest
-    needs: [changes]
+    needs: [changes, resolve-tested-build]
     defaults:
       run:
         working-directory: ./backend
+    # Real work on a branch/PR whose backend changed, and on main unless main is promoting the
+    # build its PR already tested (resolve-tested-build) -- then this exact code has passed here.
     env:
-      RUN_REAL: ${{ needs.changes.outputs.backend == 'true' || github.ref == 'refs/heads/main' }}
+      RUN_REAL: ${{ (github.ref == 'refs/heads/main' && needs.resolve-tested-build.outputs.fast != 'true') || (github.ref != 'refs/heads/main' && needs.changes.outputs.backend == 'true') }}
 
     steps:
       - name: Checkout source
@@ -131,26 +177,30 @@ jobs:
 
       - name: No backend changes — skipping build/test
         if: env.RUN_REAL != 'true'
-        run: echo "No backend/** changes in this push; skipping build and tests."
+        run: echo "No backend/** changes in this push, or main is promoting the build its PR already tested; skipping build and tests."
 
   # ──────────────────────────────────────────────
   # Job 2: Build and test the frontend
   # ──────────────────────────────────────────────
   frontend-ci:
     runs-on: ubuntu-latest
-    needs: [changes]
+    needs: [changes, resolve-tested-build]
     defaults:
       run:
         working-directory: ./frontend
+    # RUN_REAL: lint + tests, same rule as backend-ci. BUILD_ARTIFACT: a PR that ships anything
+    # also builds this side's artifact even when its tests are skipped, so main can promote the
+    # PR's complete build instead of rebuilding (resolve-tested-build).
     env:
-      RUN_REAL: ${{ needs.changes.outputs.frontend == 'true' || github.ref == 'refs/heads/main' }}
+      RUN_REAL: ${{ (github.ref == 'refs/heads/main' && needs.resolve-tested-build.outputs.fast != 'true') || (github.ref != 'refs/heads/main' && needs.changes.outputs.frontend == 'true') }}
+      BUILD_ARTIFACT: ${{ github.event_name == 'pull_request' && needs.changes.outputs.deployable == 'true' }}
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
 
       - name: Set up Node.js
-        if: env.RUN_REAL == 'true'
+        if: env.RUN_REAL == 'true' || env.BUILD_ARTIFACT == 'true'
         uses: actions/setup-node@v7
         with:
           # jsdom 30 (a frontend devDependency) requires Node ^22.22.2 || ^24.15.0 || >=26.0.0
@@ -161,7 +211,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        if: env.RUN_REAL == 'true'
+        if: env.RUN_REAL == 'true' || env.BUILD_ARTIFACT == 'true'
         run: npm ci
 
       # `lint` has been defined in package.json all along but no workflow ever called it, so
@@ -177,15 +227,18 @@ jobs:
         run: npm test
 
       - name: Build
-        if: env.RUN_REAL == 'true'
+        if: env.RUN_REAL == 'true' || env.BUILD_ARTIFACT == 'true'
         run: npm run build
 
       - name: Drop env-specific config from the deploy artifact
-        if: env.RUN_REAL == 'true'
+        if: env.RUN_REAL == 'true' || env.BUILD_ARTIFACT == 'true'
         run: rm -f dist/config.json
 
+      # Kept 7 days, not 1: on a PR this is the build main will ship if it merges unchanged
+      # (resolve-tested-build), and a PR can sit a few days between its last push and its merge.
+      # Past that, main just builds again.
       - name: Upload build artifact
-        if: env.RUN_REAL == 'true'
+        if: env.RUN_REAL == 'true' || env.BUILD_ARTIFACT == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: frontend-build
@@ -193,25 +246,27 @@ jobs:
           # dist/.well-known/apple-app-site-association.json is what lets email links open the iOS app.
           # upload-artifact skips dot-directories by default, which would drop it without a word.
           include-hidden-files: true
-          retention-days: 1
+          retention-days: 7
 
       - name: No frontend changes — skipping build/test
         if: env.RUN_REAL != 'true'
-        run: echo "No frontend/** changes in this push; skipping build and tests."
+        run: echo "No frontend/** changes in this push, or main is promoting the build its PR already tested; skipping tests."
 
   # ──────────────────────────────────────────────
   # Job 2b: Validate and package the marketing site (huddle.fitness /
   # dev.huddle.fitness). It is plain static HTML with NO build step -- it ships
   # exactly as authored -- so check-marketing.sh is the only thing standing
-  # between a typo'd asset path and a 404 in production. Same RUN_REAL idiom as
-  # the other two: always forced to real work on main so promote-to-lower
-  # always has a marketing-build artifact to hand to the deploy repo.
+  # between a typo'd asset path and a 404 in production. Same RUN_REAL and
+  # BUILD_ARTIFACT idiom as frontend-ci: real work on main unless main is
+  # promoting its PR's tested build, and every shipping PR packages the site so
+  # promote-to-lower always has a marketing-build to hand to the deploy repo.
   # ──────────────────────────────────────────────
   marketing-ci:
     runs-on: ubuntu-latest
-    needs: [changes]
+    needs: [changes, resolve-tested-build]
     env:
-      RUN_REAL: ${{ needs.changes.outputs.marketing == 'true' || github.ref == 'refs/heads/main' }}
+      RUN_REAL: ${{ (github.ref == 'refs/heads/main' && needs.resolve-tested-build.outputs.fast != 'true') || (github.ref != 'refs/heads/main' && needs.changes.outputs.marketing == 'true') }}
+      BUILD_ARTIFACT: ${{ github.event_name == 'pull_request' && needs.changes.outputs.deployable == 'true' }}
 
     steps:
       - name: Checkout source
@@ -256,7 +311,7 @@ jobs:
         run: npm run test:marketing
 
       - name: Upload marketing artifact
-        if: env.RUN_REAL == 'true'
+        if: env.RUN_REAL == 'true' || env.BUILD_ARTIFACT == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: marketing-build
@@ -265,24 +320,37 @@ jobs:
           path: |
             marketing/
             !marketing/design/
-          retention-days: 1
+          retention-days: 7
 
       - name: No marketing changes — skipping checks
         if: env.RUN_REAL != 'true'
-        run: echo "No marketing/** changes in this push; skipping checks."
+        run: echo "No marketing/** changes in this push, or main is promoting the build its PR already tested; skipping checks."
 
   # ──────────────────────────────────────────────
-  # Job 3: Build and push Docker image
-  # Only runs on pushes to main (not feature branches or PRs)
+  # Job 3: The backend image
+  #
+  # On a PR that ships anything: build the image, scan it, and keep it as an artifact named for
+  # the exact git tree it was built from. It is NOT pushed to the registry -- package-retention.yml
+  # keeps only the newest 30 versions, and an image per PR push would age out the one production
+  # runs within days.
+  #
+  # On main: push the PR's image when resolve-tested-build proved this is the same code, otherwise
+  # build it here as before. Both paths push the same two tags and then run the same blocking scan
+  # and code-scanning upload, so a CVE published between the PR and the merge still stops the
+  # deploy, exactly as it always has.
   # ──────────────────────────────────────────────
   docker-build:
     runs-on: ubuntu-latest
-    needs: [backend-ci]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [changes, resolve-tested-build, backend-ci]
+    if: (github.event_name == 'pull_request' && needs.changes.outputs.deployable == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     permissions:
       packages: write
       contents: read
       security-events: write
+      actions: read
+    env:
+      FAST: ${{ needs.resolve-tested-build.outputs.fast == 'true' }}
+      ON_MAIN: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     outputs:
       image_tag: ${{ steps.meta.outputs.tags }}
       short_sha: ${{ steps.vars.outputs.short_sha }}
@@ -291,19 +359,79 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v7
 
-      - name: Set short SHA
+      - name: Set short SHA and tree
         id: vars
-        run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: |
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "tree=$(git rev-parse 'HEAD^{tree}')" >> $GITHUB_OUTPUT
 
+      # ── PR: build, scan, keep as an artifact ──
+      - name: Build image (PR)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: ./backend
+          push: false
+          load: true
+          tags: worktrac-backend:tested
+
+      # Same severities and Trivy version as the blocking main scan below, as a table: an early
+      # warning on the PR. The main scan stays the gate and the only code-scanning upload, so
+      # code scanning keeps tracking main exactly as before.
+      - name: Scan image for vulnerabilities (PR)
+        if: github.event_name == 'pull_request'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: worktrac-backend:tested
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          version: 'v0.72.0'
+
+      - name: Save image (PR)
+        if: github.event_name == 'pull_request'
+        run: docker save worktrac-backend:tested | gzip -1 > "$RUNNER_TEMP/backend-image.tar.gz"
+
+      # The name carries the tree, which is resolve-tested-build's proof that this image IS the
+      # code main is about to ship, not merely this PR's.
+      - name: Upload image artifact (PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-image-${{ steps.vars.outputs.tree }}
+          path: ${{ runner.temp }}/backend-image.tar.gz
+          compression-level: 0
+          retention-days: 7
+
+      # ── main: push the tested image, or build it ──
       - name: Log in to GHCR
+        if: env.ON_MAIN == 'true'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.GHCR_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Push the image the PR tested
+        if: env.ON_MAIN == 'true' && env.FAST == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.resolve-tested-build.outputs.image_artifact }}
+          IMAGE: ${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}
+          SHORT_SHA: ${{ steps.vars.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/image.zip"
+          unzip -q "$RUNNER_TEMP/image.zip" -d "$RUNNER_TEMP/image"
+          gunzip -c "$RUNNER_TEMP/image/backend-image.tar.gz" | docker load
+          for tag in "$SHORT_SHA" latest; do
+            docker tag worktrac-backend:tested "$IMAGE:$tag"
+            docker push "$IMAGE:$tag"
+          done
+
       - name: Extract metadata
         id: meta
+        if: env.ON_MAIN == 'true' && env.FAST != 'true'
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.GHCR_REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -312,6 +440,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push Docker image
+        if: env.ON_MAIN == 'true' && env.FAST != 'true'
         uses: docker/build-push-action@v7
         with:
           context: ./backend
@@ -319,6 +448,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
 
       - name: Scan Docker image for vulnerabilities
+        if: env.ON_MAIN == 'true'
         # Pinned to a full commit SHA rather than a mutable tag — verify this is still
         # current before relying on it long-term (see Section 17.3 of the setup guide).
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -340,7 +470,7 @@ jobs:
 
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && env.ON_MAIN == 'true'
         with:
           sarif_file: 'trivy-results.sarif'
           category: 'container-scanning'
@@ -351,8 +481,16 @@ jobs:
   # ──────────────────────────────────────────────
   promote-to-lower:
     runs-on: ubuntu-latest
-    needs: [backend-ci, frontend-ci, marketing-ci, docker-build]
+    needs: [resolve-tested-build, backend-ci, frontend-ci, marketing-ci, docker-build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # A permissions block grants only what it names: actions:read lets the fast path fetch the
+    # PR run's artifacts, contents:read keeps the source checkout below working. The deploy repo
+    # is reached with DEPLOY_REPO_PAT, not this token.
+    permissions:
+      contents: read
+      actions: read
+    env:
+      FAST: ${{ needs.resolve-tested-build.outputs.fast == 'true' }}
 
     steps:
       - name: Checkout deploy repo
@@ -391,16 +529,37 @@ jobs:
           echo "Kept $(wc -l < "$RUNNER_TEMP/keep.txt") outgoing assets; assets/ ${before} MB -> $(du -sm assets | cut -f1) MB"
 
       - name: Download frontend build
+        if: env.FAST != 'true'
         uses: actions/download-artifact@v8
         with:
           name: frontend-build
           path: deploy/frontend-build
 
       - name: Download marketing build
+        if: env.FAST != 'true'
         uses: actions/download-artifact@v8
         with:
           name: marketing-build
           path: deploy/marketing-build
+
+      # Fast path: the same two artifacts, from the PR run resolve-tested-build proved built this
+      # exact code. Extracted with -o over the existing folders, which overlays and never deletes --
+      # the same behaviour download-artifact has above, so the prune step's reasoning still holds.
+      - name: Download the frontend and marketing builds the PR tested
+        if: env.FAST == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FRONTEND_ID: ${{ needs.resolve-tested-build.outputs.frontend_artifact }}
+          MARKETING_ID: ${{ needs.resolve-tested-build.outputs.marketing_artifact }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${{ github.repository }}/actions/artifacts/$FRONTEND_ID/zip" > "$RUNNER_TEMP/frontend.zip"
+          gh api "repos/${{ github.repository }}/actions/artifacts/$MARKETING_ID/zip" > "$RUNNER_TEMP/marketing.zip"
+          mkdir -p deploy/frontend-build deploy/marketing-build
+          unzip -q -o "$RUNNER_TEMP/frontend.zip" -d deploy/frontend-build
+          unzip -q -o "$RUNNER_TEMP/marketing.zip" -d deploy/marketing-build
+          test -f deploy/frontend-build/index.html
+          test -f deploy/marketing-build/index.html
 
       # Both builds hold __SITE_ORIGIN__ / __APP_ORIGIN__ / __SITE_ROBOTS__ placeholders, and every
       # deploy (lower and production) fills them from its own config/<env>/site-origins.env before
