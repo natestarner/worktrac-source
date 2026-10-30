@@ -6,14 +6,22 @@ name: Mobile flows — the app, signed in, on the simulator
 # refresh. The flows are e2e/mobile/flows/; what they cover and why is docs/architecture/native-apps.md.
 #
 # - NOT on push or pull_request. It needs the lower test-support key to create a throwaway household
-#   (e2e/mobile/seed-household.mjs), and this repo is public. Dispatch it by hand, or let
-#   mobile-release.yml call it.
+#   (e2e/mobile/seed-household.mjs), and this repo is public. Dispatch it by hand, let
+#   mobile-release.yml call it, or let the nightly schedule run it.
+# - NIGHTLY at 07:00 UTC, from main, as part of the nightly tier (e2e-tests.md, "Tiers"). It runs
+#   before worktrac-deploy's 09:00 lower e2e nightly so the two never load lower at once (this job
+#   can take up to 75 min). A scheduled run skips itself when nothing it tests has changed since the
+#   last green scheduled run (`changed` below): the macOS job is long, and re-proving the same
+#   code every night proves nothing new. A red scheduled run is never skipped past -- the next
+#   night runs again. Reports only: a failure emails, and blocks nothing.
 # - The key lives in the `mobile-e2e` environment, apart from the signing secrets in mobile-lower /
 #   mobile-production, so it can run from any branch while those stay restricted to main.
 # - NON-BLOCKING for TestFlight while it builds a track record: mobile-release.yml runs it beside the
 #   upload, not before. Make the upload `needs:` it once it has earned that.
 
 on:
+  schedule:
+    - cron: '0 7 * * *'
   workflow_dispatch: {}
   workflow_call: {}
 
@@ -25,7 +33,41 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Every trigger but the schedule always runs. A scheduled run compares main against the last
+  # green scheduled run and runs only when something the flows exercise moved.
+  changed:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - name: Has anything the flows test changed since the last green nightly?
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          last=$(gh api "repos/$REPO/actions/workflows/mobile-flows.yml/runs?event=schedule&status=success&per_page=1"             --jq '.workflow_runs[0].head_sha // empty')
+          if [ -z "$last" ]; then
+            echo "No green scheduled run yet -- running."; echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(gh api "repos/$REPO/compare/$last...${{ github.sha }}" --jq '.files[].filename' || echo "UNKNOWN")
+          if echo "$files" | grep -qE '^(frontend/|e2e/mobile/|\.github/workflows/mobile-flows\.yml|\.github/actions/ios-simulator-app/|UNKNOWN$)'; then
+            echo "Changed since $last -- running."; echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing the flows test changed since the last green nightly ($last) -- skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   flows:
+    needs: [changed]
+    if: needs.changed.outputs.run == 'true'
     runs-on: macos-15
     timeout-minutes: 75
     environment: mobile-e2e
