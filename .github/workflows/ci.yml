@@ -34,10 +34,11 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       marketing: ${{ steps.filter.outputs.marketing }}
-      # Whether this change touches anything that ships. Only those PRs build the artifacts that
-      # main promotes as-is (resolve-tested-build); a docs-only PR stays fast and its merge simply
-      # takes the full build.
-      deployable: ${{ steps.filter.outputs.backend == 'true' || steps.filter.outputs.frontend == 'true' || steps.filter.outputs.marketing == 'true' }}
+      # Whether this change touches anything that ships -- or the pipeline that ships it, which
+      # should prove the whole build on its own PR. Only those PRs build the artifacts that main
+      # promotes as-is (resolve-tested-build); a docs-only PR stays fast and its merge simply takes
+      # the full build.
+      deployable: ${{ steps.filter.outputs.backend == 'true' || steps.filter.outputs.frontend == 'true' || steps.filter.outputs.marketing == 'true' || steps.filter.outputs.pipeline == 'true' }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
@@ -62,6 +63,9 @@ jobs:
               - 'scripts/preview-marketing.sh'
               - 'e2e/marketing-tests/**'
               - 'e2e/playwright.marketing.config.ts'
+            pipeline:
+              - '.github/workflows/ci.yml'
+              - 'scripts/resolve-tested-build.sh'
 
   # ──────────────────────────────────────────────
   # Job 0b: The degraded-conditions contract (.claude/rules/resilience.md) -- the app must behave
