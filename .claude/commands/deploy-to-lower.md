@@ -31,13 +31,18 @@ failures — subject to the guardrails.
 ## Pipeline facts (so the steps below are accurate)
 
 - Pushing a branch runs **`ci.yml`** → jobs `backend-ci` (`mvn verify`) + `frontend-ci`
-  (Vitest + build). **Playwright e2e does NOT run in branch/PR CI** — step 3's local e2e run
+  (Vitest + build). On a PR that ships anything, `docker-build` also builds and scans the backend
+  image and keeps it, with the frontend and marketing builds, as artifacts for main to promote. **Playwright e2e does NOT run in branch/PR CI** — step 3's local e2e run
   is the only pre-merge e2e gate.
 - `main` is **branch-protected**: merge requires a PR with required checks `backend-ci` +
   `frontend-ci` green. You cannot push to `main` directly.
-- On merge to `main`, the source repo automatically runs `docker-build` (GHCR image + Trivy)
-  then `promote-to-lower`, which **pushes the image tag + frontend build to the
-  `worktrac-deploy` repo's `lower` branch**.
+- On merge to `main`, `resolve-tested-build` (`scripts/resolve-tested-build.sh`) checks whether
+  the merged code is byte-for-byte what the PR's CI built and tested. If so (the normal case:
+  "Protect main" requires up-to-date branches), the test jobs skip their work and `docker-build`
+  pushes the **PR's** image (still Trivy-scanned, still blocking), ~1.5–2 min. If not, the run
+  log says why and it builds and tests from scratch as before (~10 min). Either way it then runs
+  `promote-to-lower`, which **pushes the image tag + frontend build to the `worktrac-deploy`
+  repo's `lower` branch**.
 - That push triggers `worktrac-deploy`'s **`deploy-lower.yml`** → jobs
   `deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`, `e2e-tests`. This is where
   the lower deploy + lower smoke/e2e actually happen (expect **10–20 min**, incl. Azure
@@ -236,8 +241,10 @@ On failure: read logs (`gh run view <run-id> --log-failed`), fix, commit, re-pus
 - Delete the remote branch explicitly instead: `git push origin --delete <branch>`.
 
 ### 10. Ensure post-merge CI/CD completes
-Watch the `main`-push run (`gh run list --branch main --limit 1`): `backend-ci`,
-`frontend-ci`, `docker-build` (image + Trivy scan), `promote-to-lower` — all green. If it
+Watch the `main`-push run (`gh run list --branch main --limit 1`): `resolve-tested-build`,
+`backend-ci`, `frontend-ci`, `docker-build` (image + Trivy scan), `promote-to-lower` — all green.
+`resolve-tested-build`'s notice says which path it took; a "Full build" notice is not a failure,
+only slower. If it
 fails on a code issue, auto-fix via a **new branch → PR → merge** (bounded); you cannot push
 `main` directly. If Trivy fails on a real HIGH/CRITICAL, patch/upgrade the flagged dependency
 (don't narrow scan scope).
