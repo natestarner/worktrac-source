@@ -302,7 +302,14 @@ contains it.
   Seeding through the API also means the welcome modal is never armed.
 - **Not on push.** It needs `E2E_TEST_SUPPORT_KEY_LOWER`, kept in the `mobile-e2e` environment
   (any branch) apart from the signing secrets (main only). Dispatch it, or `mobile-release.yml`
-  calls it.
+  calls it, or the **nightly schedule** (07:00 UTC, from main) runs it.
+- **Nightly skips itself only when nothing it tests moved** since the last GREEN scheduled run
+  (its `changed` job compares `frontend/`, `e2e/mobile/` and its own workflow and action). A red
+  night is never skipped past. It runs before worktrac-deploy's 09:00 lower e2e nightly so the two
+  never load lower together. Reports only.
+- **`changed` reads the Actions API, so it declares `actions: read`**, and a workflow that calls
+  this one must grant that on the calling job (`mobile-release.yml`'s `flows` does). A called
+  workflow can ask for no more than its caller's job allows, and fails to start otherwise.
 - **The key exists twice and must match:** `worktrac-deploy`'s repo secret (what lower's backend is
   given at deploy) and this repo's `mobile-e2e` environment. To rotate, set both from one value
   (`KEY=$(openssl rand -hex 32)`, piped into `gh secret set` for each), then make sure a lower deploy

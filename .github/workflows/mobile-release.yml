@@ -50,6 +50,12 @@ jobs:
     if: inputs.lane == 'beta'
     uses: ./.github/workflows/mobile-flows.yml
     secrets: inherit
+    # A called workflow's jobs can ask for no more than this. mobile-flows' `changed` job reads the
+    # Actions API (for its nightly skip check), so it declares actions:read and would fail to start
+    # here without it -- even though under this call it never makes that request.
+    permissions:
+      contents: read
+      actions: read
 
   ios:
     needs: simulator
