@@ -288,7 +288,7 @@ contains it.
 | `01-sign-in-and-log-a-set` | Login fields and button stay above the keyboard; reps typed with the keypad up and "Log set" tapped straight away keeps the typed value |
 | `02-background-and-relaunch` | Background → back, and killed → relaunched: still signed in, workout intact |
 | `03-checkout-return-link` | The scheme link lands on Billing and a tab tap **leaves it** (#423, #438). It waits up to 2 minutes for iOS's "Open in Huddle?" prompt, which has arrived that late on the runner (#434) |
-| `04-in-app-browser-sheet` | Terms opens in the sheet; closing it returns to the same screen |
+| `04-in-app-browser-sheet` | Terms opens in the sheet; closing it returns to the same screen. If the sheet never draws its close control in a minute, the app is relaunched and Terms opened ONCE more: the runner's SafariViewService has hung on its cold start, leaving a blank sheet with nothing to tap (2026-10-31). A sheet that never opens fails both attempts |
 | `05-export-share-sheet` | Export opens the share sheet (it covers the app); flicking it away is not an error |
 | `06-history-pull-to-refresh` | History survives the pull (on only in installed apps, so no Playwright spec drives it) |
 
