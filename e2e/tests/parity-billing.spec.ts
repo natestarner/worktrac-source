@@ -23,6 +23,7 @@ async function openAccountMenu(page) {
 // divergence and belongs on the register in .claude/rules/resilience.md.
 
 forEachConnectivityMode<{ email: string }>('a Plus household reads as Plus', {
+  critical: true,
   setup: async (page, request) => {
     const email = await registerHousehold(page, request, 'Nate');
     await setBillingPlan(request, email, 'PLUS');

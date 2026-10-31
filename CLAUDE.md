@@ -30,6 +30,7 @@ bash scripts/up.sh      # or the /run-local skill
 bash scripts/down.sh    # or the /stop-local skill
 
 cd e2e && bash ../scripts/e2e.sh   # e2e against THIS worktree's own running stack
+# e2e tiers: everything locally before merge; @critical gates each lower deploy; all nightly
 node e2e/barrage/barrage.mjs --tier quick   # or /barrage: pressure test lower with years of data
 
 bash scripts/test-backend.sh unit  # fast: non-container unit tests only
@@ -139,7 +140,8 @@ not worktree-scoped:
 - **NEVER commit passwords, tokens, or connection strings to code.**
 - Lower and production SQL Databases are on the Basic tier (switched 2026-07-18 from serverless
   auto-pause, which added cold-start delays). Production Container Apps run `min-replicas=1`
-  (always warm); lower still scales to 0, so cold starts are possible there.
+  (always warm); lower still scales to 0, so cold starts are possible there. Lower's backend is
+  1 vCPU / 2Gi (since 2026-10-30, for e2e throughput), one replica.
 - **Azure is readable, not writable.** A Reader/Monitoring Reader/Log Analytics Reader service
   principal lets `az` inspect container app status, revisions, and metrics for lower and prod.
   Container logs come from KQL against the `worktrac-logs` workspace, *not*

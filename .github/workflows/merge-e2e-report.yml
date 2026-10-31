@@ -1,0 +1,70 @@
+name: Merge sharded e2e reports
+
+# Called by lower-e2e-nightly.yml once per engine: joins the shards' blob reports into the html
+# report and test-results/results.json a single run produces (playwright.merge.config.ts), uploads
+# both under the names flake history reads, prints the flaky/failed summary, and fails when the
+# shards did. merge-reports itself succeeds whatever the tests did, hence `shards-result`.
+
+on:
+  workflow_call:
+    inputs:
+      blob-pattern:
+        type: string
+        required: true
+      report-name:
+        type: string
+        required: true
+      results-name:
+        type: string
+        required: true
+      shards-result:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install dependencies
+        working-directory: e2e
+        run: npm ci
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ inputs.blob-pattern }}
+          path: e2e/all-blob-reports
+          merge-multiple: true
+      - name: Merge shard reports
+        working-directory: e2e
+        run: npx playwright merge-reports --config playwright.merge.config.ts all-blob-reports
+      - name: Summarize results (flaky + failed)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: node e2e/scripts/flake-summary.mjs e2e/test-results/results.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: ${{ inputs.report-name }}
+          path: e2e/playwright-report/
+          retention-days: 90
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: ${{ inputs.results-name }}
+          path: e2e/test-results/results.json
+          retention-days: 90
+      - name: Gate on the shards
+        if: ${{ !cancelled() }}
+        run: |
+          if [ "${{ inputs.shards-result }}" != "success" ]; then
+            echo "::error::The shards concluded ${{ inputs.shards-result }} -- see the report and summary above."
+            exit 1
+          fi

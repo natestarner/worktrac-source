@@ -44,9 +44,10 @@ failures — subject to the guardrails.
   `promote-to-lower`, which **pushes the image tag + frontend build to the `worktrac-deploy`
   repo's `lower` branch**.
 - That push triggers `worktrac-deploy`'s **`deploy-lower.yml`** → jobs
-  `deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`, `e2e-tests`. This is where
-  the lower deploy + lower smoke/e2e actually happen (expect **10–20 min**, incl. Azure
-  free-tier cold starts).
+  `deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`, `e2e-critical` (2 shards),
+  `e2e-tests` (merges them; the gate). This is where the lower deploy + lower smoke/`@critical`
+  e2e actually happen (expect **~5 min**, more on an Azure cold start). The whole suite runs on
+  lower nightly instead (`lower-e2e-nightly.yml`; `e2e-tests.md`, "Tiers").
 - Lower URLs: frontend `https://app.dev.huddle.fitness`
   (`https://black-flower-0c9bf9d0f.7.azurestaticapps.net`), backend health
   `https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io/actuator/health`.
@@ -217,6 +218,20 @@ needed: `git branch -m <old> <new>`.
 
 `git push -u origin <branch>` — this triggers `ci.yml` (`backend-ci` + `frontend-ci`).
 
+**Then check for overlap with your other open PRs** — the one case the tiers leave thin. Your
+step-3 e2e run tested this branch WITHOUT another in-flight change; once both merge, lower runs
+only `@critical` on the combination until that night's full suites.
+
+```bash
+gh pr list --author @me --state open --json number,title,headRefName,files \
+  -q '.[] | select(.headRefName != "<branch>") | {number, title, files: [.files[].path]}'
+git diff --name-only origin/main...HEAD
+```
+
+No shared files: carry on, say nothing. Shared files: name the other PR and the files, and ask
+whether to wait for it to merge, or to go ahead and, once it lands, update this branch and re-run
+the e2e specs that cover those files locally. **Never wait on your own** — it's the user's call.
+
 ### 7. Ensure branch CI passes
 Watch that run to completion, e.g. `gh run watch <run-id> --exit-status` (find it with
 `gh run list --branch <branch> --limit 1`). Confirm both jobs are green.
@@ -260,20 +275,27 @@ workflow started:
 little signal; prefer polling the job rollup, which is what you actually need:
 
 ```bash
-# Watch to completion, then print just the four job verdicts.
+# Watch to completion, then print just the job verdicts.
 gh run watch -R $OWNER/worktrac-deploy <run-id> > /dev/null 2>&1
 gh run view -R $OWNER/worktrac-deploy <run-id> \
   --json status,conclusion,jobs \
   -q '{status, conclusion, jobs: [.jobs[] | {name, conclusion}]}'
 ```
 
-All four must be green: `deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`,
-`e2e-tests`.
+All must be green: `deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`, the two
+`e2e-critical` shards, and `e2e-tests` (which merges the shards and is the gate). This run tests
+only the `@critical` tier (~50 tests, `e2e-tests.md`, "Tiers"), so it is done in a few minutes.
 
-`e2e-tests-webkit` (the same suite in Safari's engine, after `e2e-tests`) is **non-blocking**: its
-`continue-on-error` keeps the run green either way. Don't wait on it to call the deploy done, and
-don't fix its failures under this command. Report a red one in the summary, with its failing specs
-(same `--log-failed` grep, `-j` its job), so it can be triaged on its own (`e2e-tests.md`, "WebKit").
+**The whole suite, in Chrome and in WebKit, runs nightly** (`lower-e2e-nightly.yml`), not here.
+Don't wait for it to call the deploy done. If the change is risky enough to want it now, dispatch it
+after this run is green — it waits for any lower deploy to finish before it starts:
+
+```bash
+gh workflow run lower-e2e-nightly.yml   # in THIS repo (worktrac-source)
+```
+
+Its failures are triaged on their own (the morning after, or by the nightly Claude routine if one
+is set up), not under this command.
 
 If `e2e-tests` is red, get the failing spec names in **one** call before doing anything else —
 that list is what the attribution protocol below operates on:

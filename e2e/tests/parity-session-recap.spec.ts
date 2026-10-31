@@ -21,6 +21,7 @@ import { forEachConnectivityMode } from './support/parity';
 // while degraded. No branch on connectivity is involved, which is why this adds no row to
 // resilience.md's register -- and why the assertion below must never grow one either.
 forEachConnectivityMode<{ personName: string }>('ending a workout reports what was logged', {
+  critical: true,
   setup: async (page, request) => {
     const personName = 'Rec';
     await registerHousehold(page, request, personName);

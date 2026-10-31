@@ -24,7 +24,7 @@ function restRing(page, name: string) {
 }
 
 test.describe('Multi-person switching', () => {
-  test('switching people and back resumes exactly where each left off', async ({ page, request }) => {
+  test('switching people and back resumes exactly where each left off', { tag: '@critical' }, async ({ page, request }) => {
     await registerHousehold(page, request, 'Alex');
 
     // Alex picks an exercise -- this is the "in-progress" state that should be
@@ -78,7 +78,7 @@ test.describe('Multi-person switching', () => {
     await expect(page).toHaveURL(/\/app\/history/);
   });
 
-  test('logging out and back in resets every person\'s tab to Log, not wherever they left off', async ({ page, request }) => {
+  test('logging out and back in resets every person\'s tab to Log, not wherever they left off', { tag: '@critical' }, async ({ page, request }) => {
     const email = await registerHousehold(page, request, 'Alex');
 
     await page.getByRole('button', { name: '+ Add person' }).click();

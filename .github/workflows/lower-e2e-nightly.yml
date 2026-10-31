@@ -1,0 +1,203 @@
+name: Lower e2e nightly — the whole suite, Chrome then WebKit
+
+# The nightly tier (e2e-tests.md, "Tiers"): every e2e test against lower, in Chromium and then in
+# WebKit at iPhone size. Each lower deploy runs only @critical (worktrac-deploy's deploy-lower.yml)
+# and the whole suite already ran locally before the merge, so this is where everything runs
+# against the REAL environment -- latency, cold starts, the production build -- once a day.
+#
+# Lives here, not in worktrac-deploy, because scheduled workflows run only from a repo's default
+# branch, and worktrac-deploy's is `production`: every change to a workflow there would be a push
+# that deploys production. Here it ships through an ordinary PR to main.
+#
+# - REPORTS ONLY. A red night emails (GitHub's failure notification) and blocks nothing --
+#   promotions to production are never gated on it.
+# - Never overlaps a lower deploy: `ready` waits for worktrac-deploy's deploy-lower runs to finish
+#   before anything loads lower. (It can't join that workflow's concurrency group from another
+#   repo, and sharing a group would let a queued nightly cancel a queued deploy anyway.) A deploy
+#   that starts mid-run can still disturb it; at 09:00 UTC that is rare.
+# - Skips a night when lower hasn't changed since the last GREEN nightly -- nothing new to prove.
+#   A red night always runs again.
+# - Chrome first, then WebKit, never both at once: lower is one backend on a 5-DTU database.
+# - Each engine runs as 2 shards x E2E_WORKERS=4 (8 against the backend, as a deploy's run does),
+#   merged into one report per engine.
+# - The lower test-support key comes from the `mobile-e2e` environment, which mobile-flows.yml
+#   already uses for the same key (it must match worktrac-deploy's E2E_TEST_SUPPORT_KEY_LOWER).
+
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: lower-e2e-nightly
+  cancel-in-progress: false
+
+env:
+  DEPLOY_REPO: ${{ github.repository_owner }}/worktrac-deploy
+  FRONTEND_URL: https://black-flower-0c9bf9d0f.7.azurestaticapps.net
+  BACKEND_HEALTH_URL: https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io/actuator/health
+
+jobs:
+  ready:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    outputs:
+      run: ${{ steps.skip.outputs.run }}
+      lower_sha: ${{ steps.skip.outputs.lower_sha }}
+    steps:
+      - name: Wait for any lower deploy to finish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 45); do
+            busy=$(gh api "repos/$DEPLOY_REPO/actions/workflows/deploy-lower.yml/runs?per_page=20" \
+              --jq '[.workflow_runs[] | select(.status != "completed")] | length')
+            [ "$busy" = "0" ] && { echo "Lower is idle."; exit 0; }
+            echo "A lower deploy is running or queued ($busy) -- waiting ($i/45)..."
+            sleep 60
+          done
+          echo "::error::Lower stayed busy for 45 minutes; not loading it on top of a deploy."
+          exit 1
+
+      - name: Has lower changed since the last green nightly?
+        id: skip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          lower_sha=$(gh api "repos/$DEPLOY_REPO/commits/lower" --jq .sha)
+          echo "lower_sha=$lower_sha" >> "$GITHUB_OUTPUT"
+          echo "Lower is at worktrac-deploy@${lower_sha::7} (image $(gh api "repos/$DEPLOY_REPO/contents/manifests/image-tag.txt?ref=$lower_sha" --jq .content | base64 -d))."
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          last=$(gh api "repos/${{ github.repository }}/actions/workflows/lower-e2e-nightly.yml/runs?event=schedule&status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // empty')
+          tested=""
+          if [ -n "$last" ]; then
+            tested=$(gh api "repos/${{ github.repository }}/actions/runs/$last/artifacts" \
+              --jq '[.artifacts[] | select(.name | startswith("tested-lower-"))][0].name // "" | sub("^tested-lower-"; "")')
+          fi
+          if [ -n "$tested" ] && [ "$tested" = "$lower_sha" ]; then
+            echo "Lower hasn't changed since the last green nightly (run $last) -- skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The skip check above reads this from the last green run: the lower commit it proved. A
+      # skipped night records it too (it is green because an earlier night proved that commit),
+      # so one skip doesn't make the next night re-run unchanged code.
+      - name: Record what this run proves
+        run: echo "${{ steps.skip.outputs.lower_sha }}" > tested-lower.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tested-lower-${{ steps.skip.outputs.lower_sha }}
+          path: tested-lower.txt
+          retention-days: 90
+
+  chromium:
+    needs: [ready]
+    if: needs.ready.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    environment: mobile-e2e
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install dependencies and Chromium
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+      - name: Wait for lower, and settle any autoscale before the suite starts
+        run: bash scripts/wait-for-lower.sh "$BACKEND_HEALTH_URL" "$FRONTEND_URL"
+      - name: Run the whole suite in Chromium against lower (shard ${{ matrix.shard }}/2)
+        working-directory: e2e
+        run: npx playwright test --shard=${{ matrix.shard }}/2
+        env:
+          E2E_BASE_URL: ${{ env.FRONTEND_URL }}
+          E2E_TEST_SUPPORT_KEY: ${{ secrets.E2E_TEST_SUPPORT_KEY_LOWER }}
+          E2E_WORKERS: '4'
+          E2E_LOAD_WORKERS: '8'
+          E2E_BLOB: '1'
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: blob-chromium-${{ matrix.shard }}
+          path: e2e/blob-report/
+          retention-days: 1
+
+  chromium-report:
+    needs: [chromium]
+    if: ${{ !cancelled() && needs.chromium.result != 'skipped' }}
+    uses: ./.github/workflows/merge-e2e-report.yml
+    with:
+      blob-pattern: blob-chromium-*
+      report-name: playwright-report-nightly
+      results-name: e2e-results-json-nightly
+      shards-result: ${{ needs.chromium.result }}
+
+  # After Chrome, whatever it concluded -- never beside it.
+  webkit:
+    needs: [ready, chromium-report]
+    if: ${{ !cancelled() && needs.ready.outputs.run == 'true' }}
+    runs-on: ubuntu-latest
+    environment: mobile-e2e
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install dependencies and WebKit
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install webkit --with-deps
+      - name: Wait for lower
+        run: bash scripts/wait-for-lower.sh "$BACKEND_HEALTH_URL" "$FRONTEND_URL"
+      - name: Run the whole suite in WebKit against lower (shard ${{ matrix.shard }}/2)
+        working-directory: e2e
+        run: npx playwright test --shard=${{ matrix.shard }}/2
+        env:
+          E2E_ENGINE: webkit
+          E2E_BASE_URL: ${{ env.FRONTEND_URL }}
+          E2E_TEST_SUPPORT_KEY: ${{ secrets.E2E_TEST_SUPPORT_KEY_LOWER }}
+          E2E_WORKERS: '4'
+          E2E_LOAD_WORKERS: '8'
+          E2E_BLOB: '1'
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: blob-webkit-${{ matrix.shard }}
+          path: e2e/blob-report/
+          retention-days: 1
+
+  webkit-report:
+    needs: [webkit]
+    if: ${{ !cancelled() && needs.webkit.result != 'skipped' }}
+    uses: ./.github/workflows/merge-e2e-report.yml
+    with:
+      blob-pattern: blob-webkit-*
+      report-name: playwright-report-webkit
+      results-name: e2e-results-json-webkit
+      shards-result: ${{ needs.webkit.result }}

@@ -17,6 +17,8 @@ e2e/node_modules/
 e2e/playwright-report/
 e2e/pwa-report/
 e2e/test-results/
+# Sharded runs (E2E_BLOB=1) -- merged by playwright.merge.config.ts
+e2e/blob-report/
 
 # === IDE ===
 *.iml

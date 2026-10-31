@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 // no response said noindex. frontend/src/searchIndexing.test.js pins the config; this checks what
 // the deployed Static Web App actually sends, which is the only place the header exists.
 
-test('robots.txt is a real robots file, not the app shell', async ({ request }) => {
+test('robots.txt is a real robots file, not the app shell', { tag: '@critical' }, async ({ request }) => {
   const response = await request.get('/robots.txt');
   expect(response.status()).toBe(200);
   expect(response.headers()['content-type']).toMatch(/^text\/plain/);
@@ -14,7 +14,7 @@ test('robots.txt is a real robots file, not the app shell', async ({ request }) 
   expect(body).not.toContain('<html');
 });
 
-test('every app response says noindex', async ({ request, baseURL }) => {
+test('every app response says noindex', { tag: '@critical' }, async ({ request, baseURL }) => {
   // The header comes from staticwebapp.config.json's globalHeaders, which only Azure applies; the
   // Vite dev server never sends it. Runs against lower on every deploy.
   test.skip(!!baseURL?.includes('localhost'), 'SWA response headers exist only on a deployed environment');

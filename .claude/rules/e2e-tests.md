@@ -7,6 +7,30 @@ paths:
 
 Full narrative: `docs/architecture/testing.md`.
 
+## Tiers: where each test runs, and what green means
+
+| Tier | What | When | Blocks? |
+|---|---|---|---|
+| Pre-merge | The **whole** suite (`bash scripts/e2e.sh`), plus `npm run test:pwa` | `/deploy-to-lower` step 3, every change | Yes |
+| Per-merge on lower | **`@critical` only** (`--grep @critical`), Chromium, 2 shards | Every lower deploy (`deploy-lower.yml`'s `e2e-tests`) | **Yes: lower is green when this passes** |
+| Nightly on lower | The whole suite in Chromium, then the whole suite in WebKit | This repo's `lower-e2e-nightly.yml`, 09:00 UTC + "Run workflow" | No: reports |
+| On demand | Barrage, mobile flows | You run them | No |
+
+- **`@critical` means "if this breaks, the app is broken for people"**: the deploy boots, people
+  can sign up / sign in / recover, the workout loop works in every connectivity mode, nothing
+  logged offline is lost, History/PRs/Trends arrive, each person's data stays separate, and paid
+  plans are entitled. Chosen 2026-10-30 by functionality, NOT by "it once failed on lower" -- a
+  fixed bug doesn't make its test critical.
+- **Tag a test**: `test('title', { tag: '@critical' }, async (...) => ...)`. A parity spec takes
+  `critical: true` (every mode) or `critical: ['online', ...]` in its `forEachConnectivityMode`
+  spec. Keep the tier small: it is ~50 tests and ~1-1.5 min on lower, and every addition is paid
+  on every merge. A new feature's spec is untagged by default; it is still covered before merge
+  (locally) and nightly (on lower).
+- **Never add a `--grep-invert @critical` anywhere**: the untagged specs must keep running in
+  full locally and nightly. The tier only decides what blocks a lower deploy.
+- **A `--grep` that matches nothing fails the run** ("No tests found"), so the tag cannot quietly
+  disappear from the gate.
+
 ## Running
 
 - **Never run `npx playwright test` directly — always `bash scripts/e2e.sh`.** Raw Playwright
@@ -39,12 +63,17 @@ Full narrative: `docs/architecture/testing.md`.
   reads the CLI flag too — but `E2E_WORKERS` is the documented knob, and the per-test/assertion
   time budgets are derived from whichever one you use, so the budget always matches the contention.
   The local default is `cores/4` (capped at 8), deliberately below Playwright's own `cores/2` so a
-  sibling worktree's suite still has room; a deployed target ignores local cores entirely and is
-  hardcoded in `playwright.config.ts` -- raised from 2 to 8 on 2026-09-08 as a watched experiment
-  against lower's real, fixed constraint (a single Container App replica, Basic-tier/5-DTU SQL).
-  See that file's comment before touching it, and revert to 2 if `e2e-tests` starts failing with
-  connectivity-shaped errors on specs that aren't about connectivity -- that's the environment
-  saturating, not a code regression.
+  sibling worktree's suite still has room; a deployed target ignores local cores entirely and
+  defaults to 8 in `playwright.config.ts` -- raised from 2 to 8 on 2026-09-08 as a watched
+  experiment against lower's real, fixed constraint (a single Container App replica, Basic-tier/5-DTU
+  SQL; the replica went 0.5 -> 1 vCPU on 2026-10-30). See that file's comment before touching it,
+  and revert to 2 if `e2e-tests` starts failing with connectivity-shaped errors on specs that
+  aren't about connectivity -- that's the environment saturating, not a code regression.
+- **Split across runners, budget by the TOTAL.** Lower's jobs run 2 shards (`--shard=n/2`) with
+  `E2E_WORKERS=4` each, still 8 against the one backend, and set `E2E_LOAD_WORKERS=8` so the time
+  budgets match the real contention instead of one shard's 4. `E2E_BLOB=1` adds the blob reporter;
+  a merge job joins the shards with `playwright.merge.config.ts`, which writes the same html report
+  and `test-results/results.json` a single run does.
 - **The local stack is configured to absorb that parallelism — don't undo it.** `scripts/db.sh`
   sets `READ_COMMITTED_SNAPSHOT ON` (Azure SQL's default, a SQL Server container's non-default;
   without it `logLiveSet` deadlocks against itself under concurrency), `application-local.yml`
@@ -186,17 +215,22 @@ Full narrative: `docs/architecture/testing.md`.
   this e2e is a race by construction, so it detects the bug but must not be the only thing pinning
   it.
 
-- **E2E never runs in this repo's CI.** `ci.yml` is `backend-ci` + `frontend-ci` only. The suite
-  runs in GitHub in one place: `worktrac-deploy`'s `deploy-lower.yml`, on push to `lower` -- job
-  `e2e-tests` (Chrome), then job `e2e-tests-webkit` (below). Locally it runs via `scripts/e2e.sh`.
+- **E2E never runs in this repo's PR or branch CI.** `ci.yml` is `backend-ci` + `frontend-ci` only. The suite
+  runs in GitHub in two places (see "Tiers" above): `worktrac-deploy`'s `deploy-lower.yml`
+  (`e2e-critical` + `e2e-tests`) on every push to `lower` (`@critical`, Chrome), and THIS repo's
+  `lower-e2e-nightly.yml` (everything, Chrome then WebKit -- here because scheduled workflows run
+  from the default branch, and worktrac-deploy's is `production`, where any push deploys prod). Locally it runs via `scripts/e2e.sh`.
 
 - **A green lower run is not evidence the suite is stable.** CI sets `retries: 2`, so a test that
   fails and then passes is recorded `flaky` while the run still reports success — the run-level
   conclusion carries no flake signal at all. Measured 2026-08-14 across the 51 runs then retained:
   **42 were green, and 38 of those 42 contained at least one flaky test.** Do not infer "the suite
   is fine" from a row of green checks.
-- **Per-test outcomes come from the `e2e-results-json` artifact** (`results.json`, written by the
-  `json` reporter — see `playwright.config.ts`). Read `stats.flaky` for the run, and each test's
+- **Per-test outcomes come from the `e2e-results-json` artifacts** (`results.json`, written by the
+  `json` reporter — see `playwright.config.ts`). **Which one depends on the tier**: a lower deploy's
+  `e2e-results-json` holds only `@critical`; the whole suite's history is the nightly's
+  `e2e-results-json-nightly` (Chrome) and `e2e-results-json-webkit`. Before 2026-10-30 the per-deploy
+  artifact held everything, so older flake history mixes the two. Read `stats.flaky` for the run, and each test's
   `status` / `retry` for which ones. `outcome: flaky` means "needed a retry", `unexpected` means
   "failed all attempts".
 - **Don't scrape `playwright-report/index.html`.** The same data is in there, but only as a
@@ -215,9 +249,10 @@ Full narrative: `docs/architecture/testing.md`.
 Store app's WKWebView and Safari both run. **Never both projects at once** -- the lower Chrome job
 runs a bare `npx playwright test`, so an unconditional second project would silently double it.
 
-- **On lower it is `e2e-tests-webkit`, NON-BLOCKING** (`continue-on-error`) while it builds a track
-  record, and it runs **after** `e2e-tests`, never beside it, so lower's 5-DTU database never takes
-  two suites at once. Its artifacts are `playwright-report-webkit` / `e2e-results-json-webkit`.
+- **On lower it runs NIGHTLY** (`lower-e2e-nightly.yml`), after that night's full Chrome suite and
+  never beside it, so lower's 5-DTU database never takes two suites at once. It moved there from
+  every deploy on 2026-10-30; it was always non-blocking, so no gate changed. Its artifacts are
+  `playwright-report-webkit` / `e2e-results-json-webkit`, as before.
 - **Locally: `E2E_ENGINE=webkit bash scripts/e2e.sh`.** Playwright's Windows WebKit build needs a
   `zlib1.dll` this machine lacks; copying Git's (`C:\Program Files\Git\mingw64\bin\zlib1.dll`) into
   `%LOCALAPPDATA%\ms-playwright\webkit-<rev>\` fixes "Host system is missing dependencies".
