@@ -82,7 +82,11 @@ test.describe('Session recap after deleting everything logged', () => {
     await expect(page.getByText('Set 2')).toBeVisible();
 
     await page.getByRole('button', { name: '← All exercises' }).click();
-    await expect(page.getByText('Barbell Bench Press', { exact: true })).toBeVisible();
+    // Scoped to the session list (SessionSummary's .session-exercises, which exists for exactly
+    // this): once the picker's own list refreshes with the exercise just logged, a picker chip of
+    // the same name appears below it, so an unscoped getByText matched one element or two
+    // depending on which landed first -- this spec's flake, locally and on lower.
+    await expect(page.locator('.session-exercises').getByText('Barbell Bench Press', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Remove' }).click();
     await page.getByRole('button', { name: 'Delete' }).click();
