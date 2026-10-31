@@ -7,20 +7,39 @@ name: The in-app browser sheet opens and closes
     file: ../subflows/sign-in.yaml
     env:
       EMAIL: ${MAESTRO_EMAIL_4}
-# The account menu's trigger: the signed-in person's name and a caret, which iOS reports as one label
-# ("Alex ▾"). Maestro matches whole labels, so the bare name finds nothing.
-- tapOn: '${MAESTRO_PERSON} ▾'
-- tapOn: 'App Settings'
-- scrollUntilVisible:
-    element: 'Terms'
-    direction: DOWN
-    timeout: 20000
-- tapOn: 'Terms'
-# A minute: on the CI simulator the sheet has been seen blank -- not even its toolbar drawn -- for over
-# 30s before it rendered (2026-10-25), the same stall the share sheet shows there.
-- extendedWaitUntil:
-    visible: '(?i)^(done|close)$'
-    timeout: 60000
+# Open, retried once. The sheet is drawn by a separate system process, SafariViewService, and on the
+# CI simulator its cold start has hung outright: the app asked for it the instant Terms was tapped,
+# the process was created and never drew -- a blank sheet, no close control, for the full minute
+# (2026-10-31). Nothing inside the sheet can be tapped then, so the retry relaunches the app, which
+# takes the hung sheet with it, and asks again. Earlier runs saw it blank for over 30s before it
+# rendered (2026-10-25), the same stall the share sheet shows there -- hence still a minute's wait.
+- retry:
+    maxRetries: 1
+    commands:
+      # Only on the retry: the account menu is behind the hung sheet. Persisted sign-in survives the
+      # relaunch (flow 02), and the console log appends, so the artifact keeps both attempts.
+      - runFlow:
+          when:
+            notVisible: '${MAESTRO_PERSON} ▾'
+          commands:
+            - launchApp:
+                arguments:
+                  huddleConsoleToFile: true
+            - extendedWaitUntil:
+                visible: '${MAESTRO_PERSON} ▾'
+                timeout: 60000
+      # The account menu's trigger: the signed-in person's name and a caret, which iOS reports as one
+      # label ("Alex ▾"). Maestro matches whole labels, so the bare name finds nothing.
+      - tapOn: '${MAESTRO_PERSON} ▾'
+      - tapOn: 'App Settings'
+      - scrollUntilVisible:
+          element: 'Terms'
+          direction: DOWN
+          timeout: 20000
+      - tapOn: 'Terms'
+      - extendedWaitUntil:
+          visible: '(?i)^(done|close)$'
+          timeout: 60000
 - tapOn: '(?i)^(done|close)$'
 - extendedWaitUntil:
     visible: 'Terms'
