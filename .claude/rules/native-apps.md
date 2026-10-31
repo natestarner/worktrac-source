@@ -333,6 +333,11 @@ contains it.
   the `huddleConsoleToFile` launch argument (`subflows/sign-in.yaml` passes it) write it to
   `Documents/console.log` and `ios-maestro.sh` copies it out (`AppDelegate.swift`). Release builds
   never do. **Read it before blaming the app**: for #434 it showed iOS never delivered the link.
+  **Read its timestamps, not its order.** The file has no clock of its own, so a page that froze
+  writes its lines late and they read as on time. On 2026-10-31 that made a page frozen on History
+  look like "on `/app/billing` at +1s" (#434). The link and lifecycle lines carry the time, and
+  the heartbeat after a link gives `late=` per beat. Check the simulator log too: a frozen page
+  has no `WebContent` network or `didSameDocumentNavigation` lines in the window.
 - **A system prompt survives the app being quit** and hides the screen from Maestro, so
   `subflows/sign-in.yaml` cancels a stray "Open in Huddle?" before signing in.
 - **Known simulator stalls, not app bugs:** the share sheet and the Safari sheet can open and draw

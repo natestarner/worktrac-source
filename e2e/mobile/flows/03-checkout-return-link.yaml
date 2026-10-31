@@ -13,6 +13,10 @@
 #   (console-03-checkout-return-link.log), every run where iOS delivered the link shows it reach
 #   appLinks.js and land on Billing; the one failure since was iOS's prompt arriving minutes late.
 #   If it recurs, read that log first: no "openURLContexts" line means iOS never handed it over.
+#   On 2026-10-31 iOS DID hand it over and the page froze instead: no JS navigation or network
+#   activity for the whole wait, History left on screen, and the "+1s on Billing" lines written
+#   late. Every line is timestamped now, with a 1s heartbeat after the link showing how late each
+#   beat fired, and the page's lifecycle events. A frozen page shows as one burst of very late beats.
 #
 # The unsigned simulator build is the production bundle id, so its scheme is fitness.huddle.app.
 appId: fitness.huddle.app
