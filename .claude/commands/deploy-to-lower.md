@@ -281,10 +281,10 @@ only the `@critical` tier (~50 tests, `e2e-tests.md`, "Tiers"), so it is done in
 
 **The whole suite, in Chrome and in WebKit, runs nightly** (`lower-e2e-nightly.yml`), not here.
 Don't wait for it to call the deploy done. If the change is risky enough to want it now, dispatch it
-after this run is green — it shares this workflow's concurrency group, so it never overlaps a deploy:
+after this run is green — it waits for any lower deploy to finish before it starts:
 
 ```bash
-gh workflow run lower-e2e-nightly.yml -R $OWNER/worktrac-deploy
+gh workflow run lower-e2e-nightly.yml   # in THIS repo (worktrac-source)
 ```
 
 Its failures are triaged on their own (the morning after, or by the nightly Claude routine if one

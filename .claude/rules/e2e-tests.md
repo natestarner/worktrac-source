@@ -13,7 +13,7 @@ Full narrative: `docs/architecture/testing.md`.
 |---|---|---|---|
 | Pre-merge | The **whole** suite (`bash scripts/e2e.sh`), plus `npm run test:pwa` | `/deploy-to-lower` step 3, every change | Yes |
 | Per-merge on lower | **`@critical` only** (`--grep @critical`), Chromium, 2 shards | Every lower deploy (`deploy-lower.yml`'s `e2e-tests`) | **Yes: lower is green when this passes** |
-| Nightly on lower | The whole suite in Chromium, then the whole suite in WebKit | `lower-e2e-nightly.yml`, 09:00 UTC + "Run workflow" | No: reports |
+| Nightly on lower | The whole suite in Chromium, then the whole suite in WebKit | This repo's `lower-e2e-nightly.yml`, 09:00 UTC + "Run workflow" | No: reports |
 | On demand | Barrage, mobile flows | You run them | No |
 
 - **`@critical` means "if this breaks, the app is broken for people"**: the deploy boots, people
@@ -215,10 +215,11 @@ Full narrative: `docs/architecture/testing.md`.
   this e2e is a race by construction, so it detects the bug but must not be the only thing pinning
   it.
 
-- **E2E never runs in this repo's CI.** `ci.yml` is `backend-ci` + `frontend-ci` only. The suite
-  runs in GitHub in two places, both in `worktrac-deploy` (see "Tiers" above): `deploy-lower.yml`'s
-  `e2e-tests` on every push to `lower` (`@critical`, Chrome), and `lower-e2e-nightly.yml` (everything,
-  Chrome then WebKit). Locally it runs via `scripts/e2e.sh`.
+- **E2E never runs in this repo's PR or branch CI.** `ci.yml` is `backend-ci` + `frontend-ci` only. The suite
+  runs in GitHub in two places (see "Tiers" above): `worktrac-deploy`'s `deploy-lower.yml`
+  (`e2e-critical` + `e2e-tests`) on every push to `lower` (`@critical`, Chrome), and THIS repo's
+  `lower-e2e-nightly.yml` (everything, Chrome then WebKit -- here because scheduled workflows run
+  from the default branch, and worktrac-deploy's is `production`, where any push deploys prod). Locally it runs via `scripts/e2e.sh`.
 
 - **A green lower run is not evidence the suite is stable.** CI sets `retries: 2`, so a test that
   fails and then passes is recorded `flaky` while the run still reports success — the run-level
