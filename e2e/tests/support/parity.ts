@@ -110,6 +110,9 @@ export interface ParitySpec<T> {
   // to leave it there: it belongs on the register in .claude/rules/resilience.md with a reason,
   // or it belongs fixed.
   fixmeModes?: ConnectivityMode[];
+  // Which modes join the @critical tier that gates every lower deploy (true = all of them). The
+  // rest still run before every merge locally and nightly on lower; see e2e-tests.md, "Tiers".
+  critical?: boolean | ConnectivityMode[];
 }
 
 // Emits one test per mode, each named "<title> [<mode>]" so a failure names the mode directly.
@@ -117,7 +120,8 @@ export function forEachConnectivityMode<T>(title: string, spec: ParitySpec<T>) {
   const modes = spec.modes ?? ALL_MODES;
 
   for (const mode of modes) {
-    test(`${title} [${mode}]`, async ({ page, request }) => {
+    const critical = spec.critical === true || (Array.isArray(spec.critical) && spec.critical.includes(mode));
+    test(`${title} [${mode}]`, { tag: critical ? '@critical' : [] }, async ({ page, request }) => {
       test.fixme(spec.fixmeModes?.includes(mode) ?? false, 'Known parity divergence in this mode');
       const ctx: ParityContext = { mode, degraded: mode !== 'online' };
 

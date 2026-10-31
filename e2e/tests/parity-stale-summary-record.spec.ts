@@ -80,6 +80,7 @@ forEachConnectivityMode<Record<string, never>>('no false "first time" record aft
 // The sampler starts before the exercise is reopened and records whether the Last time card EVER
 // held the previous workout's 10.
 forEachConnectivityMode<Record<string, never>>('Last time shows the workout just finished, never the one before it', {
+  critical: true,
   setup: async (page, request) => {
     await registerHousehold(page, request, 'Stale');
     await workout(page, 10);

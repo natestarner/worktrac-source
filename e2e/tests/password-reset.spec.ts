@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { registerHousehold, fetchPendingCode } from './support/auth';
 
 test.describe('Password reset', () => {
-  test('reset the password via the emailed code and log in with the new one', async ({ page, request }) => {
+  test('reset the password via the emailed code and log in with the new one', { tag: '@critical' }, async ({ page, request }) => {
     const email = await registerHousehold(page, request, 'Alex');
 
     await page.goto('/login');

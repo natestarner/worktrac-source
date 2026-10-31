@@ -59,7 +59,7 @@ test.describe('Cold backend recovery', () => {
   // and persist the new token BEFORE /me had confirmed anything, so a /me that timed out left a
   // VALID token with no identity snapshot and no cached data. AuthContext's boot effect reads that
   // as "retry /me forever", so every subsequent reload sat on the boot skeleton with no way out.
-  test('a sign-in whose /me times out leaves nothing behind, and the next boot still reaches login', async ({
+  test('a sign-in whose /me times out leaves nothing behind, and the next boot still reaches login', { tag: '@critical' }, async ({
     page,
     request,
   }) => {

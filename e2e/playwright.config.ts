@@ -62,8 +62,13 @@ const isDeployedEnv = resolveIsDeployed();
 // about connectivity, that is this experiment overloading a single fixed-capacity backend, not a
 // code regression -- see e2e-tests.md's "an overloaded backend presents as offline, not slow".
 // Revert to 2 rather than chasing the specs.
+//
+// E2E_WORKERS overrides it there too, since 2026-10-30, so one suite can be split across runners
+// (`--shard`) without multiplying the load: lower's jobs run 2 shards x E2E_WORKERS=4, still 8
+// against the one backend. The time budgets below follow that TOTAL (E2E_LOAD_WORKERS), not one
+// shard's share -- see loadWorkers.
 function resolveWorkerCount(): number {
-  if (isDeployedEnv) return 8;
+  if (isDeployedEnv) return parseWorkers(process.env.E2E_WORKERS) ?? 8;
 
   // Playwright resolves `workers` after this file is evaluated, and a CLI `--workers` overrides
   // whatever the config returns -- so read the same inputs it will, in its own precedence order.
@@ -74,18 +79,25 @@ function resolveWorkerCount(): number {
     ? (arg.includes('=') ? arg.split('=')[1] : process.argv[process.argv.indexOf(arg) + 1])
     : process.env.E2E_WORKERS;
 
-  const cores = os.cpus().length;
-  if (raw) {
-    // Playwright accepts a percentage of cores ("50%") as well as a plain count.
-    const parsed = raw.trim().endsWith('%')
-      ? Math.ceil((cores * parseFloat(raw)) / 100)
-      : parseInt(raw, 10);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-  return Math.min(8, Math.max(2, Math.ceil(cores / 4)));
+  return parseWorkers(raw) ?? Math.min(8, Math.max(2, Math.ceil(os.cpus().length / 4)));
+}
+
+function parseWorkers(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  // Playwright accepts a percentage of cores ("50%") as well as a plain count.
+  const parsed = raw.trim().endsWith('%')
+    ? Math.ceil((os.cpus().length * parseFloat(raw)) / 100)
+    : parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 const workerCount = resolveWorkerCount();
+
+// How many workers are hitting the target at once across EVERY runner, which is the contention the
+// budgets below exist to absorb. One run on one machine: just this run's workers. A suite split
+// across runners against one shared backend sets E2E_LOAD_WORKERS to the sum, so a 2 x 4 split is
+// budgeted exactly like the single 8-worker run it replaced instead of like a quiet 4-worker one.
+const loadWorkers = Math.max(workerCount, parseWorkers(process.env.E2E_LOAD_WORKERS) ?? 0);
 
 // Budgets, not speed assertions. Nothing in this suite asserts that the app is fast, so a bigger
 // number here removes no coverage -- it only changes how long a genuinely stuck test takes to
@@ -108,8 +120,8 @@ const workerCount = resolveWorkerCount();
 // goes up" failure the paragraph above exists to prevent -- now against a single Container App
 // replica instead of a whole local machine. Unifying onto one formula costs nothing at the old
 // value and scales correctly at the new one.
-const perTestTimeout = 30_000 + workerCount * 5_000;
-const assertionTimeout = 12_000 + workerCount * 1_500;
+const perTestTimeout = 30_000 + loadWorkers * 5_000;
+const assertionTimeout = 12_000 + loadWorkers * 1_500;
 
 export default defineConfig({
   testDir: './tests',
@@ -148,10 +160,15 @@ export default defineConfig({
   // reporter puts there is deleted depending on which finishes first. `test-results/` is the
   // configured outputDir -- cleared BEFORE the run, never after -- so an end-of-run write survives.
   // Both directories are already gitignored.
+  //
+  // E2E_BLOB=1 adds the blob reporter, which a run split across runners (`--shard`) needs: each
+  // shard uploads its blob-report/ and one job merges them with playwright.merge.config.ts, which
+  // writes the same html report and test-results/results.json a single run does.
   reporter: [
     ['html', { open: 'never' }],
     ['json', { outputFile: 'test-results/results.json' }],
     ['list'],
+    ...(process.env.E2E_BLOB === '1' ? [['blob'] as ['blob']] : []),
   ],
   // A real deployed target (lower/production) has real network latency and shared,
   // resource-constrained infra that localhost doesn't -- give assertions more headroom there

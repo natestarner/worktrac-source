@@ -28,6 +28,7 @@ import { forEachConnectivityMode } from './support/parity';
 // Note `assert` never branches on ctx.mode -- that is the rule, and it is also the claim: the
 // person sees the same thing whatever the network is doing.
 forEachConnectivityMode<{ personName: string }>('a PR is celebrated the moment it is logged', {
+  critical: true,
   setup: async (page, request) => {
     const personName = 'Celeb';
     await registerHousehold(page, request, personName);

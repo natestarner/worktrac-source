@@ -16,6 +16,7 @@ import { forEachConnectivityMode } from './support/parity';
 const EXERCISE = 'Barbell Bench Press';
 
 forEachConnectivityMode<void>('a record logged in any mode is on the PRs board and in Trends at once', {
+  critical: true,
   async setup(page, request) {
     await registerHousehold(page, request, 'Harper');
     await pickExercise(page, EXERCISE);

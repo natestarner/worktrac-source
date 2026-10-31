@@ -15,7 +15,7 @@ import { registerHousehold, fetchEmailOutcome } from './support/auth';
 // A timestamp+random suffix (not a single fixed address) avoids "email already registered"
 // collisions across repeated runs -- same reasoning as the regular e2e pattern in auth.ts.
 test.describe('Live email canary', () => {
-  test('a real registration triggers a real, successfully-accepted ACS send', async ({ page, request }) => {
+  test('a real registration triggers a real, successfully-accepted ACS send', { tag: '@critical' }, async ({ page, request }) => {
     const email = `huddle+livewiretest-${Date.now()}-${Math.random().toString(16).slice(2)}@starner.co`;
 
     await registerHousehold(page, request, 'Canary', { emailOverride: email });

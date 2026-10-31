@@ -60,6 +60,7 @@ async function warmCatalog(page: Page) {
 // once a write is queued, its row "gets Edit/Delete controls immediately -- as durable/editable
 // as a synced row". That is a parity claim, and this is the test of it.
 forEachConnectivityMode<void>('logging a set produces the same row', {
+  critical: true,
   setup: async (page, request) => {
     await registerHousehold(page, request, 'Marlowe');
     await warmCatalog(page);
@@ -135,6 +136,7 @@ forEachConnectivityMode<void>("the weight carries forward from today's previous 
 // Regression coverage for docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md.
 // See the block comment at the bottom of this file for what this caught and how.
 forEachConnectivityMode<void>('a set is still listed under This session after a reload', {
+  critical: true,
   setup: async (page, request) => {
     await registerHousehold(page, request, 'Rafferty');
     await warmCatalog(page);
