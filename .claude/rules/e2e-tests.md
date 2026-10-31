@@ -27,11 +27,15 @@ Full narrative: `docs/architecture/testing.md`.
   on every merge. A new feature's spec is untagged by default; it is still covered before merge
   (locally) and nightly (on lower).
 - **New and changed tests run on their FIRST lower deploy, automatically -- there is no tag for
-  it.** `scripts/select-changed-e2e.sh` (deploy-lower's `e2e-changed` job) selects every test in a
-  spec changed since the last GREEN lower deploy, or importing a file that changed (Playwright's own
-  `--only-changed`, which follows imports, so a `support/` helper change selects exactly the specs
-  that use it). A deploy that went red, or was superseded while queued, never proved its tests, so
-  they stay selected until one passes. It gates green beside `@critical`.
+  it.** `scripts/select-changed-e2e.sh` (deploy-lower's `e2e-changed` job) selects every spec FILE
+  changed since the last GREEN lower deploy, or importing a file that changed, directly or through
+  other helpers (`e2e/scripts/changed-specs.mjs`), and runs those files whole. A changed Playwright
+  config or e2e package runs everything. A deploy that went red, or was superseded while queued,
+  never proved its tests, so they stay selected until one passes. It gates green beside `@critical`.
+  - **Never Playwright's `--only-changed` for this.** It attributes a test to the file where
+    `test()` is CALLED, which for every parity spec is `support/parity.ts`, so a changed parity
+    spec's parity tests were silently left out (2 of the file's 6 on the first real run). Run by
+    file, which includes every test a file defines.
   - **Burn-in:** 20 tests or fewer run 3 times each (`--repeat-each=3`); more than that run once.
     Retries stay on, so a burn-in flake doesn't block the deploy -- it's a **warning** on the run
     ("flaked during burn-in"), naming the test. Fix it then, before it becomes nightly noise.
