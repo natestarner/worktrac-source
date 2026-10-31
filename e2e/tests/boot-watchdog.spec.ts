@@ -13,7 +13,7 @@ import { registerHousehold } from './support/auth';
 // files (including this one) are served identically by `vite dev` and a production build, so this
 // doesn't need the slow production-preview PWA config offline-durability.spec.ts uses.
 test.describe('Boot watchdog', () => {
-  test('shows a login escape hatch if the app tree ever goes fully blank, however that happened', async ({
+  test('shows a login escape hatch if the app tree ever goes fully blank, however that happened', { tag: '@critical' }, async ({
     page,
     request,
   }) => {

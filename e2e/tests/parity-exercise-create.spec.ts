@@ -29,6 +29,7 @@ import { forEachConnectivityMode } from './support/parity';
 const EXERCISE = 'Zercher Squat';
 
 forEachConnectivityMode<void>('creating an exercise opens its detail screen', {
+  critical: true,
   setup: async (page, request) => {
     await registerHousehold(page, request, 'Halloway');
   },

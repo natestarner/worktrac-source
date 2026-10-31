@@ -14,7 +14,7 @@ import { goHardOffline, goOnline, outboxCountText, waitForOutboxDrain } from './
 // close+reopen while still offline) needs the production service worker to cold-serve the app
 // shell, so it lives in offline-durability.spec.ts (run against a preview build), not here.
 test.describe('Offline mode — durable set-logging outbox', () => {
-  test('a set logged offline queues, then syncs exactly once on reconnect', async ({ page, request }) => {
+  test('a set logged offline queues, then syncs exactly once on reconnect', { tag: '@critical' }, async ({ page, request }) => {
     await registerHousehold(page, request, 'Casey');
     await pickExercise(page, 'Barbell Bench Press');
 

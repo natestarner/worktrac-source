@@ -5,7 +5,7 @@ import { dismissPrCelebration, logSetAt, pickExercise, setStepper } from './supp
 // Full golden-path smoke: register a new household, log the first-ever set (always a
 // PR), confirm the celebration fires, then check every tab renders without error.
 test.describe('Log workout', () => {
-  test('register, log a set, see PR celebration, browse all tabs', async ({ page, request }) => {
+  test('register, log a set, see PR celebration, browse all tabs', { tag: '@critical' }, async ({ page, request }) => {
     await registerHousehold(page, request, 'Nate');
 
     // A fresh person's picker is empty -- search the catalog to pick an exercise.

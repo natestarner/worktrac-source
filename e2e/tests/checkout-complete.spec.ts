@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 // browser, never bounce to /login, and need no request to say what happened. The app itself
 // confirms the payment when it returns to the foreground (useCheckoutResume, unit-tested).
 test.describe('checkout complete (hosted checkout landing)', () => {
-  test('a paid return thanks them and points back to the app, signed out', async ({ page }) => {
+  test('a paid return thanks them and points back to the app, signed out', { tag: '@critical' }, async ({ page }) => {
     await page.goto('/checkout-complete?session_id=cs_test_e2e_123');
 
     await expect(page.getByRole('heading', { name: 'Payment complete' })).toBeVisible();
@@ -20,7 +20,7 @@ test.describe('checkout complete (hosted checkout landing)', () => {
     );
   });
 
-  test('a cancelled checkout says nothing was charged and offers no link', async ({ page }) => {
+  test('a cancelled checkout says nothing was charged and offers no link', { tag: '@critical' }, async ({ page }) => {
     await page.goto('/checkout-complete?cancelled=1');
 
     await expect(page.getByRole('heading', { name: 'Checkout cancelled' })).toBeVisible();

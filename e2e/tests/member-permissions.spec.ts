@@ -34,7 +34,7 @@ async function addPerson(page, name: string) {
 //      and the notice really is rendered, rather than a hook returning the right value into a
 //      component nobody wired up.
 test.describe('Member logins', () => {
-  test('a member can log their own workouts but only view a sibling', async ({ page, request }) => {
+  test('a member can log their own workouts but only view a sibling', { tag: '@critical' }, async ({ page, request }) => {
     const ownerEmail = await registerHousehold(page, request, 'Nate');
 
     await addPerson(page, 'Sam');
@@ -80,7 +80,7 @@ test.describe('Member logins', () => {
   });
 
   // ⚠️ THE ASSERTION THAT CANNOT BE MADE ANYWHERE ELSE.
-  test('a refused write answers 403, and never a 401 that would sign the member out', async ({ page, request }) => {
+  test('a refused write answers 403, and never a 401 that would sign the member out', { tag: '@critical' }, async ({ page, request }) => {
     const ownerEmail = await registerHousehold(page, request, 'Nate');
 
     await addPerson(page, 'Sam');
@@ -235,7 +235,7 @@ test.describe('Member logins', () => {
   // a test-support route, which was the only way in while the column had no endpoint at all (V66).
   // Now that Pro owns the setting, forcing it onto a Plus household would be testing a state the
   // product cannot produce, so this registers the tier the behaviour actually belongs to.
-  test('with household visibility off, a member sees only themselves', async ({ page, request }) => {
+  test('with household visibility off, a member sees only themselves', { tag: '@critical' }, async ({ page, request }) => {
     const ownerEmail = await registerHousehold(page, request, 'Nate');
 
     await addPerson(page, 'Sam');

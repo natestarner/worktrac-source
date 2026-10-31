@@ -48,7 +48,7 @@ test('a reload re-downloads no month that did not change, and a new set re-sends
 // Two devices on one account. A change made on the other device is exactly the change this one has
 // no write of its own to refresh after -- it is picked up only because the fingerprint of the month
 // it touched no longer matches what this device restored. Nothing else could tell it.
-test('a set logged on another device reaches this one, resending only its month', async ({ page, request, browser }) => {
+test('a set logged on another device reaches this one, resending only its month', { tag: '@critical' }, async ({ page, request, browser }) => {
   const sync = await watchSync(page);
   const email = await registerHousehold(page, request, 'Nate');
   await pickExercise(page, 'Barbell Bench Press');
@@ -153,7 +153,7 @@ test('a month whose fingerprint matches but whose content does not is re-read, r
 // A sign-in holds no History, so its first sync is a FULL one -- the most expensive request the app
 // makes. It must be sent once. The boot warm used to replace a sync already in flight with its own,
 // and the server finishes an abandoned request anyway, so a fresh sign-in paid for two.
-test('a fresh sign-in downloads History once', async ({ page, request, browserName }) => {
+test('a fresh sign-in downloads History once', { tag: '@critical' }, async ({ page, request, browserName }) => {
   // Known: WebKit sometimes sends two full syncs here (#429) -- most local runs, but not every one,
   // and not once against lower's ~800ms round trips. A test.fail on an intermittent bug is a flaky
   // test by construction, so WebKit skips it until #429 is fixed; Chrome keeps guarding the rule.
