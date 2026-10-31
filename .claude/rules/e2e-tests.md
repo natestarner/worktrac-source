@@ -12,7 +12,7 @@ Full narrative: `docs/architecture/testing.md`.
 | Tier | What | When | Blocks? |
 |---|---|---|---|
 | Pre-merge | The **whole** suite (`bash scripts/e2e.sh`), plus `npm run test:pwa` | `/deploy-to-lower` step 3, every change | Yes |
-| Per-merge on lower | **`@critical` only** (`--grep @critical`), Chromium, 2 shards | Every lower deploy (`deploy-lower.yml`'s `e2e-tests`) | **Yes: lower is green when this passes** |
+| Per-merge on lower | **`@critical`** (`--grep @critical`, 2 shards) **+ every new or changed test** (`e2e-changed`), Chromium | Every lower deploy (`deploy-lower.yml`'s `e2e-tests`) | **Yes: lower is green when both pass** |
 | Nightly on lower | The whole suite in Chromium, then the whole suite in WebKit | This repo's `lower-e2e-nightly.yml`, 09:00 UTC + "Run workflow" | No: reports |
 | On demand | Barrage, mobile flows | You run them | No |
 
@@ -26,6 +26,21 @@ Full narrative: `docs/architecture/testing.md`.
   spec. Keep the tier small: it is ~50 tests and ~1-1.5 min on lower, and every addition is paid
   on every merge. A new feature's spec is untagged by default; it is still covered before merge
   (locally) and nightly (on lower).
+- **New and changed tests run on their FIRST lower deploy, automatically -- there is no tag for
+  it.** `scripts/select-changed-e2e.sh` (deploy-lower's `e2e-changed` job) selects every test in a
+  spec changed since the last GREEN lower deploy, or importing a file that changed (Playwright's own
+  `--only-changed`, which follows imports, so a `support/` helper change selects exactly the specs
+  that use it). A deploy that went red, or was superseded while queued, never proved its tests, so
+  they stay selected until one passes. It gates green beside `@critical`.
+  - **Burn-in:** 20 tests or fewer run 3 times each (`--repeat-each=3`); more than that run once.
+    Retries stay on, so a burn-in flake doesn't block the deploy -- it's a **warning** on the run
+    ("flaked during burn-in"), naming the test. Fix it then, before it becomes nightly noise.
+  - Its limit: it selects by the TEST's files, not the app code a test exercises. Changing app code
+    without touching a spec selects nothing extra; that is what the local full run and the nightly
+    are for.
+  - Its own artifacts: `playwright-report-changed` / `e2e-results-json-changed`.
+  - Don't add a "new" tag: a tag has to be removed later, and forgotten ones would grow the gate
+    back into the full suite.
 - **Never add a `--grep-invert @critical` anywhere**: the untagged specs must keep running in
   full locally and nightly. The tier only decides what blocks a lower deploy.
 - **A `--grep` that matches nothing fails the run** ("No tests found"), so the tag cannot quietly
@@ -70,8 +85,8 @@ Full narrative: `docs/architecture/testing.md`.
   and revert to 2 if `e2e-tests` starts failing with connectivity-shaped errors on specs that
   aren't about connectivity -- that's the environment saturating, not a code regression.
 - **Split across runners, budget by the TOTAL.** Lower's jobs run 2 shards (`--shard=n/2`) with
-  `E2E_WORKERS=4` each, still 8 against the one backend, and set `E2E_LOAD_WORKERS=8` so the time
-  budgets match the real contention instead of one shard's 4. `E2E_BLOB=1` adds the blob reporter;
+  `E2E_WORKERS=4` each, plus `e2e-changed`'s 4 beside them, and all three set
+  `E2E_LOAD_WORKERS=12` so the time budgets match the real contention instead of one job's 4. `E2E_BLOB=1` adds the blob reporter;
   a merge job joins the shards with `playwright.merge.config.ts`, which writes the same html report
   and `test-results/results.json` a single run does.
 - **The local stack is configured to absorb that parallelism — don't undo it.** `scripts/db.sh`

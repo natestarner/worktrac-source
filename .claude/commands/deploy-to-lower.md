@@ -45,8 +45,8 @@ failures — subject to the guardrails.
   repo's `lower` branch**.
 - That push triggers `worktrac-deploy`'s **`deploy-lower.yml`** → jobs
   `deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`, `e2e-critical` (2 shards),
-  `e2e-tests` (merges them; the gate). This is where the lower deploy + lower smoke/`@critical`
-  e2e actually happen (expect **~5 min**, more on an Azure cold start). The whole suite runs on
+  `e2e-changed` (every new or changed test, burned in), `e2e-tests` (merges the shards; the gate
+  for both). This is where the lower deploy + lower smoke/`@critical`/new-test e2e actually happen (expect **~5 min**, more on an Azure cold start). The whole suite runs on
   lower nightly instead (`lower-e2e-nightly.yml`; `e2e-tests.md`, "Tiers").
 - Lower URLs: frontend `https://app.dev.huddle.fitness`
   (`https://black-flower-0c9bf9d0f.7.azurestaticapps.net`), backend health
@@ -283,8 +283,10 @@ gh run view -R $OWNER/worktrac-deploy <run-id> \
 ```
 
 All must be green: `deploy-backend-lower`, `deploy-frontend-lower`, `smoke-tests`, the two
-`e2e-critical` shards, and `e2e-tests` (which merges the shards and is the gate). This run tests
-only the `@critical` tier (~50 tests, `e2e-tests.md`, "Tiers"), so it is done in a few minutes.
+`e2e-critical` shards, `e2e-changed`, and `e2e-tests` (which merges the shards and is the gate).
+This run tests the `@critical` tier (~50 tests) plus every test this change added or modified
+(`e2e-tests.md`, "Tiers"), so it is done in a few minutes. **Report any "flaked during burn-in"
+warning on the run** -- a new test that needed a retry passed the gate, but it isn't stable yet.
 
 **The whole suite, in Chrome and in WebKit, runs nightly** (`lower-e2e-nightly.yml`), not here.
 Don't wait for it to call the deploy done. If the change is risky enough to want it now, dispatch it
