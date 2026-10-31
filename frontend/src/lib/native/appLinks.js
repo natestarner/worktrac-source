@@ -82,9 +82,11 @@ export function listenForAppLinks(onPath) {
   let last = { url: null, at: 0 };
 
   // #434: every link that reaches JS, and what became of it. The simulator flows read these from
-  // the app's console.log (AppDelegate); remove once that issue is settled.
+  // the app's console.log (AppDelegate); remove once that issue is settled. Timestamped, with the
+  // page's lifecycle beside them: console.log has no clock, and on 2026-10-31 the page froze after
+  // iOS's "Open in Huddle?" prompt, so lines written late read as having run on time.
   const deliver = (url, source) => {
-    console.info(`[appLinks] ${source}`, url, stopped ? '(stopped)' : '');
+    console.info(`[appLinks] ${source}`, new Date().toISOString(), url, stopped ? '(stopped)' : '');
     if (stopped || !url) return;
     const now = Date.now();
     if (url === last.url && now - last.at < SAME_TAP_MS) return;
@@ -94,6 +96,17 @@ export function listenForAppLinks(onPath) {
     last = { url, at: now };
     onPath(path);
   };
+
+  const onLifecycle = (event) =>
+    console.info(`[lifecycle] ${event.type}`, new Date().toISOString(), document.visibilityState);
+  const LIFECYCLE = [
+    [document, 'visibilitychange'],
+    [window, 'pagehide'],
+    [window, 'pageshow'],
+    [window, 'focus'],
+    [window, 'blur'],
+  ];
+  for (const [target, type] of LIFECYCLE) target.addEventListener(type, onLifecycle);
 
   (async () => {
     try {
@@ -118,5 +131,6 @@ export function listenForAppLinks(onPath) {
   return () => {
     stopped = true;
     handle?.remove();
+    for (const [target, type] of LIFECYCLE) target.removeEventListener(type, onLifecycle);
   };
 }

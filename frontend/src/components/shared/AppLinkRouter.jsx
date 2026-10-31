@@ -19,10 +19,24 @@ export default function AppLinkRouter() {
     () =>
       listenForAppLinks((path) => {
         navigateRef.current(path);
-        // #434: where the app actually is after the link, to catch anything that moves it on.
-        // Remove with appLinks.js's logging once that issue is settled.
-        for (const ms of [1000, 5000]) {
-          setTimeout(() => console.info(`[appLinks] at +${ms}ms`, window.location.pathname + window.location.search), ms);
+        // #434: a heartbeat for 15s after the link -- the clock time, how late the timer fired, the
+        // URL, and the tab actually drawn. On 2026-10-31 the page froze after iOS's prompt and its
+        // lines were written late, reading as "on Billing at +1s" while History stayed on screen. A
+        // frozen page shows here as a burst of beats, each seconds late. Remove with appLinks.js's
+        // logging once that issue is settled.
+        const start = performance.now();
+        for (let s = 1; s <= 15; s += 1) {
+          setTimeout(() => {
+            const late = Math.round(performance.now() - start - s * 1000);
+            const tab = document.querySelector('[aria-current="page"]')?.textContent ?? '-';
+            console.info(
+              `[appLinks] +${s}s`,
+              new Date().toISOString(),
+              `late=${late}ms`,
+              window.location.pathname + window.location.search,
+              `tab=${tab}`,
+            );
+          }, s * 1000);
         }
       }),
     [],
