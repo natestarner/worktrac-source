@@ -45,9 +45,27 @@ function uniqueSuffix() {
 // keepWelcome skips the unconditional dismissal below -- used only by
 // onboarding-tour.spec.ts, which needs the welcome modal still on screen to test it. Every other
 // spec goes through this function not caring that the modal ever existed, which is the point.
+//
+// viaUi: drive the real /register and /confirm-email screens. By DEFAULT the household is created
+// through the same two API calls those screens make, and the app is then opened already signed in
+// -- the returning-user boot path (a stored token, then /me), which is as real a way into the app
+// as the form and is exercised by every reload spec anyway. That skips two screens most specs have
+// no interest in: ~3.5s of a 9s median test on lower, across ~280 call sites. Specs whose subject
+// IS sign-up or the first run pass viaUi (keepWelcome implies it: only the confirm screen arms the
+// welcome modal), and billing-onboarding-order.spec.ts drives the form inline, so the screens stay
+// covered on every run.
 export interface RegisterHouseholdOptions {
   emailOverride?: string;
   keepWelcome?: boolean;
+  viaUi?: boolean;
+}
+
+// Where the backend is, discovered the way the app itself does: /config.json on the frontend's own
+// origin.
+async function apiUrlFor(request: APIRequestContext): Promise<string> {
+  const configResponse = await request.get('/config.json');
+  const { apiUrl } = await configResponse.json();
+  return apiUrl;
 }
 
 export async function registerHousehold(
@@ -57,7 +75,41 @@ export async function registerHousehold(
   options: RegisterHouseholdOptions = {},
 ): Promise<string> {
   const { emailOverride, keepWelcome = false } = options;
+  const viaUi = options.viaUi || keepWelcome;
   const email = emailOverride ?? `huddle+e2e-${Date.now()}-${uniqueSuffix()}@starner.co`;
+
+  if (!viaUi) {
+    const apiUrl = await apiUrlFor(request);
+    // accountName '' is what the form sends when the field is left blank: the server's default.
+    const registered = await request.post(`${apiUrl}/api/auth/register`, {
+      data: { accountName: '', email, password: 'password123', personName },
+    });
+    expect(registered.ok(), `register answered ${registered.status()}: ${await registered.text()}`).toBe(true);
+    const code = await fetchPendingCode(request, apiUrl, email);
+    const confirmed = await request.post(`${apiUrl}/api/auth/confirm-email`, { data: { email, code } });
+    expect(confirmed.ok(), `confirm-email answered ${confirmed.status()}: ${await confirmed.text()}`).toBe(true);
+    const { token } = await confirmed.json();
+
+    // Stored ONCE, from a page on the app's origin, and never with addInitScript: an init script
+    // would put the token back on every later navigation, silently undoing a spec's own logout.
+    await page.goto('/login');
+    await page.evaluate((t) => localStorage.setItem('workout-tracker-token', t), token);
+    await page.goto('/app/log');
+    await expect(page).toHaveURL(/\/app\/log/);
+    // Booted, not booting. Two waits, and the first full-suite run of this path failed 11 specs
+    // without them:
+    //  - The REAL shell, not AppShellSkeleton: the skeleton draws the same tab bar, so "the Log
+    //    link is visible" passes mid-boot. Its account-menu trigger is disabled while booting
+    //    (UserMenu's `booting`), so an enabled one means AppShell has mounted. boot-watchdog.spec
+    //    empties #root and failed when the shell mounted into it a moment later.
+    //  - The boot's requests settled, including useOfflineCacheWarming's first warm. Sign-up
+    //    through the screens gives that warm a second or two of confirm screen and welcome modal
+    //    before a spec acts; returning the instant the shell mounts let ten offline specs go offline
+    //    before the exercise catalog was cached. A person signing up gets that time too.
+    await expect(page.locator('button[aria-haspopup="menu"]')).toBeEnabled();
+    await page.waitForLoadState('networkidle');
+    return email;
+  }
 
   await page.goto('/register');
   await page.getByPlaceholder('e.g. Alex').fill(personName);
@@ -66,9 +118,7 @@ export async function registerHousehold(
   await page.getByRole('button', { name: 'Create household' }).click();
   await expect(page).toHaveURL(/\/confirm-email/);
 
-  const configResponse = await request.get('/config.json');
-  const { apiUrl } = await configResponse.json();
-  const code = await fetchPendingCode(request, apiUrl, email);
+  const code = await fetchPendingCode(request, await apiUrlFor(request), email);
 
   await page.getByPlaceholder('123456').fill(code);
   await page.getByRole('button', { name: 'Confirm' }).click();

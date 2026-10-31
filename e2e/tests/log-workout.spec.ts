@@ -6,7 +6,9 @@ import { dismissPrCelebration, logSetAt, pickExercise, setStepper } from './supp
 // PR), confirm the celebration fires, then check every tab renders without error.
 test.describe('Log workout', () => {
   test('register, log a set, see PR celebration, browse all tabs', async ({ page, request }) => {
-    await registerHousehold(page, request, 'Nate');
+    // Through the real sign-up screens: this is the one end-to-end "a new person signs up and uses
+    // the app" path, and it runs on every lower deploy (@critical once the tier lands).
+    await registerHousehold(page, request, 'Nate', { viaUi: true });
 
     // A fresh person's picker is empty -- search the catalog to pick an exercise.
     await expect(page.getByPlaceholder('Search all exercises')).toBeVisible();
