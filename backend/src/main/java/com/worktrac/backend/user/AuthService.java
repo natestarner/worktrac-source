@@ -249,7 +249,9 @@ public class AuthService {
         // bypass rather than a nicety.
         checkLoginAllowed(email, ipAddress);
 
-        User user = userRepository.findByEmail(email).orElse(null);
+        // Locked for the rest of the transaction, so the lockout check, the comparison and the
+        // failed-attempt count below happen one request at a time -- see findByEmailForUpdate.
+        User user = userRepository.findByEmailForUpdate(email).orElse(null);
         if (user == null) {
             // Spend the same time as a real verification would, then fail identically. See
             // DUMMY_HASH -- returning early here is what made login a user-enumeration oracle.
