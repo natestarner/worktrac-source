@@ -1,5 +1,7 @@
 package com.worktrac.backend.contact;
 
+import com.worktrac.backend.outbox.Outbox;
+import com.worktrac.backend.support.OutboxTestSupport;
 import com.worktrac.backend.config.AdminProperties;
 import com.worktrac.backend.email.ContactEmailEventListener;
 import com.worktrac.backend.email.EmailSendException;
@@ -52,14 +54,15 @@ class ContactAlertStatusTest {
         when(settingsService.get()).thenReturn(settings);
         when(settings.isAlertOnContactMessage()).thenReturn(true);
 
-        listener = new ContactEmailEventListener(emailService, adminProperties, settingsService, alertStatusService);
+        listener = new ContactEmailEventListener(emailService, adminProperties, settingsService, alertStatusService,
+                mock(Outbox.class));
     }
 
     @Test
     void recordsSentWithTheMessageIdOnASuccessfulSend() {
         when(emailService.sendAdminAlert(anyCollection(), anyString(), anyString())).thenReturn("acs-message-id");
 
-        listener.onContactMessageReceived(EVENT);
+        OutboxTestSupport.deliver(listener, EVENT);
 
         verify(alertStatusService).recordSent(42L, "acs-message-id");
         verify(alertStatusService, never()).recordFailed(anyLong(), anyString());
@@ -72,7 +75,7 @@ class ContactAlertStatusTest {
         doThrow(new EmailSendException("ACS send did not succeed: status=FAILED code=Throttled"))
                 .when(emailService).sendAdminAlert(anyCollection(), anyString(), anyString());
 
-        listener.onContactMessageReceived(EVENT);
+        OutboxTestSupport.deliver(listener, EVENT);
 
         ArgumentCaptor<String> detail = ArgumentCaptor.forClass(String.class);
         verify(alertStatusService).recordFailed(eq(42L), detail.capture());
@@ -89,7 +92,7 @@ class ContactAlertStatusTest {
         doThrow(new RuntimeException("transient DB hiccup"))
                 .when(alertStatusService).recordSent(anyLong(), anyString());
 
-        listener.onContactMessageReceived(EVENT);
+        OutboxTestSupport.deliver(listener, EVENT);
 
         verify(alertStatusService, never()).recordFailed(anyLong(), anyString());
     }
@@ -98,7 +101,7 @@ class ContactAlertStatusTest {
     void doesNotSendWhenTheAdminHasTurnedContactAlertsOff() {
         when(settings.isAlertOnContactMessage()).thenReturn(false);
 
-        listener.onContactMessageReceived(EVENT);
+        OutboxTestSupport.deliver(listener, EVENT);
 
         verify(emailService, never()).sendAdminAlert(anyCollection(), anyString(), anyString());
         // Deliberately left at PENDING rather than inventing a fourth state: nobody was emailed,
@@ -115,7 +118,7 @@ class ContactAlertStatusTest {
                 7L, ContactCategory.OTHER,
                 "Hello\r\nBcc: victim@example.com", "A long enough message body.", "nate@example.com", "cid");
 
-        listener.onContactMessageReceived(injected);
+        OutboxTestSupport.deliver(listener, injected);
 
         ArgumentCaptor<String> subject = ArgumentCaptor.forClass(String.class);
         verify(emailService).sendAdminAlert(anyCollection(), subject.capture(), anyString());
@@ -130,7 +133,7 @@ class ContactAlertStatusTest {
     void includesTheCorrelationIdInTheBody() {
         when(emailService.sendAdminAlert(anyCollection(), anyString(), anyString())).thenReturn("id");
 
-        listener.onContactMessageReceived(EVENT);
+        OutboxTestSupport.deliver(listener, EVENT);
 
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
         verify(emailService).sendAdminAlert(anyCollection(), anyString(), body.capture());
@@ -144,7 +147,7 @@ class ContactAlertStatusTest {
         ContactMessageReceivedEvent huge = new ContactMessageReceivedEvent(
                 9L, ContactCategory.OTHER, "Long one", "x".repeat(4000), "nate@example.com", "cid");
 
-        listener.onContactMessageReceived(huge);
+        OutboxTestSupport.deliver(listener, huge);
 
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
         verify(emailService).sendAdminAlert(anyCollection(), anyString(), body.capture());

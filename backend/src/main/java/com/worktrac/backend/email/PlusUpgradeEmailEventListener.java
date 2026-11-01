@@ -3,48 +3,65 @@ package com.worktrac.backend.email;
 import com.worktrac.backend.billing.BillingAuditService;
 import com.worktrac.backend.billing.BillingEventType;
 import com.worktrac.backend.billing.PlusUpgradedEvent;
+import com.worktrac.backend.outbox.Outbox;
+import com.worktrac.backend.outbox.OutboxHandler;
+import com.worktrac.backend.outbox.OutboxHandlerProvider;
 import com.worktrac.backend.user.User;
 import com.worktrac.backend.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.util.List;
 import java.util.Optional;
 
-// Sends the welcome-to-Plus email after a household's FIRST-ever upgrade, off the request thread
-// and only once the triggering transaction has committed -- same shape as
+// Sends the welcome-to-Plus email after a household's FIRST-ever upgrade, through the outbox
+// (outbox.Outbox) -- the row commits in the same transaction as the upgrade and its "welcome
+// claimed" marker, is sent after commit, and survives the replica that wrote it. Same shape as
 // RegistrationEmailEventListener, and a separate component for the same reason
 // ContactEmailEventListener is: the natural home for this outcome is billing_events
 // (BillingAuditService), not the registration audit trail, since it is keyed by account rather
 // than by email and already holds every other billing lifecycle moment.
 //
-// AFTER_COMMIT is safe here unconditionally, unlike most callers of this annotation: PlusUpgradedEvent
-// is only ever published from SubscriptionService.applyStripeState, which is @Transactional, as are
-// all three of its callers (the Stripe webhook, the billing controller's checkout reconcile, and the
-// reconciliation watchdog) -- see AccountPlanChangedListener's javadoc for why that check matters
-// rather than being assumed.
+// PlusUpgradedEvent is only ever published from SubscriptionService.applyStripeState, which is
+// @Transactional, so the outbox row joins that transaction.
 @Component
-public class PlusUpgradeEmailEventListener {
+public class PlusUpgradeEmailEventListener implements OutboxHandlerProvider {
+
+    static final String PLUS_WELCOME = "email.plus-welcome";
 
     private static final Logger log = LoggerFactory.getLogger(PlusUpgradeEmailEventListener.class);
 
     private final EmailService emailService;
     private final UserRepository userRepository;
     private final BillingAuditService auditService;
+    private final Outbox outbox;
 
     public PlusUpgradeEmailEventListener(EmailService emailService, UserRepository userRepository,
-                                         BillingAuditService auditService) {
+                                         BillingAuditService auditService, Outbox outbox) {
         this.emailService = emailService;
         this.userRepository = userRepository;
         this.auditService = auditService;
+        this.outbox = outbox;
     }
 
-    @Async("emailTaskExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onPlusUpgraded(PlusUpgradedEvent event) {
+        outbox.enqueue(PLUS_WELCOME, event);
+    }
+
+    @Override
+    public List<OutboxHandler<?>> outboxHandlers() {
+        return List.of(new OutboxHandler<>(PLUS_WELCOME, PlusUpgradedEvent.class,
+                this::deliver,
+                (event, reason) -> {
+                    log.error("Gave up sending welcome-to-Plus email for account {}: {}", event.accountId(), reason);
+                    recordSafely(event.accountId(), BillingEventType.PLUS_WELCOME_EMAIL_FAILED, reason);
+                }));
+    }
+
+    private void deliver(PlusUpgradedEvent event) {
         Long accountId = event.accountId();
 
         // The OWNER specifically, same reasoning as the Stripe Customer's address
@@ -63,15 +80,8 @@ public class PlusUpgradeEmailEventListener {
             return;
         }
 
-        String email = ownerEmail.get();
-        String messageId;
-        try {
-            messageId = emailService.sendPlusWelcome(email, event.plan());
-        } catch (Exception e) {
-            log.error("Failed to send welcome-to-Plus email for account {}", accountId, e);
-            recordSafely(accountId, BillingEventType.PLUS_WELCOME_EMAIL_FAILED, failureReason(e));
-            return;
-        }
+        // A send failure propagates, so the outbox retries it; the give-up above records FAILED.
+        String messageId = emailService.sendPlusWelcome(ownerEmail.get(), event.plan());
         recordSafely(accountId, BillingEventType.PLUS_WELCOME_EMAIL_SENT, messageId);
     }
 
@@ -86,11 +96,4 @@ public class PlusUpgradeEmailEventListener {
         }
     }
 
-    private String failureReason(Exception e) {
-        String message = e.getMessage();
-        if (message != null && !message.isBlank()) {
-            return e.getClass().getSimpleName() + ": " + message;
-        }
-        return e.getClass().getSimpleName();
-    }
 }

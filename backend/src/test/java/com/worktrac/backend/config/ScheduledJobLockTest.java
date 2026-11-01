@@ -72,7 +72,8 @@ class ScheduledJobLockTest extends AbstractIntegrationTest {
 
     private String stuckRegistration() {
         String email = "stuck-" + UUID.randomUUID() + "@example.com";
-        Instant startedAt = clock.instant().minus(Duration.ofMinutes(3));
+        // Past RegistrationDispatchWatchdog's grace period (15 min) and inside its lookback (60 min).
+        Instant startedAt = clock.instant().minus(Duration.ofMinutes(20));
         events.save(new RegistrationEvent(email, RegistrationEventType.REGISTER_STARTED, null, null, null, startedAt));
         return email;
     }

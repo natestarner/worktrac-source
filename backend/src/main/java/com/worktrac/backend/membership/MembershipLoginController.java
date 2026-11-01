@@ -80,11 +80,10 @@ public class MembershipLoginController {
      * Anything richer here is a user-enumeration oracle; see {@link MembershipInviteService}'s
      * class comment for the full reasoning.
      *
-     * <p>The email is dispatched by the service, on an {@code AFTER_COMMIT} listener, so a slow or
-     * failing send can never roll back the invitation itself — the same ordering registration
-     * uses. It is deliberately NOT published from here: an {@code AFTER_COMMIT} listener silently
-     * discards anything published once the service transaction has already committed, which is
-     * exactly the bug {@code MembershipInviteService#announce} documents.
+     * <p>The email is an outbox row written by the service inside its own transaction and sent
+     * after commit, so a slow or failing send can never roll back the invitation itself — the same
+     * ordering registration uses. It is deliberately NOT published from here, where the service
+     * transaction has already committed; {@code MembershipInviteService#announce} explains why.
      */
     @PostMapping("/{personId}/invite")
     @RequiresPermission(Permission.MANAGE_LOGINS)

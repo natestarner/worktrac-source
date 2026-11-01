@@ -27,13 +27,32 @@ this indistinguishability.
 This whole section exists because a real registration vanished with zero trace. See
 `docs/incidents/2026-08-01-email-blind-spots-and-delete-timeout.md`.
 
+- **Every email goes through the transactional outbox** (`outbox.Outbox`, table `outbox`). The
+  listeners are plain synchronous `@EventListener`s that write a row **inside the publisher's
+  transaction**, so the email commits or rolls back with the change that caused it. The row is
+  tried straight after commit (on `emailTaskExecutor`), and any replica's poll retries it with
+  backoff, then records FAILED. **Never send an email directly from a request, a listener or an
+  `afterCommit` hook.** That holds the only copy in one JVM's memory, and a replica scaling in loses
+  it. Full design: `docs/architecture/scaling.md`.
+  - **One outbox row = one email.** A row is retried whole, so a handler that sent two emails would
+    resend the first whenever the second failed. `MembershipAcceptedEvent` enqueues two rows.
+  - **A handler's name is stored on the row.** Renaming one strands its pending rows (they FAIL as
+    unknown). Add the new name, and keep the old until it drains.
+  - **Delivery is at-least-once.** A replica dying between ACS accepting a send and the row being
+    marked SENT means one duplicate email. Accepted, and far better than a silent loss.
+  - **FAILED is recorded once, after the LAST attempt**, with the real reason plus "after N attempts".
+    A failure that a retry recovers is a log line, not an audit event or an alert.
+    `RegistrationDispatchWatchdog`'s grace period (15 min) must outlast the whole retry schedule
+    (~9.5 min, `OutboxProperties`), or a row still retrying is reported as never dispatched.
+  - Integration tests run the outbox with **one attempt and no poll** (`AbstractIntegrationTest`),
+    so a stubbed failure shows FAILED at once and no retry lands in a later test's stubbing.
+    `OutboxTest` covers retries, leases and concurrent pollers.
 - `AsyncConfig`'s `emailTaskExecutor` uses **`CallerRunsPolicy`**, not the `ThreadPoolTaskExecutor`
-  default (`AbortPolicy`, which silently drops a task when pool+queue saturate, with nowhere for
-  an `@Async void` method's exception to go). Do not change this.
-- `RegistrationEmailEventListener`'s four handlers isolate the **SEND attempt** from the **AUDIT
-  WRITE** in separate try/catches (`sendAndRecord`/`recordSafely`). A failure persisting the
-  *SENT* row must never be misreported as the email having failed — the send may have genuinely
-  succeeded, and conflating them falsely triggers a "send failure" admin alert.
+  default (`AbortPolicy`). With the outbox, a dropped task would only delay a send to the next poll,
+  but there is still no reason to drop one. Do not change this.
+- `RegistrationEmailEventListener`'s handlers isolate the **SEND attempt** from the **AUDIT WRITE**
+  (`recordSafely`). A failure persisting the *SENT* row must never be misreported as the email
+  having failed, and must never make the outbox resend an email that already went out.
 - `RegistrationAuditService.record` is **`REQUIRES_NEW`** — load-bearing. Several failure branches
   record-then-throw from a transaction that is not `noRollbackFor`-exempted; without its own
   transaction the audit row recording the failure would roll back with everything else.

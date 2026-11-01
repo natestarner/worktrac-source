@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Tag;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.MSSQLServerContainer;
 
 import java.sql.Connection;
@@ -42,6 +43,12 @@ import java.sql.Statement;
 @SpringBootTest
 @ActiveProfiles("local")
 @Tag("integration")
+// The outbox, for tests: ONE attempt and no background poll. A test that stubs a send to fail then
+// sees the final outcome (the FAILED audit row) at once, as it always did, and no retry fires
+// minutes later into some other test's stubbing -- the cross-thread Mockito hazard backend-tests.md
+// describes. Each row is still attempted straight after its commit, on emailTaskExecutor, exactly as
+// in production. OutboxTest overrides both to exercise retries and polling.
+@TestPropertySource(properties = {"app.outbox.max-attempts=1", "app.outbox.poll-interval=PT1H"})
 public abstract class AbstractIntegrationTest {
 
     protected static final MSSQLServerContainer<?> SQL_SERVER =

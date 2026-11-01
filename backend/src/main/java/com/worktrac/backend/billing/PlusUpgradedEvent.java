@@ -16,8 +16,8 @@ package com.worktrac.backend.billing;
  *
  * <p>⚠️ <b>It carries the PLAN, and the plan rides on the event rather than being looked up in the
  * listener</b> -- the same call {@code MembershipInviteIssuedEvent} makes about the account noun,
- * and for the same reason: by the time an {@code AFTER_COMMIT} listener runs, the transaction that
- * knew the tier has committed and gone. Without it the listener could only send one email for every
+ * and for the same reason: by the time the outbox delivers the email, the transaction that knew the
+ * tier has committed and gone. Without it the listener could only send one email for every
  * paid tier, and it did: a trainer who paid for Pro received "Welcome to Huddle Plus", describing
  * four things they already had and none of the four they had just bought.
  */

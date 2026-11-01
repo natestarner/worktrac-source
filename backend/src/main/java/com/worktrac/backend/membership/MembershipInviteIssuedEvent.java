@@ -5,8 +5,9 @@ package com.worktrac.backend.membership;
  *
  * <p>Same shape and the same reason as {@code VerificationCodeIssuedEvent}: sending inside the
  * transaction let a slow or failing Azure Communication Services call roll back an otherwise
- * successful write. {@code AFTER_COMMIT} means the invitation exists before anyone is told about
- * it, which is the only ordering that cannot produce a link pointing at nothing.
+ * successful write. The email is an outbox row in the invitation's own transaction, sent only after
+ * it commits, so the invitation exists before anyone is told about it -- the only ordering that
+ * cannot produce a link pointing at nothing.
  *
  * <p>⚠️ Carries the RAW token — the only place it exists outside the one response that returns it.
  * The database holds a BCrypt hash and cannot reproduce this, so if the send fails, the invitation

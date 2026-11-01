@@ -19,8 +19,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 
@@ -192,36 +190,9 @@ public class AccountDeletionService {
         // there.
         accountAccessService.invalidateAccount(accountId);
 
-        cancelAtStripeAfterCommit(accountId, stripeSubscriptionId);
-    }
-
-    // Stopping the money is deliberately the LAST thing, and it happens outside this transaction.
-    //
-    // Cancelling at Stripe is an external side effect that cannot roll back. Done before the
-    // deletes, any failure further down left the household with their subscription cancelled and
-    // their account fully intact -- they lost the Plus they were paying for and kept the data they
-    // asked to erase, having been told the operation failed. Running it on afterCommit means it
-    // only ever fires for an account that actually went away.
-    //
-    // It also has to run after billing_events has been cleared: the canceller records its own
-    // failure as a BillingEvent, described in its comments as the only remaining record of what
-    // needs cancelling by hand, and clearing that table afterwards deleted exactly that row.
-    private void cancelAtStripeAfterCommit(Long accountId, String stripeSubscriptionId) {
-        if (stripeSubscriptionId == null) {
-            return;
-        }
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            // No surrounding transaction to hang the callback off (a direct call outside Spring's
-            // transaction management). Nothing has been rolled back in that case either, so
-            // running it inline is still correct.
-            stripeSubscriptionCanceller.cancel(accountId, stripeSubscriptionId);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                stripeSubscriptionCanceller.cancel(accountId, stripeSubscriptionId);
-            }
-        });
+        // Stopping the money is deliberately the LAST thing, and it happens only after this
+        // transaction commits: an outbox row written here, delivered after commit. See
+        // StripeSubscriptionCanceller for why both halves of that ordering are load-bearing.
+        stripeSubscriptionCanceller.scheduleCancellation(accountId, stripeSubscriptionId);
     }
 }

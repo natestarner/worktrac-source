@@ -8,14 +8,20 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 
-// Backs @Async methods (RegistrationEmailEventListener, AdminAlertEventListener) with a small
-// dedicated pool, rather than the default SimpleAsyncTaskExecutor (unbounded, one new thread per
-// task) -- email sends are infrequent and low-volume enough that a small bounded pool is plenty,
-// and bounding it caps how many concurrent Azure Communication Services calls one instance can
+// The pool outbox.OutboxDispatcher uses to try each outbox row straight after the commit that wrote
+// it -- off the request thread, so a slow Azure Communication Services call never delays a
+// response. (It used to back @Async email listeners directly; the outbox replaced those.) A small
+// bounded pool rather than the default SimpleAsyncTaskExecutor (unbounded, one new thread per
+// task): sends are infrequent, and bounding it caps how many concurrent ACS calls one replica can
 // have in flight.
 //
+// Nothing is lost if this pool is busy, full or gone: the row is already committed, and any
+// replica's poll delivers it. The name stays "emailTaskExecutor" because the tests wait on it by
+// name (EmailTestSupport.awaitEmailsIdle).
+//
 // CallerRunsPolicy, not the ThreadPoolTaskExecutor default (AbortPolicy): a saturated pool+queue
-// must never silently drop a task. AbortPolicy throws a TaskRejectedException that Spring's
+// must never silently drop a task. (Since the outbox, a dropped task would only delay a send until
+// the next poll -- but the policy below still gets it sent sooner, and costs nothing.) AbortPolicy throws a TaskRejectedException that Spring's
 // @Async proxy has nowhere to route (the caller is the transaction-commit hook, long gone by the
 // time the task would even be submitted) -- it's just logged by the JVM's default
 // uncaught-exception handling and the task vanishes, exactly the blackhole a real registration
