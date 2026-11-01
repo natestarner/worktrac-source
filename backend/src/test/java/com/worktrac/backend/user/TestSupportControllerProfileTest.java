@@ -45,6 +45,9 @@ class TestSupportControllerProfileTest {
     private void registerMockRegistrationEventRepository(AnnotationConfigApplicationContext context) {
         context.registerBean(RegistrationEventRepository.class,
                 () -> org.mockito.Mockito.mock(RegistrationEventRepository.class));
+        // TestCodeCache keeps its codes in the test_codes table (V89).
+        context.registerBean(org.springframework.jdbc.core.JdbcTemplate.class,
+                () -> org.mockito.Mockito.mock(org.springframework.jdbc.core.JdbcTemplate.class));
         // Added with the e2e billing-plan route, which needs to resolve a household from an email
         // and set its plan.
         context.registerBean(UserRepository.class,
