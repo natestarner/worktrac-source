@@ -89,8 +89,17 @@ public class WorkoutSessionService {
     // judge a session MORE stale using now() than clientLoggedAt would, never flip a
     // should-be-closed session into "still live" incorrectly -- so it's left on the server
     // clock. rest_seconds is independent (computed from each set's own createdAt).
+    //
+    // ⚠️ ONE LIVE SESSION PER PERSON is decided here by "find one, else create one", and two
+    // requests doing that at once both find none and both create -- two open sessions, the second
+    // never closed (findFirstByPerson_IdAndEndedAtIsNull only ever sees one of them), and the
+    // person's sets split between them. Concurrent first sets for one person are ordinary: two
+    // replicas, two family devices, or an offline queue draining while another set is logged. So
+    // the person row is locked first, and the check-then-create runs one request at a time per
+    // person. Sets for DIFFERENT people never wait on each other. LiveSessionConcurrencyTest pins it.
     @Transactional
     public WorkoutSession getOrCreateLiveSession(Person person, Instant clientLoggedAt) {
+        workoutSessionRepository.lockPersonForLiveSession(person.getId());
         Optional<WorkoutSession> live = getLiveSession(person);
         Instant now = Instant.now(clock);
         if (live.isPresent()) {
