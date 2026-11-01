@@ -4,8 +4,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 
@@ -28,10 +31,14 @@ public class BillingAuditService {
 
     private final BillingEventRepository repository;
     private final Clock clock;
+    private final TransactionTemplate ownTransaction;
 
-    public BillingAuditService(BillingEventRepository repository, Clock clock) {
+    public BillingAuditService(BillingEventRepository repository, Clock clock,
+                               PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.clock = clock;
+        this.ownTransaction = new TransactionTemplate(transactionManager);
+        this.ownTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -53,17 +60,37 @@ public class BillingAuditService {
     //
     // Stripe redelivers events on its own retry schedule and on demand from the Dashboard, so this
     // is an ordinary, expected outcome rather than an error worth alerting on.
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    //
+    // ⚠️ THE DUPLICATE IS CAUGHT OUTSIDE THE TRANSACTION THAT HIT IT. This used to be an
+    // @Transactional(REQUIRES_NEW) method catching the violation inside itself -- but the repository
+    // call had already marked that transaction rollback-only, so returning "duplicate" normally then
+    // threw UnexpectedRollbackException at commit. Every redelivered event was answered 500, not 200,
+    // and Stripe kept retrying it for days (13 times on lower in the 30 days to 2026-11-01). Here the
+    // insert's own transaction rolls back and ends inside the template, and the violation is caught
+    // after it. StripeWebhookRetryTest's third delivery pins it.
     public boolean recordIfFirstSeen(Long accountId, String stripeEventId, BillingEventType eventType,
                                       String detail) {
         try {
-            repository.saveAndFlush(new BillingEvent(accountId, stripeEventId, eventType,
-                    truncate(detail), clock.instant()));
+            ownTransaction.executeWithoutResult(status -> repository.saveAndFlush(new BillingEvent(
+                    accountId, stripeEventId, eventType, truncate(detail), clock.instant())));
             return true;
         } catch (DataIntegrityViolationException alreadyRecorded) {
             log.info("Ignoring redelivered Stripe event {}", stripeEventId);
             return false;
         }
+    }
+
+    /**
+     * Undoes {@link #recordIfFirstSeen} for an event whose processing then FAILED, so Stripe's
+     * retry of it is processed instead of being answered "already seen" and dropped.
+     *
+     * <p>Its own transaction, like the claim: the request's transaction is about to roll back (or
+     * has answered 503), and this must commit regardless. The failure itself stays recorded --
+     * the caller writes a WEBHOOK_REJECTED row with the reason.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void forgetFirstSeen(String stripeEventId) {
+        repository.deleteByStripeEventId(stripeEventId);
     }
 
     private String truncate(String detail) {

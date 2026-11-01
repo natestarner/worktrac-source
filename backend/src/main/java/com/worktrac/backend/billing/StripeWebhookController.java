@@ -112,14 +112,24 @@ public class StripeWebhookController {
             return ResponseEntity.ok().build();
         }
 
+        // ⚠️ A FAILED APPLY MUST UN-CLAIM THE EVENT. recordIfFirstSeen commits its row in its own
+        // transaction, BEFORE the apply -- so without forgetFirstSeen, the retry Stripe sends after
+        // our 5xx found that row, was answered 200 as a duplicate, and the event was never applied
+        // at all (a re-subscribe that never lifted the pause, a cancellation that kept the plan).
         try {
             applyEvent(event, accountId);
         } catch (StripeException e) {
+            auditService.forgetFirstSeen(event.id());
             auditService.record(accountId, BillingEventType.WEBHOOK_REJECTED,
                     "Could not re-fetch subscription: " + e.getMessage());
             log.error("Stripe webhook {} could not be applied", event.id(), e);
             // 5xx so Stripe retries: we could not reach Stripe to re-fetch, which is transient.
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        } catch (RuntimeException e) {
+            // A database failure mid-apply: this transaction rolls back and the request answers 5xx
+            // (GlobalExceptionHandler), so Stripe retries -- which must be processed, not deduplicated.
+            auditService.forgetFirstSeen(event.id());
+            throw e;
         }
 
         // Always 200 for anything we understood, even when we chose not to act -- a non-2xx makes
