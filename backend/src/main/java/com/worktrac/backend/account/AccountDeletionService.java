@@ -1,5 +1,6 @@
 package com.worktrac.backend.account;
 
+import com.worktrac.backend.membership.AccountAccessService;
 import com.worktrac.backend.membership.AccountMembershipRepository;
 import com.worktrac.backend.membership.MembershipInviteRepository;
 import com.worktrac.backend.billing.BillingEventRepository;
@@ -48,6 +49,7 @@ public class AccountDeletionService {
     private final MembershipInviteRepository inviteRepository;
     private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AccountAccessService accountAccessService;
 
     public AccountDeletionService(AccountMembershipRepository membershipRepository,
                                    MembershipInviteRepository inviteRepository,
@@ -58,7 +60,8 @@ public class AccountDeletionService {
                                    ImportBatchCleanup importBatchCleanup, PersonRepository personRepository,
                                    ExerciseRepository exerciseRepository,
                                    TagRepository tagRepository, UserRepository userRepository,
-                                   AccountRepository accountRepository, PasswordEncoder passwordEncoder) {
+                                   AccountRepository accountRepository, PasswordEncoder passwordEncoder,
+                                  AccountAccessService accountAccessService) {
         this.stripeSubscriptionCanceller = stripeSubscriptionCanceller;
         this.subscriptionRepository = subscriptionRepository;
         this.billingEventRepository = billingEventRepository;
@@ -72,6 +75,7 @@ public class AccountDeletionService {
         this.inviteRepository = inviteRepository;
         this.accountRepository = accountRepository;
         this.passwordEncoder = passwordEncoder;
+        this.accountAccessService = accountAccessService;
     }
 
     @Transactional
@@ -181,6 +185,12 @@ public class AccountDeletionService {
         }
         accountRepository.deleteById(accountId);
         log.info("Deleted account {}", accountId);
+
+        // Every replica may still hold this household's memberships in its access cache, and a
+        // deleted household must stop answering at once -- not when each entry happens to expire.
+        // Per ACCOUNT, not per user: a member who also belongs to another household stays signed in
+        // there.
+        accountAccessService.invalidateAccount(accountId);
 
         cancelAtStripeAfterCommit(accountId, stripeSubscriptionId);
     }

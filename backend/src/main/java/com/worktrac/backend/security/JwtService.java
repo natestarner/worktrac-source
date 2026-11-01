@@ -177,7 +177,8 @@ public class JwtService {
             // existing 30-day tokens keep working rather than all being invalidated at deploy.
             Number tokenVersion = claims.get("tv", Number.class);
             return Optional.of(new AccountPrincipal(userId, accountId, email, role == null ? "USER" : role,
-                    tokenVersion == null ? 0 : tokenVersion.intValue()));
+                    tokenVersion == null ? 0 : tokenVersion.intValue(),
+                    claims.getIssuedAt() == null ? null : claims.getIssuedAt().toInstant()));
         } catch (JwtException | IllegalArgumentException ex) {
             return Optional.empty();
         }

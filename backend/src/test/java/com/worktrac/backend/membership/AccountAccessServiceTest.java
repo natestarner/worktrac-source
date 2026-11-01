@@ -7,12 +7,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,6 +34,7 @@ class AccountAccessServiceTest {
 
     private AccountMembershipRepository repository;
     private SubscriptionService subscriptionService;
+    private AccessInvalidationLog invalidationLog;
     private AccountAccessService service;
 
     @BeforeEach
@@ -41,7 +45,8 @@ class AccountAccessServiceTest {
         subscriptionService = mock(SubscriptionService.class);
         when(subscriptionService.entitlementOf(anyLong()))
                 .thenReturn(new SubscriptionService.Entitlement(BillingPlan.PLUS, null));
-        service = new AccountAccessService(repository, subscriptionService);
+        invalidationLog = mock(AccessInvalidationLog.class);
+        service = new AccountAccessService(repository, subscriptionService, invalidationLog, Clock.systemUTC());
         stub(USER, ACCOUNT, AccountRole.OWNER, 100L, TOKEN_VERSION);
     }
 
@@ -217,6 +222,90 @@ class AccountAccessServiceTest {
 
             service.resolve(USER, OTHER_ACCOUNT, TOKEN_VERSION);
             verify(repository, times(1)).findAccessRow(USER, OTHER_ACCOUNT);
+        }
+    }
+
+    // The backend runs as several replicas, each with its own cache. A token minted after a change
+    // on ANOTHER replica can reach this one before it has heard about the change; refusing it would
+    // be a 401, which the client treats as "signed out". So a token that proves the cache is out of
+    // date re-reads -- and one that is merely old is still refused from memory.
+    @Nested
+    @DisplayName("a token newer than the cache")
+    class NewerToken {
+
+        @Test
+        void aHigherTokenVersionReReadsInsteadOfRefusing() {
+            service.resolve(USER, ACCOUNT, TOKEN_VERSION);
+            // The password was changed on another replica: the database now holds TOKEN_VERSION + 1.
+            stub(USER, ACCOUNT, AccountRole.OWNER, 100L, TOKEN_VERSION + 1);
+
+            assertThat(service.resolve(USER, ACCOUNT, TOKEN_VERSION + 1, Instant.now())).isPresent();
+            verify(repository, times(2)).findAccessRow(USER, ACCOUNT);
+        }
+
+        @Test
+        void aLowerTokenVersionIsRefusedWithoutARead() {
+            service.resolve(USER, ACCOUNT, TOKEN_VERSION);
+
+            assertThat(service.resolve(USER, ACCOUNT, TOKEN_VERSION - 1, Instant.now())).isEmpty();
+            verify(repository, times(1)).findAccessRow(USER, ACCOUNT);
+        }
+
+        @Test
+        void aTokenIssuedAfterACachedAbsenceReReads() {
+            when(repository.findAccessRow(USER, OTHER_ACCOUNT)).thenReturn(Optional.empty());
+            assertThat(service.resolve(USER, OTHER_ACCOUNT, TOKEN_VERSION, Instant.now().minusSeconds(60))).isEmpty();
+            // The invite was accepted on another replica.
+            stub(USER, OTHER_ACCOUNT, AccountRole.MEMBER, 200L, TOKEN_VERSION);
+
+            assertThat(service.resolve(USER, OTHER_ACCOUNT, TOKEN_VERSION, Instant.now().plusSeconds(1))).isPresent();
+        }
+
+        // A revoked device keeps retrying its old token. That must stay a memory read.
+        @Test
+        void anOldTokenRetriedAgainstACachedAbsenceDoesNotRead() {
+            when(repository.findAccessRow(USER, OTHER_ACCOUNT)).thenReturn(Optional.empty());
+            Instant issued = Instant.now().minusSeconds(3600);
+            for (int i = 0; i < 5; i++) {
+                service.resolve(USER, OTHER_ACCOUNT, TOKEN_VERSION, issued);
+            }
+            verify(repository, times(1)).findAccessRow(USER, OTHER_ACCOUNT);
+        }
+
+        @Test
+        void aTokenWithNoIssuedAtNeverForcesARead() {
+            when(repository.findAccessRow(USER, OTHER_ACCOUNT)).thenReturn(Optional.empty());
+            service.resolve(USER, OTHER_ACCOUNT, TOKEN_VERSION, null);
+            service.resolve(USER, OTHER_ACCOUNT, TOKEN_VERSION, null);
+            verify(repository, times(1)).findAccessRow(USER, OTHER_ACCOUNT);
+        }
+    }
+
+    // Every invalidation must also reach the other replicas, at the same scope.
+    @Nested
+    @DisplayName("invalidations are recorded for other replicas")
+    class Recorded {
+
+        @Test
+        void eachScopeIsRecordedWithTheIdsThatDescribeIt() {
+            service.invalidate(USER, ACCOUNT);
+            service.invalidateUser(USER);
+            service.invalidateAccount(ACCOUNT);
+
+            verify(invalidationLog).record(USER, ACCOUNT);
+            verify(invalidationLog).record(USER, null);
+            verify(invalidationLog).record(null, ACCOUNT);
+        }
+
+        @Test
+        void applyingAReplayedRowEvictsLocallyWithoutRecordingItAgain() {
+            service.resolve(USER, ACCOUNT, TOKEN_VERSION);
+
+            service.evictLocally(USER, null);
+
+            service.resolve(USER, ACCOUNT, TOKEN_VERSION);
+            verify(repository, times(2)).findAccessRow(USER, ACCOUNT);
+            verify(invalidationLog, never()).record(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         }
     }
 }

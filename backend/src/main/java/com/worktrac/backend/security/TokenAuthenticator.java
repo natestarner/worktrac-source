@@ -66,7 +66,8 @@ public class TokenAuthenticator {
     public Optional<AccountPrincipal> authenticate(String rawToken) {
         return jwtService.parseToken(rawToken)
                 .flatMap(principal -> accountAccessService
-                        .resolve(principal.userId(), principal.accountId(), principal.tokenVersion())
+                        .resolve(principal.userId(), principal.accountId(), principal.tokenVersion(),
+                                principal.issuedAt())
                         .map(principal::withAccess));
     }
 
