@@ -149,7 +149,7 @@ use. An App Store build can stay in use for months, so this is the evidence
 
 ```bash
 az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a   --analytics-query   "ContainerAppConsoleLogs_CL
-   | where ContainerAppName_s == 'worktrac-backend-production'
+   | where ContainerAppName_s == 'worktrac-backend-prod'
    | where TimeGenerated > ago(30d)
    | where Log_s contains 'Session check'
    | extend client = extract(@'\[client=([^\]]+)\]', 1, Log_s),
@@ -215,6 +215,37 @@ az extension add --name log-analytics
 
 It installs into the `AZURE_CONFIG_DIR` above, so it's per-profile — installing it in the
 default profile does not make it available to Claude's, or vice versa.
+
+### Health metrics: outbox backlog and DB pool, per replica
+
+Every replica logs one `health-metrics` line a minute (`config/HealthMetricsLogger`). The
+multi-replica alerts are Log Analytics scheduled-query rules over these lines, in
+`worktrac-deploy`'s `infra/` Bicep. **The keys are an API.** Add new ones at the end, and never
+rename one without changing the alert rules in the same release.
+
+```
+health-metrics outboxPending=0 outboxOldestPendingSeconds=0 outboxFailedLastHour=0 poolActive=1 poolIdle=9 poolTotal=10 poolMax=10 poolWaiting=0
+```
+
+```bash
+az monitor log-analytics query --workspace ed5b43a9-96fa-4194-9fb4-0d4b7932a86a --analytics-query   "ContainerAppConsoleLogs_CL
+   | where ContainerAppName_s == 'worktrac-backend-prod' and TimeGenerated > ago(1h)
+   | where Log_s contains 'health-metrics '
+   | parse Log_s with * 'outboxPending=' pending:int ' outboxOldestPendingSeconds=' oldest:long
+       ' outboxFailedLastHour=' failed:int ' poolActive=' active:int ' poolIdle=' idle:int
+       ' poolTotal=' total:int ' poolMax=' max:int ' poolWaiting=' waiting:int *
+   | project TimeGenerated, replica = ContainerGroupName_s, pending, oldest, failed, active, total, max, waiting
+   | order by TimeGenerated desc" -o table
+```
+
+What each alert asks (prod only; lower scales to zero, so "no line" there is normal):
+
+| Alert | Condition |
+|---|---|
+| Email stuck | `max(oldest) > 900` over 15 min. That's past the outbox's ~9.5-minute retry schedule, so something is wrong |
+| Email failed | `max(failed) > 0` over 15 min. A row gave up; its reason is on the row and in the audit trail |
+| Pool saturated | `max(waiting) > 0` in 3 or more of the last 5 minutes, on any replica |
+| Replica silent | no `health-metrics` line from prod for 5 min |
 
 ## Reading quota activity
 
