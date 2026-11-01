@@ -186,6 +186,23 @@ Contact Us bug report could only be matched to the container logs by timestamp. 
   through it — never `request.getRemoteAddr()` directly. See
   `docs/incidents/2026-08-31-xff-spoofing-bypassed-per-ip-rate-limits.md`.
 
+## The backend runs as several replicas — nothing may rely on being the only JVM
+
+Azure Container Apps runs this backend as more than one replica, behind one load balancer with no
+sticky sessions. Consecutive requests from one device can land on different JVMs, and every JVM runs
+its own copy of everything in-process. Full plan: `docs/architecture/scaling.md`.
+
+- **Every `@Scheduled` method also carries `@SchedulerLock`** (ShedLock, `config/SchedulingConfig`,
+  table `shedlock`). Without it each replica runs the job on its own timer. Set `lockAtLeastFor`
+  just under the interval and `lockAtMostFor` as the crash fallback. A job whose run is skipped
+  because its holder died must be safe to wait for the next tick.
+  `EveryScheduledJobIsLockedTest` fails the build on an unlocked one, and on two jobs sharing a
+  lock name.
+- **Never delete a `shedlock` row**, in a test or by hand. ShedLock remembers which rows it inserted
+  and only UPDATEs them afterwards, so a deleted row makes that job skip every tick until restart,
+  silently. Expire it instead (`UPDATE shedlock SET lock_until = …past…`), as
+  `ScheduledJobLockTest` does.
+
 ## Concurrency — the local database must match Azure SQL
 
 - **`READ_COMMITTED_SNAPSHOT` is ON everywhere, and that is what makes a read-then-write

@@ -55,6 +55,7 @@
              is on Java 25); do not use the bucket4j_jdk8-core artifact. -->
         <bucket4j.version>8.21.0</bucket4j.version>
         <caffeine.version>3.3.0</caffeine.version>
+        <shedlock.version>7.10.1</shedlock.version>
         <azure-communication-email.version>1.1.6</azure-communication-email.version>
         <!-- Latest STABLE at time of writing; 33.5.0-beta.1 exists and is deliberately not used.
              The Stripe API version itself is pinned separately via app.stripe.api-version, so an
@@ -140,6 +141,20 @@
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
             <version>${caffeine.version}</version>
+        </dependency>
+
+        <!-- Runs each @Scheduled job on ONE replica per interval: a row per job in the `shedlock`
+             table (V85) is the lock. Without it every replica runs every watchdog: duplicate
+             audit rows and admin alerts, N x the Stripe calls. See SchedulingConfig. -->
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+            <version>${shedlock.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-jdbc-template</artifactId>
+            <version>${shedlock.version}</version>
         </dependency>
 
         <!-- Azure Communication Services Email (registration verification codes) -->
