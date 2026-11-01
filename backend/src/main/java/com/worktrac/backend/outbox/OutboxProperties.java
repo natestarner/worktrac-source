@@ -37,6 +37,11 @@ public class OutboxProperties {
     // Rows claimed per poll, per replica.
     private int batchSize = 20;
 
+    // Emails delivered per minute across all replicas -- the per-minute quota Azure Communication
+    // Services has granted (its default for a custom domain is 30). An email row due while the last
+    // minute is full is put back for a few seconds without spending an attempt.
+    private int emailSendsPerMinute = 30;
+
     // SENT rows are kept this long for diagnosis, then deleted. FAILED rows are never deleted
     // automatically.
     private Duration sentRetention = Duration.ofDays(30);
@@ -79,6 +84,14 @@ public class OutboxProperties {
 
     public void setBatchSize(int batchSize) {
         this.batchSize = batchSize;
+    }
+
+    public int getEmailSendsPerMinute() {
+        return emailSendsPerMinute;
+    }
+
+    public void setEmailSendsPerMinute(int emailSendsPerMinute) {
+        this.emailSendsPerMinute = emailSendsPerMinute;
     }
 
     public Duration getSentRetention() {

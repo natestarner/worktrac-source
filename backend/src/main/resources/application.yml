@@ -107,7 +107,11 @@ app:
     import-max-bytes: ${APP_REQUEST_IMPORT_MAX_BYTES:6291456}
   rate-limit:
     per-ip-per-hour: ${APP_RATE_LIMIT_PER_IP_PER_HOUR:10}
-    global-email-sends-per-hour: ${APP_RATE_LIMIT_GLOBAL_EMAIL_SENDS_PER_HOUR:30}
+    # The global email caps (GlobalEmailCap), counted from the outbox across every replica. Hard
+    # cap: keep it just below the hourly quota Azure Communication Services has granted. Warning:
+    # alerts the admin, refuses nothing.
+    global-email-sends-per-hour: ${APP_RATE_LIMIT_GLOBAL_EMAIL_SENDS_PER_HOUR:1000}
+    global-email-warning-per-hour: ${APP_RATE_LIMIT_GLOBAL_EMAIL_WARNING_PER_HOUR:150}
     # Login (LoginRateLimiter). /api/auth/login had no throttle at all before this -- see
     # RateLimitProperties for why these are looser than the contact limits.
     # Narrowest bucket: attempts against ONE address, from anywhere. Consumed for every
@@ -122,6 +126,12 @@ app:
     contact-per-user-per-hour: ${APP_RATE_LIMIT_CONTACT_PER_USER_PER_HOUR:5}
     contact-per-ip-per-hour: ${APP_RATE_LIMIT_CONTACT_PER_IP_PER_HOUR:10}
     contact-global-per-hour: ${APP_RATE_LIMIT_CONTACT_GLOBAL_PER_HOUR:20}
+  outbox:
+    # Emails sent per minute across all replicas (OutboxDispatcher paces to it). Match the
+    # per-minute quota Azure Communication Services has granted: a burst then waits a minute or
+    # two in the outbox instead of being throttled by ACS. Codes last 15 minutes, so the wait is
+    # harmless.
+    email-sends-per-minute: ${APP_OUTBOX_EMAIL_SENDS_PER_MINUTE:30}
   quota:
     # Per-household ceilings -- see QuotaProperties. Every one is set an order of magnitude or two
     # above real use: these exist to stop one account growing the shared database without bound
