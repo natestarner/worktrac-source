@@ -1,5 +1,7 @@
 package com.worktrac.backend.membership;
 
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -9,6 +11,17 @@ import java.util.List;
 import java.util.Optional;
 
 public interface MembershipInviteRepository extends JpaRepository<MembershipInvite, Long> {
+
+    // ⚠️ PESSIMISTIC WRITE LOCK (SQL Server: WITH (UPDLOCK, HOLDLOCK, ROWLOCK)), held until the
+    // caller's transaction ends. The attempt ceiling on this row is read, compared and incremented in
+    // Java; without the lock, parallel attempts -- several replicas, or one attacker with many
+    // connections -- all read the same count, all get a BCrypt comparison, and overwrite each
+    // other's increments, so the ceiling never fires. With it they take turns, and the count is
+    // exact. Only for the attempt-checking paths: it serializes concurrent requests for ONE row.
+    // SecurityCounterConcurrencyTest is the pin.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select i from MembershipInvite i where i.id = :id")
+    Optional<MembershipInvite> findByIdForUpdate(@Param("id") Long id);
 
     /**
      * The one outstanding invite for a person, if any.

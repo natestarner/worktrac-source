@@ -141,7 +141,9 @@ public class RegistrationService {
     @Transactional(noRollbackFor = UnauthorizedException.class)
     public AuthResponse confirmEmail(ConfirmEmailRequest request) {
         String email = request.email().trim().toLowerCase();
-        PendingRegistration pending = pendingRegistrationRepository.findByEmail(email)
+        // Locked, so parallel guesses take turns and the 5-attempt ceiling is exact -- see
+        // findByEmailForUpdate.
+        PendingRegistration pending = pendingRegistrationRepository.findByEmailForUpdate(email)
                 .orElseThrow(() -> {
                     log.warn("Confirm-email failed for {}: no pending registration", email);
                     auditService.record(email, RegistrationEventType.CONFIRM_NOT_FOUND, null);
