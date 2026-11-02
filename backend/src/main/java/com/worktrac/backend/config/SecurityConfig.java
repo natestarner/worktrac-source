@@ -77,6 +77,9 @@ public class SecurityConfig {
                                 "/api/auth/test/member-visibility",
                                 "/api/auth/test/pending-invite").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // The Container Apps liveness/readiness probes. Same public, detail-free
+                        // answer as /actuator/health (show-details: never).
+                        .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
                         // Server-to-server (Azure Event Grid), no JWT possible -- gated instead
                         // by EmailDeliveryWebhookController's own query-param shared secret.
                         .requestMatchers("/api/webhooks/email-delivery").permitAll()

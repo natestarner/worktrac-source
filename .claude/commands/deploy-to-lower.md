@@ -50,7 +50,7 @@ failures — subject to the guardrails.
   lower nightly instead (`lower-e2e-nightly.yml`; `e2e-tests.md`, "Tiers").
 - Lower URLs: frontend `https://app.dev.huddle.fitness`
   (`https://black-flower-0c9bf9d0f.7.azurestaticapps.net`), backend health
-  `https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io/actuator/health`.
+  `https://api.dev.huddle.fitness/actuator/health`.
 - **Lower is a single, shared, mutable environment — deploys serialize but don't gate on
   green.** `deploy-lower.yml` has a `concurrency` group, so if another worktree's deploy is
   already running, this one **queues** rather than overlapping (no two `e2e-tests` runs ever

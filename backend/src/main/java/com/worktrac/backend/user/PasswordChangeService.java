@@ -70,12 +70,19 @@ public class PasswordChangeService {
      * more days, on a screen that implies the opposite, is the same failure
      * {@code PasswordResetService} already refuses to ship.
      */
-    @Transactional
+    // noRollbackFor: the wrong-current-password branch saves an incremented failed-attempt count and
+    // then throws ForbiddenException. Without this, that throw rolled the count back every time, so
+    // ten wrong guesses here never locked anything (SecurityCounterConcurrencyTest pins it) -- the
+    // same bug RegistrationService.confirmEmail and MembershipInviteService.requireValidInvite once
+    // had.
+    @Transactional(noRollbackFor = {ForbiddenException.class, LockedException.class})
     public AuthResponse changePassword(Long userId, Long accountId, ChangePasswordRequest request) {
         Instant now = clock.instant();
         // The session already proved this id exists; a miss here means the account was deleted
         // mid-request, which is the signed-out path rather than a distinct error.
-        User user = userRepository.findById(userId)
+        // Locked, so the attempt count and the token_version bump below are exact under parallel
+        // requests -- see findByIdForUpdate.
+        User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new UnauthorizedException("That login is no longer active."));
 
         // Checked BEFORE the comparison, so a locked account costs no BCrypt -- login's ordering,

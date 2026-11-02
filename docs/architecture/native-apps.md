@@ -180,7 +180,11 @@ time.
    `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (the .p8 file's contents), `APPLE_TEAM_ID`,
    `MATCH_PASSWORD`, `MATCH_GIT_URL` (`https://github.com/<owner>/worktrac-certs.git`),
    `MATCH_GIT_BASIC_AUTHORIZATION` (base64 of `username:token` for the fine-grained token).
-   Variable: `NATIVE_API_URL` (the lower or production backend origin).
+   Variable: `NATIVE_API_URL`: `https://api.dev.huddle.fitness` (mobile-lower) or
+   `https://api.huddle.fitness` (mobile-production). Use these, never the raw
+   `*.azurecontainerapps.io` names: a store binary keeps its API origin for months, and the custom
+   domains survive any change behind them (a new Container App, Front Door). Builds from before the
+   switch still call the ACA name, which keeps working and stays in the CSP until they have aged out.
 2. **Actions → "Release mobile app" → lane `certificates`**, environment `lower`. This creates the
    distribution certificate and both App Store profiles in the certificates repo. Once only, then
    yearly.

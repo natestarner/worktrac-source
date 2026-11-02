@@ -75,7 +75,7 @@ jobs:
       run:
         working-directory: frontend
     env:
-      NATIVE_API_URL: https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io
+      NATIVE_API_URL: https://api.dev.huddle.fitness
     steps:
       - name: The lower test-support key is configured
         # Before checkout, so frontend/ (the job's default) doesn't exist yet.
