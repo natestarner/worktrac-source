@@ -1,5 +1,6 @@
 package com.worktrac.backend.registrationaudit;
 
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -82,7 +83,12 @@ public class RegistrationDispatchWatchdog {
         this.clock = clock;
     }
 
+    // One replica per 5-minute interval (SchedulingConfig). Without the lock, two replicas running
+    // the same sweep at once would both find the same unresolved REGISTER_STARTED and both record
+    // (and alert on) the missing dispatch -- the "already flagged" guard in WATCHED is a read, so it
+    // cannot stop two concurrent runs.
     @Scheduled(fixedDelayString = "PT5M", initialDelayString = "PT5M")
+    @SchedulerLock(name = "registrationDispatchWatchdog", lockAtLeastFor = "PT4M", lockAtMostFor = "PT4M30S")
     public void checkForMissingDispatch() {
         Instant now = clock.instant();
         Instant windowStart = now.minus(LOOKBACK_WINDOW);

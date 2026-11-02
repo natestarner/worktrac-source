@@ -1,6 +1,7 @@
 package com.worktrac.backend.billing;
 
 import com.stripe.exception.StripeException;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -56,8 +57,11 @@ public class SubscriptionReconciliationWatchdog {
     }
 
     // Hourly. Far less frequent than the email watchdog's 5 minutes, because the failure it catches
-    // costs money slowly rather than losing a person's registration.
+    // costs money slowly rather than losing a person's registration. One replica per hour
+    // (SchedulingConfig): without the lock, every replica would ask Stripe about every lapsed
+    // subscription and write its own drift audit row.
     @Scheduled(fixedDelayString = "PT1H", initialDelayString = "PT5M")
+    @SchedulerLock(name = "subscriptionReconciliationWatchdog", lockAtLeastFor = "PT55M", lockAtMostFor = "PT59M")
     public void reconcileLapsedSubscriptions() {
         if (!stripeService.isConfigured()) {
             return;
