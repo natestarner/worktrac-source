@@ -201,7 +201,11 @@ export async function waitForOutboxDrain(page: Page, timeout = 15000) {
   // very request this helper exists to wait for.
   const api = trackApiRequests(page);
   try {
-    await expect(page.getByText(/waiting to sync/i)).toBeHidden({ timeout });
+    // The banner's count button only, never page text: the Help page's offline section quotes "3
+    // changes waiting to sync" as an example and Contact Us lists "Changes waiting to sync" in its
+    // diagnostics, so a page-wide match on a spec that ends on either screen waited on prose that
+    // never hides (the onboarding tour's hard-offline mode, ~1 run in 6).
+    await expect(page.getByRole('button', { name: /^\d+ changes? waiting to sync$/i })).toBeHidden({ timeout });
     await expect(savingRow(page)).toBeHidden({ timeout });
     await expect
       .poll(() => api.quietForMs(), {

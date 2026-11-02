@@ -16,17 +16,27 @@ import com.worktrac.backend.workoutsession.WorkoutSession;
 import com.worktrac.backend.workoutsession.WorkoutSessionDto;
 import com.worktrac.backend.workoutsession.WorkoutSessionRepository;
 import com.worktrac.backend.workoutsession.WorkoutSessionService;
+import org.hibernate.exception.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 @Service
 public class WorkoutSetService {
+
+    private static final Logger log = LoggerFactory.getLogger(WorkoutSetService.class);
+    private static final String CLIENT_KEY_INDEX = "UX_workout_sets_client_key";
 
     private final WorkoutSetRepository workoutSetRepository;
     private final WorkoutSessionRepository workoutSessionRepository;
@@ -37,11 +47,13 @@ public class WorkoutSetService {
     private final StatsService statsService;
     private final SetMeasures setMeasures;
     private final Clock clock;
+    private final TransactionTemplate writeTransaction;
+    private final TransactionTemplate readTransaction;
 
     public WorkoutSetService(WorkoutSetRepository workoutSetRepository, WorkoutSessionRepository workoutSessionRepository,
                               WorkoutSessionService workoutSessionService, ExerciseRepository exerciseRepository,
                               AccountRepository accountRepository, PersonService personService, StatsService statsService,
-                              SetMeasures setMeasures, Clock clock) {
+                              SetMeasures setMeasures, Clock clock, PlatformTransactionManager transactionManager) {
         this.workoutSetRepository = workoutSetRepository;
         this.workoutSessionRepository = workoutSessionRepository;
         this.workoutSessionService = workoutSessionService;
@@ -51,6 +63,9 @@ public class WorkoutSetService {
         this.statsService = statsService;
         this.setMeasures = setMeasures;
         this.clock = clock;
+        this.writeTransaction = new TransactionTemplate(transactionManager);
+        this.readTransaction = new TransactionTemplate(transactionManager);
+        this.readTransaction.setReadOnly(true);
     }
 
     // Logs into the person's auto-managed live session: reuses it, auto-closes and
@@ -58,8 +73,12 @@ public class WorkoutSetService {
     // last_activity_at. This is the path a live (not retroactive) set always takes, and
     // the ONLY path that computes rest_seconds -- see computeRestSeconds below and the
     // V17 migration for why this must never be done from logSetIntoSession too.
-    @Transactional
     public LogSetResultDto logLiveSet(AccountAccess access, Long personId, LogSetRequest request) {
+        return answeringConcurrentCopies(access, request.idempotencyKey(),
+                () -> writeLiveSet(access, personId, request));
+    }
+
+    private LogSetResultDto writeLiveSet(AccountAccess access, Long personId, LogSetRequest request) {
         Person person = personService.requireWritablePerson(personId, access);
         LogSetResultDto duplicate = findDuplicate(access, request.idempotencyKey());
         if (duplicate != null) {
@@ -91,8 +110,12 @@ public class WorkoutSetService {
     // (a manual/backfilled session, or an old session being resumed to add a forgotten
     // set), so any created_at gap against a prior set would be meaningless, not just
     // imprecise. See CLAUDE.md's Data Model Notes for the full rationale.
-    @Transactional
     public LogSetResultDto logSetIntoSession(AccountAccess access, Long sessionId, LogSetRequest request) {
+        return answeringConcurrentCopies(access, request.idempotencyKey(),
+                () -> writeSetIntoSession(access, sessionId, request));
+    }
+
+    private LogSetResultDto writeSetIntoSession(AccountAccess access, Long sessionId, LogSetRequest request) {
         LogSetResultDto duplicate = findDuplicate(access, request.idempotencyKey());
         if (duplicate != null) {
             return duplicate;
@@ -112,6 +135,46 @@ public class WorkoutSetService {
         Measure measure = resolveMeasure(exercise, request.reps(), request.durationSeconds());
         return insertSetAndDetectPr(person, session, exercise, request.weight(), measure,
                 account.getDefaultUnit(), null, loggedAt, request.idempotencyKey());
+    }
+
+    // Runs one set write in its own transaction, and answers a copy that lost the race with the set
+    // that won it.
+    //
+    // findDuplicate handles a copy that arrives after the first one committed. Two copies in flight
+    // at once -- the client gave up on a slow request and the outbox replayed it while the server was
+    // still working, which is what lie-fi produces -- both find nothing, and the second insert hits
+    // UX_workout_sets_client_key. That used to answer 503, "having trouble reaching your data", for
+    // a set that WAS saved; the outbox replayed it until findDuplicate answered. Now the loser looks
+    // up the winner and answers with it, exactly as a later replay would.
+    //
+    // ⚠️ The violation is caught OUTSIDE the transaction that hit it, which is why these two methods
+    // use a TransactionTemplate instead of @Transactional: the failed insert has already marked that
+    // transaction rollback-only, so it can't be read from or committed (BillingAuditService
+    // .recordIfFirstSeen paid for learning that). The insert blocks on the winner's key lock until
+    // the winner commits, so by the time the violation arrives the winner is there to be read.
+    //
+    // This is a lookup, not a retry: nothing is re-run. If no visible winner is found (the forged-key
+    // case findDuplicate describes, or a winner that rolled back), the original error is rethrown.
+    private LogSetResultDto answeringConcurrentCopies(AccountAccess access, String idempotencyKey,
+                                                      Supplier<LogSetResultDto> write) {
+        try {
+            return writeTransaction.execute(status -> write.get());
+        } catch (DataIntegrityViolationException e) {
+            if (!violates(e, CLIENT_KEY_INDEX)) {
+                throw e;
+            }
+            LogSetResultDto winner = readTransaction.execute(status -> findDuplicate(access, idempotencyKey));
+            if (winner == null) {
+                throw e;
+            }
+            log.info("Answered a concurrent copy of set {} with the copy that saved first", winner.set().id());
+            return winner;
+        }
+    }
+
+    private static boolean violates(DataIntegrityViolationException e, String constraint) {
+        return e.getCause() instanceof ConstraintViolationException cve
+                && constraint.equalsIgnoreCase(cve.getConstraintName());
     }
 
     // What this set actually measures, reconciled against what its exercise is tracked in.
@@ -173,7 +236,8 @@ public class WorkoutSetService {
                 // endpoint that looks like a write. Treat it as no duplicate instead.
                 //
                 // Residual, and deliberately accepted: the insert that follows will then hit the
-                // unique index and fail as a 500, which the outbox retries. That is only reachable
+                // unique index, answeringConcurrentCopies finds no visible winner either, and the
+                // write fails as a 503, which the outbox retries. That is only reachable
                 // by forging another person's key -- a client-generated UUID that appears in no
                 // response this caller can see -- so it is not a collision anyone reaches by
                 // accident. Failing the forger's own write is a better outcome than serving them

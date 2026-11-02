@@ -146,13 +146,26 @@ test.describe('Offline mode — reads over the warmed cache', () => {
 
     // Kit's History must have reached this device before the connection goes: "Kit has no workouts"
     // is only true once it has. Offline before then, History says it needs a connection instead
-    // (history-first-load-unavailable.spec.ts) -- same wait as offline-cache-warming.spec.ts.
-    const kitHistoryWarmed = page.waitForResponse((response) => /\/api\/people\/\d+\/history\/sync$/.test(response.url()));
+    // (history-first-load-unavailable.spec.ts).
+    //
+    // KIT's sync, fully downloaded -- not the first sync of anyone's. The set just logged refreshes
+    // Jules's History too, and that sync used to satisfy an any-person wait, cutting the connection
+    // before Kit's had landed (2 of 12 local runs, failing on "History needs a connection" for Kit).
+    // requestfinished, not response: a response event fires on headers, with the body still to come.
+    const fullySynced = new Set<string>();
+    page.on('requestfinished', async (req) => {
+      const person = req.url().match(/\/api\/people\/(\d+)\/history\/sync$/)?.[1];
+      if (person && (await req.response())?.ok()) fullySynced.add(person);
+    });
+    const kitCreated = page.waitForResponse(
+      (response) => /\/api\/people$/.test(response.url()) && response.request().method() === 'POST',
+    );
     await page.getByRole('button', { name: '+ Add person' }).click();
     await page.getByPlaceholder('Name', { exact: true }).fill('Kit');
     await page.getByRole('dialog').getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeHidden();
-    await kitHistoryWarmed;
+    const kitId = String((await (await kitCreated).json()).id);
+    await expect.poll(() => fullySynced.has(kitId), { message: "Kit's History never downloaded" }).toBe(true);
 
     await goHardOffline(page);
     await expect(offlineSavedLocallyBanner(page)).toBeVisible();
