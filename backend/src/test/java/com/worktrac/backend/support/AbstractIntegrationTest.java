@@ -93,6 +93,12 @@ public abstract class AbstractIntegrationTest {
         try (Connection conn = DriverManager.getConnection(adminUrl, SQL_SERVER.getUsername(), SQL_SERVER.getPassword());
              Statement stmt = conn.createStatement()) {
             stmt.execute("IF DB_ID(N'" + dbName + "') IS NULL EXEC('CREATE DATABASE [" + dbName + "]')");
+            // Azure SQL has READ_COMMITTED_SNAPSHOT on; a stock SQL Server container doesn't. Without
+            // it, concurrent read-then-write tests deadlock in ways lower and prod never can -- the
+            // same reason scripts/db.sh sets it on every dev database (backend-core.md, "Concurrency").
+            stmt.execute("IF EXISTS (SELECT 1 FROM sys.databases WHERE name = N'" + dbName
+                    + "' AND is_read_committed_snapshot_on = 0) EXEC('ALTER DATABASE [" + dbName
+                    + "] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE')");
         } catch (Exception e) {
             throw new IllegalStateException("Failed to create integration test database " + dbName, e);
         }

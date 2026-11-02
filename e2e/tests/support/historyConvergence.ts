@@ -30,8 +30,7 @@ export async function expectHistoryMatchesServer(page: Page, request: APIRequest
   });
 
   // The tab bar's link specifically -- the Help page (where a spec may end) links to its own
-  // "History" section too. Drain AFTER moving: the drain helper matches "waiting to sync", which is
-  // also Help page prose.
+  // "History" section too.
   // Retried, because a spec can end mid-navigation: closing the tour (started from the Help page)
   // routes back to Help a beat later, which would land after a single click here.
   await expect(async () => {
