@@ -156,3 +156,17 @@ default for a custom domain) emails a minute across all replicas. An email row d
 minute is full goes back for 10 seconds without spending an attempt. A burst therefore queues for a
 minute or two instead of being throttled by ACS. Codes last 15 minutes, so the wait is harmless.
 Raise all three numbers together after Azure raises the quota.
+
+## Seeing each replica: health-metrics lines, not an APM agent
+
+Each replica logs a `health-metrics` line every minute: the outbox backlog (oldest pending age,
+failures in the last hour) and its own Hikari pool (active, waiting). Log Analytics alert rules read
+these lines (`docs/azure-read-only-access.md` has the query and the alert table). Container Apps'
+and Azure SQL's built-in metrics cover CPU, memory, requests and replicas.
+
+The Application Insights Java agent was the plan, and was measured first (2026-11-01). It added
+about 7s to a cold start, which would put lower at about 42s against the client's 45s sign-in
+timeout. It also added about 260 MB. In production's 0.25 vCPU / 0.5 GiB container it pinned memory
+at 509 of 512 MiB and took 203s to start, against 100s without it. Revisit when the container is
+resized. Production is deliberately staying at its current size for now, to be scaled vertically
+before horizontally.
