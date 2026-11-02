@@ -1,9 +1,9 @@
-import { QueryClient, QueryClientProvider, dehydrate, hydrate, onlineManager } from '@tanstack/react-query';
+import { MutationObserver, QueryClient, QueryClientProvider, dehydrate, hydrate, onlineManager } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PAGE_LOADED_AT, useLiveSession } from './useLiveSession';
 import { markSessionEnded } from '../lib/endedSessions';
-import { persistOptions } from '../lib/queryClient';
+import { LOG_SET_MUTATION_KEY, persistOptions } from '../lib/queryClient';
 import { queryKeys } from '../api/queryKeys';
 import { getLiveSession } from '../api/sessions';
 
@@ -216,5 +216,64 @@ describe('useLiveSession revalidates a provisional session restored from the per
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(getLiveSession).not.toHaveBeenCalled();
     expect(result.current.session).toBeNull();
+  });
+});
+
+// A "no live workout" answer the hook asked for BEFORE a workout's first set lands AFTER it -- a
+// fetch already on the wire when offline mode was switched on (the network still works there), or
+// a revalidation online while that set is still saving. It used to replace the placeholder the set
+// had just seeded: the session bar went blank, and the next set started the workout over from its
+// own time, which split the end-workout recap. lib/liveSession.js keeps the placeholder while the
+// person has a set queued; e2e: parity-session-recap's "late live-session answer".
+describe('useLiveSession keeps a workout whose first set has not synced', () => {
+  const PLACEHOLDER = { id: null, startedAt: '2026-11-02T13:14:00Z' };
+
+  function queueSet(client, personId) {
+    new MutationObserver(client, { mutationKey: LOG_SET_MUTATION_KEY, mutationFn: () => new Promise(() => {}) })
+      .mutate({ mode: 'live', personId, exerciseId: 1, tempId: `optimistic-${personId}`, clientLoggedAt: PLACEHOLDER.startedAt })
+      .catch(() => {});
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    onlineManager.setOnline(true);
+  });
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it('a "none" answer asked for before the first set does not erase that set\'s workout', async () => {
+    let answer;
+    getLiveSession.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderWithClient(client, 7);
+    await waitFor(() => expect(getLiveSession).toHaveBeenCalledWith(7));
+
+    // The first set is logged while that fetch is still out (ExerciseDetail's onMutate).
+    client.setQueryData(queryKeys.liveSession(7), PLACEHOLDER);
+    queueSet(client, 7);
+    await waitFor(() => expect(result.current.session).toEqual(PLACEHOLDER));
+    answer(null);
+
+    await waitFor(() => expect(client.getQueryState(queryKeys.liveSession(7)).fetchStatus).toBe('idle'));
+    expect(result.current.session).toEqual(PLACEHOLDER);
+  });
+
+  it('still clears a placeholder with no set behind it', async () => {
+    let answer;
+    getLiveSession.mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderWithClient(client, 7);
+    await waitFor(() => expect(getLiveSession).toHaveBeenCalledWith(7));
+
+    client.setQueryData(queryKeys.liveSession(7), PLACEHOLDER);
+    // While the fetch is pending the hook already reads null, so assert the placeholder first --
+    // otherwise the check below passes before the answer has landed at all.
+    await waitFor(() => expect(result.current.session).toEqual(PLACEHOLDER));
+    answer(null);
+
+    await waitFor(() => expect(client.getQueryState(queryKeys.liveSession(7)).fetchStatus).toBe('idle'));
+    await waitFor(() => expect(result.current.session).toBeNull());
   });
 });

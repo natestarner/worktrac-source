@@ -442,15 +442,30 @@ kept `contextSessionId` null forever, so `sessionSets` never ran and a synced se
 never be fresh — so the entry still renders while offline (the refetch merely pauses) but is
 revalidated the moment there is a network.
 
-**Known, accepted cost — don't "discover" it again.** Online, while a workout's first set is still
-saving, that revalidation gets the server's honest "no live session" (204) and wipes the placeholder
-until the create lands. Anything that mounts a new `useLiveSession` observer in that window triggers
-it — notably **opening the End dialog** (its recap reads the session), which then closes itself a
-moment later; a refocus blinks the session bar off the same way. It lasts one create round trip,
-loses nothing, and self-corrects. Left alone on 2026-09-23 as not worth the risk. If it ever needs
-fixing, the shape is "a fetched `null` does not replace the placeholder while this person has an
-unsynced live-set create" — in **both** fetchers of this key (`useLiveSession` and
-`offlineCacheWarm`), with a repro spec first. The mid-save End race it exposes is fixed regardless
+**A fetched `null` does not replace the placeholder while this person has an unsynced live-set
+create** (`lib/liveSession.js#fetchLiveSession`, fixed 2026-11-02). The server cannot know about a
+workout until one of its sets lands, so until then its honest answer is "none" (204) — and that
+answer used to wipe the placeholder. Online it lasted one create round trip (opening the End dialog
+mid-save closed it again; this was recorded here as an accepted cost on 2026-09-23). In **offline
+mode** it lasted the whole stretch: the network still works there, so a fetch already on the wire
+when the pin went on landed after the first set, the bar vanished, the next set seeded a second
+placeholder from its own time, and the recap dropped every set before it
+(`docs/incidents/2026-11-02-late-live-session-answer-splits-workout.md`).
+
+- **`fetchLiveSession` is the ONE fetcher of `queryKeys.liveSession`** — `useLiveSession` and
+  `offlineCacheWarm` both call it. TanStack runs whichever `queryFn` last set the query's options,
+  so a second inline `getLiveSession` would quietly bring the bug back half the time.
+- **It only ever keeps a placeholder, and only on a `null`.** A real session always replaces it
+  (that is how it gets its id), a `null` over a `null` stays `null` (End workout writes that), and
+  with nothing queued the `null` clears it as before.
+- **A create the End recorded (`markCreatesEnded`) does not count.** It belongs to a finished
+  workout, and a reload inside the 1s persist window can restore that workout's placeholder.
+- **Not "cancel the in-flight fetch when seeding" — that was considered and rejected.** After a
+  reload mid-workout, that fetch may be the one bringing back the REAL session; cancelling it in
+  offline mode left `contextSessionId` null and the workout's synced sets off "This session" for the
+  whole stretch (the 2026-09-22 shape).
+
+The mid-save End race is fixed separately
 (`docs/incidents/2026-09-23-end-workout-mid-save-resurrected.md`).
 
 **Any new optimistic `setQueryData` that writes a value the server has never confirmed needs one of

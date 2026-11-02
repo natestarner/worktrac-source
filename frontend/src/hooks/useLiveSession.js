@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getLiveSession } from '../api/sessions';
 import { queryKeys } from '../api/queryKeys';
 import { isSessionEnded } from '../lib/endedSessions';
+import { fetchLiveSession } from '../lib/liveSession';
 
 // When this document started. A cache entry whose dataUpdatedAt is older came off disk; anything
 // fetched or written during this page is newer. Exported for the tests, which have to stamp a
@@ -20,7 +20,7 @@ export function useLiveSession(personId) {
 
   const query = useQuery({
     queryKey: queryKeys.liveSession(personId),
-    queryFn: () => getLiveSession(personId),
+    queryFn: () => fetchLiveSession(queryClient, personId),
     enabled: !!personId,
     // The dot has to reflect reality promptly; keep it fresher than the global default and lean on
     // window-focus refetch to catch a session started/ended on another device.
