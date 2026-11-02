@@ -108,8 +108,8 @@ public class ContactMessageService {
 
         ContactMessage saved = contactMessageRepository.save(contactMessage);
 
-        // AFTER_COMMIT on the listener side, so this publish is a no-op if the transaction rolls
-        // back -- an email about a message that was never stored would be the worst of both.
+        // The listener writes the alert's outbox row into THIS transaction, so it rolls back with
+        // the message -- an email about a message that was never stored would be the worst of both.
         eventPublisher.publishEvent(new ContactMessageReceivedEvent(saved.getId(), saved.getCategory(),
                 saved.getSubject(), saved.getMessage(), saved.getSubmitterEmail(), saved.getCorrelationId()));
     }

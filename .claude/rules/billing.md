@@ -450,7 +450,9 @@ missed step fails the delete outright rather than orphaning a row. `TestDataClea
 the same tables in its bulk delete, or e2e cleanup starts failing on constraint violations.
 
 Cancelling the subscription at Stripe is **not** inline in this method — `StripeSubscriptionCanceller`
-reads the pending subscription id before the deletes, then cancels in an `afterCommit` hook, after
+reads the pending subscription id before the deletes, then writes an outbox row (`scheduleCancellation`)
+inside the delete transaction, which is delivered — and retried, then recorded FAILED — only after it
+commits. It used to be an in-memory `afterCommit` hook, lost if the replica died first. Either way, the cancel runs after
 `billing_events` is already gone. That ordering is load-bearing (a cancellation failure is recorded
 as a `BillingEvent`, and clearing that table first would delete the only record of a needed manual
 cleanup) — see the comments on `AccountDeletionService` and `StripeSubscriptionCanceller` for the

@@ -24,9 +24,11 @@ import java.util.Set;
 // reconciliation check like this one catches everything else too, which is the entire point of
 // the pattern.
 //
-// GRACE_PERIOD gives the normal async pipeline (AsyncConfig's emailTaskExecutor) time to actually
-// run before a still-pending dispatch is treated as stuck -- @Async dispatch is typically
-// sub-second, but under CallerRunsPolicy backpressure it can briefly queue behind other work.
+// GRACE_PERIOD gives the outbox (outbox.OutboxDispatcher) time to finish with a row before a
+// still-unresolved dispatch is treated as stuck. A send is normally attempted within a second of the
+// commit, but a failing one is retried with backoff for ~9.5 minutes (OutboxProperties) before it
+// records FAILED -- so the grace period must outlast every retry, or a row still being retried is
+// reported as never dispatched.
 // LOOKBACK_WINDOW bounds the candidate query to recent history so this can never rescan the whole
 // table as it grows. RESOLVED_TYPES includes REGISTRATION_EMAIL_DISPATCH_MISSING itself so a
 // registration already flagged once isn't re-flagged (and re-alerted) on every subsequent run.
@@ -35,8 +37,8 @@ public class RegistrationDispatchWatchdog {
 
     private static final Logger log = LoggerFactory.getLogger(RegistrationDispatchWatchdog.class);
 
-    static final Duration GRACE_PERIOD = Duration.ofMinutes(2);
-    static final Duration LOOKBACK_WINDOW = Duration.ofMinutes(30);
+    static final Duration GRACE_PERIOD = Duration.ofMinutes(15);
+    static final Duration LOOKBACK_WINDOW = Duration.ofMinutes(60);
 
     /**
      * One row per async email flow this watchdog reconciles.

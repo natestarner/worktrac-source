@@ -20,6 +20,7 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Locale;
@@ -32,6 +33,9 @@ import java.util.regex.Pattern;
 public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+
+    // ACS normally accepts a send in a second or two. See send() for why this is bounded at all.
+    private static final Duration SEND_TIMEOUT = Duration.ofMinutes(2);
 
     private final EmailClient emailClient;
     private final String senderAddress;
@@ -422,7 +426,10 @@ public class EmailService {
         }
 
         SyncPoller<EmailSendResult, EmailSendResult> poller = emailClient.beginSend(message);
-        PollResponse<EmailSendResult> response = poller.waitForCompletion();
+        // Bounded: the outbox leases a row for app.outbox.claim-duration (5 minutes) while it sends.
+        // An unbounded wait could outlive the lease, letting another replica reclaim the row and send
+        // the email a second time. A timeout throws, and the outbox retries.
+        PollResponse<EmailSendResult> response = poller.waitForCompletion(SEND_TIMEOUT);
         EmailSendResult result = response.getValue();
 
         if (result.getStatus() != EmailSendStatus.SUCCEEDED) {

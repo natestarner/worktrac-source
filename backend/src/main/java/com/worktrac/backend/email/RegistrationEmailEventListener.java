@@ -3,6 +3,9 @@ package com.worktrac.backend.email;
 import com.worktrac.backend.membership.MembershipAcceptedEvent;
 import com.worktrac.backend.membership.MembershipInviteIssuedEvent;
 import com.worktrac.backend.membership.MembershipRevokedEvent;
+import com.worktrac.backend.outbox.Outbox;
+import com.worktrac.backend.outbox.OutboxHandler;
+import com.worktrac.backend.outbox.OutboxHandlerProvider;
 import com.worktrac.backend.registrationaudit.RegistrationAuditService;
 import com.worktrac.backend.registrationaudit.RegistrationEventType;
 import com.worktrac.backend.user.PasswordResetCodeIssuedEvent;
@@ -11,131 +14,98 @@ import com.worktrac.backend.user.RegistrationConfirmedEvent;
 import com.worktrac.backend.user.VerificationCodeIssuedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionalEventListener;
-import org.springframework.transaction.event.TransactionPhase;
 
-// Sends registration and password-reset emails only after the triggering transaction has
-// actually committed, and off the request thread -- the originating services publish an event
-// instead of calling EmailService directly, so a slow or failing Azure Communication Services
-// call can no longer roll back an otherwise-successful account creation/password change (it
-// used to run synchronously inside the same @Transactional method, so a send failure or
-// timeout would abort the whole transaction).
+import java.util.List;
+import java.util.function.Function;
+
+// Registration, password-reset and member-login emails. Each event becomes an outbox row INSIDE the
+// transaction that published it (see outbox.Outbox), so the email commits or rolls back with the
+// change that caused it, survives the replica that wrote it, and is sent straight after commit, off
+// the request thread. A slow or failing Azure Communication Services call still cannot roll back
+// the account creation or password change it follows -- the send happens after commit, as before.
 //
-// Every outcome is recorded via RegistrationAuditService, not just logged: nothing downstream
-// is waiting on this thread's outcome, but a send outcome must never vanish with zero trace --
-// that invisibility is exactly what made a real stuck-registration production incident
-// undiagnosable. Each handler below deliberately records the SENT audit event in its own
-// try/catch, separate from the one around the send itself -- if the send succeeds but the
-// *audit write* then throws (a transient DB hiccup at that exact moment), that failure must
-// not be misreported as an EMAIL_FAILED event, since the email genuinely went out. recordSafely
-// gives that secondary failure its own loud, distinctly-labeled log line instead of silently
-// escaping this @Async void method (where an uncaught exception would only reach Spring's
-// default AsyncUncaughtExceptionHandler, several steps removed from anything actionable).
+// These used to be AFTER_COMMIT + @Async listeners that sent directly. That held the only copy of
+// the email in an in-process queue, so a replica scaling in or redeploying at the wrong moment lost
+// it with no trace. The handlers below are the same send-and-record bodies, now run by
+// outbox.OutboxDispatcher -- which also retries a failed send with backoff before giving up.
+//
+// Every outcome is still recorded via RegistrationAuditService, never just logged:
+//   * SENT is recorded by the delivery, in its own try/catch separate from the send (recordSafely):
+//     if the send succeeds and only the audit write throws, that must never read as the email having
+//     failed -- it genuinely went out.
+//   * FAILED is recorded once, when the outbox gives up after its last attempt, with the real reason.
+//     A failed attempt that a retry then recovers is a log line, not an audit event or an alert.
 @Component
-public class RegistrationEmailEventListener {
+public class RegistrationEmailEventListener implements OutboxHandlerProvider {
 
     private static final Logger log = LoggerFactory.getLogger(RegistrationEmailEventListener.class);
 
+    static final String VERIFICATION_CODE = "email.verification-code";
+    static final String REGISTRATION_SUCCESS = "email.registration-success";
+    static final String PASSWORD_RESET_CODE = "email.password-reset-code";
+    static final String PASSWORD_RESET_SUCCESS = "email.password-reset-success";
+    static final String MEMBER_INVITE = "email.member-invite";
+    static final String MEMBER_JOINED = "email.member-joined";
+    static final String MEMBER_ACCEPTED_OWNER = "email.member-accepted-owner";
+    static final String MEMBER_REVOKED = "email.member-revoked";
+
     private final EmailService emailService;
     private final RegistrationAuditService auditService;
+    private final Outbox outbox;
 
-    public RegistrationEmailEventListener(EmailService emailService, RegistrationAuditService auditService) {
+    public RegistrationEmailEventListener(EmailService emailService, RegistrationAuditService auditService,
+                                          Outbox outbox) {
         this.emailService = emailService;
         this.auditService = auditService;
+        this.outbox = outbox;
     }
 
-    @Async("emailTaskExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onVerificationCodeIssued(VerificationCodeIssuedEvent event) {
-        sendAndRecord(event.email(),
-                () -> emailService.sendVerificationCode(event.email(), event.rawCode()),
-                RegistrationEventType.VERIFICATION_EMAIL_SENT,
-                RegistrationEventType.VERIFICATION_EMAIL_FAILED,
-                "verification code");
+        outbox.enqueue(VERIFICATION_CODE, event);
     }
 
-    @Async("emailTaskExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onRegistrationConfirmed(RegistrationConfirmedEvent event) {
-        sendAndRecord(event.email(),
-                () -> emailService.sendRegistrationSuccess(event.email()),
-                RegistrationEventType.SUCCESS_EMAIL_SENT,
-                RegistrationEventType.SUCCESS_EMAIL_FAILED,
-                "registration-success");
+        outbox.enqueue(REGISTRATION_SUCCESS, event);
     }
 
-    @Async("emailTaskExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onPasswordResetCodeIssued(PasswordResetCodeIssuedEvent event) {
-        sendAndRecord(event.email(),
-                () -> emailService.sendPasswordResetCode(event.email(), event.rawCode()),
-                RegistrationEventType.PASSWORD_RESET_EMAIL_SENT,
-                RegistrationEventType.PASSWORD_RESET_EMAIL_FAILED,
-                "password-reset code");
+        outbox.enqueue(PASSWORD_RESET_CODE, event);
     }
 
-    @Async("emailTaskExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onPasswordResetConfirmed(PasswordResetConfirmedEvent event) {
-        sendAndRecord(event.email(),
-                () -> emailService.sendPasswordResetSuccess(event.email()),
-                RegistrationEventType.PASSWORD_RESET_SUCCESS_EMAIL_SENT,
-                RegistrationEventType.PASSWORD_RESET_SUCCESS_EMAIL_FAILED,
-                "password-reset-success");
+        outbox.enqueue(PASSWORD_RESET_SUCCESS, event);
     }
 
     /**
      * The member-login invite.
      *
-     * <p>Lives here rather than in a second listener on purpose: this is the same job — send an
-     * email after the transaction commits, off the request thread, and record the outcome either
-     * way — and a second component doing it would be a second mechanism to keep in step with
-     * {@code sendAndRecord}'s two-try/catch structure.
-     *
      * <p>⚠️ A failure here is NOT recoverable by resending: the raw token exists only on this
-     * event, and the row holds a BCrypt hash that cannot reproduce it. The owner has to re-issue,
-     * which mints a new secret. That is exactly why the failure is audited rather than logged —
-     * an invitation that silently never arrived looks, from the owner's side, identical to one the
-     * recipient is ignoring.
+     * event (and, encrypted, on its outbox row until that row completes), and the invite row holds
+     * a BCrypt hash that cannot reproduce it. The owner has to re-issue, which mints a new secret.
+     * That is exactly why the failure is audited rather than logged — an invitation that silently
+     * never arrived looks, from the owner's side, identical to one the recipient is ignoring.
      */
-    @Async("emailTaskExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onMembershipInviteIssued(MembershipInviteIssuedEvent event) {
-        sendAndRecord(event.email(),
-                () -> emailService.sendMembershipInvite(event.email(), event.personName(),
-                        event.accountName(), event.accountNoun(), event.ownerName(),
-                        emailService.joinUrl(event.inviteId(), event.rawToken()),
-                        event.recipientHasAccount()),
-                RegistrationEventType.MEMBER_INVITE_EMAIL_SENT,
-                RegistrationEventType.MEMBER_INVITE_EMAIL_FAILED,
-                "membership invite");
+        outbox.enqueue(MEMBER_INVITE, event);
     }
 
     /**
-     * An invitation was accepted: TWO sends, to two people, for two different reasons.
-     *
-     * <p>They are separate {@code sendAndRecord} calls rather than one, because either can fail on
-     * its own and the audit trail has to say which. The owner's is the typo detector; the member's
+     * An invitation was accepted: TWO sends, to two people, for two different reasons — and so two
+     * outbox rows, because either can fail on its own, the audit trail has to say which, and a
+     * retry of one must never resend the other. The owner's is the typo detector; the member's
      * carries the household name and the way out.
      */
-    @Async("emailTaskExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onMembershipAccepted(MembershipAcceptedEvent event) {
-        sendAndRecord(event.memberEmail(),
-                () -> emailService.sendAddedToHousehold(event.memberEmail(), event.personName(),
-                        event.accountName(), event.ownerName()),
-                RegistrationEventType.MEMBER_JOINED_EMAIL_SENT,
-                RegistrationEventType.MEMBER_JOINED_EMAIL_FAILED,
-                "added to household");
-
-        sendAndRecord(event.ownerEmail(),
-                () -> emailService.sendInviteAccepted(event.ownerEmail(), event.memberEmail(),
-                        event.personName(), event.accountName()),
-                RegistrationEventType.MEMBER_ACCEPTED_OWNER_EMAIL_SENT,
-                RegistrationEventType.MEMBER_ACCEPTED_OWNER_EMAIL_FAILED,
-                "invite accepted (owner)");
+        outbox.enqueue(MEMBER_JOINED, event);
+        outbox.enqueue(MEMBER_ACCEPTED_OWNER, event);
     }
 
     /**
@@ -145,37 +115,73 @@ public class RegistrationEmailEventListener {
      * and their queued offline writes can then never land. Audited for the same reason — a notice
      * that quietly failed to send would leave them with no explanation at all.
      */
-    @Async("emailTaskExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onMembershipRevoked(MembershipRevokedEvent event) {
-        sendAndRecord(event.memberEmail(),
-                () -> emailService.sendLoginRevoked(event.memberEmail(), event.accountName(),
-                        event.ownerName(), event.wasOnlyAnInvitation()),
-                RegistrationEventType.MEMBER_REVOKED_EMAIL_SENT,
-                RegistrationEventType.MEMBER_REVOKED_EMAIL_FAILED,
-                "login revoked");
+        outbox.enqueue(MEMBER_REVOKED, event);
     }
 
-    // Common shape for all four handlers above: attempt the send; only a failure *of the send
-    // itself* is classified as the failedType. Recording the outcome (either branch) is
-    // isolated in its own try/catch via recordSafely so a failure to persist the audit row can
-    // never be conflated with the email itself having failed.
-    private void sendAndRecord(String email, EmailSend send, RegistrationEventType sentType,
-                                RegistrationEventType failedType, String description) {
-        String messageId;
-        try {
-            messageId = send.execute();
-        } catch (Exception e) {
-            log.error("Failed to send {} email to {}", description, email, e);
-            recordSafely(email, failedType, failureReason(e), null);
-            return;
-        }
-        recordSafely(email, sentType, null, messageId);
+    @Override
+    public List<OutboxHandler<?>> outboxHandlers() {
+        return List.of(
+                email(VERIFICATION_CODE, VerificationCodeIssuedEvent.class, VerificationCodeIssuedEvent::email,
+                        e -> emailService.sendVerificationCode(e.email(), e.rawCode()),
+                        RegistrationEventType.VERIFICATION_EMAIL_SENT,
+                        RegistrationEventType.VERIFICATION_EMAIL_FAILED, "verification code"),
+                email(REGISTRATION_SUCCESS, RegistrationConfirmedEvent.class, RegistrationConfirmedEvent::email,
+                        e -> emailService.sendRegistrationSuccess(e.email()),
+                        RegistrationEventType.SUCCESS_EMAIL_SENT,
+                        RegistrationEventType.SUCCESS_EMAIL_FAILED, "registration-success"),
+                email(PASSWORD_RESET_CODE, PasswordResetCodeIssuedEvent.class, PasswordResetCodeIssuedEvent::email,
+                        e -> emailService.sendPasswordResetCode(e.email(), e.rawCode()),
+                        RegistrationEventType.PASSWORD_RESET_EMAIL_SENT,
+                        RegistrationEventType.PASSWORD_RESET_EMAIL_FAILED, "password-reset code"),
+                email(PASSWORD_RESET_SUCCESS, PasswordResetConfirmedEvent.class, PasswordResetConfirmedEvent::email,
+                        e -> emailService.sendPasswordResetSuccess(e.email()),
+                        RegistrationEventType.PASSWORD_RESET_SUCCESS_EMAIL_SENT,
+                        RegistrationEventType.PASSWORD_RESET_SUCCESS_EMAIL_FAILED, "password-reset-success"),
+                email(MEMBER_INVITE, MembershipInviteIssuedEvent.class, MembershipInviteIssuedEvent::email,
+                        e -> emailService.sendMembershipInvite(e.email(), e.personName(), e.accountName(),
+                                e.accountNoun(), e.ownerName(), emailService.joinUrl(e.inviteId(), e.rawToken()),
+                                e.recipientHasAccount()),
+                        RegistrationEventType.MEMBER_INVITE_EMAIL_SENT,
+                        RegistrationEventType.MEMBER_INVITE_EMAIL_FAILED, "membership invite"),
+                email(MEMBER_JOINED, MembershipAcceptedEvent.class, MembershipAcceptedEvent::memberEmail,
+                        e -> emailService.sendAddedToHousehold(e.memberEmail(), e.personName(), e.accountName(),
+                                e.ownerName()),
+                        RegistrationEventType.MEMBER_JOINED_EMAIL_SENT,
+                        RegistrationEventType.MEMBER_JOINED_EMAIL_FAILED, "added to household"),
+                email(MEMBER_ACCEPTED_OWNER, MembershipAcceptedEvent.class, MembershipAcceptedEvent::ownerEmail,
+                        e -> emailService.sendInviteAccepted(e.ownerEmail(), e.memberEmail(), e.personName(),
+                                e.accountName()),
+                        RegistrationEventType.MEMBER_ACCEPTED_OWNER_EMAIL_SENT,
+                        RegistrationEventType.MEMBER_ACCEPTED_OWNER_EMAIL_FAILED, "invite accepted (owner)"),
+                email(MEMBER_REVOKED, MembershipRevokedEvent.class, MembershipRevokedEvent::memberEmail,
+                        e -> emailService.sendLoginRevoked(e.memberEmail(), e.accountName(), e.ownerName(),
+                                e.wasOnlyAnInvitation()),
+                        RegistrationEventType.MEMBER_REVOKED_EMAIL_SENT,
+                        RegistrationEventType.MEMBER_REVOKED_EMAIL_FAILED, "login revoked"));
+    }
+
+    // The common shape of every handler above: the send's own failure propagates (so the outbox
+    // retries it); success, and the final give-up, are each recorded through recordSafely so a
+    // failure to persist the audit row can never be conflated with the email itself failing.
+    private <E> OutboxHandler<E> email(String name, Class<E> type, Function<E, String> recipient,
+                                       EmailSend<E> send, RegistrationEventType sentType,
+                                       RegistrationEventType failedType, String description) {
+        return new OutboxHandler<>(name, type,
+                event -> {
+                    String messageId = send.execute(event);
+                    recordSafely(recipient.apply(event), sentType, null, messageId);
+                },
+                (event, reason) -> {
+                    log.error("Gave up sending {} email to {}: {}", description, recipient.apply(event), reason);
+                    recordSafely(recipient.apply(event), failedType, reason, null);
+                });
     }
 
     @FunctionalInterface
-    private interface EmailSend {
-        String execute() throws Exception;
+    private interface EmailSend<E> {
+        String execute(E event) throws Exception;
     }
 
     private void recordSafely(String email, RegistrationEventType type, String detail, String messageId) {
@@ -184,17 +190,5 @@ public class RegistrationEmailEventListener {
         } catch (Exception e) {
             log.error("Failed to persist registration-audit event {} for {} (detail={})", type, email, detail, e);
         }
-    }
-
-    // Builds a real, human-readable reason string instead of just the exception's class name --
-    // EmailSendException's message already carries the ACS status/code/message (see
-    // EmailService.describeFailure); any other exception (network failure, timeout, ACS SDK
-    // HTTP-level error) falls back to its own message.
-    private String failureReason(Exception e) {
-        String message = e.getMessage();
-        if (message != null && !message.isBlank()) {
-            return e.getClass().getSimpleName() + ": " + message;
-        }
-        return e.getClass().getSimpleName();
     }
 }

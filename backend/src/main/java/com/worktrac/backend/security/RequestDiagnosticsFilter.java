@@ -37,10 +37,10 @@ import java.util.regex.Pattern;
 // are still calling it (docs/azure-read-only-access.md). Sanitized the same way, with a character
 // set that admits the version punctuation.
 //
-// KNOWN LIMIT, deliberately not worked around: MDC is thread-local, so it does NOT propagate into
-// @Async("emailTaskExecutor") tasks. The email listeners' log lines carry no correlation id; they
-// correlate through contact_messages.alert_message_id instead. Its absence there is expected, not a
-// bug to go fix.
+// MDC is thread-local, so it does not follow work onto another thread by itself. Outbox rows carry
+// the cid of the request that wrote them, and OutboxDispatcher puts it back in the MDC while it
+// delivers one, so an email's send and audit log lines join the trail of the request that caused
+// it -- on whichever replica sends it.
 //
 // OPTIONAL ACCESS LOG (app.request-log.enabled, on in lower only): one "access" line per request
 // with method, path, status, duration, ip, user agent and origin. Lower scales to zero, yet woke on

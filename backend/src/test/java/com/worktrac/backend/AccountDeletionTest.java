@@ -15,12 +15,14 @@ import com.worktrac.backend.billing.SubscriptionStatus;
 import com.worktrac.backend.contact.ContactMessageRepository;
 import com.worktrac.backend.exercise.ExerciseRepository;
 import com.worktrac.backend.person.PersonRepository;
+import com.worktrac.backend.support.EmailTestSupport;
 import com.worktrac.backend.support.RegistrationTestSupport;
 import com.worktrac.backend.user.TestCodeCache;
 import com.worktrac.backend.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -31,6 +33,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -85,6 +88,10 @@ class AccountDeletionTest extends AbstractIntegrationTest {
     // relative to the deletes is the thing worth pinning.
     @MockitoBean
     private StripeService stripeService;
+
+    @Autowired
+    @Qualifier("emailTaskExecutor")
+    private Executor emailTaskExecutor;
 
     // EmailService's real constructor builds a live Azure EmailClient from
     // app.email.connection-string, which is empty in the "local" test profile (no real ACS
@@ -378,10 +385,13 @@ class AccountDeletionTest extends AbstractIntegrationTest {
                         .content(deleteAccountBody("DELETE")))
                 .andExpect(status().isNoContent());
 
+        // The cancellation is an outbox row, tried straight after the commit on emailTaskExecutor.
+        EmailTestSupport.awaitEmailsIdle(emailTaskExecutor);
         org.mockito.Mockito.verify(stripeService).cancelSubscription("sub_test_" + suffix);
 
-        // Written by the afterCommit hook, i.e. after billing_events was cleared -- so it is still
-        // here. Before this fix the row was recorded and then deleted moments later.
+        // Written by the outbox delivery, i.e. after the delete committed and billing_events was
+        // cleared -- so it is still here. Before the afterCommit fix the row was recorded and then
+        // deleted moments later.
         assertTrue(billingEventRepository.findByAccountIdOrderByCreatedAtDesc(accountId).stream()
                         .anyMatch(event -> event.getEventType() == BillingEventType.CANCELED_ON_ACCOUNT_DELETION),
                 "the cancellation audit row must outlive the account it refers to");

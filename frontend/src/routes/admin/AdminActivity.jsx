@@ -132,11 +132,11 @@ function ActivityLegend() {
       </div>
       <div>
         <strong>Safety-net events:</strong> REGISTRATION_EMAIL_DISPATCH_MISSING means a
-        registration started but no VERIFICATION_EMAIL_SENT/FAILED ever showed up for it within a
-        few minutes -- the dispatch never ran at all (not the same as it running and failing,
-        which the types above already cover). ADMIN_ALERT_FAILED means an alert email about one of
-        these events itself failed to send -- if you see this, whatever it names still happened,
-        you just weren't emailed about it; check the Detail column and this feed directly.
+        registration started but no VERIFICATION_EMAIL_SENT/FAILED ever showed up for it within 15
+        minutes (time for every retry) -- the dispatch never ran at all (not the same as it running
+        and failing, which the types above already cover). ADMIN_ALERT_FAILED means an alert email
+        about one of these events itself failed to send -- if you see this, whatever it names still
+        happened, you just weren't emailed about it; check the Detail column and this feed directly.
       </div>
     </div>
   );

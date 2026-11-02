@@ -2,26 +2,31 @@ package com.worktrac.backend.registrationaudit;
 
 import com.worktrac.backend.config.AdminProperties;
 import com.worktrac.backend.email.EmailService;
+import com.worktrac.backend.outbox.Outbox;
+import com.worktrac.backend.outbox.OutboxHandler;
+import com.worktrac.backend.outbox.OutboxHandlerProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionalEventListener;
-import org.springframework.transaction.event.TransactionPhase;
 
+import java.util.List;
 import java.util.Set;
 
 // Reacts to RegistrationAlertEvent (published by RegistrationAuditService alongside persisting
 // an alertable RegistrationEvent) by checking whether the admin has that category of alert
 // turned on in RegistrationAlertSettings, and if so, emailing every ADMIN_EMAILS address.
-// AFTER_COMMIT + @Async for the same reason as RegistrationEmailEventListener: this must never
-// run inside (or be able to roll back) the registration-audit write it's reacting to, and
-// nothing is waiting on its outcome. An alert-send failure is recorded as ADMIN_ALERT_FAILED
+// Through the outbox (outbox.Outbox), like RegistrationEmailEventListener: the alert row commits with
+// the registration-audit row it reacts to (RegistrationAuditService.record's own REQUIRES_NEW
+// transaction), is sent after commit, survives the replica that wrote it, and is retried before it
+// is reported as failed. An alert-send failure is recorded as ADMIN_ALERT_FAILED
 // (visible in the Activity feed, not just a log line) so "the underlying failure happened but
 // nobody was actually notified" isn't itself a blind spot -- deliberately not in
 // RegistrationAuditService's ALERTABLE set, since an alert about a failed alert would recurse.
 @Component
-public class AdminAlertEventListener {
+public class AdminAlertEventListener implements OutboxHandlerProvider {
+
+    static final String ADMIN_ALERT = "email.admin-alert";
 
     private static final Logger log = LoggerFactory.getLogger(AdminAlertEventListener.class);
 
@@ -43,18 +48,41 @@ public class AdminAlertEventListener {
     private final AdminProperties adminProperties;
     private final EmailService emailService;
     private final RegistrationAuditService auditService;
+    private final Outbox outbox;
 
     public AdminAlertEventListener(RegistrationAlertSettingsService settingsService, AdminProperties adminProperties,
-                                    EmailService emailService, RegistrationAuditService auditService) {
+                                    EmailService emailService, RegistrationAuditService auditService, Outbox outbox) {
         this.settingsService = settingsService;
         this.adminProperties = adminProperties;
         this.emailService = emailService;
         this.auditService = auditService;
+        this.outbox = outbox;
     }
 
-    @Async("emailTaskExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @EventListener
     public void onRegistrationAlertEvent(RegistrationAlertEvent event) {
+        outbox.enqueue(ADMIN_ALERT, event);
+    }
+
+    @Override
+    public List<OutboxHandler<?>> outboxHandlers() {
+        return List.of(new OutboxHandler<>(ADMIN_ALERT, RegistrationAlertEvent.class,
+                this::deliver,
+                (event, reason) -> {
+                    log.error("Gave up sending admin alert email for {} ({}): {}", event.email(), event.eventType(), reason);
+                    try {
+                        auditService.record(event.email(), RegistrationEventType.ADMIN_ALERT_FAILED,
+                                "Alert for " + event.eventType() + " failed to send: " + reason, null);
+                    } catch (Exception recordFailure) {
+                        log.error("Failed to persist ADMIN_ALERT_FAILED for {} ({})", event.email(), event.eventType(),
+                                recordFailure);
+                    }
+                }));
+    }
+
+    // The settings are read when the alert is sent, as before, so turning a category off also stops
+    // alerts of that category still queued.
+    private void deliver(RegistrationAlertEvent event) {
         RegistrationAlertSettings settings = settingsService.get();
         if (!shouldAlert(event.eventType(), settings)) {
             return;
@@ -64,18 +92,8 @@ public class AdminAlertEventListener {
         String body = "Email: " + event.email() + "\nEvent: " + event.eventType()
                 + "\nDetail: " + (event.detail() == null ? "(none)" : event.detail());
 
-        try {
-            emailService.sendAdminAlert(adminProperties.normalizedEmails(), subject, body);
-        } catch (Exception e) {
-            log.error("Failed to send admin alert email for {} ({})", event.email(), event.eventType(), e);
-            try {
-                auditService.record(event.email(), RegistrationEventType.ADMIN_ALERT_FAILED,
-                        "Alert for " + event.eventType() + " failed to send: " + e.getMessage(), null);
-            } catch (Exception recordFailure) {
-                log.error("Failed to persist ADMIN_ALERT_FAILED for {} ({})", event.email(), event.eventType(),
-                        recordFailure);
-            }
-        }
+        // A send failure propagates, so the outbox retries it; the give-up above records it.
+        emailService.sendAdminAlert(adminProperties.normalizedEmails(), subject, body);
     }
 
     private boolean shouldAlert(RegistrationEventType eventType, RegistrationAlertSettings settings) {

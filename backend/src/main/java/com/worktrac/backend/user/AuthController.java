@@ -181,9 +181,8 @@ public class AuthController {
     @PostMapping("/accept-invite")
     public AuthResponse acceptInvite(@Valid @RequestBody AcceptInviteRequest request,
                                       HttpServletRequest servletRequest) {
-        // The two acceptance notices are published inside the service's transaction -- an
-        // AFTER_COMMIT listener discards anything published from out here, after it has committed.
-        // See MembershipInviteService#announce.
+        // The two acceptance notices are published inside the service's transaction, so their
+        // outbox rows commit with the membership. See MembershipInviteService#announce.
         return authService.acceptInvite(request,
                 ClientIpResolver.resolveClientIp(servletRequest),
                 currentUser.optional().map(AccountPrincipal::userId).orElse(null));

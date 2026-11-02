@@ -1,5 +1,7 @@
 package com.worktrac.backend.registrationaudit;
 
+import com.worktrac.backend.outbox.Outbox;
+import com.worktrac.backend.support.OutboxTestSupport;
 import com.worktrac.backend.config.AdminProperties;
 import com.worktrac.backend.email.EmailService;
 import org.junit.jupiter.api.Test;
@@ -43,13 +45,13 @@ class AdminAlertEventListenerTest {
         EmailService emailService = mock(EmailService.class);
         RegistrationAuditService auditService = mock(RegistrationAuditService.class);
         AdminAlertEventListener listener = new AdminAlertEventListener(settingsService, adminProperties(),
-                emailService, auditService);
+                emailService, auditService, mock(Outbox.class));
 
         when(settingsService.get()).thenReturn(settingsWithSendFailureAlertsOn());
         doThrow(new RuntimeException("ACS unavailable"))
                 .when(emailService).sendAdminAlert(any(), anyString(), anyString());
 
-        listener.onRegistrationAlertEvent(
+        OutboxTestSupport.deliver(listener, 
                 new RegistrationAlertEvent(RegistrationEventType.VERIFICATION_EMAIL_FAILED, "stuck@example.com",
                         "ACS send did not succeed"));
 
@@ -68,7 +70,7 @@ class AdminAlertEventListenerTest {
         EmailService emailService = mock(EmailService.class);
         RegistrationAuditService auditService = mock(RegistrationAuditService.class);
         AdminAlertEventListener listener = new AdminAlertEventListener(settingsService, adminProperties(),
-                emailService, auditService);
+                emailService, auditService, mock(Outbox.class));
 
         when(settingsService.get()).thenReturn(settingsWithSendFailureAlertsOn());
         doThrow(new RuntimeException("ACS unavailable"))
@@ -77,7 +79,7 @@ class AdminAlertEventListenerTest {
                 .when(auditService).record(anyString(), eq(RegistrationEventType.ADMIN_ALERT_FAILED), anyString(),
                         any());
 
-        listener.onRegistrationAlertEvent(
+        OutboxTestSupport.deliver(listener, 
                 new RegistrationAlertEvent(RegistrationEventType.VERIFICATION_EMAIL_FAILED, "stuck2@example.com",
                         "ACS send did not succeed"));
         // No assertion beyond "did not throw" -- reaching this line is the test.

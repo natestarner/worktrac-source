@@ -240,8 +240,8 @@ public class MembershipInviteService {
      * rather than a 429 on purpose: {@code shouldRetryWrite} treats 429 as transient, and a seat
      * limit never clears on its own.
      *
-     * <p>The email still dispatches from {@code invite}'s {@code AFTER_COMMIT} listener, so it
-     * cannot fire for a person who was rolled back.
+     * <p>The email is an outbox row written inside {@code invite}'s transaction, so it rolls back
+     * with a person who was rolled back and cannot fire for them.
      */
     @Transactional
     public IssuedInvite addAndInvite(AccountAccess access, String personName, String rawEmail) {
@@ -313,13 +313,13 @@ public class MembershipInviteService {
      * Records the watchdog's start marker and publishes the event that sends the email.
      *
      * <p>⚠️ <b>THIS MUST BE CALLED FROM INSIDE THE TRANSACTION, and it is not a style choice.</b>
-     * The listener is {@code @TransactionalEventListener(AFTER_COMMIT)}, which with the default
-     * {@code fallbackExecution = false} <b>silently discards</b> any event published when no
-     * transaction is active. Publishing from the controller — after this {@code @Transactional}
-     * method has already returned and committed — therefore sends no email at all, with no
-     * exception, no log line and a 200 response. It shipped that way and nothing went red: every
-     * other test in {@code MembershipInviteTest} reads the invite row straight from the database,
-     * and so does the e2e via {@code /api/auth/test/pending-invite}.
+     * The listener writes the email's outbox row ({@code outbox.Outbox}) into whatever transaction
+     * is active, which is what makes the invitation and its email commit together. Published from
+     * the controller, after this method has committed, the row would commit on its own — no longer
+     * atomic with the invitation. (Under the old {@code AFTER_COMMIT} listener it was worse: such an
+     * event was silently discarded, with a 200 response and no email. It shipped that way and
+     * nothing went red: every other test in {@code MembershipInviteTest} reads the invite row
+     * straight from the database, and so does the e2e via {@code /api/auth/test/pending-invite}.)
      *
      * <p>{@code MembershipInviteTest#theInvitationEmailIsActuallySent} is the pin. Every other
      * publisher in this codebase ({@code RegistrationService}, {@code PasswordResetService},
@@ -509,8 +509,8 @@ public class MembershipInviteService {
 
         // Both notices ride one event -- see MembershipAcceptedEvent for why the OWNER's is a
         // security control rather than a courtesy. Published here rather than from AuthController
-        // for the reason announce() spells out: an AFTER_COMMIT listener drops anything published
-        // with no transaction running.
+        // for the reason announce() spells out: the notices' outbox rows must commit with the
+        // membership they announce.
         //
         // NOT published on the already-present branch above: no membership was created, so there is
         // nothing to tell the owner about, and a second notice for a login they already know about

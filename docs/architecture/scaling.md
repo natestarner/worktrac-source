@@ -17,7 +17,7 @@ than one replica is **state each JVM keeps in its own memory**. Each piece and i
 |---|---|---|---|
 | Scheduled watchdogs | Each replica runs each job: duplicate audit rows and admin alerts, N× the Stripe calls | ShedLock (below) | Done |
 | `AccountAccessService`'s 60s cache | Invalidation is local, so other replicas keep stale access, and a password change signs the person out | Token-newer re-read + DB invalidation log (below) | Done |
-| Email and after-commit work in an in-process queue | Lost when a replica scales in, redeploys or crashes | Transactional outbox | Planned |
+| Email and after-commit work in an in-process queue | Lost when a replica scales in, redeploys or crashes | Transactional outbox (below) | Done |
 | Global email cap (Bucket4j, per JVM) | N× looser, and it refuses real sign-ups at 30/hour | Counted from the outbox | Planned |
 | `TestCodeCache` (local/lower only) | e2e can't read a code from the replica that didn't send it | A DB table | Planned |
 | Per-IP / per-email / per-account rate limits | Each limit N× looser | **Kept per replica, on purpose** (below) | — |
@@ -87,6 +87,42 @@ refused, which signs the person out. Rows are purged after an hour (ShedLock'd).
 `AccessCacheAcrossReplicasTest` builds a second `AccountAccessService` on the same database (its own
 cache, as a second JVM would have) and pins each case, with a control showing the second replica *is*
 stale without a poll.
+
+## Email and other after-commit work: the transactional outbox
+
+Every email, and the Stripe cancellation after an account deletion, used to exist only in memory
+between the commit that caused it and the send. It sat in an `@Async` task in a 200-slot
+in-process queue, or in an `afterCommit` hook. A replica that scaled in, redeployed or crashed in
+that window lost it, with nothing anywhere saying it had been owed. With replicas coming and going,
+that window is routine.
+
+**Now the business transaction writes a row to `outbox`** (`outbox.Outbox.enqueue`), so the work
+commits or rolls back with the change. The event listeners became synchronous `@EventListener`s
+for exactly this reason: they run inside the publisher's transaction.
+
+| Step | What happens |
+|---|---|
+| Commit | The writing replica tries the row at once on `emailTaskExecutor`, so a code still arrives in seconds |
+| Claim | One atomic `UPDATE … WITH (UPDLOCK, READPAST)` takes a 5-minute lease and counts the attempt. Concurrent claimers skip each other's rows, so any number of replicas can poll |
+| Success | `SENT`, payload nulled. Deleted after 30 days |
+| Failure | Backoff 30s, 1m, 3m, 5m (5 attempts in ~9.5 minutes), then `FAILED`, payload nulled, and the handler's give-up records the reason (the FAILED audit row, the contact row, the billing event) |
+| Replica dies | The lease expires, and any replica's 5-second poll reclaims the row |
+
+**What is removed automatically, and what is not.** Payloads are nulled on completion, because
+they can hold a raw verification code or invite token, and are AES-GCM encrypted at rest until then.
+SENT rows are deleted after 30 days. **FAILED rows are never deleted automatically**, and nothing is
+dropped because a replica died.
+
+**Delivery is at-least-once.** If a replica dies after ACS accepted an email but before the row is
+marked SENT, the email goes out twice. That's the accepted trade: a rare duplicate instead of a
+silent loss. It's also why one row is one side effect.
+
+**Cost:** the insert is part of a transaction that was already happening, plus two small updates
+per email and one filtered-index seek every 5 seconds per replica. It replaces the in-memory queue,
+so memory use is about the same.
+
+**At zero replicas (lower)**, a new email is still sent at once: the request that creates it is what
+wakes a replica. Only a retry waits for the next wake-up.
 
 ## Rate limits stay per replica, on purpose
 

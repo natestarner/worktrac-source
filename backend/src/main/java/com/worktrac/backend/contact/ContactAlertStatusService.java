@@ -9,7 +9,7 @@ import java.time.Clock;
 // Records the outcome of the admin alert send onto the message row.
 //
 // REQUIRES_NEW is load-bearing, for the same reason RegistrationAuditService.record is: this runs
-// from an @Async listener after the originating transaction has already committed, so it needs a
+// from the outbox dispatcher after the originating transaction has already committed, so it needs a
 // transaction of its own rather than silently joining nothing -- and a failure here must not be
 // able to touch anything else.
 @Service
