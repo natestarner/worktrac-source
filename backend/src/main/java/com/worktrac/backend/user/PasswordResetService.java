@@ -104,7 +104,9 @@ public class PasswordResetService {
         // Same generic message as a wrong code below -- a missing row (no reset was ever
         // requested for this email) must not be distinguishable from a wrong code entered
         // against a real, outstanding one.
-        PasswordResetCode resetCode = passwordResetCodeRepository.findByEmail(email)
+        // Locked, so parallel guesses take turns and the 5-attempt ceiling is exact -- see
+        // findByEmailForUpdate.
+        PasswordResetCode resetCode = passwordResetCodeRepository.findByEmailForUpdate(email)
                 .orElseThrow(() -> new UnauthorizedException("Invalid or expired code"));
 
         if (resetCode.getExpiresAt().isBefore(clock.instant())) {
@@ -122,7 +124,7 @@ public class PasswordResetService {
         // The row can only exist for an email that had an account at request time (requestReset
         // never creates one otherwise), but the user could theoretically be deleted in between --
         // fall back to the same generic error rather than a distinct 404.
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailForUpdate(email)
                 .orElseThrow(() -> new UnauthorizedException("Invalid or expired code"));
         user.updatePasswordHash(passwordEncoder.encode(request.password()));
         // Clears any login lockout too. This is what makes the lockout acceptable on a shared

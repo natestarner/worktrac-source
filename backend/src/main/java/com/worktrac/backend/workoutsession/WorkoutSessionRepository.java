@@ -1,5 +1,7 @@
 package com.worktrac.backend.workoutsession;
 
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,6 +14,14 @@ import org.springframework.data.jpa.repository.Modifying;
 public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, Long> {
 
     Optional<WorkoutSession> findFirstByPerson_IdAndEndedAtIsNull(Long personId);
+
+    // Takes a write lock on the PERSON row (WITH (UPDLOCK, HOLDLOCK, ROWLOCK)) until the transaction
+    // ends -- see WorkoutSessionService.getOrCreateLiveSession for why. Returns nothing useful; the
+    // lock is the point. Lives here rather than on PersonRepository because it exists only for that
+    // one decision.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p.id from Person p where p.id = :personId")
+    Optional<Long> lockPersonForLiveSession(@Param("personId") Long personId);
 
     List<WorkoutSession> findByPerson_IdOrderByStartedAtDesc(Long personId);
 
