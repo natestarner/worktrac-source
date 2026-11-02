@@ -1,9 +1,27 @@
 spring:
   application:
     name: backend
+  lifecycle:
+    timeout-per-shutdown-phase: 25s
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    hikari:
+      # Explicit rather than Hikari's defaults, because with several replicas the total is what the
+      # database sees: replicas x maximum-pool-size must stay well under Azure SQL's limits (Basic,
+      # 5 DTU: 300 connections and ~30 concurrent requests). 10 x the planned maxReplicas (3-4) fits.
+      maximum-pool-size: 10
+      # Hikari's default keeps maximum-pool-size idle connections open forever. Two warm ones per
+      # replica answer the first requests after a quiet spell; the rest open on demand.
+      minimum-idle: 2
+      # How long a request waits for a free connection before failing. 10s, deliberately below the
+      # client's 15s abort: a saturated pool then answers an honest 503 (GlobalExceptionHandler),
+      # which the client reads as "server reached, try again" -- instead of hanging past the abort
+      # and presenting a busy server as lie-fi (resilience.md, axis B). It was 60s in lower and
+      # production to ride out serverless auto-pause, which those databases no longer use (Basic
+      # tier since 2026-07-18). Startup still waits up to 60s for the database
+      # (initialization-fail-timeout in those profiles).
+      connection-timeout: 10000
   jpa:
     hibernate:
       ddl-auto: validate    # Flyway manages schema — never change this
@@ -23,6 +41,11 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+  # On SIGTERM (a scale-in or a deploy), stop accepting new requests and let in-flight ones finish,
+  # up to spring.lifecycle.timeout-per-shutdown-phase. Readiness goes OUT_OF_SERVICE at the same
+  # moment, so the ingress stops routing here. Container Apps waits terminationGracePeriodSeconds
+  # (30s, set in worktrac-deploy's infra/) before killing the container -- longer than the 25s below.
+  shutdown: graceful
   # Deliberately NOT "framework" (or "native"/Tomcat's RemoteIpValve) -- both trust the FIRST
   # (leftmost) entry in X-Forwarded-For as the real client, and Azure Container Apps' ingress
   # appends its own observed IP to whatever a caller already sent rather than replacing it (its
@@ -73,6 +96,22 @@ management:
   endpoint:
     health:
       show-details: never
+      # /actuator/health/liveness and /actuator/health/readiness, for the Container Apps probes.
+      # /actuator/health itself is UNCHANGED (every contributor, db included): the frontend's
+      # reachability probe and the deploy workflows read it.
+      probes:
+        enabled: true
+      group:
+        # Liveness = "this JVM is wedged, restart it". Internal state only: a database outage is not
+        # cured by restarting every replica, and doing so would turn a DB blip into a full outage.
+        liveness:
+          include: livenessState
+        # Readiness = "send me traffic". The JVM is up AND BCrypt has warmed (AuthWarmupHealthIndicator,
+        # so the first sign-in on a fresh replica isn't the slow one). NOT the database: it is shared,
+        # so a DB outage would pull every replica out of rotation at once and turn honest 503s into no
+        # answer at all -- the contract (resilience.md) is that the server keeps answering.
+        readiness:
+          include: readinessState,authWarmup
 
 app:
   # The App Store app's minimum supported build and its store link, served on /me
