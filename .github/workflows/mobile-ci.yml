@@ -44,7 +44,7 @@ jobs:
 
       - uses: ./.github/actions/ios-simulator-app
         with:
-          native-api-url: https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io
+          native-api-url: https://api.dev.huddle.fitness
 
       - name: Boot, launch, screenshot
         run: bash scripts/ios-simulator-smoke.sh build/Build/Products/Debug-iphonesimulator/App.app mobile-ci-out

@@ -1,5 +1,7 @@
 package com.worktrac.backend.user;
 
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -19,6 +21,22 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
+
+    // ⚠️ PESSIMISTIC WRITE LOCK (SQL Server: WITH (UPDLOCK, HOLDLOCK, ROWLOCK)), held until the
+    // caller's transaction ends. The attempt ceiling on this row is read, compared and incremented in
+    // Java; without the lock, parallel attempts -- several replicas, or one attacker with many
+    // connections -- all read the same count, all get a BCrypt comparison, and overwrite each
+    // other's increments, so the ceiling never fires. With it they take turns, and the count is
+    // exact. Only for the attempt-checking paths: it serializes concurrent requests for ONE row.
+    // SecurityCounterConcurrencyTest is the pin.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.email = :email")
+    Optional<User> findByEmailForUpdate(@Param("email") String email);
+
+    // Same lock, by id: change-password counts wrong current passwords and bumps token_version.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id = :id")
+    Optional<User> findByIdForUpdate(@Param("id") Long id);
 
     boolean existsByEmail(String email);
 
