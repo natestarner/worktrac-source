@@ -1,5 +1,6 @@
 package com.worktrac.backend.billing;
 
+import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -18,4 +19,10 @@ public interface BillingEventRepository extends JpaRepository<BillingEvent, Long
     @Modifying
     @Query("DELETE FROM BillingEvent e WHERE e.accountId IN :accountIds")
     void deleteByAccountIdIn(List<Long> accountIds);
+
+    // BillingAuditService.forgetFirstSeen: un-claims a Stripe event whose processing failed, so
+    // Stripe's retry of it is processed rather than ignored as a duplicate.
+    @Modifying
+    @Query("delete from BillingEvent e where e.stripeEventId = :stripeEventId")
+    int deleteByStripeEventId(@Param("stripeEventId") String stripeEventId);
 }

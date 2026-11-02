@@ -15,7 +15,7 @@ export const REPO_ROOT = path.resolve(E2E_DIR, '..');
 export const LOWER = {
   name: 'lower',
   app: 'https://app.dev.huddle.fitness',
-  api: 'https://worktrac-backend-lower.whitehill-3dc27bb3.eastus.azurecontainerapps.io',
+  api: 'https://api.dev.huddle.fitness',
   containerApp: 'worktrac-backend-lower',
   resourceGroup: 'worktrac-rg',
   sqlServer: 'worktrac-sql-server',
