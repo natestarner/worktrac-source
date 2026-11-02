@@ -436,7 +436,9 @@ public class MembershipInviteService {
         // A wrong id and a wrong token answer identically: an invitation is a bearer credential, and
         // "that invite exists but your token is wrong" is information the holder of a bad link has
         // not earned.
-        MembershipInvite invite = inviteRepository.findById(inviteId)
+        // Locked, so parallel guesses take turns and the attempt ceiling is exact -- see
+        // findByIdForUpdate.
+        MembershipInvite invite = inviteRepository.findByIdForUpdate(inviteId)
                 .orElseThrow(MembershipInviteService::rejected);
 
         if (invite.isAccepted() || invite.getExpiresAt().isBefore(now)) {

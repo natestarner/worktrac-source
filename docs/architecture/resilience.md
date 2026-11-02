@@ -77,9 +77,15 @@ The crucial asymmetry: **a fulfilled 5xx does not trip lie-fi.** The server answ
 returning 503 is therefore a *different* code path from an unreachable one, not a variant of it.
 Both must work; neither implies the other has been tested.
 
-Pool exhaustion is the same shape from the other end: Hikari's default max is 10 and lower/prod
-set `connection-timeout: 60000`, so under load a request hangs past the client's abort and a
-*busy* server presents to the browser as lie-fi. `e2e/playwright.config.ts` pins `workers: 2`
+Pool exhaustion is the same shape from the other end. It used to be: Hikari's max is 10, and
+lower/prod set `connection-timeout: 60000`, so under load a request hung past the client's abort and
+a *busy* server presented to the browser as lie-fi. Since 2026-11 the timeout is 10s everywhere,
+inside the client's 15s abort, so a saturated pool answers an honest 503 instead: the asymmetry
+above, used on purpose.
+
+The Container Apps probes follow the same rule. Neither liveness nor readiness checks the shared
+database. A DB outage that restarted every replica (liveness) or pulled them all out of rotation
+(readiness) would turn honest 503s into no answer at all. `e2e/playwright.config.ts` pins `workers: 2`
 specifically because higher concurrency reproduced this against the local stack.
 
 For DB-down-but-container-up, the load-bearing invariant is `backend-core.md`'s: an escaped

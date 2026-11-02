@@ -8,10 +8,10 @@ spring:
     # "${SPRING_DATASOURCE_USERNAME}" string to SQL Server as the username, failing login
     # and crash-looping the container on every deploy.
     hikari:
-      # Azure SQL free/serverless tiers auto-pause and cold-start on the first
-      # connection after idling (see CLAUDE.md) -- give the pool enough time to wait
-      # out a resume instead of failing app startup or the first request.
-      connection-timeout: 60000
+      # Startup waits up to 60s for the database rather than failing the replica outright -- a
+      # replica booting during a brief database hiccup comes up once it clears. (connection-timeout,
+      # how long an ordinary request waits for a pooled connection, is set for every profile in
+      # application.yml.)
       initialization-fail-timeout: 60000
   jpa:
     show-sql: false
