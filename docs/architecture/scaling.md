@@ -16,7 +16,7 @@ than one replica is **state each JVM keeps in its own memory**. Each piece and i
 | In-memory state | What goes wrong at N > 1 | Replacement | Status |
 |---|---|---|---|
 | Scheduled watchdogs | Each replica runs each job: duplicate audit rows and admin alerts, N× the Stripe calls | ShedLock (below) | Done |
-| `AccountAccessService`'s 60s cache | Invalidation is local, so other replicas keep stale access, and a password change signs the person out | Token-newer re-read + DB invalidation log | Planned |
+| `AccountAccessService`'s 60s cache | Invalidation is local, so other replicas keep stale access, and a password change signs the person out | Token-newer re-read + DB invalidation log (below) | Done |
 | Email and after-commit work in an in-process queue | Lost when a replica scales in, redeploys or crashes | Transactional outbox | Planned |
 | Global email cap (Bucket4j, per JVM) | N× looser, and it refuses real sign-ups at 30/hour | Counted from the outbox | Planned |
 | `TestCodeCache` (local/lower only) | e2e can't read a code from the replica that didn't send it | A DB table | Planned |
@@ -47,6 +47,46 @@ them, using a table the app already has access to. There's no new infrastructure
 
 **Lower scales to zero.** At zero replicas nothing runs, which was already true before ShedLock.
 Background threads don't count as HTTP traffic, so they never keep a replica awake.
+
+## The access cache: two halves, both needed
+
+`AccountAccessService` caches, per (login, household), the membership, the role and the household's
+plan for 60 seconds. It is consulted on every signed-in request, so without the cache every request
+would cost a database round trip. Each replica has its own copy, which breaks two things:
+
+1. **A freshly minted token can reach a replica that hasn't seen the change behind it.** Change your
+   password on replica A; the next request, carrying the new token, lands on replica B, whose cache
+   still holds the old token version. Refusing it answers 401, and the client treats any 401 as
+   "signed out". An invite accepted on A has the same problem if B cached "no membership".
+2. **A revocation, plan change or visibility change made on A doesn't reach B** until B's entry
+   expires: a re-subscribed household stays paused, a revoked login keeps working, and a Pro owner
+   hiding clients from each other still exposes them.
+
+**Half (a): a token newer than the cache re-reads.** If the token's `tv` is higher than the cached
+row's, or no membership is cached and the token's `iat` is no earlier than the second the entry was
+read, the entry is re-read. A token that is merely *old* is still refused from memory. A revoked
+device retrying forever costs nothing.
+
+**Half (b): an invalidation log every replica replays.** Each `invalidate*` call clears the local
+cache and also inserts a row into `access_invalidations` (user, account, or both). Every replica
+replays the last 30 seconds of rows every ~2 seconds (`AccessInvalidationPoller`). It *replays* rather
+than reading from a cursor, and that matters:
+
+- The insert commits in its own transaction, possibly a moment before the change that caused it. A
+  replica that reloads in that gap gets corrected on its next poll.
+- An IDENTITY gap can't make a row get skipped.
+- A replica that starts mid-window still picks the row up.
+
+The cost is about 15 re-reads of each affected membership. Invalidations happen a handful of times
+a day. If the table is unreachable, the 60s TTL still bounds staleness, which is how every replica
+behaved before.
+
+(a) alone leaves revocations stale for a minute. (b) alone leaves a ~2s window in which a new token is
+refused, which signs the person out. Rows are purged after an hour (ShedLock'd).
+
+`AccessCacheAcrossReplicasTest` builds a second `AccountAccessService` on the same database (its own
+cache, as a second JVM would have) and pins each case, with a control showing the second replica *is*
+stale without a poll.
 
 ## Rate limits stay per replica, on purpose
 

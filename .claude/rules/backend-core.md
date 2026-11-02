@@ -198,6 +198,15 @@ its own copy of everything in-process. Full plan: `docs/architecture/scaling.md`
   because its holder died must be safe to wait for the next tick.
   `EveryScheduledJobIsLockedTest` fails the build on an unlocked one, and on two jobs sharing a
   lock name.
+- **Every change to what a login may do goes through `AccountAccessService.invalidate*`**, never
+  around it, and never by evicting a cache directly. Those methods clear this replica's cache *and*
+  write `access_invalidations`, which every other replica replays every ~2s. A new `@Scheduled` job
+  that must run everywhere (it touches only this JVM's memory) carries `@RunsOnEveryReplica("why")`
+  instead of a lock.
+- **A token newer than the cached entry must re-read, never be refused** (`AccountAccessService`'s
+  `isOlderThan`). The next request after a password change or an invite accept can land on a replica
+  that hasn't heard about it, and a refusal there is a 401, which the client reads as signed out.
+  Don't "simplify" that back to comparing `tv` for equality only.
 - **Never delete a `shedlock` row**, in a test or by hand. ShedLock remembers which rows it inserted
   and only UPDATEs them afterwards, so a deleted row makes that job skip every tick until restart,
   silently. Expire it instead (`UPDATE shedlock SET lock_until = …past…`), as
