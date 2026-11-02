@@ -237,30 +237,19 @@ export async function loginAs(page: Page, email: string, password: string): Prom
   await expect(page).toHaveURL(/\/app\/log/);
 }
 
-// TestCodeCache (see TestCodeCache.java) is a plain in-memory map inside the running
-// container -- register() only returns after writing to it, so a lookup immediately after
-// should always find it. It's occasionally missing anyway: the lower backend scales to zero
-// when idle (min-replicas 0), and Azure Container Apps can briefly route two requests to two
-// different instances during a scale event, leaving the code written on an instance this GET
-// doesn't land on. Retrying tolerates that transient case (confirmed live 2026-07-13 as the
-// cause of an intermittent "Unexpected end of JSON input" failure) without masking a real
-// bug -- if the code is genuinely never sent, this still fails after the deadline.
+// TestCodeCache (see TestCodeCache.java) keeps codes in the database, written in the same
+// transaction as the registration or reset that issued them -- so by the time that request has
+// answered, every backend replica can read the code back. (It used to be an in-memory map, which a
+// second replica, or lower scaling from zero, made intermittently empty; this used to retry for 10s
+// to paper over that.)
 export async function fetchPendingCode(request: APIRequestContext, apiUrl: string, email: string): Promise<string> {
-  const deadline = Date.now() + 10_000;
-  while (true) {
-    const response = await request.get(`${apiUrl}/api/auth/test/pending-code`, {
-      params: { email },
-      headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' },
-    });
-    if (response.ok()) {
-      const { code } = await response.json();
-      return code;
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(`No pending code appeared for ${email} within 10s (last status: ${response.status()})`);
-    }
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
+  const response = await request.get(`${apiUrl}/api/auth/test/pending-code`, {
+    params: { email },
+    headers: { 'X-E2E-Test-Key': process.env.E2E_TEST_SUPPORT_KEY ?? '' },
+  });
+  expect(response.ok(), `No pending code for ${email} (status ${response.status()})`).toBeTruthy();
+  const { code } = await response.json();
+  return code;
 }
 
 export type EmailOutcome = { status: 'SENT' | 'FAILED'; messageId: string | null; detail: string | null };

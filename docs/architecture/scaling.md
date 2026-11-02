@@ -19,7 +19,7 @@ than one replica is **state each JVM keeps in its own memory**. Each piece and i
 | `AccountAccessService`'s 60s cache | Invalidation is local, so other replicas keep stale access, and a password change signs the person out | Token-newer re-read + DB invalidation log (below) | Done |
 | Email and after-commit work in an in-process queue | Lost when a replica scales in, redeploys or crashes | Transactional outbox (below) | Done |
 | Global email cap (Bucket4j, per JVM) | N× looser, and it refuses real sign-ups at 30/hour | Counted from the outbox, plus a warning level and pacing (below) | Done |
-| `TestCodeCache` (local/lower only) | e2e can't read a code from the replica that didn't send it | A DB table | Planned |
+| `TestCodeCache` (local/lower only) | e2e can't read a code from the replica that didn't send it | The `test_codes` table, written in the issuing transaction | Done |
 | Per-IP / per-email / per-account rate limits | Each limit N× looser | **Kept per replica, on purpose** (below) | — |
 
 ## Scheduled jobs: ShedLock
