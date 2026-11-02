@@ -49,6 +49,9 @@ public class OutboxDispatcher implements SmartInitializingSingleton {
 
     private static final int MAX_ERROR_CHARS = 2000;
 
+    // How long an email row waits when the last minute's quota is used up.
+    private static final long PACING_DELAY_SECONDS = 10;
+
     record Claimed(long id, String handler, String payload, int attempts, String cid) {
     }
 
@@ -168,6 +171,16 @@ public class OutboxDispatcher implements SmartInitializingSingleton {
             return;
         }
 
+        if (row.handler().startsWith("email.") && emailQuotaUsedUp()) {
+            // Not a failure: put the row back, give the attempt back, and try again shortly.
+            jdbc.update("UPDATE outbox SET claimed_until = NULL, attempts = attempts - 1, "
+                    + "next_attempt_at = DATEADD(SECOND, ?, SYSUTCDATETIME()) WHERE id = ?",
+                    PACING_DELAY_SECONDS, row.id());
+            log.debug("Outbox row {} ({}) deferred: {} emails already sent in the last minute", row.id(),
+                    row.handler(), properties.getEmailSendsPerMinute());
+            return;
+        }
+
         P payload;
         try {
             payload = Outbox.JSON.readValue(cipher.decrypt(row.payload()), handler.payloadType());
@@ -206,6 +219,14 @@ public class OutboxDispatcher implements SmartInitializingSingleton {
             log.error("Outbox row {} ({}) was delivered but could not be marked SENT; it may be delivered again",
                     row.id(), row.handler(), e);
         }
+    }
+
+    // Approximate across replicas -- two can both see room for one more -- which can overshoot the
+    // quota by a send or two. ACS then throttles that one, and it is retried like any failure.
+    private boolean emailQuotaUsedUp() {
+        Integer sent = jdbc.queryForObject("SELECT COUNT(*) FROM outbox WHERE status = 'SENT' "
+                + "AND completed_at >= DATEADD(MINUTE, -1, SYSUTCDATETIME()) AND handler LIKE 'email.%'", Integer.class);
+        return sent != null && sent >= properties.getEmailSendsPerMinute();
     }
 
     private <P> void giveUpSafely(OutboxHandler<P> handler, P payload, Claimed row, String reason) {

@@ -11,12 +11,15 @@ public class RateLimitProperties {
     // so one bucket per source IP covers the abuse case for either endpoint.
     private int perIpPerHour = 10;
 
-    // System-wide cap on verification emails sent (register + resend combined),
-    // regardless of source IP or email. This is the real defense against a
-    // distributed bot running up the Azure Communication Services bill -- per-IP
-    // limits only bound a single source. Sized with headroom above the ~7 emails
-    // one full Playwright e2e run against `lower` sends per deploy.
-    private int globalEmailSendsPerHour = 30;
+    // The HARD global cap on user-facing emails queued per hour, across every replica
+    // (GlobalEmailCap counts them from the outbox). Above it, /register, /resend-code,
+    // /forgot-password and /resend-reset-code answer 429. Set it just below the hourly quota Azure
+    // has granted this sender. It was 30/hour per JVM, which a burst of real sign-ups would hit.
+    private int globalEmailSendsPerHour = 1000;
+
+    // The WARNING threshold: refuses nothing, alerts the admin (EMAIL_VOLUME_HIGH) at most once an
+    // hour, so a spike reaches a person well before the hard cap refuses anyone.
+    private int globalEmailWarningPerHour = 150;
 
     public int getPerIpPerHour() {
         return perIpPerHour;
@@ -32,6 +35,14 @@ public class RateLimitProperties {
 
     public void setGlobalEmailSendsPerHour(int globalEmailSendsPerHour) {
         this.globalEmailSendsPerHour = globalEmailSendsPerHour;
+    }
+
+    public int getGlobalEmailWarningPerHour() {
+        return globalEmailWarningPerHour;
+    }
+
+    public void setGlobalEmailWarningPerHour(int globalEmailWarningPerHour) {
+        this.globalEmailWarningPerHour = globalEmailWarningPerHour;
     }
 
     // Login limits (LoginRateLimiter). /api/auth/login had no throttle of any kind before this.

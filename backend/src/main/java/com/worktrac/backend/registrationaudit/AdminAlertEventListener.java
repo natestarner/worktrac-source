@@ -35,7 +35,10 @@ public class AdminAlertEventListener implements OutboxHandlerProvider {
             RegistrationEventType.SUCCESS_EMAIL_FAILED,
             RegistrationEventType.PASSWORD_RESET_EMAIL_FAILED,
             RegistrationEventType.PASSWORD_RESET_SUCCESS_EMAIL_FAILED,
-            RegistrationEventType.REGISTRATION_EMAIL_DISPATCH_MISSING);
+            RegistrationEventType.REGISTRATION_EMAIL_DISPATCH_MISSING,
+            // Under the send-failure toggle: both mean "email is not reaching people the way it
+            // should", and one toggle for that is easier to reason about than two.
+            RegistrationEventType.EMAIL_VOLUME_HIGH);
 
     private static final Set<RegistrationEventType> DELIVERY_FAILURE_TYPES = Set.of(
             RegistrationEventType.EMAIL_BOUNCED,

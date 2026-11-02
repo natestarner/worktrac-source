@@ -137,6 +137,9 @@ function ActivityLegend() {
         and failing, which the types above already cover). ADMIN_ALERT_FAILED means an alert email
         about one of these events itself failed to send -- if you see this, whatever it names still
         happened, you just weren't emailed about it; check the Detail column and this feed directly.
+        EMAIL_VOLUME_HIGH (email &quot;system&quot;) means sign-up and reset emails crossed the hourly
+        warning level, or the hard cap that starts refusing them -- the Detail column says which.
+        Check for abuse, or raise the caps and the Azure email quota if it is real traffic.
       </div>
     </div>
   );

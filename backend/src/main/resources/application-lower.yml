@@ -70,7 +70,12 @@ app:
     # growing -- while staying a real bound, unlike local's effectively-unlimited setting, because
     # lower is genuinely internet-facing.
     per-ip-per-hour: 500
-    global-email-sends-per-hour: 1000
+    # The global caps now count EVERY user-facing email an e2e run queues (verification, welcome,
+    # reset, invites -- ~2-3 per household, ~300 a run), not just verification sends, and several
+    # runs can land in one hour (deploys, shards, the nightly). The warning is set equal to the cap
+    # so lower never alerts on its own test traffic.
+    global-email-sends-per-hour: 5000
+    global-email-warning-per-hour: 5000
     # Raised over the production defaults for the same reason as the two above: the e2e suite runs
     # against lower from one source IP, and Playwright's CI retry policy multiplies every attempt.
     # The contact spec submits far fewer times than registration, so these need far less headroom.
@@ -91,6 +96,11 @@ app:
     contact-per-user-per-hour: 200
     contact-per-ip-per-hour: 500
     contact-global-per-hour: 500
+
+  outbox:
+    # e2e addresses are no-op sends (e2e-noop-recipient-pattern above), so pacing them to ACS's
+    # quota would only slow the suite.
+    email-sends-per-minute: 100000
 
   quota:
     # Raised well clear of what one e2e run produces, same reasoning as the rate limits above.

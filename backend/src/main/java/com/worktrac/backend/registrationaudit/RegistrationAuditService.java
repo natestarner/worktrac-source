@@ -39,6 +39,7 @@ public class RegistrationAuditService {
             RegistrationEventType.PASSWORD_RESET_EMAIL_FAILED,
             RegistrationEventType.PASSWORD_RESET_SUCCESS_EMAIL_FAILED,
             RegistrationEventType.REGISTRATION_EMAIL_DISPATCH_MISSING,
+            RegistrationEventType.EMAIL_VOLUME_HIGH,
             RegistrationEventType.EMAIL_BOUNCED,
             RegistrationEventType.EMAIL_DELIVERY_FAILED,
             RegistrationEventType.EMAIL_FILTERED_SPAM,

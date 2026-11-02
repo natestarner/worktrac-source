@@ -106,6 +106,7 @@ app:
     # reach rather than one that merely looks generous.
     per-ip-per-hour: 100000
     global-email-sends-per-hour: 100000
+    global-email-warning-per-hour: 100000
     # Same reasoning as the two above: @SpringBootTest classes share one Spring context and
     # therefore one set of stateful buckets across every test method in the file, so the
     # production-sane defaults would start 429ing unrelated tests partway through a class purely
@@ -129,6 +130,10 @@ app:
     # Local dev/tests never receive a real Event Grid callback (it's cloud-only), so a fixed,
     # committed placeholder is safe here the same way jwt.secret and test-support-key above are.
     key: local-dev-only-webhook-key-do-not-use-elsewhere
+  outbox:
+    # No ACS quota to respect on localhost (and integration tests run this profile): pacing to 30 a
+    # minute would leave a busy test class's emails waiting for a poll that tests switch off.
+    email-sends-per-minute: 100000
 
   quota:
     # Effectively unlimited locally, for the same reason the rate limits above are: there is no
