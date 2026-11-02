@@ -38,6 +38,10 @@ public class AsyncConfig {
         executor.setQueueCapacity(200);
         executor.setThreadNamePrefix("email-async-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        // On shutdown (a scale-in or a deploy), finish what is already queued rather than dropping
+        // it, within Spring's 25s shutdown phase.
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(20);
         executor.initialize();
         return executor;
     }
