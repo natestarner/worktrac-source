@@ -3,8 +3,9 @@ import { queryKeys } from '../api/queryKeys';
 import { listExercises, listPersonExercises } from '../api/exercises';
 import { listTags } from '../api/tags';
 import { listRoutines } from '../api/routines';
-import { getLiveSession, getHistory, getHistoryWindow } from '../api/sessions';
+import { getHistory, getHistoryWindow } from '../api/sessions';
 import { refreshHistory, scopedHistoryRefreshInFlight } from './queryClient';
+import { fetchLiveSession } from './liveSession';
 import { listRoster } from '../api/roster';
 
 // How fresh a warmed entry needs to be before prefetchQuery bothers refetching it -- kept short
@@ -50,9 +51,9 @@ const WARM_STALE_TIME = 30 * 1000;
 //   - exercises, personExercises -- insertOptimisticExercise (AddEditExerciseModal) puts a temp
 //                       exercise in both while its create is still queued in the outbox.
 //   - liveSession    -- EndWorkoutConfirmModal optimistically nulls it on end-workout.
-function personWarmTargets(personId) {
+function personWarmTargets(queryClient, personId) {
   return [
-    { queryKey: queryKeys.liveSession(personId), queryFn: () => getLiveSession(personId) },
+    { queryKey: queryKeys.liveSession(personId), queryFn: () => fetchLiveSession(queryClient, personId) },
     { queryKey: queryKeys.personExercises(personId), queryFn: () => listPersonExercises(personId) },
     { queryKey: queryKeys.routines(personId), queryFn: () => listRoutines(personId), refreshAfterRestore: true },
     // Refreshed through refreshHistory, like every other History refresh, never a bare prefetch --
@@ -150,7 +151,7 @@ export async function warmOfflineCache(
     // reads rather than a sibling key nothing observes.
     { queryKey: queryKeys.roster(undefined), queryFn: () => listRoster() },
     ...peopleToWarm(people, { selfPersonId, activePersonId })
-      .flatMap((person) => personWarmTargets(person.id)),
+      .flatMap((person) => personWarmTargets(queryClient, person.id)),
   ];
 
   await Promise.allSettled(

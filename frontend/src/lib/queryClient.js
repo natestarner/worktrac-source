@@ -302,6 +302,21 @@ export function isDeleteQueuedFor(client, setId) {
     .some((m) => m.options.mutationKey?.[0] === DELETE_SET_MUTATION_KEY[0] && m.state.variables?.setId === setId);
 }
 
+// The tempIds of this person's live-set creates that have not landed yet -- the sets of the workout
+// in progress. Session-edit creates are excluded: they log into a PAST session, not the live one.
+// Read by the End tap (EndWorkoutConfirmModal, to mark exactly these as ended) and by
+// lib/liveSession.js (to tell a "no live workout" answer that predates them from a real one).
+export function pendingLiveSetCreates(client, personId) {
+  return client
+    .getMutationCache()
+    .getAll()
+    .filter((m) => m.options.mutationKey?.[0] === LOG_SET_MUTATION_KEY[0])
+    .filter((m) => m.state.variables?.personId === personId && m.state.variables?.mode !== 'session')
+    .filter((m) => isUnsyncedWrite({ status: m.state.status, errorStatus: m.state.error?.status }))
+    .map((m) => m.state.variables?.tempId)
+    .filter(Boolean);
+}
+
 // The session a set's create landed in, read off that create's own response -- for a write that
 // targeted the set by tempId before any session existed. Null if the create never landed or has been
 // collected, which leaves the caller no worse off than not asking.

@@ -55,6 +55,13 @@ person's synced sets are missing from "This session" entirely. `useLiveSession`'
 function for exactly this reason — don't flatten it back to a number
 (`docs/incidents/2026-08-12-provisional-live-session-restored-as-fresh.md`).
 
+**…and a "no live workout" answer must not erase it while its sets are queued.** Revalidating it
+gets the server's honest "none" until a set lands. `lib/liveSession.js#fetchLiveSession` (the one
+fetcher of the key) keeps the placeholder in that case; without it, a late answer blanked the
+session bar and the next set restarted the workout from its own time, so `useSessionRecap`'s
+`clientLoggedAt >= startedAt` scoping dropped the earlier sets. `offline-internals.md` has the
+rules; `docs/incidents/2026-11-02-late-live-session-answer-splits-workout.md` the story.
+
 ### Handing a row OFF those fallbacks must OVERLAP, and `tempId` is the hinge
 
 A pending row leaves `pendingBeforeSession` the instant its mutation reports `success`

@@ -1,4 +1,4 @@
-import { queryClient, enqueueOutboxWrite, isUnsyncedWrite, END_WORKOUT_MUTATION_KEY, LOG_SET_MUTATION_KEY } from '../../lib/queryClient';
+import { queryClient, enqueueOutboxWrite, pendingLiveSetCreates, END_WORKOUT_MUTATION_KEY } from '../../lib/queryClient';
 import { queryKeys } from '../../api/queryKeys';
 import { markCreatesEnded, markSessionEnded } from '../../lib/endedSessions';
 import { tryHaptic } from '../../lib/haptics';
@@ -10,19 +10,6 @@ import { formatSessionRecap, sessionElapsedMs } from '../../utils/sessionRecap';
 import Modal from './Modal';
 import { cancelButtonStyle } from './ConfirmDialog';
 import Button from './Button';
-
-// The tempIds of this person's live-set creates that have not landed yet -- the sets of the workout
-// being ended. Session-edit creates are excluded: they log into a PAST session, not the live one.
-function pendingLiveSetCreates(personId) {
-  return queryClient
-    .getMutationCache()
-    .getAll()
-    .filter((m) => m.options.mutationKey?.[0] === LOG_SET_MUTATION_KEY[0])
-    .filter((m) => m.state.variables?.personId === personId && m.state.variables?.mode !== 'session')
-    .filter((m) => isUnsyncedWrite({ status: m.state.status, errorStatus: m.state.error?.status }))
-    .map((m) => m.state.variables?.tempId)
-    .filter(Boolean);
-}
 
 export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
   const { clearRestTimer } = useUI();
@@ -45,7 +32,7 @@ export default function EndWorkoutConfirmModal({ personId, onClose, onEnded }) {
     // under any id. Record the sets instead, so the session they create is marked ended the moment
     // it lands rather than written back as live (see endedSessions.js#markCreatesEnded). A known id
     // is already covered above, so this runs only for the placeholder.
-    if (endedId == null) markCreatesEnded(personId, pendingLiveSetCreates(personId));
+    if (endedId == null) markCreatesEnded(personId, pendingLiveSetCreates(queryClient, personId));
     // Optimistically clear the live session so the green dot and "session in progress" banner clear
     // instantly -- offline included, where the durable end-workout write only settles on reconnect.
     queryClient.setQueryData(queryKeys.liveSession(personId), null);

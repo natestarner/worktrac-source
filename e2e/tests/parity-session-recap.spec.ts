@@ -1,8 +1,9 @@
 import { APIRequestContext, expect, test } from '@playwright/test';
 import { registerHousehold } from './support/auth';
 import { dismissPrCelebration, pickExercise } from './support/exercises';
-import { delayNetwork } from './support/faults';
-import { waitForOutboxDrain } from './support/offline';
+import { delayNetwork, holdNetwork } from './support/faults';
+import { expectHistoryMatchesServer } from './support/historyConvergence';
+import { pinOfflineViaSettings, unpinOfflineViaSettings, waitForOutboxDrain } from './support/offline';
 import { forEachConnectivityMode } from './support/parity';
 
 // Ending a workout now names what was actually done -- "2 exercises · 3 sets" -- in the confirm
@@ -183,3 +184,52 @@ async function liveWorkoutOnServer(request: APIRequestContext, email: string) {
     sets: entry.sets.length,
   }));
 }
+
+// A "no live workout" answer the app asked for BEFORE a workout's first set must not erase that
+// workout. Offline mode is where it bites: the network still works, so a live-session fetch already
+// on the wire when the person switched offline mode on (the boot or warm-up fetch, typically) lands
+// AFTER their first set -- and its "none" answer used to replace the workout the set had just
+// started. The "Session in progress" bar vanished, the next set started a second placeholder from
+// its own time, and this recap -- which counts sets logged since the workout started -- dropped
+// every set before it ("2 exercises · 2 sets" for three). Seen on lower once, in this file's
+// pinned-offline parity test; held deterministically here. Nothing was lost on the server -- the
+// convergence check at the end is what says so.
+test.describe('Session recap around a late live-session answer', () => {
+  test('a "no workout" answer from before the first set does not split the workout', async ({ page, request }) => {
+    const liveFetch = await holdNetwork(page, /\/api\/people\/\d+\/sessions\/live$/);
+    await registerHousehold(page, request, 'Late');
+    await expect.poll(() => liveFetch.held(), { message: 'a live-session fetch to hold' }).toBeGreaterThan(0);
+
+    await pinOfflineViaSettings(page);
+    await page.getByRole('link', { name: 'Log' }).click();
+    await pickExercise(page, 'Barbell Bench Press');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 1')).toBeVisible();
+
+    // The held answer -- "no live workout", true when it was asked -- lands now, after the set.
+    const answered = page.waitForResponse(/\/api\/people\/\d+\/sessions\/live$/);
+    liveFetch.release();
+    await answered;
+    await expect(page.getByText(/^Session in progress/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 2')).toBeVisible();
+    await page.getByRole('button', { name: '← All exercises' }).click();
+    await pickExercise(page, 'Barbell Back Squat');
+    await page.getByRole('button', { name: 'Log set' }).click();
+    await dismissPrCelebration(page);
+    await expect(page.getByText('Set 1')).toBeVisible();
+
+    await page.getByRole('button', { name: 'End workout' }).click();
+    const dialog = page.getByRole('dialog', { name: 'End this workout?' });
+    await expect(dialog.getByText('2 exercises · 3 sets')).toBeVisible();
+    await dialog.getByRole('button', { name: 'End workout' }).click();
+    await expect(page.getByText('Workout ended — 2 exercises · 3 sets.')).toBeVisible();
+
+    await unpinOfflineViaSettings(page);
+    await waitForOutboxDrain(page);
+    await expectHistoryMatchesServer(page, request);
+  });
+});

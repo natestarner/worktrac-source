@@ -1,8 +1,8 @@
-import { QueryClient, onlineManager } from '@tanstack/react-query';
+import { MutationObserver, QueryClient, onlineManager } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { warmOfflineCache, peopleToWarm, MAX_WARMED_PEOPLE } from './offlineCacheWarm';
 import { queryKeys } from '../api/queryKeys';
-import { refreshHistory } from './queryClient';
+import { LOG_SET_MUTATION_KEY, refreshHistory } from './queryClient';
 
 vi.mock('../api/exercises', () => ({
   listExercises: vi.fn().mockResolvedValue([{ id: 1, name: 'Squat' }]),
@@ -376,5 +376,46 @@ describe('warmOfflineCache while a scoped History refresh is in flight', () => {
 
     await vi.waitFor(() => expect(client.getQueryData(queryKeys.history(PERSON.id))).toEqual(['synced']));
     expect(getHistory).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The warm is the second fetcher of liveSession, and the likelier one to be on the wire when
+// offline mode is switched on (it runs on boot, reconnect, refocus and every five minutes). Its
+// "none" must not erase a workout whose first set is still queued -- lib/liveSession.js.
+describe('warmOfflineCache and a workout whose first set has not synced', () => {
+  let client;
+  const PLACEHOLDER = { id: null, startedAt: '2026-11-02T13:14:00Z' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    onlineManager.setOnline(true);
+    client = new QueryClient();
+  });
+  afterEach(() => {
+    client.clear();
+    localStorage.clear();
+  });
+
+  it('keeps the placeholder when the server says none and a set is queued', async () => {
+    // Old enough that the warm's 30s check refetches it.
+    client.setQueryData(queryKeys.liveSession(1), PLACEHOLDER, { updatedAt: Date.now() - 60_000 });
+    new MutationObserver(client, { mutationKey: LOG_SET_MUTATION_KEY, mutationFn: () => new Promise(() => {}) })
+      .mutate({ mode: 'live', personId: 1, exerciseId: 1, tempId: 'optimistic-a', clientLoggedAt: PLACEHOLDER.startedAt })
+      .catch(() => {});
+
+    await warmOfflineCache(client, [{ id: 1 }]);
+
+    expect(getLiveSession).toHaveBeenCalledWith(1);
+    expect(client.getQueryData(queryKeys.liveSession(1))).toEqual(PLACEHOLDER);
+  });
+
+  it('still takes the server\'s none when nothing is queued', async () => {
+    client.setQueryData(queryKeys.liveSession(1), PLACEHOLDER, { updatedAt: Date.now() - 60_000 });
+
+    await warmOfflineCache(client, [{ id: 1 }]);
+
+    expect(getLiveSession).toHaveBeenCalledWith(1);
+    expect(client.getQueryData(queryKeys.liveSession(1))).toBeNull();
   });
 });

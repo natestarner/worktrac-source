@@ -348,6 +348,10 @@ Phases, in order — `setup` runs **online**, everything after runs **in the mod
 | `act` / `assert` | in-mode | The action, then the parity claim |
 | `afterReconnect` | after restore + outbox drain | That the write actually reached the server |
 
+- **The restore runs after `assert`, never in a `finally`.** A failure ends the test and its context,
+  so there is nothing to restore — and a restore that runs anyway can hang (pinned-offline leaves
+  through the banner, which an open dialog covers) and REPLACE the real error with its own
+  (`docs/incidents/2026-11-02-late-live-session-answer-splits-workout.md`).
 - **`assert` must not branch on `ctx.mode`.** If it needs to, that is a real divergence and belongs
   on the register in `.claude/rules/resilience.md`, not in an `if`.
 - **Assert the *result*, not the sync chrome.** The outbox badge, "Saving…" and the offline banner

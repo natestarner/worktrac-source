@@ -128,14 +128,16 @@ export function forEachConnectivityMode<T>(title: string, spec: ParitySpec<T>) {
       const state = await spec.setup(page, request);
 
       const handle = await enterMode(page, mode);
-      try {
-        await returnToLogTab(page);
-        if (spec.navigate) await spec.navigate(page, state, ctx);
-        await spec.act(page, state, ctx);
-        await spec.assert(page, state, ctx);
-      } finally {
-        await handle.restore();
-      }
+      await returnToLogTab(page);
+      if (spec.navigate) await spec.navigate(page, state, ctx);
+      await spec.act(page, state, ctx);
+      await spec.assert(page, state, ctx);
+      // Not in a `finally`. A failure above ends the test and its browser context with it, so there
+      // is nothing to restore for -- and restoring anyway REPLACED the real error: pinned-offline
+      // leaves through the banner's "Go back online", which a still-open dialog covers, so a wrong
+      // count in the End dialog was reported as a 90s click timeout on that button (lower,
+      // 2026-11-02). It also redrew the screen before the failure screenshot was taken.
+      await handle.restore();
 
       if (spec.afterReconnect) {
         await waitForOutboxDrain(page);
