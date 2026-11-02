@@ -29,6 +29,9 @@ public interface RegistrationEventRepository extends JpaRepository<RegistrationE
 
     // RegistrationDispatchWatchdog's resolution check: has this email had any of the given
     // outcome types recorded at or after its REGISTER_STARTED row's own timestamp?
+    // GlobalEmailCap's once-an-hour check for EMAIL_VOLUME_HIGH, shared by every replica.
+    boolean existsByEventTypeAndCreatedAtGreaterThanEqual(RegistrationEventType eventType, Instant since);
+
     boolean existsByEmailAndEventTypeInAndCreatedAtGreaterThanEqual(String email,
                                                                      Collection<RegistrationEventType> eventTypes,
                                                                      Instant since);

@@ -18,7 +18,7 @@ than one replica is **state each JVM keeps in its own memory**. Each piece and i
 | Scheduled watchdogs | Each replica runs each job: duplicate audit rows and admin alerts, N× the Stripe calls | ShedLock (below) | Done |
 | `AccountAccessService`'s 60s cache | Invalidation is local, so other replicas keep stale access, and a password change signs the person out | Token-newer re-read + DB invalidation log (below) | Done |
 | Email and after-commit work in an in-process queue | Lost when a replica scales in, redeploys or crashes | Transactional outbox (below) | Done |
-| Global email cap (Bucket4j, per JVM) | N× looser, and it refuses real sign-ups at 30/hour | Counted from the outbox | Planned |
+| Global email cap (Bucket4j, per JVM) | N× looser, and it refuses real sign-ups at 30/hour | Counted from the outbox, plus a warning level and pacing (below) | Done |
 | `TestCodeCache` (local/lower only) | e2e can't read a code from the replica that didn't send it | A DB table | Planned |
 | Per-IP / per-email / per-account rate limits | Each limit N× looser | **Kept per replica, on purpose** (below) | — |
 
@@ -134,5 +134,25 @@ The Bucket4j limiters stay in memory, so each limit applies per replica:
   nothing.
 
 The **global email caps** are the exception, because they protect the unauthenticated endpoints
-(registration, password reset) and the email quota, which is shared. They move to a count from the
-outbox. Per-IP filtering at the edge (Front Door + WAF) is Phase II.
+(registration, password reset) and the email quota, which is shared. Per-IP filtering at the edge
+(Front Door + WAF) is Phase II.
+
+## The global email caps
+
+`GlobalEmailCap` counts the user-facing `email.*` outbox rows queued in the last hour, across every
+replica (an indexed range count, V88). It runs only on `/register`, `/resend-code`,
+`/forgot-password` and `/resend-reset-code`. There are two levels:
+
+| Level | Env var | Default | Effect |
+|---|---|---|---|
+| Warning | `APP_RATE_LIMIT_GLOBAL_EMAIL_WARNING_PER_HOUR` | 150 | Records `EMAIL_VOLUME_HIGH`, which alerts the admin at most once an hour (send-failure toggle). Refuses nothing |
+| Hard cap | `APP_RATE_LIMIT_GLOBAL_EMAIL_SENDS_PER_HOUR` | 1000 | 429. **Keep it just below the hourly quota Azure Communication Services has granted** |
+
+Admin alerts and Contact Us alerts don't count and are never refused. Contact Us keeps its own
+limiter.
+
+**Pacing.** `OutboxDispatcher` sends at most `APP_OUTBOX_EMAIL_SENDS_PER_MINUTE` (default 30, ACS's
+default for a custom domain) emails a minute across all replicas. An email row due while the last
+minute is full goes back for 10 seconds without spending an attempt. A burst therefore queues for a
+minute or two instead of being throttled by ACS. Codes last 15 minutes, so the wait is harmless.
+Raise all three numbers together after Azure raises the quota.

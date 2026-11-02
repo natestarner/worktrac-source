@@ -59,6 +59,12 @@ public enum RegistrationEventType {
     PASSWORD_RESET_SUCCESS_EMAIL_SENT,
     PASSWORD_RESET_SUCCESS_EMAIL_FAILED,
 
+    // The user-facing emails queued in the last hour crossed the warning threshold (or the hard
+    // cap) in ratelimit.GlobalEmailCap. Recorded at most once an hour under the email "system",
+    // and alertable, so a spike -- marketing working, or a bot -- reaches a person before the hard
+    // cap starts refusing sign-ups.
+    EMAIL_VOLUME_HIGH,
+
     // Level 2: what actually happened to it, reported by Event Grid after the fact.
     EMAIL_DELIVERED,
     EMAIL_BOUNCED,
