@@ -58,6 +58,34 @@ for arg in "$@"; do
 done
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
 
+# With LOWER_HEALTH_URL set (mobile-flows.yml), keep lower warm for as long as the flows run. Lower is
+# min-replicas=0 (resilience.md, "Cold start"), and the seed step is the last request it sees before
+# flow 01: the simulator boot above and Maestro's first driver start then take 5-17 minutes, lower
+# scales back to zero, and flow 01's sign-in met the cold start -- "Couldn't reach Huddle" on
+# 2026-11-02 and twice on 11-03, while every later flow signed in fine. The flows pin what only the
+# app can break, not lower's cold start; a cold backend is the Playwright suite's to cover. Every
+# ping goes to lower-keep-warm.log in the artifact, with how long it took.
+KEEP_WARM_PID=""
+if [ -n "${LOWER_HEALTH_URL:-}" ]; then
+  ping_lower() {
+    curl -s -o /dev/null -w "$(date -u +%H:%M:%S) %{http_code} %{time_total}s\n" --max-time 90 \
+      "$LOWER_HEALTH_URL" >> "$OUT/lower-keep-warm.log" 2>/dev/null ||
+      echo "$(date -u +%H:%M:%S) 000 (no answer in 90s)" >> "$OUT/lower-keep-warm.log"
+  }
+  deadline=$(( $(date +%s) + 180 ))
+  until ping_lower && tail -n 1 "$OUT/lower-keep-warm.log" | grep -q ' 200 '; do
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      echo "::warning::Lower did not answer 200 within 180s; running the flows anyway."
+      break
+    fi
+    sleep 5
+  done
+  echo "== lower: $(tail -n 1 "$OUT/lower-keep-warm.log")"
+  ( while true; do sleep 60; ping_lower; done ) &
+  KEEP_WARM_PID=$!
+  trap '[ -n "$KEEP_WARM_PID" ] && kill "$KEEP_WARM_PID" 2>/dev/null' EXIT
+fi
+
 run_flow() {
   local flow="$1" name
   name=$(basename "$flow" .yaml)
