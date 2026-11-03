@@ -404,6 +404,26 @@ Phases, in order — `setup` runs **online**, everything after runs **in the mod
   from *which* modes it names — the 2026-08-12 entry's mode list was an artifact of how long each
   mode's run happened to take relative to the persister's 1s throttle.
 
+## A plan change reaches every backend replica within ~2s — not on the next request
+
+Each replica caches who-may-do-what per login. The replica that changes a plan evicts its own
+cache at once; the others replay the change from the access invalidation log on their next poll
+(`AccessInvalidationPoller`, every 2s). So **a reload straight after `setBillingPlan` can be
+answered by a replica still holding the old status**, and the app asks `/me` only during a load, so
+that answer stands until the next reload. Lower ran two replicas for the 2026-11-02 test window and
+`member-login-pause` failed in both engines on exactly this. A single local replica never shows it.
+
+- **After a plan change that a signed-in MEMBER must see** (paused / resumed), reload until the new
+  state shows: `member-login-pause.spec.ts`'s `reloadUntil`. Asserting on the first answer tests
+  which replica the load balancer picked.
+- **Wait for a positive signal before asserting an absence.** `toHaveCount(0)` passes on a page
+  that hasn't drawn anything yet, which is how the paused screen arriving a beat later got past
+  the old spec.
+- An OWNER is never paused, and a plan set before the member logs in is not cached yet, so most
+  `setBillingPlan` callers need none of this.
+- To reproduce it locally, answer every `/me` for 3s after the change with the body from before it
+  (`page.route`). The old spec failed 6/6 that way; it passes with `reloadUntil`.
+
 ## ⚠️ Cross-file coupling: the test email pattern
 
 `tests/support/auth.ts`'s `registerHousehold` generates
