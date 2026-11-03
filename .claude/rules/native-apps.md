@@ -300,6 +300,14 @@ contains it.
   (`ios-maestro.sh`). Sharing a household let one flow's session change another's screen, and sharing
   a session let a sheet one flow left up fail the next flow's launch ("App did not stop in time").
   Seeding through the API also means the welcome modal is never armed.
+- **Lower is kept warm while the flows run.** `ios-maestro.sh` waits for `LOWER_HEALTH_URL` to
+  answer 200, then pings it every 60s until the last flow ends (`lower-keep-warm.log` in the
+  artifact, with each ping's time). Seeding is lower's last request before flow 01, and the
+  simulator boot plus Maestro's first driver start took 5-17 minutes: long enough for
+  `min-replicas=0` to scale lower to zero, so flow 01's sign-in met the cold start and failed with
+  "Couldn't reach Huddle" (2026-11-02, 11-03) while later flows signed in fine. A cold backend is
+  covered by the Playwright suite and resilience.md, not here. Don't move the warm-up into a step
+  before `Signed-in flows`: the gap is inside the script.
 - **Not on push.** It needs `E2E_TEST_SUPPORT_KEY_LOWER`, kept in the `mobile-e2e` environment
   (any branch) apart from the signing secrets (main only). Dispatch it, or `mobile-release.yml`
   calls it, or the **nightly schedule** (07:00 UTC, from main) runs it.
