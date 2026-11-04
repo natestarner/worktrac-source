@@ -92,10 +92,29 @@ done
 BG_PIDS=()
 trap 'for p in ${BG_PIDS[@]+"${BG_PIDS[@]}"}; do kill "$p" 2>/dev/null; done; true' EXIT
 
-# What the runner is busy with: the top processes by CPU every 30s, for the whole run (host-top.log
-# in the artifact). The simulator's processes are host processes, so iOS's daemons show here too.
+# What the runner is busy with: the top processes by CPU every 30s, and by memory every 2 min, for the
+# whole run (host-top.log, host-mem.log in the artifact). The simulator's processes are host
+# processes, so iOS's daemons show here too.
 top -l 0 -s 30 -n 12 -o cpu -stats pid,command,cpu,rsize > "$OUT/host-top.log" 2>&1 &
 BG_PIDS+=($!)
+top -l 0 -s 120 -n 15 -o mem -stats pid,command,mem,cpu > "$OUT/host-mem.log" 2>&1 &
+BG_PIDS+=($!)
+
+# Launch the app once, outside any flow, and wait for its WebView to load. The FIRST WebView launch on
+# a fresh simulator is the slow one: flow 01 failed with "Loading app at capacitor://localhost..." and
+# no "WebView loaded" for over a minute (2026-11-04), while every later launch loaded in seconds. The
+# flows still install-fresh (clearState); what this warms is the system's WebKit, not the app's data.
+# How long it took goes to app-warm-up.log.
+warm_start=$(date +%s)
+xcrun simctl launch "$UDID" "$BUNDLE_ID" -huddleConsoleToFile true >/dev/null 2>&1 || true
+warmed=no
+for _ in $(seq 1 60); do
+  data=$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data 2>/dev/null) &&
+    grep -q "WebView loaded" "$data/Documents/console.log" 2>/dev/null && { warmed=yes; break; }
+  sleep 3
+done
+echo "WebView loaded: $warmed after $(( $(date +%s) - warm_start ))s" | tee "$OUT/app-warm-up.log"
+xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
 
 if [ -n "${LOWER_HEALTH_URL:-}" ]; then
   ping_lower() {

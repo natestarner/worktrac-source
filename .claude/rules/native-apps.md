@@ -311,7 +311,14 @@ contains it.
   night after night is the thing to look at; read `results.tsv` across runs, not one night.
 - **`apsd` is stopped in the test simulator.** iOS's push daemon retried its connection ~22 times a
   second for the whole run (~55% of the simulator's log lines) on a 3-core runner; the app uses no
-  push. `apsd.log` says whether it stayed down, and `host-top.log` what the runner was busy with.
+  push. `apsd.log` says whether it stayed down.
+- **The runner is out of memory, so everything around the simulator is trimmed.** A 3-core, 7 GB
+  runner with the simulator up sat at ~7.0 GB used (2.3-2.9 GB compressed) and a load average of
+  474-942 for a whole run (2026-11-04). So: host Spotlight indexing off and Xcode's build services
+  killed after the build (`ios-simulator-app`), and the app launched once before flow 01 so the first,
+  slowest WebView launch happens outside a flow (`app-warm-up.log`). `host-top.log` (CPU, every 30s)
+  and `host-mem.log` (memory, every 2 min) show what the runner was doing; read them before blaming
+  the app for anything slow.
 - **Lower is kept warm while the flows run.** `ios-maestro.sh` waits for `LOWER_HEALTH_URL` to
   answer 200, then pings it every 60s until the last flow ends (`lower-keep-warm.log` in the
   artifact, with each ping's time). Seeding is lower's last request before flow 01, and the

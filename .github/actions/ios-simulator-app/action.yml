@@ -13,6 +13,14 @@ inputs:
 runs:
   using: composite
   steps:
+    # The runner is a 3-core, 7 GB VM, and with the simulator up it ran out of memory: ~7.0 GB used,
+    # 2.3-2.9 GB compressed and a load average of 474-942 for a whole mobile-flows run, with the
+    # host's Spotlight (mds_stores, mdworker) among the top CPU users, indexing build output and the
+    # simulator's files that nobody will search (host-top.log, 2026-11-04).
+    - name: Stop Spotlight indexing on the runner
+      shell: bash
+      run: sudo -n mdutil -a -i off || true
+
     - uses: actions/setup-node@v7
       with:
         node-version: '24'
@@ -51,6 +59,9 @@ runs:
           -derivedDataPath build \
           CODE_SIGNING_ALLOWED=NO \
           build | tail -40
+        # Xcode's build services stay resident after xcodebuild exits, holding memory the simulator
+        # needs next (see "Stop Spotlight indexing" above).
+        pkill -f 'SWBBuildService|XCBBuildService' || true
 
     - uses: actions/setup-java@v6
       with:
