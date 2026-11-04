@@ -1,5 +1,8 @@
 # Terms opens in the in-app browser sheet (openExternal), and closing the sheet returns to the same
 # screen. The sheet's close control is "Done" before iOS 26 and an X after; matching both by label.
+# What the app's console must show for its side (ios-maestro.sh records these per attempt):
+# app-evidence: browser asked for = To Native -> +Browser open
+# app-evidence: back in the app = \[lifecycle\] focus .* visible
 appId: fitness.huddle.app
 name: The in-app browser sheet opens and closes
 ---

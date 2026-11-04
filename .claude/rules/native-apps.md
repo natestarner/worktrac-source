@@ -270,8 +270,8 @@ contains it.
   iPhone), never the one the screenshot step just used. Re-booting that one is where Maestro's
   XCTest driver hung on its first app launch and the simulator's launch service died ("(ipc/mig)
   server died", Xcode 26.3 / iOS 26.2), failing good and broken builds alike before any step ran.
-  `ios-maestro.sh` retries once **only** on "iOS driver not ready"; a flow that ran and failed is
-  never retried. Its `--debug-output` (XCTest runner logs) is in the artifact.
+  `ios-maestro.sh` retries at once on "iOS driver not ready". In `mobile-ci.yml`'s launch gate a
+  flow that ran and failed is never retried; `mobile-flows.yml` sets `RETRY_FAILED_FLOWS` (below). Its `--debug-output` (XCTest runner logs) is in the artifact.
 - **Proven both ways before it gated anything:** a deliberately broken boot failed on `"Log in" is
   visible`, and a good build passed in about a minute. A gate that can't fail guards nothing.
 - **`launch.yaml` relaunches the app ONCE if the login form hasn't appeared.** A fresh CI simulator
@@ -300,6 +300,25 @@ contains it.
   (`ios-maestro.sh`). Sharing a household let one flow's session change another's screen, and sharing
   a session let a sheet one flow left up fail the next flow's launch ("App did not stop in time").
   Seeding through the API also means the welcome modal is never armed.
+- **Three shards, and one retry that classifies.** The six flows run two per runner, in parallel
+  (`mobile-flows.yml`'s matrix; a check fails the job if a flow file isn't in exactly one shard). A
+  flow that ran and failed gets ONE more attempt: **passed**, **flaky** (failed, then passed: a
+  `::warning::`, not a red run) or **failed** (both). Each shard's step summary and `results.tsv` say
+  which, with the flow's **app evidence**: the `# app-evidence:` lines in the flow, checked against
+  the app's console (link received, browser asked for, file shared, result came back). Every failure
+  from 2026-10-31 to 11-04 was the runner -- lower asleep, lsd's prompt, a hung SafariViewService, a
+  sheet drawn differently -- and each was a red night with nothing to fix in Huddle. A flow flaky
+  night after night is the thing to look at; read `results.tsv` across runs, not one night.
+- **`apsd` is stopped in the test simulator.** iOS's push daemon retried its connection ~22 times a
+  second for the whole run (~55% of the simulator's log lines) on a 3-core runner; the app uses no
+  push. `apsd.log` says whether it stayed down.
+- **The runner is out of memory, so everything around the simulator is trimmed.** A 3-core, 7 GB
+  runner with the simulator up sat at ~7.0 GB used (2.3-2.9 GB compressed) and a load average of
+  474-942 for a whole run (2026-11-04). So: host Spotlight indexing off and Xcode's build services
+  killed after the build (`ios-simulator-app`), and the app launched once before flow 01 so the first,
+  slowest WebView launch happens outside a flow (`app-warm-up.log`). `host-top.log` (CPU, every 30s)
+  and `host-mem.log` (memory, every 2 min) show what the runner was doing; read them before blaming
+  the app for anything slow.
 - **Lower is kept warm while the flows run.** `ios-maestro.sh` waits for `LOWER_HEALTH_URL` to
   answer 200, then pings it every 60s until the last flow ends (`lower-keep-warm.log` in the
   artifact, with each ping's time). Seeding is lower's last request before flow 01, and the
