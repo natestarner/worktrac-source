@@ -1,0 +1,38 @@
+# DIAGNOSTIC (#434): flow 03's link, but tapped in Safari the way a real Stripe return arrives,
+# instead of opened by the simulator's host bridge (simctl openurl). Compare when "Open" is tapped
+# with when the app logs openURLContexts, against flow 03 in the same run.
+appId: fitness.huddle.app
+name: DIAG Checkout return link tapped in Safari
+---
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_4}
+- tapOn: 'History'
+- extendedWaitUntil:
+    visible: 'Export data'
+    timeout: 30000
+# An http link goes straight to Safari, with no prompt.
+- openLink: 'http://127.0.0.1:8765/checkout-return.html'
+# A fresh simulator's Safari may greet first.
+- runFlow:
+    when:
+      visible: '^(Continue|Not Now)$'
+    commands:
+      - tapOn: '^(Continue|Not Now)$'
+- extendedWaitUntil:
+    visible: 'Return to the Huddle app'
+    timeout: 60000
+- takeScreenshot: safari-page
+- tapOn: 'Return to the Huddle app'
+# Safari's own prompt reads "Open this page in 'Huddle'?", not lsd's "Open in 'Huddle'?".
+- extendedWaitUntil:
+    visible: '(?i)open .*huddle.*'
+    timeout: 120000
+- takeScreenshot: safari-prompt
+- tapOn: 'Open'
+- takeScreenshot: after-open
+# Long on purpose: this run measures the lag, it doesn't judge it.
+- extendedWaitUntil:
+    visible: '(?i)your plan'
+    timeout: 90000

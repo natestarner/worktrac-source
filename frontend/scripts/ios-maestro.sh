@@ -83,12 +83,41 @@ if [ -n "${LOWER_HEALTH_URL:-}" ]; then
   echo "== lower: $(tail -n 1 "$OUT/lower-keep-warm.log")"
   ( while true; do sleep 60; ping_lower; done ) &
   KEEP_WARM_PID=$!
-  trap '[ -n "$KEEP_WARM_PID" ] && kill "$KEEP_WARM_PID" 2>/dev/null' EXIT
 fi
 
+# DIAGNOSTIC (#434, diag/434-lsd only): why lsd sits 26-36s between "Open" on its "Open in Huddle?"
+# prompt and asking SpringBoard to open the app. Streams lsd at debug level, and every time
+# SpringBoard dismisses an alert, samples the simulator's lsd for 45s (lsd-sample-*.txt).
+DIAG_PIDS=()
+if [ -n "${LSD_DIAG:-}" ]; then
+  xcrun simctl spawn "$UDID" log config --mode "level:debug" --subsystem com.apple.launchservices || true
+  xcrun simctl spawn "$UDID" log stream --level debug --style compact \
+    --predicate 'process == "lsd" OR (process == "SpringBoard" AND eventMessage CONTAINS "alertItem") OR (process == "MobileSafari" AND eventMessage CONTAINS[c] "open")' \
+    > "$OUT/lsd-stream.log" 2>&1 &
+  DIAG_PIDS+=($!)
+  (
+    tail -n 0 -F "$OUT/lsd-stream.log" 2>/dev/null | while IFS= read -r line; do
+      case "$line" in
+        *"Will deactivate alertItem"*)
+          for pid in $(pgrep -f "RuntimeRoot/usr/libexec/lsd"); do
+            f="$OUT/lsd-sample-$(date -u +%H%M%S)-$pid.txt"
+            echo "$(date -u +%H:%M:%S) sampling lsd $pid -> $f" >> "$OUT/lsd-sample-index.log"
+            ( sample "$pid" 45 -file "$f" >/dev/null 2>&1 || sudo -n sample "$pid" 45 -file "$f" >/dev/null 2>&1 ||
+              echo "sample failed for $pid" >> "$OUT/lsd-sample-index.log" ) &
+          done ;;
+      esac
+    done
+  ) &
+  DIAG_PIDS+=($!)
+fi
+trap '[ -n "$KEEP_WARM_PID" ] && kill "$KEEP_WARM_PID" 2>/dev/null; for p in ${DIAG_PIDS[@]+"${DIAG_PIDS[@]}"}; do kill "$p" 2>/dev/null; done; pkill -f "tail -n 0 -F $OUT/lsd-stream.log" 2>/dev/null; true' EXIT
+
+RUN_N=0
 run_flow() {
   local flow="$1" name
-  name=$(basename "$flow" .yaml)
+  RUN_N=$((RUN_N + 1))
+  # Numbered, so a flow listed twice (the #434 diagnostic) keeps both runs' reports and consoles.
+  name="$(printf '%02d' "$RUN_N")-$(basename "$flow" .yaml)"
   maestro --device "$UDID" test \
     --format junit --output "$OUT/report-$name.xml" \
     --test-output-dir "$OUT" \
