@@ -32,6 +32,20 @@ xcrun simctl bootstatus "$UDID" -b
 # time one appears, and it sat over a search field mid-flow (2026-10-25). Mark it already seen.
 xcrun simctl spawn "$UDID" defaults write com.apple.Preferences DidShowContinuousPathIntroduction -bool true || true
 xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences KeyboardContinuousPathEnabled -bool false || true
+# Stop apsd, iOS's push daemon. On the runner it can't hold a connection to sandbox.push.apple.com and
+# retried ~22 times a second -- each a TLS handshake, keychain reads and a status notice to a dozen
+# other daemons -- for the whole run: ~55% of the simulator's log lines and a steady drain on a
+# 3-core runner where taps took 3-17s (2026-11-04). The app uses no push notifications. What
+# happened, and whether launchd brought it back, goes to apsd.log in the artifact.
+APSD_PATTERN='ApplePushService.framework/apsd'
+{
+  echo "before: $(pgrep -f "$APSD_PATTERN" | tr '\n' ' ')"
+  xcrun simctl spawn "$UDID" launchctl bootout system/com.apple.apsd 2>&1 ||
+    xcrun simctl spawn "$UDID" launchctl disable system/com.apple.apsd 2>&1 || true
+  pkill -f "$APSD_PATTERN" 2>&1 || true
+  sleep 5
+  echo "after 5s: $(pgrep -f "$APSD_PATTERN" | tr '\n' ' ')"
+} > "$OUT/apsd.log" 2>&1
 # The Simulator app attached to the device: XCTest's first app launch on a headless runner is where
 # the hang above happened, and a device with its UI host running is the configuration Xcode expects.
 open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
@@ -75,7 +89,14 @@ done
 # 2026-11-02 and twice on 11-03, while every later flow signed in fine. The flows pin what only the
 # app can break, not lower's cold start; a cold backend is the Playwright suite's to cover. Every
 # ping goes to lower-keep-warm.log in the artifact, with how long it took.
-KEEP_WARM_PID=""
+BG_PIDS=()
+trap 'for p in ${BG_PIDS[@]+"${BG_PIDS[@]}"}; do kill "$p" 2>/dev/null; done; true' EXIT
+
+# What the runner is busy with: the top processes by CPU every 30s, for the whole run (host-top.log
+# in the artifact). The simulator's processes are host processes, so iOS's daemons show here too.
+top -l 0 -s 30 -n 12 -o cpu -stats pid,command,cpu,rsize > "$OUT/host-top.log" 2>&1 &
+BG_PIDS+=($!)
+
 if [ -n "${LOWER_HEALTH_URL:-}" ]; then
   ping_lower() {
     curl -s -o /dev/null -w "$(date -u +%H:%M:%S) %{http_code} %{time_total}s\n" --max-time 90 \
@@ -92,8 +113,7 @@ if [ -n "${LOWER_HEALTH_URL:-}" ]; then
   done
   echo "== lower: $(tail -n 1 "$OUT/lower-keep-warm.log")"
   ( while true; do sleep 60; ping_lower; done ) &
-  KEEP_WARM_PID=$!
-  trap '[ -n "$KEEP_WARM_PID" ] && kill "$KEEP_WARM_PID" 2>/dev/null' EXIT
+  BG_PIDS+=($!)
 fi
 
 run_flow() {
@@ -132,6 +152,7 @@ done
 set -e
 echo "== Summary"
 grep -E '^\[(Passed|Failed)\]' "$OUT/maestro-run.log" || true
+echo "apsd at the end: $(pgrep -f "$APSD_PATTERN" | tr '\n' ' ')" >> "$OUT/apsd.log"
 
 # Whatever the last flow ended on, pass or fail: the first thing anyone wants when a step times out.
 xcrun simctl io "$UDID" screenshot "$OUT/final.png" || true
