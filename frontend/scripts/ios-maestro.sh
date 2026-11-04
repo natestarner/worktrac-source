@@ -117,8 +117,7 @@ if [ -n "${LOWER_HEALTH_URL:-}" ]; then
 fi
 
 run_flow() {
-  local flow="$1" name
-  name=$(basename "$flow" .yaml)
+  local flow="$1" name="$2"
   maestro --device "$UDID" test \
     --format junit --output "$OUT/report-$name.xml" \
     --test-output-dir "$OUT" \
@@ -134,24 +133,84 @@ run_flow() {
   return "$status"
 }
 
+# One attempt at a flow, with the app force-quit first. Retried at once, and ALWAYS, when Maestro's
+# driver never started: that is the runner's simulator, not the app, and no step of the flow ran.
+attempt() {
+  local flow="$1" name="$2" s
+  xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1
+  run_flow "$flow" "$name"
+  s=$?
+  if [ "$s" -ne 0 ] && grep -q "iOS driver not ready in time" "$OUT/.last-run.log"; then
+    echo "::warning::Maestro's iOS driver never started for $flow; retrying it once."
+    xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1
+    run_flow "$flow" "$name"
+    s=$?
+  fi
+  return "$s"
+}
+
+# Each "# app-evidence: <what> = <regex>" line in a flow names something the app's console must show
+# for ITS side of a hand-off to iOS: the link received, the browser asked for, the file shared, the
+# result coming back. Maestro reads only the screen, so it can't tell "Huddle didn't do it" from
+# "iOS's sheet or prompt stalled on the runner"; this can. Recorded, not enforced.
+app_evidence() {
+  local flow="$1" log="$2" out="" line what re
+  while IFS= read -r line; do
+    what=${line%% = *}
+    re=${line#* = }
+    if [ -f "$log" ] && grep -qE "$re" "$log"; then out+="$what yes; "; else out+="$what NO; "; fi
+  done < <(sed -n 's/^# app-evidence: //p' "$flow")
+  echo "${out%; }"
+}
+
+# RETRY_FAILED_FLOWS=1 (mobile-flows.yml): a flow that ran and failed gets ONE more attempt, and is
+# classified -- passed, flaky (failed, then passed), or failed (both attempts). Only "failed" fails the
+# run. Every failure so far traced to the runner, not the app: lower asleep, lsd's prompt, a hung
+# SafariViewService, a sheet drawn differently (2026-10-31 to 11-04), and with no retry each one was
+# a red night with nothing to fix in Huddle. A flaky flow is still reported -- a ::warning::, the step
+# summary and results.tsv -- so a flow that's flaky night after night stays visible. Unset
+# (mobile-ci.yml's launch gate), a flow that ran and failed is not retried.
 set +e
 rc=0
+printf 'flow\tattempt 1\tattempt 2\toutcome\tapp evidence (attempt 1)\n' > "$OUT/results.tsv"
 for flow in "${FLOWS[@]}"; do
-  xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1
-  run_flow "$flow"
-  frc=$?
-  # One retry, and ONLY when the driver never started: that is the runner's simulator, not the app,
-  # and no step of the flow ran. A flow that ran and failed is never retried -- that is the signal.
-  if [ "$frc" -ne 0 ] && grep -q "iOS driver not ready in time" "$OUT/.last-run.log"; then
-    echo "::warning::Maestro's iOS driver never started for $flow; retrying it once."
-    run_flow "$flow"
-    frc=$?
+  base=$(basename "$flow" .yaml)
+  attempt "$flow" "$base"
+  a1=$?
+  a2=""
+  if [ "$a1" -eq 0 ]; then
+    outcome=passed
+  elif [ -n "${RETRY_FAILED_FLOWS:-}" ]; then
+    attempt "$flow" "$base-retry"
+    a2=$?
+    if [ "$a2" -eq 0 ]; then
+      outcome=flaky
+      echo "::warning::$base failed, then passed on its retry. Flaky: read report-$base.xml and console-$base.log."
+    else
+      outcome=failed
+    fi
+  else
+    outcome=failed
   fi
-  [ "$frc" -ne 0 ] && rc=1
+  [ "$outcome" = failed ] && rc=1
+  evidence=$(app_evidence "$flow" "$OUT/console-$base.log")
+  printf '%s\t%s\t%s\t%s\t%s\n' "$base" "$([ "$a1" -eq 0 ] && echo pass || echo fail)" \
+    "$([ -z "$a2" ] && echo - || { [ "$a2" -eq 0 ] && echo pass || echo fail; })" "$outcome" "${evidence:--}" \
+    >> "$OUT/results.tsv"
 done
 set -e
 echo "== Summary"
 grep -E '^\[(Passed|Failed)\]' "$OUT/maestro-run.log" || true
+column -t -s $'\t' "$OUT/results.tsv" || cat "$OUT/results.tsv"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  {
+    echo "### Maestro flows${SUMMARY_TITLE:+ -- $SUMMARY_TITLE}"
+    echo
+    echo "| Flow | Attempt 1 | Attempt 2 | Outcome | App evidence (attempt 1) |"
+    echo "|---|---|---|---|---|"
+    tail -n +2 "$OUT/results.tsv" | awk -F'\t' '{ printf "| %s | %s | %s | **%s** | %s |\n", $1, $2, $3, $4, $5 }'
+  } >> "$GITHUB_STEP_SUMMARY"
+fi
 echo "apsd at the end: $(pgrep -f "$APSD_PATTERN" | tr '\n' ' ')" >> "$OUT/apsd.log"
 
 # Whatever the last flow ended on, pass or fail: the first thing anyone wants when a step times out.

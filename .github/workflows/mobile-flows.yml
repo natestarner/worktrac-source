@@ -65,9 +65,25 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
+  # Three runners, two flows each, side by side. On one 3-core runner the six flows shared a simulator
+  # whose taps took 3-17s by the end (2026-11-04), and a sheet or prompt one flow left behind could
+  # land on the next. Standard runners are free in this public repo, and the Free plan allows 5 macOS
+  # jobs at once; each shard builds its own app (~6 min), so the run takes about as long as one shard.
+  # The pairs keep the two system-sheet flows (04 browser, 05 share) on different runners.
   flows:
     needs: [changed]
     if: needs.changed.outputs.run == 'true'
+    name: flows (${{ matrix.shard }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: sign-in-and-relaunch
+            flows: 01-sign-in-and-log-a-set 02-background-and-relaunch
+          - shard: link-and-browser
+            flows: 03-checkout-return-link 04-in-app-browser-sheet
+          - shard: share-and-refresh
+            flows: 05-export-share-sheet 06-history-pull-to-refresh
     runs-on: macos-15
     timeout-minutes: 75
     environment: mobile-e2e
@@ -90,6 +106,19 @@ jobs:
 
       - uses: actions/checkout@v7
 
+      - name: Every flow is in exactly one shard
+        # The matrix above lists flows by name, so a new file in e2e/mobile/flows/ would otherwise
+        # never run, silently.
+        working-directory: .
+        run: |
+          listed=$(grep -E '^ +flows: ' .github/workflows/mobile-flows.yml | sed 's/^ *flows: //' | tr ' ' '\n' | sort)
+          present=$(ls e2e/mobile/flows/*.yaml | xargs -n1 basename | sed 's/\.yaml$//' | sort)
+          if [ "$listed" != "$present" ]; then
+            echo "::error::mobile-flows.yml's shards don't list every flow exactly once."
+            diff <(echo "$listed") <(echo "$present") || true
+            exit 1
+          fi
+
       - uses: ./.github/actions/ios-simulator-app
         with:
           native-api-url: ${{ env.NATIVE_API_URL }}
@@ -108,11 +137,19 @@ jobs:
           # ios-maestro.sh keeps lower warm while the flows run: the gap after seeding outlasts
           # lower's scale-to-zero, and flow 01 signed in against a cold start (native-apps.md).
           LOWER_HEALTH_URL: ${{ env.NATIVE_API_URL }}/actuator/health
-        run: bash scripts/ios-maestro.sh build/Build/Products/Debug-iphonesimulator/App.app mobile-flows-out ../e2e/mobile/flows
+          # A flow that ran and failed gets one more attempt: passed / flaky / failed, in the step
+          # summary and results.tsv (ios-maestro.sh, native-apps.md).
+          RETRY_FAILED_FLOWS: '1'
+          SUMMARY_TITLE: ${{ matrix.shard }}
+          SHARD_FLOWS: ${{ matrix.flows }}
+        run: |
+          flows=()
+          for f in $SHARD_FLOWS; do flows+=("../e2e/mobile/flows/$f.yaml"); done
+          bash scripts/ios-maestro.sh build/Build/Products/Debug-iphonesimulator/App.app mobile-flows-out "${flows[@]}"
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: mobile-flows
+          name: mobile-flows-${{ matrix.shard }}
           path: frontend/mobile-flows-out/
           retention-days: 30

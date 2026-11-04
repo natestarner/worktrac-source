@@ -22,6 +22,9 @@
 #   ios-maestro.sh now pre-approves the scheme, so the simulator's prompt never appears.
 #
 # The unsigned simulator build is the production bundle id, so its scheme is fitness.huddle.app.
+# What the app's console must show for its side (ios-maestro.sh records these per attempt):
+# app-evidence: link received = \[appLinks\] appUrlOpen
+# app-evidence: routed to Billing = \[appLinks\] path /app/billing
 appId: fitness.huddle.app
 name: Checkout return link lands on Billing and lets go
 ---

@@ -1,5 +1,9 @@
 # Export hands the file to the iOS share sheet (lib/native's saveFile), and dismissing the sheet is
 # success, not an error: no "couldn't export" toast afterwards.
+# What the app's console must show for its side (ios-maestro.sh records these per attempt):
+# app-evidence: file written = To Native -> +Filesystem writeFile
+# app-evidence: handed to the share sheet = To Native -> +Share share
+# app-evidence: sheet's answer came back = Share canceled|activityType
 appId: fitness.huddle.app
 name: Export opens the share sheet
 ---
