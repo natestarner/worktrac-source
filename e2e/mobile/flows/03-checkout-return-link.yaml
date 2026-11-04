@@ -17,6 +17,9 @@
 #   activity for the whole wait, History left on screen, and the "+1s on Billing" lines written
 #   late. Every line is timestamped now, with a 1s heartbeat after the link showing how late each
 #   beat fired, and the page's lifecycle events. A frozen page shows as one burst of very late beats.
+#   2026-11-04, the cause: nothing froze. iOS's lsd acted on "Open" 28-90s after it was tapped, so
+#   the link arrived after this flow's 30s wait for Billing (the late "+1s" lines came from that).
+#   ios-maestro.sh now pre-approves the scheme, so the simulator's prompt never appears.
 #
 # The unsigned simulator build is the production bundle id, so its scheme is fitness.huddle.app.
 appId: fitness.huddle.app
@@ -33,16 +36,16 @@ name: Checkout return link lands on Billing and lets go
     visible: 'Export data'
     timeout: 30000
 - openLink: 'fitness.huddle.app://checkout-complete?session_id=cs_test_maestro_return'
-# iOS asks before any custom-scheme link opens an app -- the same prompt a person sees after tapping
-# "Return to the Huddle app" in Safari. Left unanswered it also sits over every later flow.
-# ⚠️ Waited for, not just tapped: on the runner the prompt has arrived two MINUTES late (run
-# 40251542825), after this flow had given up, and then covered the next three flows' login screens.
-# The app's console showed no openURLContexts at all, so that run's "ignored link" was the
-# simulator, not the app (#434).
-- extendedWaitUntil:
-    visible: 'Open in .*Huddle.*'
-    timeout: 120000
-- tapOn: 'Open'
+# No "Open in Huddle?" prompt: ios-maestro.sh pre-approves the scheme for links the simulator opens.
+# That prompt is lsd's, shown because the SIMULATOR opened the link; a person returning from Stripe
+# sees Safari's instead. Answering it on the runner cost 28-90s before lsd acted (#434), and it
+# once arrived two minutes late and covered the next three flows' logins. If it shows anyway, the
+# pre-approval didn't take: tap it so it can't sit over later flows, and read ios-maestro.sh.
+- runFlow:
+    when:
+      visible: 'Open in .*Huddle.*'
+    commands:
+      - tapOn: 'Open'
 - takeScreenshot: after-open
 - waitForAnimationToEnd:
     timeout: 5000

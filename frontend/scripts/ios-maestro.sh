@@ -37,6 +37,17 @@ xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences Keyboar
 open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
 xcrun simctl ui "$UDID" appearance light
 xcrun simctl install "$UDID" "$APP"
+BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+# Approve the app's own scheme for links the simulator opens (Maestro's openLink), as lsd records it
+# after someone taps "Open" on its "Open in Huddle?" prompt. That prompt is the simulator's, not one
+# a person sees: they get Safari's after "Return to the Huddle app". On the runner lsd took 28-90s
+# AFTER "Open" was tapped to act on it, and flow 03 failed waiting for Billing (#434, 2026-11-04:
+# SpringBoard dismissed the prompt at once; lsd's prompt thread sat in
+# CFUserNotificationReceiveResponse until it saved this key, then opened the app). With the key
+# already set, lsd skips the prompt and the link reached the app in ~10s. The scheme is the bundle
+# id (Info.plist's CFBundleURLSchemes).
+xcrun simctl spawn "$UDID" defaults write com.apple.launchservices.schemeapproval \
+  "com.apple.CoreSimulator.CoreSimulatorBridge-->$BUNDLE_ID" -string "$BUNDLE_ID"
 
 # Maestro drives iOS through an XCTest runner it installs on first use, which takes minutes on a cold
 # runner. In milliseconds.
@@ -56,7 +67,6 @@ for arg in "$@"; do
     FLOWS+=("$arg")
   fi
 done
-BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
 
 # With LOWER_HEALTH_URL set (mobile-flows.yml), keep lower warm for as long as the flows run. Lower is
 # min-replicas=0 (resilience.md, "Cold start"), and the seed step is the last request it sees before
