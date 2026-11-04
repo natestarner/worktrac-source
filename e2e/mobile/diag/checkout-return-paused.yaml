@@ -1,0 +1,26 @@
+# DIAGNOSTIC (#434): flow 03's link, but with no screen queries for 20s after tapping "Open".
+# Run 41756252045: while Maestro polled for "your plan", SpringBoard served ~60 XCTest snapshot
+# jobs a second on its main run loop, and lsd only got the prompt's answer ~11s after the polling
+# stopped. If the link lands during this pause, the polling is what holds it up.
+appId: fitness.huddle.app
+name: DIAG Checkout return link, no polling after Open
+---
+- runFlow:
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL_3}
+- tapOn: 'History'
+- extendedWaitUntil:
+    visible: 'Export data'
+    timeout: 30000
+- openLink: 'fitness.huddle.app://checkout-complete?session_id=cs_test_maestro_return'
+- extendedWaitUntil:
+    visible: 'Open in .*Huddle.*'
+    timeout: 120000
+- tapOn: 'Open'
+- runScript: pause-20s.js
+# One look, not a poll: is Billing already up?
+- takeScreenshot: after-pause
+- extendedWaitUntil:
+    visible: '(?i)your plan'
+    timeout: 30000

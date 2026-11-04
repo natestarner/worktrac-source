@@ -86,28 +86,14 @@ if [ -n "${LOWER_HEALTH_URL:-}" ]; then
 fi
 
 # DIAGNOSTIC (#434, diag/434-lsd only): why lsd sits 26-36s between "Open" on its "Open in Huddle?"
-# prompt and asking SpringBoard to open the app. Streams lsd at debug level, and every time
-# SpringBoard dismisses an alert, samples the simulator's lsd for 45s (lsd-sample-*.txt).
+# prompt and asking SpringBoard to open the app. Streams lsd at debug level. (Run 41756252045 also
+# sampled lsd every 1ms; that loaded the runner, so it's gone.)
 DIAG_PIDS=()
 if [ -n "${LSD_DIAG:-}" ]; then
   xcrun simctl spawn "$UDID" log config --mode "level:debug" --subsystem com.apple.launchservices || true
   xcrun simctl spawn "$UDID" log stream --level debug --style compact \
     --predicate 'process == "lsd" OR (process == "SpringBoard" AND eventMessage CONTAINS "alertItem") OR (process == "MobileSafari" AND eventMessage CONTAINS[c] "open")' \
     > "$OUT/lsd-stream.log" 2>&1 &
-  DIAG_PIDS+=($!)
-  (
-    tail -n 0 -F "$OUT/lsd-stream.log" 2>/dev/null | while IFS= read -r line; do
-      case "$line" in
-        *"Will deactivate alertItem"*)
-          for pid in $(pgrep -f "RuntimeRoot/usr/libexec/lsd"); do
-            f="$OUT/lsd-sample-$(date -u +%H%M%S)-$pid.txt"
-            echo "$(date -u +%H:%M:%S) sampling lsd $pid -> $f" >> "$OUT/lsd-sample-index.log"
-            ( sample "$pid" 45 -file "$f" >/dev/null 2>&1 || sudo -n sample "$pid" 45 -file "$f" >/dev/null 2>&1 ||
-              echo "sample failed for $pid" >> "$OUT/lsd-sample-index.log" ) &
-          done ;;
-      esac
-    done
-  ) &
   DIAG_PIDS+=($!)
 fi
 trap '[ -n "$KEEP_WARM_PID" ] && kill "$KEEP_WARM_PID" 2>/dev/null; for p in ${DIAG_PIDS[@]+"${DIAG_PIDS[@]}"}; do kill "$p" 2>/dev/null; done; pkill -f "tail -n 0 -F $OUT/lsd-stream.log" 2>/dev/null; true' EXIT
