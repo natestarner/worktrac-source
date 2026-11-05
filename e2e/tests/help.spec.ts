@@ -118,4 +118,29 @@ test.describe('Handbook', () => {
 
     await goOnline(page);
   });
+
+  // The install section offers the App Store listing named by /me's client.appStoreUrl
+  // (NATIVE_APP_STORE_URL), and only Add to Home Screen when there is none. The local stack sets
+  // none, so the listing case answers /me with one added; every other field is the real reply.
+  test('the install section links to the App Store only when a listing is configured', async ({ page, request }) => {
+    const listing = 'https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272';
+    await page.route('**/api/auth/me', async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      await route.fulfill({ response, json: { ...body, client: { ...body.client, appStoreUrl: listing } } });
+    });
+    await registerHousehold(page, request, 'Okonkwo');
+    await openHelp(page);
+
+    await expect(page.getByRole('heading', { name: 'Put it on your phone' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Huddle from the App Store' })).toHaveAttribute('href', listing);
+    await expect(page.getByText(/no app store/i)).toHaveCount(0);
+
+    // Same household, a fresh load with the backend's own answer: no listing, so no link.
+    await page.unroute('**/api/auth/me');
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Put it on your phone' })).toBeVisible();
+    await expect(page.getByText(/Add to Home Screen/).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /App Store/ })).toHaveCount(0);
+  });
 });

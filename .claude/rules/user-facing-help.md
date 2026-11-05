@@ -65,6 +65,7 @@ that isn't one.
 | History's date search: **a workout that ran past midnight counts on both days, and its heading shows both dates** | `utils/exerciseFilter.js#sessionDaySpan`, `HistoryTab.jsx#sessionHeaderLabel` |
 | **reloading on History, or pulling down on it in the Home Screen app, re-downloads the whole History of the person on screen**, and offline it waits for the connection | `lib/historyReload.js`, `components/history/PullToRefresh.jsx`, `refreshHistory`'s `full` in `lib/queryClient.js` |
 | **in the App Store app only**: the phone says when the rest bar fills even when locked or in another app, and the screen stays on mid-workout | `hooks/useRestNotifications.js`, `lib/native/notifications.js`, `lib/native/keepAwake.js`, `SessionBar.jsx`'s keep-awake effect. App-only copy, pinned in `HelpTab.native.test.jsx` |
+| **on the web**: an iPhone or iPad can get Huddle from the App Store (linked), and any other device uses Add to Home Screen. The link is `/me`'s `client.appStoreUrl`, so with `NATIVE_APP_STORE_URL` unset the page offers only Add to Home Screen | `NativeAppProperties`, `ClientConfigDto`, the `NATIVE_APP_STORE_URL` env var. Pinned in `HelpTab.native.test.jsx` and `help.spec.ts` |
 
 **If your change alters a row's left-hand column, update the handbook in the same PR.** If it
 doesn't, no action — this rule is not a prompt to re-read the page on every edit.

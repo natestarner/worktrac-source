@@ -11,6 +11,9 @@ import { useUI } from '../../context/UIContext';
 // than wrapped in the real provider, matching the convention every other component test here
 // uses (see AddPersonModal.test.jsx).
 vi.mock('../../context/UIContext', () => ({ useUI: vi.fn() }));
+// The install section reads the App Store listing from /me's client config (HelpTab.native.test.jsx
+// covers both answers); nothing else on the page reaches into AuthContext.
+vi.mock('../../context/AuthContext', () => ({ useAuth: () => ({ client: null }) }));
 
 function renderHelp() {
   return render(
