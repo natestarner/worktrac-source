@@ -27,6 +27,8 @@ anywhere else.
 
 - **The one sanctioned exception is COPY that describes the platform itself.** `HelpTab`'s install
   section reads `isNativeApp()` because "add Huddle to your home screen" is false inside the app.
+  Its web branch links to the App Store listing from `/me`'s `client.appStoreUrl`, which is data,
+  not a platform check: unset, it offers Add to Home Screen alone.
   Words may branch; behaviour may not. Each such branch carries a comment and a test pinning both
   variants (`HelpTab.native.test.jsx`). If a branch would change what a control *does*, it belongs
   in `lib/native` instead.

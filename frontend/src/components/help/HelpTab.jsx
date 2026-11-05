@@ -4,7 +4,8 @@ import { EXERCISE_METRICS } from '../trends/exerciseMetrics';
 import { WEEKLY_METRICS } from '../trends/weeklyMetrics';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
 import { useUI } from '../../context/UIContext';
-import { isNativeApp } from '../../lib/native';
+import { useAuth } from '../../context/AuthContext';
+import { externalLinkProps, isNativeApp } from '../../lib/native';
 import Button from '../shared/Button';
 import BackLink from '../shared/BackLink';
 import { useGoBack } from '../../hooks/useGoBack';
@@ -55,6 +56,7 @@ export default function HelpTab() {
   const goBack = useGoBack();
   const { hash } = useLocation();
   const { startTour } = useUI();
+  const appStoreUrl = useAuth().client?.appStoreUrl || null;
 
   // ARRIVING at /app/help#plan has to land on that section. Nothing else makes it happen, and the
   // section ids are advertised as deep links right above -- so "How Free and Plus differ"
@@ -136,8 +138,13 @@ export default function HelpTab() {
         {/* The one place the handbook's WORDS depend on where it is being read: it describes how
             to get Huddle onto a phone, and inside the App Store app that is already done. A copy
             branch only -- behaviour never branches on platform outside lib/native
-            (.claude/rules/native-apps.md). The web copy changes when the App Store listing is
-            live and there is a link to give. */}
+            (.claude/rules/native-apps.md).
+
+            The web copy offers the App Store listing only when there is one to give: the link is
+            /me's `client.appStoreUrl` (NATIVE_APP_STORE_URL), the same value the update banner
+            and "Rate Huddle" read, kept in the auth snapshot so it is there offline too. Unset,
+            the page says only what is true everywhere: Add to Home Screen. Decided by data, not
+            by connectivity. */}
         {isNativeApp() ? (
           <>
             <h3 className="help-h3">You&rsquo;re using the Huddle app</h3>
@@ -150,12 +157,20 @@ export default function HelpTab() {
           </>
         ) : (
           <>
-            <h3 className="help-h3">Put it on your home screen</h3>
+            <h3 className="help-h3">Put it on your phone</h3>
+            {appStoreUrl ? (
+              <p>
+                On an iPhone or iPad, get{' '}
+                <a {...externalLinkProps(appStoreUrl)}>Huddle from the App Store</a>. It keeps
+                working when there&rsquo;s no signal, and it can tell you when your rest is up even
+                with the phone locked.
+              </p>
+            ) : null}
             <p>
-              Huddle is a website, so there is no app store. Open <strong>app.huddle.fitness</strong>{' '}
-              in your phone or tablet browser and from your browser's settings, tap{' '}
-              <T>Add to Home Screen</T>. It then opens full-screen like any other app. Importantly,
-              it keeps working when there&rsquo;s no signal.
+              {appStoreUrl ? 'On any other phone or tablet, open ' : 'Open '}
+              <strong>app.huddle.fitness</strong> in your browser and from your browser's settings,
+              tap <T>Add to Home Screen</T>. It then opens full-screen like any other app.
+              Importantly, it keeps working when there&rsquo;s no signal.
             </p>
           </>
         )}
