@@ -120,14 +120,17 @@ test.describe('Handbook', () => {
   });
 
   // The install section offers the App Store listing named by /me's client.appStoreUrl
-  // (NATIVE_APP_STORE_URL), and only Add to Home Screen when there is none. The local stack sets
-  // none, so the listing case answers /me with one added; every other field is the real reply.
+  // (NATIVE_APP_STORE_URL), and only Add to Home Screen when there is none. Both halves set the
+  // listing explicitly on the real /me reply, because environments differ: the local stack sets
+  // none, lower and production set the real one. Relying on the backend's own answer for the
+  // no-listing half failed every run on lower, which (correctly) showed the link.
   test('the install section links to the App Store only when a listing is configured', async ({ page, request }) => {
     const listing = 'https://apps.apple.com/us/app/huddle-workout-tracker/id6826555272';
+    let appStoreUrl: string | null = listing;
     await page.route('**/api/auth/me', async (route) => {
       const response = await route.fetch();
       const body = await response.json();
-      await route.fulfill({ response, json: { ...body, client: { ...body.client, appStoreUrl: listing } } });
+      await route.fulfill({ response, json: { ...body, client: { ...body.client, appStoreUrl } } });
     });
     await registerHousehold(page, request, 'Okonkwo');
     await openHelp(page);
@@ -136,8 +139,8 @@ test.describe('Handbook', () => {
     await expect(page.getByRole('link', { name: 'Huddle from the App Store' })).toHaveAttribute('href', listing);
     await expect(page.getByText(/no app store/i)).toHaveCount(0);
 
-    // Same household, a fresh load with the backend's own answer: no listing, so no link.
-    await page.unroute('**/api/auth/me');
+    // Same household, a fresh load whose /me names no listing: no link, only Add to Home Screen.
+    appStoreUrl = null;
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Put it on your phone' })).toBeVisible();
     await expect(page.getByText(/Add to Home Screen/).first()).toBeVisible();
