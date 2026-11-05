@@ -109,9 +109,16 @@ checks that every barbell lift's est.-1RM and top-weight charts finish at their 
   background circles. The headlines reuse the marketing site's own claims. These captioned panels
   are what gets uploaded.
 - **Header** (version page → Header and Search Results → Header) comes from
-  `e2e/tools/app-store-header.mjs`: 21:9, 3840 x 1646. The lockup and the site's hero line sit inside
+  `e2e/tools/app-store-header.mjs`: 21:9, 3840 x 1646. The lockup and a short headline sit inside
   the art safe area from Apple's own template (1646 x 661, centred), and the tool refuses to render
-  if they don't fit. Two real captures flank it outside the safe area. **Search Results is left
+  if they don't fit. Two real captures flank it outside the safe area. **Redone 2026-11-05 for the
+  iPhone** (Nate chose "B2" from side-by-side iPhone crops): the 1.0 header's type looked small and
+  the page empty there, because an iPhone shows ~86% of the header's width while the type filled
+  only the much narrower safe area. The headline is now "The whole family's workout" (192px, was the
+  site's longer "One screen, the whole family's workout" at 116px, which was already width-bound),
+  the lockup 210px (was 150), and the phones sit lower and further in so the back/share buttons
+  don't cover them. The new file is in `screenshots/app-store-2026-10-27/next-version/` and goes up
+  with the next version; the 1.0 header stays live until then. **Search Results is left
   empty on purpose**: without that asset, the first three screenshots show in search, and those sell
   the app better than one banner. Every asset is RGB with no alpha channel, as Apple requires.
 - **Store order is the file number.** Only the first two or three show in search results: logging,
