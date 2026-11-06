@@ -28,17 +28,26 @@ public class ExerciseService {
     private final WorkoutSetRepository workoutSetRepository;
     private final AccountMembershipRepository membershipRepository;
     private final ExerciseAttributionResolver attributionResolver;
+    private final ExerciseMuscleResolver muscleResolver;
 
     public ExerciseService(ExerciseRepository exerciseRepository, AccountRepository accountRepository,
                             QuotaService quotaService, WorkoutSetRepository workoutSetRepository,
                             AccountMembershipRepository membershipRepository,
-                            ExerciseAttributionResolver attributionResolver) {
+                            ExerciseAttributionResolver attributionResolver,
+                            ExerciseMuscleResolver muscleResolver) {
         this.exerciseRepository = exerciseRepository;
         this.accountRepository = accountRepository;
         this.quotaService = quotaService;
         this.workoutSetRepository = workoutSetRepository;
         this.membershipRepository = membershipRepository;
         this.attributionResolver = attributionResolver;
+        this.muscleResolver = muscleResolver;
+    }
+
+    // One row's DTO, for the single-exercise responses (create, rename).
+    private ExerciseDto toDto(AccountAccess access, Exercise exercise) {
+        return ExerciseDto.from(exercise, attributionResolver.resolveOne(access, exercise),
+                muscleResolver.forExercise(exercise));
     }
 
     // The full catalog visible to this account, used for search. Grouping/favoriting is now
@@ -53,8 +62,11 @@ public class ExerciseService {
         // ⚠️ Resolved ONCE, outside the mapping below. Per-row it is an N+1 across the whole
         // catalog -- see ExerciseAttributionResolver.
         Map<Long, ExerciseAttribution> attribution = attributionResolver.resolve(access, exercises);
+        // Same: one query for the whole catalogue (ExerciseMuscleResolver), looked up per row.
+        Map<Long, ExerciseMuscles> muscles = muscleResolver.forAccount(access.accountId());
         return exercises.stream()
-                .map(exercise -> ExerciseDto.from(exercise, attribution.get(exercise.getId())))
+                .map(exercise -> ExerciseDto.from(exercise, attribution.get(exercise.getId()),
+                        muscles.getOrDefault(exercise.getId(), ExerciseMuscles.NONE)))
                 .toList();
     }
 
@@ -119,8 +131,7 @@ public class ExerciseService {
             if (existing.isPresent()) {
                 // Resolved, never assumed: a replayed create returns a row this caller may not
                 // have created, and the stamp was deliberately not transferred above.
-                return ExerciseDto.from(existing.get(),
-                        attributionResolver.resolveOne(access, existing.get()));
+                return toDto(access, existing.get());
             }
         }
         // IllegalArgumentException is the app's existing route to an honest 400
@@ -159,7 +170,7 @@ public class ExerciseService {
         if (!sameNameAndMeasure.isEmpty()) {
             // Same as the idempotency branch: this row is whoever's it already was.
             Exercise existing = sameNameAndMeasure.get(0);
-            return ExerciseDto.from(existing, attributionResolver.resolveOne(access, existing));
+            return toDto(access, existing);
         }
 
         // Deliberately here, AFTER both dedup branches above. A create that resolves to an
@@ -179,7 +190,7 @@ public class ExerciseService {
         // over the optimistic row, so a wrong answer here makes a just-created exercise render as
         // somebody else's.
         Exercise saved = exerciseRepository.save(exercise);
-        return ExerciseDto.from(saved, attributionResolver.resolveOne(access, saved));
+        return toDto(access, saved);
     }
 
     // Editing is only for an account's own exercises. Preloaded (global) exercises are shared
@@ -237,7 +248,7 @@ public class ExerciseService {
         }
 
         exercise.setName(request.name().trim());
-        return ExerciseDto.from(exercise, attributionResolver.resolveOne(access, exercise));
+        return toDto(access, exercise);
     }
 
     // Deleting is only for an account's own exercises. Removing a preloaded exercise from your

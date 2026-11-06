@@ -84,6 +84,34 @@
     storing an empty string, so "has a note" can be tested by row presence alone — don't
     special-case empty strings anywhere downstream.
 
+## Muscles worked (V90–V93)
+
+What an exercise trains, so the app can show it (a body diagram and a line of muscle names on the
+Log screen) and, later, count it (a muscle heat map on Trends). Planned 2026-11-06 together with
+in-app how-to videos, which share the same entry point and the same library-curation problem.
+
+- **`muscles`** is reference data: a fixed list of codes (`chest`, `rear_delts`, `cardio`, …) with
+  a display name, a sort order and two flags — `drawn` (has a shape on the body diagram) and
+  `counted` (counts toward muscle statistics). Sixteen are drawn, matching the regions the body art
+  can shade; adductors, abductors, hip flexors and neck are listed but not drawn; `full_body` and
+  `cardio` are labels for conditioning work, neither drawn nor counted.
+- **`exercise_muscles`** holds `(exercise_id, muscle_code, role)` with role `primary` or
+  `secondary`, one row per pair. Library and household exercises use the same table.
+- **One list, three copies, one test each.** `shared/muscles/muscles.json` is the agreed list; the
+  database must equal it (`LibraryExerciseMusclesTest`) and so must the client's
+  `utils/muscles.js` (`muscles.test.js`). The server only ever sends codes; names come from the
+  client, which drops a code it does not know (an App Store build lives for months).
+- **Every library exercise has a primary muscle**, enforced by `LibraryExerciseMusclesTest`. V93
+  matches by name, so a typo would otherwise insert nothing and fail silently. A library exercise
+  added later is described in the same change.
+- **On the catalog row only** (`ExerciseDto.primaryMuscles` / `secondaryMuscles`, in sort order),
+  not on `PersonExerciseDto`: muscles are a fact about the movement, not personalization, so the
+  client looks an exercise up in the catalog by id. Resolved in one query per list call
+  (`ExerciseMuscleResolver`), keyed on the account like the catalog itself.
+- **Absent means empty.** A catalog cached before these fields existed, and an exercise created
+  offline (a temp row), have neither field; `exerciseMuscles()` returns empty lists for both.
+- Not a return of the categories V33 dropped — see `trends.md`, "Deliberately not built".
+
 ## Endurance (time-based) exercises
 
 Added V46–V50. The problem: the app could only record a set as **weight × reps**, so time-based

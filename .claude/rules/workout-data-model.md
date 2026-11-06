@@ -88,6 +88,22 @@ rejections here is a data-loss bug, not a strictness improvement.
   same-key edit-via-recreate is silently discarded. An edit is always a separate `EDIT_SET` write.
   See `docs/incidents/2026-07-30-editing-queued-offline-set.md`.
 
+## Muscles worked (`muscles`, `exercise_muscles`, V90-V93)
+
+Full narrative: `docs/architecture/data-model.md`, "Muscles worked".
+
+- **A library exercise added by a migration must be described in the same change** (a primary
+  muscle at least). `LibraryExerciseMusclesTest` fails otherwise, and also pins the exact count V93
+  described, so a later rename of a library row must update that test.
+- **The vocabulary changes in three places at once**: a new migration, `shared/muscles/muscles.json`,
+  and `frontend/src/utils/muscles.js`. Never edit V91 to add one.
+- **Muscles go on `ExerciseDto` only**, resolved once per list call by `ExerciseMuscleResolver`,
+  never per row.
+- **Never make muscles required on a create.** A custom exercise's muscles are optional, and
+  `ExerciseService.add` is a durable write: a 400 for missing or unknown muscles would discard the
+  create and every set queued behind its temp id. An unknown code from a newer client is dropped,
+  not refused.
+
 ## Creating an exercise that already exists returns it -- never a 409
 
 `ExerciseService.add` resolves in a fixed order: **`clientKey` -> validate `trackingType` ->

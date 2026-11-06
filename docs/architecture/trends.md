@@ -231,10 +231,15 @@ Two things about it are less obvious than they look:
 Scoped out on 2026-08-07, listed so the reasoning isn't re-derived:
 
 - **Muscle-group breakdown** (sets per muscle group per week, body diagram) — the single biggest
-  gap versus Hevy and Boostcamp. Needs a `muscle_group` column on `exercises`; the ~115 seeded
-  exercises could be backfilled mechanically since `V34` already groups them under SQL comments.
-  Note this would **re-introduce** a taxonomy deliberately dropped in `V33` in favour of free-text
-  tags, so it's a decision to revisit, not just a migration to write.
+  gap versus Hevy and Boostcamp. **The data now exists** (2026-11-06, `V90`–`V93`): a fixed
+  `muscles` vocabulary and `exercise_muscles` (primary/secondary) for every library exercise,
+  carried on the catalog DTO — see `data-model.md`, "Muscles worked". The decision this note said
+  to revisit was made, and it is **not** a return of the categories `V33` dropped: categories were
+  a person's way to organise *their* exercises, a job tags still do; a muscle is a fact about the
+  movement, the same for everyone. What remains unbuilt is the Trends view itself (the
+  heat-map mockup lives outside the repo, `../design-mockups/`): hard sets per muscle per week,
+  primary = 1 set, secondary = ½, `counted = 0` labels (Full body, Cardio) excluded, and custom
+  exercises nobody described shown as "not counted".
 - **Body-weight tracking** — small table, large unlock (bodyweight trend, relative strength, and
   making pull-ups count toward volume instead of contributing zero).
 - **Workout duration** — the data exists but is not trustworthy: `ended_at` is set to `started_at`
