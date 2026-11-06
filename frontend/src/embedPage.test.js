@@ -19,8 +19,10 @@ describe('the YouTube embed page on the web host', () => {
     expect(webAppConfig.navigationFallback.exclude).toContain('/embed/*');
   });
 
-  it('may be framed only by this origin and the App Store app', () => {
-    expect(directive('frame-ancestors')).toBe("frame-ancestors 'self' capacitor://localhost");
+  it('may be framed only by this origin and the two store apps', () => {
+    // capacitor://localhost is the iOS app's origin; https://localhost is Capacitor's default
+    // origin on Android (androidScheme 'https'), ready for when that app exists.
+    expect(directive('frame-ancestors')).toBe("frame-ancestors 'self' capacitor://localhost https://localhost");
   });
 
   it('frames YouTube and nothing else, and runs only its own script', () => {

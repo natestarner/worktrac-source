@@ -51,7 +51,8 @@ break the app rather than merely loosening it.
 straight from `capacitor://localhost`, YouTube gets no usable Referer and refuses with "Error 153"
 (TestFlight, 2026-11-05). The app frames this page instead, and it frames YouTube. Its route in
 `staticwebapp.config.json` overrides the CSP **for that path only**:
-`frame-ancestors 'self' capacitor://localhost`, `frame-src` YouTube's two embed hosts,
+`frame-ancestors 'self' capacitor://localhost https://localhost` (the iOS app, and Capacitor's
+default origin on Android, added ahead of that app), `frame-src` YouTube's two embed hosts,
 `script-src 'self'`, `default-src 'none'`. `X-Frame-Options: DENY` still arrives from
 `globalHeaders`; browsers ignore it when the response carries `frame-ancestors`, which is what lets
 the app frame the page while the rest of the site stays unframeable.
@@ -63,8 +64,10 @@ the app frame the page while the rest of the site stays unframeable.
   to frame an arbitrary URL from this origin.
 - It is kept out of the SPA fallback and the service worker's precache and navigation fallback, so
   it always arrives with its own headers. `embedPage.test.js` pins all of this.
-- Widening `frame-ancestors` (another app scheme, Android's `https://localhost`) is a change to
-  this route only, never to `globalHeaders`.
+- Widening `frame-ancestors` (another app scheme) is a change to this route only, never to
+  `globalHeaders`. `https://localhost` is safe to allow because the page has nothing to clickjack:
+  any page served from a developer's own `https://localhost` could already embed YouTube directly.
+  If the Android app ever sets a custom `androidScheme` or `hostname`, this value has to follow it.
 
 The Customer Portal is a **redirect** to `billing.stripe.com` opened in a new tab, not a frame, so
 it needs no `frame-src` entry — top-level navigation is not governed by these directives.
