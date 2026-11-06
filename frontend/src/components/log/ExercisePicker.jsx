@@ -10,6 +10,7 @@ import { IconChevronDown, IconDumbbell } from '../shared/icons';
 import { searchExercises } from '../../utils/exerciseSearch';
 import { useChipRowOverflow } from '../../hooks/useChipRowOverflow';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
+import { ExercisePreviewSheet } from '../exercise/ExercisePreview';
 
 // How many routines the quick-start block offers before it collapses. Routines are full-width
 // rows sitting ABOVE the search field, so this is the number that decides whether the rest of
@@ -51,6 +52,9 @@ export default function ExercisePicker({
   // shouldn't outlive the visit anyway.
   const [showAllRoutines, setShowAllRoutines] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState(() => new Set());
+  // The search result being previewed ("Preview exercise": its muscles and video, before choosing
+  // it). Local for the same reason as the two above: a person switch remounts this component.
+  const [preview, setPreview] = useState(null);
   const term = exerciseSearch.trim().toLowerCase();
   const searching = term.length > 0;
 
@@ -178,6 +182,7 @@ export default function ExercisePicker({
             results={searchResults}
             term={exerciseSearch}
             onSelect={onSelectExercise}
+            onPreview={(ex) => setPreview({ id: ex.id, name: ex.name })}
             emptyMessage={`No exercises match "${exerciseSearch}". Try a shorter word, or add it as your own below.`}
           />
         </div>
@@ -216,6 +221,8 @@ export default function ExercisePicker({
           + Add your own exercise
         </Button>
       )}
+
+      {preview && <ExercisePreviewSheet exerciseId={preview.id} exerciseName={preview.name} onClose={() => setPreview(null)} />}
     </div>
   );
 }

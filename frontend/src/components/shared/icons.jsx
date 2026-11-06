@@ -57,6 +57,16 @@ export const IconPlay = (props) => (
   </Icon>
 );
 
+// Lucide "info" (an i in a circle). "Preview exercise" beside a search result: muscles and video
+// before choosing.
+export const IconInfo = (props) => (
+  <Icon {...props}>
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 16v-4" />
+    <path d="M12 8h.01" />
+  </Icon>
+);
+
 export const IconStarFilled = (props) => (
   <Icon fill="currentColor" {...props}>
     <path d="M11.5 2.9a.6.6 0 0 1 1 0l2.6 5.2 5.8.9a.6.6 0 0 1 .3 1l-4.2 4 1 5.7a.6.6 0 0 1-.9.7L12 17.8l-5.1 2.6a.6.6 0 0 1-.9-.7l1-5.7-4.2-4a.6.6 0 0 1 .3-1l5.8-.9Z" />
