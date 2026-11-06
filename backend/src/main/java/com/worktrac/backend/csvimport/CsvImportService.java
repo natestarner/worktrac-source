@@ -3,7 +3,9 @@ package com.worktrac.backend.csvimport;
 import com.worktrac.backend.account.Account;
 import com.worktrac.backend.account.AccountRepository;
 import com.worktrac.backend.exercise.Exercise;
+import com.worktrac.backend.exercise.ExerciseMuscleWriter;
 import com.worktrac.backend.exercise.ExerciseRepository;
+import com.worktrac.backend.exercise.MuscleNames;
 import com.worktrac.backend.exercise.PersonExerciseService;
 import com.worktrac.backend.export.ExportRow;
 import com.worktrac.backend.export.WorkoutRowProjection;
@@ -85,6 +87,8 @@ public class CsvImportService {
     private final PersonExerciseService personExerciseService;
     private final ImportBatchRepository importBatchRepository;
     private final QuotaService quotaService;
+    private final MuscleNames muscleNames;
+    private final ExerciseMuscleWriter exerciseMuscleWriter;
     private final Clock clock;
 
     public CsvImportService(PersonService personService, CsvImportParser csvImportParser,
@@ -94,7 +98,8 @@ public class CsvImportService {
                              WorkoutSetRepository workoutSetRepository,
                              SessionExerciseNoteRepository sessionExerciseNoteRepository,
                              PersonExerciseService personExerciseService,
-                             ImportBatchRepository importBatchRepository, QuotaService quotaService, Clock clock) {
+                             ImportBatchRepository importBatchRepository, QuotaService quotaService,
+                             MuscleNames muscleNames, ExerciseMuscleWriter exerciseMuscleWriter, Clock clock) {
         this.personService = personService;
         this.csvImportParser = csvImportParser;
         this.workoutRowProjection = workoutRowProjection;
@@ -107,6 +112,8 @@ public class CsvImportService {
         this.personExerciseService = personExerciseService;
         this.importBatchRepository = importBatchRepository;
         this.quotaService = quotaService;
+        this.muscleNames = muscleNames;
+        this.exerciseMuscleWriter = exerciseMuscleWriter;
         this.clock = clock;
     }
 
@@ -285,6 +292,13 @@ public class CsvImportService {
         // whole file and applied once -- otherwise an exercise appearing in ten workouts would be
         // reconciled ten times.
         Map<String, Personalization> personalization = new LinkedHashMap<>();
+        // The exercises this import CREATES, and the muscles the file gives each (its first row that
+        // names any). Muscles are written onto these only -- the same rule as an ordinary create,
+        // which writes them on the insert branch and never onto an exercise that already exists.
+        // An existing exercise keeps what it has: the library's are the app's, and a household's
+        // are edited in Customize, by whoever may (never by an old file).
+        Map<Long, ParsedImport.ParsedRow> createdMuscles = new LinkedHashMap<>();
+        Set<Long> created = new LinkedHashSet<>();
         List<WorkoutSet> pending = new ArrayList<>();
         int sessionNotesApplied = 0;
 
@@ -300,10 +314,17 @@ public class CsvImportService {
                 // Stamped with the importer. Import is IMPORT_DATA, which is owner-only, so today
                 // this is always the owner -- threaded through rather than hardcoded so the stamp
                 // stays true if that ever changes.
-                Exercise exercise = byName.computeIfAbsent(key(row.exerciseName()),
-                        k -> exerciseRepository.save(new Exercise(account, row.exerciseName(), null,
-                                row.isHold() ? Exercise.TRACKING_TYPE_DURATION : Exercise.TRACKING_TYPE_STRENGTH,
-                                access.userId())));
+                Exercise exercise = byName.computeIfAbsent(key(row.exerciseName()), k -> {
+                    Exercise made = exerciseRepository.save(new Exercise(account, row.exerciseName(), null,
+                            row.isHold() ? Exercise.TRACKING_TYPE_DURATION : Exercise.TRACKING_TYPE_STRENGTH,
+                            access.userId()));
+                    created.add(made.getId());
+                    return made;
+                });
+                if (created.contains(exercise.getId()) && !createdMuscles.containsKey(exercise.getId())
+                        && !(row.mainMuscles().isEmpty() && row.helpingMuscles().isEmpty())) {
+                    createdMuscles.put(exercise.getId(), row);
+                }
 
                 WorkoutSet set = new WorkoutSet(session, person, exercise, row.weight(), row.reps(),
                         row.durationSeconds(), row.unit(), row.restSeconds(), row.createdAt(), null);
@@ -336,6 +357,13 @@ public class CsvImportService {
             }
         }
         flush(pending);
+
+        if (!createdMuscles.isEmpty()) {
+            Map<String, String> vocabulary = muscleNames.namesByCode();
+            createdMuscles.forEach((exerciseId, row) -> exerciseMuscleWriter.replace(exerciseId,
+                    muscleNames.toCodes(row.mainMuscles(), vocabulary),
+                    muscleNames.toCodes(row.helpingMuscles(), vocabulary)));
+        }
 
         Written written = new Written();
         written.sessionNotesApplied = sessionNotesApplied;

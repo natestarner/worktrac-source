@@ -37,7 +37,10 @@ public record ParsedImport(
             String exerciseNote,
             boolean favorite,
             List<String> tags,
-            String sessionNote) {
+            String sessionNote,
+            // Muscle names or codes as the file wrote them; empty when the file has none.
+            List<String> mainMuscles,
+            List<String> helpingMuscles) {
 
         public boolean isHold() {
             return durationSeconds != null;

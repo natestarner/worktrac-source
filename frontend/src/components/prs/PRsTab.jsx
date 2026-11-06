@@ -29,7 +29,8 @@ import ChartHelp from '../shared/ChartHelp';
 import Select from '../shared/Select';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
-import { IconChevronRight, IconScroll, IconStar, IconTrendingUp } from '../shared/icons';
+import { IconChevronRight, IconInfo, IconScroll, IconStar, IconTrendingUp } from '../shared/icons';
+import { ExercisePreviewSheet } from '../exercise/ExercisePreview';
 import { windowLabel } from '../shared/historyWindowCopy';
 
 // Wrapper: same key={activePersonId} remount pattern as HistoryTab (see its header comment) --
@@ -51,6 +52,8 @@ function PRsTabContent() {
   // The row whose destination chooser is open, or null. ONE modal for the whole board rather than
   // one per row -- a board can run to dozens of exercises.
   const [navTarget, setNavTarget] = useState(null);
+  // The exercise whose muscles and video are open (the menu's "About this exercise").
+  const [preview, setPreview] = useState(null);
   const activePersonName = people.find((p) => p.id === activePersonId)?.name || '';
   const defaultUnit = account?.defaultUnit || 'lb';
   const hiddenFromView = historyWindow?.hiddenSessions ?? 0;
@@ -368,9 +371,23 @@ function PRsTabContent() {
               <IconTrendingUp size={16} />
               View progress
             </Button>
+            {/* Muscles and the how-to video, the Log screen's "About this exercise" sheet. It
+                replaces this menu rather than stacking on it: one dialog at a time. */}
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => {
+                setPreview({ id: navTarget.exerciseId, name: navTarget.exerciseName });
+                setNavTarget(null);
+              }}
+            >
+              <IconInfo size={16} />
+              About this exercise
+            </Button>
           </div>
         </Modal>
       )}
+      {preview && <ExercisePreviewSheet exerciseId={preview.id} exerciseName={preview.name} onClose={() => setPreview(null)} />}
     </div>
   );
 }

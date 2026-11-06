@@ -15,7 +15,7 @@
 // .claude/rules/trends.md about the tooltip that blanked the page on an unrecognized metric.
 //
 // Each `label` is the "?" button's accessible name. They must stay mutually non-containing:
-// Playwright matches an accessible name as a case-insensitive SUBSTRING, and the three Trends ones
+// Playwright matches an accessible name as a case-insensitive SUBSTRING, and the four Trends ones
 // are on screen at once. prRecordHelp's label lives here with them even though it renders on the
 // PRs tab, because checking four labels against each other is only easy where they sit side by
 // side -- and that check is what chartHelp.test.js does.
@@ -31,6 +31,18 @@ export const CONSISTENCY_HELP = {
     'One square per day, oldest on the left. The darker the square, the more sets you logged that day.',
     'This grid is always the last 6 months. The range buttons at the top of the tab do not change it.',
     'Tap a square for that day’s totals.',
+  ],
+};
+
+// The muscle map's rule is stated once, here, and the handbook reads these same lines -- so the
+// "?" and the Trends section of the Huddle Handbook cannot disagree about what a set counts for.
+export const MUSCLE_MAP_HELP = {
+  label: 'What the muscle map counts',
+  title: 'Muscles worked',
+  lines: [
+    'Every set you logged in the range, added up by muscle. A set counts as one set for each muscle the exercise mainly works, and half a set for each muscle that helps.',
+    'The darker the muscle, the more sets it got, compared with your most-worked muscle in the same range. The range buttons at the top of the tab change it.',
+    'Running, rowing and other conditioning count as sets of their own, not toward any muscle. An exercise with no muscles listed is not counted; add its muscles from Customize on the exercise.',
   ],
 };
 

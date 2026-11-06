@@ -246,7 +246,7 @@ function formatterFor(zone) {
 }
 
 // Days since the epoch of the calendar date `instant` falls on in `zone`.
-function localDay(instant, zone) {
+export function localDay(instant, zone) {
   const parts = Object.fromEntries(formatterFor(zone).formatToParts(new Date(instant)).map((p) => [p.type, p.value]));
   return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)) / DAY_MS;
 }
@@ -467,16 +467,23 @@ export function exerciseTrend(digests, exerciseId, { weeks, zone, now, windowSta
   return points;
 }
 
+// The days the range toggle covers, in the viewer's zone: from the Monday `weeks - 1` weeks before
+// this one, through today. Shared with utils/muscleSets.js, so the muscle map counts exactly the
+// weeks the weekly chart beside it draws.
+export function trendsRange({ weeks, zone, now }) {
+  const effectiveWeeks = Math.min(Math.max(weeks, 1), MAX_WEEKS);
+  const today = localDay(now, zone);
+  const currentWeek = mondayOf(today);
+  return { today, currentWeek, rangeStart: currentWeek - 7 * (effectiveWeeks - 1) };
+}
+
 // ── Trends overview: GET /trends/overview ─────────────────────────────────────────────────────
 
 // `hiddenSessions` is the History window's count of workouts with sets behind the Free floor: the
 // overview's hasAnyHistory is all-time, so History behind the window still means this person has
 // trained. (The server's count requires sets, as its History does -- WorkoutSessionRepository.)
 export function trendsOverview(digests, { weeks, zone, now, hiddenSessions = 0 }) {
-  const effectiveWeeks = Math.min(Math.max(weeks, 1), MAX_WEEKS);
-  const today = localDay(now, zone);
-  const currentWeek = mondayOf(today);
-  const rangeStart = currentWeek - 7 * (effectiveWeeks - 1);
+  const { today, currentWeek, rangeStart } = trendsRange({ weeks, zone, now });
 
   const byWeek = new Map();
   for (let w = rangeStart; w <= currentWeek; w += 7) byWeek.set(w, { workouts: 0, volume: 0, sets: 0, reps: 0, hold: 0 });

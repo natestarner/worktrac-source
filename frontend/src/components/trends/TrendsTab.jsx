@@ -9,6 +9,7 @@ import SummaryCards from './SummaryCards';
 import WeeklyMetricChart from './WeeklyMetricChart';
 import ConsistencyHeatmap from './ConsistencyHeatmap';
 import ExerciseTrendSection from './ExerciseTrendSection';
+import MuscleMapCard from './MuscleMapCard';
 import Skeleton from '../shared/Skeleton';
 import RefreshIndicator from '../shared/RefreshIndicator';
 import OfflineDataNotice from '../shared/OfflineDataNotice';
@@ -45,6 +46,16 @@ function HeatmapSkeleton() {
   );
 }
 
+// MuscleMapCard: its title row, then the two bodies (about 0.9x as tall as the card is wide).
+function MuscleMapSkeleton() {
+  return (
+    <Card size="dense">
+      <Skeleton width={190} height={13} style={{ marginBottom: 12 }} />
+      <Skeleton width="100%" height={300} radius={8} />
+    </Card>
+  );
+}
+
 function TrendsSkeleton() {
   return (
     <div data-testid="trends-skeleton">
@@ -69,6 +80,7 @@ function TrendsSkeleton() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
         <HeatmapSkeleton />
         <BarChartSkeleton />
+        <MuscleMapSkeleton />
       </div>
       <Card size="dense">
         <Skeleton width={140} height={13} style={{ marginBottom: 12 }} />
@@ -91,6 +103,7 @@ export default function TrendsTab() {
     setTrendsWeeklyMetric,
     trendsExerciseMetric,
     setTrendsExerciseMetric,
+    bodyFigure,
   } = useAppState();
   const { account } = useAuth();
   const location = useLocation();
@@ -141,7 +154,7 @@ export default function TrendsTab() {
     node.scrollIntoView?.({ block: 'start' });
   }, []);
 
-  const { overview, loading, isFetching, isPaused, isError, updatedAt } = useTrendsOverview(
+  const { overview, muscleSets, loading, isFetching, isPaused, isError, updatedAt } = useTrendsOverview(
     activePersonId,
     trendsRangeWeeks,
   );
@@ -243,6 +256,8 @@ export default function TrendsTab() {
           onMetricChange={setTrendsWeeklyMetric}
           defaultUnit={defaultUnit}
         />
+        {/* The body the person chose in an exercise's About sheet; male until they choose. */}
+        <MuscleMapCard muscleSets={muscleSets} weeks={trendsRangeWeeks} gender={bodyFigure ?? 'male'} />
       </div>
 
       <div ref={exerciseSectionRef} className="trends-exercise-anchor">

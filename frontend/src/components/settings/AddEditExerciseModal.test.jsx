@@ -405,4 +405,44 @@ describe('AddEditExerciseModal', () => {
       expect(screen.queryByText('You already have this exercise.')).toBeNull();
     });
   });
+
+  // Muscles worked: optional, create-only, and carried everywhere the exercise is before its
+  // create syncs -- the temp row (what the strip reads offline) and the queued create.
+  describe('muscles worked', () => {
+    it('prefills from the closest library exercise and sends the picked muscles', async () => {
+      listExercises.mockResolvedValue([
+        { id: 1, name: 'Barbell Back Squat', isGlobal: true, primaryMuscles: ['quads', 'glutes'], secondaryMuscles: ['hamstrings'] },
+        { id: 2, name: 'Barbell Bench Press', isGlobal: true, primaryMuscles: ['chest'], secondaryMuscles: ['triceps'] },
+      ]);
+      const onSaved = vi.fn();
+      renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={onSaved} />);
+
+      fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Zercher Squat' } });
+      expect(await screen.findByText('Suggested from Barbell Back Squat. Tap to change.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Quads: main' })).toBeInTheDocument();
+
+      // Taking hamstrings off: helping -> not worked. Once touched, the choice is theirs.
+      fireEvent.click(screen.getByRole('button', { name: 'Hamstrings: helping' }));
+      expect(screen.queryByText(/Suggested from/)).toBeNull();
+      fireEvent.click(lastAddButton());
+
+      expect(onSaved).toHaveBeenCalledWith(
+        expect.objectContaining({ primaryMuscles: ['glutes', 'quads'], secondaryMuscles: [], optimistic: true }),
+      );
+      await waitFor(() =>
+        expect(addExercise).toHaveBeenCalledWith(
+          expect.objectContaining({ name: 'Zercher Squat', primaryMuscles: ['glutes', 'quads'], secondaryMuscles: [] }),
+        ),
+      );
+    });
+
+    it('cycles a chip through main, helping and back to not worked', () => {
+      renderWithQuery(<AddEditExerciseModal exercise={null} personId={5} onClose={vi.fn()} onSaved={vi.fn()} />);
+      fireEvent.change(screen.getByPlaceholderText('Exercise name'), { target: { value: 'Mystery Move' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Chest: not worked' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Chest: main' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Chest: helping' }));
+      expect(screen.getByRole('button', { name: 'Chest: not worked' })).toBeInTheDocument();
+    });
+  });
 });

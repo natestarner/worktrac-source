@@ -226,15 +226,54 @@ Two things about it are less obvious than they look:
   on screen. jsdom computes no layout, so `trends.spec.ts`'s bounding-box test is the only thing
   that can catch a regression here.
 
+## Muscles worked (the muscle map)
+
+Built 2026-11-06 (`components/trends/MuscleMapCard.jsx`, `utils/muscleSets.js`). It was the single
+biggest gap versus Hevy and Boostcamp, and it waited on data: until `V90`–`V93` gave every library
+exercise its muscles (`data-model.md`, "Muscles worked"), there was nothing to count. Those muscles
+are not a return of the categories `V33` dropped: categories were a person's way to organise *their*
+exercises, a job tags still do; a muscle is a fact about the movement, the same for everyone.
+
+**The rule.** Every set in the range counts **one set** toward each muscle the exercise mainly
+works and **half a set** toward each muscle that helps. Half sets are summed as integers
+(`halves`), so 0.5 + 0.5 is exactly 1 and the list never shows 2.9999. That weighting is the
+common "fractional sets" convention for hard sets per muscle; it was chosen over counting a helper
+as a full set (which makes a bench-press-only week read as a triceps week) and over ignoring helpers
+(which leaves rows, dips and presses invisible to the muscles they really train).
+
+- **Same digests, same range, same mode-independence as the rest of Trends.** It reads
+  `useStatsFromHistory`'s month digests (the workout in progress and its queued sets folded in), and
+  the range comes from `statsFromHistory.js#trendsRange`, the one the weekly chart is drawn from. So
+  sets logged in the basement are on the map at once: `parity-muscle-map.spec.ts`, verified red in
+  all three degraded modes against a fold that skipped queued sets.
+- **No server counterpart, so no oracle row.** The equivalence oracle pins what `StatsService` also
+  computes; this has never been computed on the server and nothing old calls an endpoint for it.
+  If an endpoint is ever added, it joins the oracle like the others.
+- **Muscles come from the catalog** (`queryKeys.exercises()`), cached and warmed like the names. A
+  temp exercise created offline is found by its temp id, with the muscles its create carried. No
+  catalog at all means `null` and no card, never "no muscles worked", which is the empty-board
+  mistake one level over.
+- **Conditioning is counted, never spread over the body.** An exercise described only by
+  `counted = 0` labels (Full body, Cardio) adds to `conditioning`, said in one line under the list.
+- **An exercise nobody described is named**, with its sets, and the line says where to add its
+  muscles (Customize). Households from before muscles existed will see their own custom exercises
+  here. That line is the nudge the plan called for, not an error state.
+- **Shading is relative** to the most-worked muscle in the range, in four steps (`SHADE_STEPS`), so a
+  light week still shows its shape and the darkest muscle is always the top row. Each row's bar
+  carries its muscle's shade, so the list and the bodies read as one chart, and every shade is also
+  a name and a number (nothing is said by colour alone).
+- **Follows the range toggle**, unlike the consistency grid: "what have I been training lately" is a
+  range question.
+- **The body is the person's `bodyFigure`** (chosen in an exercise's About sheet), male until chosen.
+- **The numbers stand alone in the rows** under a "Sets per muscle" heading. With "N sets" in every
+  row the bar column collapsed to ~14px on a 320px phone; a screen reader still hears "3 sets"
+  (`sr-only`). Beside the bodies once the card is 600px wide (a container query, so iPad split view
+  gets the phone layout).
+
 ## Deliberately not built
 
 Scoped out on 2026-08-07, listed so the reasoning isn't re-derived:
 
-- **Muscle-group breakdown** (sets per muscle group per week, body diagram) — the single biggest
-  gap versus Hevy and Boostcamp. Needs a `muscle_group` column on `exercises`; the ~115 seeded
-  exercises could be backfilled mechanically since `V34` already groups them under SQL comments.
-  Note this would **re-introduce** a taxonomy deliberately dropped in `V33` in favour of free-text
-  tags, so it's a decision to revisit, not just a migration to write.
 - **Body-weight tracking** — small table, large unlock (bodyweight trend, relative strength, and
   making pull-ups count toward volume instead of contributing zero).
 - **Workout duration** — the data exists but is not trustworthy: `ended_at` is set to `started_at`

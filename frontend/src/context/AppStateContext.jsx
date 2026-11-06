@@ -104,6 +104,12 @@ const PERSON_DEFAULTS = {
   // client's note onto the other's screen. Cleared only on a successful save.
   checkInDraft: null,
 
+  // Which body the muscle diagram draws for this person: 'male' | 'female', or null until they
+  // choose -- the "About this exercise" sheet asks the first time it opens, and offers the switch
+  // from then on. A display preference about the person looking, so it is per person (two people
+  // trading one iPad each see their own) and local to the device, like the Trends switchers above.
+  bodyFigure: null,
+
   // { [exerciseId]: volumeLb } -- the session-volume figure at which this person was last
   // congratulated for that exercise. A BACKSTOP, not the mechanism.
   //
@@ -259,6 +265,8 @@ export function reducer(state, action) {
       return updateActive(state, { prsSort: action.sort });
     case 'SET_PRS_MEASURE':
       return updateActive(state, { prsMeasure: action.measure });
+    case 'SET_BODY_FIGURE':
+      return updateActive(state, { bodyFigure: action.figure === 'female' ? 'female' : 'male' });
     // Re-arm ONE exercise's volume-celebration latch, because the record it was holding may no
     // longer exist: editing a set down or deleting one lowers the all-time best, and a latch left
     // at the old value silently suppresses every later record below it. Scoped to the exercise
@@ -481,6 +489,7 @@ export function AppStateProvider({ children }) {
       setTrendsExerciseMetric: (metric) => dispatch({ type: 'SET_TRENDS_EXERCISE_METRIC', metric }),
       setPrsSort: (sort) => dispatch({ type: 'SET_PRS_SORT', sort }),
       setPrsMeasure: (measure) => dispatch({ type: 'SET_PRS_MEASURE', measure }),
+      setBodyFigure: (figure) => dispatch({ type: 'SET_BODY_FIGURE', figure }),
       recordVolumePrCelebrated: (exerciseId, latch) =>
         dispatch({ type: 'RECORD_VOLUME_PR_CELEBRATED', exerciseId, latch }),
       clearVolumePrCelebrated: (exerciseId) =>

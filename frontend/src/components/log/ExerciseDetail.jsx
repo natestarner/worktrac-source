@@ -64,6 +64,7 @@ import {
   IconPin,
   IconStar,
   IconStarFilled,
+  IconPlay,
   IconTrash,
   IconTrophy,
 } from '../shared/icons';
@@ -71,6 +72,9 @@ import Skeleton from '../shared/Skeleton';
 import SetPillRow from '../shared/SetPillRow';
 import PrBadge, { est1rmLabelForSet, prBadgeLabel, prBadgeTitle } from '../shared/PrBadge';
 import { TOUR_ANCHORS } from '../onboarding/tourSteps';
+import { exerciseMuscles } from '../../utils/muscles';
+import ExerciseAboutStrip from '../exercise/ExerciseAboutStrip';
+import ExerciseAboutSheet from '../exercise/ExerciseAboutSheet';
 
 // How far from a record the nudge under the steppers is still worth showing. Past this it stops
 // being encouragement and becomes a reminder of how far off you are -- and it would be on screen
@@ -95,6 +99,11 @@ export default function ExerciseDetail({
   // Optional: called once per set logged here, after the write is dispatched. LogTab uses it to
   // mark the routine step the set was logged at.
   onSetLogged,
+  // { primary, secondary } muscle codes from the exercise's catalog row (see `muscles` below).
+  muscles: musclesProp,
+  // The library exercise's how-to video (utils/exerciseVideo.js), looked up from the catalog row by
+  // LogTab like the muscles; null for no video.
+  video = null,
 }) {
   const { account, people } = useAuth();
   const activePersonName = people.length >= 2 ? people.find((p) => p.id === personId)?.name : null;
@@ -118,6 +127,8 @@ export default function ExerciseDetail({
     volumePrCelebrated,
     recordVolumePrCelebrated,
     clearVolumePrCelebrated,
+    bodyFigure,
+    setBodyFigure,
   } = useAppState();
   // holdTimers is defaulted because it is read during RENDER: a context missing it would throw
   // mid-render, and a render-time throw has to be contained rather than allowed to white-screen the
@@ -156,6 +167,13 @@ export default function ExerciseDetail({
   const [editingSet, setEditingSet] = useState(null);
   const [justAddedSetId, setJustAddedSetId] = useState(null);
   const [showSessionNoteModal, setShowSessionNoteModal] = useState(false);
+  // false, or 'about' / 'video' -- which strip button opened it (the play button scrolls to the video).
+  const [showAboutSheet, setShowAboutSheet] = useState(false);
+  // "Muscles worked" lives on the CATALOG row only (ExerciseDto), not on the person's picker row
+  // that `exercise` usually is, so LogTab (which holds the catalog) looks it up by id and passes it
+  // in. Without the prop, whatever the row itself carries -- exerciseMuscles() answers empty lists
+  // for a custom exercise, a temp row created offline, or a catalog cached before the fields existed.
+  const muscles = musclesProp ?? exerciseMuscles(exercise);
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   // Which session the "Last time" card shows: 'last' or 'bestVolume'. Stamped with the exercise it
   // was chosen on, because the routine strip swaps `exercise` without remounting this component --
@@ -1187,19 +1205,25 @@ export default function ExerciseDetail({
     <div>
       <div className="exercise-detail-grid">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginBottom: exercise.tags?.length ? 'var(--space-2)' : 'var(--space-5)' }}>
-            <div
-              style={{
-                minWidth: 0,
-                flex: 1,
-                fontSize: 'var(--text-2xl)',
-                fontWeight: 'var(--weight-bold)',
-                letterSpacing: 'var(--tracking-tight)',
-                lineHeight: 'var(--leading-tight)',
-              }}
-            >
-              {exercise.name}
-            </div>
+          {/* The name has the full width to itself, so long names stop wrapping beside the icons;
+              the icons moved into the strip below (decided 2026-11-06). */}
+          <div
+            style={{
+              fontSize: 'var(--text-2xl)',
+              fontWeight: 'var(--weight-bold)',
+              letterSpacing: 'var(--tracking-tight)',
+              lineHeight: 'var(--leading-tight)',
+              marginBottom: 'var(--space-1)',
+            }}
+          >
+            {exercise.name}
+          </div>
+          <div style={{ marginBottom: exercise.tags?.length ? 'var(--space-2)' : 'var(--space-5)' }}>
+          <ExerciseAboutStrip
+            muscles={muscles}
+            bodyFigure={bodyFigure}
+            onOpen={() => setShowAboutSheet('about')}
+            actions={<>
             {/* These three were a text glyph and two emoji at three different font sizes,
                 each with a ~20px hit area. As IconButtons they share one 40px target and
                 one stroke weight. The aria-labels are unchanged -- e2e selects the note
@@ -1252,6 +1276,15 @@ export default function ExerciseDetail({
                 data-tour-anchor={TOUR_ANCHORS.CUSTOMIZE_EXERCISE}
               />
             </ReadOnlyWrap>
+            </>}
+            // Not wrapped: watching a video is not a write, so it is anyone's to do on any screen.
+            // ⚠️ The label must not contain "Done" (or any other label on this screen): Playwright
+            // matches names by substring, and "Watch how it's done" broke every spec that clicks
+            // the past-workout frame's "Done" the day exercises got real videos.
+            video={video && (
+              <IconButton onClick={() => setShowAboutSheet('video')} label="Show how-to video" icon={IconPlay} />
+            )}
+          />
           </div>
           {exercise.tags?.length > 0 && (
             <div style={{ marginBottom: 18 }}>
@@ -1722,6 +1755,29 @@ export default function ExerciseDetail({
         />
       )}
 
+      {showAboutSheet && (
+        <ExerciseAboutSheet
+          exerciseName={exercise.name}
+          muscles={muscles}
+          bodyFigure={bodyFigure}
+          onChooseFigure={setBodyFigure}
+          onClose={() => setShowAboutSheet(false)}
+          video={video}
+          focusVideo={showAboutSheet === 'video'}
+          // An own exercise nobody has described yet: offer to describe it, through Customize (the
+          // one place muscles are edited). Not for library exercises, which the app describes, and
+          // not for a temp row, whose Customize is disabled until its create syncs.
+          onAddMuscles={
+            !exercise.isGlobal && !isTempExerciseId(exercise.id) && exercise.createdByYou !== false
+              ? () => {
+                  setShowAboutSheet(false);
+                  setShowConfigureModal(true);
+                }
+              : null
+          }
+        />
+      )}
+
       {showConfigureModal && (
         <ConfigureExerciseModal
           exercise={exercise}
@@ -1735,6 +1791,15 @@ export default function ExerciseDetail({
           onTagsChanged={onPersonalizationChanged || (() => {})}
           onExerciseChanged={onPersonalizationChanged || (() => {})}
           onRequestDelete={handleRequestDelete}
+          muscles={muscles}
+          // The server's row, written into the cached catalog in place (muscles live there), so the
+          // strip and sheet show the change at once. Patches an existing entry only -- never builds
+          // the catalog from one row (offline-internals.md).
+          onMusclesSaved={(updated) =>
+            queryClient.setQueryData(queryKeys.exercises(), (rows) =>
+              rows === undefined ? undefined : rows.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
+            )
+          }
         />
       )}
 
