@@ -52,6 +52,11 @@ wrong for Romanian Deadlift. Here it names the same lift.
 
 ## Adding more
 
+**What needs one:** the admin portal's **Videos** tab (`/admin/videos`, `GET /api/admin/library-videos`)
+lists every library exercise with no video to show, the ones people log most first. It also lists any
+video the daily check hid because YouTube said it was gone, with the dead id, so it can be confirmed
+and replaced. The tab is read-only; the steps below are still how a video is added.
+
 1. Find the video. For Muscle & Strength, the exercise page's YouTube embed; anything else, a channel
    whose terms allow embedding.
 2. Check it: `https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v=<id>`

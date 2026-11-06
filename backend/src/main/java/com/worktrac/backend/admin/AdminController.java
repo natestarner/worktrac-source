@@ -1,6 +1,7 @@
 package com.worktrac.backend.admin;
 
 import com.worktrac.backend.billing.CompGrantService;
+import com.worktrac.backend.exercise.ExerciseVideoRepository;
 import com.worktrac.backend.security.CurrentUser;
 import org.springframework.boot.health.actuate.endpoint.HealthEndpoint;
 import org.springframework.http.ResponseEntity;
@@ -35,14 +36,17 @@ public class AdminController {
     private final HealthEndpoint healthEndpoint;
     private final CompGrantService compGrantService;
     private final CurrentUser currentUser;
+    private final ExerciseVideoRepository exerciseVideoRepository;
     private final Clock clock;
 
     public AdminController(AdminService adminService, HealthEndpoint healthEndpoint,
-                            CompGrantService compGrantService, CurrentUser currentUser, Clock clock) {
+                            CompGrantService compGrantService, CurrentUser currentUser,
+                            ExerciseVideoRepository exerciseVideoRepository, Clock clock) {
         this.adminService = adminService;
         this.healthEndpoint = healthEndpoint;
         this.compGrantService = compGrantService;
         this.currentUser = currentUser;
+        this.exerciseVideoRepository = exerciseVideoRepository;
         this.clock = clock;
     }
 
@@ -88,6 +92,18 @@ public class AdminController {
     @GetMapping("/contact-messages")
     public List<AdminContactMessageDto> contactMessages() {
         return adminService.contactMessages();
+    }
+
+    // The how-to video curation queue: library exercises with no video to show. Read-only.
+    @GetMapping("/library-videos")
+    public AdminLibraryVideosDto libraryVideos() {
+        int[] counts = exerciseVideoRepository.libraryVideoCounts();
+        List<AdminLibraryVideosDto.Missing> missing = exerciseVideoRepository.libraryWithoutActiveVideo().stream()
+                .map(row -> new AdminLibraryVideosDto.Missing(row.exerciseId(), row.exerciseName(),
+                        row.videoId() == null ? "none" : "unavailable", row.videoId(), row.checkedAt(),
+                        row.peopleUsing()))
+                .toList();
+        return new AdminLibraryVideosDto(counts[0], counts[1], missing);
     }
 
     @GetMapping("/health")
