@@ -1,0 +1,44 @@
+<!doctype html>
+<!--
+  A YouTube player hosted on Huddle's own origin, for the App Store app.
+
+  The app's pages load from capacitor://localhost, so a YouTube iframe placed directly in the app
+  sends YouTube no usable Referer, and YouTube refuses to play ("Error 153: video player
+  configuration error", found on TestFlight 2026-11-05). The app frames THIS page instead; this
+  page frames YouTube, and YouTube sees https://app(.dev).huddle.fitness as the embedder.
+
+  Static on purpose: no bundle, no service-worker routing, no app state. Its own CSP (a route in
+  staticwebapp.config.json) is what lets YouTube in and lets the app frame it; the rest of the
+  site keeps frame-ancestors 'none'. Script is external because that CSP allows no inline script.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Video</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+      p {
+        margin: 0;
+        padding: 16px;
+        color: #ccc;
+        font: 14px/1.4 system-ui, -apple-system, sans-serif;
+      }
+    </style>
+    <script src="./youtube.js" defer></script>
+  </head>
+  <body></body>
+</html>
