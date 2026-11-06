@@ -1278,8 +1278,11 @@ export default function ExerciseDetail({
             </ReadOnlyWrap>
             </>}
             // Not wrapped: watching a video is not a write, so it is anyone's to do on any screen.
+            // ⚠️ The label must not contain "Done" (or any other label on this screen): Playwright
+            // matches names by substring, and "Watch how it's done" broke every spec that clicks
+            // the past-workout frame's "Done" the day exercises got real videos.
             video={video && (
-              <IconButton onClick={() => setShowAboutSheet('video')} label="Watch how it's done" icon={IconPlay} />
+              <IconButton onClick={() => setShowAboutSheet('video')} label="Show how-to video" icon={IconPlay} />
             )}
           />
           </div>
