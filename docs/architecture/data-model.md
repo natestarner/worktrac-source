@@ -136,6 +136,57 @@ in-app how-to videos, which share the same entry point and the same library-cura
   Adding a `Muscles` column is possible later; the round trip stays byte-identical meanwhile
   because neither side writes one.
 
+## How-to videos (V94)
+
+A library exercise can carry one how-to video (`exercise_videos`): a pointer to a public YouTube
+video, played inside the app. Built 2026-11-06, with no video rows yet. The mapping (our exercise
+to a Muscle & Strength video) waits on Muscle & Strength's answer to the permission email of
+2026-11-05, and nothing about the design depends on which channel the videos come from.
+
+- **Rows arrive by migration**, like the library itself. `scripts/video-migration.mjs` turns a
+  reviewed CSV (`exercise,video_id,start_seconds,source_label`) into a migration that matches
+  library exercises by exact name and **throws if any name matched nothing**. V93's name matching
+  failed silently on a typo; this one fails every backend test instead. Proven against a local
+  database with a deliberately misspelt row (2026-11-06).
+- **An id, never a URL.** `ExerciseVideoDto` is `{ provider, videoId, startSeconds, sourceLabel }`,
+  the table checks `LEN(video_id) = 11`, and the client builds the only two URLs it ever uses: its
+  own `/embed/youtube.html` page and a plain YouTube watch link. The embed page validates the id
+  again, so nothing in a row can point the player anywhere but YouTube.
+- **Library only.** Custom exercises get muscles, not videos (decided 2026-11-06). Every read joins
+  the exercise and requires `account_id IS NULL`.
+- **Only `active` rows are sent.** `ExerciseVideoChecker` asks YouTube's oEmbed endpoint about each
+  video once a day (04:30 UTC, ShedLock'd to one replica): 200 means embeddable, 400 means no such
+  video (measured: a well-formed id that does not exist answers 400, not 404), and 401/403/404
+  mean private, embedding turned off, or removed (YouTube's documented behaviour, not reproduced
+  here). Anything else, including no answer, changes nothing, so a YouTube outage cannot hide every
+  video. A video that comes back is shown again. Rows are never deleted.
+- **On the device:** the catalog is cached like the names, so the play button and the sheet are the
+  same offline. The player itself needs YouTube, so offline it is replaced by a sentence (the one
+  connectivity branch, on `resilience.md`'s register). Nothing loads until the play button is tapped,
+  and the video starts muted. In the App Store app the embed page comes from the web host, because
+  YouTube refuses to play inside `capacitor://localhost` (`native-apps.md`).
+- **Ads:** monetised channels can show YouTube's ads inside an embed, and we cannot turn them off.
+  Accepted for now (2026-11-06); our own videos are the long-term answer.
+
+## Search aliases (V95/V96)
+
+Lifters type "OHP", "RDL" and "military press"; the library says "Barbell Overhead Press" and
+"Romanian Deadlift". `exercise_aliases` holds the other names of 47 library exercises, sent on
+`ExerciseDto.aliases`, and the picker's search (`utils/exerciseSearch.js`) matches them after the
+name. It also matches the muscles an exercise mainly works, after aliases, so "hamstrings" lists
+what trains them. A result found either way says so under its name ("Also called OHP", "Works
+Hamstrings"), because nothing in the name is highlighted.
+
+- **Search only, never identity.** The duplicate-name check on create stays on the name, so an alias
+  can never silently turn somebody's "Military Press" into the library row. History, PRs, the CSV
+  round trip and the History filter never see an alias.
+- **Curated, not imported.** Only names people actually type: abbreviations, the name without its
+  equipment, and well-known synonyms. Loose synonyms that name a different movement are left out (a
+  stiff-leg deadlift is not a Romanian deadlift). An alias that is another library exercise's name,
+  or one shared by two exercises, fails `LibraryExerciseAliasesTest`.
+- **The library expansion will need more of these.** Each new library exercise should arrive with
+  its common other names in the same migration.
+
 ## Endurance (time-based) exercises
 
 Added V46–V50. The problem: the app could only record a set as **weight × reps**, so time-based

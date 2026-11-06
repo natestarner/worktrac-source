@@ -50,6 +50,13 @@ export const IconStar = (props) => (
   </Icon>
 );
 
+// Lucide "play" (a rounded triangle). The how-to video button on the exercise strip.
+export const IconPlay = (props) => (
+  <Icon {...props}>
+    <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+  </Icon>
+);
+
 export const IconStarFilled = (props) => (
   <Icon fill="currentColor" {...props}>
     <path d="M11.5 2.9a.6.6 0 0 1 1 0l2.6 5.2 5.8.9a.6.6 0 0 1 .3 1l-4.2 4 1 5.7a.6.6 0 0 1-.9.7L12 17.8l-5.1 2.6a.6.6 0 0 1-.9-.7l1-5.7-4.2-4a.6.6 0 0 1 .3-1l5.8-.9Z" />

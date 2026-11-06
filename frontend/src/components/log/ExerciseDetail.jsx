@@ -64,6 +64,7 @@ import {
   IconPin,
   IconStar,
   IconStarFilled,
+  IconPlay,
   IconTrash,
   IconTrophy,
 } from '../shared/icons';
@@ -100,6 +101,9 @@ export default function ExerciseDetail({
   onSetLogged,
   // { primary, secondary } muscle codes from the exercise's catalog row (see `muscles` below).
   muscles: musclesProp,
+  // The library exercise's how-to video (utils/exerciseVideo.js), looked up from the catalog row by
+  // LogTab like the muscles; null for no video.
+  video = null,
 }) {
   const { account, people } = useAuth();
   const activePersonName = people.length >= 2 ? people.find((p) => p.id === personId)?.name : null;
@@ -163,6 +167,7 @@ export default function ExerciseDetail({
   const [editingSet, setEditingSet] = useState(null);
   const [justAddedSetId, setJustAddedSetId] = useState(null);
   const [showSessionNoteModal, setShowSessionNoteModal] = useState(false);
+  // false, or 'about' / 'video' -- which strip button opened it (the play button scrolls to the video).
   const [showAboutSheet, setShowAboutSheet] = useState(false);
   // "Muscles worked" lives on the CATALOG row only (ExerciseDto), not on the person's picker row
   // that `exercise` usually is, so LogTab (which holds the catalog) looks it up by id and passes it
@@ -1217,7 +1222,7 @@ export default function ExerciseDetail({
           <ExerciseAboutStrip
             muscles={muscles}
             bodyFigure={bodyFigure}
-            onOpen={() => setShowAboutSheet(true)}
+            onOpen={() => setShowAboutSheet('about')}
             actions={<>
             {/* These three were a text glyph and two emoji at three different font sizes,
                 each with a ~20px hit area. As IconButtons they share one 40px target and
@@ -1272,6 +1277,13 @@ export default function ExerciseDetail({
               />
             </ReadOnlyWrap>
             </>}
+            // Not wrapped: watching a video is not a write, so it is anyone's to do on any screen.
+            // ⚠️ The label must not contain "Done" (or any other label on this screen): Playwright
+            // matches names by substring, and "Watch how it's done" broke every spec that clicks
+            // the past-workout frame's "Done" the day exercises got real videos.
+            video={video && (
+              <IconButton onClick={() => setShowAboutSheet('video')} label="Show how-to video" icon={IconPlay} />
+            )}
           />
           </div>
           {exercise.tags?.length > 0 && (
@@ -1750,6 +1762,8 @@ export default function ExerciseDetail({
           bodyFigure={bodyFigure}
           onChooseFigure={setBodyFigure}
           onClose={() => setShowAboutSheet(false)}
+          video={video}
+          focusVideo={showAboutSheet === 'video'}
           // An own exercise nobody has described yet: offer to describe it, through Customize (the
           // one place muscles are edited). Not for library exercises, which the app describes, and
           // not for a temp row, whose Customize is disabled until its create syncs.

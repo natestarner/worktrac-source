@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { highlightMatches, searchExercises } from './exerciseSearch';
+import { highlightMatches, matchReason, searchExercises } from './exerciseSearch';
 
 const catalog = [
   { id: 1, name: 'Barbell Back Squat' },
@@ -63,5 +63,43 @@ describe('highlightMatches', () => {
 
   it('returns the whole name unmatched for a blank query', () => {
     expect(highlightMatches('Barbell Back Squat', '')).toEqual([{ text: 'Barbell Back Squat', matched: false }]);
+  });
+});
+
+describe('searching by other names and by muscle', () => {
+  const library = [
+    { id: 1, name: 'Barbell Overhead Press', aliases: ['Military Press', 'OHP'], primaryMuscles: ['shoulders'] },
+    { id: 2, name: 'Romanian Deadlift', aliases: ['RDL'], primaryMuscles: ['hamstrings', 'glutes'] },
+    { id: 3, name: 'Cable Chest Fly', aliases: [], primaryMuscles: ['chest'] },
+    { id: 4, name: 'Barbell Bench Press', aliases: ['Bench'], primaryMuscles: ['chest'] },
+    { id: 5, name: 'Military Press Machine', primaryMuscles: ['shoulders'] },
+    // A catalog row cached before aliases and muscles existed.
+    { id: 6, name: 'Arnold Press' },
+  ];
+
+  it('finds an exercise by an abbreviation', () => {
+    expect(searchExercises(library, 'ohp').map((e) => e.id)).toEqual([1]);
+    expect(searchExercises(library, 'rdl').map((e) => e.id)).toEqual([2]);
+  });
+
+  it('ranks a name match above an alias match', () => {
+    expect(searchExercises(library, 'military press').map((e) => e.id)).toEqual([5, 1]);
+  });
+
+  it('finds what mainly works a muscle, after anything named for it', () => {
+    expect(searchExercises(library, 'chest').map((e) => e.id)).toEqual([3, 4]);
+    expect(searchExercises(library, 'hamstrings').map((e) => e.id)).toEqual([2]);
+  });
+
+  it('says why a result is there when its name is not the reason', () => {
+    expect(matchReason(library[0], 'ohp')).toBe('Also called OHP');
+    expect(matchReason(library[3], 'chest')).toBe('Works Chest');
+    expect(matchReason(library[2], 'chest')).toBeNull();
+    expect(matchReason(library[5], 'arnold')).toBeNull();
+  });
+
+  it('treats a row with no aliases or muscles as matching on its name alone', () => {
+    expect(searchExercises(library, 'arnold').map((e) => e.id)).toEqual([6]);
+    expect(searchExercises(library, 'shoulders').map((e) => e.id)).toEqual([1, 5]);
   });
 });

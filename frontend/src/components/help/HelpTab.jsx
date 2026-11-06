@@ -233,6 +233,13 @@ export default function HelpTab() {
           to guess the exact name.
         </p>
         <p>
+          It knows other names too: &ldquo;OHP&rdquo; or &ldquo;military press&rdquo; finds{' '}
+          <strong>Barbell Overhead Press</strong>, and &ldquo;RDL&rdquo; finds{' '}
+          <strong>Romanian Deadlift</strong>. Type a muscle, such as &ldquo;hamstrings&rdquo;, and you
+          get the exercises that mainly work it, after any whose name matches. A result found that way
+          says so underneath.
+        </p>
+        <p>
           Both lists stay alphabetical, and they always will &mdash; so an exercise sits in the same
           place every time you come looking for it. Once a list outgrows the screen it shows the
           first few rows with a <T>Show all</T> link underneath; tap it to see the rest, and{' '}
@@ -808,6 +815,12 @@ export default function HelpTab() {
           saved on this device. All of this works offline.
         </p>
         <p>
+          Some exercises from Huddle&rsquo;s library also have a how-to video: a play button at the
+          end of that row. Tap it and the video sits under the muscles. Nothing downloads until you
+          press play, and it starts with the sound off. Use the player&rsquo;s own controls to turn it
+          up or go full screen. The video needs a connection; the muscles beside it don&rsquo;t.
+        </p>
+        <p>
           When you add your own exercise you can pick its muscles too: tap a muscle once for a main
           one, twice for a helper. Huddle suggests a starting point from the closest exercise in its
           library. That part works offline. Changing them later, from <T>&hellip;</T>, needs a
@@ -1273,6 +1286,7 @@ export default function HelpTab() {
               <li>Renaming or deleting an exercise</li>
               <li>Changing units or the rest-timer setting</li>
               <li>Logging a past workout</li>
+              <li>Playing an exercise&rsquo;s how-to video</li>
               <li>Import and export</li>
               <li>Changing your plan or managing billing</li>
               <li>Deleting your account</li>

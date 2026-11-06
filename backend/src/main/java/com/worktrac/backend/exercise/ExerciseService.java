@@ -30,13 +30,17 @@ public class ExerciseService {
     private final ExerciseAttributionResolver attributionResolver;
     private final ExerciseMuscleResolver muscleResolver;
     private final ExerciseMuscleWriter muscleWriter;
+    private final ExerciseVideoRepository videoRepository;
+    private final ExerciseAliasRepository aliasRepository;
 
     public ExerciseService(ExerciseRepository exerciseRepository, AccountRepository accountRepository,
                             QuotaService quotaService, WorkoutSetRepository workoutSetRepository,
                             AccountMembershipRepository membershipRepository,
                             ExerciseAttributionResolver attributionResolver,
                             ExerciseMuscleResolver muscleResolver,
-                            ExerciseMuscleWriter muscleWriter) {
+                            ExerciseMuscleWriter muscleWriter,
+                            ExerciseVideoRepository videoRepository,
+                            ExerciseAliasRepository aliasRepository) {
         this.exerciseRepository = exerciseRepository;
         this.accountRepository = accountRepository;
         this.quotaService = quotaService;
@@ -45,12 +49,15 @@ public class ExerciseService {
         this.attributionResolver = attributionResolver;
         this.muscleResolver = muscleResolver;
         this.muscleWriter = muscleWriter;
+        this.videoRepository = videoRepository;
+        this.aliasRepository = aliasRepository;
     }
 
     // One row's DTO, for the single-exercise responses (create, rename).
     private ExerciseDto toDto(AccountAccess access, Exercise exercise) {
         return ExerciseDto.from(exercise, attributionResolver.resolveOne(access, exercise),
-                muscleResolver.forExercise(exercise));
+                muscleResolver.forExercise(exercise), videoRepository.activeForExercise(exercise.getId()),
+                aliasRepository.forExercise(exercise.getId()));
     }
 
     // The full catalog visible to this account, used for search. Grouping/favoriting is now
@@ -67,9 +74,15 @@ public class ExerciseService {
         Map<Long, ExerciseAttribution> attribution = attributionResolver.resolve(access, exercises);
         // Same: one query for the whole catalogue (ExerciseMuscleResolver), looked up per row.
         Map<Long, ExerciseMuscles> muscles = muscleResolver.forAccount(access.accountId());
+        // And videos: one query, library rows only (ExerciseVideoRepository).
+        Map<Long, ExerciseVideoDto> videos = videoRepository.activeByExercise();
+        // And search aliases: one query, library rows only (ExerciseAliasRepository).
+        Map<Long, List<String>> aliases = aliasRepository.byExercise();
         return exercises.stream()
                 .map(exercise -> ExerciseDto.from(exercise, attribution.get(exercise.getId()),
-                        muscles.getOrDefault(exercise.getId(), ExerciseMuscles.NONE)))
+                        muscles.getOrDefault(exercise.getId(), ExerciseMuscles.NONE),
+                        videos.get(exercise.getId()),
+                        aliases.getOrDefault(exercise.getId(), List.of())))
                 .toList();
     }
 

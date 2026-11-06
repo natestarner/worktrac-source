@@ -109,6 +109,32 @@ Full narrative: `docs/architecture/data-model.md`, "Muscles worked".
   member; `ExerciseService.updateMuscles`'s `mayEditSharedResource` check is what refuses, and only
   `MemberPermissionsTest` notices if it goes.
 
+## How-to videos (`exercise_videos`, V94)
+
+Full narrative: `docs/architecture/data-model.md`, "How-to videos".
+
+- **Library exercises only, and rows arrive by MIGRATION**, generated from a reviewed CSV by
+  `scripts/video-migration.mjs`. There is no API that writes the table. Every read requires
+  `account_id IS NULL`; `ExerciseVideoTest` fails if a household exercise's row is ever sent.
+- **An id, never a URL**, on the DTO and in the table (`CK_exercise_videos_video_id`). The client
+  builds the only URLs it uses, and the embed page validates the id again.
+- **`ExerciseVideoChecker` hides and restores on a DEFINITE answer only** (oEmbed 200 -> active;
+  400/401/403/404 -> unavailable). Anything else changes nothing, so a YouTube outage cannot hide
+  every video. It never deletes a row.
+- **Resolved once per list call** (`ExerciseVideoRepository.activeByExercise`), like muscles.
+
+## Search aliases (`exercise_aliases`, V95/V96)
+
+- **Search only.** An alias is never shown as the name, never written to History, and never matched
+  by the duplicate-name check on create (that stays on `exercises.name`): creating "Military Press"
+  makes a custom exercise rather than silently opening the library row.
+- **Library rows, by migration**, matched by exact name; the seed THROWS on a name that matches
+  nothing. `LibraryExerciseAliasesTest` refuses an alias that is another library exercise's name or
+  sits on two exercises, and pins how many exercises the seed describes.
+- **Resolved once per list call** (`ExerciseAliasRepository.byExercise`), like muscles and videos.
+- **Client ranking** (`utils/exerciseSearch.js`): name tiers 0-2, alias 3-5, main muscle 6-8, so a
+  name match always outranks the rest. History's filter (`matchesSearch`) stays name-only.
+
 ## Creating an exercise that already exists returns it -- never a 409
 
 `ExerciseService.add` resolves in a fixed order: **`clientKey` -> validate `trackingType` ->
