@@ -758,6 +758,24 @@ favorite / session-note / customize buttons, and the how-to video slot. Tapping 
   is disabled until its create syncs. Customize hands the server's row back through
   `onMusclesSaved`, which patches the cached catalog in place — never builds it.
 
+### The same sheet away from the Log screen: "Preview exercise"
+
+`components/exercise/ExercisePreview.jsx` shows an exercise's muscles and video **before** it is
+chosen: a "Preview exercise" button on each search result (the picker, the routine editor), and
+"About this exercise" in History's and PRs' per-exercise menu. One lookup for all of them (the
+catalog row by id), so it shows exactly what the strip would.
+
+- **The button's name never contains the exercise's name.** Specs click a result by
+  `getByRole('button', { name: 'Barbell Bench Press' })` and Playwright matches by substring; the
+  row is named to a screen reader through `aria-describedby` instead.
+- **One dialog at a time.** History and PRs close their menu as the sheet opens; the routine
+  editor draws the preview INSIDE its own dialog (`ExerciseAboutContent`), with a back link,
+  because a sheet over a dialog is two scrims and two focus traps. The editor's draft is its own
+  state, so it is all there on the way back.
+- **Read-only.** No "Add muscles worked" in a preview; muscles are edited in Customize.
+- Not a connectivity branch: `parity-exercise-preview.spec.ts` covers the picker in all four
+  modes (verified red by hiding muscles offline).
+
 ## Editable temp rows
 
 `editableTempIds` is what gives a paused/retrying/errored row its Edit and Delete controls

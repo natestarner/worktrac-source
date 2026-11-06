@@ -33,7 +33,8 @@ import { windowLabel } from '../shared/historyWindowCopy';
 import SetPillRow from '../shared/SetPillRow';
 import PrBadge, { prBadgeLabel } from '../shared/PrBadge';
 import ExerciseFilterBar from '../shared/ExerciseFilterBar';
-import { IconCalendar, IconChevronRight, IconDownload, IconHelp, IconNote, IconPlus, IconScroll, IconTrendingUp } from '../shared/icons';
+import { IconCalendar, IconChevronRight, IconDownload, IconHelp, IconInfo, IconNote, IconPlus, IconScroll, IconTrendingUp } from '../shared/icons';
+import { ExercisePreviewSheet } from '../exercise/ExercisePreview';
 
 // Whether a searched date ends before the Free window's first visible day, while the server says
 // something IS hidden. Only then is "no workouts that day" possibly untrue. The window start is an
@@ -114,6 +115,8 @@ function HistoryTabContent({ initialExerciseFilter }) {
   // than one per row, mirroring PRsTab's identical `navTarget` (see its header comment for why a
   // record/entry now leads two useful places and neither is obviously the default).
   const [navTarget, setNavTarget] = useState(null);
+  // The exercise whose muscles and video are open (the menu's "About this exercise").
+  const [preview, setPreview] = useState(null);
   const [scrollToSessionId, setScrollToSessionId] = useState(null);
   const sessionRefs = useRef({});
 
@@ -525,9 +528,23 @@ function HistoryTabContent({ initialExerciseFilter }) {
               <IconTrendingUp size={16} />
               View progress
             </Button>
+            {/* Muscles and the how-to video, the Log screen's "About this exercise" sheet. It
+                replaces this menu rather than stacking on it: one dialog at a time. */}
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => {
+                setPreview({ id: navTarget.exerciseId, name: navTarget.exerciseName });
+                setNavTarget(null);
+              }}
+            >
+              <IconInfo size={16} />
+              About this exercise
+            </Button>
           </div>
         </Modal>
       )}
+      {preview && <ExercisePreviewSheet exerciseId={preview.id} exerciseName={preview.name} onClose={() => setPreview(null)} />}
     </div>
   );
 }
