@@ -1,4 +1,5 @@
 import Modal from '../shared/Modal';
+import Button from '../shared/Button';
 import SectionLabel from '../shared/SectionLabel';
 import BodyMap from './BodyMap';
 import { muscleName } from '../../utils/muscles';
@@ -61,12 +62,19 @@ function MuscleList({ title, codes, tone }) {
   );
 }
 
-export default function ExerciseAboutSheet({ exerciseName, muscles, bodyFigure, onChooseFigure, onClose, children }) {
+export default function ExerciseAboutSheet({ exerciseName, muscles, bodyFigure, onChooseFigure, onClose, onAddMuscles = null, children }) {
   const hasMuscles = muscles.primary.length > 0;
   return (
     <Modal align="bottom" width={560} title={exerciseName} onClose={onClose} initialFocus="dialog">
       {!hasMuscles ? (
-        <p className="exercise-about-empty">No muscles are listed for this exercise yet.</p>
+        <div className="exercise-about-empty">
+          <p>No muscles are listed for this exercise yet.</p>
+          {onAddMuscles && (
+            <Button variant="secondary" onClick={onAddMuscles}>
+              Add muscles worked
+            </Button>
+          )}
+        </div>
       ) : (
         <>
           {bodyFigure ? (

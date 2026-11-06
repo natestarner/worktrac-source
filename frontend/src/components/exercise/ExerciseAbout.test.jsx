@@ -88,6 +88,18 @@ describe('ExerciseAboutSheet', () => {
     expect(screen.queryByRole('group', { name: 'Body diagram' })).toBeNull();
   });
 
+  it('offers to describe an undescribed exercise when the caller allows it', () => {
+    const onAddMuscles = vi.fn();
+    renderSheet({ muscles: NONE, onAddMuscles });
+    fireEvent.click(screen.getByRole('button', { name: 'Add muscles worked' }));
+    expect(onAddMuscles).toHaveBeenCalled();
+  });
+
+  it('offers nothing to add when the caller does not (a library exercise, a temp row)', () => {
+    renderSheet({ muscles: NONE });
+    expect(screen.queryByRole('button', { name: 'Add muscles worked' })).toBeNull();
+  });
+
   it('closes from its X', () => {
     const { onClose } = renderSheet({ bodyFigure: 'male' });
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));

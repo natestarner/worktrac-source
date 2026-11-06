@@ -16,6 +16,11 @@ import Modal from '../shared/Modal';
 import SegmentedToggle from '../shared/SegmentedToggle';
 import { cancelButtonStyle } from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
+import SectionLabel from '../shared/SectionLabel';
+import MusclePicker from '../exercise/MusclePicker';
+import { suggestMuscles } from '../../utils/muscles';
+
+const NO_MUSCLES = { primary: [], secondary: [] };
 
 // Optimistically drop a just-created (offline) exercise into the shared catalog and this person's
 // picker list, so it's selectable and loggable immediately -- before its create has synced. Keyed by
@@ -38,6 +43,10 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   // What a set of this exercise measures. Create-only: the backend has no setter for it, because
   // flipping it would silently reinterpret every set already logged against the exercise.
   const [trackingType, setTrackingType] = useState('strength');
+  // Muscles worked, optional and create-only (changed later from Customize). `null` means the
+  // person has not touched the picker, so it shows the suggestion derived from the name below;
+  // once they tap a chip their choice is theirs and the suggestion stops following the name.
+  const [chosenMuscles, setChosenMuscles] = useState(null);
   const { run, pending: saving } = useGatedMutation();
   const queryClient = useQueryClient();
   // Durable create (create + auto-favorite, both idempotent) so an offline create replays safely and
@@ -54,6 +63,17 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   // Own exercises only, mirroring the server's countByAccount_IdAndDeletedFalse: the preloaded
   // global catalog is shared and costs the household nothing against its ceiling.
   const ownExerciseCount = (catalog || []).filter((e) => !e.isGlobal).length;
+
+  // A starting guess from the library exercise whose name shares the most movement words, derived
+  // during render from the cached catalog -- the same answer in every connectivity mode.
+  const suggestion = isEditing ? null : suggestMuscles(name, catalog);
+  const muscles = chosenMuscles ?? (suggestion ? { primary: suggestion.primary, secondary: suggestion.secondary } : NO_MUSCLES);
+  // Sent only when something is picked, so a create without muscles is byte-for-byte the request
+  // (and the queued variables) it always was.
+  const musclesPayload =
+    muscles.primary.length + muscles.secondary.length > 0
+      ? { primaryMuscles: muscles.primary, secondaryMuscles: muscles.secondary }
+      : {};
 
   // Derived during render, not in an effect, so the note, the button label and handleSave below all
   // read the same answer. Skipped entirely while editing -- rename is a different question, and
@@ -101,7 +121,7 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
   // requireSyncedExercise.
   const saveSynced = run(
     async (trimmed) => {
-      const created = await addExercise({ name: trimmed, trackingType });
+      const created = await addExercise({ name: trimmed, trackingType, ...musclesPayload });
       if (personId) await favoriteExercise(personId, created.id);
       onSaved(created);
     },
@@ -225,10 +245,20 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
       // server's row when CREATE_EXERCISE's onSettled reconciles.
       createdByYou: true,
       renamable: true,
+      // On the temp row too, so the strip and the About sheet show them before the create syncs --
+      // offline, for the whole outage. The server's row replaces this one on sync with the same.
+      ...musclesPayload,
       optimistic: true,
     };
     insertOptimisticExercise(queryClient, personId, tempExercise);
-    createExerciseMutation.mutate({ tempId, name: finalName, trackingType, personId, idempotencyKey: newId() });
+    createExerciseMutation.mutate({
+      tempId,
+      name: finalName,
+      trackingType,
+      personId,
+      idempotencyKey: newId(),
+      ...musclesPayload,
+    });
     onSaved(tempExercise);
   }
 
@@ -280,6 +310,18 @@ export default function AddEditExerciseModal({ exercise, personId, initialName =
             onChange={setTrackingType}
             options={MEASURE_OPTIONS}
           />
+        </div>
+      )}
+
+      {/* Optional, and only for a genuinely new exercise: one that already exists opens instead,
+          and keeps the muscles it has. */}
+      {!isEditing && !openTarget && (
+        <div style={{ marginBottom: 'var(--space-5)' }}>
+          <SectionLabel>Muscles worked (optional)</SectionLabel>
+          {chosenMuscles === null && suggestion && (
+            <p className="muscle-picker-hint">Suggested from {suggestion.from}. Tap to change.</p>
+          )}
+          <MusclePicker value={muscles} onChange={setChosenMuscles} />
         </div>
       )}
 

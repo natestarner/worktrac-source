@@ -1761,6 +1761,16 @@ input[type='search']::-webkit-search-results-decoration {
   text-align: center;
 }
 
+.exercise-about-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+}
+
+.exercise-about-empty p {
+  margin: 0;
+}
+
 .exercise-about-lists {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1799,6 +1809,49 @@ input[type='search']::-webkit-search-results-decoration {
 
 .exercise-about-credit summary {
   cursor: pointer;
+}
+
+/* MusclePicker: a chip per muscle cycling not worked -> main -> helping. Main is filled, helping is
+   outlined in the accent, so the state reads without relying on colour alone. */
+.muscle-picker-hint {
+  margin: 0 0 var(--space-2);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+.muscle-picker-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.muscle-chip {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.muscle-chip--primary {
+  border-color: var(--color-accent-strong);
+  background: var(--color-accent-strong);
+  color: var(--color-accent-contrast);
+  font-weight: var(--weight-semibold);
+}
+
+.muscle-chip--secondary {
+  border: 2px solid var(--color-accent);
+  color: var(--color-accent-text);
+  font-weight: var(--weight-semibold);
+}
+
+.muscle-chip:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Matches BodyMap's secondary intensity against its primary (35 vs 80). */

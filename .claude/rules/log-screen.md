@@ -743,6 +743,10 @@ favorite / session-note / customize buttons, and the how-to video slot. Tapping 
   the screen; the existing three keep theirs verbatim (tests select by them). The body switch is
   "Show a male body" / "Show a female body", because "Male" is a substring of "Female".
 - **The body choice is `PERSON_DEFAULTS.bodyFigure`** (null = ask), per person, on this device.
+- **An undescribed own exercise offers "Add muscles worked"** in the sheet, which opens Customize
+  (the one place muscles are edited). Not for library exercises, and not for a temp row: Customize
+  is disabled until its create syncs. Customize hands the server's row back through
+  `onMusclesSaved`, which patches the cached catalog in place — never builds it.
 
 ## Editable temp rows
 

@@ -52,6 +52,14 @@ public class ExerciseController {
         return exerciseService.update(currentUser.access(), exerciseId, request);
     }
 
+    // Same shape as rename: EDIT_OWN admits every member, and ExerciseService.updateMuscles is
+    // what refuses someone who neither added the exercise nor owns the account.
+    @PutMapping("/{exerciseId}/muscles")
+    @RequiresPermission(Permission.EDIT_OWN_SHARED_RESOURCE)
+    public ExerciseDto updateMuscles(@PathVariable Long exerciseId, @RequestBody ExerciseMusclesRequest request) {
+        return exerciseService.updateMuscles(currentUser.access(), exerciseId, request);
+    }
+
     @DeleteMapping("/{exerciseId}")
     @RequiresPermission(Permission.DELETE_SHARED_RESOURCE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
