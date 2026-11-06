@@ -733,9 +733,10 @@ favorite / session-note / customize buttons, and the how-to video slot. Tapping 
   narrow = five equal slots, no muscle text; wide = the About button takes the spare width.
 - **The video slot is always present, and last.** No video leaves it empty, so the actions never
   shift sideways between exercises. With one (`exercise.video` on the catalog row, library only,
-  read through `utils/exerciseVideo.js` like the muscles) it holds "Watch how it's done", which
+  read through `utils/exerciseVideo.js` like the muscles) it holds "Show how-to video", which
   opens the same sheet scrolled to `ExerciseVideoCard`. Not wrapped in `ReadOnlyWrap`: watching is
-  not a write.
+  not a write. It was "Watch how it's done" until real videos arrived: that contains "Done", and 20
+  e2e tests clicking the past-workout frame's Done hit two buttons.
 - **The video loads nothing until "Play the video" is tapped** -- no poster, no YouTube request --
   and plays this app's own `/embed/youtube.html` (muted, from `start`). Closing the sheet unmounts
   the frame, which is what stops it. Offline the button becomes a sentence; that is the one
