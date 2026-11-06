@@ -36,11 +36,15 @@ const pwaPlugin = (mode) => VitePWA({
     // The Capacitor plugins' lazy chunks (named by NATIVE_CHUNK below). lib/native imports them
     // only inside its native branch, so a browser never loads one -- precaching them would make
     // every web install and update download ~20 KB of code that can never run there.
-    globIgnores: ['**/native-*.js'],
+    // The YouTube embed page (public/embed/) is also left out: it is only useful online (it frames
+    // YouTube), and it must reach the browser with its OWN route headers from
+    // staticwebapp.config.json -- the one route that may be framed -- not as a precached copy.
+    globIgnores: ['**/native-*.js', 'embed/**'],
     navigateFallback: '/index.html',
     // Never hand app-shell HTML to API/health calls; let those hit the network (and fail cleanly
-    // offline, which the app handles) instead of being answered with index.html.
-    navigateFallbackDenylist: [/^\/api\//, /^\/actuator\//, /^\/config\.json$/],
+    // offline, which the app handles) instead of being answered with index.html. /embed/ is a
+    // static page of its own, framed by the app, and must never be answered with the app shell.
+    navigateFallbackDenylist: [/^\/api\//, /^\/actuator\//, /^\/config\.json$/, /^\/embed\//],
     runtimeCaching: [
       {
         // Runtime config: serve fresh when online so a changed apiUrl still updates, but fall back

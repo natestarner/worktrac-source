@@ -45,6 +45,27 @@ break the app rather than merely loosening it.
 | `img-src` incl. `data:` and `blob:` | `data:` for inline icons; `blob:` because CSV/ZIP export builds an object URL. |
 | `form-action 'self'`, `base-uri 'self'`, `object-src 'none'` | Standard hardening with no cost here — the app has no cross-origin form posts, no `<base>`, no plugins. |
 
+### The one frameable page: `/embed/*`
+
+`frontend/public/embed/youtube.html` exists so the App Store app can show a YouTube video: framed
+straight from `capacitor://localhost`, YouTube gets no usable Referer and refuses with "Error 153"
+(TestFlight, 2026-11-05). The app frames this page instead, and it frames YouTube. Its route in
+`staticwebapp.config.json` overrides the CSP **for that path only**:
+`frame-ancestors 'self' capacitor://localhost`, `frame-src` YouTube's two embed hosts,
+`script-src 'self'`, `default-src 'none'`. `X-Frame-Options: DENY` still arrives from
+`globalHeaders`; browsers ignore it when the response carries `frame-ancestors`, which is what lets
+the app frame the page while the rest of the site stays unframeable.
+
+- **It stays static and actionless.** No bundle, no token read, no controls but YouTube's own.
+  Being framable is safe only because there is nothing on it to clickjack; anything with an action
+  or app state does not go under `/embed/`.
+- **`youtube.js` accepts an 11-character video id and nothing else**, so the page can never be made
+  to frame an arbitrary URL from this origin.
+- It is kept out of the SPA fallback and the service worker's precache and navigation fallback, so
+  it always arrives with its own headers. `embedPage.test.js` pins all of this.
+- Widening `frame-ancestors` (another app scheme, Android's `https://localhost`) is a change to
+  this route only, never to `globalHeaders`.
+
 The Customer Portal is a **redirect** to `billing.stripe.com` opened in a new tab, not a frame, so
 it needs no `frame-src` entry — top-level navigation is not governed by these directives.
 
