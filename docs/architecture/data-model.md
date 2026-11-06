@@ -139,9 +139,11 @@ in-app how-to videos, which share the same entry point and the same library-cura
 ## How-to videos (V94)
 
 A library exercise can carry one how-to video (`exercise_videos`): a pointer to a public YouTube
-video, played inside the app. Built 2026-11-06, with no video rows yet. The mapping (our exercise
-to a Muscle & Strength video) waits on Muscle & Strength's answer to the permission email of
-2026-11-05, and nothing about the design depends on which channel the videos come from.
+video, played inside the app. Built 2026-11-06; the first 57 videos (Muscle & Strength's own
+YouTube clips) arrived the same day in `V97`, from `docs/exercise-videos/library-videos-2026-11-06.csv`.
+That README records how they were found and checked, and why the other 106 have none (most of
+Muscle & Strength's newer clips are on Vimeo, locked to their own site). Nothing about the design
+depends on which channel a video comes from.
 
 - **Rows arrive by migration**, like the library itself. `scripts/video-migration.mjs` turns a
   reviewed CSV (`exercise,video_id,start_seconds,source_label`) into a migration that matches

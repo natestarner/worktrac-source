@@ -7,10 +7,10 @@ import { forEachConnectivityMode } from './support/parity';
 // The how-to video on a library exercise: a play button in the strip's last slot, opening "About
 // this exercise" scrolled to the video, which loads only on a tap.
 //
-// No library exercise has a video yet (they arrive by migration once the mapping is approved), so
-// these give Barbell Bench Press one by rewriting the catalog response -- exactly the shape
-// GET /api/exercises sends (ExerciseVideoDto). The embed page is answered with a stub, so no test
-// ever reaches YouTube.
+// Library videos arrive by migration (V97 and later), and the app reads them from the catalog. These
+// pin Barbell Bench Press's video by rewriting the catalog response -- exactly the shape
+// GET /api/exercises sends (ExerciseVideoDto) -- so the spec does not depend on which id a migration
+// chose. The embed page is answered with a stub, so no test ever reaches YouTube.
 
 const EXERCISE = 'Barbell Bench Press';
 const VIDEO = { provider: 'youtube', videoId: 'j7ULT6dznNc', startSeconds: 12, sourceLabel: 'Muscle & Strength' };
@@ -112,7 +112,9 @@ test.describe('the how-to video', () => {
   });
 
   test('an exercise with no video keeps an empty slot and no play button', async ({ page }) => {
-    await pickExercise(page, 'Barbell Back Squat');
+    // Hammer Curl has no video: Muscle & Strength's clip for it is a site-locked Vimeo
+    // (docs/exercise-videos/README.md).
+    await pickExercise(page, 'Hammer Curl');
     await expect(page.getByRole('button', { name: /^About this exercise/ })).toBeVisible();
     await expect(page.getByRole('button', { name: WATCH })).toHaveCount(0);
   });

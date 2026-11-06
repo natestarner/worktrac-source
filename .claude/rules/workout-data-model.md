@@ -113,9 +113,12 @@ Full narrative: `docs/architecture/data-model.md`, "Muscles worked".
 
 Full narrative: `docs/architecture/data-model.md`, "How-to videos".
 
-- **Library exercises only, and rows arrive by MIGRATION**, generated from a reviewed CSV by
-  `scripts/video-migration.mjs`. There is no API that writes the table. Every read requires
-  `account_id IS NULL`; `ExerciseVideoTest` fails if a household exercise's row is ever sent.
+- **Library exercises only, and rows arrive by MIGRATION**, generated from a reviewed CSV in
+  `docs/exercise-videos/` by `scripts/video-migration.mjs`. There is no API that writes the table.
+  Every read requires `account_id IS NULL`; `ExerciseVideoTest` fails if a household exercise's row
+  is ever sent. `LibraryExerciseVideosTest` fails if the migrated rows differ from the CSVs, so add a
+  CSV and regenerate; never hand-write a video migration. That folder's README records how each
+  batch was found and checked.
 - **An id, never a URL**, on the DTO and in the table (`CK_exercise_videos_video_id`). The client
   builds the only URLs it uses, and the embed page validates the id again.
 - **`ExerciseVideoChecker` hides and restores on a DEFINITE answer only** (oEmbed 200 -> active;
