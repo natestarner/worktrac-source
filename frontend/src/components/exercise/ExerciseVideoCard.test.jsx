@@ -59,12 +59,12 @@ describe('the video in the strip and the sheet', () => {
         bodyFigure={null}
         onOpen={vi.fn()}
         actions={null}
-        video={<button type="button" onClick={onPlay}>Watch how it&rsquo;s done</button>}
+        video={<button type="button" onClick={onPlay}>Show how-to video</button>}
       />,
     );
     const slot = container.querySelector('.exercise-strip').lastElementChild;
     expect(slot.className).toBe('exercise-strip-video');
-    fireEvent.click(screen.getByRole('button', { name: 'Watch how it’s done' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show how-to video' }));
     expect(onPlay).toHaveBeenCalledTimes(1);
   });
 

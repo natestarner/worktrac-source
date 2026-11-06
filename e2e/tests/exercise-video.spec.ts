@@ -14,7 +14,7 @@ import { forEachConnectivityMode } from './support/parity';
 
 const EXERCISE = 'Barbell Bench Press';
 const VIDEO = { provider: 'youtube', videoId: 'j7ULT6dznNc', startSeconds: 12, sourceLabel: 'Muscle & Strength' };
-const WATCH = "Watch how it's done";
+const WATCH = 'Show how-to video';
 
 async function giveBenchAVideo(page: Page) {
   await page.route('**/api/exercises', async (route) => {
