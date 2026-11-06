@@ -351,8 +351,9 @@ function WhatGetsImported() {
             Everything else is optional: <em>Time</em> (else midday), <em>Weight</em> (else bodyweight),{' '}
             <em>Unit</em> (else your account default), <em>Session Start</em> (else one workout per day),{' '}
             <em>Session Type</em>, <em>Set #</em>, <em>Rest (sec)</em>, <em>Session Note</em>,{' '}
-            <em>Exercise Note</em>, <em>Favorite</em> and <em>Tags</em>. Custom Fields and Est. 1RM aren&rsquo;t
-            imported.
+            <em>Exercise Note</em>, <em>Favorite</em> and <em>Tags</em>. <em>Main Muscles</em> and{' '}
+            <em>Helping Muscles</em> describe an exercise the import adds; one you already have keeps its own.
+            Custom Fields and Est. 1RM aren&rsquo;t imported.
           </p>
           <p style={{ margin: 0, marginBottom: 'var(--space-3)' }}>
             Importing only ever <strong>adds</strong>. Nothing already in your history is changed or deleted,
