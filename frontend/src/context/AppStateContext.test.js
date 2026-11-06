@@ -598,6 +598,23 @@ describe('selectRestTimersByPerson', () => {
     expect(active(state).prsMeasure).toBe('heaviest');
   });
 
+  // Two people trading one iPad each see their own body on the muscle diagram, and nobody gets a
+  // guess before choosing (null means "ask").
+  it('SET_BODY_FIGURE is per person, starts unset, and only ever stores male or female', () => {
+    let state = withPerson(1);
+    expect(active(state).bodyFigure).toBeNull();
+    state = reducer(state, { type: 'SET_BODY_FIGURE', figure: 'female' });
+    expect(active(state).bodyFigure).toBe('female');
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 2 });
+    expect(active(state).bodyFigure).toBeNull();
+    state = reducer(state, { type: 'SET_BODY_FIGURE', figure: 'something-else' });
+    expect(active(state).bodyFigure).toBe('male');
+
+    state = reducer(state, { type: 'SELECT_PERSON', personId: 1 });
+    expect(active(state).bodyFigure).toBe('female');
+  });
+
   // The board's record and the chart's metric are separate preferences on purpose: the two screens
   // answer different questions, so drilling into top weights across the whole board must not
   // retarget a chart the person left on est. 1RM.
