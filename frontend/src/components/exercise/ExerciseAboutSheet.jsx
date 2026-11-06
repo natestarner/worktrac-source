@@ -1,7 +1,9 @@
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import SectionLabel from '../shared/SectionLabel';
+import { useEffect, useRef } from 'react';
 import BodyMap from './BodyMap';
+import ExerciseVideoCard from './ExerciseVideoCard';
 import { muscleName } from '../../utils/muscles';
 
 // "About this exercise": what it works, drawn on a body, front and back. Opened from the strip
@@ -62,10 +64,22 @@ function MuscleList({ title, codes, tone }) {
   );
 }
 
-export default function ExerciseAboutSheet({ exerciseName, muscles, bodyFigure, onChooseFigure, onClose, onAddMuscles = null, children }) {
+// `video` (utils/exerciseVideo.js) adds the how-to video below the muscles. `focusVideo` is set when
+// the strip's play button opened the sheet: it scrolls the video into view, so a tap on "play" lands
+// on the player rather than on a diagram above it.
+// The sheet's contents, without the sheet. The routine editor shows them INSIDE its own dialog
+// (RoutineFormModal's preview), because a sheet over a dialog is two scrims and two focus traps.
+export function ExerciseAboutContent({ exerciseName, muscles, bodyFigure, onChooseFigure, onAddMuscles = null, video = null, focusVideo = false, children }) {
   const hasMuscles = muscles.primary.length > 0;
+  const videoRef = useRef(null);
+  useEffect(() => {
+    // jsdom defines no scrollIntoView; degrade to no scroll.
+    if (focusVideo) videoRef.current?.scrollIntoView?.({ block: 'start' });
+    // Once, on open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
-    <Modal align="bottom" width={560} title={exerciseName} onClose={onClose} initialFocus="dialog">
+    <>
       {!hasMuscles ? (
         <div className="exercise-about-empty">
           <p>No muscles are listed for this exercise yet.</p>
@@ -94,6 +108,9 @@ export default function ExerciseAboutSheet({ exerciseName, muscles, bodyFigure, 
           </div>
         </>
       )}
+      <div ref={videoRef}>
+        <ExerciseVideoCard video={video} exerciseName={exerciseName} />
+      </div>
       {children}
       {/* The body art's licence travels with the art (MIT requires the notice in every copy).
           A <details> so it costs one line until someone opens it. */}
@@ -121,6 +138,14 @@ export default function ExerciseAboutSheet({ exerciseName, muscles, bodyFigure, 
           DEALINGS IN THE SOFTWARE.
         </p>
       </details>
+    </>
+  );
+}
+
+export default function ExerciseAboutSheet({ exerciseName, onClose, ...content }) {
+  return (
+    <Modal align="bottom" width={560} title={exerciseName} onClose={onClose} initialFocus="dialog">
+      <ExerciseAboutContent exerciseName={exerciseName} {...content} />
     </Modal>
   );
 }

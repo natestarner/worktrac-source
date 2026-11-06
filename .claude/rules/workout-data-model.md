@@ -105,9 +105,56 @@ Full narrative: `docs/architecture/data-model.md`, "Muscles worked".
   not refused — `ExerciseMuscleWriter` normalises, it never validates.
 - **A create writes muscles only on the insert branch.** Like the creator stamp: a replay or a
   duplicate-name match returns the existing row untouched.
+- **CSV import writes muscles only onto an exercise it CREATES** (`Main Muscles` / `Helping
+  Muscles`, by name or code), the insert-branch rule again. An existing exercise, library or
+  household, keeps what it has. Export writes every exercise's, by name, as the last two columns.
+  `docs/architecture/import-export.md`, "Muscles travel with an exercise the import creates".
 - **`PUT /{id}/muscles` is rename's "who may" without rename's 409.** The annotation admits every
   member; `ExerciseService.updateMuscles`'s `mayEditSharedResource` check is what refuses, and only
   `MemberPermissionsTest` notices if it goes.
+
+## How-to videos (`exercise_videos`, V94)
+
+Full narrative: `docs/architecture/data-model.md`, "How-to videos".
+
+- **Library exercises only, and rows arrive by MIGRATION**, generated from a reviewed CSV in
+  `docs/exercise-videos/` by `scripts/video-migration.mjs`. There is no API that writes the table.
+  Every read requires `account_id IS NULL`; `ExerciseVideoTest` fails if a household exercise's row
+  is ever sent. `LibraryExerciseVideosTest` fails if the migrated rows differ from the CSVs, so add a
+  CSV and regenerate; never hand-write a video migration. That folder's README records how each
+  batch was found and checked.
+- **An id, never a URL**, on the DTO and in the table (`CK_exercise_videos_video_id`). The client
+  builds the only URLs it uses, and the embed page validates the id again.
+- **`ExerciseVideoChecker` hides and restores on a DEFINITE answer only** (oEmbed 200 -> active;
+  400/401/403/404 -> unavailable). Anything else changes nothing, so a YouTube outage cannot hide
+  every video. It never deletes a row.
+- **Resolved once per list call** (`ExerciseVideoRepository.activeByExercise`), like muscles.
+
+## Search aliases (`exercise_aliases`, V95/V96)
+
+- **Search only.** An alias is never shown as the name, never written to History, and never matched
+  by the duplicate-name check on create (that stays on `exercises.name`): creating "Military Press"
+  makes a custom exercise rather than silently opening the library row.
+- **Library rows, by migration**, matched by exact name; the seed THROWS on a name that matches
+  nothing. `LibraryExerciseAliasesTest` refuses an alias that is another library exercise's name or
+  sits on two exercises, and pins how many exercises the seed describes.
+- **Resolved once per list call** (`ExerciseAliasRepository.byExercise`), like muscles and videos.
+- **Client ranking** (`utils/exerciseSearch.js`): name tiers 0-2, alias 3-5, main muscle 6-8, so a
+  name match always outranks the rest. History's filter (`matchesSearch`) stays name-only.
+
+## Library growth: a household's own twin wins in search
+
+When the library gains an exercise a household had already made for itself (V98 onwards), the
+picker's search shows the household's row and hides the library one
+(`utils/exerciseSearch.js#searchExercises`, case-insensitive like SQL Server). Their row holds their
+History. Two identical names cannot be told apart, and "own account first" is the rule creating one
+already applies. **Search only**: the server catalogue and the library row are unchanged, and the
+library row stays wherever it already is in someone's list. Never merge or rename either row to
+"fix" it: both may hold sets.
+
+**Adding library exercises:** a migration for the rows, another for their muscles (raise
+`LibraryExerciseMusclesTest`'s count in the same change), one for their aliases, and a video CSV.
+Every name-matched seed must throw on a name that matches nothing.
 
 ## Creating an exercise that already exists returns it -- never a 409
 

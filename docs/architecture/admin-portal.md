@@ -39,6 +39,11 @@
   2. `DELETE /api/admin/test-data` (below) — genuinely deletes rows, but only ones matching the
      e2e suite's own exact, unmistakable email pattern; see its own entry for the full safety
      design.
+- **The Videos tab (`GET /api/admin/library-videos`, read-only)** lists every library exercise
+  with no how-to video to show: none was ever found, or the daily check (`ExerciseVideoChecker`)
+  hid one YouTube says is gone. It is sorted by how many people have ever logged each exercise,
+  across every household. That count is the one cross-account number on it, a count and never
+  who. Adding a video stays a reviewed CSV plus a migration (`docs/exercise-videos/README.md`).
 - **Registration observability (`registration_events` table, `V44__create_registration_events.sql`,
   `com.worktrac.backend.registrationaudit` package) — added 2026-07-31 after a production
   registration silently failed with zero trace anywhere.** Every step of the registration

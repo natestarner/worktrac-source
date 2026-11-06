@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { EXERCISE_METRICS } from '../trends/exerciseMetrics';
 import { WEEKLY_METRICS } from '../trends/weeklyMetrics';
+import { MUSCLE_MAP_HELP } from '../trends/chartHelp';
 import { DEFAULT_REST_TARGET_SECONDS, REST_CEILING_SECONDS } from '../../utils/restTarget';
 import { useUI } from '../../context/UIContext';
 import { useAuth } from '../../context/AuthContext';
@@ -230,6 +231,13 @@ export default function HelpTab() {
           Type in the search box to reach the full library. Search is forgiving about word order, so
           &ldquo;barbell squat&rdquo; finds <strong>Barbell Back Squat</strong>. You don&rsquo;t have
           to guess the exact name.
+        </p>
+        <p>
+          It knows other names too: &ldquo;OHP&rdquo; or &ldquo;military press&rdquo; finds{' '}
+          <strong>Barbell Overhead Press</strong>, and &ldquo;RDL&rdquo; finds{' '}
+          <strong>Romanian Deadlift</strong>. Type a muscle, such as &ldquo;hamstrings&rdquo;, and you
+          get the exercises that mainly work it, after any whose name matches. A result found that way
+          says so underneath.
         </p>
         <p>
           Both lists stay alphabetical, and they always will &mdash; so an exercise sits in the same
@@ -739,6 +747,16 @@ export default function HelpTab() {
           rows={Object.values(WEEKLY_METRICS).map((m) => [m.label, m.barMeaning])}
         />
 
+        <h3 className="help-h3">Muscles worked</h3>
+        {/* Read from the card's own "?" copy, so the two cannot disagree (user-facing-help.md). */}
+        {MUSCLE_MAP_HELP.lines.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+        <p>
+          The body is the one you picked in an exercise&rsquo;s About sheet. Every shade on it is also a
+          row underneath, with the muscle&rsquo;s name and its number of sets.
+        </p>
+
         <h3 className="help-h3">Per-exercise progress</h3>
         <p>
           Pick an exercise and choose what to plot. Three of the five measure a{' '}
@@ -795,6 +813,17 @@ export default function HelpTab() {
           lighter, and every one named underneath. The first time, it asks whether to draw a male
           or female body, and you can switch whenever you like. That choice is per person and is
           saved on this device. All of this works offline.
+        </p>
+        <p>
+          Some exercises from Huddle&rsquo;s library also have a how-to video: a play button at the
+          end of that row. Tap it and the video sits under the muscles. Nothing downloads until you
+          press play, and it starts with the sound off. Use the player&rsquo;s own controls to turn it
+          up or go full screen. The video needs a connection; the muscles beside it don&rsquo;t.
+        </p>
+        <p>
+          You can look before you choose. When you search for an exercise, on Log or while building a
+          routine, the <T>i</T> button at the end of each result shows its muscles and video without
+          picking it. On History and PRs, tap an exercise and choose <T>About this exercise</T>.
         </p>
         <p>
           When you add your own exercise you can pick its muscles too: tap a muscle once for a main
@@ -1209,6 +1238,12 @@ export default function HelpTab() {
           matched by name, so their order in the file doesn&rsquo;t matter.
         </p>
         <p>
+          An export lists each exercise&rsquo;s muscles in <strong>Main Muscles</strong> and{' '}
+          <strong>Helping Muscles</strong>. Importing uses them only for an exercise the file adds, so
+          your own exercises keep their muscles when they move to another household. An exercise you
+          already have keeps the muscles it has.
+        </p>
+        <p>
           Every default that actually got used is listed in the preview before you commit. You
           find out from the screen, not from a surprise in your history afterwards.
         </p>
@@ -1262,6 +1297,7 @@ export default function HelpTab() {
               <li>Renaming or deleting an exercise</li>
               <li>Changing units or the rest-timer setting</li>
               <li>Logging a past workout</li>
+              <li>Playing an exercise&rsquo;s how-to video</li>
               <li>Import and export</li>
               <li>Changing your plan or managing billing</li>
               <li>Deleting your account</li>

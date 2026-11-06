@@ -14,6 +14,8 @@ import { IconClose, IconGripVertical } from '../shared/icons';
 import ExerciseSearchResults from '../shared/ExerciseSearchResults';
 import { searchExercises } from '../../utils/exerciseSearch';
 import { FIELD_LIMITS } from '../../utils/fieldLimits';
+import BackLink from '../shared/BackLink';
+import { ExercisePreviewContent } from '../exercise/ExercisePreview';
 
 // Same favorites/logged-first-then-search model as the Log picker: the "Add exercise to
 // routine" pool defaults to the person's own list (personExercises); typing a search reveals
@@ -85,6 +87,8 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
   // A single sr-only live region, updated by BOTH reorder paths below, so a screen-reader user
   // hears the same wording regardless of whether the move came from a drag or an arrow key.
   const [liveMessage, setLiveMessage] = useState('');
+  // The search result whose muscles and video are showing, in place of the form (see below).
+  const [preview, setPreview] = useState(null);
   const { run } = useGatedMutation();
 
   /**
@@ -220,6 +224,20 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
 
   const activeRow = rows.find((row) => row.key === activeId);
 
+  // "Preview exercise" on a search result shows that exercise's muscles and video IN this dialog,
+  // in place of the form, rather than as a sheet over it: a sheet over a dialog is two scrims and
+  // two focus traps (the reason EditSetModal draws its duration wheel inline). Everything the form
+  // holds is this component's state, so it is all still there on the way back. Not a route, so the
+  // back link closes the preview rather than going back in history (useGoBack).
+  if (preview) {
+    return (
+      <Modal width={420} onClose={onClose} title={preview.name}>
+        <BackLink onClick={() => setPreview(null)}>&larr; Back to the routine</BackLink>
+        <ExercisePreviewContent exerciseId={preview.id} exerciseName={preview.name} />
+      </Modal>
+    );
+  }
+
   return (
     <Modal width={420} onClose={onClose} title={isEditing ? 'Edit routine' : 'New routine'}>
       <input
@@ -312,6 +330,7 @@ export default function RoutineFormModal({ personId, routine, personExercises, c
           results={searchResults}
           term={exerciseFilter}
           onSelect={addExercise}
+          onPreview={(ex) => setPreview({ id: ex.id, name: ex.name })}
           emptyMessage={`No exercises match "${exerciseFilter}".`}
         />
       ) : groups.length === 0 ? (

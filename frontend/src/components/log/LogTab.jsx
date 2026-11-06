@@ -26,6 +26,7 @@ import IconButton from '../shared/IconButton';
 import { IconCheck, IconClose } from '../shared/icons';
 import Card from '../shared/Card';
 import { exerciseMuscles } from '../../utils/muscles';
+import { exerciseVideo } from '../../utils/exerciseVideo';
 
 function routineBannerDismissKey(personId) {
   return `workout-tracker-routine-banner-dismissed-${personId}`;
@@ -599,6 +600,8 @@ export default function LogTab() {
               // Muscles live on the catalog row, not the person's picker row selectedExercise usually
               // is. Looked up by id; anything missing them answers empty lists (utils/muscles.js).
               muscles={exerciseMuscles(catalog.find((e) => e.id === selectedExercise.id) ?? selectedExercise)}
+              // The how-to video lives on the catalog row too (library exercises only).
+              video={exerciseVideo(catalog.find((e) => e.id === selectedExercise.id) ?? selectedExercise)}
               personId={activePersonId}
               tags={tags}
               onPersonalizationChanged={refreshPersonalization}

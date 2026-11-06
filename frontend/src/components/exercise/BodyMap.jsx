@@ -3,7 +3,8 @@ import { MuscleMap } from 'js-rich-body-highlighter';
 import { REGISTRY, DRAWN, bodySrc, clipToBody } from './bodyMapArt';
 
 // One body (front or back) with an exercise's muscles shaded: primary at full strength, secondary
-// at roughly half. A thin React shell around js-rich-body-highlighter's imperative MuscleMap --
+// at roughly half. Or, given `levels` ({ code: intensity 0-100 }), each muscle at its own strength
+// -- the Trends muscle map, where the shade is how much that muscle was worked. A thin React shell around js-rich-body-highlighter's imperative MuscleMap --
 // created once per mount, updated in place when the props change, destroyed on unmount.
 //
 // Imported eagerly, like everything else in this app (App.jsx: a chunk that has to be fetched is a
@@ -33,15 +34,20 @@ function muscleColor() {
   return value || 'red';
 }
 
-function highlightsFor(primary, secondary) {
+function highlightsFor(primary, secondary, levels) {
   const color = muscleColor();
+  if (levels) {
+    return Object.entries(levels)
+      .filter(([code, intensity]) => DRAWN.has(code) && intensity > 0)
+      .map(([group, intensity]) => ({ group, intensity, color }));
+  }
   return [
     ...secondary.filter((code) => DRAWN.has(code)).map((group) => ({ group, intensity: SECONDARY_INTENSITY, color })),
     ...primary.filter((code) => DRAWN.has(code)).map((group) => ({ group, intensity: PRIMARY_INTENSITY, color })),
   ];
 }
 
-export default function BodyMap({ primary = [], secondary = [], gender = 'male', view = 'front', label, className }) {
+export default function BodyMap({ primary = [], secondary = [], levels = null, gender = 'male', view = 'front', label, className }) {
   const hostRef = useRef(null);
   const mapRef = useRef(null);
   const theme = useSyncExternalStore(subscribeTheme, themeSnapshot, () => 'light');
@@ -57,7 +63,7 @@ export default function BodyMap({ primary = [], secondary = [], gender = 'male',
       registry: REGISTRY,
       hoverHighlight: false,
       bodySrc: bodySrc(gender, view, theme),
-      highlights: highlightsFor(primary, secondary),
+      highlights: highlightsFor(primary, secondary, levels),
     });
     mapRef.current = map;
     clipToBody(map.element, gender, bodySrc(gender, view, theme));
@@ -71,15 +77,16 @@ export default function BodyMap({ primary = [], secondary = [], gender = 'male',
 
   const primaryKey = primary.join(',');
   const secondaryKey = secondary.join(',');
+  const levelsKey = levels ? JSON.stringify(levels) : '';
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const src = bodySrc(gender, view, theme);
-    map.update({ view, gender, theme, bodySrc: src, highlights: highlightsFor(primary, secondary) });
+    map.update({ view, gender, theme, bodySrc: src, highlights: highlightsFor(primary, secondary, levels) });
     clipToBody(map.element, gender, src);
-    // primaryKey/secondaryKey stand in for the arrays, whose identity changes every render.
+    // The keys stand in for the arrays and the levels object, whose identity changes every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, gender, theme, primaryKey, secondaryKey]);
+  }, [view, gender, theme, primaryKey, secondaryKey, levelsKey]);
 
   return (
     <div
