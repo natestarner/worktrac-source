@@ -17,6 +17,9 @@ import java.util.List;
 // offline use. Empty lists for an exercise nobody has described; an installed client that predates
 // these fields ignores them, and a cached catalog that predates them simply lacks them, so the
 // client must treat absent as empty (resilience.md, axis D).
+//
+// video is a library exercise's how-to video (V94), or null: no video, a video the checker found
+// unavailable, or a household's own exercise. Never a URL (ExerciseVideoDto).
 public record ExerciseDto(
         Long id,
         String name,
@@ -26,9 +29,11 @@ public record ExerciseDto(
         boolean createdByYou,
         boolean renamable,
         List<String> primaryMuscles,
-        List<String> secondaryMuscles
+        List<String> secondaryMuscles,
+        ExerciseVideoDto video
 ) {
-    public static ExerciseDto from(Exercise exercise, ExerciseAttribution attribution, ExerciseMuscles muscles) {
+    public static ExerciseDto from(Exercise exercise, ExerciseAttribution attribution, ExerciseMuscles muscles,
+                                   ExerciseVideoDto video) {
         return new ExerciseDto(
                 exercise.getId(),
                 exercise.getName(),
@@ -38,6 +43,7 @@ public record ExerciseDto(
                 attribution.createdByYou(),
                 attribution.renamable(),
                 muscles.primary(),
-                muscles.secondary());
+                muscles.secondary(),
+                video);
     }
 }

@@ -16,8 +16,21 @@ if (!apiUrl || !/^https:\/\//.test(apiUrl)) {
   process.exit(1);
 }
 
+// The web origin whose /embed/youtube.html the app frames for how-to videos. A YouTube player
+// framed straight from capacitor://localhost refuses to play (error 153), so the app frames the web
+// host's copy, which YouTube sees as an ordinary https embedder. NATIVE_EMBED_ORIGIN wins;
+// otherwise it is the API's host with "api." swapped for "app." (api.huddle.fitness ->
+// app.huddle.fitness, api.dev.huddle.fitness -> app.dev.huddle.fitness). Required like the API: a
+// store binary that cannot play its videos is not a redeploy away from fixed.
+const derived = /^https:\/\/api\./.test(apiUrl) ? apiUrl.replace(/^https:\/\/api\./, 'https://app.') : '';
+const embedOrigin = (process.env.NATIVE_EMBED_ORIGIN || derived).replace(/\/+$/, '').replace(/^(https:\/\/[^/]+).*$/, '$1');
+if (!/^https:\/\/[^/]+$/.test(embedOrigin)) {
+  console.error('write-native-config: set NATIVE_EMBED_ORIGIN to the web app origin (https://app...).');
+  process.exit(1);
+}
+
 writeFileSync(
   new URL('../dist/config.json', import.meta.url),
-  JSON.stringify({ apiUrl: apiUrl.replace(/\/+$/, '') }, null, 2) + '\n'
+  JSON.stringify({ apiUrl: apiUrl.replace(/\/+$/, ''), embedOrigin }, null, 2) + '\n'
 );
-console.log(`write-native-config: dist/config.json -> ${apiUrl}`);
+console.log(`write-native-config: dist/config.json -> ${apiUrl}, videos from ${embedOrigin}`);

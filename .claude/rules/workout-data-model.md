@@ -109,6 +109,20 @@ Full narrative: `docs/architecture/data-model.md`, "Muscles worked".
   member; `ExerciseService.updateMuscles`'s `mayEditSharedResource` check is what refuses, and only
   `MemberPermissionsTest` notices if it goes.
 
+## How-to videos (`exercise_videos`, V94)
+
+Full narrative: `docs/architecture/data-model.md`, "How-to videos".
+
+- **Library exercises only, and rows arrive by MIGRATION**, generated from a reviewed CSV by
+  `scripts/video-migration.mjs`. There is no API that writes the table. Every read requires
+  `account_id IS NULL`; `ExerciseVideoTest` fails if a household exercise's row is ever sent.
+- **An id, never a URL**, on the DTO and in the table (`CK_exercise_videos_video_id`). The client
+  builds the only URLs it uses, and the embed page validates the id again.
+- **`ExerciseVideoChecker` hides and restores on a DEFINITE answer only** (oEmbed 200 -> active;
+  400/401/403/404 -> unavailable). Anything else changes nothing, so a YouTube outage cannot hide
+  every video. It never deletes a row.
+- **Resolved once per list call** (`ExerciseVideoRepository.activeByExercise`), like muscles.
+
 ## Creating an exercise that already exists returns it -- never a 409
 
 `ExerciseService.add` resolves in a fixed order: **`clientKey` -> validate `trackingType` ->

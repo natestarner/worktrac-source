@@ -1811,6 +1811,71 @@ input[type='search']::-webkit-search-results-decoration {
   cursor: pointer;
 }
 
+/* The how-to video in the About sheet (ExerciseVideoCard.jsx). A 16:9 box that holds the play
+   button, the player, or the offline line -- always the same size, so loading the player never
+   moves the credit line or anything below it. */
+.exercise-video {
+  margin-top: var(--space-5);
+}
+
+.exercise-video-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-subtle-bg);
+}
+
+.exercise-video-frame iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.exercise-video-play {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.exercise-video-play-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-strong);
+  color: var(--color-accent-contrast);
+}
+
+.exercise-video-offline {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.exercise-video-credit {
+  margin: var(--space-2) 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
 /* The Trends muscle map (MuscleMapCard.jsx): two bodies, then one row per worked muscle whose bar
    carries the same shade as the muscle on the body, so the list and the bodies read as one chart. */
 .muscle-map-head {

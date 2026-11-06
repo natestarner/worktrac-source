@@ -136,6 +136,38 @@ in-app how-to videos, which share the same entry point and the same library-cura
   Adding a `Muscles` column is possible later; the round trip stays byte-identical meanwhile
   because neither side writes one.
 
+## How-to videos (V94)
+
+A library exercise can carry one how-to video (`exercise_videos`): a pointer to a public YouTube
+video, played inside the app. Built 2026-11-06, with no video rows yet. The mapping (our exercise
+to a Muscle & Strength video) waits on Muscle & Strength's answer to the permission email of
+2026-11-05, and nothing about the design depends on which channel the videos come from.
+
+- **Rows arrive by migration**, like the library itself. `scripts/video-migration.mjs` turns a
+  reviewed CSV (`exercise,video_id,start_seconds,source_label`) into a migration that matches
+  library exercises by exact name and **throws if any name matched nothing**. V93's name matching
+  failed silently on a typo; this one fails every backend test instead. Proven against a local
+  database with a deliberately misspelt row (2026-11-06).
+- **An id, never a URL.** `ExerciseVideoDto` is `{ provider, videoId, startSeconds, sourceLabel }`,
+  the table checks `LEN(video_id) = 11`, and the client builds the only two URLs it ever uses: its
+  own `/embed/youtube.html` page and a plain YouTube watch link. The embed page validates the id
+  again, so nothing in a row can point the player anywhere but YouTube.
+- **Library only.** Custom exercises get muscles, not videos (decided 2026-11-06). Every read joins
+  the exercise and requires `account_id IS NULL`.
+- **Only `active` rows are sent.** `ExerciseVideoChecker` asks YouTube's oEmbed endpoint about each
+  video once a day (04:30 UTC, ShedLock'd to one replica): 200 means embeddable, 400 means no such
+  video (measured: a well-formed id that does not exist answers 400, not 404), and 401/403/404
+  mean private, embedding turned off, or removed (YouTube's documented behaviour, not reproduced
+  here). Anything else, including no answer, changes nothing, so a YouTube outage cannot hide every
+  video. A video that comes back is shown again. Rows are never deleted.
+- **On the device:** the catalog is cached like the names, so the play button and the sheet are the
+  same offline. The player itself needs YouTube, so offline it is replaced by a sentence (the one
+  connectivity branch, on `resilience.md`'s register). Nothing loads until the play button is tapped,
+  and the video starts muted. In the App Store app the embed page comes from the web host, because
+  YouTube refuses to play inside `capacitor://localhost` (`native-apps.md`).
+- **Ads:** monetised channels can show YouTube's ads inside an embed, and we cannot turn them off.
+  Accepted for now (2026-11-06); our own videos are the long-term answer.
+
 ## Endurance (time-based) exercises
 
 Added V46–V50. The problem: the app could only record a set as **weight × reps**, so time-based

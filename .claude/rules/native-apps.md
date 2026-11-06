@@ -178,6 +178,12 @@ version-skew rules once they land).
 without an `https://` `NATIVE_API_URL`, deliberately: a store binary pointed at the wrong backend
 is not a redeploy away from fixed.
 
+It also writes **`embedOrigin`**, the web host whose `/embed/youtube.html` the app frames for
+how-to videos (`config.js#getEmbedOrigin`): a YouTube player framed from `capacitor://localhost`
+refuses to play (error 153), so the app frames the web host's copy instead. It is
+`NATIVE_EMBED_ORIGIN`, or the API host with `api.` swapped for `app.`, and the script refuses to
+run when it can derive neither. The web build has no `embedOrigin`, so its path stays relative.
+
 ## Keyboard: `resize: "native"`, plus `keepFocusedFieldVisible`
 
 **`"none"` is NOT "leave it to WKWebView".** `@capacitor/keyboard` removes WKWebView's own keyboard
