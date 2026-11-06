@@ -1,4 +1,4 @@
-import { highlightMatches } from '../../utils/exerciseSearch';
+import { highlightMatches, matchReason } from '../../utils/exerciseSearch';
 
 // Ranked exercise search results, rendered as a traditional single-column list (one result per
 // row) rather than the wrapped chip layout used for Favorites/Other Previously Logged -- that
@@ -6,6 +6,9 @@ import { highlightMatches } from '../../utils/exerciseSearch';
 // exercises" visually separate from "here's what matched your search". Styled after the row list
 // in HistoryTab.jsx (card container, rows divided by a bottom border) for consistency with the
 // rest of the app.
+// A result found by another name or by the muscle it works (utils/exerciseSearch.js) says so on a
+// second line, since nothing in its name is highlighted. That line is not part of the accessible
+// name, which stays the exercise's name exactly.
 export default function ExerciseSearchResults({ results, term, onSelect, emptyMessage }) {
   if (results.length === 0) {
     return <div style={emptyStyle}>{emptyMessage}</div>;
@@ -28,11 +31,25 @@ export default function ExerciseSearchResults({ results, term, onSelect, emptyMe
               {seg.text}
             </span>
           ))}
+          <MatchReason ex={ex} term={term} />
         </button>
       ))}
     </div>
   );
 }
+
+function MatchReason({ ex, term }) {
+  const reason = matchReason(ex, term);
+  return reason ? <span style={reasonStyle}>{reason}</span> : null;
+}
+
+const reasonStyle = {
+  display: 'block',
+  marginTop: 'var(--space-1)',
+  fontSize: 'var(--text-sm)',
+  fontWeight: 'var(--weight-normal)',
+  color: 'var(--color-muted)',
+};
 
 const cardStyle = {
   background: 'var(--color-surface)',

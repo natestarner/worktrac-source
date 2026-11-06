@@ -233,6 +233,13 @@ export default function HelpTab() {
           to guess the exact name.
         </p>
         <p>
+          It knows other names too: &ldquo;OHP&rdquo; or &ldquo;military press&rdquo; finds{' '}
+          <strong>Barbell Overhead Press</strong>, and &ldquo;RDL&rdquo; finds{' '}
+          <strong>Romanian Deadlift</strong>. Type a muscle, such as &ldquo;hamstrings&rdquo;, and you
+          get the exercises that mainly work it, after any whose name matches. A result found that way
+          says so underneath.
+        </p>
+        <p>
           Both lists stay alphabetical, and they always will &mdash; so an exercise sits in the same
           place every time you come looking for it. Once a list outgrows the screen it shows the
           first few rows with a <T>Show all</T> link underneath; tap it to see the rest, and{' '}

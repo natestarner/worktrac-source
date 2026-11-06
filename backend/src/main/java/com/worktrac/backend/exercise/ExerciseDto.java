@@ -20,6 +20,9 @@ import java.util.List;
 //
 // video is a library exercise's how-to video (V94), or null: no video, a video the checker found
 // unavailable, or a household's own exercise. Never a URL (ExerciseVideoDto).
+//
+// aliases are other names a library exercise goes by ("OHP", "Military Press"), for search only
+// (V95/V96). Empty for a household's own exercise; absent in a catalog cached before them.
 public record ExerciseDto(
         Long id,
         String name,
@@ -30,10 +33,11 @@ public record ExerciseDto(
         boolean renamable,
         List<String> primaryMuscles,
         List<String> secondaryMuscles,
-        ExerciseVideoDto video
+        ExerciseVideoDto video,
+        List<String> aliases
 ) {
     public static ExerciseDto from(Exercise exercise, ExerciseAttribution attribution, ExerciseMuscles muscles,
-                                   ExerciseVideoDto video) {
+                                   ExerciseVideoDto video, List<String> aliases) {
         return new ExerciseDto(
                 exercise.getId(),
                 exercise.getName(),
@@ -44,6 +48,7 @@ public record ExerciseDto(
                 attribution.renamable(),
                 muscles.primary(),
                 muscles.secondary(),
-                video);
+                video,
+                aliases);
     }
 }
