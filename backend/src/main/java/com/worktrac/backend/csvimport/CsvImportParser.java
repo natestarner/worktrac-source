@@ -57,6 +57,10 @@ public class CsvImportParser {
     static final String DURATION = "duration (sec)";
     static final String REST = "rest (sec)";
     static final String EST_1RM = "est. 1rm";
+    // An exercise's muscles, by name ("Chest; Triceps"). Exported for every exercise; imported
+    // only onto an exercise the import CREATES (CsvImportService), like the create it stands in for.
+    static final String MAIN_MUSCLES = "main muscles";
+    static final String HELPING_MUSCLES = "helping muscles";
 
     // Noon rather than midnight, when a file carries no Time. History renders in local time, so a
     // set stamped 00:00 UTC shows up on the PREVIOUS day for anyone west of Greenwich -- the
@@ -200,11 +204,14 @@ public class CsvImportParser {
             boolean favorite,
             List<String> tags,
             String sessionNote,
+            List<String> mainMuscles,
+            List<String> helpingMuscles,
             Instant resolvedCreatedAt) {
 
         RawRow withCreatedAt(Instant createdAt) {
             return new RawRow(line, exerciseName, date, time, sessionStart, live, setNumber, weight, unit,
-                    reps, durationSeconds, restSeconds, exerciseNote, favorite, tags, sessionNote, createdAt);
+                    reps, durationSeconds, restSeconds, exerciseNote, favorite, tags, sessionNote,
+                    mainMuscles, helpingMuscles, createdAt);
         }
     }
 
@@ -339,8 +346,15 @@ public class CsvImportParser {
 
         boolean favorite = "yes".equalsIgnoreCase(String.valueOf(cell(row, columns, FAVORITE)).trim());
 
+        // Names as written; CsvImportService maps them onto the vocabulary (by name or code, any
+        // case) and drops what it doesn't know. Never a reason to reject the row: the set is the
+        // point, and a muscle describes the exercise, not the set.
+        List<String> mainMuscles = splitList(cell(row, columns, MAIN_MUSCLES));
+        List<String> helpingMuscles = splitList(cell(row, columns, HELPING_MUSCLES));
+
         return new RawRow(line, exerciseName, date, time, sessionStart, live, setNumber, weight, unit,
-                reps == null ? 0 : reps, duration, rest, exerciseNote, favorite, tags, sessionNote, null);
+                reps == null ? 0 : reps, duration, rest, exerciseNote, favorite, tags, sessionNote,
+                mainMuscles, helpingMuscles, null);
     }
 
     // ── Defaults and grouping ──────────────────────────────────────────────────────────────────
@@ -404,7 +418,8 @@ public class CsvImportParser {
             for (RawRow r : rows) {
                 parsedRows.add(new ParsedImport.ParsedRow(r.line(), r.exerciseName(), r.resolvedCreatedAt(),
                         r.setNumber(), r.weight(), r.unit(), r.reps(), r.durationSeconds(), r.restSeconds(),
-                        r.exerciseNote(), r.favorite(), r.tags(), r.sessionNote()));
+                        r.exerciseNote(), r.favorite(), r.tags(), r.sessionNote(), r.mainMuscles(),
+                        r.helpingMuscles()));
             }
             sessions.add(new ParsedImport.ParsedSession(startedAt, endedAt, manual, parsedRows));
         }

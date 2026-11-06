@@ -41,7 +41,21 @@ against our exercise by hand.
 
 The app hides any of these videos YouTube later reports as gone (`ExerciseVideoChecker`, daily).
 
+## 2026-11-06: 22 of the 50 new library exercises (`V101`)
+
+The library expansion (V98) added 50 exercises, each picked because Muscle & Strength has a page for
+the same movement. The ids were found and checked exactly as above. 22 have a YouTube clip, all
+oEmbed-verified with titles matching. The other 28 are site-locked Vimeo, including all the new
+curls, Bench Dip, Tricep Kickback, and the lunges and squats other than Box and Overhead Squat.
+One of the 22, Barbell Stiff-Leg Deadlift, reuses the "Stiff Leg Deadlift" clip that was judged
+wrong for Romanian Deadlift. Here it names the same lift.
+
 ## Adding more
+
+**What needs one:** the admin portal's **Videos** tab (`/admin/videos`, `GET /api/admin/library-videos`)
+lists every library exercise with no video to show, the ones people log most first. It also lists any
+video the daily check hid because YouTube said it was gone, with the dead id, so it can be confirmed
+and replaced. The tab is read-only; the steps below are still how a video is added.
 
 1. Find the video. For Muscle & Strength, the exercise page's YouTube embed; anything else, a channel
    whose terms allow embedding.

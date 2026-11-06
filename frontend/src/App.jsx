@@ -52,6 +52,7 @@ import AdminPeople from './routes/admin/AdminPeople';
 import AdminPending from './routes/admin/AdminPending';
 import AdminActivity from './routes/admin/AdminActivity';
 import AdminContact from './routes/admin/AdminContact';
+import AdminVideos from './routes/admin/AdminVideos';
 
 export default function App() {
   useEffect(() => {
@@ -188,6 +189,7 @@ export default function App() {
                 <Route path="pending" element={<AdminPending />} />
                 <Route path="activity" element={<AdminActivity />} />
                 <Route path="contact" element={<AdminContact />} />
+                <Route path="videos" element={<AdminVideos />} />
               </Route>
             </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

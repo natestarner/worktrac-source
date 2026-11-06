@@ -125,6 +125,7 @@ class LibraryExerciseAliasesTest extends AbstractIntegrationTest {
     void theSeedDescribedEveryExerciseItNamed() {
         Integer described = jdbcTemplate.queryForObject(
                 "SELECT COUNT(DISTINCT exercise_id) FROM exercise_aliases", Integer.class);
-        assertEquals(47, described);
+        // 47 from V96, 22 from V100 (the 2026-11-06 expansion).
+        assertEquals(69, described);
     }
 }
