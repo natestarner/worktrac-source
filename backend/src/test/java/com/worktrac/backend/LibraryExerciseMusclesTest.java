@@ -100,13 +100,14 @@ class LibraryExerciseMusclesTest extends AbstractIntegrationTest {
 
     @Test
     void theLibraryIsDescribedInFull() {
-        // Every one of the 163 library exercises V93 lists matched a row: a lower count means a
-        // name in V93 no longer matches the library (a rename since), and that row did nothing.
+        // Every one of the 163 library exercises V93 lists, and the 50 V98 added (V99), matched a
+        // row: a lower count means a name in a seed no longer matches the library (a rename since),
+        // and that row did nothing. Adding library exercises raises this number in the same change.
         Integer described = jdbcTemplate.queryForObject(
                 "SELECT COUNT(DISTINCT em.exercise_id) FROM exercise_muscles em "
                         + "JOIN exercises e ON e.id = em.exercise_id WHERE e.account_id IS NULL",
                 Integer.class);
-        assertEquals(163, described);
+        assertEquals(213, described);
     }
 
     @Test

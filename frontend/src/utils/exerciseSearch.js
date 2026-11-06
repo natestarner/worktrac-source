@@ -57,12 +57,21 @@ function rankExercise(ex, rawTerm, tokens) {
 // `term` (in any order), ranked best-first: exact-prefix, then contiguous substring, then
 // scattered tokens -- then the same three against an alias, then against a main muscle. Ties break
 // alphabetically. Never caps the result count.
+//
+// A household's own exercise hides a library exercise of the same name (case-insensitively, as SQL
+// Server compares names). That happens when the library gains an exercise a household had already
+// made for itself (V98): their row holds their History, and two identical names in one list cannot
+// be told apart. It is the same preference creating one applies (utils/exerciseDuplicates.js): own
+// account first. Search only -- the library row is untouched and still reachable wherever it is
+// already in someone's list.
 export function searchExercises(catalog, term) {
   const rawTerm = term.trim().toLowerCase();
   if (!rawTerm) return [];
   const tokens = tokensOf(term);
+  const ownNames = new Set(catalog.filter((ex) => ex.isGlobal === false).map((ex) => ex.name.toLowerCase()));
 
   return catalog
+    .filter((ex) => !(ex.isGlobal && ownNames.has(ex.name.toLowerCase())))
     .map((ex) => ({ ex, tier: rankExercise(ex, rawTerm, tokens) }))
     .filter(({ tier }) => tier !== null)
     .sort((a, b) => a.tier - b.tier || a.ex.name.localeCompare(b.ex.name))

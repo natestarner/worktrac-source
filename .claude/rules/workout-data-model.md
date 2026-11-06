@@ -138,6 +138,20 @@ Full narrative: `docs/architecture/data-model.md`, "How-to videos".
 - **Client ranking** (`utils/exerciseSearch.js`): name tiers 0-2, alias 3-5, main muscle 6-8, so a
   name match always outranks the rest. History's filter (`matchesSearch`) stays name-only.
 
+## Library growth: a household's own twin wins in search
+
+When the library gains an exercise a household had already made for itself (V98 onwards), the
+picker's search shows the household's row and hides the library one
+(`utils/exerciseSearch.js#searchExercises`, case-insensitive like SQL Server). Their row holds their
+History. Two identical names cannot be told apart, and "own account first" is the rule creating one
+already applies. **Search only**: the server catalogue and the library row are unchanged, and the
+library row stays wherever it already is in someone's list. Never merge or rename either row to
+"fix" it: both may hold sets.
+
+**Adding library exercises:** a migration for the rows, another for their muscles (raise
+`LibraryExerciseMusclesTest`'s count in the same change), one for their aliases, and a video CSV.
+Every name-matched seed must throw on a name that matches nothing.
+
 ## Creating an exercise that already exists returns it -- never a 409
 
 `ExerciseService.add` resolves in a fixed order: **`clientKey` -> validate `trackingType` ->
