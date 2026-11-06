@@ -786,8 +786,21 @@ export default function HelpTab() {
           leg press has nothing to do with your son&rsquo;s.
         </p>
         <p>
-          The star and note icons sit at the top of any exercise screen; the rest live behind the{' '}
-          <T>&hellip;</T> button beside them.
+          The star and note icons sit in the row just under the exercise&rsquo;s name; the rest live
+          behind the <T>&hellip;</T> button beside them.
+        </p>
+        <p>
+          The small body at the start of that row shows the muscles the exercise works. Tap it to
+          see them drawn on a body, front and back: the main muscles in solid red, the helping ones
+          lighter, and every one named underneath. The first time, it asks whether to draw a male
+          or female body, and you can switch whenever you like. That choice is per person and is
+          saved on this device. All of this works offline.
+        </p>
+        <p>
+          When you add your own exercise you can pick its muscles too: tap a muscle once for a main
+          one, twice for a helper. Huddle suggests a starting point from the closest exercise in its
+          library. That part works offline. Changing them later, from <T>&hellip;</T>, needs a
+          connection, and only whoever added the exercise or the account owner can.
         </p>
         <HelpTable
           head={['What', 'Does', 'Offline?']}

@@ -112,6 +112,30 @@ in-app how-to videos, which share the same entry point and the same library-cura
   offline (a temp row), have neither field; `exerciseMuscles()` returns empty lists for both.
 - Not a return of the categories V33 dropped — see `trends.md`, "Deliberately not built".
 
+### A household's own exercises
+
+- **Picked when the exercise is created** — optional `primaryMuscles` / `secondaryMuscles` on
+  `POST /api/exercises`. That is a durable offline write, so `ExerciseMuscleWriter` refuses nothing:
+  unknown codes are dropped, a code listed both ways stays primary, absent means none. Written only
+  on the branch that genuinely inserts; a replay or a duplicate name leaves the existing row's
+  muscles alone (`CustomExerciseMusclesTest`).
+- **The temp row carries them** (`AddEditExerciseModal`), so the strip shows them before the create
+  syncs, and the queued `CREATE_EXERCISE` variables carry them so the server stores them on replay.
+  Both are sent only when something is picked, so a create without muscles is the request it always
+  was. `parity-custom-exercise-muscles.spec.ts` checks the screen in every mode and the server
+  afterwards (verified red by dropping them from the queued create).
+- **The picker prefills a suggestion** (`utils/muscles.js#suggestMuscles`): the library exercise
+  sharing the most movement words with the typed name, ignoring equipment words ("Cable Fly" is a
+  fly). A guess the person can change, never saved on its own.
+- **Changed later through `PUT /api/exercises/{id}/muscles`**, an online-only write from Customize.
+  Same "who may" as rename (the creator or the owner; `EDIT_OWN_SHARED_RESOURCE` + the service
+  check, pinned in `MemberPermissionsTest` and verified red), but without rename's "nobody else is
+  using it" 409: muscles describe the movement and relabel nobody's history. Library exercises 403.
+- **Not in the CSV.** Export carries no muscles column, so importing a file into a fresh household
+  brings custom exercises back without muscles (library exercises get theirs from the name).
+  Adding a `Muscles` column is possible later; the round trip stays byte-identical meanwhile
+  because neither side writes one.
+
 ## Endurance (time-based) exercises
 
 Added V46–V50. The problem: the app could only record a set as **weight × reps**, so time-based

@@ -3,6 +3,70 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigureExerciseModal from './ConfigureExerciseModal';
 import { setPersistentNote } from '../../api/notes';
+import { updateExerciseMuscles } from '../../api/exercises';
+
+// Muscles worked on the household's own exercises: an online-only edit, offered to whoever may
+// change them, handing the server's row back so the caller can update the cached catalog.
+describe('ConfigureExerciseModal muscles', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onlineManager.setOnline(true);
+    useUI.mockReturnValue({ showToast: vi.fn() });
+  });
+  afterEach(() => onlineManager.setOnline(true));
+
+  function renderWithMuscles(exercise, accountAccess, onMusclesSaved = vi.fn()) {
+    access.current = accountAccess;
+    render(
+      <ConfigureExerciseModal
+        exercise={exercise}
+        personId={1}
+        exerciseId={exercise.id}
+        allTags={[]}
+        appliedTagNames={[]}
+        customFields={[]}
+        onClose={vi.fn()}
+        onFieldsChanged={vi.fn()}
+        onTagsChanged={vi.fn()}
+        onExerciseChanged={vi.fn()}
+        onRequestDelete={vi.fn()}
+        muscles={{ primary: ['biceps'], secondary: [] }}
+        onMusclesSaved={onMusclesSaved}
+      />,
+    );
+    return onMusclesSaved;
+  }
+
+  it('lets the creator change them, and hands back the saved row', async () => {
+    const updated = { id: 9, primaryMuscles: ['biceps'], secondaryMuscles: ['forearms'] };
+    updateExerciseMuscles.mockResolvedValue(updated);
+    const onMusclesSaved = renderWithMuscles(
+      { id: 9, name: 'My Curl', isGlobal: false, createdByYou: true, renamable: true },
+      { isMember: true, ownerName: 'Nate' },
+    );
+
+    expect(screen.getByRole('button', { name: 'Biceps: main' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Forearms: not worked' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Forearms: main' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Update muscles' }));
+
+    await waitFor(() => expect(updateExerciseMuscles).toHaveBeenCalledWith(9, { primary: ['biceps'], secondary: ['forearms'] }));
+    await waitFor(() => expect(onMusclesSaved).toHaveBeenCalledWith(updated));
+  });
+
+  it('is not offered on a library exercise', () => {
+    renderWithMuscles({ id: 1, name: 'Hammer Curl', isGlobal: true }, { isMember: false, ownerName: null });
+    expect(screen.queryByRole('group', { name: 'Muscles worked' })).toBeNull();
+  });
+
+  it("is not offered to a member on somebody else's exercise", () => {
+    renderWithMuscles(
+      { id: 3, name: "Nate's Curl", isGlobal: false, createdByYou: false, createdByName: 'Nate', renamable: false },
+      { isMember: true, ownerName: 'Nate' },
+    );
+    expect(screen.queryByRole('group', { name: 'Muscles worked' })).toBeNull();
+  });
+});
 import { useUI } from '../../context/UIContext';
 
 vi.mock('../../api/exercises', () => ({
@@ -11,6 +75,7 @@ vi.mock('../../api/exercises', () => ({
   removeCustomField: vi.fn(),
   setExerciseTags: vi.fn(),
   updateExercise: vi.fn(),
+  updateExerciseMuscles: vi.fn(),
 }));
 
 vi.mock('../../api/notes', () => ({

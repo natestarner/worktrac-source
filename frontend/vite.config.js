@@ -32,14 +32,19 @@ const pwaPlugin = (mode) => VitePWA({
   injectRegister: null, // we call registerSW() ourselves in main.jsx
   manifest: false, // keep the existing hand-written public/manifest.webmanifest
   workbox: {
-    globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff,woff2}'],
+    // webp: the muscle diagram's body art (src/assets/body/), which must draw offline like the
+    // rest of the Log screen -- without it here the web app showed the diagram with no body.
+    globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,webmanifest,woff,woff2}'],
     // The Capacitor plugins' lazy chunks (named by NATIVE_CHUNK below). lib/native imports them
     // only inside its native branch, so a browser never loads one -- precaching them would make
     // every web install and update download ~20 KB of code that can never run there.
     // The YouTube embed page (public/embed/) is also left out: it is only useful online (it frames
     // YouTube), and it must reach the browser with its OWN route headers from
     // staticwebapp.config.json -- the one route that may be framed -- not as a precached copy.
-    globIgnores: ['**/native-*.js', 'embed/**'],
+    // assets/male-*.webp / female-*.webp are js-rich-body-highlighter's OWN default bodies. Its
+    // code names them with new URL(..., import.meta.url), so Vite emits them, but the app always
+    // passes its own (assets/body-*.webp, with the fitted heads) -- they are never requested.
+    globIgnores: ['**/native-*.js', 'embed/**', 'assets/male-*.webp', 'assets/female-*.webp'],
     navigateFallback: '/index.html',
     // Never hand app-shell HTML to API/health calls; let those hit the network (and fail cleanly
     // offline, which the app handles) instead of being answered with index.html. /embed/ is a

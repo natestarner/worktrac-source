@@ -720,6 +720,34 @@ is selectable and searchable the moment the modal closes.
 Mechanism and the general form of the rule: `.claude/rules/offline-internals.md`. Post-mortem:
 `docs/incidents/2026-08-19-exercise-create-navigation-lost-online.md`.
 
+## The strip under the name: "About this exercise" + the exercise's actions (2026-11-06)
+
+The name has its own full-width line; directly under it, `ExerciseAboutStrip` holds the About
+button (a tiny body with the main muscles shaded, plus their names when there is room), the
+favorite / session-note / customize buttons, and the how-to video slot. Tapping About opens
+`ExerciseAboutSheet` (muscles on a body, front and back). Decided with Nate; plan in the PR.
+
+- **Fixed height, and nothing in it waits on data.** It renders synchronously from the props, and
+  an exercise with no muscles gets the same box. The steppers sit below it.
+- **The layout follows the strip's own width** (`@container`, index.css), never the device:
+  narrow = five equal slots, no muscle text; wide = the About button takes the spare width.
+- **The video slot is always present, and last.** No video leaves it empty, so the actions never
+  shift sideways between exercises.
+- **Muscles come from the CATALOG row**, which `LogTab` looks up by id and passes in as `muscles`
+  (`selectedExercise` is usually the person's picker row, which carries none). Absent fields are
+  empty lists (`utils/muscles.js#exerciseMuscles`), never an error.
+- **Not a connectivity branch.** Muscles are in the cached catalog and the body art is a build
+  asset (precached on the web: `webp` is in `vite.config.js`'s `globPatterns`).
+  `parity-exercise-about.spec.ts` covers all four modes; verified red by hiding muscles offline.
+- **Labels:** the About button's name starts "About this exercise" and contains no other label on
+  the screen; the existing three keep theirs verbatim (tests select by them). The body switch is
+  "Show a male body" / "Show a female body", because "Male" is a substring of "Female".
+- **The body choice is `PERSON_DEFAULTS.bodyFigure`** (null = ask), per person, on this device.
+- **An undescribed own exercise offers "Add muscles worked"** in the sheet, which opens Customize
+  (the one place muscles are edited). Not for library exercises, and not for a temp row: Customize
+  is disabled until its create syncs. Customize hands the server's row back through
+  `onMusclesSaved`, which patches the cached catalog in place — never builds it.
+
 ## Editable temp rows
 
 `editableTempIds` is what gives a paused/retrying/errored row its Edit and Delete controls

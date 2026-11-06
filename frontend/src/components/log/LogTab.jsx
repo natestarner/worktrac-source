@@ -25,6 +25,7 @@ import Button from '../shared/Button';
 import IconButton from '../shared/IconButton';
 import { IconCheck, IconClose } from '../shared/icons';
 import Card from '../shared/Card';
+import { exerciseMuscles } from '../../utils/muscles';
 
 function routineBannerDismissKey(personId) {
   return `workout-tracker-routine-banner-dismissed-${personId}`;
@@ -595,6 +596,9 @@ export default function LogTab() {
               // highlight) can bleed from one person to the next -- the per-person isolation guarantee.
               key={activePersonId}
               exercise={selectedExercise}
+              // Muscles live on the catalog row, not the person's picker row selectedExercise usually
+              // is. Looked up by id; anything missing them answers empty lists (utils/muscles.js).
+              muscles={exerciseMuscles(catalog.find((e) => e.id === selectedExercise.id) ?? selectedExercise)}
               personId={activePersonId}
               tags={tags}
               onPersonalizationChanged={refreshPersonalization}
